@@ -18,7 +18,9 @@ const renderer = {
   },
   link(token: Tokens.Link) {
     const href = SAFE_PROTOCOLS.test(token.href) ? token.href : "#";
-    return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(token.text)}</a>`;
+    return `<a href="${
+      escapeHtml(href)
+    }" target="_blank" rel="noopener noreferrer">${escapeHtml(token.text)}</a>`;
   },
 };
 

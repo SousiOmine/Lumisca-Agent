@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 
 Deno.test("node:sqlite works in Deno", () => {
   const db = new DatabaseSync(":memory:");
@@ -12,7 +12,9 @@ Deno.test("node:sqlite works in Deno", () => {
   `);
   db.prepare("INSERT INTO workspaces (name, created_at) VALUES (?, ?)")
     .run("my-workspace", Date.now());
-  const row = db.prepare("SELECT name FROM workspaces WHERE id = 1").get() as { name: string };
+  const row = db.prepare("SELECT name FROM workspaces WHERE id = 1").get() as {
+    name: string;
+  };
   assertEquals(row.name, "my-workspace");
   db.close();
 });

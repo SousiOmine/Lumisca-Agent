@@ -1,18 +1,18 @@
-import { Agent } from "npm:@earendil-works/pi-agent-core@0.83.0";
+import { Agent } from "@earendil-works/pi-agent-core";
 import type {
   AgentEvent,
   AgentMessage,
   AgentTool,
   StreamFn,
-} from "npm:@earendil-works/pi-agent-core@0.83.0";
-import type { Model } from "npm:@earendil-works/pi-ai@0.83.0";
+} from "@earendil-works/pi-agent-core";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 
 export interface SessionAgentOptions {
   sessionId: string;
   systemPrompt: string;
-  model: Model<any>;
+  model: Model<Api>;
   tools: AgentTool[];
   messages?: AgentMessage[];
   streamFn: StreamFn;
@@ -70,7 +70,7 @@ export class SessionAgent {
     }
   }
 
-  async steer(text: string): Promise<void> {
+  steer(text: string): void {
     this.agent.steer({
       role: "user",
       content: [{ type: "text", text }],
@@ -78,7 +78,7 @@ export class SessionAgent {
     });
   }
 
-  async followUp(text: string): Promise<void> {
+  followUp(text: string): void {
     this.agent.followUp({
       role: "user",
       content: [{ type: "text", text }],

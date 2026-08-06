@@ -5,14 +5,19 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
-} from "npm:@earendil-works/pi-ai@0.83.0";
-import { assertEquals, assertRejects } from "jsr:@std/assert";
+} from "@earendil-works/pi-ai";
+import { assertEquals, assertRejects } from "@std/assert";
 import { LumiscaCore } from "./mod.ts";
 
 function setup() {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
-  return { core, faux, providerId: faux.provider.id, modelId: faux.getModel().id };
+  return {
+    core,
+    faux,
+    providerId: faux.provider.id,
+    modelId: faux.getModel().id,
+  };
 }
 
 async function makeWorkspace(core: LumiscaCore, name = "ws") {
@@ -59,7 +64,8 @@ Deno.test("session prompt persists messages and restores them", async () => {
   assertEquals(messages[0]!.role, "user");
   assertEquals(messages[1]!.role, "assistant");
   assertEquals(
-    (messages[1] as { content: Array<{ type: string; text: string }> }).content[0]!.text,
+    (messages[1] as { content: Array<{ type: string; text: string }> })
+      .content[0]!.text,
     "Hello from faux!",
   );
 
@@ -75,7 +81,7 @@ Deno.test("session prompt persists messages and restores them", async () => {
 });
 
 Deno.test("sessions are listed and deleted", async () => {
-  const { core, faux, providerId, modelId } = setup();
+  const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
   const s1 = core.createSession({
@@ -123,7 +129,10 @@ Deno.test("tools block file access outside the workspace", async () => {
   const messages = core.getAgent(session.id)!.messages;
   const toolResults = messages.filter((m) => m.role === "toolResult");
   assertEquals(toolResults.length, 1);
-  const tr = toolResults[0] as { isError: boolean; content: Array<{ type: string; text: string }> };
+  const tr = toolResults[0] as {
+    isError: boolean;
+    content: Array<{ type: string; text: string }>;
+  };
   assertEquals(tr.isError, true);
   assertEquals(tr.content[0]!.text.includes("outside the workspace"), true);
 
@@ -150,7 +159,7 @@ Deno.test("tools block file access outside the workspace", async () => {
   await Deno.remove(outside, { recursive: true });
 });
 
-Deno.test("model enablement is persisted", async () => {
+Deno.test("model enablement is persisted", () => {
   const { core, providerId } = setup();
   const models = core.listModelsWithState(providerId);
   assertEquals(models.length > 0, true);
@@ -173,7 +182,7 @@ Deno.test("model enablement is persisted", async () => {
 });
 
 Deno.test("session without model picks the last used model", async () => {
-  const { core, faux, providerId, modelId } = setup();
+  const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
   const first = core.createSession({
@@ -193,7 +202,7 @@ Deno.test("session without model picks the last used model", async () => {
 });
 
 Deno.test("getDefaultModel returns the last used model or a fallback", async () => {
-  const { core, faux, providerId, modelId } = setup();
+  const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
   // No sessions yet: falls back to the first enabled model.
@@ -220,7 +229,10 @@ Deno.test("session without model falls back to first enabled model", async () =>
   const session = core.createSession({ workspaceId: ws.id });
   assertEquals(session.modelProvider.length > 0, true);
   assertEquals(session.modelId.length > 0, true);
-  assertEquals(core.isModelEnabled(session.modelProvider, session.modelId), true);
+  assertEquals(
+    core.isModelEnabled(session.modelProvider, session.modelId),
+    true,
+  );
 
   // The faux provider is still usable when selected explicitly.
   const explicit = core.createSession({
@@ -234,7 +246,7 @@ Deno.test("session without model falls back to first enabled model", async () =>
 });
 
 Deno.test("workspace folder update rebuilds session tools", async () => {
-  const { core, faux, providerId, modelId } = setup();
+  const { core, faux: _faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
 

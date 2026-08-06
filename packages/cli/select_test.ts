@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { getPromptFn, setPromptFn } from "./ui.ts";
 import { selectFromList } from "./select.ts";
 

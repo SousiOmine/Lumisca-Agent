@@ -1,4 +1,10 @@
-import { IconMoon, IconPlus, IconSettings, IconSun, IconX } from "@tabler/icons-react";
+import {
+  IconMoon,
+  IconPlus,
+  IconSettings,
+  IconSun,
+  IconX,
+} from "@tabler/icons-react";
 import { isViewRunning, type SessionView } from "../types.ts";
 
 interface TabBarProps {
@@ -26,7 +32,13 @@ export function TabBar({
 }: TabBarProps) {
   return (
     <div className="tabbar" role="tablist" aria-label="セッションタブ">
-      <button className="tab-new" onClick={onNew} title="新しいセッション" aria-label="新しいセッション">
+      <button
+        type="button"
+        className="tab-new"
+        onClick={onNew}
+        title="新しいセッション"
+        aria-label="新しいセッション"
+      >
         <IconPlus size={17} />
       </button>
       {tabs.map((id) => {
@@ -48,8 +60,11 @@ export function TabBar({
           >
             {isRunning && <span className="live-dot" aria-label="実行中" />}
             <span className="tab-name">{name}</span>
-            {isRunning && runningTool && <span className="tab-badge">{runningTool}</span>}
+            {isRunning && runningTool && (
+              <span className="tab-badge">{runningTool}</span>
+            )}
             <button
+              type="button"
               className="tab-close"
               onClick={(e) => {
                 e.stopPropagation();
@@ -65,13 +80,21 @@ export function TabBar({
       })}
       <div className="tabbar-actions">
         <button
+          type="button"
           className="icon-btn"
           onClick={onToggleTheme}
-          title={theme === "dark" ? "ライトモードに切り替え" : "ダークモードに切り替え"}
+          title={theme === "dark"
+            ? "ライトモードに切り替え"
+            : "ダークモードに切り替え"}
         >
           {theme === "dark" ? <IconSun size={17} /> : <IconMoon size={17} />}
         </button>
-        <button className="icon-btn" onClick={onOpenSettings} title="設定">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={onOpenSettings}
+          title="設定"
+        >
           <IconSettings size={17} />
         </button>
       </div>

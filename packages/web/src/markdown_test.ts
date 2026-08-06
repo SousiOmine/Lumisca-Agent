@@ -1,8 +1,10 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { renderMarkdown } from "./markdown.ts";
 
 Deno.test("markdown renders headings, code and lists", () => {
-  const html = renderMarkdown("# Title\n\n```ts\nconst x = 1;\n```\n\n- a\n- b");
+  const html = renderMarkdown(
+    "# Title\n\n```ts\nconst x = 1;\n```\n\n- a\n- b",
+  );
   assertEquals(html.includes("<h1>Title</h1>"), true);
   assertEquals(html.includes("<code"), true);
   assertEquals(html.includes("const x = 1;"), true);

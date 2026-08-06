@@ -1,4 +1,4 @@
-import type { AgentMessage } from "npm:@earendil-works/pi-agent-core@0.83.0";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 /** Events emitted by the core and forwarded to any client (WebSocket, CLI). */
 export type ClientEvent =

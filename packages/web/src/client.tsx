@@ -11,4 +11,4 @@ declare global {
 const root = document.getElementById("root");
 if (!root) throw new Error("root element not found");
 
-hydrateRoot(root, <App initialData={window.__INITIAL_DATA__} />);
+hydrateRoot(root, <App initialData={globalThis.__INITIAL_DATA__} />);

@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { Type } from "npm:@earendil-works/pi-ai@0.83.0";
-import type { AgentTool } from "npm:@earendil-works/pi-agent-core@0.83.0";
+import { Type } from "@earendil-works/pi-ai";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { DEFAULT_READ_LIMIT, MAX_TOOL_OUTPUT, truncate } from "./truncate.ts";
 
@@ -35,7 +35,7 @@ export function createReadFileTool(
       "Read a file's contents as text. `offset` and `limit` are in bytes. " +
       "Large files are read in chunks; the output is truncated to the last portion when larger than 64KB.",
     parameters: readSchema,
-    execute: async (_id, params, signal) => {
+    execute: async (_id, params, _signal) => {
       const resolved = await ctx.sandbox.resolve(params.path, ctx.cwd);
       if (!resolved.ok) throw new Error(resolved.reason);
       const stat = await Deno.stat(resolved.path);
@@ -47,13 +47,19 @@ export function createReadFileTool(
         await file.seek(offset, Deno.SeekMode.Start);
         const buffer = new Uint8Array(limit);
         const read = await file.read(buffer);
-        const bytes = read === null ? new Uint8Array(0) : buffer.subarray(0, read);
+        const bytes = read === null
+          ? new Uint8Array(0)
+          : buffer.subarray(0, read);
         const text = new TextDecoder().decode(bytes);
         const { text: trimmed, truncated } = truncate(text);
         let note = "";
-        if (truncated) note = `\n[output truncated to the last ${MAX_TOOL_OUTPUT} bytes]`;
+        if (truncated) {
+          note = `\n[output truncated to the last ${MAX_TOOL_OUTPUT} bytes]`;
+        }
         if (offset + bytes.length < stat.size) {
-          note += `\n[file continues; read with offset=${offset + bytes.length}]`;
+          note += `\n[file continues; read with offset=${
+            offset + bytes.length
+          }]`;
         }
         return {
           content: [{ type: "text", text: trimmed + note }],
@@ -158,7 +164,9 @@ export function createListDirTool(
       entries.sort((a, b) => a.name.localeCompare(b.name));
       const lines = entries.map((e) => fileInfoLine(e));
       const { text, truncated } = truncate(lines.join("\n") || "(empty)");
-      const note = truncated ? `\n[listing truncated to the last ${MAX_TOOL_OUTPUT} bytes]` : "";
+      const note = truncated
+        ? `\n[listing truncated to the last ${MAX_TOOL_OUTPUT} bytes]`
+        : "";
       return {
         content: [{ type: "text", text: `${resolved.path}:\n${text}${note}` }],
         details: { path: resolved.path, count: entries.length },

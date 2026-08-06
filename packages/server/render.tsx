@@ -1,4 +1,4 @@
-import { renderToReadableStream } from "npm:react-dom@19/server";
+import { renderToReadableStream } from "react-dom/server";
 import { App } from "../web/src/App.tsx";
 import type { InitialData } from "../web/src/types.ts";
 

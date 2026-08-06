@@ -8,7 +8,7 @@ import {
   getApiKey,
   setApiKey,
 } from "./settings/credentials.ts";
-import type { CredentialStore, Provider } from "npm:@earendil-works/pi-ai@0.83.0";
+import type { CredentialStore, Provider } from "@earendil-works/pi-ai";
 import { createDbModelsStore, ModelManager } from "./models/mod.ts";
 import { createWorkspaceRepo, type WorkspaceRepo } from "./workspace/repo.ts";
 import { Sandbox } from "./workspace/sandbox.ts";
@@ -16,7 +16,7 @@ import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
 import { SessionAgent } from "./agent/session-agent.ts";
 import { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
-import type { AgentMessage } from "npm:@earendil-works/pi-agent-core@0.83.0";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 export interface CreateSessionInput {
   workspaceId: string;
@@ -48,7 +48,11 @@ export class LumiscaCore {
     this.settings = createSettingsRepo(db);
     this.credentials = createDbCredentialStore(this.settings);
     const modelsStore = createDbModelsStore(this.settings);
-    this.models = new ModelManager(this.credentials, this.settings, modelsStore);
+    this.models = new ModelManager(
+      this.credentials,
+      this.settings,
+      modelsStore,
+    );
     this.workspaces = createWorkspaceRepo(db);
     this.sessions = createSessionRepo(db);
     this.messages = createMessageRepo(db);
@@ -114,7 +118,7 @@ export class LumiscaCore {
   }
 
   async getProviderApiKey(providerId: string): Promise<string | undefined> {
-    return getApiKey(this.credentials, providerId);
+    return await getApiKey(this.credentials, providerId);
   }
 
   async listProviderCredentials(): Promise<string[]> {
@@ -191,7 +195,7 @@ export class LumiscaCore {
   }
 
   /** Load a persisted session into memory (restores message history). */
-  async openSession(id: string): Promise<SessionInfo> {
+  openSession(id: string): SessionInfo {
     const session = this.sessions.get(id);
     if (!session) throw new Error(`Session not found: ${id}`);
     if (!this.agents.has(id)) {
@@ -222,11 +226,11 @@ export class LumiscaCore {
     await agent.prompt(text);
   }
 
-  async steer(id: string, text: string): Promise<void> {
+  steer(id: string, text: string): void {
     this.requireAgent(id).steer(text);
   }
 
-  async followUp(id: string, text: string): Promise<void> {
+  followUp(id: string, text: string): void {
     this.requireAgent(id).followUp(text);
   }
 
@@ -262,7 +266,9 @@ export class LumiscaCore {
   }
 
   /** List models of a provider with their enabled state. */
-  listModelsWithState(providerId: string): Array<{ id: string; enabled: boolean }> {
+  listModelsWithState(
+    providerId: string,
+  ): Array<{ id: string; enabled: boolean }> {
     return this.listModelsDetailed(providerId).map(({ id, enabled }) => ({
       id,
       enabled,
@@ -371,7 +377,10 @@ export class LumiscaCore {
     if (current) {
       const messages = current.messages;
       this.agents.delete(session.id);
-      this.agents.set(session.id, this.buildAgent(session, workspace, messages));
+      this.agents.set(
+        session.id,
+        this.buildAgent(session, workspace, messages),
+      );
     }
   }
 }

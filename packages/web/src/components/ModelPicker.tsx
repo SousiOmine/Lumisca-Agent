@@ -20,7 +20,9 @@ export function ModelPicker({
   onSelect,
   onModelsLoaded,
 }: ModelPickerProps) {
-  const [providers, setProviders] = useState<Array<{ id: string; name: string }>>([]);
+  const [providers, setProviders] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [providerId, setProviderId] = useState(value?.provider ?? "");
   const [search, setSearch] = useState("");
@@ -52,7 +54,9 @@ export function ModelPicker({
   }, [providerId]);
 
   const visible = useMemo(() => {
-    const list = enabledOnly ? models.filter((m) => m.enabled !== false) : models;
+    const list = enabledOnly
+      ? models.filter((m) => m.enabled !== false)
+      : models;
     const q = search.trim().toLowerCase();
     if (!q) return list;
     return list.filter(
@@ -64,56 +68,70 @@ export function ModelPicker({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {providers.length === 0 ? (
-        <div className="settings-note" style={{ padding: 6 }}>
-          設定済みのプロバイダーがありません。
-          設定画面からAPIキーを登録してください。
-        </div>
-      ) : (
-        <>
-          <label>
-            プロバイダー
-            <select
-              value={providerId}
-              onChange={(e) => {
-                setProviderId(e.target.value);
-                setSearch("");
-              }}
-            >
-              {providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </label>
-          <label>
-            モデル{busy && <span style={{ color: "var(--accent)" }}> 読み込み中...</span>}
-            <input
-              placeholder="モデルを検索..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className="model-list">
-              {visible.slice(0, 200).map((m) => (
-                <div
-                  key={m.id}
-                  className={`model-item${value?.modelId === m.id ? " selected" : ""}`}
-                  onClick={() => onSelect(providerId, m.id)}
-                >
-                  <span className="model-id">{m.id}</span>
-                  <span className="model-meta">
-                    {formatModelMeta(m.contextWindow, m.reasoning)}
-                  </span>
-                </div>
-              ))}
-              {visible.length === 0 && (
-                <div style={{ padding: 8, fontSize: 12, color: "var(--text-faint)" }}>
-                  {enabledOnly && models.length > 0
-                    ? "有効なモデルがありません(設定でモデルを有効にしてください)"
-                    : "該当するモデルがありません"}
-                </div>
+      {providers.length === 0
+        ? (
+          <div className="settings-note" style={{ padding: 6 }}>
+            設定済みのプロバイダーがありません。
+            設定画面からAPIキーを登録してください。
+          </div>
+        )
+        : (
+          <>
+            <label>
+              プロバイダー
+              <select
+                value={providerId}
+                onChange={(e) => {
+                  setProviderId(e.target.value);
+                  setSearch("");
+                }}
+              >
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              モデル{busy && (
+                <span style={{ color: "var(--accent)" }}>読み込み中...</span>
               )}
-            </div>
-          </label>
-        </>
-      )}
+              <input
+                placeholder="モデルを検索..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <div className="model-list">
+                {visible.slice(0, 200).map((m) => (
+                  <div
+                    key={m.id}
+                    className={`model-item${
+                      value?.modelId === m.id ? " selected" : ""
+                    }`}
+                    onClick={() => onSelect(providerId, m.id)}
+                  >
+                    <span className="model-id">{m.id}</span>
+                    <span className="model-meta">
+                      {formatModelMeta(m.contextWindow, m.reasoning)}
+                    </span>
+                  </div>
+                ))}
+                {visible.length === 0 && (
+                  <div
+                    style={{
+                      padding: 8,
+                      fontSize: 12,
+                      color: "var(--text-faint)",
+                    }}
+                  >
+                    {enabledOnly && models.length > 0
+                      ? "有効なモデルがありません(設定でモデルを有効にしてください)"
+                      : "該当するモデルがありません"}
+                  </div>
+                )}
+              </div>
+            </label>
+          </>
+        )}
     </div>
   );
 }

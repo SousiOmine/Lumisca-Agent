@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, connectEvents } from "./api.ts";
 import type {
-  AgentMessage,
   ClientEvent,
   InitialData,
   SessionView,
@@ -79,9 +78,11 @@ export function App({ initialData }: AppProps) {
       restoredRef.current = true;
       setTabs(restoredTabs);
       setViews((prev) => new Map([...prev, ...restoredViews]));
-      setActiveTab(active && restoredTabs.includes(active)
-        ? active
-        : (restoredTabs.at(-1) ?? null));
+      setActiveTab(
+        active && restoredTabs.includes(active)
+          ? active
+          : (restoredTabs.at(-1) ?? null),
+      );
     };
     restore();
     return () => {
@@ -93,7 +94,10 @@ export function App({ initialData }: AppProps) {
   useEffect(() => {
     if (!restoredRef.current) return;
     try {
-      localStorage.setItem(TABS_KEY, JSON.stringify(tabs.filter((t) => t !== DRAFT_TAB)));
+      localStorage.setItem(
+        TABS_KEY,
+        JSON.stringify(tabs.filter((t) => t !== DRAFT_TAB)),
+      );
       if (activeTab && activeTab !== DRAFT_TAB) {
         localStorage.setItem(ACTIVE_TAB_KEY, activeTab);
       } else {
@@ -146,11 +150,6 @@ export function App({ initialData }: AppProps) {
     };
   }, []);
 
-  const openTab = useCallback((sessionId: string) => {
-    setTabs((prev) => (prev.includes(sessionId) ? prev : [...prev, sessionId]));
-    setActiveTab(sessionId);
-  }, []);
-
   /** Record an error on a session view (no-op when the tab is gone). */
   const setViewError = useCallback((sessionId: string, error: unknown) => {
     setViews((prev) => {
@@ -200,7 +199,9 @@ export function App({ initialData }: AppProps) {
     async (workspaceId: string, model: ComposerModel | null, text: string) => {
       const session = await api.createSession({
         workspaceId,
-        ...(model ? { modelProvider: model.provider, modelId: model.modelId } : {}),
+        ...(model
+          ? { modelProvider: model.provider, modelId: model.modelId }
+          : {}),
       });
       setTabs((prev) => {
         if (prev.includes(DRAFT_TAB)) {
@@ -244,22 +245,30 @@ export function App({ initialData }: AppProps) {
     api.abort(sessionId).catch(console.error);
   }, []);
 
-  const changeModel = useCallback(async (sessionId: string, provider: string, modelId: string) => {
-    try {
-      const updated = await api.updateSessionModel(sessionId, provider, modelId);
-      setViews((prev) => {
-        const current = prev.get(sessionId);
-        if (!current) return prev;
-        const next = new Map(prev);
-        next.set(sessionId, { ...current, info: updated });
-        return next;
-      });
-    } catch (error) {
-      console.error(error);
-    }
-  }, []);
+  const changeModel = useCallback(
+    async (sessionId: string, provider: string, modelId: string) => {
+      try {
+        const updated = await api.updateSessionModel(
+          sessionId,
+          provider,
+          modelId,
+        );
+        setViews((prev) => {
+          const current = prev.get(sessionId);
+          if (!current) return prev;
+          const next = new Map(prev);
+          next.set(sessionId, { ...current, info: updated });
+          return next;
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [],
+  );
 
-  const viewFor = (sessionId: string): SessionView | undefined => views.get(sessionId);
+  const viewFor = (sessionId: string): SessionView | undefined =>
+    views.get(sessionId);
   const activeView = activeTab ? viewFor(activeTab) : undefined;
 
   return (
@@ -292,9 +301,7 @@ export function App({ initialData }: AppProps) {
             onWorkspaceCreated={handleWorkspaceCreated}
           />
         )}
-      {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
-      )}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
@@ -330,7 +337,9 @@ function handleEvent(
         }
         // Replace the optimistic version of this message if present.
         const exists = v.messages.some(
-          (m) => m.timestamp === event.message.timestamp && m.role === event.message.role,
+          (m) =>
+            m.timestamp === event.message.timestamp &&
+            m.role === event.message.role,
         );
         return {
           ...v,

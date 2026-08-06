@@ -1,4 +1,4 @@
-import { Hono } from "npm:hono@4";
+import { Hono } from "hono";
 import type { LumiscaCore } from "@lumisca/core";
 import { jsonError } from "./util.ts";
 
@@ -9,11 +9,18 @@ export function workspaceRoutes(core: LumiscaCore): Hono {
 
   app.post("/workspaces", async (c) => {
     const body = await c.req.json().catch(() => null);
-    if (!body || typeof body.name !== "string" || !Array.isArray(body.folders)) {
-      return c.json({ error: "name (string) and folders (string[]) are required" }, 400);
+    if (
+      !body || typeof body.name !== "string" || !Array.isArray(body.folders)
+    ) {
+      return c.json({
+        error: "name (string) and folders (string[]) are required",
+      }, 400);
     }
     try {
-      const ws = await core.createWorkspace(body.name, body.folders.map(String));
+      const ws = await core.createWorkspace(
+        body.name,
+        body.folders.map(String),
+      );
       return c.json(ws, 201);
     } catch (error) {
       return jsonError(c, error);
@@ -32,7 +39,10 @@ export function workspaceRoutes(core: LumiscaCore): Hono {
       return c.json({ error: "folders (string[]) is required" }, 400);
     }
     try {
-      await core.updateWorkspaceFolders(c.req.param("id"), body.folders.map(String));
+      await core.updateWorkspaceFolders(
+        c.req.param("id"),
+        body.folders.map(String),
+      );
       return c.json({ ok: true });
     } catch (error) {
       return jsonError(c, error);

@@ -92,7 +92,9 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
     },
 
     get(id: string): SessionRecord | undefined {
-      const row = getStmt.get(id) as Parameters<typeof toSession>[0] | undefined;
+      const row = getStmt.get(id) as
+        | Parameters<typeof toSession>[0]
+        | undefined;
       return row ? toSession(row) : undefined;
     },
 

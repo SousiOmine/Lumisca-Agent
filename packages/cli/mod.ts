@@ -1,7 +1,7 @@
 import { LumiscaCore } from "@lumisca/core";
 import { runRepl } from "./repl.ts";
 import { pickModel, pickWorkspace, selectFromList } from "./select.ts";
-import { color, error, header, info, success } from "./ui.ts";
+import { color, error, info, success } from "./ui.ts";
 
 const USAGE = `Lumisca CLI
 
@@ -32,6 +32,10 @@ function parseArgs(args: string[]): CliOptions {
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
+    if (arg === "--help" || arg === "-h") {
+      console.log(USAGE);
+      Deno.exit(0);
+    }
     switch (arg) {
       case "--db":
         opts.dbPath = args[++i]!;
@@ -48,10 +52,6 @@ function parseArgs(args: string[]): CliOptions {
       case "--session":
         opts.sessionId = args[++i]!;
         break;
-      case "--help":
-      case "-h":
-        console.log(USAGE);
-        Deno.exit(0);
       default:
         error(`不明な引数: ${arg}`);
         console.log(USAGE);
@@ -81,7 +81,9 @@ async function main(): Promise<void> {
     // Workspace selection
     let workspaceId: string | null = null;
     if (opts.workspaceName) {
-      const ws = core.listWorkspaces().find((w) => w.name === opts.workspaceName);
+      const ws = core.listWorkspaces().find((w) =>
+        w.name === opts.workspaceName
+      );
       if (ws) {
         workspaceId = ws.id;
       } else {
@@ -105,7 +107,9 @@ async function main(): Promise<void> {
         sessionId = await selectFromList(
           "セッションを選択",
           sessions.map((s) => ({
-            label: `${s.name} ${color.faint(`${s.modelProvider}/${s.modelId}`)}`,
+            label: `${s.name} ${
+              color.faint(`${s.modelProvider}/${s.modelId}`)
+            }`,
             value: s.id,
           })),
         );
@@ -121,7 +125,9 @@ async function main(): Promise<void> {
         modelProvider: model.providerId,
         modelId: model.modelId,
       });
-      success(`セッション作成: ${session.id} (${model.providerId}/${model.modelId})`);
+      success(
+        `セッション作成: ${session.id} (${model.providerId}/${model.modelId})`,
+      );
       sessionId = session.id;
     }
 

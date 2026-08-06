@@ -24,13 +24,17 @@ export async function selectFromList<T>(
   for (;;) {
     const shown = filtered.slice(0, 30);
     for (let i = 0; i < shown.length; i++) {
-      console.log(`  ${color.yellow(String(i + 1).padStart(2))}  ${shown[i]!.label}`);
+      console.log(
+        `  ${color.yellow(String(i + 1).padStart(2))}  ${shown[i]!.label}`,
+      );
     }
     if (filtered.length > shown.length) {
       info(`...ほか ${filtered.length - shown.length} 件`);
     }
     const input = await getPromptFn()(
-      `選択 (${query ? `検索: ${query}` : "番号で選択 / 文字で検索"} / 空Enterで戻る)`,
+      `選択 (${
+        query ? `検索: ${query}` : "番号で選択 / 文字で検索"
+      } / 空Enterで戻る)`,
     );
     if (input === null) return null;
     const trimmed = input.trim();
@@ -62,7 +66,9 @@ export async function pickWorkspace(core: LumiscaCore): Promise<string | null> {
     info("作業フォルダのパスを入力してください(複数ある場合はカンマ区切り)");
     const input = await getPromptFn()("フォルダ:");
     if (input === null) return null;
-    const folders = input.split(",").map((f) => f.trim()).filter((f) => f.length > 0);
+    const folders = input.split(",").map((f) => f.trim()).filter((f) =>
+      f.length > 0
+    );
     if (folders.length === 0) {
       error("フォルダが指定されていません");
       return null;
@@ -81,13 +87,17 @@ export async function pickWorkspace(core: LumiscaCore): Promise<string | null> {
   const id = await selectFromList(
     "ワークスペースを選択",
     workspaces.map((w) => ({
-      label: `${w.name} ${color.faint(`(${w.folders.length} folders: ${w.folders.join(", ")})`)}`,
+      label: `${w.name} ${
+        color.faint(`(${w.folders.length} folders: ${w.folders.join(", ")})`)
+      }`,
       value: w.id,
     })),
   );
   if (id === null) {
     // offer to create a new one
-    const yes = await getPromptFn()("新しいワークスペースを作成しますか? (y/N)");
+    const yes = await getPromptFn()(
+      "新しいワークスペースを作成しますか? (y/N)",
+    );
     if (yes?.toLowerCase() === "y") return pickWorkspace(core);
     return null;
   }
@@ -95,10 +105,12 @@ export async function pickWorkspace(core: LumiscaCore): Promise<string | null> {
 }
 
 /** Pick a model (provider → model). */
-export async function pickModel(core: LumiscaCore): Promise<{
-  providerId: string;
-  modelId: string;
-} | null> {
+export async function pickModel(core: LumiscaCore): Promise<
+  {
+    providerId: string;
+    modelId: string;
+  } | null
+> {
   const providers = core.models.getProviders();
   const providerId = await selectFromList(
     "プロバイダーを選択",
@@ -111,7 +123,11 @@ export async function pickModel(core: LumiscaCore): Promise<{
   const modelId = await selectFromList(
     `モデルを選択 (${models.length} 件)`,
     models.map((m) => ({
-      label: `${m.id}${m.reasoning ? " 🧠" : ""}${m.contextWindow ? ` ${color.faint(`${Math.round(m.contextWindow / 1024)}K ctx`)}` : ""}`,
+      label: `${m.id}${m.reasoning ? " 🧠" : ""}${
+        m.contextWindow
+          ? ` ${color.faint(`${Math.round(m.contextWindow / 1024)}K ctx`)}`
+          : ""
+      }`,
       value: m.id,
     })),
     (id, q) => id.toLowerCase().includes(q),

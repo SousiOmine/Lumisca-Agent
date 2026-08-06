@@ -18,7 +18,9 @@ interface ChatViewProps {
   onModelChange: (provider: string, modelId: string) => void;
 }
 
-export function ChatView({ view, onPrompt, onAbort, onModelChange }: ChatViewProps) {
+export function ChatView(
+  { view, onPrompt, onAbort, onModelChange }: ChatViewProps,
+) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const isRunning = isViewRunning(view);
@@ -90,7 +92,10 @@ export function ChatView({ view, onPrompt, onAbort, onModelChange }: ChatViewPro
           onChange={setInput}
           placeholder="タスクを入力..."
           onKeyDown={onKeyDown}
-          model={{ provider: view.info.modelProvider, modelId: view.info.modelId }}
+          model={{
+            provider: view.info.modelProvider,
+            modelId: view.info.modelId,
+          }}
           onModelSelect={onModelChange}
           submitLabel="送信"
           submitDisabled={!input.trim()}
@@ -114,7 +119,9 @@ function MessageRow({
   if (message.role === "toolResult") return null;
 
   if (message.role === "user") {
-    const text = contentText(message.content as Array<{ type: string; text?: string }>);
+    const text = contentText(
+      message.content as Array<{ type: string; text?: string }>,
+    );
     return (
       <div className="msg user">
         <div className="msg-body">
@@ -125,7 +132,9 @@ function MessageRow({
   }
 
   const assistant = message as AssistantMessage;
-  const text = contentText(assistant.content as Array<{ type: string; text?: string }>);
+  const text = contentText(
+    assistant.content as Array<{ type: string; text?: string }>,
+  );
   const toolCalls = assistant.content.filter(
     (b): b is ToolCallBlock => b.type === "toolCall",
   );
@@ -140,7 +149,9 @@ function MessageRow({
   return (
     <div className="msg">
       <div className="msg-body markdown">
-        {text && <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />}
+        {text && (
+          <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+        )}
         {toolCalls.map((tc) => (
           <ToolCall
             key={tc.id}

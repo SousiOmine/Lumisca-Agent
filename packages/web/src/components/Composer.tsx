@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { type KeyboardEvent, useState } from "react";
 import { IconChevronRight } from "@tabler/icons-react";
 import { ModelPicker } from "./ModelPicker.tsx";
 
@@ -63,11 +63,15 @@ export function Composer({
       <div className="input-row">
         <div className="model-switch-bar">
           <button
+            type="button"
             className="model-switch"
             onClick={() => setShowModelPicker((o) => !o)}
             title="モデルを選択"
           >
-            <span className="live-dot" style={{ background: "var(--text-faint)", width: 6, height: 6 }} />
+            <span
+              className="live-dot"
+              style={{ background: "var(--text-faint)", width: 6, height: 6 }}
+            />
             <span className="mono">
               {model ? `${model.provider}/${model.modelId}` : "モデル: 自動"}
             </span>
@@ -88,9 +92,14 @@ export function Composer({
           )}
         </div>
         {onAbort
-          ? <button className="btn danger" onClick={onAbort}>中断</button>
+          ? (
+            <button type="button" className="btn danger" onClick={onAbort}>
+              中断
+            </button>
+          )
           : (
             <button
+              type="button"
               className="btn primary"
               onClick={onSubmit}
               disabled={submitDisabled}

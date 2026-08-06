@@ -59,7 +59,7 @@ export async function bundleClient(options: BundleOptions): Promise<void> {
     "--jsx=automatic",
     `--outfile=${options.outfile}`,
     "--log-level=warning",
-    "--define:process.env.NODE_ENV=\"production\"",
+    '--define:process.env.NODE_ENV="production"',
   ];
   const cmd = new Deno.Command(exe, {
     args,

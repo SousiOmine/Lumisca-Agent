@@ -1,4 +1,4 @@
-import type { AgentMessage } from "npm:@earendil-works/pi-agent-core@0.83.0";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { LumiscaDb } from "../db/mod.ts";
 
 export interface StoredMessage {
@@ -11,7 +11,11 @@ export interface StoredMessage {
 }
 
 export interface MessageRepo {
-  append(sessionId: string, message: AgentMessage, parentId?: string | null): StoredMessage;
+  append(
+    sessionId: string,
+    message: AgentMessage,
+    parentId?: string | null,
+  ): StoredMessage;
   list(sessionId: string): StoredMessage[];
   listMessages(sessionId: string): AgentMessage[];
   deleteBySession(sessionId: string): void;
@@ -50,7 +54,8 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
   return {
     append(sessionId, message, parentId = null): StoredMessage {
       const id = crypto.randomUUID();
-      const timestamp = (message as { timestamp?: number }).timestamp ?? Date.now();
+      const timestamp = (message as { timestamp?: number }).timestamp ??
+        Date.now();
       insertStmt.run(
         id,
         sessionId,
@@ -59,7 +64,14 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
         parentId,
         timestamp,
       );
-      return { id, sessionId, role: message.role, message, parentId, timestamp };
+      return {
+        id,
+        sessionId,
+        role: message.role,
+        message,
+        parentId,
+        timestamp,
+      };
     },
 
     list(sessionId: string): StoredMessage[] {

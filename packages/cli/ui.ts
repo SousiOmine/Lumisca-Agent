@@ -71,7 +71,10 @@ export async function pickNumber(
 }
 
 /** Prompt for a non-empty string; returns null when cancelled. */
-export async function ask(label: string, backLabel = "キャンセル"): Promise<string | null> {
+export async function ask(
+  label: string,
+  backLabel = "キャンセル",
+): Promise<string | null> {
   const input = await promptFn(`${label} (空Enterで${backLabel})`);
   if (input === null || input.trim() === "") return null;
   return input.trim();

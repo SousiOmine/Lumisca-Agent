@@ -1,12 +1,9 @@
 import { realpathSync } from "node:fs";
-import {
-  fauxAssistantMessage,
-  fauxProvider,
-} from "npm:@earendil-works/pi-ai@0.83.0";
-import { assertEquals } from "jsr:@std/assert";
+import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
+import { assertEquals } from "@std/assert";
 import { LumiscaCore } from "@lumisca/core";
 import { startServer } from "./app.ts";
-async function setup() {
+function setup() {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const server = startServer(core, 0);
@@ -15,7 +12,11 @@ async function setup() {
   return { core, server, faux, base };
 }
 
-function json(base: string, path: string, init?: RequestInit): Promise<Response> {
+function json(
+  base: string,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
   return fetch(`${base}${path}`, {
     ...init,
     headers: { "content-type": "application/json", ...init?.headers },
@@ -83,7 +84,10 @@ Deno.test("session prompt roundtrip via API", async () => {
     });
     assertEquals(promptRes.status, 200);
 
-    const messagesRes = await json(base, `/api/sessions/${session.id}/messages`);
+    const messagesRes = await json(
+      base,
+      `/api/sessions/${session.id}/messages`,
+    );
     const messages = await messagesRes.json();
     assertEquals(messages.length, 2);
     assertEquals(messages[1].role, "assistant");
@@ -148,16 +152,30 @@ Deno.test("websocket streams agent events", async () => {
 Deno.test("model enablement API", async () => {
   const { core, server, faux, base } = await setup();
   try {
-    const modelsRes = await fetch(`${base}/api/providers/${faux.provider.id}/models`);
+    const modelsRes = await fetch(
+      `${base}/api/providers/${faux.provider.id}/models`,
+    );
     assertEquals(modelsRes.status, 200);
-    const models = await modelsRes.json() as Array<{ id: string; enabled: boolean }>;
+    const models = await modelsRes.json() as Array<
+      { id: string; enabled: boolean }
+    >;
     assertEquals(models.length > 0, true);
-    assertEquals(models.every((m) => m.enabled === true), true, "default enabled");
+    assertEquals(
+      models.every((m) => m.enabled === true),
+      true,
+      "default enabled",
+    );
 
     const target = models[0]!;
     const put = await fetch(
-      `${base}/api/providers/${faux.provider.id}/models/${encodeURIComponent(target.id)}`,
-      { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: false }) },
+      `${base}/api/providers/${faux.provider.id}/models/${
+        encodeURIComponent(target.id)
+      }`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      },
     );
     assertEquals(put.status, 200);
 
@@ -192,7 +210,10 @@ Deno.test("session model switch API", async () => {
 
     const res = await json(base, `/api/sessions/${session.id}/model`, {
       method: "POST",
-      body: JSON.stringify({ provider: faux.provider.id, modelId: faux.getModel().id }),
+      body: JSON.stringify({
+        provider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
     });
     assertEquals(res.status, 200);
     const updated = await res.json();
@@ -262,21 +283,39 @@ Deno.test("filesystem browse API", async () => {
     await Deno.mkdir(`${sub}/beta`, { recursive: true });
     await Deno.writeTextFile(`${root}/file.txt`, "x");
 
-    const browseRes = await fetch(`${base}/api/fs/browse?path=${encodeURIComponent(root)}`);
+    const browseRes = await fetch(
+      `${base}/api/fs/browse?path=${encodeURIComponent(root)}`,
+    );
     assertEquals(browseRes.status, 200);
     const browse = await browseRes.json();
     assertEquals(browse.path, root);
-    assertEquals(browse.entries.some((e: { name: string }) => e.name === "alpha"), true);
-    assertEquals(browse.entries.some((e: { name: string }) => e.name === "file.txt"), false, "files excluded");
+    assertEquals(
+      browse.entries.some((e: { name: string }) => e.name === "alpha"),
+      true,
+    );
+    assertEquals(
+      browse.entries.some((e: { name: string }) => e.name === "file.txt"),
+      false,
+      "files excluded",
+    );
 
-    const nested = await fetch(`${base}/api/fs/browse?path=${encodeURIComponent(sub)}`);
+    const nested = await fetch(
+      `${base}/api/fs/browse?path=${encodeURIComponent(sub)}`,
+    );
     const nestedJson = await nested.json();
-    assertEquals(nestedJson.entries.some((e: { name: string }) => e.name === "beta"), true);
+    assertEquals(
+      nestedJson.entries.some((e: { name: string }) => e.name === "beta"),
+      true,
+    );
 
     // Non-directory / missing path → 400.
-    const fileRes = await fetch(`${base}/api/fs/browse?path=${encodeURIComponent(`${root}/file.txt`)}`);
+    const fileRes = await fetch(
+      `${base}/api/fs/browse?path=${encodeURIComponent(`${root}/file.txt`)}`,
+    );
     assertEquals(fileRes.status, 400);
-    const missing = await fetch(`${base}/api/fs/browse?path=${encodeURIComponent(`${root}/nope`)}`);
+    const missing = await fetch(
+      `${base}/api/fs/browse?path=${encodeURIComponent(`${root}/nope`)}`,
+    );
     assertEquals(missing.status, 400);
 
     await Deno.remove(root, { recursive: true });
@@ -291,7 +330,9 @@ Deno.test("providers API includes auth state", async () => {
   try {
     const res = await fetch(`${base}/api/providers`);
     assertEquals(res.status, 200);
-    const providers = await res.json() as Array<{ id: string; configured: boolean; source?: string }>;
+    const providers = await res.json() as Array<
+      { id: string; configured: boolean; source?: string }
+    >;
     assertEquals(providers.length > 0, true);
     assertEquals(typeof providers[0]!.configured, "boolean");
     // The faux provider always resolves auth → configured.

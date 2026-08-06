@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { Hono } from "npm:hono@4";
+import { Hono } from "hono";
 
 /** Filesystem browser endpoints (workspace folder picker). */
 export function fsRoutes(): Hono {

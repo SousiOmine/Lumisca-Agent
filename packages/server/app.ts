@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { Hono } from "npm:hono@4";
-import { cors } from "npm:hono@4/cors";
-import { upgradeWebSocket } from "npm:hono@4/deno";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { upgradeWebSocket } from "hono/deno";
 import type { LumiscaCore } from "@lumisca/core";
 import { bundleClient } from "./bundle.ts";
 import { renderAppMarkup, renderHtmlDocument } from "./render.tsx";
@@ -135,7 +135,9 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       });
     } catch (error) {
       return c.text(
-        `Client bundle build failed: ${error instanceof Error ? error.message : String(error)}`,
+        `Client bundle build failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
         500,
       );
     }
@@ -162,7 +164,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   });
 
   // SPA fallback: any other page renders the app shell.
-  app.get("*", async (c, next) => {
+  app.get("*", (c, next) => {
     if (c.req.path.startsWith("/api") || c.req.path === "/ws") {
       return next();
     }
@@ -182,13 +184,13 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const ws = upgradeWebSocket(() => {
     let unsubscribe: (() => void) | undefined;
     return {
-      onOpen(evt, ws) {
+      onOpen(_evt, ws) {
         if (ws.raw) wsClients.add(ws.raw);
         unsubscribe = core.subscribe((event) => {
           ws.send(JSON.stringify(event));
         });
       },
-      onClose(evt, ws) {
+      onClose(_evt, ws) {
         unsubscribe?.();
         if (ws.raw) wsClients.delete(ws.raw);
       },
@@ -201,7 +203,11 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 }
 
 /** Start the server on 127.0.0.1:port. */
-export function startServer(core: LumiscaCore, port = 8000, options?: AppOptions) {
+export function startServer(
+  core: LumiscaCore,
+  port = 8000,
+  options?: AppOptions,
+) {
   const app = createApp(core, options);
   return Deno.serve({ hostname: "127.0.0.1", port }, app.fetch);
 }

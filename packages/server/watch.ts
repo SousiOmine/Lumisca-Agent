@@ -13,7 +13,7 @@ export class SourceWatcher {
     this.debounceMs = debounceMs;
   }
 
-  async start(onChange: () => void): Promise<void> {
+  start(onChange: () => void): void {
     const watcher = Deno.watchFs(this.srcDir, { recursive: true });
     this.watcher = watcher;
     (async () => {

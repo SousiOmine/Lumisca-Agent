@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "jsr:@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { createBashTool } from "./bash.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 
@@ -9,7 +9,8 @@ function makeTool() {
 function toolText(
   result: { content: { type: "text" | "image"; text?: string }[] },
 ): string {
-  return result.content.map((c) => (c.type === "text" ? (c.text ?? "") : "")).join("");
+  return result.content.map((c) => (c.type === "text" ? (c.text ?? "") : ""))
+    .join("");
 }
 
 Deno.test("bash tool reports exit code", async () => {
@@ -45,7 +46,10 @@ Deno.test({
       `output contains mojibake: ${text}`,
     );
     // The code page number must be visible (932 on Japanese Windows).
-    assert(/9\d\d/.test(text) || /8\d\d/.test(text), `code page missing: ${text}`);
+    assert(
+      /9\d\d/.test(text) || /8\d\d/.test(text),
+      `code page missing: ${text}`,
+    );
   },
 });
 

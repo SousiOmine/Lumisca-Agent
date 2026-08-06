@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 
 // "日本語" in Shift_JIS (CP932).

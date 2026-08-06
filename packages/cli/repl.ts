@@ -1,5 +1,13 @@
-import { contentText, type ClientEvent, type LumiscaCore, type SessionInfo } from "@lumisca/core";
-import { color, error, getPromptFn, header, info, success, userLine } from "./ui.ts";
+import { type ClientEvent, contentText, type LumiscaCore } from "@lumisca/core";
+import {
+  color,
+  error,
+  getPromptFn,
+  header,
+  info,
+  success,
+  userLine,
+} from "./ui.ts";
 import { pickModel, pickWorkspace, selectFromList } from "./select.ts";
 
 function summarize(text: string, max = 300): string {
@@ -13,9 +21,17 @@ function printToolStart(toolName: string, args: unknown): void {
   console.log(color.cyan(`  ⚙ ${toolName} ${color.faint(argsText)}`));
 }
 
-function printToolEnd(toolName: string, result: unknown, isError: boolean): void {
-  const r = result as { content?: Array<{ type: string; text?: string }> } | null;
-  const text = r?.content ? contentText(r.content as Array<{ type: string; text?: string }>) : "";
+function printToolEnd(
+  toolName: string,
+  result: unknown,
+  isError: boolean,
+): void {
+  const r = result as
+    | { content?: Array<{ type: string; text?: string }> }
+    | null;
+  const text = r?.content
+    ? contentText(r.content as Array<{ type: string; text?: string }>)
+    : "";
   const summary = summarize(text, 200);
   if (isError) {
     console.log(color.red(`  ✗ ${toolName} → ${summary}`));
@@ -25,7 +41,10 @@ function printToolEnd(toolName: string, result: unknown, isError: boolean): void
 }
 
 /** Interactive single-session REPL. */
-export async function runRepl(core: LumiscaCore, sessionId: string): Promise<void> {
+export async function runRepl(
+  core: LumiscaCore,
+  sessionId: string,
+): Promise<void> {
   let currentId = sessionId;
   let agent = core.getAgent(currentId);
   if (!agent) {
@@ -124,16 +143,18 @@ async function handleCommand(
   switch (cmd) {
     case "help": {
       header("コマンド");
-      for (const [k, v] of [
-        ["/new", "新しいセッションを作成"],
-        ["/resume", "過去のセッションから再開"],
-        ["/model", "モデルを変更"],
-        ["/workspace", "ワークスペースを切り替え"],
-        ["/keys", "APIキーを設定"],
-        ["/sessions", "セッション一覧"],
-        ["/name", "セッション名を変更"],
-        ["/exit", "終了"],
-      ] as const) {
+      for (
+        const [k, v] of [
+          ["/new", "新しいセッションを作成"],
+          ["/resume", "過去のセッションから再開"],
+          ["/model", "モデルを変更"],
+          ["/workspace", "ワークスペースを切り替え"],
+          ["/keys", "APIキーを設定"],
+          ["/sessions", "セッション一覧"],
+          ["/name", "セッション名を変更"],
+          ["/exit", "終了"],
+        ] as const
+      ) {
         console.log(`  ${color.yellow(k.padEnd(12))} ${v}`);
       }
       return undefined;
@@ -149,7 +170,9 @@ async function handleCommand(
         modelProvider: model.providerId,
         modelId: model.modelId,
       });
-      success(`セッション作成: ${session.id} (${model.providerId}/${model.modelId})`);
+      success(
+        `セッション作成: ${session.id} (${model.providerId}/${model.modelId})`,
+      );
       return session.id;
     }
 
@@ -162,7 +185,11 @@ async function handleCommand(
       const id = await selectFromList(
         "セッションを選択",
         sessions.map((s) => ({
-          label: `${s.name} ${color.faint(`${s.modelProvider}/${s.modelId} (${formatDate(s.updatedAt)})`)}`,
+          label: `${s.name} ${
+            color.faint(
+              `${s.modelProvider}/${s.modelId} (${formatDate(s.updatedAt)})`,
+            )
+          }`,
           value: s.id,
         })),
       );
@@ -209,7 +236,11 @@ async function handleCommand(
       header("セッション一覧");
       for (const s of sessions.slice(0, 30)) {
         const active = s.id === currentId ? color.green("*") : " ";
-        console.log(`  ${active} ${s.name} ${color.faint(`${s.modelProvider}/${s.modelId}`)}`);
+        console.log(
+          `  ${active} ${s.name} ${
+            color.faint(`${s.modelProvider}/${s.modelId}`)
+          }`,
+        );
       }
       return undefined;
     }

@@ -1,12 +1,14 @@
-import { builtinModels } from "npm:@earendil-works/pi-ai@0.83.0/providers/all";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type {
+  Api,
+  AuthCheck,
   CredentialStore,
   Model,
   ModelsStore,
   ModelsStoreEntry,
   MutableModels,
   Provider,
-} from "npm:@earendil-works/pi-ai@0.83.0";
+} from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "../settings/repo.ts";
 
 const CATALOG_PREFIX = "model_catalog:";
@@ -15,20 +17,22 @@ const ENABLED_PREFIX = "model_enabled:";
 /** Persistent model catalog cache stored in the settings table. */
 export function createDbModelsStore(settings: SettingsRepo): ModelsStore {
   return {
-    async read(providerId: string): Promise<ModelsStoreEntry | undefined> {
+    read(providerId: string): Promise<ModelsStoreEntry | undefined> {
       const raw = settings.get(`${CATALOG_PREFIX}${providerId}`);
-      if (!raw) return undefined;
+      if (!raw) return Promise.resolve(undefined);
       try {
-        return JSON.parse(raw) as ModelsStoreEntry;
+        return Promise.resolve(JSON.parse(raw) as ModelsStoreEntry);
       } catch {
-        return undefined;
+        return Promise.resolve(undefined);
       }
     },
-    async write(providerId: string, entry: ModelsStoreEntry): Promise<void> {
+    write(providerId: string, entry: ModelsStoreEntry): Promise<void> {
       settings.set(`${CATALOG_PREFIX}${providerId}`, JSON.stringify(entry));
+      return Promise.resolve();
     },
-    async delete(providerId: string): Promise<void> {
+    delete(providerId: string): Promise<void> {
       settings.delete(`${CATALOG_PREFIX}${providerId}`);
+      return Promise.resolve();
     },
   };
 }
@@ -51,29 +55,33 @@ export class ModelManager {
     }
   }
 
-  getProviders() {
+  getProviders(): readonly Provider[] {
     return this.models.getProviders();
   }
 
-  getModels(providerId?: string) {
+  getModels(providerId?: string): readonly Model<Api>[] {
     return this.models.getModels(providerId);
   }
 
-  getModel(providerId: string, modelId: string): Model<any> | undefined {
+  getModel(providerId: string, modelId: string): Model<Api> | undefined {
     return this.models.getModel(providerId, modelId);
   }
 
   /** Models whose provider has complete auth configuration. */
-  async getAvailable(providerId?: string) {
-    return this.models.getAvailable(providerId);
+  async getAvailable(
+    providerId?: string,
+  ): Promise<readonly Model<Api>[]> {
+    return await this.models.getAvailable(providerId);
   }
 
-  async checkAuth(providerId: string) {
-    return this.models.checkAuth(providerId);
+  async checkAuth(
+    providerId: string,
+  ): Promise<AuthCheck | undefined> {
+    return await this.models.checkAuth(providerId);
   }
 
   /** Refresh dynamic provider catalogs (OpenRouter etc.). */
-  async refresh(providerIds?: string[]): Promise<void> {
+  async refresh(_providerIds?: string[]): Promise<void> {
     await this.models.refresh({ force: true, allowNetwork: true });
   }
 
@@ -89,6 +97,7 @@ export class ModelManager {
   }
 
   isModelEnabled(providerId: string, modelId: string): boolean {
-    return this.settings.get(`${ENABLED_PREFIX}${providerId}:${modelId}`) !== "0";
+    return this.settings.get(`${ENABLED_PREFIX}${providerId}:${modelId}`) !==
+      "0";
   }
 }

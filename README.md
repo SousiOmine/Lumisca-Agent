@@ -105,11 +105,15 @@ npm run tauri --prefix packages/desktop -- dev
 ## テスト
 
 ```bash
-deno task test
+deno task test       # 全テスト
+deno task check      # 型チェック
+deno task lint       # lint
+deno task fmt        # フォーマット(適用)
+deno task fmt:check  # フォーマット(確認のみ)
 ```
 
 core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSocket / SSR / バンドル)の
-テストを含みます。
+テストを含みます。CI(GitHub Actions)では fmt / lint / check / test を実行します。
 
 ## 設計メモ
 

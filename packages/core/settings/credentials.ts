@@ -3,7 +3,7 @@ import type {
   Credential,
   CredentialInfo,
   CredentialStore,
-} from "npm:@earendil-works/pi-ai@0.83.0";
+} from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "./repo.ts";
 
 const KEY_PREFIX = "api_key:";
@@ -14,7 +14,9 @@ const KEY_PREFIX = "api_key:";
  * Keys are namespaced (`api_key:<providerId>`) so credentials and
  * application settings share the settings table without colliding.
  */
-export function createDbCredentialStore(settings: SettingsRepo): CredentialStore {
+export function createDbCredentialStore(
+  settings: SettingsRepo,
+): CredentialStore {
   function read(providerId: string): Credential | undefined {
     const raw = settings.get(`${KEY_PREFIX}${providerId}`);
     if (!raw) return undefined;
@@ -26,10 +28,10 @@ export function createDbCredentialStore(settings: SettingsRepo): CredentialStore
   }
 
   return {
-    async read(providerId: string): Promise<Credential | undefined> {
-      return read(providerId);
+    read(providerId: string): Promise<Credential | undefined> {
+      return Promise.resolve(read(providerId));
     },
-    async list(): Promise<readonly CredentialInfo[]> {
+    list(): Promise<readonly CredentialInfo[]> {
       const infos: CredentialInfo[] = [];
       for (const [key, value] of settings.list()) {
         if (!key.startsWith(KEY_PREFIX)) continue;
@@ -41,7 +43,7 @@ export function createDbCredentialStore(settings: SettingsRepo): CredentialStore
           // ignore malformed entries
         }
       }
-      return infos;
+      return Promise.resolve(infos);
     },
     async modify(
       providerId: string,
@@ -56,8 +58,9 @@ export function createDbCredentialStore(settings: SettingsRepo): CredentialStore
       }
       return next;
     },
-    async delete(providerId: string): Promise<void> {
+    delete(providerId: string): Promise<void> {
       settings.delete(`${KEY_PREFIX}${providerId}`);
+      return Promise.resolve();
     },
   };
 }
@@ -69,7 +72,7 @@ export async function setApiKey(
   key: string,
 ): Promise<void> {
   const credential: ApiKeyCredential = { type: "api_key", key };
-  await store.modify(providerId, async () => credential);
+  await store.modify(providerId, () => Promise.resolve(credential));
 }
 
 export async function getApiKey(

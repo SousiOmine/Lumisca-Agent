@@ -43,26 +43,32 @@ export const api = {
     request<{ ok: boolean }>(`/api/workspaces/${id}`, { method: "DELETE" }),
 
   listSessions: (workspaceId?: string) =>
-    request<SessionInfo[]>(`/api/sessions${workspaceId ? `?workspaceId=${workspaceId}` : ""}`),
+    request<SessionInfo[]>(
+      `/api/sessions${workspaceId ? `?workspaceId=${workspaceId}` : ""}`,
+    ),
   getDefaultModel: () =>
-    request<{ provider: string; modelId: string } | null>("/api/sessions/default-model"),
+    request<{ provider: string; modelId: string } | null>(
+      "/api/sessions/default-model",
+    ),
   createSession: (input: {
     workspaceId: string;
     name?: string;
     modelProvider?: string;
     modelId?: string;
     systemPrompt?: string;
-  }) => request<SessionInfo>("/api/sessions", {
-    method: "POST",
-    body: JSON.stringify(input),
-  }),
+  }) =>
+    request<SessionInfo>("/api/sessions", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   openSession: (id: string) =>
     request<SessionInfo>(`/api/sessions/${id}/open`, { method: "POST" }),
   closeSession: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/close`, { method: "POST" }),
   deleteSession: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}`, { method: "DELETE" }),
-  getMessages: (id: string) => request<AgentMessage[]>(`/api/sessions/${id}/messages`),
+  getMessages: (id: string) =>
+    request<AgentMessage[]>(`/api/sessions/${id}/messages`),
   prompt: (id: string, text: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/prompt`, {
       method: "POST",
@@ -106,7 +112,13 @@ export const api = {
 
   fsRoots: () => request<string[]>("/api/fs/roots"),
   fsBrowse: (path: string) =>
-    request<{ path: string; parent: string | null; entries: Array<{ name: string; path: string }> }>(
+    request<
+      {
+        path: string;
+        parent: string | null;
+        entries: Array<{ name: string; path: string }>;
+      }
+    >(
       `/api/fs/browse?path=${encodeURIComponent(path)}`,
     ),
   setSetting: (key: string, value: string) =>

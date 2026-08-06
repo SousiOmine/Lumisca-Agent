@@ -3,7 +3,7 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
-} from "npm:@earendil-works/pi-ai@0.83.0";
+} from "@earendil-works/pi-ai";
 import { LumiscaCore } from "../packages/core/mod.ts";
 import { startServer } from "../packages/server/app.ts";
 
@@ -27,7 +27,9 @@ faux.setResponses([
         .map((b) => b.text)
         .join("");
       return fauxAssistantMessage(
-        `ツールの実行結果を確認しました: ${content.slice(0, 80)}\n\nタスクは完了です。`,
+        `ツールの実行結果を確認しました: ${
+          content.slice(0, 80)
+        }\n\nタスクは完了です。`,
       );
     }
     const text = (last?.content ?? [])

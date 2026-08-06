@@ -14,10 +14,17 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
 
   const state = result
     ? result.isError ? "error" : "done"
-    : running ? "running" : "pending";
+    : running
+    ? "running"
+    : "pending";
 
-  const stateLabel =
-    state === "running" ? "実行中" : state === "done" ? "完了" : state === "error" ? "エラー" : "待機";
+  const stateLabel = state === "running"
+    ? "実行中"
+    : state === "done"
+    ? "完了"
+    : state === "error"
+    ? "エラー"
+    : "待機";
 
   return (
     <div className="tool">

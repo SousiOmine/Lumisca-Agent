@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { realpathSync } from "node:fs";
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { Sandbox } from "./mod.ts";
 
 function tempDir(prefix: string): Promise<string> {

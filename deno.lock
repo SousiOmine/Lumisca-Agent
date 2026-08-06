@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "jsr:@std/assert@*": "1.0.19",
+    "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "npm:@earendil-works/pi-agent-core@0.83.0": "0.83.0_zod@4.4.3",
     "npm:@earendil-works/pi-ai@0.83.0": "0.83.0_zod@4.4.3",
@@ -893,8 +894,12 @@
   },
   "workspace": {
     "dependencies": [
+      "jsr:@std/assert@1",
+      "npm:@earendil-works/pi-agent-core@0.83.0",
+      "npm:@earendil-works/pi-ai@0.83.0",
       "npm:@tabler/icons-react@3",
       "npm:@types/react@19",
+      "npm:hono@4",
       "npm:marked@15",
       "npm:react-dom@19.2.3",
       "npm:react@19.2.3"

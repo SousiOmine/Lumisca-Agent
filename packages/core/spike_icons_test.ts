@@ -1,10 +1,12 @@
-import { IconPlus, IconMoon, IconSun } from "@tabler/icons-react";
-import { createElement } from "npm:react@19";
+import { IconMoon, IconPlus, IconSun } from "@tabler/icons-react";
+import { createElement } from "react";
 
 Deno.test("tabler icons render in Deno (SSR)", async () => {
-  const { renderToReadableStream } = await import("npm:react-dom@19/server");
+  const { renderToReadableStream } = await import("react-dom/server");
   const stream = await renderToReadableStream(
-    createElement("div", null,
+    createElement(
+      "div",
+      null,
       createElement(IconPlus, { size: 16 }),
       createElement(IconMoon, { size: 16 }),
       createElement(IconSun, { size: 16 }),

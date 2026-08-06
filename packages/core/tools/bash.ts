@@ -1,5 +1,5 @@
-import { Type } from "npm:@earendil-works/pi-ai@0.83.0";
-import type { AgentTool } from "npm:@earendil-works/pi-agent-core@0.83.0";
+import { Type } from "@earendil-works/pi-ai";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { MAX_TOOL_OUTPUT, truncate } from "./truncate.ts";
 

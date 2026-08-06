@@ -1,13 +1,13 @@
-import { Agent } from "npm:@earendil-works/pi-agent-core@0.83.0";
+import { Agent } from "@earendil-works/pi-agent-core";
 import {
   createModels,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
-} from "npm:@earendil-works/pi-ai@0.83.0";
-import { Type } from "npm:@earendil-works/pi-ai@0.83.0";
-import { assertEquals } from "jsr:@std/assert";
+} from "@earendil-works/pi-ai";
+import { Type } from "@earendil-works/pi-ai";
+import { assertEquals } from "@std/assert";
 
 function createFauxModels() {
   const faux = fauxProvider();
@@ -62,9 +62,11 @@ Deno.test("pi-agent-core executes tools", async () => {
         parameters: Type.Object({
           timezone: Type.String(),
         }),
-        execute: async () => {
-          return { content: [{ type: "text", text: "12:00 UTC" }], details: {} };
-        },
+        execute: () =>
+          Promise.resolve({
+            content: [{ type: "text", text: "12:00 UTC" }],
+            details: {},
+          }),
       }],
     },
     streamFn: models.streamSimple.bind(models),
@@ -78,6 +80,8 @@ Deno.test("pi-agent-core executes tools", async () => {
   await agent.prompt("What time is it?");
   assertEquals(events.includes("tool_execution_start"), true);
   assertEquals(events.includes("tool_execution_end"), true);
-  const toolResults = agent.state.messages.filter((m) => m.role === "toolResult");
+  const toolResults = agent.state.messages.filter((m) =>
+    m.role === "toolResult"
+  );
   assertEquals(toolResults.length, 1);
 });

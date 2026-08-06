@@ -1,4 +1,4 @@
-import type { AgentTool } from "npm:@earendil-works/pi-agent-core@0.83.0";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Workspace } from "../types/workspace.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import {

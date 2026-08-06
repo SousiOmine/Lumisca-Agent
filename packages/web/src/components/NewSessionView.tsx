@@ -18,7 +18,9 @@ interface NewSessionViewProps {
 }
 
 /** The draft session tab: pick workspace/model and start from the center. */
-export function NewSessionView({ workspaces, onStart, onWorkspaceCreated }: NewSessionViewProps) {
+export function NewSessionView(
+  { workspaces, onStart, onWorkspaceCreated }: NewSessionViewProps,
+) {
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
   const [model, setModel] = useState<ComposerModel | null>(null);
   const [text, setText] = useState("");
@@ -73,7 +75,9 @@ export function NewSessionView({ workspaces, onStart, onWorkspaceCreated }: NewS
                 {workspaces.map((w) => (
                   <option key={w.id} value={w.id}>{w.name}</option>
                 ))}
-                <option value={NEW_WORKSPACE}>＋ 新しいワークスペースを作成</option>
+                <option value={NEW_WORKSPACE}>
+                  ＋ 新しいワークスペースを作成
+                </option>
               </select>
             </label>
             <Composer
@@ -83,7 +87,8 @@ export function NewSessionView({ workspaces, onStart, onWorkspaceCreated }: NewS
               autoFocus
               large
               model={model}
-              onModelSelect={(provider, modelId) => setModel({ provider, modelId })}
+              onModelSelect={(provider, modelId) =>
+                setModel({ provider, modelId })}
               submitLabel={busy ? "作成中..." : "開始"}
               submitDisabled={busy || !text.trim() || !workspaceId}
               onSubmit={submit}

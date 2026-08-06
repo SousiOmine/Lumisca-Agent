@@ -1,5 +1,5 @@
-import { builtinModels } from "npm:@earendil-works/pi-ai@0.83.0/providers/all";
-import { assertEquals } from "jsr:@std/assert";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { assertEquals } from "@std/assert";
 
 Deno.test("pi-ai loads builtin models in Deno", () => {
   const models = builtinModels();

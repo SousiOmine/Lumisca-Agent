@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { SourceWatcher } from "./watch.ts";
 
 Deno.test("SourceWatcher fires on source file changes", async () => {

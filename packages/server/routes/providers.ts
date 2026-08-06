@@ -1,4 +1,4 @@
-import { Hono } from "npm:hono@4";
+import { Hono } from "hono";
 import type { LumiscaCore } from "@lumisca/core";
 import { jsonError } from "./util.ts";
 
@@ -16,7 +16,9 @@ export function providerRoutes(core: LumiscaCore): Hono {
   const cachedAuth = async (providerId: string) => {
     const cached = authCache.get(providerId);
     if (cached && cached.expires > Date.now()) return cached;
-    const check = await core.models.checkAuth(providerId).catch(() => undefined);
+    const check = await core.models.checkAuth(providerId).catch(() =>
+      undefined
+    );
     const entry = {
       configured: check !== undefined,
       source: check?.source,

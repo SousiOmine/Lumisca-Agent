@@ -25,25 +25,35 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <Modal width="min(720px, calc(100vw - 48px))" onClose={onClose}>
-      {view.kind === "home" && <HomeView
-        onOpenProviders={() => setView({ kind: "list" })}
-        onClose={onClose}
-      />}
-      {view.kind === "list" && <ProviderList
-        onBack={() => setView({ kind: "home" })}
-        onAdd={() => setView({ kind: "add" })}
-        onOpen={(id) => setView({ kind: "detail", providerId: id, isNew: false })}
-        onClose={onClose}
-      />}
-      {view.kind === "add" && <AddProviderFlow
-        onSelect={(id) => setView({ kind: "detail", providerId: id, isNew: true })}
-        onBack={() => setView({ kind: "list" })}
-      />}
-      {view.kind === "detail" && <ProviderDetail
-        providerId={view.providerId}
-        isNew={view.isNew}
-        onBack={() => setView({ kind: "list" })}
-      />}
+      {view.kind === "home" && (
+        <HomeView
+          onOpenProviders={() => setView({ kind: "list" })}
+          onClose={onClose}
+        />
+      )}
+      {view.kind === "list" && (
+        <ProviderList
+          onBack={() => setView({ kind: "home" })}
+          onAdd={() => setView({ kind: "add" })}
+          onOpen={(id) =>
+            setView({ kind: "detail", providerId: id, isNew: false })}
+          onClose={onClose}
+        />
+      )}
+      {view.kind === "add" && (
+        <AddProviderFlow
+          onSelect={(id) =>
+            setView({ kind: "detail", providerId: id, isNew: true })}
+          onBack={() => setView({ kind: "list" })}
+        />
+      )}
+      {view.kind === "detail" && (
+        <ProviderDetail
+          providerId={view.providerId}
+          isNew={view.isNew}
+          onBack={() => setView({ kind: "list" })}
+        />
+      )}
     </Modal>
   );
 }
@@ -61,19 +71,25 @@ function HomeView({
     <>
       <div className="modal-header">
         <h2>設定</h2>
-        <button className="btn push" onClick={onClose}>
+        <button type="button" className="btn push" onClick={onClose}>
           <IconX size={14} />
           閉じる
         </button>
       </div>
       <div className="settings-menu">
-        <button className="settings-menu-item" onClick={onOpenProviders}>
+        <button
+          type="button"
+          className="settings-menu-item"
+          onClick={onOpenProviders}
+        >
           <span className="settings-menu-icon">
             <IconPlugConnected size={20} />
           </span>
           <span className="settings-menu-text">
             <span className="settings-menu-title">プロバイダー</span>
-            <span className="settings-menu-desc">APIキーの登録と、モデルの有効/無効の管理</span>
+            <span className="settings-menu-desc">
+              APIキーの登録と、モデルの有効/無効の管理
+            </span>
           </span>
           <span className="chevron">
             <IconChevronRight size={16} />
@@ -109,9 +125,13 @@ function ProviderList({
   return (
     <>
       <div className="modal-header">
-        <button className="btn" onClick={onBack}><IconArrowLeft size={14} /> 戻る</button>
+        <button type="button" className="btn" onClick={onBack}>
+          <IconArrowLeft size={14} /> 戻る
+        </button>
         <h2>プロバイダー</h2>
-        <button className="btn push" onClick={onClose}>閉じる</button>
+        <button type="button" className="btn push" onClick={onClose}>
+          閉じる
+        </button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -124,8 +144,18 @@ function ProviderList({
           </div>
         )}
         {configured.map((p) => (
-          <button key={p.id} className="btn" style={{ textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}
-            onClick={() => onOpen(p.id)}>
+          <button
+            type="button"
+            key={p.id}
+            className="btn"
+            style={{
+              textAlign: "left",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+            onClick={() => onOpen(p.id)}
+          >
             <span style={{ flex: 1 }}>{p.name}</span>
             <span className="provider-state configured">
               {p.source ?? "APIキー"}
@@ -139,7 +169,13 @@ function ProviderList({
           未設定のプロバイダー
         </p>
         {others.slice(0, 12).map((p) => (
-          <button key={p.id} className="btn" style={{ textAlign: "left" }} onClick={() => onOpen(p.id)}>
+          <button
+            type="button"
+            key={p.id}
+            className="btn"
+            style={{ textAlign: "left" }}
+            onClick={() => onOpen(p.id)}
+          >
             {p.name}
           </button>
         ))}
@@ -151,7 +187,9 @@ function ProviderList({
       </div>
 
       <div className="modal-actions">
-        <button className="btn primary" onClick={onAdd}>+ プロバイダーを追加</button>
+        <button type="button" className="btn primary" onClick={onAdd}>
+          + プロバイダーを追加
+        </button>
       </div>
     </>
   );
@@ -184,7 +222,9 @@ function AddProviderFlow({
   return (
     <>
       <div className="modal-header">
-        <button className="btn" onClick={onBack}><IconArrowLeft size={14} /> 戻る</button>
+        <button type="button" className="btn" onClick={onBack}>
+          <IconArrowLeft size={14} /> 戻る
+        </button>
         <h2>プロバイダーを追加</h2>
       </div>
       <p className="settings-note">
@@ -197,7 +237,11 @@ function AddProviderFlow({
       />
       <div className="model-list" style={{ maxHeight: 360 }}>
         {visible.map((p) => (
-          <div key={p.id} className="model-item" onClick={() => onSelect(p.id)}>
+          <div
+            key={p.id}
+            className="model-item"
+            onClick={() => onSelect(p.id)}
+          >
             <span className="model-id">{p.name}</span>
             <span className="model-meta">{p.id}</span>
           </div>
@@ -224,7 +268,9 @@ function ProviderDetail({
   onBack: () => void;
 }) {
   const [provider, setProvider] = useState<ProviderInfo | undefined>();
-  const [auth, setAuth] = useState<{ configured: boolean; source?: string }>({ configured: false });
+  const [auth, setAuth] = useState<{ configured: boolean; source?: string }>({
+    configured: false,
+  });
   const [key, setKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -256,7 +302,9 @@ function ProviderDetail({
       : models;
     if (!q) return base;
     return base.filter(
-      (m) => m.id.toLowerCase().includes(q) || (m.name ?? "").toLowerCase().includes(q),
+      (m) =>
+        m.id.toLowerCase().includes(q) ||
+        (m.name ?? "").toLowerCase().includes(q),
     );
   }, [models, search, showDisabled]);
 
@@ -278,7 +326,9 @@ function ProviderDetail({
   };
 
   const toggleModel = async (modelId: string, enabled: boolean) => {
-    setModels((ms) => ms.map((m) => (m.id === modelId ? { ...m, enabled } : m)));
+    setModels((ms) =>
+      ms.map((m) => (m.id === modelId ? { ...m, enabled } : m))
+    );
     try {
       await api.setModelEnabled(providerId, modelId, enabled);
     } catch (e) {
@@ -291,7 +341,9 @@ function ProviderDetail({
   return (
     <>
       <div className="modal-header">
-        <button className="btn" onClick={onBack}><IconArrowLeft size={14} /> 戻る</button>
+        <button type="button" className="btn" onClick={onBack}>
+          <IconArrowLeft size={14} /> 戻る
+        </button>
         <h2>{provider?.name ?? providerId}</h2>
         {auth.configured
           ? <span className="provider-state configured">設定済み</span>
@@ -303,16 +355,27 @@ function ProviderDetail({
         <div style={{ display: "flex", gap: 8 }}>
           <input
             type="password"
-            placeholder={auth.configured ? "新しいAPIキー(上書き)" : "APIキーを入力"}
+            placeholder={auth.configured
+              ? "新しいAPIキー(上書き)"
+              : "APIキーを入力"}
             value={key}
             onChange={(e) => setKey(e.target.value)}
             style={{ flex: 1 }}
           />
-          <button className="btn primary" onClick={saveKey} disabled={savingKey || !key.trim()}>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={saveKey}
+            disabled={savingKey || !key.trim()}
+          >
             保存
           </button>
         </div>
-        {savedNotice && <p className="settings-note" style={{ color: "var(--ok)" }}>APIキーを保存しました</p>}
+        {savedNotice && (
+          <p className="settings-note" style={{ color: "var(--ok)" }}>
+            APIキーを保存しました
+          </p>
+        )}
         {isNew && !auth.configured && (
           <p className="settings-note">
             APIキーを保存するとこのプロバイダーが利用可能になります(プロバイダー追加完了)。
@@ -325,7 +388,14 @@ function ProviderDetail({
           <p className="settings-note" style={{ flex: 1 }}>
             モデル({enabledCount}/{models.length} 有効)
           </p>
-          <label style={{ flexDirection: "row", alignItems: "center", gap: 4, fontSize: 12 }}>
+          <label
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 12,
+            }}
+          >
             <input
               type="checkbox"
               checked={showDisabled}
@@ -341,7 +411,11 @@ function ProviderDetail({
         />
         <div className="model-list" style={{ maxHeight: 280 }}>
           {visible.slice(0, 300).map((m) => (
-            <label key={m.id} className="model-item" style={{ cursor: "pointer" }}>
+            <label
+              key={m.id}
+              className="model-item"
+              style={{ cursor: "pointer" }}
+            >
               <input
                 type="checkbox"
                 checked={m.enabled !== false}
@@ -364,7 +438,7 @@ function ProviderDetail({
       {error && <div className="error-text">{error}</div>}
 
       <div className="modal-actions">
-        <button className="btn primary" onClick={onBack}>
+        <button type="button" className="btn primary" onClick={onBack}>
           完了
         </button>
       </div>

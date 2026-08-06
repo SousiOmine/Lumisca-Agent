@@ -1,4 +1,4 @@
-import { Hono } from "npm:hono@4";
+import { Hono } from "hono";
 import type { LumiscaCore } from "@lumisca/core";
 import { jsonError } from "./util.ts";
 
@@ -40,7 +40,9 @@ export function sessionRoutes(core: LumiscaCore): Hono {
           ? body.modelProvider
           : undefined,
         modelId: typeof body.modelId === "string" ? body.modelId : undefined,
-        systemPrompt: typeof body.systemPrompt === "string" ? body.systemPrompt : undefined,
+        systemPrompt: typeof body.systemPrompt === "string"
+          ? body.systemPrompt
+          : undefined,
       });
       return c.json(session, 201);
     } catch (error) {
@@ -117,8 +119,14 @@ export function sessionRoutes(core: LumiscaCore): Hono {
 
   app.post("/sessions/:id/model", async (c) => {
     const body = await c.req.json().catch(() => null);
-    if (!body || typeof body.provider !== "string" || typeof body.modelId !== "string") {
-      return c.json({ error: "provider and modelId (strings) are required" }, 400);
+    if (
+      !body || typeof body.provider !== "string" ||
+      typeof body.modelId !== "string"
+    ) {
+      return c.json(
+        { error: "provider and modelId (strings) are required" },
+        400,
+      );
     }
     try {
       core.setSessionModel(c.req.param("id"), body.provider, body.modelId);

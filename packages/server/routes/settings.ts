@@ -1,4 +1,4 @@
-import { Hono } from "npm:hono@4";
+import { Hono } from "hono";
 import type { LumiscaCore } from "@lumisca/core";
 import { jsonError } from "./util.ts";
 
