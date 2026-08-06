@@ -1,0 +1,32 @@
+{
+  "workspace": [
+    "packages/core",
+    "packages/server",
+    "packages/cli"
+  ],
+  "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "jsxImportSourceTypes": "npm:@types/react@19",
+    "lib": ["esnext", "dom", "dom.iterable", "deno.ns", "deno.window"]
+  },
+  "imports": {
+    "react": "npm:react@19.2.3",
+    "react-dom": "npm:react-dom@19.2.3",
+    "react-dom/client": "npm:react-dom@19.2.3/client",
+    "react-dom/server": "npm:react-dom@19.2.3/server",
+    "@types/react": "npm:@types/react@19",
+    "@tabler/icons-react": "npm:@tabler/icons-react@3",
+    "marked": "npm:marked@15"
+  },
+  "tasks": {
+    "check": "deno check packages/core/mod.ts packages/server/mod.ts packages/cli/mod.ts",
+    "test": "deno test packages/core packages/server packages/cli packages/web --allow-read --allow-write --allow-run --allow-env --allow-net",
+    "server": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys packages/server/mod.ts",
+    "server:dev": "LUMISCA_DEV=1 deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys packages/server/mod.ts",
+    "cli": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys packages/cli/mod.ts"
+  }
+}

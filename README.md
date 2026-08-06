@@ -1,1 +1,125 @@
-# Lumisca-Agent
+# Lumisca Agent
+
+Claude Code / Codex / opencode のようなコーディングエージェント。AI基板に
+[pi](https://github.com/earendil-works/pi)(`@earendil-works/pi-ai` + `@earendil-works/pi-agent-core`)を使用し、
+CLI・Web・デスクトップの3つのフロントエンドから同一の機能を利用できます。
+
+## 特徴
+
+- **サーバーサイドレンダリング(SSR)**: React を Hono サーバー上で直接レンダリング。
+  Vite / npm ビルドは不要で `deno task server` だけで完結します(クライアントJSは
+  起動時に esbuild が自動バンドル)
+- **Fluent デザイン**: フラット・シンプルな UI。ダーク/ライトモードをサイドバー下部の
+  アイコンで切り替え可能(設定はデータベースに保存され、SSR で引き継がれます)。アイコンは tabler icons
+- **タブ式セッション管理**: ブラウザのように上部タブで複数セッションを同時に切り替え
+  (Web / デスクトップ)。各セッションは独立して並行稼働します
+- **ワークスペース**: 単一フォルダだけでなく、複数フォルダをまとめた単位でも作業可能。
+  ファイル操作(read / write / edit / list_dir)はワークスペース内に制限されます
+  (パス正規化 + シンボリックリンク解決によるサンドボックス)
+- **セッション永続化**: セッション履歴とメタデータを SQLite に保存。再起動後も再開できます
+- **全プロバイダー対応**: Anthropic, OpenAI, DeepSeek, OpenRouter, Google など
+  20+ のプロバイダーを API キー方式で利用可能(モデル選択UI付き)
+- **ツール**: read_file / write_file / edit / list_dir / bash(cmd.exe または /bin/sh)
+
+## 構成
+
+```
+packages/
+├── core/      AI基板(共通)。全フロントエンドはこれだけに依存
+│   ├── agent/       pi-agent-core ラッパー + セッションプール
+│   ├── tools/       ワークスペース境界付きコーディングツール
+│   ├── workspace/   複数フォルダ管理・サンドボックス
+│   ├── session/     セッション管理 + SQLite 永続化
+│   ├── models/      pi-ai モデル管理
+│   ├── settings/    APIキー等の設定(DBバックの CredentialStore)
+│   └── db/          SQLite(node:sqlite)
+├── server/    Hono HTTP + WebSocket(127.0.0.1 ローカル専用)+ React SSR + esbuild バンドル
+├── web/       React フロントエンドのソース(SSR/ハイドレーション共用)
+├── cli/       シングルセッションの対話 CLI
+└── desktop/   Tauri 2 デスクトップシェル
+```
+
+## 必要環境
+
+- [Deno](https://deno.com) 2.8+
+- Rust(デスクトップアプリのビルド時のみ)
+
+## 使い方
+
+### Web(推奨)
+
+```bash
+deno task server        # 本番相当(キャッシュ有効)
+deno task server:dev    # 開発用: ライブリロード付き
+# → http://127.0.0.1:8000 をブラウザで開く
+```
+
+React の初期HTMLはサーバーでレンダリングされ、ハイドレーション用のクライアントJSは
+初回アクセス時に esbuild で自動生成されます(`.lumisca-cache/` にキャッシュ)。
+
+`server:dev` では `packages/web/src` の変更を検知して自動で再バンドルし、
+開いているブラウザを WebSocket 経由で自動リロードします(ライブリロード)。
+
+`LUMISCA_DB` で DB パス、`LUMISCA_PORT` でポートを変更できます。
+
+### CLI
+
+```bash
+deno task cli            # 対話モード(ワークスペース/モデル選択から開始)
+deno task cli -- --resume   # 過去のセッションから再開
+deno task cli -- --help     # 全オプション
+```
+
+コマンド: `/new` `/resume` `/model` `/workspace` `/keys` `/sessions` `/name` `/exit`
+
+### デスクトップ(Tauri)
+
+```bash
+npm install --prefix packages/desktop
+npm run tauri --prefix packages/desktop -- dev
+```
+
+アプリ起動時に Deno サーバーを自動起動し、WebView で UI を開きます。
+`PATH` に deno が必要です。
+
+## APIキーの設定
+
+サイドバーの ⚙ から**設定モーダル**を開きます:
+
+1. 「+ プロバイダーを追加」→ プロバイダー一覧から選択
+2. APIキーを入力して保存 → プロバイダー追加完了(設定済み一覧に表示)
+3. プロバイダーの詳細で**モデルのチェックボックス**により有効/無効を設定
+   (無効にしたモデルはモデル選択肢に表示されません)
+
+チャット入力欄の下にあるモデル表示をクリックすると、その場でモデルを切り替えられます。
+新しいセッションはワークスペースを選ぶだけで作成でき、モデルは直近で使用したモデルが
+自動設定されます(後から切り替え可能)。
+環境変数(`ANTHROPIC_API_KEY` 等)で認証が解決されるプロバイダーも設定済みとして表示されます。
+
+## データ
+
+- データベース: `./lumisca.db`(既定。`LUMISCA_DB` で変更)
+  - テーブル: workspaces / workspace_folders / sessions / messages / settings
+- APIキー: 設定DB内(`api_key:<providerId>` キー)に保存(ローカル専用前提)
+
+## テスト
+
+```bash
+deno task test
+```
+
+core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSocket / SSR / バンドル)の
+テストを含みます。
+
+## 設計メモ
+
+- エージェントループは pi の `Agent`(イベント購読ベース)を使用し、
+  イベントを WebSocket / CLI へ中継します
+- SSR では初期データ(ワークスペース・セッション一覧)を HTML に埋め込み、
+  クライアントが `hydrateRoot` で引き継ぎます(ハイドレーションミスマッチ防止のため
+  `window.__INITIAL_DATA__` を利用)
+- セッションのメッセージは message_end ごとに SQLite へ追記保存され、
+  再オープン時に完全復元されます
+- ワークスペース境界の検証は `packages/core/workspace/sandbox.ts` に集約されており、
+  実在パスは realpath 解決後にルート集合との包含判定を行います
+
