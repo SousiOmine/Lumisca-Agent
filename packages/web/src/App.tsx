@@ -190,8 +190,16 @@ export function App({ initialData }: AppProps) {
     });
   }, [tabs]);
 
-  const handleWorkspaceCreated = useCallback((ws: Workspace) => {
-    setWorkspaces((prev) => [ws, ...prev]);
+  const handleWorkspaceChanged = useCallback((ws: Workspace) => {
+    setWorkspaces((prev) => {
+      const exists = prev.some((w) => w.id === ws.id);
+      if (exists) return prev.map((w) => (w.id === ws.id ? ws : w));
+      return [ws, ...prev];
+    });
+  }, []);
+
+  const handleWorkspaceDeleted = useCallback((id: string) => {
+    setWorkspaces((prev) => prev.filter((w) => w.id !== id));
   }, []);
 
   /** Create a session from the draft tab and send the first prompt. */
@@ -298,7 +306,8 @@ export function App({ initialData }: AppProps) {
           <NewSessionView
             workspaces={workspaces}
             onStart={startSession}
-            onWorkspaceCreated={handleWorkspaceCreated}
+            onWorkspaceChanged={handleWorkspaceChanged}
+            onWorkspaceDeleted={handleWorkspaceDeleted}
           />
         )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}

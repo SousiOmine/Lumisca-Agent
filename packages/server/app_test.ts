@@ -55,6 +55,54 @@ Deno.test("health and workspaces API", async () => {
   }
 });
 
+Deno.test("workspace update and delete API", async () => {
+  const { core, server, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const extra = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+
+    const patch = await json(base, `/api/workspaces/${ws.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: "renamed", folders: [root, extra] }),
+    });
+    assertEquals(patch.status, 200);
+    const updated = await patch.json();
+    assertEquals(updated.name, "renamed");
+    assertEquals(updated.folders.length, 2);
+
+    const nameOnly = await json(base, `/api/workspaces/${ws.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: "again" }),
+    });
+    assertEquals(nameOnly.status, 200);
+    assertEquals((await nameOnly.json()).name, "again");
+
+    const bad = await json(base, `/api/workspaces/${ws.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: 42 }),
+    });
+    assertEquals(bad.status, 400);
+
+    const del = await json(base, `/api/workspaces/${ws.id}`, {
+      method: "DELETE",
+    });
+    assertEquals(del.status, 200);
+    const after = await json(base, "/api/workspaces");
+    assertEquals((await after.json()).length, 0);
+
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(extra, { recursive: true });
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("session prompt roundtrip via API", async () => {
   const { core, server, faux, base } = await setup();
   try {

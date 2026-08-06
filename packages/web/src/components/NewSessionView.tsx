@@ -3,9 +3,7 @@ import { api } from "../api.ts";
 import type { Workspace } from "../types.ts";
 import { Composer, type ComposerModel } from "./Composer.tsx";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
-
-/** Select value meaning "create a new workspace". */
-const NEW_WORKSPACE = "__new__";
+import { WorkspacePicker } from "./WorkspacePicker.tsx";
 
 interface NewSessionViewProps {
   workspaces: Workspace[];
@@ -14,16 +12,25 @@ interface NewSessionViewProps {
     model: ComposerModel | null,
     text: string,
   ) => Promise<void>;
-  onWorkspaceCreated: (ws: Workspace) => void;
+  onWorkspaceChanged: (ws: Workspace) => void;
+  onWorkspaceDeleted: (id: string) => void;
 }
 
 /** The draft session tab: pick workspace/model and start from the center. */
 export function NewSessionView(
-  { workspaces, onStart, onWorkspaceCreated }: NewSessionViewProps,
+  {
+    workspaces,
+    onStart,
+    onWorkspaceChanged,
+    onWorkspaceDeleted,
+  }: NewSessionViewProps,
 ) {
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
   const [model, setModel] = useState<ComposerModel | null>(null);
   const [text, setText] = useState("");
+  const [modalWorkspace, setModalWorkspace] = useState<Workspace | undefined>(
+    undefined,
+  );
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -38,6 +45,16 @@ export function NewSessionView(
       .catch(() => {});
   }, []);
 
+  // Keep a valid selection when the workspace list changes (e.g. after a
+  // delete); fall back to the first remaining workspace.
+  useEffect(() => {
+    setWorkspaceId((current) =>
+      workspaces.some((w) => w.id === current)
+        ? current
+        : (workspaces[0]?.id ?? "")
+    );
+  }, [workspaces]);
+
   const submit = async () => {
     const trimmed = text.trim();
     if (!trimmed || !workspaceId || busy) return;
@@ -51,6 +68,19 @@ export function NewSessionView(
     }
   };
 
+  const removeWorkspace = async (ws: Workspace) => {
+    if (!globalThis.confirm(`ワークスペース「${ws.name}」を削除しますか？`)) {
+      return;
+    }
+    setError(undefined);
+    try {
+      await api.deleteWorkspace(ws.id);
+      onWorkspaceDeleted(ws.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <div className="chat">
       <div className="chat-scroll">
@@ -59,26 +89,20 @@ export function NewSessionView(
             <h2>新しいセッション</h2>
             <label className="new-session-select">
               <span>ワークスペース</span>
-              <select
+              <WorkspacePicker
+                workspaces={workspaces}
                 value={workspaceId}
-                onChange={(e) => {
-                  if (e.target.value === NEW_WORKSPACE) {
-                    setShowWorkspaceModal(true);
-                    return;
-                  }
-                  setWorkspaceId(e.target.value);
+                onChange={setWorkspaceId}
+                onEdit={(ws) => {
+                  setModalWorkspace(ws);
+                  setShowWorkspaceModal(true);
                 }}
-              >
-                {workspaces.length === 0 && (
-                  <option value="">(ワークスペースがありません)</option>
-                )}
-                {workspaces.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-                <option value={NEW_WORKSPACE}>
-                  ＋ 新しいワークスペースを作成
-                </option>
-              </select>
+                onDelete={removeWorkspace}
+                onCreate={() => {
+                  setModalWorkspace(undefined);
+                  setShowWorkspaceModal(true);
+                }}
+              />
             </label>
             <Composer
               value={text}
@@ -99,9 +123,14 @@ export function NewSessionView(
       </div>
       {showWorkspaceModal && (
         <WorkspaceModal
-          onCreated={(ws) => {
-            onWorkspaceCreated(ws);
+          workspace={modalWorkspace}
+          onSaved={(ws) => {
+            onWorkspaceChanged(ws);
             setWorkspaceId(ws.id);
+            setShowWorkspaceModal(false);
+          }}
+          onDeleted={(id) => {
+            onWorkspaceDeleted(id);
             setShowWorkspaceModal(false);
           }}
           onClose={() => setShowWorkspaceModal(false)}

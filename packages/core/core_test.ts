@@ -245,7 +245,7 @@ Deno.test("session without model falls back to first enabled model", async () =>
   core.close();
 });
 
-Deno.test("workspace folder update rebuilds session tools", async () => {
+Deno.test("workspace update rebuilds session tools", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
@@ -255,11 +255,17 @@ Deno.test("workspace folder update rebuilds session tools", async () => {
     modelProvider: providerId,
     modelId,
   });
-  await core.updateWorkspaceFolders(ws.id, [root, extra]);
+  const updated = await core.updateWorkspace(ws.id, {
+    name: "renamed",
+    folders: [root, extra],
+  });
+  assertEquals(updated.name, "renamed");
+  assertEquals(updated.folders.length, 2);
 
-  const updated = core.getWorkspace(ws.id);
-  assertEquals(updated !== undefined, true);
-  assertEquals(updated!.folders.length, 2);
+  const fetched = core.getWorkspace(ws.id);
+  assertEquals(fetched !== undefined, true);
+  assertEquals(fetched!.name, "renamed");
+  assertEquals(fetched!.folders.length, 2);
 
   core.close();
   await Deno.remove(root, { recursive: true });

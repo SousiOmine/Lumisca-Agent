@@ -5,22 +5,29 @@ import {
   IconChevronRight,
   IconDeviceDesktop,
   IconFolder,
+  IconTrash,
 } from "@tabler/icons-react";
 import { api } from "../api.ts";
 import type { Workspace } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 
 interface WorkspaceModalProps {
-  onCreated: (ws: Workspace) => void;
+  /** Present → edit mode (rename / change folders / delete). */
+  workspace?: Workspace;
+  onSaved: (ws: Workspace) => void;
+  onDeleted?: (id: string) => void;
   onClose: () => void;
 }
 
 type View = { kind: "main" } | { kind: "browse" };
 
-export function WorkspaceModal({ onCreated, onClose }: WorkspaceModalProps) {
+export function WorkspaceModal(
+  { workspace, onSaved, onDeleted, onClose }: WorkspaceModalProps,
+) {
+  const editing = workspace !== undefined;
   const [view, setView] = useState<View>({ kind: "main" });
-  const [name, setName] = useState("");
-  const [folders, setFolders] = useState<string[]>([]);
+  const [name, setName] = useState(workspace?.name ?? "");
+  const [folders, setFolders] = useState<string[]>(workspace?.folders ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
@@ -29,16 +36,39 @@ export function WorkspaceModal({ onCreated, onClose }: WorkspaceModalProps) {
     setView({ kind: "main" });
   };
 
-  const create = async () => {
+  const save = async () => {
     if (!name.trim() || folders.length === 0) return;
     setBusy(true);
     setError(undefined);
     try {
-      const ws = await api.createWorkspace(name.trim(), folders);
-      onCreated(ws);
+      const ws = editing
+        ? await api.updateWorkspace(workspace!.id, {
+          name: name.trim(),
+          folders,
+        })
+        : await api.createWorkspace(name.trim(), folders);
+      onSaved(ws);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!editing || !workspace) return;
+    if (
+      !globalThis.confirm(`ワークスペース「${workspace.name}」を削除しますか？`)
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api.deleteWorkspace(workspace.id);
+      onDeleted?.(workspace.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
     }
   };
@@ -54,7 +84,7 @@ export function WorkspaceModal({ onCreated, onClose }: WorkspaceModalProps) {
         )
         : (
           <>
-            <h2>新しいワークスペース</h2>
+            <h2>{editing ? "ワークスペースを編集" : "新しいワークスペース"}</h2>
 
             <label>
               名前
@@ -104,16 +134,27 @@ export function WorkspaceModal({ onCreated, onClose }: WorkspaceModalProps) {
             {error && <div className="error-text">{error}</div>}
 
             <div className="modal-actions">
+              {editing && (
+                <button
+                  type="button"
+                  className="btn danger"
+                  onClick={remove}
+                  disabled={busy}
+                >
+                  <IconTrash size={14} />
+                  削除
+                </button>
+              )}
               <button type="button" className="btn" onClick={onClose}>
                 キャンセル
               </button>
               <button
                 type="button"
                 className="btn primary"
-                onClick={create}
+                onClick={save}
                 disabled={busy || !name.trim() || folders.length === 0}
               >
-                {busy ? "作成中..." : "作成"}
+                {busy ? "保存中..." : editing ? "保存" : "作成"}
               </button>
             </div>
           </>

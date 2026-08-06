@@ -34,10 +34,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ name, folders }),
     }),
-  updateWorkspaceFolders: (id: string, folders: string[]) =>
-    request<{ ok: boolean }>(`/api/workspaces/${id}/folders`, {
+  updateWorkspace: (id: string, input: { name?: string; folders?: string[] }) =>
+    request<Workspace>(`/api/workspaces/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ folders }),
+      body: JSON.stringify(input),
     }),
   deleteWorkspace: (id: string) =>
     request<{ ok: boolean }>(`/api/workspaces/${id}`, { method: "DELETE" }),

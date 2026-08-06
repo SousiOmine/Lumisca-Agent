@@ -5,7 +5,7 @@ export interface WorkspaceRepo {
   create(name: string, folders: string[], createdAt?: number): Workspace;
   get(id: string): Workspace | undefined;
   list(): Workspace[];
-  updateFolders(id: string, folders: string[]): void;
+  update(id: string, name: string, folders: string[]): void;
   delete(id: string): void;
 }
 
@@ -35,6 +35,9 @@ export function createWorkspaceRepo(db: LumiscaDb): WorkspaceRepo {
   );
   const deleteFoldersStmt = db.db.prepare(
     "DELETE FROM workspace_folders WHERE workspace_id = ?",
+  );
+  const renameStmt = db.db.prepare(
+    "UPDATE workspaces SET name = ? WHERE id = ?",
   );
   const deleteStmt = db.db.prepare("DELETE FROM workspaces WHERE id = ?");
 
@@ -72,7 +75,8 @@ export function createWorkspaceRepo(db: LumiscaDb): WorkspaceRepo {
       });
     },
 
-    updateFolders(id: string, folders: string[]): void {
+    update(id: string, name: string, folders: string[]): void {
+      renameStmt.run(name, id);
       deleteFoldersStmt.run(id);
       for (const folder of folders) {
         insertFolderStmt.run(id, folder);

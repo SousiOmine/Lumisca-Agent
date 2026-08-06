@@ -31,9 +31,18 @@ export function ModelPicker({
   useEffect(() => {
     api.listProviders().then((ps) => {
       const configured = ps.filter((p) => p.configured !== false);
-      setProviders(configured);
-      if (!providerId && configured.length > 0) {
-        setProviderId(configured[0]!.id);
+      // Keep the currently selected provider in the list even when it has no
+      // configured credentials, so the dropdown matches the selected model.
+      const current = value?.provider;
+      const list = current && !configured.some((p) => p.id === current)
+        ? [...configured, {
+          id: current,
+          name: ps.find((p) => p.id === current)?.name ?? current,
+        }]
+        : configured;
+      setProviders(list);
+      if (!providerId && list.length > 0) {
+        setProviderId(list[0]!.id);
       }
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps

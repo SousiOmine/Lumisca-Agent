@@ -141,13 +141,22 @@ export class LumiscaCore {
     return this.workspaces.get(id);
   }
 
-  /** Update workspace folders; running sessions get rebuilt tools. */
-  async updateWorkspaceFolders(id: string, folders: string[]): Promise<void> {
-    const resolved = await this.resolveFolders(folders);
-    this.workspaces.updateFolders(id, resolved);
+  /** Update a workspace (name and/or folders); running sessions get rebuilt
+   * tools when the folders change. Returns the updated workspace. */
+  async updateWorkspace(
+    id: string,
+    input: { name?: string; folders?: string[] },
+  ): Promise<Workspace> {
+    const current = this.requireWorkspace(id);
+    const name = input.name ?? current.name;
+    const folders = input.folders !== undefined
+      ? await this.resolveFolders(input.folders)
+      : current.folders;
+    this.workspaces.update(id, name, folders);
     for (const session of this.sessions.list(id)) {
       this.rebuildAgent(session);
     }
+    return this.workspaces.get(id)!;
   }
 
   deleteWorkspace(id: string): void {

@@ -73,7 +73,7 @@ export function Composer({
               style={{ background: "var(--text-faint)", width: 6, height: 6 }}
             />
             <span className="mono">
-              {model ? `${model.provider}/${model.modelId}` : "モデル: 自動"}
+              {model ? `${model.provider}/${model.modelId}` : "モデルを選択"}
             </span>
             <span className={`chevron${showModelPicker ? " open" : ""}`}>
               <IconChevronRight size={13} />
