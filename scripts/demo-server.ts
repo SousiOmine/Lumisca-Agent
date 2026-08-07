@@ -4,7 +4,7 @@ import {
   fauxText,
   fauxToolCall,
 } from "@earendil-works/pi-ai";
-import { LumiscaCore } from "../packages/core/mod.ts";
+import { contentText, LumiscaCore } from "../packages/core/mod.ts";
 import { startServer } from "../packages/server/app.ts";
 
 const faux = fauxProvider();
@@ -22,20 +22,18 @@ faux.setResponses([
   (ctx) => {
     const last = ctx.messages.at(-1);
     if (last?.role === "toolResult") {
-      const content = (last.content as Array<{ type: string; text?: string }>)
-        .filter((b) => b.type === "text")
-        .map((b) => b.text)
-        .join("");
+      const content = contentText(
+        last.content as Array<{ type: string; text?: string }>,
+      );
       return fauxAssistantMessage(
         `ツールの実行結果を確認しました: ${
           content.slice(0, 80)
         }\n\nタスクは完了です。`,
       );
     }
-    const text = (last?.content ?? [])
-      .filter((b) => (b as { type: string }).type === "text")
-      .map((b) => (b as { text: string }).text)
-      .join("");
+    const text = contentText(
+      (last?.content ?? []) as Array<{ type: string; text?: string }>,
+    );
     if (text.includes("bash")) {
       return fauxAssistantMessage([
         fauxText("ディレクトリを確認します。"),

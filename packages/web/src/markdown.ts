@@ -11,6 +11,19 @@ function escapeHtml(text: string): string {
 
 const SAFE_PROTOCOLS = /^(https?:|mailto:)/;
 
+/** Images trigger real network requests from untrusted model output: allow
+ * only http(s), and never the local machine itself (SSRF to other local
+ * services). data: URIs and protocol-relative //host URLs never render. */
+function safeImageHref(href: string): string {
+  const match = href.match(/^https?:\/\/([^/]+)/i);
+  if (!match) return "";
+  const host = match[1]!.toLowerCase();
+  if (host === "localhost" || host.startsWith("127.") || host === "[::1]") {
+    return "";
+  }
+  return href;
+}
+
 const renderer = {
   // Raw HTML from the model is shown as escaped text, never executed.
   html(token: Tokens.HTML | Tokens.Tag) {
@@ -21,6 +34,11 @@ const renderer = {
     return `<a href="${
       escapeHtml(href)
     }" target="_blank" rel="noopener noreferrer">${escapeHtml(token.text)}</a>`;
+  },
+  image(token: Tokens.Image) {
+    const href = safeImageHref(token.href);
+    if (!href) return "";
+    return `<img src="${escapeHtml(href)}" alt="${escapeHtml(token.text)}" />`;
   },
 };
 

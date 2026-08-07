@@ -44,7 +44,8 @@ export function success(text: string): void {
 }
 
 export function error(text: string): void {
-  console.log(color.red(text));
+  // Errors go to stderr so they stay separable from streamed agent output.
+  console.error(color.red(text));
 }
 
 export function userLine(text: string): void {
@@ -53,29 +54,4 @@ export function userLine(text: string): void {
 
 export function assistantLine(text: string): void {
   console.log(color.cyan(`◈ ${text}`));
-}
-
-/** Print a numbered list with a prompt; empty input returns null (back). */
-export async function pickNumber(
-  label: string,
-  backLabel = "戻る",
-): Promise<number | null> {
-  const input = await promptFn(`${label} (空Enterで${backLabel})`);
-  if (input === null || input.trim() === "") return null;
-  const n = Number(input.trim());
-  if (!Number.isInteger(n) || n < 1) {
-    error("数字で指定してください");
-    return pickNumber(label, backLabel);
-  }
-  return n;
-}
-
-/** Prompt for a non-empty string; returns null when cancelled. */
-export async function ask(
-  label: string,
-  backLabel = "キャンセル",
-): Promise<string | null> {
-  const input = await promptFn(`${label} (空Enterで${backLabel})`);
-  if (input === null || input.trim() === "") return null;
-  return input.trim();
 }

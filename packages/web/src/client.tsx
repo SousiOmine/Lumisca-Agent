@@ -3,9 +3,8 @@ import { App } from "./App.tsx";
 import type { InitialData } from "./types.ts";
 
 declare global {
-  interface Window {
-    __INITIAL_DATA__?: InitialData;
-  }
+  /** Initial data injected by the SSR server (window.__INITIAL_DATA__). */
+  var __INITIAL_DATA__: InitialData | undefined;
 }
 
 const root = document.getElementById("root");

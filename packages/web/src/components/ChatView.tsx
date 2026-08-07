@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { contentText } from "../../../core/content.ts";
+import { memo, useEffect, useRef, useState } from "react";
+import { contentText } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
   AgentMessage,
@@ -18,6 +18,12 @@ interface ChatViewProps {
   onModelChange: (provider: string, modelId: string) => void;
 }
 
+/** Memoized markdown rendering: message text is static once a message is
+ * complete, so a text delta must not re-parse every historical message. */
+const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
+  return <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
+});
+
 export function ChatView(
   { view, onPrompt, onAbort, onModelChange }: ChatViewProps,
 ) {
@@ -25,9 +31,13 @@ export function ChatView(
   const scrollRef = useRef<HTMLDivElement>(null);
   const isRunning = isViewRunning(view);
 
+  // Follow the stream when the user is at the bottom; never yank the scroll
+  // position out from under someone reading earlier messages.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [view.messages.length, view.streamingText.length]);
 
   const submit = () => {
@@ -42,6 +52,21 @@ export function ChatView(
       onAbort();
     }
   };
+
+  // Pair each assistant message with the tool results that follow it, in a
+  // single forward pass (message rows no longer slice the tail per row).
+  const toolResultsByIndex = new Map<number, Map<string, ToolResultMessage>>();
+  for (let i = 0; i < view.messages.length; i++) {
+    const m = view.messages[i]!;
+    if (m.role !== "assistant") continue;
+    const results = new Map<string, ToolResultMessage>();
+    for (let j = i + 1; j < view.messages.length; j++) {
+      const next = view.messages[j]!;
+      if (next.role !== "toolResult") break;
+      results.set(next.toolCallId, next);
+    }
+    toolResultsByIndex.set(i, results);
+  }
 
   return (
     <div className="chat">
@@ -61,18 +86,14 @@ export function ChatView(
             <MessageRow
               key={`${m.role}-${m.timestamp}-${i}`}
               message={m}
-              following={view.messages.slice(i + 1)}
+              toolResults={toolResultsByIndex.get(i) ?? EMPTY_RESULTS}
               runningTools={view.runningTools}
             />
           ))}
           {view.streamingText.length > 0 && (
             <div className="msg">
               <div className="msg-body markdown">
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: renderMarkdown(view.streamingText),
-                  }}
-                />
+                <MarkdownBlock text={view.streamingText} />
                 <span className="cursor" />
               </div>
             </div>
@@ -107,21 +128,22 @@ export function ChatView(
   );
 }
 
+/** Shared empty map for messages without tool results. */
+const EMPTY_RESULTS = new Map<string, ToolResultMessage>();
+
 function MessageRow({
   message,
-  following,
+  toolResults,
   runningTools,
 }: {
   message: AgentMessage;
-  following: AgentMessage[];
+  toolResults: Map<string, ToolResultMessage>;
   runningTools: Map<string, string>;
 }) {
   if (message.role === "toolResult") return null;
 
   if (message.role === "user") {
-    const text = contentText(
-      message.content as Array<{ type: string; text?: string }>,
-    );
+    const text = contentText(message.content);
     return (
       <div className="msg user">
         <div className="msg-body">
@@ -132,26 +154,15 @@ function MessageRow({
   }
 
   const assistant = message as AssistantMessage;
-  const text = contentText(
-    assistant.content as Array<{ type: string; text?: string }>,
-  );
+  const text = contentText(assistant.content);
   const toolCalls = assistant.content.filter(
     (b): b is ToolCallBlock => b.type === "toolCall",
   );
 
-  // Collect the toolResult messages that follow this assistant message.
-  const toolResults = new Map<string, ToolResultMessage>();
-  for (const m of following) {
-    if (m.role !== "toolResult") break;
-    toolResults.set(m.toolCallId, m);
-  }
-
   return (
     <div className="msg">
       <div className="msg-body markdown">
-        {text && (
-          <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
-        )}
+        {text && <MarkdownBlock text={text} />}
         {toolCalls.map((tc) => (
           <ToolCall
             key={tc.id}

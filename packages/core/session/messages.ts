@@ -6,16 +6,11 @@ export interface StoredMessage {
   sessionId: string;
   role: string;
   message: AgentMessage;
-  parentId: string | null;
   timestamp: number;
 }
 
 export interface MessageRepo {
-  append(
-    sessionId: string,
-    message: AgentMessage,
-    parentId?: string | null,
-  ): StoredMessage;
+  append(sessionId: string, message: AgentMessage): StoredMessage;
   list(sessionId: string): StoredMessage[];
   listMessages(sessionId: string): AgentMessage[];
   deleteBySession(sessionId: string): void;
@@ -23,8 +18,8 @@ export interface MessageRepo {
 
 export function createMessageRepo(db: LumiscaDb): MessageRepo {
   const insertStmt = db.db.prepare(`
-    INSERT INTO messages (id, session_id, role, content, parent_id, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO messages (id, session_id, role, content, timestamp)
+    VALUES (?, ?, ?, ?, ?)
   `);
   const listStmt = db.db.prepare(
     "SELECT * FROM messages WHERE session_id = ? ORDER BY rowid",
@@ -38,7 +33,6 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     session_id: string;
     role: string;
     content: string;
-    parent_id: string | null;
     timestamp: number;
   }): StoredMessage {
     return {
@@ -46,13 +40,19 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       sessionId: row.session_id,
       role: row.role,
       message: JSON.parse(row.content) as AgentMessage,
-      parentId: row.parent_id,
       timestamp: row.timestamp,
     };
   }
 
+  const list = (sessionId: string): StoredMessage[] => {
+    const rows = listStmt.all(sessionId) as Array<
+      Parameters<typeof toStored>[0]
+    >;
+    return rows.map(toStored);
+  };
+
   return {
-    append(sessionId, message, parentId = null): StoredMessage {
+    append(sessionId, message): StoredMessage {
       const id = crypto.randomUUID();
       const timestamp = (message as { timestamp?: number }).timestamp ??
         Date.now();
@@ -61,7 +61,6 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
         sessionId,
         message.role,
         JSON.stringify(message),
-        parentId,
         timestamp,
       );
       return {
@@ -69,20 +68,14 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
         sessionId,
         role: message.role,
         message,
-        parentId,
         timestamp,
       };
     },
 
-    list(sessionId: string): StoredMessage[] {
-      const rows = listStmt.all(sessionId) as Array<
-        Parameters<typeof toStored>[0]
-      >;
-      return rows.map(toStored);
-    },
+    list,
 
     listMessages(sessionId: string): AgentMessage[] {
-      return this.list(sessionId).map((m) => m.message);
+      return list(sessionId).map((m) => m.message);
     },
 
     deleteBySession(sessionId: string): void {

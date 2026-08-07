@@ -62,6 +62,11 @@ React の初期HTMLはサーバーでレンダリングされ、ハイドレー�
 
 `LUMISCA_DB` で DB パス、`LUMISCA_PORT` でポートを変更できます。
 
+`LUMISCA_TOKEN` を設定すると、API と WebSocket にトークン認証がかかります
+(ヘッダー `X-Lumisca-Token` または WS の `?token=` クエリ)。デスクトップアプリは
+起動のたびにトークンを生成して渡すため、別のローカルプロセスからエージェントを
+操作できません。未設定なら従来どおり認証なしで動きます。
+
 ### CLI
 
 ```bash
@@ -76,11 +81,19 @@ deno task cli -- --help     # 全オプション
 
 ```bash
 npm install --prefix packages/desktop
-npm run tauri --prefix packages/desktop -- dev
+npm run tauri --prefix packages/desktop -- dev        # 開発
+npm run tauri --prefix packages/desktop -- build      # インストーラ
 ```
 
 アプリ起動時に Deno サーバーを自動起動し、WebView で UI を開きます。
-`PATH` に deno が必要です。
+開発時は `PATH` に deno が必要です。
+
+`tauri build` は自動的に:
+1. フロントエンドを esbuild でバンドルし `assets.json` に埋め込み
+2. サーバーを `deno compile` で単一バイナリ化
+3. その両方をインストーラに同梱
+
+パッケージ版はリポジトリレイアウトや Deno 本体に依存せず動作します。
 
 ## APIキーの設定
 
@@ -119,11 +132,15 @@ core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSoc
 
 - エージェントループは pi の `Agent`(イベント購読ベース)を使用し、
   イベントを WebSocket / CLI へ中継します
-- SSR では初期データ(ワークスペース・セッション一覧)を HTML に埋め込み、
-  クライアントが `hydrateRoot` で引き継ぎます(ハイドレーションミスマッチ防止のため
-  `window.__INITIAL_DATA__` を利用)
+- SSR では初期データ(ワークスペース・セッション一覧)を `/assets/initial-data.js`
+  として外部化し、クライアントが `hydrateRoot` で引き継ぎます
+  (ハイドレーションミスマッチ防止のため `window.__INITIAL_DATA__` を利用。
+  インラインスクリプトはページ CSP で禁止しているため外部化しています)
 - セッションのメッセージは message_end ごとに SQLite へ追記保存され、
   再オープン時に完全復元されます
 - ワークスペース境界の検証は `packages/core/workspace/sandbox.ts` に集約されており、
   実在パスは realpath 解決後にルート集合との包含判定を行います
+- セキュリティ: ループバック限定 + オリジン完全比較(CORS / WS)+
+  任意の `LUMISCA_TOKEN` 認証。Markdown レンダラーは画像 URL を
+  https/http + 非ループバックに制限します
 

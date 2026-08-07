@@ -15,14 +15,15 @@ interface WorkspaceModalProps {
   /** Present → edit mode (rename / change folders / delete). */
   workspace?: Workspace;
   onSaved: (ws: Workspace) => void;
-  onDeleted?: (id: string) => void;
+  /** The App-owned delete flow (confirm + API + state). */
+  onDelete: (ws: Workspace) => Promise<void>;
   onClose: () => void;
 }
 
 type View = { kind: "main" } | { kind: "browse" };
 
 export function WorkspaceModal(
-  { workspace, onSaved, onDeleted, onClose }: WorkspaceModalProps,
+  { workspace, onSaved, onDelete, onClose }: WorkspaceModalProps,
 ) {
   const editing = workspace !== undefined;
   const [view, setView] = useState<View>({ kind: "main" });
@@ -56,17 +57,12 @@ export function WorkspaceModal(
   };
 
   const remove = async () => {
-    if (!editing || !workspace) return;
-    if (
-      !globalThis.confirm(`ワークスペース「${workspace.name}」を削除しますか？`)
-    ) {
-      return;
-    }
+    if (!editing || !workspace || busy) return;
     setBusy(true);
     setError(undefined);
     try {
-      await api.deleteWorkspace(workspace.id);
-      onDeleted?.(workspace.id);
+      await onDelete(workspace);
+      onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -189,13 +185,21 @@ function FolderBrowser({
 
   useEffect(() => {
     if (path === null) return;
+    // Ignore responses for a path we navigated away from (rapid 上へ clicks).
+    let stale = false;
     setError(undefined);
     api.fsBrowse(path)
       .then((r) => {
+        if (stale) return;
         setParent(r.parent);
         setEntries(r.entries);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => {
+        if (!stale) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      stale = true;
+    };
   }, [path]);
 
   const go = (p: string | null) => {

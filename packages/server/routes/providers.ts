@@ -1,11 +1,20 @@
 import { Hono } from "hono";
-import type { LumiscaCore } from "@lumisca/core";
-import { jsonError } from "./util.ts";
+import type { AuthCheck, ModelInfo, Provider } from "@lumisca/core";
+import { AppError, parseBody } from "./util.ts";
 
 /** Auth checks are cached briefly; invalidated when an API key changes. */
 const AUTH_CACHE_TTL = 30_000;
 
-export function providerRoutes(core: LumiscaCore): Hono {
+/** The slice of the core these routes need (interface segregation). */
+export interface ProviderApi {
+  listProviders(): readonly Provider[];
+  listModelsDetailed(providerId: string): ModelInfo[];
+  setModelEnabled(providerId: string, modelId: string, enabled: boolean): void;
+  checkAuth(providerId: string): Promise<AuthCheck | undefined>;
+  setProviderApiKey(providerId: string, key: string): Promise<void>;
+}
+
+export function providerRoutes(core: ProviderApi): Hono {
   const app = new Hono();
 
   const authCache = new Map<string, {
@@ -16,9 +25,14 @@ export function providerRoutes(core: LumiscaCore): Hono {
   const cachedAuth = async (providerId: string) => {
     const cached = authCache.get(providerId);
     if (cached && cached.expires > Date.now()) return cached;
-    const check = await core.models.checkAuth(providerId).catch(() =>
-      undefined
-    );
+    let check: AuthCheck | undefined;
+    try {
+      check = await core.checkAuth(providerId);
+    } catch {
+      // A transient checkAuth failure (network) must not be cached as
+      // "not configured" — that would lie to the settings UI.
+      return { configured: false, expires: Date.now() + AUTH_CACHE_TTL };
+    }
     const entry = {
       configured: check !== undefined,
       source: check?.source,
@@ -31,7 +45,7 @@ export function providerRoutes(core: LumiscaCore): Hono {
 
   app.get("/providers", async (c) => {
     const providers = await Promise.all(
-      core.models.getProviders().map(async (p) => {
+      core.listProviders().map(async (p) => {
         const check = await cachedAuth(p.id);
         return { id: p.id, name: p.name, ...check };
       }),
@@ -41,19 +55,24 @@ export function providerRoutes(core: LumiscaCore): Hono {
 
   app.get("/providers/:id/models", (c) => {
     const id = c.req.param("id");
-    const provider = core.models.getProviders().find((p) => p.id === id);
-    if (!provider) return c.json({ error: "provider not found" }, 404);
+    const provider = core.listProviders().find((p) => p.id === id);
+    if (!provider) {
+      throw new AppError(`Provider not found: ${id}`, 404);
+    }
     return c.json(core.listModelsDetailed(id));
   });
 
   app.put("/providers/:id/models/:modelId", async (c) => {
-    const body = await c.req.json().catch(() => null);
+    const body = await parseBody<{ enabled?: unknown }>(c);
     if (!body || typeof body.enabled !== "boolean") {
-      return c.json({ error: "enabled (boolean) is required" }, 400);
+      throw new AppError("enabled (boolean) is required", 400);
     }
+    // Hono already decodes path params once; the client percent-encodes
+    // model ids, so decoding again here would corrupt ids containing `+`
+    // (or throw on malformed escapes like %zz).
     core.setModelEnabled(
       c.req.param("id"),
-      decodeURIComponent(c.req.param("modelId")),
+      c.req.param("modelId"),
       body.enabled,
     );
     return c.json({ ok: true });
@@ -66,17 +85,13 @@ export function providerRoutes(core: LumiscaCore): Hono {
   });
 
   app.post("/providers/:id/api-key", async (c) => {
-    const body = await c.req.json().catch(() => null);
+    const body = await parseBody<{ key?: unknown }>(c);
     if (!body || typeof body.key !== "string" || body.key.length === 0) {
-      return c.json({ error: "key (string) is required" }, 400);
+      throw new AppError("key (string) is required", 400);
     }
-    try {
-      await core.setProviderApiKey(c.req.param("id"), body.key);
-      invalidateAuth(c.req.param("id"));
-      return c.json({ ok: true });
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    await core.setProviderApiKey(c.req.param("id"), body.key);
+    invalidateAuth(c.req.param("id"));
+    return c.json({ ok: true });
   });
 
   return app;

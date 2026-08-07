@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api.ts";
 import type { Workspace } from "../types.ts";
+import { errorText } from "../providers.ts";
 import { Composer, type ComposerModel } from "./Composer.tsx";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
 import { WorkspacePicker } from "./WorkspacePicker.tsx";
@@ -13,7 +14,8 @@ interface NewSessionViewProps {
     text: string,
   ) => Promise<void>;
   onWorkspaceChanged: (ws: Workspace) => void;
-  onWorkspaceDeleted: (id: string) => void;
+  /** The single delete flow owned by the App (confirm + API + state). */
+  onDeleteWorkspace: (ws: Workspace) => Promise<void>;
 }
 
 /** The draft session tab: pick workspace/model and start from the center. */
@@ -22,7 +24,7 @@ export function NewSessionView(
     workspaces,
     onStart,
     onWorkspaceChanged,
-    onWorkspaceDeleted,
+    onDeleteWorkspace,
   }: NewSessionViewProps,
 ) {
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
@@ -34,13 +36,18 @@ export function NewSessionView(
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const modelTouched = useRef(false);
 
   // Show the last used model (the one a session without an explicit model
   // would get) right away instead of leaving the picker to choose on click.
+  // A selection the user already made is never overwritten by the late
+  // response.
   useEffect(() => {
     api.getDefaultModel()
       .then((m) => {
-        if (m) setModel({ provider: m.provider, modelId: m.modelId });
+        if (m && !modelTouched.current) {
+          setModel({ provider: m.provider, modelId: m.modelId });
+        }
       })
       .catch(() => {});
   }, []);
@@ -63,21 +70,17 @@ export function NewSessionView(
     try {
       await onStart(workspaceId, model, trimmed);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
       setBusy(false);
     }
   };
 
-  const removeWorkspace = async (ws: Workspace) => {
-    if (!globalThis.confirm(`ワークスペース「${ws.name}」を削除しますか？`)) {
-      return;
-    }
+  const deleteWorkspace = async (ws: Workspace) => {
     setError(undefined);
     try {
-      await api.deleteWorkspace(ws.id);
-      onWorkspaceDeleted(ws.id);
+      await onDeleteWorkspace(ws);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   };
 
@@ -97,7 +100,7 @@ export function NewSessionView(
                   setModalWorkspace(ws);
                   setShowWorkspaceModal(true);
                 }}
-                onDelete={removeWorkspace}
+                onDelete={deleteWorkspace}
                 onCreate={() => {
                   setModalWorkspace(undefined);
                   setShowWorkspaceModal(true);
@@ -111,8 +114,10 @@ export function NewSessionView(
               autoFocus
               large
               model={model}
-              onModelSelect={(provider, modelId) =>
-                setModel({ provider, modelId })}
+              onModelSelect={(provider, modelId) => {
+                modelTouched.current = true;
+                setModel({ provider, modelId });
+              }}
               submitLabel={busy ? "作成中..." : "開始"}
               submitDisabled={busy || !text.trim() || !workspaceId}
               onSubmit={submit}
@@ -129,10 +134,7 @@ export function NewSessionView(
             setWorkspaceId(ws.id);
             setShowWorkspaceModal(false);
           }}
-          onDeleted={(id) => {
-            onWorkspaceDeleted(id);
-            setShowWorkspaceModal(false);
-          }}
+          onDelete={deleteWorkspace}
           onClose={() => setShowWorkspaceModal(false)}
         />
       )}

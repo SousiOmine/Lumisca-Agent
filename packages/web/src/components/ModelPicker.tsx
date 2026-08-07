@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.ts";
-import { formatModelMeta } from "../format.ts";
+import { formatModelMeta } from "@lumisca/core/shared";
 import type { ModelInfo } from "../types.ts";
+import { filterByQuery } from "../providers.ts";
 
 export interface ModelPickerProps {
   value: { provider: string; modelId: string } | null;
   /** Only show models the user enabled in settings. Default true. */
   enabledOnly?: boolean;
   onSelect: (provider: string, modelId: string) => void;
-  /** Called with the models of the active provider (for external state). */
-  onModelsLoaded?: (models: ModelInfo[]) => void;
 }
 
 /** Provider + searchable model selection, shared by modals and the chat bar.
@@ -18,7 +17,6 @@ export function ModelPicker({
   value,
   enabledOnly = true,
   onSelect,
-  onModelsLoaded,
 }: ModelPickerProps) {
   const [providers, setProviders] = useState<
     Array<{ id: string; name: string }>
@@ -27,57 +25,82 @@ export function ModelPicker({
   const [providerId, setProviderId] = useState(value?.provider ?? "");
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.listProviders().then((ps) => {
-      const configured = ps.filter((p) => p.configured !== false);
-      // Keep the currently selected provider in the list even when it has no
-      // configured credentials, so the dropdown matches the selected model.
-      const current = value?.provider;
-      const list = current && !configured.some((p) => p.id === current)
-        ? [...configured, {
-          id: current,
-          name: ps.find((p) => p.id === current)?.name ?? current,
-        }]
-        : configured;
-      setProviders(list);
-      if (!providerId && list.length > 0) {
-        setProviderId(list[0]!.id);
-      }
-    }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let stale = false;
+    api.listProviders()
+      .then((ps) => {
+        if (stale) return;
+        const configured = ps.filter((p) => p.configured !== false);
+        // Keep the currently selected provider in the list even when it has
+        // no configured credentials, so the dropdown matches the selection.
+        const current = value?.provider;
+        const list = current && !configured.some((p) => p.id === current)
+          ? [...configured, {
+            id: current,
+            name: ps.find((p) => p.id === current)?.name ?? current,
+          }]
+          : configured;
+        setProviders(list);
+        if (!providerId && list.length > 0) {
+          setProviderId(list[0]!.id);
+        }
+      })
+      .catch(() => {
+        if (!stale) {
+          setError(
+            "プロバイダー一覧を取得できませんでした(サーバーに接続できません)",
+          );
+        }
+      });
+    return () => {
+      stale = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!providerId) return;
+    // Drop stale responses: switching providers quickly must never show the
+    // models of a previous provider under the new one.
+    let stale = false;
     setBusy(true);
     setModels([]);
     api.listModels(providerId)
       .then((ms) => {
-        setModels(ms);
-        onModelsLoaded?.(ms);
+        if (!stale) setModels(ms);
       })
-      .catch(() => {})
-      .finally(() => setBusy(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() => {
+        if (!stale) setError("モデル一覧を取得できませんでした");
+      })
+      .finally(() => {
+        if (!stale) setBusy(false);
+      });
+    return () => {
+      stale = true;
+    };
   }, [providerId]);
+
+  // Follow external value changes (e.g. the session model switched while
+  // the picker stayed mounted).
+  useEffect(() => {
+    if (value?.provider && value.provider !== providerId) {
+      setProviderId(value.provider);
+    }
+  }, [value?.provider, providerId]);
 
   const visible = useMemo(() => {
     const list = enabledOnly
       ? models.filter((m) => m.enabled !== false)
       : models;
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter(
-      (m) =>
-        m.id.toLowerCase().includes(q) ||
-        (m.name ?? "").toLowerCase().includes(q),
-    );
+    return filterByQuery(list, search);
   }, [models, search, enabledOnly]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {providers.length === 0
+      {error !== null
+        ? <div className="error-text">{error}</div>
+        : providers.length === 0
         ? (
           <div className="settings-note" style={{ padding: 6 }}>
             設定済みのプロバイダーがありません。

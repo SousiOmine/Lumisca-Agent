@@ -33,6 +33,9 @@ export function createWorkspaceRepo(db: LumiscaDb): WorkspaceRepo {
   const foldersStmt = db.db.prepare(
     "SELECT path FROM workspace_folders WHERE workspace_id = ? ORDER BY rowid",
   );
+  const allFoldersStmt = db.db.prepare(
+    "SELECT workspace_id, path FROM workspace_folders ORDER BY rowid",
+  );
   const deleteFoldersStmt = db.db.prepare(
     "DELETE FROM workspace_folders WHERE workspace_id = ?",
   );
@@ -68,11 +71,21 @@ export function createWorkspaceRepo(db: LumiscaDb): WorkspaceRepo {
         name: string;
         created_at: number;
       }>;
-      return rows.map((row) => {
-        const folders = (foldersStmt.all(row.id) as Array<{ path: string }>)
-          .map((f) => f.path);
-        return toWorkspace(row, folders);
-      });
+      // Load folders for every workspace in a single query (no N+1).
+      const foldersByWorkspace = new Map<string, string[]>();
+      for (
+        const folder of allFoldersStmt.all() as Array<{
+          workspace_id: string;
+          path: string;
+        }>
+      ) {
+        const list = foldersByWorkspace.get(folder.workspace_id);
+        if (list) list.push(folder.path);
+        else foldersByWorkspace.set(folder.workspace_id, [folder.path]);
+      }
+      return rows.map((row) =>
+        toWorkspace(row, foldersByWorkspace.get(row.id) ?? [])
+      );
     },
 
     update(id: string, name: string, folders: string[]): void {

@@ -6,8 +6,9 @@ import {
   fauxText,
   fauxToolCall,
 } from "@earendil-works/pi-ai";
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { LumiscaCore } from "./mod.ts";
+import { LumiscaDb } from "./mod.ts";
 
 function setup() {
   const faux = fauxProvider();
@@ -161,7 +162,7 @@ Deno.test("tools block file access outside the workspace", async () => {
 
 Deno.test("model enablement is persisted", () => {
   const { core, providerId } = setup();
-  const models = core.listModelsWithState(providerId);
+  const models = core.listModelsDetailed(providerId);
   assertEquals(models.length > 0, true);
   const target = models[0]!;
 
@@ -171,7 +172,7 @@ Deno.test("model enablement is persisted", () => {
   // Disable: persisted.
   core.setModelEnabled(providerId, target.id, false);
   assertEquals(core.isModelEnabled(providerId, target.id), false);
-  const after = core.listModelsWithState(providerId);
+  const after = core.listModelsDetailed(providerId);
   assertEquals(after.find((m) => m.id === target.id)?.enabled, false);
 
   // Re-enable: back to default.
@@ -270,4 +271,141 @@ Deno.test("workspace update rebuilds session tools", async () => {
   core.close();
   await Deno.remove(root, { recursive: true });
   await Deno.remove(extra, { recursive: true });
+});
+
+Deno.test("startPrompt throws while the session is streaming", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  // A slow response keeps the session streaming while we probe.
+  faux.setResponses([
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return fauxAssistantMessage("slow reply");
+    },
+  ]);
+  core.startPrompt(session.id, "go");
+  assertThrows(
+    () => core.startPrompt(session.id, "again"),
+    Error,
+    "already running",
+  );
+
+  await core.getAgent(session.id)!.waitForIdle();
+  assertEquals(core.getAgent(session.id)!.isStreaming, false);
+  core.close();
+});
+
+Deno.test("model switch and workspace update are refused while streaming", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws, root } = await makeWorkspace(core);
+  const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return fauxAssistantMessage("slow reply");
+    },
+  ]);
+  core.startPrompt(session.id, "go");
+
+  assertThrows(
+    () => core.setSessionModel(session.id, providerId, modelId),
+    Error,
+    "already running",
+  );
+  await assertRejects(
+    () => core.updateWorkspace(ws.id, { folders: [root, extra] }),
+    Error,
+    "already running",
+  );
+
+  await core.getAgent(session.id)!.waitForIdle();
+
+  // After the run finishes, both succeed.
+  core.setSessionModel(session.id, providerId, modelId);
+  const updated = await core.updateWorkspace(ws.id, { folders: [root, extra] });
+  assertEquals(updated.folders.length, 2);
+
+  core.close();
+  await Deno.remove(root, { recursive: true });
+  await Deno.remove(extra, { recursive: true });
+});
+
+Deno.test("workspaces require at least one folder", async () => {
+  const { core } = setup();
+  await assertRejects(
+    () => core.createWorkspace("empty", []),
+    Error,
+    "at least one folder",
+  );
+
+  const { ws } = await makeWorkspace(core);
+  await assertRejects(
+    () => core.updateWorkspace(ws.id, { folders: [] }),
+    Error,
+    "at least one folder",
+  );
+  core.close();
+});
+
+Deno.test("credentials are guarded on every settings surface", async () => {
+  const { core } = setup();
+  await core.setProviderApiKey("anthropic", "sk-test");
+
+  // Reading, writing, or deleting credentials through the generic settings
+  // surface is refused (they have their own API).
+  const refused = (fn: () => void) => {
+    assertThrows(fn, Error, "credentials cannot be accessed");
+  };
+  refused(() => core.getSetting("api_key:anthropic"));
+  refused(() => core.setSetting("api_key:anthropic", "x"));
+  refused(() => core.deleteSetting("api_key:anthropic"));
+
+  // listSettings never exposes them.
+  assertEquals(core.listSettings().has("api_key:anthropic"), false);
+
+  // The credential survives (the refused operations were no-ops).
+  const row = core.db.db
+    .prepare("SELECT value FROM settings WHERE key = ?")
+    .get("api_key:anthropic") as { value: string } | undefined;
+  assertEquals(row !== undefined, true);
+
+  core.close();
+});
+
+Deno.test("database migration stamps user_version and is idempotent", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "lumisca-migrate-" });
+  const path = join(dir, "test.db");
+
+  const db1 = LumiscaDb.open(path);
+  assertEquals(
+    (db1.db.prepare("PRAGMA user_version").get() as { user_version: number })
+      .user_version,
+    1,
+  );
+  db1.close();
+
+  // Reopening an existing database must not re-run or fail migrations.
+  const db2 = LumiscaDb.open(path);
+  assertEquals(
+    (db2.db.prepare("PRAGMA user_version").get() as { user_version: number })
+      .user_version,
+    1,
+  );
+  db2.close();
+
+  await Deno.remove(dir, { recursive: true });
 });

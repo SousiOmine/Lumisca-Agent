@@ -1,26 +1,29 @@
 import { Hono } from "hono";
-import type { LumiscaCore } from "@lumisca/core";
-import { jsonError } from "./util.ts";
+import { AppError, parseBody } from "./util.ts";
 
-export function settingRoutes(core: LumiscaCore): Hono {
+/** The slice of the core these routes need (interface segregation).
+ * Credential filtering/guarding lives in the core, not here. */
+export interface SettingsApi {
+  listSettings(): Map<string, string>;
+  setSetting(key: string, value: string): void;
+}
+
+export function settingRoutes(core: SettingsApi): Hono {
   const app = new Hono();
 
   app.get("/settings", (c) => {
-    const entries = core.settings.list();
-    return c.json(Object.fromEntries(entries));
+    return c.json(Object.fromEntries(core.listSettings()));
   });
 
   app.put("/settings/:key", async (c) => {
-    const body = await c.req.json().catch(() => null);
+    // Core refuses credential keys (throws CoreError → 403); credentials
+    // have their own endpoint (/providers/:id/api-key).
+    const body = await parseBody<{ value?: unknown }>(c);
     if (!body || typeof body.value !== "string") {
-      return c.json({ error: "value (string) is required" }, 400);
+      throw new AppError("value (string) is required", 400);
     }
-    try {
-      core.setSetting(c.req.param("key"), body.value);
-      return c.json({ ok: true });
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    core.setSetting(c.req.param("key"), body.value);
+    return c.json({ ok: true });
   });
 
   return app;

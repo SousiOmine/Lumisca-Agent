@@ -155,3 +155,4 @@ packages/desktop/dist/
 .playwright-mcp/
 ui-home.png
 .lumisca-cache/
+packages/desktop/src-tauri/resources/

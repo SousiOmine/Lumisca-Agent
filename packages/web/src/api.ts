@@ -10,11 +10,21 @@ import type {
 /** The SSR server serves both the UI and the API on the same origin. */
 const API_BASE = "";
 
+declare global {
+  /** Embedded by the SSR server when LUMISCA_TOKEN auth is enabled. */
+  var __LUMISCA_TOKEN__: string | undefined;
+}
+
+/** Optional per-instance token (embedded in the SSR page by the server).
+ * Attached to every request; browsers cannot set WebSocket headers, so the
+ * WS URL carries it as a query parameter instead. */
+const token = globalThis.__LUMISCA_TOKEN__;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: { "content-type": "application/json", ...init?.headers },
-  });
+  const headers = new Headers(init?.headers);
+  headers.set("content-type", "application/json");
+  if (token) headers.set("x-lumisca-token", token);
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const message = body && typeof body.error === "string"
@@ -25,9 +35,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export const api = {
-  health: () => request<{ ok: boolean }>("/api/health"),
+/** Session info as served by the API: includes the last run error, if any. */
+export type SessionInfoDto = SessionInfo & { lastError?: string };
 
+export const api = {
   listWorkspaces: () => request<Workspace[]>("/api/workspaces"),
   createWorkspace: (name: string, folders: string[]) =>
     request<Workspace>("/api/workspaces", {
@@ -42,10 +53,6 @@ export const api = {
   deleteWorkspace: (id: string) =>
     request<{ ok: boolean }>(`/api/workspaces/${id}`, { method: "DELETE" }),
 
-  listSessions: (workspaceId?: string) =>
-    request<SessionInfo[]>(
-      `/api/sessions${workspaceId ? `?workspaceId=${workspaceId}` : ""}`,
-    ),
   getDefaultModel: () =>
     request<{ provider: string; modelId: string } | null>(
       "/api/sessions/default-model",
@@ -61,26 +68,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  getSession: (id: string) => request<SessionInfoDto>(`/api/sessions/${id}`),
   openSession: (id: string) =>
-    request<SessionInfo>(`/api/sessions/${id}/open`, { method: "POST" }),
+    request<SessionInfoDto>(`/api/sessions/${id}/open`, { method: "POST" }),
   closeSession: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/close`, { method: "POST" }),
-  deleteSession: (id: string) =>
-    request<{ ok: boolean }>(`/api/sessions/${id}`, { method: "DELETE" }),
   getMessages: (id: string) =>
     request<AgentMessage[]>(`/api/sessions/${id}/messages`),
   prompt: (id: string, text: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/prompt`, {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    }),
-  steer: (id: string, text: string) =>
-    request<{ ok: boolean }>(`/api/sessions/${id}/steer`, {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    }),
-  followUp: (id: string, text: string) =>
-    request<{ ok: boolean }>(`/api/sessions/${id}/follow-up`, {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
@@ -129,15 +125,20 @@ export const api = {
 };
 
 /** Connect to the WebSocket event stream. Returns a close function.
- * Same origin as the page (the SSR server serves both UI and API). */
+ * Same origin as the page (the SSR server serves both UI and API).
+ * `onOpen` fires on every (re)connection so callers can re-sync state. */
 export function connectEvents(
   onEvent: (event: ClientEvent) => void,
   onClose: () => void,
+  onOpen?: () => void,
 ): () => void {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+  // Browsers cannot set WS headers, so an enabled token travels in the URL.
+  const suffix = token ? `?token=${encodeURIComponent(token)}` : "";
+  const ws = new WebSocket(`${proto}//${location.host}/ws${suffix}`);
   let closed = false;
 
+  ws.onopen = () => onOpen?.();
   ws.onmessage = (e) => {
     try {
       onEvent(JSON.parse(String(e.data)) as ClientEvent);

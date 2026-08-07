@@ -8,7 +8,13 @@ import {
   success,
   userLine,
 } from "./ui.ts";
-import { pickModel, pickWorkspace, selectFromList } from "./select.ts";
+import {
+  pickModel,
+  pickWorkspace,
+  selectFromList,
+  sessionLabel,
+} from "./select.ts";
+import { createSession } from "./session.ts";
 
 function summarize(text: string, max = 300): string {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -54,46 +60,53 @@ export async function runRepl(
 
   let streaming = false;
 
-  const unsubscribe = core.subscribe((event: ClientEvent) => {
-    if (event.type === "session_created") return;
-    if (event.sessionId !== currentId) return;
-    switch (event.type) {
-      case "message_delta":
-        process.stdout.write(event.delta);
-        streaming = true;
-        break;
-      case "message_end":
-        if (event.message.role === "assistant" && streaming) {
-          process.stdout.write("\n");
-        }
-        streaming = false;
-        break;
-      case "tool_start":
-        printToolStart(event.toolName, event.args);
-        break;
-      case "tool_end":
-        printToolEnd(event.toolName, event.result, event.isError);
-        break;
-      case "session_error":
-        if (streaming) process.stdout.write("\n");
-        streaming = false;
-        error(`エラー: ${event.message}`);
-        break;
-      case "agent_end":
-        streaming = false;
-        break;
-      default:
-        break;
-    }
-  });
+  /** Subscribe to the events of one session. Returns an unsubscribe
+   * function; call it before switching to another session scope. */
+  const subscribeTo = (targetId: string): () => void => {
+    return core.subscribe((event: ClientEvent) => {
+      if (event.type === "session_created") return;
+      if (event.sessionId !== targetId) return;
+      switch (event.type) {
+        case "message_delta":
+          process.stdout.write(event.delta);
+          streaming = true;
+          break;
+        case "message_end":
+          if (event.message.role === "assistant" && streaming) {
+            process.stdout.write("\n");
+          }
+          streaming = false;
+          break;
+        case "tool_start":
+          printToolStart(event.toolName, event.args);
+          break;
+        case "tool_end":
+          printToolEnd(event.toolName, event.result, event.isError);
+          break;
+        case "session_error":
+          if (streaming) process.stdout.write("\n");
+          streaming = false;
+          error(`エラー: ${event.message}`);
+          break;
+        case "agent_end":
+          streaming = false;
+          break;
+        default:
+          break;
+      }
+    });
+  };
+
+  let unsubscribe = subscribeTo(currentId);
 
   header(`Lumisca CLI — ${sessionName(core, currentId)}`);
   info("/help でコマンド一覧");
 
   for (;;) {
-    if (streaming) {
+    // Wait for the current run before reading input. isStreaming is
+    // authoritative (the renderer's streaming flag misses tool-only runs).
+    if (agent.isStreaming) {
       await agent.waitForIdle();
-      streaming = false;
     }
 
     const input = await getPromptFn()("❯");
@@ -109,14 +122,18 @@ export async function runRepl(
       if (next && next !== currentId) {
         currentId = next;
         agent = core.getAgent(currentId)!;
-        unsubscribe(); // re-subscribe with the new session scope
-        continue;
+        unsubscribe(); // drop the old subscription...
+        unsubscribe = subscribeTo(currentId); // ...and re-subscribe to the new session
+        header(`Lumisca CLI — ${sessionName(core, currentId)}`);
       }
       continue;
     }
 
     userLine(trimmed);
     try {
+      // Run failures arrive as session_error events, but prompt() can still
+      // throw synchronously (session not open / already running) — surface
+      // those instead of crashing the REPL with an unhandled rejection.
       await core.prompt(currentId, trimmed);
     } catch (e) {
       error(e instanceof Error ? e.message : String(e));
@@ -132,7 +149,7 @@ function sessionName(core: LumiscaCore, id: string): string {
 
 type CommandResult = "exit" | string | undefined;
 
-async function handleCommand(
+export async function handleCommand(
   core: LumiscaCore,
   raw: string,
   currentId: string,
@@ -161,19 +178,9 @@ async function handleCommand(
     }
 
     case "new": {
-      const model = await pickModel(core);
-      if (!model) return undefined;
       const workspaceId = core.getSession(currentId)?.workspaceId;
       if (!workspaceId) return undefined;
-      const session = core.createSession({
-        workspaceId,
-        modelProvider: model.providerId,
-        modelId: model.modelId,
-      });
-      success(
-        `セッション作成: ${session.id} (${model.providerId}/${model.modelId})`,
-      );
-      return session.id;
+      return (await createSession(core, workspaceId)) ?? undefined;
     }
 
     case "resume": {
@@ -185,11 +192,7 @@ async function handleCommand(
       const id = await selectFromList(
         "セッションを選択",
         sessions.map((s) => ({
-          label: `${s.name} ${
-            color.faint(
-              `${s.modelProvider}/${s.modelId} (${formatDate(s.updatedAt)})`,
-            )
-          }`,
+          label: sessionLabel(s, { date: true }),
           value: s.id,
         })),
       );
@@ -210,15 +213,7 @@ async function handleCommand(
       const id = await pickWorkspace(core);
       if (id === null) return undefined;
       // create a fresh session in the new workspace
-      const model = await pickModel(core);
-      if (!model) return undefined;
-      const session = core.createSession({
-        workspaceId: id,
-        modelProvider: model.providerId,
-        modelId: model.modelId,
-      });
-      success(`ワークスペース切替 → 新セッション: ${session.id}`);
-      return session.id;
+      return (await createSession(core, id)) ?? undefined;
     }
 
     case "keys": {
@@ -236,11 +231,7 @@ async function handleCommand(
       header("セッション一覧");
       for (const s of sessions.slice(0, 30)) {
         const active = s.id === currentId ? color.green("*") : " ";
-        console.log(
-          `  ${active} ${s.name} ${
-            color.faint(`${s.modelProvider}/${s.modelId}`)
-          }`,
-        );
+        console.log(`  ${active} ${sessionLabel(s)}`);
       }
       return undefined;
     }
@@ -265,8 +256,4 @@ async function handleCommand(
       error(`不明なコマンド: /${cmd} (/help を参照)`);
       return undefined;
   }
-}
-
-function formatDate(ts: number): string {
-  return new Date(ts).toLocaleString();
 }

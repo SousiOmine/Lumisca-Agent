@@ -1,8 +1,9 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { SessionInfo } from "./session.ts";
 
 /** Events emitted by the core and forwarded to any client (WebSocket, CLI). */
 export type ClientEvent =
-  | { type: "session_created"; session: unknown }
+  | { type: "session_created"; session: SessionInfo }
   | { type: "agent_start"; sessionId: string }
   | { type: "message_start"; sessionId: string; message: AgentMessage }
   | { type: "message_delta"; sessionId: string; delta: string }

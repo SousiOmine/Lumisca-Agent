@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { SCHEMA } from "./schema.ts";
+import { migrate } from "./schema.ts";
 
 /** Central SQLite access point. All repositories share one instance. */
 export class LumiscaDb {
@@ -14,7 +14,7 @@ export class LumiscaDb {
     const lumisca = new LumiscaDb(db);
     lumisca.db.exec("PRAGMA journal_mode = WAL;");
     lumisca.db.exec("PRAGMA foreign_keys = ON;");
-    lumisca.db.exec(SCHEMA);
+    migrate(db);
     return lumisca;
   }
 
@@ -22,7 +22,7 @@ export class LumiscaDb {
     const db = new DatabaseSync(":memory:");
     const lumisca = new LumiscaDb(db);
     lumisca.db.exec("PRAGMA foreign_keys = ON;");
-    lumisca.db.exec(SCHEMA);
+    migrate(db);
     return lumisca;
   }
 

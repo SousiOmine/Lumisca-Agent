@@ -7,7 +7,12 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Windows is a first-class platform (cmd.exe shell, OEM code pages,
+        # case-insensitive paths, Tauri) — it must run the same suite.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +27,54 @@ jobs:
         run: deno lint
 
       - name: Type check
-        run: deno check packages/core/mod.ts packages/server/mod.ts packages/cli/mod.ts
+        run: deno check packages/core/mod.ts packages/server/mod.ts packages/cli/mod.ts packages/web/src/client.tsx
 
       - name: Test
         run: deno test packages/core packages/server packages/cli packages/web --allow-read --allow-write --allow-run --allow-env --allow-net
+
+  desktop:
+    # The desktop shell was never built in CI, so a broken release packaging
+    # (missing resources, Rust errors) went unnoticed. The toolchain for a
+    # full `tauri build` (NSIS, webkit2gtk) is heavy; compiling the crate and
+    # checking that the server binary + embedded assets are produced covers
+    # the failure modes that have actually bitten this project.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: packages/desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+
+      # Generates the embedded frontend assets + server binary slot that
+      # tauri-build validates at config-parse time.
+      - name: Generate embedded assets
+        run: npm run build:server:dev
+
+      - name: Format check
+        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: Compile
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Compile server binary
+        # Full `npm run build:server` needs the denort download; verify the
+        # packaged server entry compiles standalone instead.
+        run: deno check ../../packages/server/mod.ts

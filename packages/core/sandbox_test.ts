@@ -56,12 +56,45 @@ Deno.test("sandbox allows writing to not-yet-existing files inside the workspace
 
   const r = await sandbox.resolve(target, root);
   assertEquals(r.ok, true);
+  if (r.ok) assertEquals(r.path, join(real(root), "new", "file.txt"));
+
+  await Deno.remove(root, { recursive: true });
+});
+
+Deno.test("sandbox resolves deep new paths in full (no truncation)", async () => {
+  const root = await tempDir("lumisca-sb-");
+  const sandbox = new Sandbox([root]);
+
+  // Two missing segments below the deepest existing ancestor: the resolved
+  // path must keep every segment, not just the deepest ancestor + 1.
+  const deep = join(root, "a", "b", "c", "file.txt");
+  const r = await sandbox.resolve(deep, root);
+  assertEquals(r.ok, true);
+  if (r.ok) assertEquals(r.path, join(real(root), "a", "b", "c", "file.txt"));
+
+  // The same for a path with a single missing parent directory.
+  const shallow = join(root, "new", "file.txt");
+  const r2 = await sandbox.resolve(shallow, root);
+  assertEquals(r2.ok, true);
+  if (r2.ok) assertEquals(r2.path, join(real(root), "new", "file.txt"));
+
+  // A write through that path must land on the full target (after the
+  // parents are created, mirroring what write_file does).
+  await Deno.mkdir(join(real(root), "a", "b", "c"), { recursive: true });
+  await Deno.writeTextFile(r.ok ? r.path : "", "content");
+  assertEquals(
+    await Deno.readTextFile(join(real(root), "a", "b", "c", "file.txt")),
+    "content",
+  );
+  // The intermediate directories must stay directories (no stray file).
+  const aStat = Deno.statSync(join(real(root), "a"));
+  assertEquals(aStat.isDirectory, true);
+  assertEquals(aStat.isFile, false);
 
   await Deno.remove(root, { recursive: true });
 });
 
 Deno.test("sandbox rejects workspace folders that do not exist", async () => {
-  const sandbox = new Sandbox([]);
-  const r = await sandbox.resolveFolder("Z:\\definitely\\not\\here\\lumisca");
+  const r = await Sandbox.resolveFolder("Z:\\definitely\\not\\here\\lumisca");
   assertEquals(r.ok, false);
 });

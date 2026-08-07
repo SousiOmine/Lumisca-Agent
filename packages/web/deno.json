@@ -1,0 +1,8 @@
+{
+  "name": "@lumisca/web",
+  "version": "0.1.0",
+  "exports": {
+    "./app": "./src/App.tsx",
+    "./types": "./src/types.ts"
+  }
+}

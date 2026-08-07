@@ -1,4 +1,5 @@
 import type { LumiscaDb } from "../db/mod.ts";
+export { THEME_KEY } from "../shared.ts";
 
 export interface SettingsRepo {
   get(key: string): string | undefined;

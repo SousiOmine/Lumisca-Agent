@@ -6,7 +6,9 @@ import type {
 } from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "./repo.ts";
 
-const KEY_PREFIX = "api_key:";
+/** Settings-table key prefix for credentials. Shared with the server layer
+ * (settings API filters these keys out) — single source of truth. */
+export const CREDENTIAL_KEY_PREFIX = "api_key:";
 
 /**
  * CredentialStore backed by the settings table.
@@ -18,7 +20,7 @@ export function createDbCredentialStore(
   settings: SettingsRepo,
 ): CredentialStore {
   function read(providerId: string): Credential | undefined {
-    const raw = settings.get(`${KEY_PREFIX}${providerId}`);
+    const raw = settings.get(`${CREDENTIAL_KEY_PREFIX}${providerId}`);
     if (!raw) return undefined;
     try {
       return JSON.parse(raw) as Credential;
@@ -34,8 +36,8 @@ export function createDbCredentialStore(
     list(): Promise<readonly CredentialInfo[]> {
       const infos: CredentialInfo[] = [];
       for (const [key, value] of settings.list()) {
-        if (!key.startsWith(KEY_PREFIX)) continue;
-        const providerId = key.slice(KEY_PREFIX.length);
+        if (!key.startsWith(CREDENTIAL_KEY_PREFIX)) continue;
+        const providerId = key.slice(CREDENTIAL_KEY_PREFIX.length);
         try {
           const credential = JSON.parse(value) as Credential;
           infos.push({ providerId, type: credential.type });
@@ -52,14 +54,17 @@ export function createDbCredentialStore(
       const current = read(providerId);
       const next = await fn(current);
       if (next === undefined) {
-        settings.delete(`${KEY_PREFIX}${providerId}`);
+        settings.delete(`${CREDENTIAL_KEY_PREFIX}${providerId}`);
       } else {
-        settings.set(`${KEY_PREFIX}${providerId}`, JSON.stringify(next));
+        settings.set(
+          `${CREDENTIAL_KEY_PREFIX}${providerId}`,
+          JSON.stringify(next),
+        );
       }
       return next;
     },
     delete(providerId: string): Promise<void> {
-      settings.delete(`${KEY_PREFIX}${providerId}`);
+      settings.delete(`${CREDENTIAL_KEY_PREFIX}${providerId}`);
       return Promise.resolve();
     },
   };
@@ -73,13 +78,4 @@ export async function setApiKey(
 ): Promise<void> {
   const credential: ApiKeyCredential = { type: "api_key", key };
   await store.modify(providerId, () => Promise.resolve(credential));
-}
-
-export async function getApiKey(
-  store: CredentialStore,
-  providerId: string,
-): Promise<string | undefined> {
-  const credential = await store.read(providerId);
-  if (credential?.type === "api_key") return credential.key;
-  return undefined;
 }

@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
+import { LumiscaCore } from "@lumisca/core";
 import { getPromptFn, setPromptFn } from "./ui.ts";
-import { selectFromList } from "./select.ts";
+import { pickWorkspace, selectFromList } from "./select.ts";
 
 function withInputs(inputs: string[]) {
   let i = 0;
@@ -57,6 +58,34 @@ Deno.test("selectFromList restores list after no matches", async () => {
     { label: "two", value: 2 },
   ]);
   assertEquals(result, 1);
+});
+
+Deno.test("pickWorkspace creates a new workspace from the picker", async () => {
+  const core = LumiscaCore.openInMemory();
+  const root = await Deno.makeTempDir({ prefix: "lumisca-pick-" });
+  const ws = await core.createWorkspace("existing", [root]);
+
+  // With workspaces present, the create entry is the 2nd choice; then the
+  // creation flow prompts for folders (comma separated) and a name.
+  withInputs(["2", `${root},${root}`, "new-ws"]);
+  const id = await pickWorkspace(core);
+  assertEquals(id !== null, true);
+  const created = core.getWorkspace(id!);
+  assertEquals(created?.name, "new-ws");
+  assertEquals(created!.id !== ws.id, true, "a new workspace is created");
+  core.close();
+  await Deno.remove(root, { recursive: true });
+});
+
+Deno.test("pickWorkspace falls back to creation when none exist", async () => {
+  const core = LumiscaCore.openInMemory();
+  const root = await Deno.makeTempDir({ prefix: "lumisca-pick-" });
+
+  withInputs([root, "first-ws"]);
+  const id = await pickWorkspace(core);
+  assertEquals(core.getWorkspace(id!)?.name, "first-ws");
+  core.close();
+  await Deno.remove(root, { recursive: true });
 });
 
 // Restore the real prompt for other tests.

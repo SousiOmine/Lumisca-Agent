@@ -46,13 +46,9 @@ export class ModelManager {
     credentials: CredentialStore,
     settings: SettingsRepo,
     modelsStore?: ModelsStore,
-    extraProviders: Provider[] = [],
   ) {
     this.models = builtinModels({ credentials, modelsStore }) as MutableModels;
     this.settings = settings;
-    for (const provider of extraProviders) {
-      this.models.setProvider(provider);
-    }
   }
 
   getProviders(): readonly Provider[] {
@@ -67,22 +63,17 @@ export class ModelManager {
     return this.models.getModel(providerId, modelId);
   }
 
-  /** Models whose provider has complete auth configuration. */
-  async getAvailable(
-    providerId?: string,
-  ): Promise<readonly Model<Api>[]> {
-    return await this.models.getAvailable(providerId);
-  }
-
   async checkAuth(
     providerId: string,
   ): Promise<AuthCheck | undefined> {
     return await this.models.checkAuth(providerId);
   }
 
-  /** Refresh dynamic provider catalogs (OpenRouter etc.). */
-  async refresh(_providerIds?: string[]): Promise<void> {
-    await this.models.refresh({ force: true, allowNetwork: true });
+  /** Whether the provider resolves auth (env var or stored key) without a
+   * network call. The pickers use this so unconfigured providers are not
+   * offered; unlike checkAuth it never fails on a transient network error. */
+  async hasProviderAuth(providerId: string): Promise<boolean> {
+    return (await this.models.getAuth(providerId)) !== undefined;
   }
 
   /** Enable or disable a model for the UI. Disabled models are hidden
@@ -99,5 +90,16 @@ export class ModelManager {
   isModelEnabled(providerId: string, modelId: string): boolean {
     return this.settings.get(`${ENABLED_PREFIX}${providerId}:${modelId}`) !==
       "0";
+  }
+
+  /** First enabled model across providers (the default-model fallback). */
+  getFallbackModel(): { provider: string; modelId: string } | null {
+    for (const p of this.getProviders()) {
+      const model = this.getModels(p.id).find((m) =>
+        this.isModelEnabled(p.id, m.id)
+      );
+      if (model) return { provider: p.id, modelId: model.id };
+    }
+    return null;
   }
 }

@@ -28,6 +28,23 @@ Deno.test("markdown allows safe links", () => {
   assertEquals(html.includes('href="https://pi.dev"'), true);
 });
 
+Deno.test("markdown blocks unsafe image sources", () => {
+  // Images fire network requests from untrusted model output: localhost,
+  // data: URIs, and protocol-relative URLs must not render.
+  const local = renderMarkdown("![x](http://127.0.0.1:8080/admin)");
+  assertEquals(local.includes("<img"), false);
+
+  const data = renderMarkdown("![x](data:image/png;base64,AAAA)");
+  assertEquals(data.includes("<img"), false);
+
+  const relative = renderMarkdown("![x](//127.0.0.1:9000/x)");
+  assertEquals(relative.includes("<img"), false);
+
+  // https images still render.
+  const ok = renderMarkdown("![x](https://example.com/pic.png)");
+  assertEquals(ok.includes('src="https://example.com/pic.png"'), true);
+});
+
 Deno.test("markdown handles inline formatting", () => {
   const html = renderMarkdown("**bold** and `code` and ~~strike~~");
   assertEquals(html.includes("<strong>bold</strong>"), true);

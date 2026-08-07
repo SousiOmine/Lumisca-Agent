@@ -1,76 +1,89 @@
 import { Hono } from "hono";
-import type { LumiscaCore } from "@lumisca/core";
-import { jsonError } from "./util.ts";
+import type { Workspace } from "@lumisca/core";
+import { AppError, parseBody } from "./util.ts";
 
-export function workspaceRoutes(core: LumiscaCore): Hono {
+interface WorkspaceBody {
+  name?: unknown;
+  folders?: unknown;
+}
+
+/** Coerce a parsed body into a string array; throws 400 on wrong types
+ * instead of silently stringifying numbers/null into `"null"`. */
+function folderList(folders: unknown): string[] {
+  if (
+    !Array.isArray(folders) ||
+    folders.some((f) => typeof f !== "string" || f.length === 0)
+  ) {
+    throw new AppError("folders (non-empty string[]) is required", 400);
+  }
+  return folders as string[];
+}
+
+/** The slice of the core these routes need (interface segregation). */
+export interface WorkspaceApi {
+  listWorkspaces(): Workspace[];
+  getWorkspace(id: string): Workspace | undefined;
+  createWorkspace(name: string, folders: string[]): Promise<Workspace>;
+  updateWorkspace(
+    id: string,
+    input: { name?: string; folders?: string[] },
+  ): Promise<Workspace>;
+  deleteWorkspace(id: string): void;
+}
+
+export function workspaceRoutes(core: WorkspaceApi): Hono {
   const app = new Hono();
 
   app.get("/workspaces", (c) => c.json(core.listWorkspaces()));
 
   app.post("/workspaces", async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (
-      !body || typeof body.name !== "string" || !Array.isArray(body.folders)
-    ) {
-      return c.json({
-        error: "name (string) and folders (string[]) are required",
-      }, 400);
+    const body = await parseBody<WorkspaceBody>(c);
+    if (!body || typeof body.name !== "string" || body.name.length === 0) {
+      throw new AppError("name (non-empty string) is required", 400);
     }
-    try {
-      const ws = await core.createWorkspace(
-        body.name,
-        body.folders.map(String),
-      );
-      return c.json(ws, 201);
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    const ws = await core.createWorkspace(body.name, folderList(body.folders));
+    return c.json(ws, 201);
   });
 
   app.get("/workspaces/:id", (c) => {
     const ws = core.getWorkspace(c.req.param("id"));
-    if (!ws) return c.json({ error: "not found" }, 404);
+    if (!ws) {
+      throw new AppError(`Workspace not found: ${c.req.param("id")}`, 404);
+    }
     return c.json(ws);
   });
 
   app.patch("/workspaces/:id", async (c) => {
-    const body = await c.req.json().catch(() => null);
+    const body = await parseBody<WorkspaceBody>(c);
     if (
       !body ||
       (typeof body.name !== "undefined" && typeof body.name !== "string") ||
       (typeof body.folders !== "undefined" && !Array.isArray(body.folders))
     ) {
-      return c.json({
-        error: "name (string) and/or folders (string[]) expected",
-      }, 400);
+      throw new AppError(
+        "name (string) and/or folders (string[]) expected",
+        400,
+      );
     }
-    try {
-      const ws = await core.updateWorkspace(c.req.param("id"), {
-        ...(typeof body.name === "string" ? { name: body.name } : {}),
-        ...(Array.isArray(body.folders)
-          ? { folders: body.folders.map(String) }
-          : {}),
-      });
-      return c.json(ws);
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    const ws = await core.updateWorkspace(c.req.param("id"), {
+      ...(typeof body.name === "string" ? { name: body.name } : {}),
+      ...(body.folders !== undefined
+        ? { folders: folderList(body.folders) }
+        : {}),
+    });
+    return c.json(ws);
   });
 
   app.patch("/workspaces/:id/folders", async (c) => {
-    const body = await c.req.json().catch(() => null);
+    const body = await parseBody<WorkspaceBody>(c);
     if (!body || !Array.isArray(body.folders)) {
-      return c.json({ error: "folders (string[]) is required" }, 400);
+      throw new AppError("folders (string[]) is required", 400);
     }
-    try {
-      await core.updateWorkspace(
-        c.req.param("id"),
-        { folders: body.folders.map(String) },
-      );
-      return c.json({ ok: true });
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    await core.updateWorkspace(
+      c.req.param("id"),
+      { folders: folderList(body.folders) },
+    );
+    return c.json({ ok: true });
   });
 
   app.delete("/workspaces/:id", (c) => {

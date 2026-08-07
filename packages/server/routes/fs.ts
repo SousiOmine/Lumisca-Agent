@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { Hono } from "hono";
+import { AppError } from "./util.ts";
 
 /** Filesystem browser endpoints (workspace folder picker). */
 export function fsRoutes(): Hono {
@@ -23,10 +24,10 @@ export function fsRoutes(): Hono {
 
   app.get("/fs/browse", async (c) => {
     const path = c.req.query("path") ?? "";
-    if (!path) return c.json({ error: "path is required" }, 400);
+    if (!path) throw new AppError("path is required", 400);
     const stat = await Deno.stat(path).catch(() => null);
     if (!stat || !stat.isDirectory) {
-      return c.json({ error: `not a directory: ${path}` }, 400);
+      throw new AppError(`not a directory: ${path}`, 400);
     }
     const entries: Array<{ name: string; path: string }> = [];
     for await (const entry of Deno.readDir(path)) {

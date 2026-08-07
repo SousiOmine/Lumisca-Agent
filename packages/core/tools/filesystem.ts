@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Sandbox } from "../workspace/sandbox.ts";
-import { DEFAULT_READ_LIMIT, MAX_TOOL_OUTPUT, truncate } from "./truncate.ts";
+import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 
 interface FsToolContext {
   sandbox: Sandbox;
@@ -54,7 +54,7 @@ export function createReadFileTool(
         const { text: trimmed, truncated } = truncate(text);
         let note = "";
         if (truncated) {
-          note = `\n[output truncated to the last ${MAX_TOOL_OUTPUT} bytes]`;
+          note = truncatedNote("output");
         }
         if (offset + bytes.length < stat.size) {
           note += `\n[file continues; read with offset=${
@@ -164,9 +164,7 @@ export function createListDirTool(
       entries.sort((a, b) => a.name.localeCompare(b.name));
       const lines = entries.map((e) => fileInfoLine(e));
       const { text, truncated } = truncate(lines.join("\n") || "(empty)");
-      const note = truncated
-        ? `\n[listing truncated to the last ${MAX_TOOL_OUTPUT} bytes]`
-        : "";
+      const note = truncated ? truncatedNote("listing") : "";
       return {
         content: [{ type: "text", text: `${resolved.path}:\n${text}${note}` }],
         details: { path: resolved.path, count: entries.length },

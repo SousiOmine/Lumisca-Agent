@@ -1,4 +1,4 @@
-import { basename, dirname, isAbsolute, join, normalize } from "node:path";
+import { dirname, isAbsolute, join, normalize, relative } from "node:path";
 import { realpathSync } from "node:fs";
 
 export type ResolvedPath =
@@ -26,6 +26,13 @@ function isWithin(root: string, candidate: string): boolean {
  * Paths are normalized syntactically, then resolved through symlinks
  * (via realpath on existing ancestors) so that symlink escapes are
  * detected, not bypassed.
+ *
+ * Note: resolution and the subsequent file operation are two separate
+ * syscalls, so a malicious process that can swap a symlink between them
+ * (TOCTOU) could redirect the operation outside the workspace. This is
+ * acceptable for a local coding agent whose model output is the primary
+ * actor, but the boundary is not a security wall against concurrent
+ * local attackers.
  */
 export class Sandbox {
   /** Resolved, absolute workspace roots. */
@@ -76,21 +83,29 @@ export class Sandbox {
     }
   }
 
-  private async canonicalizeParent(abs: string): Promise<ResolvedPath> {
+  private async canonicalizeParent(
+    abs: string,
+    original = abs,
+  ): Promise<ResolvedPath> {
     const parent = dirname(abs);
     if (parent === abs) {
       return { ok: false, reason: `Path does not exist: ${abs}` };
     }
     try {
       const realParent = await Deno.realPath(parent);
-      return { ok: true, path: join(realParent, basename(abs)) };
+      // `abs` may not exist yet: re-attach the whole missing suffix of the
+      // ORIGINAL path (not just the recursed argument), so deep new paths
+      // (e.g. a/b/file.txt with only a/ existing) are resolved in full
+      // instead of being truncated to the deepest existing ancestor + 1.
+      const suffix = relative(parent, original);
+      return { ok: true, path: join(realParent, suffix) };
     } catch {
-      return this.canonicalizeParent(parent);
+      return this.canonicalizeParent(parent, original);
     }
   }
 
   /** Resolve a folder at workspace-creation time; it must exist. */
-  async resolveFolder(folder: string): Promise<ResolvedPath> {
+  static async resolveFolder(folder: string): Promise<ResolvedPath> {
     try {
       return { ok: true, path: await Deno.realPath(folder) };
     } catch {

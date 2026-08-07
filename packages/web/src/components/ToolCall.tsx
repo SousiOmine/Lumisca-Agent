@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconChevronRight } from "@tabler/icons-react";
-import { contentText } from "../../../core/content.ts";
+import { contentText } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
 
 interface ToolCallProps {
@@ -10,7 +10,17 @@ interface ToolCallProps {
 }
 
 export function ToolCall({ toolCall, result, running }: ToolCallProps) {
+  // Live-streaming tool calls mount without a result and stay collapsed
+  // otherwise; a result arriving later must expand them, matching restored
+  // sessions where the result is present at mount.
   const [open, setOpen] = useState(result !== undefined);
+  const hadResult = useRef(result !== undefined);
+  useEffect(() => {
+    if (result !== undefined && !hadResult.current) {
+      hadResult.current = true;
+      setOpen(true);
+    }
+  }, [result]);
 
   const state = result
     ? result.isError ? "error" : "done"

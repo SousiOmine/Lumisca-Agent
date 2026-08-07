@@ -5,10 +5,11 @@ import type { Workspace } from "./types/workspace.ts";
 import { createSettingsRepo, type SettingsRepo } from "./settings/repo.ts";
 import {
   createDbCredentialStore,
-  getApiKey,
+  CREDENTIAL_KEY_PREFIX,
   setApiKey,
 } from "./settings/credentials.ts";
 import type { CredentialStore, Provider } from "@earendil-works/pi-ai";
+import type { Api, AuthCheck, Model } from "@earendil-works/pi-ai";
 import { createDbModelsStore, ModelManager } from "./models/mod.ts";
 import { createWorkspaceRepo, type WorkspaceRepo } from "./workspace/repo.ts";
 import { Sandbox } from "./workspace/sandbox.ts";
@@ -16,6 +17,7 @@ import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
 import { SessionAgent } from "./agent/session-agent.ts";
 import { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
+import { CoreError } from "./errors.ts";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 export interface CreateSessionInput {
@@ -33,15 +35,16 @@ export interface CreateSessionInput {
  */
 export class LumiscaCore {
   readonly db: LumiscaDb;
-  readonly settings: SettingsRepo;
   readonly models: ModelManager;
 
+  private readonly settings: SettingsRepo;
   private readonly credentials: CredentialStore;
   private readonly workspaces: WorkspaceRepo;
   private readonly sessions: SessionRepo;
   private readonly messages: MessageRepo;
   private readonly agents = new Map<string, SessionAgent>();
   private readonly listeners = new Set<(event: ClientEvent) => void>();
+  private readonly lastErrors = new Map<string, string>();
 
   private constructor(db: LumiscaDb) {
     this.db = db;
@@ -101,35 +104,58 @@ export class LumiscaCore {
 
   // --- settings -----------------------------------------------------------
 
+  /** Read a setting. Credential keys are refused — they have their own API
+   * (/providers/:id/api-key) and must never be readable through the generic
+   * settings surface. */
   getSetting(key: string): string | undefined {
+    this.assertNotCredential(key);
     return this.settings.get(key);
   }
 
   setSetting(key: string, value: string): void {
+    this.assertNotCredential(key);
     this.settings.set(key, value);
   }
 
   deleteSetting(key: string): void {
+    this.assertNotCredential(key);
     this.settings.delete(key);
+  }
+
+  private assertNotCredential(key: string): void {
+    if (key.startsWith(CREDENTIAL_KEY_PREFIX)) {
+      // Credentials have their own API (/providers/:id/api-key); touching
+      // them through the generic settings surface would bypass it.
+      throw new CoreError(
+        "credentials cannot be accessed through this endpoint",
+        "forbidden",
+      );
+    }
+  }
+
+  /** Non-credential settings only; credentials are never exposed. */
+  listSettings(): Map<string, string> {
+    const safe = new Map<string, string>();
+    for (const [key, value] of this.settings.list()) {
+      if (!key.startsWith(CREDENTIAL_KEY_PREFIX)) safe.set(key, value);
+    }
+    return safe;
   }
 
   async setProviderApiKey(providerId: string, key: string): Promise<void> {
     await setApiKey(this.credentials, providerId, key);
   }
 
-  async getProviderApiKey(providerId: string): Promise<string | undefined> {
-    return await getApiKey(this.credentials, providerId);
-  }
-
-  async listProviderCredentials(): Promise<string[]> {
-    const infos = await this.credentials.list();
-    return infos.map((i) => i.providerId);
-  }
-
   // --- workspaces ---------------------------------------------------------
 
   async createWorkspace(name: string, folders: string[]): Promise<Workspace> {
     const resolved = await this.resolveFolders(folders);
+    if (resolved.length === 0) {
+      throw new CoreError(
+        "Workspace must contain at least one folder",
+        "invalid",
+      );
+    }
     return this.workspaces.create(name, resolved);
   }
 
@@ -142,7 +168,8 @@ export class LumiscaCore {
   }
 
   /** Update a workspace (name and/or folders); running sessions get rebuilt
-   * tools when the folders change. Returns the updated workspace. */
+   * tools when the folders change. Returns the updated workspace. Throws
+   * `conflict` while a session in the workspace is streaming. */
   async updateWorkspace(
     id: string,
     input: { name?: string; folders?: string[] },
@@ -152,8 +179,16 @@ export class LumiscaCore {
     const folders = input.folders !== undefined
       ? await this.resolveFolders(input.folders)
       : current.folders;
+    if (folders.length === 0) {
+      throw new CoreError(
+        "Workspace must contain at least one folder",
+        "invalid",
+      );
+    }
+    const sessions = this.sessions.list(id);
+    this.assertNoStreaming(sessions);
     this.workspaces.update(id, name, folders);
-    for (const session of this.sessions.list(id)) {
+    for (const session of sessions) {
       this.rebuildAgent(session);
     }
     return this.workspaces.get(id)!;
@@ -163,6 +198,7 @@ export class LumiscaCore {
     for (const session of this.sessions.list(id)) {
       this.agents.get(session.id)?.abort();
       this.agents.delete(session.id);
+      this.lastErrors.delete(session.id);
     }
     this.workspaces.delete(id);
   }
@@ -206,7 +242,9 @@ export class LumiscaCore {
   /** Load a persisted session into memory (restores message history). */
   openSession(id: string): SessionInfo {
     const session = this.sessions.get(id);
-    if (!session) throw new Error(`Session not found: ${id}`);
+    if (!session) {
+      throw new CoreError(`Session not found: ${id}`, "not_found");
+    }
     if (!this.agents.has(id)) {
       const workspace = this.requireWorkspace(session.workspaceId);
       const messages = this.messages.listMessages(id);
@@ -221,7 +259,9 @@ export class LumiscaCore {
   }
 
   deleteSession(id: string): void {
+    this.agents.get(id)?.abort();
     this.agents.delete(id);
+    this.lastErrors.delete(id);
     this.sessions.delete(id);
   }
 
@@ -229,30 +269,55 @@ export class LumiscaCore {
     return this.agents.get(id);
   }
 
+  /** The last failure of a session, if any. Cleared when a new run starts.
+   * Lets non-WebSocket clients (curl, the desktop shell) learn about
+   * failures of fire-and-forget prompts instead of losing them. */
+  getSessionLastError(id: string): string | undefined {
+    return this.lastErrors.get(id);
+  }
+
+  /** Fire-and-forget prompt: completion and failures arrive as events
+   * (agent_end / session_error). The HTTP layer should use this instead of
+   * holding a connection open for the whole run. Throws when the session
+   * is already streaming. */
+  startPrompt(id: string, text: string): void {
+    const agent = this.requireAgent(id);
+    if (agent.isStreaming) {
+      throw new CoreError(`Session is already running: ${id}`, "conflict");
+    }
+    this.sessions.touch(id);
+    void agent.prompt(text).catch(() => {
+      // SessionAgent.prompt reports failures via session_error events.
+    });
+  }
+
+  /** Await the prompt (CLI). Errors are reported via session_error events. */
   async prompt(id: string, text: string): Promise<void> {
     const agent = this.requireAgent(id);
     this.sessions.touch(id);
     await agent.prompt(text);
   }
 
-  steer(id: string, text: string): void {
-    this.requireAgent(id).steer(text);
-  }
-
-  followUp(id: string, text: string): void {
-    this.requireAgent(id).followUp(text);
-  }
-
   abort(id: string): void {
     this.requireAgent(id).abort();
   }
 
-  /** Switch the model used by a session (persisted). */
+  /** Switch the model used by a session (persisted). Throws `conflict`
+   * while the session is streaming (rebuilding a live agent would orphan
+   * the running loop). */
   setSessionModel(id: string, provider: string, modelId: string): void {
     const session = this.sessions.get(id);
-    if (!session) throw new Error(`Session not found: ${id}`);
+    if (!session) {
+      throw new CoreError(`Session not found: ${id}`, "not_found");
+    }
     const model = this.models.getModel(provider, modelId);
-    if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
+    if (!model) {
+      throw new CoreError(
+        `Model not found: ${provider}/${modelId}`,
+        "not_found",
+      );
+    }
+    this.assertNoStreaming([session]);
     this.sessions.updateModel(id, provider, modelId);
     this.rebuildAgent({ ...session, modelProvider: provider, modelId });
   }
@@ -264,6 +329,30 @@ export class LumiscaCore {
 
   // --- model enablement ----------------------------------------------------
 
+  /** Providers with their models; the UI and CLI use this to render pickers. */
+  listProviders(): readonly Provider[] {
+    return this.models.getProviders();
+  }
+
+  listModels(providerId?: string): readonly Model<Api>[] {
+    return this.models.getModels(providerId);
+  }
+
+  getModel(providerId: string, modelId: string): Model<Api> | undefined {
+    return this.models.getModel(providerId, modelId);
+  }
+
+  /** Whether a provider's credentials are complete. */
+  async checkAuth(providerId: string): Promise<AuthCheck | undefined> {
+    return await this.models.checkAuth(providerId);
+  }
+
+  /** Local (network-free) auth check: env var or stored key resolves.
+   * Used by pickers to skip unconfigured providers. */
+  async hasProviderAuth(providerId: string): Promise<boolean> {
+    return await this.models.hasProviderAuth(providerId);
+  }
+
   /** Enable or disable a model for the UI. Disabled models are hidden
    * from model pickers. Enabled is the default (nothing stored). */
   setModelEnabled(providerId: string, modelId: string, enabled: boolean): void {
@@ -272,16 +361,6 @@ export class LumiscaCore {
 
   isModelEnabled(providerId: string, modelId: string): boolean {
     return this.models.isModelEnabled(providerId, modelId);
-  }
-
-  /** List models of a provider with their enabled state. */
-  listModelsWithState(
-    providerId: string,
-  ): Array<{ id: string; enabled: boolean }> {
-    return this.listModelsDetailed(providerId).map(({ id, enabled }) => ({
-      id,
-      enabled,
-    }));
   }
 
   /** Models of a provider with enablement info, for the settings UI. */
@@ -307,7 +386,9 @@ export class LumiscaCore {
 
   private requireWorkspace(id: string): Workspace {
     const workspace = this.workspaces.get(id);
-    if (!workspace) throw new Error(`Workspace not found: ${id}`);
+    if (!workspace) {
+      throw new CoreError(`Workspace not found: ${id}`, "not_found");
+    }
     return workspace;
   }
 
@@ -315,9 +396,8 @@ export class LumiscaCore {
   private async resolveFolders(folders: string[]): Promise<string[]> {
     const resolved: string[] = [];
     for (const folder of folders) {
-      const sandbox = new Sandbox([folder]);
-      const r = await sandbox.resolveFolder(folder);
-      if (!r.ok) throw new Error(r.reason);
+      const r = await Sandbox.resolveFolder(folder);
+      if (!r.ok) throw new CoreError(r.reason, "invalid");
       resolved.push(r.path);
     }
     return [...new Set(resolved)];
@@ -331,25 +411,28 @@ export class LumiscaCore {
   ): { provider: string; modelId: string } {
     if (provider && modelId) {
       const model = this.models.getModel(provider, modelId);
-      if (!model) throw new Error(`Model not found: ${provider}/${modelId}`);
+      if (!model) {
+        throw new CoreError(
+          `Model not found: ${provider}/${modelId}`,
+          "not_found",
+        );
+      }
       return { provider, modelId };
     }
     const latest = this.sessions.list()[0];
     if (latest && this.models.getModel(latest.modelProvider, latest.modelId)) {
       return { provider: latest.modelProvider, modelId: latest.modelId };
     }
-    for (const p of this.models.getProviders()) {
-      const model = this.models.getModels(p.id).find((m) =>
-        this.isModelEnabled(p.id, m.id)
-      );
-      if (model) return { provider: p.id, modelId: model.id };
-    }
-    throw new Error("No models available");
+    const fallback = this.models.getFallbackModel();
+    if (fallback) return fallback;
+    throw new CoreError("No models available", "unavailable");
   }
 
   private requireAgent(id: string): SessionAgent {
     const agent = this.agents.get(id);
-    if (!agent) throw new Error(`Session is not open: ${id}`);
+    if (!agent) {
+      throw new CoreError(`Session is not open: ${id}`, "not_found");
+    }
     return agent;
   }
 
@@ -363,8 +446,9 @@ export class LumiscaCore {
       session.modelId,
     );
     if (!model) {
-      throw new Error(
+      throw new CoreError(
         `Model not found: ${session.modelProvider}/${session.modelId}`,
+        "not_found",
       );
     }
     const { tools } = createCodingTools(workspace);
@@ -376,7 +460,16 @@ export class LumiscaCore {
       messages,
       streamFn: this.models.models.streamSimple.bind(this.models.models),
       messageRepo: this.messages,
-      onEvent: (event) => this.emit(event),
+      onEvent: (event) => {
+        // Remember failures for clients that do not see the WS stream;
+        // a new run clears the stale error.
+        if (event.type === "session_error") {
+          this.lastErrors.set(event.sessionId, event.message);
+        } else if (event.type === "agent_start") {
+          this.lastErrors.delete(event.sessionId);
+        }
+        this.emit(event);
+      },
     });
   }
 
@@ -384,12 +477,33 @@ export class LumiscaCore {
     const workspace = this.requireWorkspace(session.workspaceId);
     const current = this.agents.get(session.id);
     if (current) {
+      // Never replace a live agent: the old run would keep executing
+      // against the same message array and duplicate DB rows (see the
+      // streaming guards in updateWorkspace / setSessionModel).
+      if (current.isStreaming) {
+        throw new CoreError(
+          `Session is already running: ${session.id}`,
+          "conflict",
+        );
+      }
       const messages = current.messages;
       this.agents.delete(session.id);
       this.agents.set(
         session.id,
         this.buildAgent(session, workspace, messages),
       );
+    }
+  }
+
+  /** Refuse configuration changes while any listed session is streaming. */
+  private assertNoStreaming(sessions: SessionInfo[]): void {
+    for (const session of sessions) {
+      if (this.agents.get(session.id)?.isStreaming) {
+        throw new CoreError(
+          `Session is already running: ${session.id}`,
+          "conflict",
+        );
+      }
     }
   }
 }

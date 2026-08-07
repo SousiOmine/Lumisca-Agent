@@ -1,7 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
-import { MAX_TOOL_OUTPUT, truncate } from "./truncate.ts";
+import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
 const bashSchema = Type.Object({
   command: Type.String({ description: "The shell command to execute" }),
@@ -53,7 +53,20 @@ export function createBashTool(
       const child = command.spawn();
       const kill = () => {
         try {
-          child.kill("SIGKILL");
+          if (Deno.build.os === "windows") {
+            // Killing cmd.exe alone orphans everything it spawned (npm run
+            // dev, deno run, ...); taskkill /T /F tears down the tree.
+            new Deno.Command("taskkill", {
+              args: ["/PID", String(child.pid), "/T", "/F"],
+              stdout: "null",
+              stderr: "null",
+            }).output().catch(() => {});
+          } else {
+            // Note: without a process group the shell's children may
+            // survive on POSIX; they receive SIGHUP when the parent dies
+            // in most terminals, which is the best available without setsid.
+            child.kill("SIGKILL");
+          }
         } catch {
           // already exited
         }
@@ -78,11 +91,11 @@ export function createBashTool(
           MAX_TOOL_OUTPUT,
         );
         let body = outTrimmed;
-        if (outTruncated) body += "\n[stdout truncated to the last 64KB]";
+        if (outTruncated) body += truncatedNote("stdout");
         if (errTrimmed.length > 0) {
           body += body.length > 0 ? "\n\n[stderr]\n" : "";
           body += errTrimmed;
-          if (errTruncated) body += "\n[stderr truncated to the last 64KB]";
+          if (errTruncated) body += truncatedNote("stderr");
         }
         body += `\n[exit code: ${code}]`;
         return {

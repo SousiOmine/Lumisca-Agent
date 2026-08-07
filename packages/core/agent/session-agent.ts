@@ -58,6 +58,10 @@ export class SessionAgent {
     return this.agent.state.messages;
   }
 
+  /** Run a prompt to completion. Failures are reported via the
+   * `session_error` event, never through the returned promise — callers
+   * (HTTP fire-and-forget, CLI) all listen on events, so awaiting here only
+   * means "the run finished". */
   async prompt(text: string): Promise<void> {
     try {
       await this.agent.prompt(text);
@@ -68,22 +72,6 @@ export class SessionAgent {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-  }
-
-  steer(text: string): void {
-    this.agent.steer({
-      role: "user",
-      content: [{ type: "text", text }],
-      timestamp: Date.now(),
-    });
-  }
-
-  followUp(text: string): void {
-    this.agent.followUp({
-      role: "user",
-      content: [{ type: "text", text }],
-      timestamp: Date.now(),
-    });
   }
 
   abort(): void {
@@ -163,6 +151,11 @@ export class SessionAgent {
   /** Append only the messages added since the last save. */
   private persistMessages(): void {
     const messages = this.agent.state.messages;
+    if (messages.length < this.savedCount) {
+      // History was compacted/truncated (no such path today, but guard
+      // against it): re-anchor so messages are never re-appended.
+      this.savedCount = messages.length;
+    }
     for (let i = this.savedCount; i < messages.length; i++) {
       this.messageRepo.append(this.sessionId, messages[i]!);
     }

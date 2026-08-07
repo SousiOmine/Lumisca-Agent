@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, connectEvents } from "./api.ts";
-import type {
-  ClientEvent,
-  InitialData,
-  SessionView,
-  Workspace,
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { api, connectEvents, type SessionInfoDto } from "./api.ts";
+import {
+  type AgentMessage,
+  type ClientEvent,
+  emptyView,
+  type InitialData,
+  type SessionView,
+  type Workspace,
 } from "./types.ts";
+import { applyEvent, mergeMessages } from "./events.ts";
+import { THEME_KEY } from "@lumisca/core/shared";
 import { TabBar } from "./components/TabBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
@@ -19,12 +29,15 @@ const DRAFT_TAB = "__new__";
 const TABS_KEY = "lumisca.tabs";
 const ACTIVE_TAB_KEY = "lumisca.activeTab";
 
+/** Period between opportunistic message re-syncs (see syncMessages). */
+const SYNC_INTERVAL_MS = 20_000;
+
 export interface AppProps {
   /** Preloaded data rendered into the SSR HTML; undefined when not SSR. */
   initialData?: InitialData;
 }
 
-export function App({ initialData }: AppProps) {
+export function App({ initialData }: AppProps): ReactElement {
   const [theme, setTheme] = useState<"light" | "dark">(
     initialData?.theme ?? "dark",
   );
@@ -35,9 +48,16 @@ export function App({ initialData }: AppProps) {
   const [tabs, setTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const viewsRef = useRef(views);
-  viewsRef.current = views;
+  // Ref writes happen in an effect: writing during render breaks under
+  // concurrent rendering. The WS event handler reads the ref, so it always
+  // sees the latest views.
+  useEffect(() => {
+    viewsRef.current = views;
+  }, [views]);
   const restoredRef = useRef(false);
+  const modelChangeSeq = useRef(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -55,27 +75,26 @@ export function App({ initialData }: AppProps) {
       } catch {
         return;
       }
-      const restoredTabs: string[] = [];
       const restoredViews = new Map<string, SessionView>();
       await Promise.all(ids.map(async (id) => {
         try {
+          // GET /sessions/:id (not /open) for the info: the messages
+          // endpoint already opens the session, and the response carries
+          // the last run error so a failed run is visible after a restart.
           const [info, messages] = await Promise.all([
-            api.openSession(id),
+            api.getSession(id),
             api.getMessages(id),
           ]);
-          restoredTabs.push(id);
-          restoredViews.set(id, {
-            info,
-            messages,
-            streamingText: "",
-            runningTools: new Map(),
-          });
+          restoredViews.set(id, restoreView(info, messages));
         } catch {
           // The session no longer exists; skip it.
         }
       }));
       if (disposed) return;
       restoredRef.current = true;
+      // Keep the saved order: Promise.all resolves out of order, so filter
+      // the original ids instead of collecting in completion order.
+      const restoredTabs = ids.filter((id) => restoredViews.has(id));
       setTabs(restoredTabs);
       setViews((prev) => new Map([...prev, ...restoredViews]));
       setActiveTab(
@@ -111,21 +130,91 @@ export function App({ initialData }: AppProps) {
   const toggleTheme = useCallback(() => {
     setTheme((current) => {
       const next = current === "dark" ? "light" : "dark";
-      api.setSetting("theme", next).catch(console.error);
+      api.setSetting(THEME_KEY, next).catch(console.error);
       return next;
     });
   }, []);
 
   const load = useCallback(async () => {
-    setWorkspaces(await api.listWorkspaces());
+    setLoadError(null);
+    try {
+      setWorkspaces(await api.listWorkspaces());
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
+    }
   }, []);
 
   useEffect(() => {
     // With SSR the data is already present; refresh only in the non-SSR path.
     if (!initialData) {
-      load().catch(console.error);
+      load();
     }
   }, [load, initialData]);
+
+  /** Re-fetch persisted messages for every open tab and merge them in
+   * without duplicating what is already shown. Runs on reconnect and on an
+   * interval so a run that completes while the socket was down is not lost
+   * until the next WS drop. */
+  const syncMessages = useCallback(async () => {
+    const ids = [...viewsRef.current.keys()];
+    const fetched = new Map<string, AgentMessage[]>();
+    await Promise.all(ids.map(async (id) => {
+      try {
+        fetched.set(id, await api.getMessages(id));
+      } catch {
+        // Server not reachable yet; keep the current list.
+      }
+    }));
+    if (fetched.size === 0) return;
+    setViews((prev) => {
+      const next = new Map(prev);
+      for (const [id, messages] of fetched) {
+        const v = next.get(id);
+        if (!v) continue;
+        const merged = mergeMessages(v.messages, messages);
+        if (merged.length === v.messages.length) continue;
+        next.set(id, { ...v, messages: merged });
+      }
+      return next;
+    });
+  }, []);
+
+  /** Clear per-session transient state (stuck streaming/tool indicators)
+   * and re-fetch persisted messages, so nothing is lost after a WS drop. */
+  const resync = useCallback(async () => {
+    setViews((prev) => {
+      const next = new Map(prev);
+      for (const [id, v] of next) {
+        next.set(id, {
+          ...v,
+          streamingText: "",
+          runningTools: new Map(),
+          error: undefined,
+        });
+      }
+      return next;
+    });
+    await syncMessages();
+  }, [syncMessages]);
+
+  /** Apply a WS event to the matching session view (pure reducer). */
+  const handleEvent = useCallback((event: ClientEvent) => {
+    if (event.type === "reload") {
+      // Dev mode: the server rebuilt the bundle; refresh to pick it up.
+      location.reload();
+      return;
+    }
+    if (event.type === "session_created") return;
+    setViews((prev) => {
+      const target = prev.get(event.sessionId);
+      if (!target) return prev;
+      const nextView = applyEvent(event, target);
+      if (nextView === null || nextView === target) return prev;
+      const next = new Map(prev);
+      next.set(event.sessionId, nextView);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -134,21 +223,31 @@ export function App({ initialData }: AppProps) {
 
     const connect = () => {
       disconnect = connectEvents(
-        (event) => handleEvent(event, viewsRef.current, setViews),
+        handleEvent,
         () => {
-          // Reconnect on close after a short delay (loop until disposed).
+          // On close: clear stuck state and re-sync, then reconnect.
           if (disposed) return;
+          resync();
           timer = setTimeout(connect, 1500);
         },
+        resync,
       );
     };
     connect();
+
+    // Opportunistic sync: a run that finishes entirely inside a disconnect
+    // window would otherwise only appear at the next WS drop.
+    const syncTimer = setInterval(() => {
+      syncMessages();
+    }, SYNC_INTERVAL_MS);
+
     return () => {
       disposed = true;
       if (timer) clearTimeout(timer);
+      clearInterval(syncTimer);
       disconnect?.();
     };
-  }, []);
+  }, [handleEvent, resync, syncMessages]);
 
   /** Record an error on a session view (no-op when the tab is gone). */
   const setViewError = useCallback((sessionId: string, error: unknown) => {
@@ -202,6 +301,16 @@ export function App({ initialData }: AppProps) {
     setWorkspaces((prev) => prev.filter((w) => w.id !== id));
   }, []);
 
+  /** The single delete flow (confirm + API + state), shared by the draft
+   * tab and the workspace edit modal. */
+  const deleteWorkspace = useCallback(async (ws: Workspace) => {
+    if (!globalThis.confirm(`ワークスペース「${ws.name}」を削除しますか？`)) {
+      return;
+    }
+    await api.deleteWorkspace(ws.id);
+    handleWorkspaceDeleted(ws.id);
+  }, [handleWorkspaceDeleted]);
+
   /** Create a session from the draft tab and send the first prompt. */
   const startSession = useCallback(
     async (workspaceId: string, model: ComposerModel | null, text: string) => {
@@ -220,12 +329,7 @@ export function App({ initialData }: AppProps) {
       setActiveTab(session.id);
       setViews((prev) => {
         const next = new Map(prev);
-        next.set(session.id, {
-          info: session,
-          messages: [],
-          streamingText: "",
-          runningTools: new Map(),
-        });
+        next.set(session.id, emptyView(session));
         return next;
       });
       try {
@@ -255,12 +359,15 @@ export function App({ initialData }: AppProps) {
 
   const changeModel = useCallback(
     async (sessionId: string, provider: string, modelId: string) => {
+      const seq = ++modelChangeSeq.current;
       try {
         const updated = await api.updateSessionModel(
           sessionId,
           provider,
           modelId,
         );
+        // A newer switch may have resolved first; never show a stale model.
+        if (modelChangeSeq.current !== seq) return;
         setViews((prev) => {
           const current = prev.get(sessionId);
           if (!current) return prev;
@@ -292,9 +399,19 @@ export function App({ initialData }: AppProps) {
         onToggleTheme={toggleTheme}
         onOpenSettings={() => setShowSettings(true)}
       />
+      {loadError && (
+        <div className="msg">
+          <div className="msg-body error-text">
+            <p>サーバーに接続できません: {loadError}</p>
+          </div>
+        </div>
+      )}
       {activeView
         ? (
+          // Key by tab so switching sessions never leaks draft text or
+          // scroll position between sessions.
           <ChatView
+            key={activeTab ?? undefined}
             view={activeView}
             onPrompt={(text) => activeTab && prompt(activeTab, text)}
             onAbort={() => activeTab && abort(activeTab)}
@@ -307,7 +424,7 @@ export function App({ initialData }: AppProps) {
             workspaces={workspaces}
             onStart={startSession}
             onWorkspaceChanged={handleWorkspaceChanged}
-            onWorkspaceDeleted={handleWorkspaceDeleted}
+            onDeleteWorkspace={deleteWorkspace}
           />
         )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
@@ -315,93 +432,13 @@ export function App({ initialData }: AppProps) {
   );
 }
 
-function handleEvent(
-  event: ClientEvent,
-  current: Map<string, SessionView>,
-  setViews: React.Dispatch<React.SetStateAction<Map<string, SessionView>>>,
-) {
-  const update = (sessionId: string, fn: (v: SessionView) => SessionView) => {
-    const v = current.get(sessionId);
-    if (!v) return;
-    setViews((prev) => {
-      const target = prev.get(sessionId);
-      if (!target) return prev;
-      const next = new Map(prev);
-      next.set(sessionId, fn(target));
-      return next;
-    });
-  };
-
-  switch (event.type) {
-    case "reload":
-      // Dev mode: the server rebuilt the bundle; refresh to pick it up.
-      location.reload();
-      return;
-    case "agent_start":
-      return;
-    case "message_start": {
-      update(event.sessionId, (v) => {
-        if (event.message.role === "assistant") {
-          return { ...v, streamingText: "" };
-        }
-        // Replace the optimistic version of this message if present.
-        const exists = v.messages.some(
-          (m) =>
-            m.timestamp === event.message.timestamp &&
-            m.role === event.message.role,
-        );
-        return {
-          ...v,
-          messages: exists
-            ? v.messages.map((m) =>
-              m.timestamp === event.message.timestamp ? event.message : m
-            )
-            : [...v.messages, event.message],
-        };
-      });
-      return;
-    }
-    case "message_delta":
-      update(event.sessionId, (v) => ({
-        ...v,
-        streamingText: v.streamingText + event.delta,
-      }));
-      return;
-    case "message_end": {
-      update(event.sessionId, (v) => {
-        if (event.message.role === "assistant") {
-          return {
-            ...v,
-            messages: [...v.messages, event.message],
-            streamingText: "",
-          };
-        }
-        // Replace the optimistic/partial version of this message.
-        const messages = v.messages.map((m) =>
-          m.timestamp === event.message.timestamp ? event.message : m
-        );
-        return { ...v, messages, streamingText: "" };
-      });
-      return;
-    }
-    case "tool_start":
-      update(event.sessionId, (v) => {
-        const runningTools = new Map(v.runningTools);
-        runningTools.set(event.toolCallId, event.toolName);
-        return { ...v, runningTools };
-      });
-      return;
-    case "tool_end":
-      update(event.sessionId, (v) => {
-        const runningTools = new Map(v.runningTools);
-        runningTools.delete(event.toolCallId);
-        return { ...v, runningTools };
-      });
-      return;
-    case "agent_end":
-      return;
-    case "session_error":
-      update(event.sessionId, (v) => ({ ...v, error: event.message }));
-      return;
-  }
+/** View state for a restored tab: show the last run error (if any) so a
+ * failure that happened without a connected UI is not silently hidden. */
+function restoreView(
+  info: SessionInfoDto,
+  messages: AgentMessage[],
+): SessionView {
+  const v = emptyView(info, messages);
+  if (info.lastError) v.error = info.lastError;
+  return v;
 }

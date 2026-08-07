@@ -1,9 +1,49 @@
 import { Hono } from "hono";
-import type { LumiscaCore } from "@lumisca/core";
-import { jsonError } from "./util.ts";
+import type {
+  CreateSessionInput,
+  SessionAgent,
+  SessionInfo,
+} from "@lumisca/core";
+import { AppError, parseBody } from "./util.ts";
 
-export function sessionRoutes(core: LumiscaCore): Hono {
+interface SessionBody {
+  workspaceId?: unknown;
+  name?: unknown;
+  modelProvider?: unknown;
+  modelId?: unknown;
+  systemPrompt?: unknown;
+}
+
+/** The slice of the core these routes need (interface segregation). */
+export interface SessionApi {
+  getSession(id: string): SessionInfo | undefined;
+  getSessionLastError(id: string): string | undefined;
+  listSessions(workspaceId?: string): SessionInfo[];
+  createSession(input: CreateSessionInput): SessionInfo;
+  openSession(id: string): SessionInfo;
+  closeSession(id: string): void;
+  deleteSession(id: string): void;
+  getAgent(id: string): SessionAgent | undefined;
+  getDefaultModel(): { provider: string; modelId: string } | null;
+  startPrompt(id: string, text: string): void;
+  abort(id: string): void;
+  setSessionModel(id: string, provider: string, modelId: string): void;
+}
+
+export function sessionRoutes(core: SessionApi): Hono {
   const app = new Hono();
+
+  /** 404 unless a session with this id exists. */
+  const requireSession = (id: string) => {
+    const session = core.getSession(id);
+    if (!session) throw new AppError(`Session not found: ${id}`, 404);
+    return session;
+  };
+
+  const sessionJson = (session: SessionInfo) => ({
+    ...session,
+    lastError: core.getSessionLastError(session.id),
+  });
 
   app.get("/sessions", (c) => {
     const workspaceId = c.req.query("workspaceId");
@@ -15,48 +55,45 @@ export function sessionRoutes(core: LumiscaCore): Hono {
   });
 
   app.get("/sessions/:id", (c) => {
-    const session = core.getSession(c.req.param("id"));
-    if (!session) return c.json({ error: "not found" }, 404);
-    return c.json(session);
+    return c.json(sessionJson(requireSession(c.req.param("id"))));
   });
 
   app.get("/sessions/:id/messages", async (c) => {
-    await core.openSession(c.req.param("id"));
-    const agent = core.getAgent(c.req.param("id"));
-    if (!agent) return c.json({ error: "not found" }, 404);
+    const id = c.req.param("id");
+    requireSession(id);
+    await core.openSession(id);
+    const agent = core.getAgent(id);
+    if (!agent) {
+      // Unreachable today (openSession just created the agent), but do not
+      // crash with a TypeError if that invariant ever changes.
+      throw new AppError(`Session is not open: ${id}`, 404);
+    }
     return c.json(agent.messages);
   });
 
   app.post("/sessions", async (c) => {
-    const body = await c.req.json().catch(() => null);
+    const body = await parseBody<SessionBody>(c);
     if (!body || typeof body.workspaceId !== "string") {
-      return c.json({ error: "workspaceId (string) is required" }, 400);
+      throw new AppError("workspaceId (string) is required", 400);
     }
-    try {
-      const session = core.createSession({
-        workspaceId: body.workspaceId,
-        name: typeof body.name === "string" ? body.name : undefined,
-        modelProvider: typeof body.modelProvider === "string"
-          ? body.modelProvider
-          : undefined,
-        modelId: typeof body.modelId === "string" ? body.modelId : undefined,
-        systemPrompt: typeof body.systemPrompt === "string"
-          ? body.systemPrompt
-          : undefined,
-      });
-      return c.json(session, 201);
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    const session = core.createSession({
+      workspaceId: body.workspaceId,
+      name: typeof body.name === "string" ? body.name : undefined,
+      modelProvider: typeof body.modelProvider === "string"
+        ? body.modelProvider
+        : undefined,
+      modelId: typeof body.modelId === "string" ? body.modelId : undefined,
+      systemPrompt: typeof body.systemPrompt === "string"
+        ? body.systemPrompt
+        : undefined,
+    });
+    return c.json(session, 201);
   });
 
   app.post("/sessions/:id/open", async (c) => {
-    try {
-      const session = await core.openSession(c.req.param("id"));
-      return c.json(session);
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    const id = c.req.param("id");
+    requireSession(id);
+    return c.json(sessionJson(await core.openSession(id)));
   });
 
   app.post("/sessions/:id/close", (c) => {
@@ -70,71 +107,34 @@ export function sessionRoutes(core: LumiscaCore): Hono {
   });
 
   app.post("/sessions/:id/prompt", async (c) => {
-    const body = await c.req.json().catch(() => null);
+    const body = await parseBody<{ text?: unknown }>(c);
     if (!body || typeof body.text !== "string" || body.text.length === 0) {
-      return c.json({ error: "text (string) is required" }, 400);
+      throw new AppError("text (string) is required", 400);
     }
-    try {
-      await core.prompt(c.req.param("id"), body.text);
-      return c.json({ ok: true });
-    } catch (error) {
-      return jsonError(c, error);
-    }
-  });
-
-  app.post("/sessions/:id/steer", async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body || typeof body.text !== "string") {
-      return c.json({ error: "text (string) is required" }, 400);
-    }
-    try {
-      await core.steer(c.req.param("id"), body.text);
-      return c.json({ ok: true });
-    } catch (error) {
-      return jsonError(c, error);
-    }
-  });
-
-  app.post("/sessions/:id/follow-up", async (c) => {
-    const body = await c.req.json().catch(() => null);
-    if (!body || typeof body.text !== "string") {
-      return c.json({ error: "text (string) is required" }, 400);
-    }
-    try {
-      await core.followUp(c.req.param("id"), body.text);
-      return c.json({ ok: true });
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    // Fire-and-forget: the run progresses via the WebSocket event stream,
+    // so the request does not stay open for the whole agent execution.
+    core.startPrompt(c.req.param("id"), body.text);
+    return c.json({ ok: true });
   });
 
   app.post("/sessions/:id/abort", (c) => {
-    try {
-      core.abort(c.req.param("id"));
-      return c.json({ ok: true });
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    core.abort(c.req.param("id"));
+    return c.json({ ok: true });
   });
 
   app.post("/sessions/:id/model", async (c) => {
-    const body = await c.req.json().catch(() => null);
+    const body = await parseBody<{ provider?: unknown; modelId?: unknown }>(c);
     if (
       !body || typeof body.provider !== "string" ||
       typeof body.modelId !== "string"
     ) {
-      return c.json(
-        { error: "provider and modelId (strings) are required" },
+      throw new AppError(
+        "provider and modelId (strings) are required",
         400,
       );
     }
-    try {
-      core.setSessionModel(c.req.param("id"), body.provider, body.modelId);
-      const session = core.getSession(c.req.param("id"));
-      return c.json(session);
-    } catch (error) {
-      return jsonError(c, error);
-    }
+    core.setSessionModel(c.req.param("id"), body.provider, body.modelId);
+    return c.json(core.getSession(c.req.param("id")));
   });
 
   return app;

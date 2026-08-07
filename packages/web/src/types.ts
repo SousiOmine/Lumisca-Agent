@@ -1,94 +1,25 @@
-export interface Workspace {
-  id: string;
-  name: string;
-  folders: string[];
-  createdAt: number;
-}
+import type { Message, ToolCall } from "@earendil-works/pi-ai";
 
-export interface SessionInfo {
-  id: string;
-  workspaceId: string;
-  name: string;
-  modelProvider: string;
-  modelId: string;
-  systemPrompt?: string;
-  createdAt: number;
-  updatedAt: number;
-}
+/** Shared domain types; single source of truth in packages/core. */
+import type {
+  AgentMessage,
+  ClientEvent as CoreClientEvent,
+  ModelInfo,
+  ProviderInfo,
+  SessionInfo,
+  Workspace,
+} from "@lumisca/core";
+export type { AgentMessage, ModelInfo, ProviderInfo, SessionInfo, Workspace };
 
-export interface ProviderInfo {
-  id: string;
-  name: string;
-  configured?: boolean;
-  source?: string;
-}
+/** Core events plus the dev-mode reload broadcast from the server. */
+export type ClientEvent = CoreClientEvent | { type: "reload" };
 
-export interface ModelInfo {
-  id: string;
-  name: string;
-  contextWindow?: number;
-  reasoning?: boolean;
-  input?: string[];
-  enabled?: boolean;
-}
-
-export type TextBlock = { type: "text"; text: string };
-export type ImageBlock = { type: "image"; data: string; mimeType: string };
-export type ToolCallBlock = {
-  type: "toolCall";
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-};
-
-export interface AssistantMessage {
-  role: "assistant";
-  content: Array<TextBlock | ImageBlock | ToolCallBlock>;
-  timestamp: number;
-  stopReason?: string;
-}
-
-export interface UserMessage {
-  role: "user";
-  content: Array<TextBlock | ImageBlock>;
-  timestamp: number;
-}
-
-export interface ToolResultMessage {
-  role: "toolResult";
-  toolCallId: string;
-  toolName: string;
-  content: Array<TextBlock | ImageBlock>;
-  isError: boolean;
-  timestamp: number;
-}
-
-export type AgentMessage = UserMessage | AssistantMessage | ToolResultMessage;
-
-export type ClientEvent =
-  | { type: "session_created"; session: SessionInfo }
-  | { type: "agent_start"; sessionId: string }
-  | { type: "message_start"; sessionId: string; message: AgentMessage }
-  | { type: "message_delta"; sessionId: string; delta: string }
-  | { type: "message_end"; sessionId: string; message: AgentMessage }
-  | {
-    type: "tool_start";
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-  }
-  | {
-    type: "tool_end";
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-    result: unknown;
-    isError: boolean;
-  }
-  | { type: "agent_end"; sessionId: string }
-  | { type: "session_error"; sessionId: string; message: string }
-  | { type: "reload" };
+/** Assistant message with text/tool-call content, for rendering. */
+export type AssistantMessage = Extract<Message, { role: "assistant" }>;
+/** Tool-result message, for pairing with its assistant tool call. */
+export type ToolResultMessage = Extract<Message, { role: "toolResult" }>;
+/** A tool call block inside an assistant message. */
+export type ToolCallBlock = ToolCall;
 
 /** Initial data rendered into the SSR HTML and hydrated on the client. */
 export interface InitialData {
@@ -103,6 +34,14 @@ export interface SessionView {
   streamingText: string;
   runningTools: Map<string, string>; // toolCallId -> toolName
   error?: string;
+}
+
+/** Fresh view state for a newly opened session tab. */
+export function emptyView(
+  info: SessionInfo,
+  messages: AgentMessage[] = [],
+): SessionView {
+  return { info, messages, streamingText: "", runningTools: new Map() };
 }
 
 export function isViewRunning(view: SessionView): boolean {
