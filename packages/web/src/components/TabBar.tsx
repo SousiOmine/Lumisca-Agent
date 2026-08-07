@@ -32,15 +32,6 @@ export function TabBar({
 }: TabBarProps) {
   return (
     <div className="tabbar" role="tablist" aria-label="セッションタブ">
-      <button
-        type="button"
-        className="tab-new"
-        onClick={onNew}
-        title="新しいセッション"
-        aria-label="新しいセッション"
-      >
-        <IconPlus size={17} />
-      </button>
       {tabs.map((id) => {
         const view = views.get(id);
         const isActive = id === activeTab;
@@ -78,6 +69,15 @@ export function TabBar({
           </div>
         );
       })}
+      <button
+        type="button"
+        className="tab-new"
+        onClick={onNew}
+        title="新しいセッション"
+        aria-label="新しいセッション"
+      >
+        <IconPlus size={17} />
+      </button>
       <div className="tabbar-actions">
         <button
           type="button"

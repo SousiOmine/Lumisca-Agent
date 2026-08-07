@@ -24,6 +24,14 @@
   --radius-sm: 4px;
   --radius: 8px;
   --tab-height: 40px;
+  /* selected tab: a white card that appears raised above the bar */
+  --tab-active-bg: #ffffff;
+  --tab-active-text: #1b1b1b;
+  --tab-active-dim: rgba(0, 0, 0, 0.45);
+  --tab-active-hover: rgba(0, 0, 0, 0.08);
+  --tab-active-shadow:
+    -3px 0 6px -2px rgba(0, 0, 0, 0.45),
+    3px 0 6px -2px rgba(0, 0, 0, 0.45);
 }
 
 html[data-theme="light"] {
@@ -44,6 +52,9 @@ html[data-theme="light"] {
   --error-soft: rgba(196, 43, 28, 0.08);
   --shadow: rgba(0, 0, 0, 0.14);
   --user-msg-bg: #efefef;
+  --tab-active-shadow:
+    -3px 0 6px -2px rgba(0, 0, 0, 0.16),
+    3px 0 6px -2px rgba(0, 0, 0, 0.16);
 }
 
 * {
@@ -124,7 +135,6 @@ select:focus {
   display: flex;
   align-items: stretch;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
   height: var(--tab-height);
   overflow-x: auto;
   overflow-y: hidden;
@@ -142,20 +152,13 @@ select:focus {
   min-width: 130px;
   max-width: 240px;
   border-right: 1px solid var(--border);
+  /* the bar's bottom edge line: the active tab drops this border and
+   * connects to the content below, which makes it read as raised */
+  border-bottom: 1px solid var(--border);
   color: var(--text-dim);
   font-size: 12.5px;
   position: relative;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.tab::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -1px;
-  height: 2px;
-  background: transparent;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .tab:hover {
@@ -164,12 +167,12 @@ select:focus {
 }
 
 .tab.active {
-  background: var(--bg);
-  color: var(--text);
-}
-
-.tab.active::after {
-  background: var(--accent);
+  background: var(--tab-active-bg);
+  color: var(--tab-active-text);
+  border-right: none;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: var(--tab-active-shadow);
 }
 
 .tab .tab-name {
@@ -195,11 +198,21 @@ select:focus {
   color: var(--text);
 }
 
+/* inside the white active card, close button and badge use dark-on-white */
+.tab.active .tab-close {
+  color: var(--tab-active-dim);
+}
+
+.tab.active .tab-close:hover {
+  background: var(--tab-active-hover);
+  color: var(--tab-active-text);
+}
+
 .tab-new {
   display: grid;
   place-items: center;
   width: 38px;
-  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   color: var(--text-dim);
   flex: none;
 }
@@ -216,6 +229,7 @@ select:focus {
   margin-left: auto;
   padding: 0 8px;
   border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   flex: none;
 }
 
@@ -247,6 +261,10 @@ select:focus {
   padding: 1px 6px;
   white-space: nowrap;
   flex: none;
+}
+
+.tab.active .tab-badge {
+  color: var(--accent-dim);
 }
 
 .btn {
@@ -576,8 +594,6 @@ select:focus {
 /* ---- input --------------------------------------------------------------- */
 
 .input-area {
-  border-top: 1px solid var(--border);
-  background: var(--surface);
   padding: 12px 16px 10px;
   /* Chrome bar: never shrink when the chat history overflows the viewport. */
   flex: none;
