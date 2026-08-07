@@ -11,6 +11,11 @@ import {
 import type { CredentialStore, Provider } from "@earendil-works/pi-ai";
 import type { Api, AuthCheck, Model } from "@earendil-works/pi-ai";
 import { createDbModelsStore, ModelManager } from "./models/mod.ts";
+import {
+  getSupportedThinkingLevels,
+  isThinkingLevel,
+} from "./models/thinking.ts";
+import type { ThinkingLevel } from "./shared.ts";
 import { createWorkspaceRepo, type WorkspaceRepo } from "./workspace/repo.ts";
 import { Sandbox } from "./workspace/sandbox.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
@@ -206,10 +211,26 @@ export class LumiscaCore {
   // --- sessions -----------------------------------------------------------
 
   /** The model a new session would get: the last used model, or the first
-   * enabled model. Null when no model can be resolved. */
-  getDefaultModel(): { provider: string; modelId: string } | null {
+   * enabled model. Null when no model can be resolved. Includes the model's
+   * thinking level so the draft tab can show the right control. */
+  getDefaultModel(): {
+    provider: string;
+    modelId: string;
+    thinkingLevel: ThinkingLevel;
+    thinkingLevels: ThinkingLevel[];
+  } | null {
     try {
-      return this.resolveDefaultModel();
+      const model = this.resolveDefaultModel();
+      return {
+        ...model,
+        thinkingLevel: this.models.getThinkingLevel(
+          model.provider,
+          model.modelId,
+        ),
+        thinkingLevels: getSupportedThinkingLevels(
+          this.models.getModel(model.provider, model.modelId),
+        ),
+      };
     } catch {
       return null;
     }
@@ -228,15 +249,16 @@ export class LumiscaCore {
     });
     this.agents.set(session.id, this.buildAgent(session, workspace, []));
     this.emit({ type: "session_created", session });
-    return session;
+    return this.decorateSession(session);
   }
 
   listSessions(workspaceId?: string): SessionInfo[] {
-    return this.sessions.list(workspaceId);
+    return this.sessions.list(workspaceId).map((s) => this.decorateSession(s));
   }
 
   getSession(id: string): SessionInfo | undefined {
-    return this.sessions.get(id);
+    const session = this.sessions.get(id);
+    return session ? this.decorateSession(session) : undefined;
   }
 
   /** Load a persisted session into memory (restores message history). */
@@ -250,7 +272,7 @@ export class LumiscaCore {
       const messages = this.messages.listMessages(id);
       this.agents.set(id, this.buildAgent(session, workspace, messages));
     }
-    return session;
+    return this.decorateSession(session);
   }
 
   closeSession(id: string): void {
@@ -327,6 +349,44 @@ export class LumiscaCore {
     this.sessions.rename(id, name);
   }
 
+  /** The thinking level stored for a model (the level its sessions use). */
+  getModelThinkingLevel(providerId: string, modelId: string): ThinkingLevel {
+    return this.models.getThinkingLevel(providerId, modelId);
+  }
+
+  /** Set the thinking level of a model (persisted, per model). Open
+   * sessions using the model are rebuilt so the change applies immediately;
+   * throws `conflict` while any of them is streaming. Returns the level
+   * that will actually be used (unsupported requests are clamped). */
+  setModelThinkingLevel(
+    providerId: string,
+    modelId: string,
+    level: string,
+  ): ThinkingLevel {
+    if (!isThinkingLevel(level)) {
+      throw new CoreError(
+        `Unknown thinking level: ${level}`,
+        "invalid",
+      );
+    }
+    const model = this.models.getModel(providerId, modelId);
+    if (!model) {
+      throw new CoreError(
+        `Model not found: ${providerId}/${modelId}`,
+        "not_found",
+      );
+    }
+    const affected = this.sessions.list().filter(
+      (s) => s.modelProvider === providerId && s.modelId === modelId,
+    );
+    this.assertNoStreaming(affected);
+    const effective = this.models.setThinkingLevel(providerId, modelId, level);
+    for (const session of affected) {
+      this.rebuildAgent(session);
+    }
+    return effective;
+  }
+
   // --- model enablement ----------------------------------------------------
 
   /** Providers with their models; the UI and CLI use this to render pickers. */
@@ -371,6 +431,8 @@ export class LumiscaCore {
     reasoning?: boolean;
     input?: string[];
     enabled: boolean;
+    thinkingLevel: ThinkingLevel;
+    thinkingLevels: ThinkingLevel[];
   }> {
     return this.models.getModels(providerId).map((m) => ({
       id: m.id,
@@ -379,6 +441,8 @@ export class LumiscaCore {
       reasoning: m.reasoning,
       input: m.input,
       enabled: this.isModelEnabled(providerId, m.id),
+      thinkingLevel: this.models.getThinkingLevel(providerId, m.id),
+      thinkingLevels: getSupportedThinkingLevels(m),
     }));
   }
 
@@ -436,6 +500,23 @@ export class LumiscaCore {
     return agent;
   }
 
+  /** Attach the session's model thinking level so the UI can render the
+   * thinking control without an extra fetch. */
+  private decorateSession(session: SessionInfo): SessionInfo {
+    const model = this.models.getModel(
+      session.modelProvider,
+      session.modelId,
+    );
+    return {
+      ...session,
+      thinkingLevel: this.models.getThinkingLevel(
+        session.modelProvider,
+        session.modelId,
+      ),
+      thinkingLevels: getSupportedThinkingLevels(model),
+    };
+  }
+
   private buildAgent(
     session: SessionInfo,
     workspace: Workspace,
@@ -458,6 +539,10 @@ export class LumiscaCore {
       model,
       tools,
       messages,
+      thinkingLevel: this.models.getThinkingLevel(
+        session.modelProvider,
+        session.modelId,
+      ),
       streamFn: this.models.models.streamSimple.bind(this.models.models),
       messageRepo: this.messages,
       onEvent: (event) => {

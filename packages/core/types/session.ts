@@ -1,3 +1,5 @@
+import type { ThinkingLevel } from "../shared.ts";
+
 export interface SessionInfo {
   id: string;
   workspaceId: string;
@@ -7,4 +9,9 @@ export interface SessionInfo {
   systemPrompt?: string;
   createdAt: number;
   updatedAt: number;
+  /** Thinking level of the session's model (set via the model picker).
+   * Attached by the core when sessions are returned; absent on raw rows. */
+  thinkingLevel?: ThinkingLevel;
+  /** The thinking levels the session's model supports. */
+  thinkingLevels?: ThinkingLevel[];
 }

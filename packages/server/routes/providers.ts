@@ -10,6 +10,11 @@ export interface ProviderApi {
   listProviders(): readonly Provider[];
   listModelsDetailed(providerId: string): ModelInfo[];
   setModelEnabled(providerId: string, modelId: string, enabled: boolean): void;
+  setModelThinkingLevel(
+    providerId: string,
+    modelId: string,
+    level: string,
+  ): string;
   checkAuth(providerId: string): Promise<AuthCheck | undefined>;
   setProviderApiKey(providerId: string, key: string): Promise<void>;
 }
@@ -76,6 +81,19 @@ export function providerRoutes(core: ProviderApi): Hono {
       body.enabled,
     );
     return c.json({ ok: true });
+  });
+
+  app.put("/providers/:id/models/:modelId/thinking-level", async (c) => {
+    const body = await parseBody<{ level?: unknown }>(c);
+    if (!body || typeof body.level !== "string") {
+      throw new AppError("level (string) is required", 400);
+    }
+    const thinkingLevel = core.setModelThinkingLevel(
+      c.req.param("id"),
+      c.req.param("modelId"),
+      body.level,
+    );
+    return c.json({ ok: true, thinkingLevel });
   });
 
   app.get("/providers/:id/auth", async (c) => {

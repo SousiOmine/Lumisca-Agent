@@ -1,4 +1,10 @@
-import { type ClientEvent, contentText, type LumiscaCore } from "@lumisca/core";
+import {
+  type ClientEvent,
+  contentText,
+  getSupportedThinkingLevels,
+  type LumiscaCore,
+  THINKING_LEVEL_LABELS,
+} from "@lumisca/core";
 import {
   color,
   error,
@@ -165,6 +171,7 @@ export async function handleCommand(
           ["/new", "新しいセッションを作成"],
           ["/resume", "過去のセッションから再開"],
           ["/model", "モデルを変更"],
+          ["/thinking", "思考強度を変更"],
           ["/workspace", "ワークスペースを切り替え"],
           ["/keys", "APIキーを設定"],
           ["/sessions", "セッション一覧"],
@@ -206,6 +213,34 @@ export async function handleCommand(
       if (!model) return undefined;
       core.setSessionModel(currentId, model.providerId, model.modelId);
       success(`モデル変更: ${model.providerId}/${model.modelId}`);
+      return undefined;
+    }
+
+    case "thinking": {
+      const session = core.getSession(currentId);
+      if (!session) return undefined;
+      const levels = getSupportedThinkingLevels(
+        core.getModel(session.modelProvider, session.modelId),
+      );
+      if (levels.length <= 1) {
+        info("このモデルは思考モードに対応していません");
+        return undefined;
+      }
+      const current = session.thinkingLevel ?? "off";
+      const level = await selectFromList(
+        "思考強度を選択",
+        levels.map((l) => ({
+          label: `${THINKING_LEVEL_LABELS[l]}${l === current ? " (現在)" : ""}`,
+          value: l,
+        })),
+      );
+      if (level === null) return undefined;
+      const effective = core.setModelThinkingLevel(
+        session.modelProvider,
+        session.modelId,
+        level,
+      );
+      success(`思考強度変更: ${THINKING_LEVEL_LABELS[effective]}`);
       return undefined;
     }
 

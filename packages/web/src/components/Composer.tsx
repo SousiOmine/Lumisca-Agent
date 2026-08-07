@@ -1,6 +1,8 @@
 import { type KeyboardEvent, useState } from "react";
 import { IconChevronRight } from "@tabler/icons-react";
+import { THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
 import { ModelPicker } from "./ModelPicker.tsx";
+import type { ModelInfo, ThinkingLevel } from "../types.ts";
 
 export interface ComposerModel {
   provider: string;
@@ -16,7 +18,16 @@ interface ComposerProps {
   /** Taller, vertically resizable textarea (new-session use). */
   large?: boolean;
   model: ComposerModel | null;
-  onModelSelect: (provider: string, modelId: string) => void;
+  onModelSelect: (
+    provider: string,
+    modelId: string,
+    info?: ModelInfo,
+  ) => void;
+  /** Thinking level of the current model; the select appears only when the
+   * model supports levels besides "off" (see thinkingLevels). */
+  thinkingLevel?: ThinkingLevel;
+  thinkingLevels?: ThinkingLevel[];
+  onThinkingLevelChange?: (level: ThinkingLevel) => void;
   submitLabel: string;
   submitDisabled?: boolean;
   /** Show an abort button instead of submit while the agent is running. */
@@ -35,6 +46,9 @@ export function Composer({
   large,
   model,
   onModelSelect,
+  thinkingLevel,
+  thinkingLevels,
+  onThinkingLevelChange,
   submitLabel,
   submitDisabled,
   onAbort,
@@ -49,6 +63,11 @@ export function Composer({
     }
     onKeyDown?.(e);
   };
+
+  // Only models that can actually think (more than just "off") get the
+  // level selector; the options are the levels the model supports.
+  const levels = thinkingLevels ?? [];
+  const canThink = levels.length > 1;
 
   return (
     <div className="input-composer">
@@ -79,12 +98,27 @@ export function Composer({
               <IconChevronRight size={13} />
             </span>
           </button>
+          {canThink && onThinkingLevelChange && (
+            <select
+              className="thinking-select"
+              value={thinkingLevel ?? "off"}
+              title="思考強度"
+              onChange={(e) =>
+                onThinkingLevelChange(e.target.value as ThinkingLevel)}
+            >
+              {levels.map((level) => (
+                <option key={level} value={level}>
+                  {THINKING_LEVEL_LABELS[level]}
+                </option>
+              ))}
+            </select>
+          )}
           {showModelPicker && (
             <div className="model-popover">
               <ModelPicker
                 value={model}
-                onSelect={(provider, modelId) => {
-                  onModelSelect(provider, modelId);
+                onSelect={(provider, modelId, info) => {
+                  onModelSelect(provider, modelId, info);
                   setShowModelPicker(false);
                 }}
               />

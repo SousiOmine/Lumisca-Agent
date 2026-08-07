@@ -8,6 +8,7 @@ import type {
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
+import type { ThinkingLevel } from "../shared.ts";
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -15,6 +16,8 @@ export interface SessionAgentOptions {
   model: Model<Api>;
   tools: AgentTool[];
   messages?: AgentMessage[];
+  /** Reasoning level for every run of this session ("off" = no thinking). */
+  thinkingLevel?: ThinkingLevel;
   streamFn: StreamFn;
   messageRepo: MessageRepo;
   onEvent: (event: ClientEvent) => void;
@@ -43,6 +46,7 @@ export class SessionAgent {
         model: options.model,
         tools: options.tools,
         messages: options.messages ?? [],
+        thinkingLevel: options.thinkingLevel ?? "off",
       },
       streamFn: options.streamFn,
       sessionId: options.sessionId,

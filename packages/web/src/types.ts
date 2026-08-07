@@ -7,9 +7,17 @@ import type {
   ModelInfo,
   ProviderInfo,
   SessionInfo,
+  ThinkingLevel,
   Workspace,
 } from "@lumisca/core";
-export type { AgentMessage, ModelInfo, ProviderInfo, SessionInfo, Workspace };
+export type {
+  AgentMessage,
+  ModelInfo,
+  ProviderInfo,
+  SessionInfo,
+  ThinkingLevel,
+  Workspace,
+};
 
 /** Core events plus the dev-mode reload broadcast from the server. */
 export type ClientEvent = CoreClientEvent | { type: "reload" };

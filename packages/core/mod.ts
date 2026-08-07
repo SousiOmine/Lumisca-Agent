@@ -12,6 +12,13 @@ export { contentText } from "./content.ts";
 export { CREDENTIAL_KEY_PREFIX } from "./settings/credentials.ts";
 export { THEME_KEY } from "./settings/repo.ts";
 export { formatModelMeta } from "./models/meta.ts";
+export {
+  clampThinkingLevel,
+  getSupportedThinkingLevels,
+  isThinkingLevel,
+} from "./models/thinking.ts";
+export type { ThinkingLevel } from "./shared.ts";
+export { THINKING_LEVEL_LABELS } from "./shared.ts";
 export type { ModelInfo, ProviderInfo } from "./shared.ts";
 export type { SettingsRepo } from "./settings/repo.ts";
 export type { ModelManager } from "./models/mod.ts";

@@ -9,6 +9,31 @@
 /** Settings-table key for the UI theme. Shared with the server (SSR). */
 export const THEME_KEY = "theme";
 
+/**
+ * Reasoning-effort levels for a model. "off" disables thinking; the rest
+ * match pi-ai's ThinkingLevel so values pass straight into the agent.
+ */
+export type ThinkingLevel =
+  | "off"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
+
+/** User-facing labels for the thinking levels. Shared by the web UI and
+ * the CLI so the level names stay consistent. */
+export const THINKING_LEVEL_LABELS: Record<ThinkingLevel, string> = {
+  off: "Off",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra High",
+  max: "Max",
+};
+
 /** Provider summary for pickers and lists. Shared by the server routes
  * (which build these) and the web UI (which renders them). */
 export interface ProviderInfo {
@@ -26,6 +51,10 @@ export interface ModelInfo {
   reasoning?: boolean;
   input?: string[];
   enabled?: boolean;
+  /** Stored thinking level for this model ("off" when unset). */
+  thinkingLevel?: ThinkingLevel;
+  /** The thinking levels this model actually supports (at least ["off"]). */
+  thinkingLevels?: ThinkingLevel[];
 }
 
 /** Concatenate the text blocks of a message/tool-result content array

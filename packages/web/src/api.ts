@@ -4,6 +4,7 @@ import type {
   ModelInfo,
   ProviderInfo,
   SessionInfo,
+  ThinkingLevel,
   Workspace,
 } from "./types.ts";
 
@@ -54,7 +55,14 @@ export const api = {
     request<{ ok: boolean }>(`/api/workspaces/${id}`, { method: "DELETE" }),
 
   getDefaultModel: () =>
-    request<{ provider: string; modelId: string } | null>(
+    request<
+      {
+        provider: string;
+        modelId: string;
+        thinkingLevel: ThinkingLevel;
+        thinkingLevels: ThinkingLevel[];
+      } | null
+    >(
       "/api/sessions/default-model",
     ),
   createSession: (input: {
@@ -105,6 +113,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ provider, modelId }),
     }),
+  setModelThinkingLevel: (
+    providerId: string,
+    modelId: string,
+    level: ThinkingLevel,
+  ) =>
+    request<{ ok: boolean; thinkingLevel: ThinkingLevel }>(
+      `/api/providers/${providerId}/models/${
+        encodeURIComponent(modelId)
+      }/thinking-level`,
+      { method: "PUT", body: JSON.stringify({ level }) },
+    ),
 
   fsRoots: () => request<string[]>("/api/fs/roots"),
   fsBrowse: (path: string) =>

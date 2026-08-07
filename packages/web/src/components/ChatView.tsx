@@ -4,6 +4,7 @@ import { isViewRunning, type SessionView } from "../types.ts";
 import type {
   AgentMessage,
   AssistantMessage,
+  ThinkingLevel,
   ToolCallBlock,
   ToolResultMessage,
 } from "../types.ts";
@@ -16,6 +17,7 @@ interface ChatViewProps {
   onPrompt: (text: string) => void;
   onAbort: () => void;
   onModelChange: (provider: string, modelId: string) => void;
+  onThinkingLevelChange: (level: ThinkingLevel) => void;
 }
 
 /** Memoized markdown rendering: message text is static once a message is
@@ -25,7 +27,13 @@ const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
 });
 
 export function ChatView(
-  { view, onPrompt, onAbort, onModelChange }: ChatViewProps,
+  {
+    view,
+    onPrompt,
+    onAbort,
+    onModelChange,
+    onThinkingLevelChange,
+  }: ChatViewProps,
 ) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -118,6 +126,9 @@ export function ChatView(
             modelId: view.info.modelId,
           }}
           onModelSelect={onModelChange}
+          thinkingLevel={view.info.thinkingLevel}
+          thinkingLevels={view.info.thinkingLevels}
+          onThinkingLevelChange={onThinkingLevelChange}
           submitLabel="送信"
           submitDisabled={!input.trim()}
           onAbort={isRunning ? onAbort : undefined}

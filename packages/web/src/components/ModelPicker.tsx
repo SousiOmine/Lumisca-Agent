@@ -8,7 +8,13 @@ export interface ModelPickerProps {
   value: { provider: string; modelId: string } | null;
   /** Only show models the user enabled in settings. Default true. */
   enabledOnly?: boolean;
-  onSelect: (provider: string, modelId: string) => void;
+  /** Called with the selected model; the ModelInfo lets the caller know
+   * the model's thinking levels without another fetch. */
+  onSelect: (
+    provider: string,
+    modelId: string,
+    info?: ModelInfo,
+  ) => void;
 }
 
 /** Provider + searchable model selection, shared by modals and the chat bar.
@@ -139,7 +145,7 @@ export function ModelPicker({
                     className={`model-item${
                       value?.modelId === m.id ? " selected" : ""
                     }`}
-                    onClick={() => onSelect(providerId, m.id)}
+                    onClick={() => onSelect(providerId, m.id, m)}
                   >
                     <span className="model-id">{m.id}</span>
                     <span className="model-meta">

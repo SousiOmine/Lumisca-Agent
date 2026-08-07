@@ -12,6 +12,7 @@ import {
   emptyView,
   type InitialData,
   type SessionView,
+  type ThinkingLevel,
   type Workspace,
 } from "./types.ts";
 import { applyEvent, mergeMessages } from "./events.ts";
@@ -382,6 +383,43 @@ export function App({ initialData }: AppProps): ReactElement {
     [],
   );
 
+  /** The thinking level is a per-model setting: update the views of every
+   * open session using that model so the control stays in sync. */
+  const changeThinkingLevel = useCallback(
+    async (
+      provider: string,
+      modelId: string,
+      level: ThinkingLevel,
+    ) => {
+      try {
+        const { thinkingLevel } = await api.setModelThinkingLevel(
+          provider,
+          modelId,
+          level,
+        );
+        setViews((prev) => {
+          const next = new Map(prev);
+          for (const [id, v] of next) {
+            if (
+              v.info.modelProvider !== provider || v.info.modelId !== modelId
+            ) {
+              continue;
+            }
+            if (v.info.thinkingLevel === thinkingLevel) continue;
+            next.set(id, {
+              ...v,
+              info: { ...v.info, thinkingLevel },
+            });
+          }
+          return next;
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [],
+  );
+
   const viewFor = (sessionId: string): SessionView | undefined =>
     views.get(sessionId);
   const activeView = activeTab ? viewFor(activeTab) : undefined;
@@ -417,6 +455,12 @@ export function App({ initialData }: AppProps): ReactElement {
             onAbort={() => activeTab && abort(activeTab)}
             onModelChange={(provider, modelId) =>
               activeTab && changeModel(activeTab, provider, modelId)}
+            onThinkingLevelChange={(level) =>
+              changeThinkingLevel(
+                activeView.info.modelProvider,
+                activeView.info.modelId,
+                level,
+              )}
           />
         )
         : (

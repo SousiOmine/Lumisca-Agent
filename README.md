@@ -75,7 +75,7 @@ deno task cli -- --resume   # 過去のセッションから再開
 deno task cli -- --help     # 全オプション
 ```
 
-コマンド: `/new` `/resume` `/model` `/workspace` `/keys` `/sessions` `/name` `/exit`
+コマンド: `/new` `/resume` `/model` `/thinking` `/workspace` `/keys` `/sessions` `/name` `/exit`
 
 ### デスクトップ(Tauri)
 
@@ -105,6 +105,8 @@ npm run tauri --prefix packages/desktop -- build      # インストーラ
    (無効にしたモデルはモデル選択肢に表示されません)
 
 チャット入力欄の下にあるモデル表示をクリックすると、その場でモデルを切り替えられます。
+思考モードに対応したモデルでは、モデル表示の右側に**思考強度**(Off/Minimal/Low/Medium/High/Extra High/Max)
+の選択肢が表示され、モデルごとに設定できます(対応していない段階は自動的に最寄りの段階へ補正されます)。
 新しいセッションはワークスペースを選ぶだけで作成でき、モデルは直近で使用したモデルが
 自動設定されます(後から切り替え可能)。
 環境変数(`ANTHROPIC_API_KEY` 等)で認証が解決されるプロバイダーも設定済みとして表示されます。

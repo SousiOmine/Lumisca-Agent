@@ -10,9 +10,12 @@ import type {
   Provider,
 } from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "../settings/repo.ts";
+import type { ThinkingLevel } from "../shared.ts";
+import { clampThinkingLevel } from "./thinking.ts";
 
 const CATALOG_PREFIX = "model_catalog:";
 const ENABLED_PREFIX = "model_enabled:";
+const THINKING_PREFIX = "model_thinking:";
 
 /** Persistent model catalog cache stored in the settings table. */
 export function createDbModelsStore(settings: SettingsRepo): ModelsStore {
@@ -90,6 +93,35 @@ export class ModelManager {
   isModelEnabled(providerId: string, modelId: string): boolean {
     return this.settings.get(`${ENABLED_PREFIX}${providerId}:${modelId}`) !==
       "0";
+  }
+
+  /** The stored thinking level of a model, clamped to what it supports.
+   * "off" is the default when nothing is stored. */
+  getThinkingLevel(providerId: string, modelId: string): ThinkingLevel {
+    const model = this.getModel(providerId, modelId);
+    const stored = this.settings.get(
+      `${THINKING_PREFIX}${providerId}:${modelId}`,
+    );
+    return clampThinkingLevel(model, stored as ThinkingLevel ?? "off");
+  }
+
+  /** Store a thinking level for a model. Unsupported levels are clamped to
+   * the nearest supported one; "off" removes the entry (the default).
+   * Returns the level that will actually be used. */
+  setThinkingLevel(
+    providerId: string,
+    modelId: string,
+    level: ThinkingLevel,
+  ): ThinkingLevel {
+    const model = this.getModel(providerId, modelId);
+    const effective = clampThinkingLevel(model, level);
+    const key = `${THINKING_PREFIX}${providerId}:${modelId}`;
+    if (effective === "off") {
+      this.settings.delete(key);
+    } else {
+      this.settings.set(key, effective);
+    }
+    return effective;
   }
 
   /** First enabled model across providers (the default-model fallback). */

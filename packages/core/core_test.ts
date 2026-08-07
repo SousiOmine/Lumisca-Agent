@@ -217,7 +217,13 @@ Deno.test("getDefaultModel returns the last used model or a fallback", async () 
     modelProvider: providerId,
     modelId,
   });
-  assertEquals(core.getDefaultModel(), { provider: providerId, modelId });
+  const last = core.getDefaultModel();
+  assertEquals(last, {
+    provider: providerId,
+    modelId,
+    thinkingLevel: "off",
+    thinkingLevels: ["off"],
+  });
 
   core.close();
 });
@@ -408,4 +414,188 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   db2.close();
 
   await Deno.remove(dir, { recursive: true });
+});
+
+// --- thinking level (モデルごとの思考強度) --------------------------------
+
+function setupReasoning() {
+  // A reasoning model: without a thinkingLevelMap the provider defaults
+  // apply, so off/minimal/low/medium/high are supported (not xhigh/max).
+  const faux = fauxProvider({
+    models: [{ id: "thinky", reasoning: true }],
+  });
+  const core = LumiscaCore.forTesting([faux.provider]);
+  return {
+    core,
+    faux,
+    providerId: faux.provider.id,
+    modelId: faux.getModel().id,
+  };
+}
+
+Deno.test("sessions default to thinking off and expose supported levels", async () => {
+  const { core, providerId, modelId } = setupReasoning();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+  assertEquals(session.thinkingLevel, "off");
+  assertEquals(session.thinkingLevels, [
+    "off",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+  ]);
+
+  // A non-reasoning model only supports "off".
+  const plain = setup();
+  const { ws: ws2 } = await makeWorkspace(plain.core);
+  const s2 = plain.core.createSession({
+    workspaceId: ws2.id,
+    modelProvider: plain.providerId,
+    modelId: plain.modelId,
+  });
+  assertEquals(s2.thinkingLevels, ["off"]);
+  assertEquals(s2.thinkingLevel, "off");
+
+  core.close();
+  plain.core.close();
+});
+
+Deno.test("setModelThinkingLevel persists, clamps, and reflects on sessions", async () => {
+  const { core, providerId, modelId } = setupReasoning();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  // Supported level is stored as-is.
+  assertEquals(core.setModelThinkingLevel(providerId, modelId, "high"), "high");
+  assertEquals(core.getSession(session.id)!.thinkingLevel, "high");
+
+  // Unsupported levels clamp to the nearest supported one.
+  assertEquals(core.setModelThinkingLevel(providerId, modelId, "max"), "high");
+
+  // Non-reasoning models clamp everything to off.
+  const plain = setup();
+  assertEquals(
+    plain.core.setModelThinkingLevel(plain.providerId, plain.modelId, "high"),
+    "off",
+  );
+  assertEquals(
+    plain.core.getModelThinkingLevel(plain.providerId, plain.modelId),
+    "off",
+  );
+
+  core.close();
+  plain.core.close();
+});
+
+Deno.test("setModelThinkingLevel rejects unknown levels and models", () => {
+  const { core, providerId, modelId } = setupReasoning();
+  assertThrows(
+    () => core.setModelThinkingLevel(providerId, modelId, "turbo"),
+    Error,
+    "Unknown thinking level",
+  );
+  assertThrows(
+    () => core.setModelThinkingLevel(providerId, "nope", "high"),
+    Error,
+    "Model not found",
+  );
+  core.close();
+});
+
+Deno.test("switching model picks up the new model's thinking level", async () => {
+  const { core, providerId, modelId } = setupReasoning();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+  core.setModelThinkingLevel(providerId, modelId, "medium");
+  assertEquals(core.getSession(session.id)!.thinkingLevel, "medium");
+
+  core.setSessionModel(session.id, providerId, modelId);
+  assertEquals(core.getSession(session.id)!.thinkingLevel, "medium");
+
+  core.close();
+});
+
+Deno.test("thinking level reaches the provider stream options", async () => {
+  const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const { ws } = await makeWorkspace(core);
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: faux.provider.id,
+    modelId: faux.getModel().id,
+  });
+  core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "high");
+
+  let receivedReasoning: unknown;
+  faux.setResponses([
+    (_context, options) => {
+      receivedReasoning = (options as { reasoning?: unknown }).reasoning;
+      return fauxAssistantMessage("ok");
+    },
+  ]);
+  await core.prompt(session.id, "hi");
+  assertEquals(receivedReasoning, "high");
+
+  // A second run picks up a level change without rebuilding the agent.
+  core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "off");
+  receivedReasoning = undefined;
+  faux.setResponses([
+    (_context, options) => {
+      receivedReasoning = (options as { reasoning?: unknown }).reasoning;
+      return fauxAssistantMessage("ok");
+    },
+  ]);
+  await core.prompt(session.id, "again");
+  assertEquals(receivedReasoning, undefined);
+
+  core.close();
+});
+
+Deno.test("thinking level change is refused while a session using the model streams", async () => {
+  const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const { ws } = await makeWorkspace(core);
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: faux.provider.id,
+    modelId: faux.getModel().id,
+  });
+
+  faux.setResponses([
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return fauxAssistantMessage("slow reply");
+    },
+  ]);
+  core.startPrompt(session.id, "go");
+  assertThrows(
+    () =>
+      core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "high"),
+    Error,
+    "already running",
+  );
+
+  await core.getAgent(session.id)!.waitForIdle();
+  // Idle again: the change goes through.
+  assertEquals(
+    core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "high"),
+    "high",
+  );
+  core.close();
 });

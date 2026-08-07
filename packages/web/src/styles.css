@@ -873,6 +873,22 @@ select:focus {
   transform: rotate(90deg);
 }
 
+/* Thinking-level selector, right of the model switch. Only rendered for
+ * models that support reasoning, so it can look like a quiet toggle. */
+.thinking-select {
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+}
+
+.thinking-select:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .model-popover {
   position: absolute;
   bottom: calc(100% + 6px);

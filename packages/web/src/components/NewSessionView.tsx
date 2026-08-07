@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.ts";
-import type { Workspace } from "../types.ts";
+import type { ModelInfo, ThinkingLevel, Workspace } from "../types.ts";
 import { errorText } from "../providers.ts";
 import { Composer, type ComposerModel } from "./Composer.tsx";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
 import { WorkspacePicker } from "./WorkspacePicker.tsx";
+
+/** The model plus the thinking levels it supports, so the draft tab's
+ * thinking control can render without an extra fetch. */
+interface DraftModel extends ComposerModel {
+  thinkingLevel?: ThinkingLevel;
+  thinkingLevels?: ThinkingLevel[];
+}
 
 interface NewSessionViewProps {
   workspaces: Workspace[];
@@ -28,7 +35,7 @@ export function NewSessionView(
   }: NewSessionViewProps,
 ) {
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
-  const [model, setModel] = useState<ComposerModel | null>(null);
+  const [model, setModel] = useState<DraftModel | null>(null);
   const [text, setText] = useState("");
   const [modalWorkspace, setModalWorkspace] = useState<Workspace | undefined>(
     undefined,
@@ -46,7 +53,12 @@ export function NewSessionView(
     api.getDefaultModel()
       .then((m) => {
         if (m && !modelTouched.current) {
-          setModel({ provider: m.provider, modelId: m.modelId });
+          setModel({
+            provider: m.provider,
+            modelId: m.modelId,
+            thinkingLevel: m.thinkingLevel,
+            thinkingLevels: m.thinkingLevels,
+          });
         }
       })
       .catch(() => {});
@@ -84,6 +96,26 @@ export function NewSessionView(
     }
   };
 
+  /** Set the thinking level for the draft's model (a per-model setting). */
+  const changeThinkingLevel = async (level: ThinkingLevel) => {
+    if (!model) return;
+    try {
+      const { thinkingLevel } = await api.setModelThinkingLevel(
+        model.provider,
+        model.modelId,
+        level,
+      );
+      setModel((current) =>
+        current && current.provider === model.provider &&
+          current.modelId === model.modelId
+          ? { ...current, thinkingLevel }
+          : current
+      );
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
   return (
     <div className="chat">
       <div className="chat-scroll">
@@ -114,10 +146,18 @@ export function NewSessionView(
               autoFocus
               large
               model={model}
-              onModelSelect={(provider, modelId) => {
+              onModelSelect={(provider, modelId, info?: ModelInfo) => {
                 modelTouched.current = true;
-                setModel({ provider, modelId });
+                setModel({
+                  provider,
+                  modelId,
+                  thinkingLevel: info?.thinkingLevel,
+                  thinkingLevels: info?.thinkingLevels,
+                });
               }}
+              thinkingLevel={model?.thinkingLevel}
+              thinkingLevels={model?.thinkingLevels}
+              onThinkingLevelChange={changeThinkingLevel}
               submitLabel={busy ? "作成中..." : "開始"}
               submitDisabled={busy || !text.trim() || !workspaceId}
               onSubmit={submit}
