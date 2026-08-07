@@ -59,6 +59,63 @@ for (let i = 1; i <= nPairs; i++) {
     ts,
   );
   n++;
+
+  // One assistant message with two tool calls, each followed by a tool
+  // result, so restored-session rendering of tool calls can be verified.
+  ts += 30_000;
+  const callIds = [`call_t${i}_a`, `call_t${i}_b`];
+  insert.run(
+    `msg-t-${i}`,
+    sessionId,
+    "assistant",
+    JSON.stringify({
+      role: "assistant",
+      content: [
+        {
+          type: "toolCall",
+          id: callIds[0]!,
+          name: "list_dir",
+          arguments: { path: "." },
+        },
+        {
+          type: "toolCall",
+          id: callIds[1]!,
+          name: "read_file",
+          arguments: { path: "README.md" },
+        },
+      ],
+      api: "openai-completions",
+      provider: "opencode-go",
+      model: "deepseek-v4-flash",
+      usage: { input: 100, output: 50 },
+      timestamp: ts,
+    }),
+    ts,
+  );
+  n++;
+  for (let k = 0; k < callIds.length; k++) {
+    ts += 20_000;
+    insert.run(
+      `msg-tr-${i}-${k}`,
+      sessionId,
+      "toolResult",
+      JSON.stringify({
+        role: "toolResult",
+        toolCallId: callIds[k]!,
+        toolName: k === 0 ? "list_dir" : "read_file",
+        content: [{
+          type: "text",
+          text:
+            `ツール実行結果 ${i}-${k} です。ダミーの実行結果テキストが入ります。${
+              "ダミー行です。".repeat(10)
+            }`,
+        }],
+        timestamp: ts,
+      }),
+      ts,
+    );
+    n++;
+  }
 }
 
 console.log(`seeded ${n} messages into ${sessionId}`);

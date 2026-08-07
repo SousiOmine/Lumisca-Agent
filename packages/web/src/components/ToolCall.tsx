@@ -10,10 +10,11 @@ interface ToolCallProps {
 }
 
 export function ToolCall({ toolCall, result, running }: ToolCallProps) {
-  // Live-streaming tool calls mount without a result and stay collapsed
-  // otherwise; a result arriving later must expand them, matching restored
-  // sessions where the result is present at mount.
-  const [open, setOpen] = useState(result !== undefined);
+  // Collapsed by default. Restored sessions mount with results already
+  // present, and expanding every tool call would make a long history
+  // impossible to scan. A result arriving later (live run) still expands
+  // the call so the run stays observable.
+  const [open, setOpen] = useState(false);
   const hadResult = useRef(result !== undefined);
   useEffect(() => {
     if (result !== undefined && !hadResult.current) {
