@@ -4,7 +4,12 @@ import { existsSync } from "node:fs";
 import type { ClientEvent } from "./types/event.ts";
 import type { SessionInfo } from "./types/session.ts";
 import type { Workspace } from "./types/workspace.ts";
-import { createSettingsRepo, type SettingsRepo } from "./settings/repo.ts";
+import {
+  createFileSettingsRepo,
+  createInMemorySettingsRepo,
+  type SettingsRepo,
+} from "./settings/repo.ts";
+import { resolveSettingsPath } from "./settings/path.ts";
 import {
   type ConnectionEntry,
   CONNECTIONS_KEY,
@@ -67,9 +72,9 @@ export class LumiscaCore {
   private readonly listeners = new Set<(event: ClientEvent) => void>();
   private readonly lastErrors = new Map<string, string>();
 
-  private constructor(db: LumiscaDb) {
+  private constructor(db: LumiscaDb, settings: SettingsRepo) {
     this.db = db;
-    this.settings = createSettingsRepo(db);
+    this.settings = settings;
     this.credentials = createDbCredentialStore(this.settings);
     const modelsStore = createDbModelsStore(this.settings);
     this.models = new ModelManager(
@@ -82,17 +87,31 @@ export class LumiscaCore {
     this.messages = createMessageRepo(db);
   }
 
-  static open(dbPath: string): LumiscaCore {
-    return new LumiscaCore(LumiscaDb.open(dbPath));
+  /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
+   * (see resolveSettingsPath); an explicit settingsPath overrides that. */
+  static open(
+    dbPath: string,
+    settingsPath: string = resolveSettingsPath(),
+  ): LumiscaCore {
+    return new LumiscaCore(
+      LumiscaDb.open(dbPath),
+      createFileSettingsRepo(settingsPath),
+    );
   }
 
   static openInMemory(): LumiscaCore {
-    return new LumiscaCore(LumiscaDb.openInMemory());
+    return new LumiscaCore(
+      LumiscaDb.openInMemory(),
+      createInMemorySettingsRepo(),
+    );
   }
 
   /** Test-only: in-memory core with extra providers (e.g. the faux provider). */
   static forTesting(extraProviders: Provider[] = []): LumiscaCore {
-    const core = new LumiscaCore(LumiscaDb.openInMemory());
+    const core = new LumiscaCore(
+      LumiscaDb.openInMemory(),
+      createInMemorySettingsRepo(),
+    );
     for (const provider of extraProviders) {
       core.models.models.setProvider(provider);
     }
@@ -293,7 +312,7 @@ export class LumiscaCore {
   }
 
   /** The app-level (global) MCP config with live statuses from every open
-   * session. Stored in the settings table; applies to all workspaces. */
+   * session. Stored in the settings file; applies to all workspaces. */
   getAppMcpInfo(): McpInfo {
     const exists = this.settings.get(APP_MCP_SETTINGS_KEY) !== undefined;
     const config = this.loadAppMcpConfig();
@@ -391,7 +410,7 @@ export class LumiscaCore {
     return this.getMcpInfo(workspaceId);
   }
 
-  /** The app-level config from the settings table (empty when unset). */
+  /** The app-level config from the settings file (empty when unset). */
   private loadAppMcpConfig(): McpConfig {
     const raw = this.settings.get(APP_MCP_SETTINGS_KEY);
     if (raw === undefined) return this.emptyMcpConfig(APP_MCP_SOURCE);

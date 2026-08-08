@@ -489,12 +489,10 @@ Deno.test("settings API refuses to write credentials", async () => {
       body: JSON.stringify({ value: "sk-leak" }),
     });
     assertEquals(res.status, 403);
-    // Nothing was stored (checked at the DB layer; the generic settings
-    // surface refuses to read credential keys back).
-    const row = core.db.db
-      .prepare("SELECT value FROM settings WHERE key = ?")
-      .get("api_key:anthropic") as { value: string } | undefined;
-    assertEquals(row, undefined);
+    // Nothing was stored: the generic settings surface never sees the key.
+    const list = await fetch(`${base}/api/settings`);
+    const settings = await list.json() as Record<string, string>;
+    assertEquals("api_key:anthropic" in settings, false);
   } finally {
     server.shutdown();
     core.close();

@@ -6,15 +6,15 @@ import type {
 } from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "./repo.ts";
 
-/** Settings-table key prefix for credentials. Shared with the server layer
+/** Settings-file key prefix for credentials. Shared with the server layer
  * (settings API filters these keys out) — single source of truth. */
 export const CREDENTIAL_KEY_PREFIX = "api_key:";
 
 /**
- * CredentialStore backed by the settings table.
+ * CredentialStore backed by the settings store.
  *
  * Keys are namespaced (`api_key:<providerId>`) so credentials and
- * application settings share the settings table without colliding.
+ * application settings share the settings store without colliding.
  */
 export function createDbCredentialStore(
   settings: SettingsRepo,

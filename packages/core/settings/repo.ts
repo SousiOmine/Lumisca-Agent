@@ -1,4 +1,6 @@
-import type { LumiscaDb } from "../db/mod.ts";
+import { existsSync } from "node:fs";
+import { dirname } from "node:path";
+import { parseJsonc, SettingsFileError } from "./jsonc.ts";
 export { THEME_KEY } from "../shared.ts";
 
 export interface SettingsRepo {
@@ -8,28 +10,95 @@ export interface SettingsRepo {
   list(): Map<string, string>;
 }
 
-export function createSettingsRepo(db: LumiscaDb): SettingsRepo {
-  const getStmt = db.db.prepare("SELECT value FROM settings WHERE key = ?");
-  const setStmt = db.db.prepare(
-    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-  );
-  const deleteStmt = db.db.prepare("DELETE FROM settings WHERE key = ?");
-  const listStmt = db.db.prepare("SELECT key, value FROM settings");
+/** Values that parse as JSON (arrays, objects, numbers) are written natively
+ * so the file stays readable by hand; everything is read back as a string,
+ * which is what every consumer of SettingsRepo expects. */
+function toNativeValue(value: string): unknown {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return typeof parsed === "string" ? value : parsed;
+  } catch {
+    return value;
+  }
+}
+
+function toStoredString(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+/** Settings persisted as a single user-editable JSONC file. The file is
+ * loaded once at creation (a missing file means empty settings); every
+ * mutation rewrites the whole file atomically (tmp + rename). */
+export function createFileSettingsRepo(path: string): SettingsRepo {
+  const data = loadFile(path);
+
+  const save = () => {
+    Deno.mkdirSync(dirname(path), { recursive: true });
+    const tmp = `${path}.tmp`;
+    try {
+      Deno.writeTextFileSync(
+        tmp,
+        `${JSON.stringify(Object.fromEntries(data), null, 2)}\n`,
+        { mode: 0o600 },
+      );
+      Deno.renameSync(tmp, path);
+    } finally {
+      try {
+        Deno.removeSync(tmp);
+      } catch {
+        // Already renamed into place.
+      }
+    }
+  };
 
   return {
     get(key: string): string | undefined {
-      const row = getStmt.get(key) as { value: string } | undefined;
-      return row?.value;
+      const value = data.get(key);
+      return value === undefined ? undefined : toStoredString(value);
     },
     set(key: string, value: string): void {
-      setStmt.run(key, value);
+      data.set(key, toNativeValue(value));
+      save();
     },
     delete(key: string): void {
-      deleteStmt.run(key);
+      if (data.delete(key)) save();
     },
     list(): Map<string, string> {
-      const rows = listStmt.all() as Array<{ key: string; value: string }>;
-      return new Map(rows.map((r) => [r.key, r.value]));
+      const out = new Map<string, string>();
+      for (const [key, value] of data) {
+        out.set(key, toStoredString(value));
+      }
+      return out;
+    },
+  };
+}
+
+function loadFile(path: string): Map<string, unknown> {
+  if (!existsSync(path)) return new Map();
+  const parsed = parseJsonc(Deno.readTextFileSync(path), path);
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new SettingsFileError(
+      `Settings file ${path} must contain a JSON object at the top level`,
+    );
+  }
+  return new Map(Object.entries(parsed as Record<string, unknown>));
+}
+
+/** In-memory settings store (tests and in-memory cores). */
+export function createInMemorySettingsRepo(): SettingsRepo {
+  const data = new Map<string, string>();
+  return {
+    get(key: string): string | undefined {
+      return data.get(key);
+    },
+    set(key: string, value: string): void {
+      data.set(key, value);
+    },
+    delete(key: string): void {
+      data.delete(key);
+    },
+    list(): Map<string, string> {
+      return new Map(data);
     },
   };
 }

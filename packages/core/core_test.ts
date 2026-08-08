@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { realpathSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -368,28 +369,39 @@ Deno.test("workspaces require at least one folder", async () => {
 });
 
 Deno.test("credentials are guarded on every settings surface", async () => {
-  const { core } = setup();
-  await core.setProviderApiKey("anthropic", "sk-test");
+  // File-backed settings so "nothing was stored" can be verified at rest.
+  const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
+  const core = LumiscaCore.open(
+    join(dir, "test.db"),
+    join(dir, "settings.jsonc"),
+  );
+  try {
+    await core.setProviderApiKey("anthropic", "sk-test");
 
-  // Reading, writing, or deleting credentials through the generic settings
-  // surface is refused (they have their own API).
-  const refused = (fn: () => void) => {
-    assertThrows(fn, Error, "credentials cannot be accessed");
-  };
-  refused(() => core.getSetting("api_key:anthropic"));
-  refused(() => core.setSetting("api_key:anthropic", "x"));
-  refused(() => core.deleteSetting("api_key:anthropic"));
+    // Reading, writing, or deleting credentials through the generic settings
+    // surface is refused (they have their own API).
+    const refused = (fn: () => void) => {
+      assertThrows(fn, Error, "credentials cannot be accessed");
+    };
+    refused(() => core.getSetting("api_key:anthropic"));
+    refused(() => core.setSetting("api_key:anthropic", "x"));
+    refused(() => core.deleteSetting("api_key:anthropic"));
 
-  // listSettings never exposes them.
-  assertEquals(core.listSettings().has("api_key:anthropic"), false);
+    // listSettings never exposes them.
+    assertEquals(core.listSettings().has("api_key:anthropic"), false);
 
-  // The credential survives (the refused operations were no-ops).
-  const row = core.db.db
-    .prepare("SELECT value FROM settings WHERE key = ?")
-    .get("api_key:anthropic") as { value: string } | undefined;
-  assertEquals(row !== undefined, true);
-
-  core.close();
+    // The credential survives (the refused operations were no-ops).
+    const stored = JSON.parse(
+      Deno.readTextFileSync(join(dir, "settings.jsonc")),
+    ) as Record<string, unknown>;
+    assertEquals(stored["api_key:anthropic"], {
+      key: "sk-test",
+      type: "api_key",
+    });
+  } finally {
+    core.close();
+    await Deno.remove(dir, { recursive: true });
+  }
 });
 
 Deno.test("database migration stamps user_version and is idempotent", async () => {
@@ -400,7 +412,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db1.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    2,
+    3,
   );
   db1.close();
 
@@ -409,9 +421,39 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db2.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    2,
+    3,
   );
   db2.close();
+
+  await Deno.remove(dir, { recursive: true });
+});
+
+Deno.test("migration drops the legacy settings table", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "lumisca-migrate-" });
+  const path = join(dir, "legacy.db");
+
+  // A database created before settings moved to the settings file still
+  // carries the settings table; opening it must drop it.
+  const legacy = new DatabaseSync(path);
+  legacy.exec(
+    "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+  );
+  legacy.exec("PRAGMA user_version = 2");
+  legacy.close();
+
+  const db = LumiscaDb.open(path);
+  const table = db.db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'",
+    )
+    .get();
+  assertEquals(table, undefined);
+  assertEquals(
+    (db.db.prepare("PRAGMA user_version").get() as { user_version: number })
+      .user_version,
+    3,
+  );
+  db.close();
 
   await Deno.remove(dir, { recursive: true });
 });

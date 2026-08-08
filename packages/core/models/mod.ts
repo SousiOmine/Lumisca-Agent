@@ -17,7 +17,7 @@ const CATALOG_PREFIX = "model_catalog:";
 const ENABLED_PREFIX = "model_enabled:";
 const THINKING_PREFIX = "model_thinking:";
 
-/** Persistent model catalog cache stored in the settings table. */
+/** Persistent model catalog cache stored in the settings store. */
 export function createDbModelsStore(settings: SettingsRepo): ModelsStore {
   return {
     read(providerId: string): Promise<ModelsStoreEntry | undefined> {

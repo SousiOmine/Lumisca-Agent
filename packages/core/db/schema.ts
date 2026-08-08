@@ -32,11 +32,6 @@ CREATE TABLE IF NOT EXISTS messages (
   timestamp INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
-
-CREATE TABLE IF NOT EXISTS settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
 `;
 
 /** Ordered schema migrations. Index i brings the DB from user_version i to
@@ -51,6 +46,8 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec(
       "ALTER TABLE sessions ADD COLUMN system_prompt_custom INTEGER NOT NULL DEFAULT 0",
     ),
+  // Settings moved out of the database into ~/.config/lumisca-agent/settings.jsonc.
+  (db) => db.exec("DROP TABLE IF EXISTS settings"),
 ];
 
 /** Apply pending migrations, tracked via PRAGMA user_version. */

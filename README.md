@@ -44,7 +44,7 @@ packages/
 │   ├── workspace/   複数フォルダ管理・サンドボックス
 │   ├── session/     セッション管理 + SQLite 永続化
 │   ├── models/      pi-ai モデル管理
-│   ├── settings/    APIキー等の設定(DBバックの CredentialStore)
+│   ├── settings/    設定(`~/.config/lumisca-agent/settings.jsonc` バック)
 │   └── db/          SQLite(node:sqlite)
 ├── server/    Hono HTTP + WebSocket(127.0.0.1 ローカル専用)+ React SSR + esbuild バンドル
 ├── web/       React フロントエンドのソース(SSR/ハイドレーション共用)
@@ -76,7 +76,9 @@ esbuild で再バンドルして接続中のクライアントにリロードを
 (フルページリロード。ソース変更は次回アクセス時にサーバー側レンダリングにも
 反映されます)。
 
-`LUMISCA_DB` で DB パス、`LUMISCA_PORT` でポートを変更できます。
+`LUMISCA_DB` で DB パス、`LUMISCA_PORT` でポートを変更できます。設定(テーマ・
+APIキー・接続先など)は `~/.config/lumisca-agent/settings.jsonc` に保存されます
+(`$XDG_CONFIG_HOME` が設定されていれば `$XDG_CONFIG_HOME/lumisca-agent/settings.jsonc`)。
 
 `LUMISCA_TOKEN` を設定すると、API・WebSocket・SSR ページにトークン認証がかかります
 (ヘッダー `X-Lumisca-Token`、WS の `?token=`、ページの `?token=`)。デスクトップアプリは
@@ -144,6 +146,7 @@ npm run tauri --prefix packages/desktop -- build      # インストーラ
    | `LUMISCA_TOKEN` | 認証トークン。**非ループバックバインド時は必須**(未設定なら起動拒否) | 十分に長いランダム文字列 |
    | `LUMISCA_PORT` | ポート(既定 8000) | `8000` |
    | `LUMISCA_DB` | DB パス(既定 `./lumisca.db`) | `C:\lumisca\lumisca.db` |
+   | `XDG_CONFIG_HOME` | 設定ファイルの親ディレクトリ(既定 `~/.config`) | `C:\Users\me\.config` |
 
    例(Windows):
    ```bat
@@ -285,8 +288,9 @@ MCP(Model Context Protocol)サーバーを追加すると、その外部ツー�
 ## データ
 
 - データベース: `./lumisca.db`(既定。`LUMISCA_DB` で変更)
-  - テーブル: workspaces / workspace_folders / sessions / messages / settings
-- APIキー: 設定DB内(`api_key:<providerId>` キー)に保存(サーバーが動く PC に保存される)
+  - テーブル: workspaces / workspace_folders / sessions / messages
+- 設定: `~/.config/lumisca-agent/settings.jsonc`(JSONC。手書き編集可)
+  - APIキーは `api_key:<providerId>` キーに保存(サーバーが動く PC に保存される)
 
 ## テスト
 
@@ -316,7 +320,7 @@ core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSoc
   開くたびに再生成されるため、AGENTS.md の編集が次回オープン時に反映されます
 - MCP は公式 `@modelcontextprotocol/sdk` の Client を使用し、`McpManager` が
   セッションごとにサーバーの起動・ツール発見・呼び出し・終了を管理します
-  (stdio は子プロセス、HTTP は streamable HTTP)。アプリ単位の設定は DB
+  (stdio は子プロセス、HTTP は streamable HTTP)。アプリ単位の設定は設定ファイル
   (settings の `mcp_servers` キー、汎用 settings API からは保護)で、
   ワークスペースの `.mcp.json` とマージして使用します
 - ワークスペース境界の検証は `packages/core/workspace/sandbox.ts` に集約されており、

@@ -1,4 +1,4 @@
-import { LumiscaCore } from "@lumisca/core";
+import { LumiscaCore, resolveSettingsPath } from "@lumisca/core";
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -55,10 +55,11 @@ if (configError) {
 
 const port = Number(Deno.env.get("LUMISCA_PORT") ?? DEFAULT_PORT);
 const dbPath = resolveDbPath();
+const settingsPath = resolveSettingsPath();
 const repoRoot = resolveRepoRoot();
 const allowedHosts = resolveAllowedHosts();
 
-const core = LumiscaCore.open(dbPath);
+const core = LumiscaCore.open(dbPath, settingsPath);
 const server = startServer(core, port, {
   repoRoot,
   token,
@@ -68,6 +69,7 @@ const server = startServer(core, port, {
 
 console.log(`Lumisca server listening on http://${host}:${port}`);
 console.log(`Database: ${dbPath}`);
+console.log(`Settings: ${settingsPath}`);
 if (token) console.log("Token authentication enabled");
 if (allowedHosts.length > 0) {
   console.log(`Allowed hosts: ${allowedHosts.join(", ")}`);
