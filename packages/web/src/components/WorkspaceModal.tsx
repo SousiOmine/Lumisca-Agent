@@ -8,23 +8,32 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { api } from "../api.ts";
+import { api, fed } from "../api.ts";
 import type { Workspace } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 
 interface WorkspaceModalProps {
   /** Present → edit mode (rename / change folders / delete). */
   workspace?: Workspace;
+  /** Peer owning the workspace ("" = this server). Browsing, saving and
+   * deleting are proxied to that peer, so workspaces can be registered
+   * and edited on other machines. */
+  peerId: string;
+  /** Peer name for the folder-browser caption. */
+  peerName: string;
   onSaved: (ws: Workspace) => void;
   /** The App-owned delete flow (confirm + API + state). */
-  onDelete: (ws: Workspace) => Promise<void>;
+  onDelete: (
+    fws: { peerId: string; peerName: string; workspace: Workspace },
+  ) => Promise<void>;
   onClose: () => void;
 }
 
 type View = { kind: "main" } | { kind: "browse" };
 
 export function WorkspaceModal(
-  { workspace, onSaved, onDelete, onClose }: WorkspaceModalProps,
+  { workspace, peerId, peerName, onSaved, onDelete, onClose }:
+    WorkspaceModalProps,
 ) {
   const editing = workspace !== undefined;
   const [view, setView] = useState<View>({ kind: "main" });
@@ -44,11 +53,18 @@ export function WorkspaceModal(
     setError(undefined);
     try {
       const ws = editing
-        ? await api.updateWorkspace(workspace!.id, {
-          name: name.trim(),
-          folders,
-        })
-        : await api.createWorkspace(name.trim(), folders);
+        ? peerId === ""
+          ? await api.updateWorkspace(workspace!.id, {
+            name: name.trim(),
+            folders,
+          })
+          : await fed.updateWorkspace(peerId, workspace!.id, {
+            name: name.trim(),
+            folders,
+          })
+        : peerId === ""
+        ? await api.createWorkspace(name.trim(), folders)
+        : await fed.createWorkspace(peerId, name.trim(), folders);
       onSaved(ws);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -62,7 +78,7 @@ export function WorkspaceModal(
     setBusy(true);
     setError(undefined);
     try {
-      await onDelete(workspace);
+      await onDelete({ peerId, peerName, workspace });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -75,6 +91,8 @@ export function WorkspaceModal(
       {view.kind === "browse"
         ? (
           <FolderBrowser
+            peerId={peerId}
+            peerName={peerName}
             onAdd={addFolder}
             onBack={() => setView({ kind: "main" })}
           />
@@ -82,6 +100,10 @@ export function WorkspaceModal(
         : (
           <>
             <h2>{editing ? "ワークスペースを編集" : "新しいワークスペース"}</h2>
+
+            <p className="settings-note">
+              対象サーバー: {peerId === "" ? "このサーバー" : peerName}
+            </p>
 
             <label>
               名前
@@ -170,9 +192,13 @@ interface BrowseEntry {
 }
 
 function FolderBrowser({
+  peerId,
+  peerName,
   onAdd,
   onBack,
 }: {
+  peerId: string;
+  peerName: string;
   onAdd: (path: string) => void;
   onBack: () => void;
 }) {
@@ -181,17 +207,21 @@ function FolderBrowser({
   const [parent, setParent] = useState<string | null>(null);
   const [entries, setEntries] = useState<BrowseEntry[]>([]);
   const [error, setError] = useState<string | undefined>();
+  // Browsing happens on the peer that owns the workspace (its filesystem).
+  const fsRoots = () => peerId === "" ? api.fsRoots() : fed.fsRoots(peerId);
+  const fsBrowse = (p: string) =>
+    peerId === "" ? api.fsBrowse(p) : fed.fsBrowse(peerId, p);
 
   useEffect(() => {
-    api.fsRoots().then(setRoots).catch((e) => setError(String(e)));
-  }, []);
+    fsRoots().then(setRoots).catch((e) => setError(String(e)));
+  }, [peerId]);
 
   useEffect(() => {
     if (path === null) return;
     // Ignore responses for a path we navigated away from (rapid 上へ clicks).
     let stale = false;
     setError(undefined);
-    api.fsBrowse(path)
+    fsBrowse(path)
       .then((r) => {
         if (stale) return;
         setParent(r.parent);
@@ -203,7 +233,7 @@ function FolderBrowser({
     return () => {
       stale = true;
     };
-  }, [path]);
+  }, [path, peerId]);
 
   const go = (p: string | null) => {
     if (p === null) {
@@ -225,7 +255,9 @@ function FolderBrowser({
           <h2>フォルダを選択</h2>
         </div>
         <p className="settings-note">
-          場所を選択してください
+          {peerId === ""
+            ? "このサーバーの場所を選択してください"
+            : `${peerName} (${peerId}) の場所を選択してください`}
         </p>
         <div className="model-list" style={{ maxHeight: 320 }}>
           {roots.map((r) => (

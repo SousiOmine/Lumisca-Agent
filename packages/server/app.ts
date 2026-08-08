@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { Hono, type MiddlewareHandler } from "hono";
+import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { upgradeWebSocket } from "hono/deno";
 import { type LumiscaCore, THEME_KEY } from "@lumisca/core";
@@ -19,6 +19,9 @@ import { sessionRoutes } from "./routes/sessions.ts";
 import { providerRoutes } from "./routes/providers.ts";
 import { settingRoutes } from "./routes/settings.ts";
 import { mcpRoutes } from "./routes/mcp.ts";
+import { connectionRoutes } from "./routes/connections.ts";
+import { federationRoutes } from "./routes/federation.ts";
+import { FederationClient } from "./federation.ts";
 import { jsonError } from "./routes/util.ts";
 import type { InitialData } from "@lumisca/web/types";
 
@@ -27,10 +30,30 @@ export interface AppOptions {
   repoRoot?: string;
   /** Watch frontend sources; rebundle and notify clients on change. */
   watch?: boolean;
-  /** When set, /api/* and /ws require this token (X-Lumisca-Token header,
-   * or the `token` query parameter for browser WebSockets). Used by the
-   * desktop shell so only its own spawned server instance answers. */
+  /** Address to bind (defaults to 127.0.0.1 — loopback only). Remote
+   * hosting sets LUMISCA_HOST. Binding a non-loopback address without a
+   * token is refused at startup (see validateHostConfig). */
+  hostname?: string;
+  /** Extra hostnames (without port) accepted by the Host guard, e.g. a
+   * Tailscale hostname or LAN IP when hosting remotely. Loopback
+   * hostnames are always accepted; DNS-rebinding protection stays intact
+   * because the Host check still applies. */
+  allowedHosts?: string[];
+  /** When set, requests require this token (X-Lumisca-Token header, the
+   * `token` query parameter for browser WebSockets, or `?token=` on the
+   * SSR page URL). In production mode the SSR page itself is also
+   * guarded, so the token is a real capability, not just a barrier for
+   * casual local processes. Used by the desktop shell so only its own
+   * spawned server instance answers. */
   token?: string;
+  /** Mutable holder for this server's origin (http://host:port), filled
+   * by startServer's onListen — the real port is only known after the
+   * listener binds (port 0 = ephemeral). The federation client reads it
+   * lazily for its self-guard. */
+  selfOrigin?: { current: string };
+  /** The federation client, injected by startServer so it can start the
+   * peer event streams once the origin is known. */
+  fed?: FederationClient;
 }
 
 /** Lazily built/loaded frontend assets (client bundle, css, favicon). */
@@ -172,6 +195,23 @@ class Assets {
 /** Hostnames allowed to reach the server (loopback only, DNS-rebinding guard). */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 
+/** True when the hostname is a loopback address. */
+export function isLoopbackHost(host: string): boolean {
+  return LOOPBACK_HOSTS.has(host);
+}
+
+/** Startup validation: a non-loopback bind without a token would expose
+ * the agent (bash tool included) to anyone who can reach the address.
+ * Returns an error message, or null when the configuration is safe. */
+export function validateHostConfig(
+  host: string,
+  token: string | undefined,
+): string | null {
+  if (isLoopbackHost(host) || token) return null;
+  return `binding to "${host}" without LUMISCA_TOKEN would expose the agent ` +
+    "to the network; set LUMISCA_TOKEN or bind a loopback address";
+}
+
 function hostnameOf(host: string | undefined): string {
   if (!host) return "";
   try {
@@ -224,32 +264,66 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const assets = new Assets(repoRoot, join(repoRoot, ".lumisca-cache"));
   const watch = options.watch ?? Deno.env.get("LUMISCA_DEV") === "1";
 
-  // The server is local-only: refuse requests that do not target a loopback
-  // host (blocks DNS rebinding and cross-origin browser access).
+  // Federated peers (the server-side connection registry): the hub proxies
+  // their workspaces/sessions and relays their events, tagged with the
+  // peer id so the UI can route them to the right tabs. startServer injects
+  // its own client (started once the real origin is known); direct
+  // createApp usage gets a client with no self-guard.
+  const fed = options.fed ??
+    new FederationClient(
+      () => core.getConnections(),
+      () => options.selfOrigin?.current ?? "",
+    );
+  if (!options.fed) fed.start();
+
+  // The server is local-only by default: refuse requests that do not target
+  // a loopback host (blocks DNS rebinding and cross-origin browser access).
+  // Remote hosting opens additional hostnames via allowedHosts; the Host
+  // check still applies to them, so DNS rebinding stays blocked.
+  const allowedHosts = new Set(
+    (options.allowedHosts ?? []).map((h) => h.toLowerCase()),
+  );
   app.use("*", async (c, next) => {
-    if (!LOOPBACK_HOSTS.has(hostnameOf(c.req.header("host")))) {
-      return c.text("Forbidden: only loopback access is allowed", 403);
+    const host = hostnameOf(c.req.header("host"));
+    if (!isLoopbackHost(host) && !allowedHosts.has(host)) {
+      return c.text(
+        "Forbidden: host is not allowed (loopback or LUMISCA_ALLOWED_HOSTS)",
+        403,
+      );
     }
     await next();
   });
 
   // Optional bearer token: blocks arbitrary local processes (curl, other
-  // apps) from driving the agent. The SSR page embeds the token so the
-  // same-origin UI authenticates transparently.
+  // apps) from driving the agent, and — for remote hosting — anyone without
+  // the token from reaching the SSR page itself. The token is accepted as
+  // the X-Lumisca-Token header, the `token` query parameter (WebSocket
+  // handshakes), or `?token=` on the page URL (the desktop shell opens the
+  // page that way).
   if (options.token) {
-    const tokenGuard: MiddlewareHandler = async (c, next) => {
-      const supplied = c.req.header("x-lumisca-token") ??
-        c.req.query("token");
-      if (supplied !== options.token) {
-        return c.json(
-          { error: "Unauthorized: missing or invalid token" },
-          401,
-        );
+    // Static assets stay public (they contain no secrets) so the
+    // authenticated page can load them without a token query. In dev mode
+    // Vite serves client modules (/src/*, /@vite/*, /@fs/*, ...) that the
+    // browser fetches without a token, so only the API and WebSocket are
+    // guarded there (dev is a local-only workflow).
+    const publicPath = watch
+      ? (path: string) => !path.startsWith("/api") && path !== "/ws"
+      : (path: string) =>
+        path === "/assets/app.js" || path === "/styles.css" ||
+        path === "/favicon.svg";
+    app.use("*", async (c, next) => {
+      if (!publicPath(c.req.path)) {
+        const supplied = c.req.header("x-lumisca-token") ??
+          c.req.query("token");
+        if (supplied !== options.token) {
+          return c.json(
+            { error: "Unauthorized: missing or invalid token" },
+            401,
+          );
+        }
       }
       await next();
-    };
-    app.use("/api/*", tokenGuard);
-    app.use("/ws", tokenGuard);
+    });
   }
 
   // Route handlers throw instead of catching: unify error responses here.
@@ -323,6 +397,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   appDisposers.set(app, () => {
     watcher?.stop();
     viteDev?.close();
+    fed.close();
   });
 
   // Dev mode: serve transformed frontend modules (/@vite/*, /@fs/*,
@@ -382,7 +457,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     theme: core.getSetting(THEME_KEY) === "light" ? "light" : "dark",
   });
 
-  const renderPage = async () => {
+  const renderPage = async (c: Context) => {
     // Dev mode: render from the live sources via Vite's module runner and
     // let Vite inject its HMR client into the HTML.
     const vd = watch ? await getViteDev() : null;
@@ -403,12 +478,18 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       renderAppMarkup(initialData()),
       assets.getCss(),
     ]);
-    return new Response(renderHtmlDocument(markup, initialData(), css), {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
+    return new Response(
+      renderHtmlDocument(markup, initialData(), css, {
+        // The page's own host, so the CSP can name the WebSocket endpoint
+        // (the UI's event stream) even when the page is served remotely.
+        pageHost: c.req.header("host"),
+        token: options.token,
+      }),
+      { headers: { "content-type": "text/html; charset=utf-8" } },
+    );
   };
 
-  app.get("/", renderPage);
+  app.get("/", (c) => renderPage(c));
 
   app.get("/assets/initial-data.js", (c) => {
     // `<` is escaped so the JSON can never close the script tag.
@@ -467,7 +548,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     if (/\.\w+$/.test(c.req.path)) {
       return c.text("Not found", 404);
     }
-    return renderPage();
+    return renderPage(c);
   });
 
   // --- API routes (mounted after the SPA fallback so /api passes through) ----
@@ -478,20 +559,33 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", sessionRoutes(core));
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
+  app.route("/api", connectionRoutes(core, () => fed.restart()));
+  app.route("/api", federationRoutes(core, fed));
 
   // --- websocket event stream ------------------------------------------------
 
   const ws = upgradeWebSocket(() => {
     let unsubscribe: (() => void) | undefined;
+    let unsubscribeFed: (() => void) | undefined;
     return {
       onOpen(_evt, ws) {
         if (ws.raw) wsClients.add(ws.raw);
         unsubscribe = core.subscribe((event) => {
-          ws.send(JSON.stringify(event));
+          // Every event carries the peer id ("" = this server) so the UI
+          // routes it to the right session tab.
+          ws.send(JSON.stringify({ peerId: "", ...event }));
+        });
+        // Federated peers' events, tagged with their id. The peer's own
+        // `peerId` marker ("" on its side) is stripped first, so the tag
+        // is always the id this hub knows.
+        unsubscribeFed = fed.subscribe((peerId, event) => {
+          const { peerId: _stale, ...rest } = event as Record<string, unknown>;
+          ws.send(JSON.stringify({ peerId, ...rest }));
         });
       },
       onClose(_evt, ws) {
         unsubscribe?.();
+        unsubscribeFed?.();
         if (ws.raw) wsClients.delete(ws.raw);
       },
     };
@@ -502,14 +596,33 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   return app;
 }
 
-/** Start the server on 127.0.0.1:port. */
+/** Start the server, bound to `options.hostname` (loopback by default). */
 export function startServer(
   core: LumiscaCore,
   port = 8000,
   options?: AppOptions,
 ): Deno.HttpServer<Deno.NetAddr> {
-  const app = createApp(core, options);
-  const server = Deno.serve({ hostname: "127.0.0.1", port }, app.fetch);
+  const hostname = options?.hostname ?? "127.0.0.1";
+  // The hub's real origin is only known after binding (port 0 =
+  // ephemeral); the federation self-guard reads it through this holder,
+  // and the peer event streams start once it is known.
+  const selfOrigin: { current: string } = { current: "" };
+  const fed = new FederationClient(
+    () => core.getConnections(),
+    () => selfOrigin.current,
+  );
+  const app = createApp(core, { ...options, selfOrigin, fed });
+  const server = Deno.serve(
+    {
+      hostname,
+      port,
+      onListen(addr) {
+        selfOrigin.current = `http://${addr.hostname}:${addr.port}`;
+        fed.start();
+      },
+    },
+    app.fetch,
+  );
   serverDisposers.set(server, () => disposeApp(app));
   return server;
 }

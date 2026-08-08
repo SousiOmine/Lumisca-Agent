@@ -3,6 +3,7 @@ import {
   IconChevronRight,
   IconPlugConnected,
   IconServer,
+  IconWorld,
   IconX,
 } from "@tabler/icons-react";
 import { Modal } from "./Modal.tsx";
@@ -10,6 +11,7 @@ import { ProviderList } from "./settings/ProviderList.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { McpList } from "./settings/McpList.tsx";
+import { ConnectionList } from "./settings/ConnectionList.tsx";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -20,7 +22,8 @@ type View =
   | { kind: "list" }
   | { kind: "add" }
   | { kind: "detail"; providerId: string; isNew: boolean }
-  | { kind: "mcp"; workspaceId: string };
+  | { kind: "mcp"; workspaceId: string }
+  | { kind: "servers" };
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const [view, setView] = useState<View>({ kind: "home" });
@@ -32,6 +35,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         <HomeView
           onOpenProviders={() => setView({ kind: "list" })}
           onOpenMcp={() => setView({ kind: "mcp", workspaceId: "" })}
+          onOpenServers={() => setView({ kind: "servers" })}
           onClose={onClose}
         />
       )}
@@ -59,6 +63,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         />
       )}
       {view.kind === "mcp" && <McpList onBack={home} onClose={onClose} />}
+      {view.kind === "servers" && (
+        <ConnectionList onBack={home} onClose={onClose} />
+      )}
     </Modal>
   );
 }
@@ -68,10 +75,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 function HomeView({
   onOpenProviders,
   onOpenMcp,
+  onOpenServers,
   onClose,
 }: {
   onOpenProviders: () => void;
   onOpenMcp: () => void;
+  onOpenServers: () => void;
   onClose: () => void;
 }) {
   return (
@@ -114,6 +123,24 @@ function HomeView({
             <span className="settings-menu-title">MCP サーバー</span>
             <span className="settings-menu-desc">
               外部ツールサーバーの追加・編集 (.mcp.json)
+            </span>
+          </span>
+          <span className="chevron">
+            <IconChevronRight size={16} />
+          </span>
+        </button>
+        <button
+          type="button"
+          className="settings-menu-item"
+          onClick={onOpenServers}
+        >
+          <span className="settings-menu-icon">
+            <IconWorld size={20} />
+          </span>
+          <span className="settings-menu-text">
+            <span className="settings-menu-title">接続先サーバー</span>
+            <span className="settings-menu-desc">
+              ローカル / リモートサーバーの接続と切替
             </span>
           </span>
           <span className="chevron">

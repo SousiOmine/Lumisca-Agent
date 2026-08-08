@@ -5,17 +5,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { api, connectEvents, type SessionInfoDto } from "./api.ts";
+import { api, connectEvents, fed, type SessionInfoDto } from "./api.ts";
 import {
   type AgentMessage,
   type ClientEvent,
   emptyView,
+  type FederatedWorkspace,
   type InitialData,
+  type PeerStatus,
   type SessionView,
   type ThinkingLevel,
-  type Workspace,
 } from "./types.ts";
 import { applyEvent, mergeMessages } from "./events.ts";
+import { splitTabKey, tabKey } from "./tabs.ts";
 import { THEME_KEY } from "@lumisca/core/shared";
 import { TabBar } from "./components/TabBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
@@ -33,6 +35,36 @@ const ACTIVE_TAB_KEY = "lumisca.activeTab";
 /** Period between opportunistic message re-syncs (see syncMessages). */
 const SYNC_INTERVAL_MS = 20_000;
 
+/** Per-tab session API: routes every call to the peer that owns the
+ * session ("" = this server). Module-level: depends only on api/fed. */
+function sessionApi(key: string) {
+  const { peerId, sessionId } = splitTabKey(key);
+  if (peerId === "") {
+    return {
+      peerId,
+      sessionId,
+      getSession: () => api.getSession(sessionId),
+      getMessages: () => api.getMessages(sessionId),
+      close: () => api.closeSession(sessionId),
+      prompt: (text: string) => api.prompt(sessionId, text),
+      abort: () => api.abort(sessionId),
+      updateModel: (provider: string, modelId: string) =>
+        api.updateSessionModel(sessionId, provider, modelId),
+    };
+  }
+  return {
+    peerId,
+    sessionId,
+    getSession: () => fed.getSession(peerId, sessionId),
+    getMessages: () => fed.getMessages(peerId, sessionId),
+    close: () => fed.closeSession(peerId, sessionId),
+    prompt: (text: string) => fed.prompt(peerId, sessionId, text),
+    abort: () => fed.abort(peerId, sessionId),
+    updateModel: (provider: string, modelId: string) =>
+      fed.updateSessionModel(peerId, sessionId, provider, modelId),
+  };
+}
+
 export interface AppProps {
   /** Preloaded data rendered into the SSR HTML; undefined when not SSR. */
   initialData?: InitialData;
@@ -42,9 +74,14 @@ export function App({ initialData }: AppProps): ReactElement {
   const [theme, setTheme] = useState<"light" | "dark">(
     initialData?.theme ?? "dark",
   );
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(
-    initialData?.workspaces ?? [],
+  const [workspaces, setWorkspaces] = useState<FederatedWorkspace[]>(
+    initialData?.workspaces.map((ws) => ({
+      peerId: "",
+      peerName: "",
+      workspace: ws,
+    })) ?? [],
   );
+  const [peers, setPeers] = useState<PeerStatus[]>([]);
   const [views, setViews] = useState<Map<string, SessionView>>(new Map());
   const [tabs, setTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -83,8 +120,8 @@ export function App({ initialData }: AppProps): ReactElement {
           // endpoint already opens the session, and the response carries
           // the last run error so a failed run is visible after a restart.
           const [info, messages] = await Promise.all([
-            api.getSession(id),
-            api.getMessages(id),
+            sessionApi(id).getSession(),
+            sessionApi(id).getMessages(),
           ]);
           restoredViews.set(id, restoreView(info, messages));
         } catch {
@@ -139,7 +176,11 @@ export function App({ initialData }: AppProps): ReactElement {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      setWorkspaces(await api.listWorkspaces());
+      // The federated list: this server's workspaces plus every peer's,
+      // with peer reachability for the picker.
+      const { workspaces, peers } = await fed.workspaces();
+      setWorkspaces(workspaces);
+      setPeers(peers);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : String(error));
     }
@@ -161,7 +202,7 @@ export function App({ initialData }: AppProps): ReactElement {
     const fetched = new Map<string, AgentMessage[]>();
     await Promise.all(ids.map(async (id) => {
       try {
-        fetched.set(id, await api.getMessages(id));
+        fetched.set(id, await sessionApi(id).getMessages());
       } catch {
         // Server not reachable yet; keep the current list.
       }
@@ -198,24 +239,29 @@ export function App({ initialData }: AppProps): ReactElement {
     await syncMessages();
   }, [syncMessages]);
 
-  /** Apply a WS event to the matching session view (pure reducer). */
-  const handleEvent = useCallback((event: ClientEvent) => {
-    if (event.type === "reload") {
-      // Dev mode: the server rebuilt the bundle; refresh to pick it up.
-      location.reload();
-      return;
-    }
-    if (event.type === "session_created") return;
-    setViews((prev) => {
-      const target = prev.get(event.sessionId);
-      if (!target) return prev;
-      const nextView = applyEvent(event, target);
-      if (nextView === null || nextView === target) return prev;
-      const next = new Map(prev);
-      next.set(event.sessionId, nextView);
-      return next;
-    });
-  }, []);
+  /** Apply a WS event to the matching session view (pure reducer). Events
+   * carry the peer id ("" = this server); the tab key resolves the view. */
+  const handleEvent = useCallback(
+    (event: ClientEvent & { peerId?: string }) => {
+      if (event.type === "reload") {
+        // Dev mode: the server rebuilt the bundle; refresh to pick it up.
+        location.reload();
+        return;
+      }
+      if (event.type === "session_created") return;
+      const key = tabKey(event.peerId ?? "", event.sessionId);
+      setViews((prev) => {
+        const target = prev.get(key);
+        if (!target) return prev;
+        const nextView = applyEvent(event, target);
+        if (nextView === null || nextView === target) return prev;
+        const next = new Map(prev);
+        next.set(key, nextView);
+        return next;
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -270,14 +316,14 @@ export function App({ initialData }: AppProps): ReactElement {
     setActiveTab(DRAFT_TAB);
   }, []);
 
-  /** Close the given tabs: tell the server about real sessions and drop the
-   * tabs and views. When the active tab is among them, fall back to the
-   * last remaining tab (kept in the existing order). */
+  /** Close the given tabs: tell the owning server about real sessions and
+   * drop the tabs and views. When the active tab is among them, fall back
+   * to the last remaining tab (kept in the existing order). */
   const closeTabs = useCallback((ids: string[]) => {
     const toClose = new Set(ids);
     for (const id of ids) {
       if (id !== DRAFT_TAB) {
-        api.closeSession(id).catch(console.error);
+        sessionApi(id).close().catch(console.error);
       }
     }
     setTabs((prev) => prev.filter((id) => !toClose.has(id)));
@@ -315,90 +361,115 @@ export function App({ initialData }: AppProps): ReactElement {
     closeTabs(tabs.filter((id) => id !== sessionId));
   }, [tabs, closeTabs]);
 
-  const handleWorkspaceChanged = useCallback((ws: Workspace) => {
+  const handleWorkspaceChanged = useCallback((fws: FederatedWorkspace) => {
     setWorkspaces((prev) => {
-      const exists = prev.some((w) => w.id === ws.id);
-      if (exists) return prev.map((w) => (w.id === ws.id ? ws : w));
-      return [ws, ...prev];
+      const exists = prev.some(
+        (w) => w.peerId === fws.peerId && w.workspace.id === fws.workspace.id,
+      );
+      if (exists) {
+        return prev.map((w) =>
+          w.peerId === fws.peerId && w.workspace.id === fws.workspace.id
+            ? fws
+            : w
+        );
+      }
+      return [fws, ...prev];
     });
   }, []);
 
-  const handleWorkspaceDeleted = useCallback((id: string) => {
-    setWorkspaces((prev) => prev.filter((w) => w.id !== id));
+  const handleWorkspaceDeleted = useCallback((peerId: string, id: string) => {
+    setWorkspaces((prev) =>
+      prev.filter((w) => !(w.peerId === peerId && w.workspace.id === id))
+    );
   }, []);
 
   /** The single delete flow (confirm + API + state), shared by the draft
-   * tab and the workspace edit modal. */
-  const deleteWorkspace = useCallback(async (ws: Workspace) => {
-    if (!globalThis.confirm(`ワークスペース「${ws.name}」を削除しますか？`)) {
+   * tab and the workspace edit modal. Remote workspaces are deleted on the
+   * peer that owns them. */
+  const deleteWorkspace = useCallback(async (fws: FederatedWorkspace) => {
+    if (
+      !globalThis.confirm(
+        `ワークスペース「${fws.workspace.name}」を削除しますか？`,
+      )
+    ) {
       return;
     }
-    await api.deleteWorkspace(ws.id);
-    handleWorkspaceDeleted(ws.id);
+    if (fws.peerId === "") {
+      await api.deleteWorkspace(fws.workspace.id);
+    } else {
+      await fed.deleteWorkspace(fws.peerId, fws.workspace.id);
+    }
+    handleWorkspaceDeleted(fws.peerId, fws.workspace.id);
   }, [handleWorkspaceDeleted]);
 
-  /** Create a session from the draft tab and send the first prompt. */
+  /** Create a session from the draft tab and send the first prompt. The
+   * session runs on the peer that owns the workspace (remote workspaces
+   * use the peer's default model). */
   const startSession = useCallback(
-    async (workspaceId: string, model: ComposerModel | null, text: string) => {
-      const session = await api.createSession({
-        workspaceId,
-        ...(model
-          ? { modelProvider: model.provider, modelId: model.modelId }
-          : {}),
-      });
+    async (
+      fws: FederatedWorkspace,
+      model: ComposerModel | null,
+      text: string,
+    ) => {
+      const { peerId, workspace } = fws;
+      const session = peerId === ""
+        ? await api.createSession({
+          workspaceId: workspace.id,
+          ...(model
+            ? { modelProvider: model.provider, modelId: model.modelId }
+            : {}),
+        })
+        : await fed.createSession(peerId, { workspaceId: workspace.id });
+      const key = tabKey(peerId, session.id);
       setTabs((prev) => {
         if (prev.includes(DRAFT_TAB)) {
-          return prev.map((t) => (t === DRAFT_TAB ? session.id : t));
+          return prev.map((t) => (t === DRAFT_TAB ? key : t));
         }
-        return [...prev, session.id];
+        return [...prev, key];
       });
-      setActiveTab(session.id);
+      setActiveTab(key);
       setViews((prev) => {
         const next = new Map(prev);
-        next.set(session.id, emptyView(session));
+        next.set(key, emptyView(session));
         return next;
       });
       try {
-        await api.prompt(session.id, text.trim());
+        await sessionApi(key).prompt(text.trim());
       } catch (error) {
-        setViewError(session.id, error);
+        setViewError(key, error);
       }
     },
     [setViewError],
   );
 
-  const prompt = useCallback(async (sessionId: string, text: string) => {
+  const prompt = useCallback(async (key: string, text: string) => {
     const textTrimmed = text.trim();
     if (!textTrimmed) return;
     // The user message appears via the WebSocket event stream
     // (message_start), so no optimistic append is needed.
     try {
-      await api.prompt(sessionId, textTrimmed);
+      await sessionApi(key).prompt(textTrimmed);
     } catch (error) {
-      setViewError(sessionId, error);
+      setViewError(key, error);
     }
   }, [setViewError]);
 
-  const abort = useCallback((sessionId: string) => {
-    api.abort(sessionId).catch(console.error);
+  const abort = useCallback((key: string) => {
+    sessionApi(key).abort().catch(console.error);
   }, []);
 
   const changeModel = useCallback(
-    async (sessionId: string, provider: string, modelId: string) => {
+    async (key: string, provider: string, modelId: string) => {
       const seq = ++modelChangeSeq.current;
       try {
-        const updated = await api.updateSessionModel(
-          sessionId,
-          provider,
-          modelId,
-        );
+        const updated = await sessionApi(key).updateModel(provider, modelId);
         // A newer switch may have resolved first; never show a stale model.
         if (modelChangeSeq.current !== seq) return;
         setViews((prev) => {
-          const current = prev.get(sessionId);
+          const current = prev.get(key);
           if (!current) return prev;
           const next = new Map(prev);
-          next.set(sessionId, { ...current, info: updated });
+          next.set(key, { ...current, info: updated });
           return next;
         });
       } catch (error) {
@@ -408,23 +479,24 @@ export function App({ initialData }: AppProps): ReactElement {
     [],
   );
 
-  /** The thinking level is a per-model setting: update the views of every
-   * open session using that model so the control stays in sync. */
+  /** The thinking level is a per-model setting on the owning server:
+   * update the views of every open session on the same peer that uses
+   * that model so the control stays in sync. */
   const changeThinkingLevel = useCallback(
     async (
       provider: string,
       modelId: string,
       level: ThinkingLevel,
     ) => {
+      const { peerId } = activeTab ? splitTabKey(activeTab) : { peerId: "" };
       try {
-        const { thinkingLevel } = await api.setModelThinkingLevel(
-          provider,
-          modelId,
-          level,
-        );
+        const { thinkingLevel } = peerId === ""
+          ? await api.setModelThinkingLevel(provider, modelId, level)
+          : await fed.setModelThinkingLevel(peerId, provider, modelId, level);
         setViews((prev) => {
           const next = new Map(prev);
           for (const [id, v] of next) {
+            if (splitTabKey(id).peerId !== peerId) continue;
             if (
               v.info.modelProvider !== provider || v.info.modelId !== modelId
             ) {
@@ -442,7 +514,7 @@ export function App({ initialData }: AppProps): ReactElement {
         console.error(error);
       }
     },
-    [],
+    [activeTab],
   );
 
   const viewFor = (sessionId: string): SessionView | undefined =>
@@ -479,6 +551,7 @@ export function App({ initialData }: AppProps): ReactElement {
           <ChatView
             key={activeTab ?? undefined}
             view={activeView}
+            peerId={activeTab ? splitTabKey(activeTab).peerId : ""}
             onPrompt={(text) => activeTab && prompt(activeTab, text)}
             onAbort={() => activeTab && abort(activeTab)}
             onModelChange={(provider, modelId) =>
@@ -494,6 +567,7 @@ export function App({ initialData }: AppProps): ReactElement {
         : (
           <NewSessionView
             workspaces={workspaces}
+            peers={peers}
             onStart={startSession}
             onWorkspaceChanged={handleWorkspaceChanged}
             onDeleteWorkspace={deleteWorkspace}

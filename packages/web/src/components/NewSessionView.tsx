@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { IconPlayerPlay } from "@tabler/icons-react";
 import { api } from "../api.ts";
-import type { ModelInfo, ThinkingLevel, Workspace } from "../types.ts";
+import type {
+  FederatedWorkspace,
+  ModelInfo,
+  PeerStatus,
+  ThinkingLevel,
+} from "../types.ts";
 import { errorText } from "../providers.ts";
+import { tabKey } from "../tabs.ts";
 import { Composer, type ComposerModel } from "./Composer.tsx";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
 import { WorkspacePicker } from "./WorkspacePicker.tsx";
@@ -15,32 +21,41 @@ interface DraftModel extends ComposerModel {
 }
 
 interface NewSessionViewProps {
-  workspaces: Workspace[];
+  workspaces: FederatedWorkspace[];
+  /** Peers that did not answer the workspace list fetch. */
+  peers: PeerStatus[];
   onStart: (
-    workspaceId: string,
+    fws: FederatedWorkspace,
     model: ComposerModel | null,
     text: string,
   ) => Promise<void>;
-  onWorkspaceChanged: (ws: Workspace) => void;
+  onWorkspaceChanged: (fws: FederatedWorkspace) => void;
   /** The single delete flow owned by the App (confirm + API + state). */
-  onDeleteWorkspace: (ws: Workspace) => Promise<void>;
+  onDeleteWorkspace: (fws: FederatedWorkspace) => Promise<void>;
 }
 
-/** The draft session tab: pick workspace/model and start from the center. */
+/** The draft session tab: pick workspace/model and start from the center.
+ * Workspaces from every federated server appear here; picking one on
+ * another machine runs the agent there (peer default model). */
 export function NewSessionView(
   {
     workspaces,
+    peers,
     onStart,
     onWorkspaceChanged,
     onDeleteWorkspace,
   }: NewSessionViewProps,
 ) {
-  const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
+  const selected = workspaces[0]
+    ? tabKey(workspaces[0].peerId, workspaces[0].workspace.id)
+    : "";
+  const [workspaceKey, setWorkspaceKey] = useState(selected);
   const [model, setModel] = useState<DraftModel | null>(null);
   const [text, setText] = useState("");
-  const [modalWorkspace, setModalWorkspace] = useState<Workspace | undefined>(
-    undefined,
-  );
+  const [modalWorkspace, setModalWorkspace] = useState<
+    FederatedWorkspace | undefined
+  >(undefined);
+  const [modalPeerId, setModalPeerId] = useState("");
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -68,36 +83,48 @@ export function NewSessionView(
   // Keep a valid selection when the workspace list changes (e.g. after a
   // delete); fall back to the first remaining workspace.
   useEffect(() => {
-    setWorkspaceId((current) =>
-      workspaces.some((w) => w.id === current)
+    setWorkspaceKey((current) =>
+      workspaces.some(
+          (w) => tabKey(w.peerId, w.workspace.id) === current,
+        )
         ? current
-        : (workspaces[0]?.id ?? "")
+        : (workspaces[0]
+          ? tabKey(workspaces[0].peerId, workspaces[0].workspace.id)
+          : "")
     );
   }, [workspaces]);
 
+  const selectedWorkspace = workspaces.find(
+    (w) => tabKey(w.peerId, w.workspace.id) === workspaceKey,
+  );
+  // Sessions on another server are created with that server's default
+  // model, so the model picker is hidden for them.
+  const remoteWorkspace = (selectedWorkspace?.peerId ?? "") !== "";
+
   const submit = async () => {
     const trimmed = text.trim();
-    if (!trimmed || !workspaceId || busy) return;
+    if (!trimmed || !workspaceKey || !selectedWorkspace || busy) return;
     setBusy(true);
     setError(undefined);
     try {
-      await onStart(workspaceId, model, trimmed);
+      await onStart(selectedWorkspace, model, trimmed);
     } catch (e) {
       setError(errorText(e));
       setBusy(false);
     }
   };
 
-  const deleteWorkspace = async (ws: Workspace) => {
+  const deleteWorkspace = async (fws: FederatedWorkspace) => {
     setError(undefined);
     try {
-      await onDeleteWorkspace(ws);
+      await onDeleteWorkspace(fws);
     } catch (e) {
       setError(errorText(e));
     }
   };
 
-  /** Set the thinking level for the draft's model (a per-model setting). */
+  /** Set the thinking level for the draft's model (a per-model setting on
+   * this server; the draft is always local). */
   const changeThinkingLevel = async (level: ThinkingLevel) => {
     if (!model) return;
     try {
@@ -127,15 +154,18 @@ export function NewSessionView(
               <span>ワークスペース</span>
               <WorkspacePicker
                 workspaces={workspaces}
-                value={workspaceId}
-                onChange={setWorkspaceId}
-                onEdit={(ws) => {
-                  setModalWorkspace(ws);
+                peers={peers}
+                value={workspaceKey}
+                onChange={setWorkspaceKey}
+                onEdit={(fws) => {
+                  setModalWorkspace(fws);
+                  setModalPeerId(fws.peerId);
                   setShowWorkspaceModal(true);
                 }}
                 onDelete={deleteWorkspace}
-                onCreate={() => {
+                onCreate={(peerId) => {
                   setModalWorkspace(undefined);
+                  setModalPeerId(peerId);
                   setShowWorkspaceModal(true);
                 }}
               />
@@ -147,6 +177,7 @@ export function NewSessionView(
               autoFocus
               large
               model={model}
+              hideModelSwitch={remoteWorkspace}
               onModelSelect={(provider, modelId, info?: ModelInfo) => {
                 modelTouched.current = true;
                 setModel({
@@ -161,7 +192,7 @@ export function NewSessionView(
               onThinkingLevelChange={changeThinkingLevel}
               submitLabel={busy ? "作成中..." : "開始"}
               submitIcon={busy ? undefined : IconPlayerPlay}
-              submitDisabled={busy || !text.trim() || !workspaceId}
+              submitDisabled={busy || !text.trim() || !workspaceKey}
               onSubmit={submit}
             />
             {error && <div className="error-text">{error}</div>}
@@ -170,10 +201,19 @@ export function NewSessionView(
       </div>
       {showWorkspaceModal && (
         <WorkspaceModal
-          workspace={modalWorkspace}
+          workspace={modalWorkspace?.workspace}
+          peerId={modalPeerId}
+          peerName={modalWorkspace?.peerName ??
+            peers.find((p) => p.id === modalPeerId)?.name ??
+            modalPeerId}
           onSaved={(ws) => {
-            onWorkspaceChanged(ws);
-            setWorkspaceId(ws.id);
+            const fws = {
+              peerId: modalPeerId,
+              peerName: modalWorkspace?.peerName ?? "",
+              workspace: ws,
+            };
+            onWorkspaceChanged(fws);
+            setWorkspaceKey(tabKey(modalPeerId, ws.id));
             setShowWorkspaceModal(false);
           }}
           onDelete={deleteWorkspace}

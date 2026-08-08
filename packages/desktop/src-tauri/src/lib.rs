@@ -7,10 +7,36 @@ use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{Manager, WindowEvent};
+use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, StatusCode};
+use tauri::{AppHandle, Manager, WindowEvent};
 
-/// Server process handle stored in Tauri state.
-struct ServerProcess(Mutex<Option<Child>>);
+/// State shared by the shell bridge and the window lifecycle.
+struct AppState {
+    /// The spawned local server, when running.
+    local: Mutex<Option<LocalServer>>,
+    /// The last remote server the user switched to (url, token) — the
+    /// "current display" reported by the bridge state.
+    last_remote: Mutex<Option<(String, String)>>,
+}
+
+/// A locally spawned server process.
+struct LocalServer {
+    child: Child,
+    port: u16,
+    token: String,
+}
+
+/// Current display, shown by the settings UI.
+#[derive(serde::Serialize)]
+struct ConnectionState {
+    /// "local" | "remote"
+    mode: String,
+    /// Page URL of the current display, if known.
+    url: Option<String>,
+}
+
+/// JSON body of a lumisca://shell/* bridge response.
+type BridgeResponse = HttpResponse<Vec<u8>>;
 
 const DEFAULT_PORT: u16 = 8000;
 const SERVER_PORT_ENV: &str = "LUMISCA_PORT";
@@ -71,11 +97,14 @@ fn find_server_command() -> Option<ServerCommand> {
     None
 }
 
-fn server_db_path(app: &tauri::App) -> PathBuf {
-    let dir = app
-        .path()
+fn app_data_dir(app: &AppHandle) -> PathBuf {
+    app.path()
         .app_data_dir()
-        .unwrap_or_else(|_| std::env::temp_dir().join("lumisca"));
+        .unwrap_or_else(|_| std::env::temp_dir().join("lumisca"))
+}
+
+fn server_db_path(app: &AppHandle) -> PathBuf {
+    let dir = app_data_dir(app);
     let _ = std::fs::create_dir_all(&dir);
     dir.join("lumisca.db")
 }
@@ -109,17 +138,33 @@ fn generate_token() -> String {
     format!("{:016x}", hasher.finish())
 }
 
-/// Wait until OUR server answers GET /api/health (replaces a fixed sleep and
-/// a bare TCP connect, which would accept ANY process on the port — e.g. a
-/// stale server with a different database). The token is sent so a stale
-/// instance cannot pass the check.
-fn wait_for_server_health(port: u16, token: &str, timeout: Duration) -> bool {
+/// Check a server's GET /api/health over raw TCP. `host` may be a hostname
+/// or an IP literal; `token` is optional (servers without token auth answer
+/// without it). The Host header names the target host so the server's Host
+/// guard accepts the probe. Replaces a bare TCP connect, which would accept
+/// ANY process on the port — e.g. a stale server with a different database.
+fn health_check(
+    host: &str,
+    port: u16,
+    token: Option<&str>,
+    timeout: Duration,
+) -> bool {
     let deadline = Instant::now() + timeout;
-    let request = format!(
-        "GET /api/health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Lumisca-Token: {token}\r\nConnection: close\r\n\r\n"
-    );
+    // Bracketed IPv6 literals for the Host header and the connect address.
+    let is_ipv6 = host.contains(':') && !host.starts_with('[');
+    let host_label = if is_ipv6 {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    };
+    let mut request = format!("GET /api/health HTTP/1.1\r\nHost: {host_label}:{port}\r\n");
+    if let Some(t) = token {
+        request.push_str(&format!("X-Lumisca-Token: {t}\r\n"));
+    }
+    request.push_str("Connection: close\r\n\r\n");
+    let addr = format!("{host_label}:{port}");
     while Instant::now() < deadline {
-        if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) {
+        if let Ok(mut stream) = TcpStream::connect(addr.as_str()) {
             let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
             let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
             if stream.write_all(request.as_bytes()).is_ok() {
@@ -137,7 +182,28 @@ fn wait_for_server_health(port: u16, token: &str, timeout: Duration) -> bool {
     false
 }
 
-fn start_server(app: &tauri::App, port: u16, token: &str) -> Result<Child, String> {
+/// Parse a server URL into (host, port). Only http:// is supported
+/// (v1: Tailscale / trusted LAN, no TLS).
+fn parse_remote_url(url: &str) -> Result<(String, u16), String> {
+    let parsed = url::Url::parse(url).map_err(|e| format!("URL が不正です: {e}"))?;
+    if parsed.scheme() != "http" {
+        return Err("http:// URL のみサポートされています".into());
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "URL にホストがありません".to_string())?
+        .to_string();
+    let port = parsed.port().unwrap_or(80);
+    Ok((host, port))
+}
+
+/// The page URL to open for a connection: the base URL plus `/?token=`
+/// (the SSR page is token-guarded in production mode).
+fn page_url(base: &str, token: &str) -> String {
+    format!("{}/?token={}", base.trim_end_matches('/'), token)
+}
+
+fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String> {
     let db_path = server_db_path(app);
     let command = find_server_command()
         .ok_or_else(|| "Lumisca server not found. Build the project first.".to_string())?;
@@ -162,12 +228,14 @@ fn start_server(app: &tauri::App, port: u16, token: &str) -> Result<Child, Strin
             })?;
             // The server resolves frontend assets relative to the
             // repository root; the spawned process runs from a different
-            // cwd, so pass it explicitly.
-            let repo_root = entry
-                .parent()
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .map(|p| p.to_path_buf())
+            // cwd, so pass it explicitly. The entry is relative in the
+            // development layout, so canonicalize it — a relative root
+            // breaks esbuild (it rejects relative working directories).
+            let repo_root = std::fs::canonicalize(&entry)
+                .ok()
+                .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| PathBuf::from("."));
             Command::new(&deno)
                 .args([
@@ -206,49 +274,221 @@ fn kill_process_tree(child: &mut Child) {
     let _ = child.wait();
 }
 
-fn api_base_url(port: u16) -> String {
-    format!("http://127.0.0.1:{port}")
+/// Start the local server (or reuse the running one) and return the page
+/// URL. Retries on fresh ports when the health check fails (port taken by
+/// another process, bind race).
+fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    if let Some(local) = state.local.lock().unwrap().as_ref() {
+        return Ok(page_url(
+            &format!("http://127.0.0.1:{}", local.port),
+            &local.token,
+        ));
+    }
+    let token = generate_token();
+    let mut server_child: Option<Child> = None;
+    let mut server_port: Option<u16> = None;
+    for attempt in 0..10 {
+        let port = resolve_port();
+        let mut child = start_server(app, port, &token)?;
+        if health_check("127.0.0.1", port, Some(&token), Duration::from_secs(5)) {
+            server_child = Some(child);
+            server_port = Some(port);
+            break;
+        }
+        kill_process_tree(&mut child);
+        if attempt == 9 {
+            return Err("Lumisca server did not become ready".into());
+        }
+        // Give the previous port a moment to be released.
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    let port = server_port.ok_or("Lumisca server did not become ready")?;
+    let child = server_child.ok_or("Lumisca server did not become ready")?;
+    *state.local.lock().unwrap() = Some(LocalServer {
+        child,
+        port,
+        token: token.clone(),
+    });
+    Ok(page_url(
+        &format!("http://127.0.0.1:{port}"),
+        &token,
+    ))
+}
+
+/// Navigate the main window to a URL (local server page or remote server
+/// page).
+fn navigate_main(app: &AppHandle, url: &str) -> Result<(), String> {
+    let parsed = url.parse::<url::Url>().map_err(|e| format!("URL が不正です: {e}"))?;
+    if let Some(window) = app.get_webview_window("main") {
+        window.navigate(parsed).map_err(|e| format!("画面遷移に失敗しました: {e}"))?;
+    }
+    Ok(())
+}
+
+fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String, String> {
+    let (host, port) = parse_remote_url(url)?;
+    if !health_check(&host, port, Some(token), Duration::from_secs(5)) {
+        return Err(format!("サーバーに接続できません: {url}"));
+    }
+    let page = page_url(url, token);
+    *app.state::<AppState>().last_remote.lock().unwrap() = Some((url.to_string(), token.to_string()));
+    navigate_main(app, &page)?;
+    Ok(page)
+}
+
+fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
+    let url = ensure_local_server(app)?;
+    *app.state::<AppState>().last_remote.lock().unwrap() = None;
+    navigate_main(app, &url)?;
+    Ok(url)
+}
+
+// --- lumisca://shell bridge -------------------------------------------------
+//
+// The settings UI is served by the (possibly remote) server, so it cannot
+// call Tauri commands. Instead it fetches `http://lumisca.localhost/shell/
+// <action>` — the custom protocol re-homed for WebView2, where the scheme
+// is handled here. The bridge only manages the local server and UI
+// switching; the peer registry lives in the server's own database.
+//
+// Every request must carry `key` = the auth token of the CURRENTLY
+// DISPLAYED server — a value only the page served by that server knows, so
+// arbitrary pages in the webview cannot drive the bridge.
+
+/// Current display's auth token (the bridge key).
+fn current_connection_token(app: &AppHandle) -> Option<String> {
+    let state = app.state::<AppState>();
+    let remote = state.last_remote.lock().unwrap().as_ref().map(|(_, t)| t.clone());
+    if remote.is_some() {
+        return remote;
+    }
+    let local = state.local.lock().unwrap().as_ref().map(|l| l.token.clone());
+    local
+}
+
+fn bridge_json(status: StatusCode, value: serde_json::Value) -> BridgeResponse {
+    // `builder()` is defined on Response<()>; `.body()` yields Response<T>.
+    tauri::http::Response::builder()
+        .status(status)
+        .header(header::CONTENT_TYPE, "application/json")
+        // The page origin is dynamic (local or remote server); `*` is fine
+        // because the key gate above already authenticates the caller.
+        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+        .body(serde_json::to_vec(&value).unwrap_or_default())
+        .unwrap()
+}
+
+fn bridge_error(status: StatusCode, message: &str) -> BridgeResponse {
+    bridge_json(status, serde_json::json!({ "error": message }))
+}
+
+fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> BridgeResponse {
+    let parsed = match url::Url::parse(&request.uri().to_string()) {
+        Ok(parsed) => parsed,
+        Err(_) => return bridge_error(StatusCode::BAD_REQUEST, "invalid uri"),
+    };
+    let mut segments = parsed.path().trim_start_matches('/').split('/');
+    let action = segments.nth(1).unwrap_or("");
+    let params: std::collections::HashMap<String, String> =
+        parsed.query_pairs().into_owned().collect();
+
+    // Key gate: only the page of the currently displayed server may drive
+    // the bridge. Tokenless servers leave it open (matching their own
+    // auth posture).
+    if let Some(current) = current_connection_token(app) {
+        let supplied = params.get("key").map(String::as_str);
+        if supplied != Some(current.as_str()) {
+            return bridge_error(StatusCode::UNAUTHORIZED, "invalid key");
+        }
+    }
+
+    let get = |name: &str| params.get(name).cloned();
+    match action {
+        "state" => {
+            let state = app.state::<AppState>();
+            let mode = if state.last_remote.lock().unwrap().is_some() {
+                "remote"
+            } else {
+                "local"
+            };
+            let url = if mode == "remote" {
+                state.last_remote.lock().unwrap().as_ref().map(|(u, t)| page_url(u, t))
+            } else {
+                state.local.lock().unwrap().as_ref().map(|l| {
+                    page_url(&format!("http://127.0.0.1:{}", l.port), &l.token)
+                })
+            };
+            let state = ConnectionState {
+                mode: mode.to_string(),
+                url,
+            };
+            bridge_json(StatusCode::OK, serde_json::to_value(state).unwrap())
+        }
+        "connect-remote" => {
+            let (url, token) = match (get("url"), get("token")) {
+                (Some(url), token) => (url, token.unwrap_or_default()),
+                _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
+            };
+            match connect_remote_impl(app, &url, &token) {
+                Ok(page) => {
+                    bridge_json(StatusCode::OK, serde_json::json!({ "ok": true, "url": page }))
+                }
+                Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
+            }
+        }
+        "connect-local" => match connect_local_impl(app) {
+            Ok(url) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true, "url": url })),
+            Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
+        },
+        "test" => {
+            let (url, token) = match (get("url"), get("token")) {
+                (Some(url), token) => (url, token.unwrap_or_default()),
+                _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
+            };
+            match parse_remote_url(&url)
+                .and_then(|(host, port)| {
+                    if health_check(&host, port, Some(&token), Duration::from_secs(5)) {
+                        Ok(())
+                    } else {
+                        Err(format!("サーバーに接続できません: {url}"))
+                    }
+                }) {
+                Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
+                Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
+            }
+        }
+        _ => bridge_error(StatusCode::NOT_FOUND, "unknown action"),
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let token = generate_token();
-            // Start the server; if it does not pass the health check within
-            // the timeout (port taken by another process, bind race), kill it
-            // and retry on a fresh port.
-            let mut server_child: Option<Child> = None;
-            let mut server_port: Option<u16> = None;
-            for attempt in 0..10 {
-                let port = resolve_port();
-                let mut child = start_server(app, port, &token)?;
-                if wait_for_server_health(port, &token, Duration::from_secs(5)) {
-                    server_child = Some(child);
-                    server_port = Some(port);
-                    break;
-                }
-                kill_process_tree(&mut child);
-                if attempt == 9 {
-                    return Err("Lumisca server did not become ready".into());
-                }
-                // Give the previous port a moment to be released.
-                std::thread::sleep(Duration::from_millis(300));
-            }
-            let port = server_port.ok_or("Lumisca server did not become ready")?;
-            app.manage(ServerProcess(Mutex::new(server_child)));
-            let url = api_base_url(port);
-            if let Some(window) = app.get_webview_window("main") {
-                let parsed = url.parse::<url::Url>().map_err(|e| e.to_string())?;
-                let _ = window.navigate(parsed);
-            }
+            let handle = app.handle().clone();
+            app.manage(AppState {
+                local: Mutex::new(None),
+                last_remote: Mutex::new(None),
+            });
+
+            // Always start local; the federated view of every registered
+            // server is served by this hub.
+            let url = ensure_local_server(&handle)?;
+            navigate_main(&handle, &url)?;
+
             Ok(())
+        })
+        // The settings UI (served by the local or remote server) drives
+        // the local server and UI switching through this bridge.
+        .register_uri_scheme_protocol("lumisca", |ctx, request| {
+            handle_shell_request(ctx.app_handle(), request)
         })
         .on_window_event(|window, event| {
             if let WindowEvent::Destroyed = event {
-                if let Some(state) = window.app_handle().try_state::<ServerProcess>() {
-                    if let Some(mut child) = state.0.lock().unwrap().take() {
-                        kill_process_tree(&mut child);
+                if let Some(state) = window.app_handle().try_state::<AppState>() {
+                    if let Some(mut local) = state.local.lock().unwrap().take() {
+                        kill_process_tree(&mut local.child);
                     }
                 }
             }

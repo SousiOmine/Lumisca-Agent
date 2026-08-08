@@ -15,6 +15,9 @@ import { renderMarkdown } from "../markdown.ts";
 
 interface ChatViewProps {
   view: SessionView;
+  /** Peer owning the session ("" = this server); forwarded to the model
+   * picker so remote sessions list the peer's models. */
+  peerId?: string;
   onPrompt: (text: string) => void;
   onAbort: () => void;
   onModelChange: (provider: string, modelId: string) => void;
@@ -30,6 +33,7 @@ const MarkdownBlock = memo(function MarkdownBlock({ text }: { text: string }) {
 export function ChatView(
   {
     view,
+    peerId,
     onPrompt,
     onAbort,
     onModelChange,
@@ -126,6 +130,7 @@ export function ChatView(
             provider: view.info.modelProvider,
             modelId: view.info.modelId,
           }}
+          peerId={peerId}
           onModelSelect={onModelChange}
           thinkingLevel={view.info.thinkingLevel}
           thinkingLevels={view.info.thinkingLevels}

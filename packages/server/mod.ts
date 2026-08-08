@@ -1,6 +1,7 @@
 import { LumiscaCore } from "@lumisca/core";
-import { disposeServer, startServer } from "./app.ts";
+import { disposeServer, startServer, validateHostConfig } from "./app.ts";
 
+const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8000;
 const DEFAULT_DB = "lumisca.db";
 
@@ -14,23 +15,63 @@ function resolveDbPath(): string {
 
 /** Repository root for frontend assets. The desktop shell sets
  * LUMISCA_REPO_ROOT because the server process it spawns runs from a
- * different working directory; without it the web UI cannot be served. */
+ * different working directory; without it the web UI cannot be served.
+ * Normalized to an absolute path — esbuild rejects relative working
+ * directories when bundling the client. */
 function resolveRepoRoot(): string {
-  return Deno.env.get("LUMISCA_REPO_ROOT") ?? Deno.cwd();
+  const root = Deno.env.get("LUMISCA_REPO_ROOT") ?? Deno.cwd();
+  try {
+    return Deno.realPathSync(root);
+  } catch {
+    return root;
+  }
+}
+
+/** Extra hostnames accepted by the Host guard (LUMISCA_ALLOWED_HOSTS,
+ * comma-separated, no port). Loopback hostnames are always accepted. */
+function resolveAllowedHosts(): string[] {
+  return (Deno.env.get("LUMISCA_ALLOWED_HOSTS") ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter((h) => h.length > 0);
+}
+
+// Optional auth token (the desktop shell sets one): /api, /ws and — unless
+// a local dev server — the SSR page then require it, so only clients that
+// know the token can drive the agent.
+const token = Deno.env.get("LUMISCA_TOKEN") || undefined;
+
+// Bind address (LUMISCA_HOST). The default is loopback-only; remote
+// hosting (LAN / Tailscale) sets 0.0.0.0, a specific IP, or "::".
+const host = Deno.env.get("LUMISCA_HOST") ?? DEFAULT_HOST;
+
+// Refuse to expose the agent (bash tool included) to the network without
+// authentication.
+const configError = validateHostConfig(host, token);
+if (configError) {
+  console.error(`Lumisca: ${configError}`);
+  Deno.exit(1);
 }
 
 const port = Number(Deno.env.get("LUMISCA_PORT") ?? DEFAULT_PORT);
 const dbPath = resolveDbPath();
 const repoRoot = resolveRepoRoot();
-// Optional auth token (the desktop shell sets one): /api and /ws then
-// require it, so only the process that spawned this server can drive it.
-const token = Deno.env.get("LUMISCA_TOKEN") || undefined;
+const allowedHosts = resolveAllowedHosts();
 
 const core = LumiscaCore.open(dbPath);
-const server = startServer(core, port, { repoRoot, token });
+const server = startServer(core, port, {
+  repoRoot,
+  token,
+  hostname: host,
+  allowedHosts,
+});
 
-console.log(`Lumisca server listening on http://127.0.0.1:${port}`);
+console.log(`Lumisca server listening on http://${host}:${port}`);
 console.log(`Database: ${dbPath}`);
+if (token) console.log("Token authentication enabled");
+if (allowedHosts.length > 0) {
+  console.log(`Allowed hosts: ${allowedHosts.join(", ")}`);
+}
 
 const shutdown = () => {
   console.log("\nShutting down...");

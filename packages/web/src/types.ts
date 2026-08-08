@@ -4,6 +4,7 @@ import type { Message, ToolCall } from "@earendil-works/pi-ai";
 import type {
   AgentMessage,
   ClientEvent as CoreClientEvent,
+  ConnectionEntry,
   McpInfo,
   McpServerInfo,
   ModelInfo,
@@ -14,6 +15,7 @@ import type {
 } from "@lumisca/core";
 export type {
   AgentMessage,
+  ConnectionEntry,
   McpInfo,
   McpServerInfo,
   ModelInfo,
@@ -25,6 +27,26 @@ export type {
 
 /** Core events plus the dev-mode reload broadcast from the server. */
 export type ClientEvent = CoreClientEvent | { type: "reload" };
+
+/** Event as received over the WebSocket: every event carries the peer id
+ * of the server that produced it ("" = this server). */
+export type FederatedEvent = ClientEvent & { peerId?: string };
+
+/** A workspace as shown in the federated workspace picker: which peer owns
+ * it ("" = this server) and how that peer is named. */
+export interface FederatedWorkspace {
+  peerId: string;
+  peerName: string;
+  workspace: Workspace;
+}
+
+/** Peer reachability, reported alongside the merged workspace list. */
+export interface PeerStatus {
+  id: string;
+  name: string;
+  ok: boolean;
+  error?: string;
+}
 
 /** Assistant message with text/tool-call content, for rendering. */
 export type AssistantMessage = Extract<Message, { role: "assistant" }>;

@@ -1,8 +1,11 @@
 import type {
   AgentMessage,
   ClientEvent,
+  ConnectionEntry,
+  FederatedWorkspace,
   McpInfo,
   ModelInfo,
+  PeerStatus,
   ProviderInfo,
   SessionInfo,
   ThinkingLevel,
@@ -149,6 +152,117 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ value }),
     }),
+
+  /** Server-side connection registry (the federated peer list). */
+  getConnections: () =>
+    request<{ connections: ConnectionEntry[] }>("/api/connections"),
+  putConnections: (connections: ConnectionEntry[]) =>
+    request<{ ok: boolean }>("/api/connections", {
+      method: "PUT",
+      body: JSON.stringify({ connections }),
+    }),
+};
+
+/** Federated (hub-and-spoke) API: resources owned by a peer server. The
+ * agent runs on the peer; the hub only proxies. */
+export const fed = {
+  /** Merged workspace list (hub + peers) with peer reachability. */
+  workspaces: () =>
+    request<{ workspaces: FederatedWorkspace[]; peers: PeerStatus[] }>(
+      "/api/fed/workspaces",
+    ),
+  createWorkspace: (peerId: string, name: string, folders: string[]) =>
+    request<Workspace>(`/api/fed/${peerId}/workspaces`, {
+      method: "POST",
+      body: JSON.stringify({ name, folders }),
+    }),
+  updateWorkspace: (
+    peerId: string,
+    id: string,
+    input: { name?: string; folders?: string[] },
+  ) =>
+    request<Workspace>(`/api/fed/${peerId}/workspaces/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
+  deleteWorkspace: (peerId: string, id: string) =>
+    request<{ ok: boolean }>(`/api/fed/${peerId}/workspaces/${id}`, {
+      method: "DELETE",
+    }),
+  fsRoots: (peerId: string) => request<string[]>(`/api/fed/${peerId}/fs/roots`),
+  fsBrowse: (peerId: string, path: string) =>
+    request<
+      {
+        path: string;
+        parent: string | null;
+        entries: Array<{ name: string; path: string }>;
+      }
+    >(
+      `/api/fed/${peerId}/fs/browse?path=${encodeURIComponent(path)}`,
+    ),
+  createSession: (peerId: string, input: {
+    workspaceId: string;
+    name?: string;
+  }) =>
+    request<SessionInfo>(`/api/fed/${peerId}/sessions`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  getSession: (peerId: string, sessionId: string) =>
+    request<SessionInfoDto>(`/api/fed/${peerId}/sessions/${sessionId}`),
+  getMessages: (peerId: string, sessionId: string) =>
+    request<AgentMessage[]>(
+      `/api/fed/${peerId}/sessions/${sessionId}/messages`,
+    ),
+  closeSession: (peerId: string, sessionId: string) =>
+    request<{ ok: boolean }>(`/api/fed/${peerId}/sessions/${sessionId}/close`, {
+      method: "POST",
+    }),
+  openSession: (peerId: string, sessionId: string) =>
+    request<SessionInfoDto>(`/api/fed/${peerId}/sessions/${sessionId}/open`, {
+      method: "POST",
+    }),
+  prompt: (peerId: string, sessionId: string, text: string) =>
+    request<{ ok: boolean }>(
+      `/api/fed/${peerId}/sessions/${sessionId}/prompt`,
+      {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      },
+    ),
+  abort: (peerId: string, sessionId: string) =>
+    request<{ ok: boolean }>(`/api/fed/${peerId}/sessions/${sessionId}/abort`, {
+      method: "POST",
+    }),
+  updateSessionModel: (
+    peerId: string,
+    sessionId: string,
+    provider: string,
+    modelId: string,
+  ) =>
+    request<SessionInfo>(`/api/fed/${peerId}/sessions/${sessionId}/model`, {
+      method: "POST",
+      body: JSON.stringify({ provider, modelId }),
+    }),
+  /** The peer's providers/models (model picker data for remote sessions). */
+  listProviders: (peerId: string) =>
+    request<ProviderInfo[]>(`/api/fed/${peerId}/providers`),
+  listModels: (peerId: string, providerId: string) =>
+    request<ModelInfo[]>(
+      `/api/fed/${peerId}/providers/${encodeURIComponent(providerId)}/models`,
+    ),
+  setModelThinkingLevel: (
+    peerId: string,
+    providerId: string,
+    modelId: string,
+    level: ThinkingLevel,
+  ) =>
+    request<{ ok: boolean; thinkingLevel: ThinkingLevel }>(
+      `/api/fed/${peerId}/providers/${encodeURIComponent(providerId)}/models/${
+        encodeURIComponent(modelId)
+      }/thinking-level`,
+      { method: "PUT", body: JSON.stringify({ level }) },
+    ),
 };
 
 /** Connect to the WebSocket event stream. Returns a close function.

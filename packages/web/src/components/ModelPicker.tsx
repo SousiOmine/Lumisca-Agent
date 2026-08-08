@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconBrain } from "@tabler/icons-react";
-import { api } from "../api.ts";
+import { api, fed } from "../api.ts";
 import { formatModelMeta } from "@lumisca/core/shared";
 import type { ModelInfo } from "../types.ts";
 import { filterByQuery } from "../providers.ts";
@@ -9,6 +9,10 @@ export interface ModelPickerProps {
   value: { provider: string; modelId: string } | null;
   /** Only show models the user enabled in settings. Default true. */
   enabledOnly?: boolean;
+  /** Peer owning the session ("" = this server). When set, the provider
+   * and model lists come from that peer, so remote sessions switch models
+   * against the machine that runs the agent. */
+  peerId?: string;
   /** Called with the selected model; the ModelInfo lets the caller know
    * the model's thinking levels without another fetch. */
   onSelect: (
@@ -23,6 +27,7 @@ export interface ModelPickerProps {
 export function ModelPicker({
   value,
   enabledOnly = true,
+  peerId = "",
   onSelect,
 }: ModelPickerProps) {
   const [providers, setProviders] = useState<
@@ -36,7 +41,10 @@ export function ModelPicker({
 
   useEffect(() => {
     let stale = false;
-    api.listProviders()
+    const listProviders = peerId === ""
+      ? api.listProviders()
+      : fed.listProviders(peerId);
+    listProviders
       .then((ps) => {
         if (stale) return;
         const configured = ps.filter((p) => p.configured !== false);
@@ -64,7 +72,7 @@ export function ModelPicker({
     return () => {
       stale = true;
     };
-  }, []);
+  }, [peerId]);
 
   useEffect(() => {
     if (!providerId) return;
@@ -73,7 +81,10 @@ export function ModelPicker({
     let stale = false;
     setBusy(true);
     setModels([]);
-    api.listModels(providerId)
+    const listModels = peerId === ""
+      ? api.listModels(providerId)
+      : fed.listModels(peerId, providerId);
+    listModels
       .then((ms) => {
         if (!stale) setModels(ms);
       })
@@ -86,7 +97,7 @@ export function ModelPicker({
     return () => {
       stale = true;
     };
-  }, [providerId]);
+  }, [providerId, peerId]);
 
   // Follow external value changes (e.g. the session model switched while
   // the picker stayed mounted). Only react when the prop itself changes:

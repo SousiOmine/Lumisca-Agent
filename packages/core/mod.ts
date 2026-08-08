@@ -27,6 +27,8 @@ export type { McpServerStatus, McpToolDef } from "./mcp/manager.ts";
 export { createMcpTools, sanitizeServerName } from "./mcp/tools.ts";
 export { CREDENTIAL_KEY_PREFIX } from "./settings/credentials.ts";
 export { THEME_KEY } from "./settings/repo.ts";
+export { CONNECTIONS_KEY } from "./settings/connections.ts";
+export type { ConnectionEntry } from "./settings/connections.ts";
 export { formatModelMeta } from "./models/meta.ts";
 export {
   clampThinkingLevel,

@@ -6,6 +6,11 @@ import type { SessionInfo } from "./types/session.ts";
 import type { Workspace } from "./types/workspace.ts";
 import { createSettingsRepo, type SettingsRepo } from "./settings/repo.ts";
 import {
+  type ConnectionEntry,
+  CONNECTIONS_KEY,
+  parseConnections,
+} from "./settings/connections.ts";
+import {
   createDbCredentialStore,
   CREDENTIAL_KEY_PREFIX,
   setApiKey,
@@ -138,6 +143,18 @@ export class LumiscaCore {
     this.settings.delete(key);
   }
 
+  // --- server connection registry (web clients) ---------------------------
+  // The desktop app keeps its own per-PC copy (servers.json); web clients
+  // share this server-side list so they can switch servers too.
+
+  getConnections(): ConnectionEntry[] {
+    return parseConnections(this.settings.get(CONNECTIONS_KEY));
+  }
+
+  setConnections(entries: ConnectionEntry[]): void {
+    this.settings.set(CONNECTIONS_KEY, JSON.stringify(entries));
+  }
+
   private assertNotProtected(key: string): void {
     if (key.startsWith(CREDENTIAL_KEY_PREFIX)) {
       // Credentials have their own API (/providers/:id/api-key); touching
@@ -155,6 +172,14 @@ export class LumiscaCore {
         "forbidden",
       );
     }
+    if (key === CONNECTIONS_KEY) {
+      // The connection registry contains server tokens and has its own
+      // API (/api/connections).
+      throw new CoreError(
+        "connection registry cannot be accessed through this endpoint",
+        "forbidden",
+      );
+    }
   }
 
   /** Non-protected settings only; credentials and MCP config are never
@@ -163,7 +188,9 @@ export class LumiscaCore {
     const safe = new Map<string, string>();
     for (const [key, value] of this.settings.list()) {
       if (
-        key.startsWith(CREDENTIAL_KEY_PREFIX) || key === APP_MCP_SETTINGS_KEY
+        key.startsWith(CREDENTIAL_KEY_PREFIX) ||
+        key === APP_MCP_SETTINGS_KEY ||
+        key === CONNECTIONS_KEY
       ) {
         continue;
       }

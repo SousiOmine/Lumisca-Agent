@@ -6,19 +6,39 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import type { Workspace } from "../types.ts";
+import type { FederatedWorkspace, PeerStatus } from "../types.ts";
+import { tabKey } from "../tabs.ts";
 
 interface WorkspacePickerProps {
-  workspaces: Workspace[];
-  /** Currently selected workspace id ("" when none). */
+  workspaces: FederatedWorkspace[];
+  /** Currently selected workspace (composite key; "" when none). */
   value: string;
-  onChange: (id: string) => void;
-  onEdit: (ws: Workspace) => void;
-  onDelete: (ws: Workspace) => void;
-  onCreate: () => void;
+  onChange: (key: string) => void;
+  onEdit: (fws: FederatedWorkspace) => void;
+  onDelete: (fws: FederatedWorkspace) => void;
+  /** Called with the peer the new workspace should be created on (the
+   * peer of the current selection, "" = this server). */
+  onCreate: (peerId: string) => void;
+  /** Peers that did not answer the workspace list fetch. */
+  peers: PeerStatus[];
 }
 
-/** Custom workspace dropdown with per-item edit/delete actions. */
+const BADGE: React.CSSProperties = {
+  fontSize: 10.5,
+  padding: "1px 7px",
+  borderRadius: 999,
+  border: "1px solid var(--accent-dim)",
+  color: "var(--accent-dim)",
+  marginLeft: 6,
+  whiteSpace: "nowrap",
+};
+
+function peerName(peerId: string, peerName: string): string {
+  return peerId === "" ? "このPC" : peerName || "リモート";
+}
+
+/** Custom workspace dropdown with per-item edit/delete actions. Shows the
+ * owning machine's name next to every federated workspace. */
 export function WorkspacePicker({
   workspaces,
   value,
@@ -26,11 +46,14 @@ export function WorkspacePicker({
   onEdit,
   onDelete,
   onCreate,
+  peers,
 }: WorkspacePickerProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const selected = workspaces.find((w) => w.id === value);
+  const selected = workspaces.find((w) =>
+    tabKey(w.peerId, w.workspace.id) === value
+  );
 
   // Close on outside click and Escape.
   useEffect(() => {
@@ -57,10 +80,14 @@ export function WorkspacePicker({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={selected ? selected.name : "ワークスペースを選択"}
+        title={selected ? selected.workspace.name : "ワークスペースを選択"}
       >
         <span className="workspace-picker-name">
-          {selected ? selected.name : "(ワークスペースがありません)"}
+          {selected
+            ? `${selected.workspace.name} (${
+              peerName(selected.peerId, selected.peerName)
+            })`
+            : "(ワークスペースがありません)"}
         </span>
         <span className={`workspace-picker-chevron${open ? " open" : ""}`}>
           <IconChevronDown size={15} />
@@ -74,53 +101,80 @@ export function WorkspacePicker({
               ワークスペースがありません
             </div>
           )}
-          {workspaces.map((w) => (
+          {workspaces.map((fws) => {
+            const key = tabKey(fws.peerId, fws.workspace.id);
+            return (
+              <div
+                key={key}
+                role="option"
+                aria-selected={key === value}
+                className={`workspace-option${
+                  key === value ? " selected" : ""
+                }`}
+                onClick={() => {
+                  onChange(key);
+                  setOpen(false);
+                }}
+              >
+                <span className="workspace-option-icon">
+                  <IconFolder size={14} />
+                </span>
+                <span
+                  className="workspace-option-name"
+                  title={fws.workspace.name}
+                >
+                  {fws.workspace.name}
+                  <span style={BADGE}>
+                    {peerName(fws.peerId, fws.peerName)}
+                  </span>
+                </span>
+                <span className="workspace-option-meta">
+                  {fws.workspace.folders.length} フォルダ
+                </span>
+                <span className="workspace-option-actions">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="編集"
+                    aria-label={`${fws.workspace.name} を編集`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpen(false);
+                      onEdit(fws);
+                    }}
+                  >
+                    <IconPencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="削除"
+                    aria-label={`${fws.workspace.name} を削除`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpen(false);
+                      onDelete(fws);
+                    }}
+                  >
+                    <IconTrash size={14} />
+                  </button>
+                </span>
+              </div>
+            );
+          })}
+          {peers.filter((p) => !p.ok).map((p) => (
             <div
-              key={w.id}
-              role="option"
-              aria-selected={w.id === value}
-              className={`workspace-option${w.id === value ? " selected" : ""}`}
-              onClick={() => {
-                onChange(w.id);
-                setOpen(false);
-              }}
+              key={p.id}
+              className="workspace-option"
+              style={{ opacity: 0.6, pointerEvents: "none" }}
+              title={p.error}
             >
               <span className="workspace-option-icon">
                 <IconFolder size={14} />
               </span>
-              <span className="workspace-option-name" title={w.name}>
-                {w.name}
-              </span>
-              <span className="workspace-option-meta">
-                {w.folders.length} フォルダ
-              </span>
-              <span className="workspace-option-actions">
-                <button
-                  type="button"
-                  className="icon-btn"
-                  title="編集"
-                  aria-label={`${w.name} を編集`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpen(false);
-                    onEdit(w);
-                  }}
-                >
-                  <IconPencil size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  title="削除"
-                  aria-label={`${w.name} を削除`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpen(false);
-                    onDelete(w);
-                  }}
-                >
-                  <IconTrash size={14} />
-                </button>
+              <span className="workspace-option-name">
+                サーバーに接続できません: {p.name}
+                <span style={BADGE}>{p.name}</span>
               </span>
             </div>
           ))}
@@ -129,7 +183,7 @@ export function WorkspacePicker({
             className="workspace-option create"
             onClick={() => {
               setOpen(false);
-              onCreate();
+              onCreate(selected?.peerId ?? "");
             }}
           >
             <IconPlus size={14} />

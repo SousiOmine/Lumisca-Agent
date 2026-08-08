@@ -13,6 +13,10 @@ CLI・Web・デスクトップの3つのフロントエンドから同一の機�
   アイコンで切り替え可能(設定はデータベースに保存され、SSR で引き継がれます)。アイコンは tabler icons
 - **タブ式セッション管理**: ブラウザのように上部タブで複数セッションを同時に切り替え
   (Web / デスクトップ)。各セッションは独立して並行稼働します
+- **フェデレーション**: ⚙ → 接続先サーバー で登録した**別のマシンのサーバー**
+  (LAN / Tailscale)のワークスペースを同じ一覧に表示し、そのままセッションを開始・
+  作業できます。エージェントはワークスペースを所有するマシンで実行され、イベントは
+  リアルタイムに同期されます(接続切替の操作は不要)
 - **ワークスペース**: 単一フォルダだけでなく、複数フォルダをまとめた単位でも作業可能。
   ファイル操作(read / write / edit / list_dir)はワークスペース内に制限されます
   (パス正規化 + シンボリックリンク解決によるサンドボックス)
@@ -80,10 +84,11 @@ React の初期HTMLはサーバーでレンダリングされます。本番相�
 
 `LUMISCA_DB` で DB パス、`LUMISCA_PORT` でポートを変更できます。
 
-`LUMISCA_TOKEN` を設定すると、API と WebSocket にトークン認証がかかります
-(ヘッダー `X-Lumisca-Token` または WS の `?token=` クエリ)。デスクトップアプリは
+`LUMISCA_TOKEN` を設定すると、API・WebSocket・SSR ページにトークン認証がかかります
+(ヘッダー `X-Lumisca-Token`、WS の `?token=`、ページの `?token=`)。デスクトップアプリは
 起動のたびにトークンを生成して渡すため、別のローカルプロセスからエージェントを
-操作できません。未設定なら従来どおり認証なしで動きます。
+操作できません。未設定なら従来どおり認証なしで動きます(リモートホスティング時は
+トークン必須。→ [リモートサーバーでのホスティング](#リモートサーバーでのホスティング))
 
 ### CLI
 
@@ -112,6 +117,115 @@ npm run tauri --prefix packages/desktop -- build      # インストーラ
 3. その両方をインストーラに同梱
 
 パッケージ版はリポジトリレイアウトや Deno 本体に依存せず動作します。
+
+## リモートサーバーでのホスティング
+
+エージェントの処理・ファイル操作・DB・APIキーを**別 PC の Lumisca サーバー**で
+動かし、デスクトップアプリ(またはブラウザ)から接続して操作できます。
+ローカルネットワークや **Tailscale** のような VPN を前提としています。
+
+```
+[クライアント PC]                 [サーバー PC]
+┌──────────────┐   LAN / VPN   ┌──────────────────┐
+│ デスクトップ  │ ────────────▶ │ Lumisca サーバー │
+│ (接続管理UI)  │  http + token │  エージェント処理 │
+└──────────────┘               │  ファイル操作     │
+                               │  SQLite / APIキー │
+                               └──────────────────┘
+```
+
+### サーバー PC のセットアップ
+
+1. サーバーバイナリを用意します。デスクトップのパッケージビルドが生成する
+   `packages/desktop/src-tauri/resources/server/` の
+   `lumisca-server(.exe)` と `assets.json` をサーバー PC にコピーするか、
+   `deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys packages/server/mod.ts`
+   で実行します
+2. 環境変数を設定して起動します:
+
+   | 変数 | 説明 | 例 |
+   |------|------|-----|
+   | `LUMISCA_HOST` | バインド先アドレス(既定 `127.0.0.1`) | `0.0.0.0` または Tailscale IP |
+   | `LUMISCA_ALLOWED_HOSTS` | Host ガードで許可するホスト名(カンマ区切り・ポート不要) | `myserver.tailnet.ts.net,100.64.0.5` |
+   | `LUMISCA_TOKEN` | 認証トークン。**非ループバックバインド時は必須**(未設定なら起動拒否) | 十分に長いランダム文字列 |
+   | `LUMISCA_PORT` | ポート(既定 8000) | `8000` |
+   | `LUMISCA_DB` | DB パス(既定 `./lumisca.db`) | `C:\lumisca\lumisca.db` |
+
+   例(Windows):
+   ```bat
+   set LUMISCA_HOST=0.0.0.0
+   set LUMISCA_ALLOWED_HOSTS=100.64.0.5
+   set LUMISCA_TOKEN=xxxxxxxxxxxxxxxx
+   lumisca-server.exe
+   ```
+
+3. 常駐化するには Windows なら NSSM や
+   `sc create Lumisca binPath= "C:\lumisca\lumisca-server.exe" start= auto`、
+   Linux なら systemd unit を使います(例):
+
+   ```ini
+   # /etc/systemd/system/lumisca.service
+   [Unit]
+   Description=Lumisca Agent server
+   After=network-online.target
+
+   [Service]
+   ExecStart=/opt/lumisca/lumisca-server
+   Environment=LUMISCA_HOST=0.0.0.0
+   Environment=LUMISCA_ALLOWED_HOSTS=myserver.tailnet.ts.net
+   Environment=LUMISCA_TOKEN=xxxxxxxxxxxxxxxx
+   Restart=on-failure
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+4. **Tailscale 推奨**: Tailscale 経由ならトラフィックは WireGuard で暗号化されます。
+   直接 LAN に公開する場合は平文 HTTP になるため、信頼できるネットワークに限定し、
+   強力なトークンを使用してください。HTTPS が必要なら Caddy 等のリバースプロキシを
+   前に置きます(将来のバージョンでネイティブ TLS 対応を予定)
+
+### クライアント側 (デスクトップアプリ / ブラウザ共通)
+
+1. サイドバーの ⚙ から**設定モーダル**を開き、**接続先サーバー**を選びます
+2. 「サーバーを追加」で 名前 / URL(`http://100.64.0.5:8000` など)/ トークン
+   (`LUMISCA_TOKEN` と同じ値)を入力し「テスト」で接続確認 →「保存」
+3. **フェデレーション**: 登録したサーバーの**ワークスペースがそのまま一覧に表示**
+   されます(マシン名バッジ付き)。別マシンのワークスペースを選んでセッションを
+   開始すると、**そのマシンでエージェントが実行**され、結果がリアルタイムで
+   届きます — 明示的な「接続」操作は不要です
+4. ワークスペースの作成・編集・削除も**対象サーバーを選んで実行**できます
+   (フォルダ選択はそのマシンのファイルシステムを参照)。リモートセッションの
+   モデル切替・思考レベル変更も、そのマシンのモデル一覧で動作します
+5. 登録リストは**このサーバーのデータベース**に保存され(`/api/connections`)、
+   web / デスクトップのどちらからでも同じ一覧を編集できます
+
+デスクトップアプリでは、⚙ → 接続先サーバーの「表示」ボタンで**UI 自体を別
+サーバーに切り替える**こともできます(ローカルサーバーへ戻す操作も同様)。
+ブラウザでは「表示」はそのサーバーの URL への移動になります。
+
+トークンはページ読み込み後にアドレスバーから除去されます。
+
+### セキュリティ上の注意
+
+- トークンを知っている人は、ページ・API・WebSocket すべてにアクセスでき、
+  **サーバー PC 上で bash ツールを実行できる**(エージェントの全権限に等しい)。
+  トークンは厳重に管理してください
+- `LUMISCA_ALLOWED_HOSTS` に指定したホスト名以外からのアクセスはサーバーが
+  拒否します(Host ガード)。DNS リバインディング対策も維持されています
+- サーバーの DB(`lumisca.db`)には API キーが平文で保存されます。DB ファイルの
+  取り扱いに注意してください
+- 複数のクライアントから同時に接続できますが、同一セッションへの同時 prompt は
+  サーバー側の単一ストリーム制約により拒否されます
+- デスクトップのシェルブリッジ(設定 → 接続先サーバーの「表示」)は
+  **接続中のサーバーのトークンを key として要求**するため、WebView 内に読み込まれた
+  別のページからシェル操作を実行することはできません。
+  トークンなしで運用しているサーバーを表示中はブリッジも無防備になります
+  (サーバー自体が認証なしで公開されている状態と同等)
+- **フェデレーションの安全要件**: ピアを登録するサーバー (ハブ) はピアの
+  トークンを DB に保持します。ハブ⇔ピア間は各ピアの `LUMISCA_ALLOWED_HOSTS` と
+  トークンで保護されます。またハブが自分自身をピア登録しても自動的に無視されます
+  (イベントループ防止)
 
 ## APIキーの設定
 
@@ -178,7 +292,7 @@ MCP(Model Context Protocol)サーバーを追加すると、その外部ツー�
 
 - データベース: `./lumisca.db`(既定。`LUMISCA_DB` で変更)
   - テーブル: workspaces / workspace_folders / sessions / messages / settings
-- APIキー: 設定DB内(`api_key:<providerId>` キー)に保存(ローカル専用前提)
+- APIキー: 設定DB内(`api_key:<providerId>` キー)に保存(サーバーが動く PC に保存される)
 
 ## テスト
 
@@ -213,7 +327,8 @@ core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSoc
   ワークスペースの `.mcp.json` とマージして使用します
 - ワークスペース境界の検証は `packages/core/workspace/sandbox.ts` に集約されており、
   実在パスは realpath 解決後にルート集合との包含判定を行います
-- セキュリティ: ループバック限定 + オリジン完全比較(CORS / WS)+
-  任意の `LUMISCA_TOKEN` 認証。Markdown レンダラーは画像 URL を
-  https/http + 非ループバックに制限します
+- セキュリティ: ループバック限定 + `LUMISCA_ALLOWED_HOSTS`(リモートホスティング時)
+  + オリジン完全比較(CORS / WS)+ 任意の `LUMISCA_TOKEN` 認証
+  (非ループバックバインド時は必須。認証付きサーバーでは SSR ページ自体もトークン必須)。
+  Markdown レンダラーは画像 URL を https/http + 非ループバックに制限します
 

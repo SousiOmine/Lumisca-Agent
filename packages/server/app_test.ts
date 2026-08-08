@@ -3,7 +3,13 @@ import { realpathSync } from "node:fs";
 import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore } from "@lumisca/core";
-import { createApp, startServer } from "./app.ts";
+import {
+  createApp,
+  disposeServer,
+  isLoopbackHost,
+  startServer,
+  validateHostConfig,
+} from "./app.ts";
 function setup() {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
@@ -593,7 +599,7 @@ Deno.test("websocket rejects cross-port origins", async () => {
   }
 });
 
-Deno.test("token auth guards the API and websocket when configured", async () => {
+Deno.test("token auth guards the API, websocket and SSR page", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
@@ -638,17 +644,38 @@ Deno.test("token auth guards the API and websocket when configured", async () =>
     );
     assertEquals(wsOk.status !== 401 && wsOk.status !== 403, true);
 
-    // The SSR page embeds the token via the externalized initial-data
-    // script (inline scripts are banned by the page CSP).
-    const page = await app.fetch(
+    // The SSR page itself is guarded too (the token is a real capability).
+    const pageDenied = await app.fetch(
       new Request("http://127.0.0.1:8000/", { headers: HOST }),
     );
+    assertEquals(pageDenied.status, 401);
+
+    // With `?token=` the page renders; the externalized initial-data script
+    // (inline scripts are banned by the page CSP) carries the token in its
+    // URL so the guarded asset can be fetched.
+    const page = await app.fetch(
+      new Request("http://127.0.0.1:8000/?token=secret-token", {
+        headers: HOST,
+      }),
+    );
     const html = await page.text();
-    assertEquals(html.includes('src="/assets/initial-data.js"'), true);
-    const dataScript = await app.fetch(
+    assertEquals(
+      html.includes('src="/assets/initial-data.js?token=secret-token"'),
+      true,
+    );
+
+    const dataDenied = await app.fetch(
       new Request("http://127.0.0.1:8000/assets/initial-data.js", {
         headers: HOST,
       }),
+    );
+    assertEquals(dataDenied.status, 401);
+
+    const dataScript = await app.fetch(
+      new Request(
+        "http://127.0.0.1:8000/assets/initial-data.js?token=secret-token",
+        { headers: HOST },
+      ),
     );
     const script = await dataScript.text();
     assertEquals(
@@ -658,6 +685,89 @@ Deno.test("token auth guards the API and websocket when configured", async () =>
   } finally {
     core.close();
   }
+});
+
+Deno.test("host guard rejects non-loopback hosts by default", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const app = createApp(core);
+  try {
+    const remote = await app.fetch(
+      new Request("http://127.0.0.1:8000/api/health", {
+        headers: { host: "myserver.tailnet.ts.net:8000" },
+      }),
+    );
+    assertEquals(remote.status, 403);
+    // Loopback spellings keep working.
+    for (const host of ["127.0.0.1:8000", "localhost:8000", "[::1]:8000"]) {
+      const ok = await app.fetch(
+        new Request("http://127.0.0.1:8000/api/health", {
+          headers: { host },
+        }),
+      );
+      assertEquals(ok.status, 200, `host ${host} must be allowed`);
+    }
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("host guard accepts LUMISCA_ALLOWED_HOSTS", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const app = createApp(core, {
+    allowedHosts: ["myserver.tailnet.ts.net", "192.168.1.20"],
+  });
+  try {
+    const ok = await app.fetch(
+      new Request("http://127.0.0.1:8000/api/health", {
+        headers: { host: "myserver.tailnet.ts.net:8000" },
+      }),
+    );
+    assertEquals(ok.status, 200);
+
+    // Hostnames are case-insensitive.
+    const mixed = await app.fetch(
+      new Request("http://127.0.0.1:8000/api/health", {
+        headers: { host: "MyServer.Tailnet.Ts.Net:8000" },
+      }),
+    );
+    assertEquals(mixed.status, 200);
+
+    // The WebSocket guard passes for allowed hosts too (the upgrade itself
+    // fails without websocket headers — but not with the host 403).
+    const ws = await app.fetch(
+      new Request("http://127.0.0.1:8000/ws", {
+        headers: { host: "192.168.1.20:8000" },
+      }),
+    );
+    assertEquals(ws.status !== 403, true);
+
+    // Anything not listed stays blocked.
+    const other = await app.fetch(
+      new Request("http://127.0.0.1:8000/api/health", {
+        headers: { host: "other.example.com:8000" },
+      }),
+    );
+    assertEquals(other.status, 403);
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("validateHostConfig requires a token for non-loopback binds", () => {
+  assertEquals(validateHostConfig("127.0.0.1", undefined), null);
+  assertEquals(validateHostConfig("localhost", undefined), null);
+  assertEquals(validateHostConfig("::1", undefined), null);
+  assertEquals(validateHostConfig("0.0.0.0", undefined) !== null, true);
+  assertEquals(validateHostConfig("0.0.0.0", "token"), null);
+  assertEquals(validateHostConfig("100.64.0.5", undefined) !== null, true);
+  assertEquals(validateHostConfig("100.64.0.5", "token"), null);
+  assertEquals(isLoopbackHost("127.0.0.1"), true);
+  assertEquals(isLoopbackHost("localhost"), true);
+  assertEquals(isLoopbackHost("::1"), true);
+  assertEquals(isLoopbackHost("0.0.0.0"), false);
+  assertEquals(isLoopbackHost("100.64.0.5"), false);
 });
 
 Deno.test("settings API never exposes credentials", async () => {
@@ -678,6 +788,248 @@ Deno.test("settings API never exposes credentials", async () => {
   } finally {
     server.shutdown();
     core.close();
+  }
+});
+
+Deno.test("connections API: registry roundtrip, validation and protection", async () => {
+  const { core, server, base } = await setup();
+  try {
+    // Starts empty.
+    const empty = await fetch(`${base}/api/connections`);
+    assertEquals(empty.status, 200);
+    assertEquals((await empty.json()).connections.length, 0);
+
+    // PUT the whole registry.
+    const entries = [
+      { id: "srv-1", name: "自宅", url: "http://100.64.0.5:8000", token: "t1" },
+      {
+        id: "srv-2",
+        name: "作業PC",
+        url: "http://192.168.1.20:8000",
+        token: "",
+      },
+    ];
+    const put = await json(base, "/api/connections", {
+      method: "PUT",
+      body: JSON.stringify({ connections: entries }),
+    });
+    assertEquals(put.status, 200);
+
+    const got = await fetch(`${base}/api/connections`);
+    const body = await got.json() as { connections: typeof entries };
+    assertEquals(body.connections.length, 2);
+    assertEquals(body.connections[1]?.name, "作業PC");
+
+    // Malformed bodies are rejected, not persisted.
+    const bad = await json(base, "/api/connections", {
+      method: "PUT",
+      body: JSON.stringify({ connections: [{ id: "x", name: 42 }] }),
+    });
+    assertEquals(bad.status, 400);
+    const after = await fetch(`${base}/api/connections`);
+    assertEquals((await after.json()).connections.length, 2);
+
+    // The registry holds tokens: it must not leak via generic settings,
+    // and the generic settings API refuses to touch it.
+    const settings = await fetch(`${base}/api/settings`);
+    const values = Object.values(
+      await settings.json() as Record<string, string>,
+    );
+    assertEquals(values.some((v) => v.includes("srv-1")), false);
+    assertEquals(values.some((v) => v.includes("t1")), false);
+    const forbidden = await json(base, "/api/settings/connections", {
+      method: "PUT",
+      body: JSON.stringify({ value: "x" }),
+    });
+    assertEquals(forbidden.status, 403);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("federation: hub merges peers and proxies workspaces and sessions", async () => {
+  // Peer first: the hub's federation client connects to it at startup.
+  const peerFaux = fauxProvider();
+  const peerCore = LumiscaCore.forTesting([peerFaux.provider]);
+  const peerServer = startServer(peerCore, 0, { token: "peer-token" });
+  const peerBase = `http://127.0.0.1:${peerServer.addr.port}`;
+  let peerRoot = "";
+  try {
+    peerRoot = await Deno.makeTempDir({ prefix: "lumisca-peer-" });
+    const peerWsRes = await json(peerBase, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "peer-ws", folders: [peerRoot] }),
+      headers: { "x-lumisca-token": "peer-token" },
+    });
+    assertEquals(peerWsRes.status, 201);
+
+    // Hub with the peer (and itself, to prove the self-guard) registered.
+    // Connections must be set BEFORE the server starts: the federation
+    // client connects to peers once the listener is bound.
+    const hubFaux = fauxProvider();
+    const hubCore = LumiscaCore.forTesting([hubFaux.provider]);
+    hubCore.setConnections([
+      { id: "peer1", name: "自宅", url: peerBase, token: "peer-token" },
+      // Registering the hub itself must be ignored (event loop guard).
+      // The hub's own URL is filled in below once its port is known.
+    ]);
+    const hubServer = startServer(hubCore, 0, { token: "hub-token" });
+    const hubBase = `http://127.0.0.1:${hubServer.addr.port}`;
+    hubCore.setConnections([
+      { id: "peer1", name: "自宅", url: peerBase, token: "peer-token" },
+      { id: "self", name: "self", url: hubBase, token: "hub-token" },
+    ]);
+    try {
+      const auth = { "x-lumisca-token": "hub-token" };
+      const hubRoot = await Deno.makeTempDir({ prefix: "lumisca-hub-" });
+      await json(hubBase, "/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "hub-ws", folders: [hubRoot] }),
+        headers: auth,
+      });
+
+      // Merged workspace list: hub + peer, self excluded.
+      const mergedRes = await json(hubBase, "/api/fed/workspaces", {
+        headers: auth,
+      });
+      assertEquals(mergedRes.status, 200);
+      const merged = await mergedRes.json() as {
+        workspaces: Array<{
+          peerId: string;
+          peerName: string;
+          workspace: { id: string; name: string };
+        }>;
+        peers: Array<{ id: string; name: string; ok: boolean; error?: string }>;
+      };
+      assertEquals(merged.workspaces.length, 2);
+      const hubEntry = merged.workspaces.find((w) => w.peerId === "");
+      const peerEntry = merged.workspaces.find((w) => w.peerId === "peer1");
+      assertEquals(hubEntry?.workspace.name, "hub-ws");
+      assertEquals(peerEntry?.workspace.name, "peer-ws");
+      assertEquals(peerEntry?.peerName, "自宅");
+      assertEquals(merged.peers.length, 1);
+      assertEquals(merged.peers[0]?.ok, true);
+
+      // Create a workspace on the peer through the hub.
+      const remoteCreate = await json(hubBase, "/api/fed/peer1/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "peer-ws-2", folders: [peerRoot] }),
+        headers: auth,
+      });
+      assertEquals(remoteCreate.status, 201);
+
+      // Rename it through the hub (PATCH).
+      const remotePatch = await json(
+        hubBase,
+        `/api/fed/peer1/workspaces/${(await remoteCreate.json()).id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ name: "peer-ws-2-renamed" }),
+          headers: auth,
+        },
+      );
+      assertEquals(remotePatch.status, 200);
+      assertEquals((await remotePatch.json()).name, "peer-ws-2-renamed");
+
+      // Open the hub WS first so we can watch peer events arrive.
+      const hubWs = new WebSocket(
+        `${hubBase.replace("http", "ws")}/ws?token=hub-token`,
+      );
+      const fedEvents: Array<{ peerId: string; type: string }> = [];
+      hubWs.onmessage = (evt) => {
+        const event = JSON.parse(String(evt.data));
+        if (event.peerId === "peer1") fedEvents.push(event);
+      };
+      await new Promise<void>((resolve) => (hubWs.onopen = () => resolve()));
+
+      // Session + prompt roundtrip on the peer through the hub.
+      const peerWorkspaceId = peerEntry?.workspace.id;
+      assertEquals(typeof peerWorkspaceId, "string");
+      peerFaux.setResponses([fauxAssistantMessage("Hi from peer!")]);
+      const created = await json(hubBase, "/api/fed/peer1/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: peerWorkspaceId,
+          name: "fed",
+        }),
+        headers: auth,
+      });
+      assertEquals(created.status, 201);
+      const session = await created.json();
+
+      const prompt = await json(
+        hubBase,
+        `/api/fed/peer1/sessions/${session.id}/prompt`,
+        {
+          method: "POST",
+          body: JSON.stringify({ text: "hello" }),
+          headers: auth,
+        },
+      );
+      assertEquals(prompt.status, 200);
+
+      // The peer's agent events arrive at the hub's UI websocket, tagged
+      // with the peer id.
+      const deadline = Date.now() + 5000;
+      while (
+        !fedEvents.some((e) => e.type === "agent_end") &&
+        Date.now() < deadline
+      ) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assertEquals(
+        fedEvents.some((e) => e.type === "agent_end"),
+        true,
+        "peer events must be relayed with the peer id",
+      );
+
+      const messages = await json(
+        hubBase,
+        `/api/fed/peer1/sessions/${session.id}/messages`,
+        { headers: auth },
+      );
+      const msgs = await messages.json();
+      assertEquals(msgs.length, 2);
+      assertEquals(msgs[1].role, "assistant");
+
+      // Unknown peer → 404.
+      const unknown = await json(hubBase, "/api/fed/nope/workspaces", {
+        headers: auth,
+      });
+      assertEquals(unknown.status, 404);
+      hubWs.close();
+      await Deno.remove(hubRoot, { recursive: true });
+    } finally {
+      disposeServer(hubServer);
+      hubServer.shutdown();
+      hubCore.close();
+    }
+    // The peer is gone: a fresh hub must answer 502 for it.
+    disposeServer(peerServer);
+    peerServer.shutdown();
+    peerCore.close();
+    const deadHubCore = LumiscaCore.forTesting([hubFaux.provider]);
+    deadHubCore.setConnections([
+      { id: "peer1", name: "自宅", url: peerBase, token: "peer-token" },
+    ]);
+    const deadHub = startServer(deadHubCore, 0, { token: "hub-token" });
+    try {
+      const res = await json(
+        `http://127.0.0.1:${deadHub.addr.port}`,
+        "/api/fed/peer1/fs/roots",
+        { headers: { "x-lumisca-token": "hub-token" } },
+      );
+      assertEquals(res.status, 502);
+    } finally {
+      disposeServer(deadHub);
+      deadHub.shutdown();
+      deadHubCore.close();
+    }
+  } finally {
+    if (peerRoot !== "") {
+      await Deno.remove(peerRoot, { recursive: true }).catch(() => {});
+    }
   }
 });
 
@@ -751,6 +1103,9 @@ Deno.test("server SSR-renders the app shell", async () => {
     assertEquals(html.includes('src="/assets/initial-data.js"'), true);
     assertEquals(html.includes('src="/assets/app.js"'), true);
     assertEquals(html.includes("styles.css") || html.includes("<style>"), true);
+    // The desktop shell bridge (settings → 接続先サーバー) is allowed by
+    // the CSP; in plain browsers that host does not resolve.
+    assertEquals(html.includes("http://lumisca.localhost"), true);
 
     // The initial-data script carries the serialized state.
     const dataScript = await fetch(`${base}/assets/initial-data.js`);
