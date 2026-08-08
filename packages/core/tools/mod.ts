@@ -1,4 +1,3 @@
-import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Workspace } from "../types/workspace.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import {
@@ -9,6 +8,7 @@ import {
 } from "./filesystem.ts";
 import { createBashTool } from "./bash.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
+import type { Tool } from "./schema.ts";
 import { loadProjectMemory } from "../memory/agents-md.ts";
 
 export interface ToolFactoryOptions {
@@ -22,12 +22,12 @@ export interface ToolFactoryOptions {
 export function createCodingTools(
   workspace: Workspace,
   options: Partial<ToolFactoryOptions> = {},
-): { tools: AgentTool[]; sandbox: Sandbox; cwd: string } {
+): { tools: Tool[]; sandbox: Sandbox; cwd: string } {
   const cwd = options.cwd ?? workspace.folders[0] ?? Deno.cwd();
   const sandbox = new Sandbox(workspace.folders);
   const ctx = { sandbox, cwd };
 
-  const tools: AgentTool[] = [
+  const tools: Tool[] = [
     createReadFileTool(ctx),
     createWriteFileTool(ctx),
     createEditFileTool(ctx),

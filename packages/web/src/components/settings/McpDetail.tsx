@@ -41,6 +41,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 const fullWidth: CSSProperties = { width: "100%" };
 
+/** Placeholders with real newlines: JSX attribute strings do not process
+ * escape sequences, so these stay in JS string literals. */
+const ARGS_PLACEHOLDER = "例:\n-y\n@modelcontextprotocol/server-filesystem\n.";
+const ENV_PLACEHOLDER = "例:\nTOKEN=abc123";
+const HEADERS_PLACEHOLDER = "例:\nAuthorization=Bearer x";
+
 /** Edit (or create) one MCP server. Saving calls back with the assembled
  * server; the list persists it. */
 export function McpDetail({
@@ -155,7 +161,7 @@ export function McpDetail({
                   rows={3}
                   value={args}
                   onChange={(e) => setArgs(e.target.value)}
-                  placeholder={"例:\n-y\n@modelcontextprotocol/server-filesystem\n."}
+                  placeholder={ARGS_PLACEHOLDER}
                   style={{ ...fullWidth, fontFamily: "monospace" }}
                 />
               </Field>
@@ -185,7 +191,7 @@ export function McpDetail({
             rows={3}
             value={env}
             onChange={(e) => setEnv(e.target.value)}
-            placeholder={"例:\nTOKEN=abc123"}
+            placeholder={ENV_PLACEHOLDER}
             style={{ ...fullWidth, fontFamily: "monospace" }}
           />
         </Field>
@@ -196,7 +202,7 @@ export function McpDetail({
               rows={3}
               value={headers}
               onChange={(e) => setHeaders(e.target.value)}
-              placeholder={"例:\nAuthorization=Bearer x"}
+              placeholder={HEADERS_PLACEHOLDER}
               style={{ ...fullWidth, fontFamily: "monospace" }}
             />
           </Field>

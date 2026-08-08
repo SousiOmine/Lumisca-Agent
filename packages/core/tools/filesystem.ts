@@ -1,7 +1,6 @@
 import { join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Sandbox } from "../workspace/sandbox.ts";
+import { integer, object, optional, string, type Tool } from "./schema.ts";
 import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 
 interface FsToolContext {
@@ -15,19 +14,15 @@ function fileInfoLine(entry: Deno.DirEntry): string {
   return `${entry.name}`;
 }
 
-const readSchema = Type.Object({
-  path: Type.String({ description: "Path to the file" }),
-  offset: Type.Optional(
-    Type.Integer({ description: "Byte offset to start reading from" }),
-  ),
-  limit: Type.Optional(
-    Type.Integer({ description: "Maximum number of bytes to read" }),
-  ),
+const readSchema = object({
+  path: string("Path to the file"),
+  offset: optional(integer("Byte offset to start reading from")),
+  limit: optional(integer("Maximum number of bytes to read")),
 });
 
 export function createReadFileTool(
   ctx: FsToolContext,
-): AgentTool<typeof readSchema> {
+): Tool<typeof readSchema> {
   return {
     name: "read_file",
     label: "Read File",
@@ -72,14 +67,14 @@ export function createReadFileTool(
   };
 }
 
-const writeSchema = Type.Object({
-  path: Type.String({ description: "Path to the file" }),
-  content: Type.String({ description: "Full text content to write" }),
+const writeSchema = object({
+  path: string("Path to the file"),
+  content: string("Full text content to write"),
 });
 
 export function createWriteFileTool(
   ctx: FsToolContext,
-): AgentTool<typeof writeSchema> {
+): Tool<typeof writeSchema> {
   return {
     name: "write_file",
     label: "Write File",
@@ -102,15 +97,15 @@ export function createWriteFileTool(
   };
 }
 
-const editSchema = Type.Object({
-  path: Type.String({ description: "Path to the file" }),
-  old_string: Type.String({ description: "Text to find (exact match)" }),
-  new_string: Type.String({ description: "Replacement text" }),
+const editSchema = object({
+  path: string("Path to the file"),
+  old_string: string("Text to find (exact match)"),
+  new_string: string("Replacement text"),
 });
 
 export function createEditFileTool(
   ctx: FsToolContext,
-): AgentTool<typeof editSchema> {
+): Tool<typeof editSchema> {
   return {
     name: "edit",
     label: "Edit File",
@@ -142,13 +137,13 @@ export function createEditFileTool(
   };
 }
 
-const listDirSchema = Type.Object({
-  path: Type.String({ description: "Path to the directory" }),
+const listDirSchema = object({
+  path: string("Path to the directory"),
 });
 
 export function createListDirTool(
   ctx: FsToolContext,
-): AgentTool<typeof listDirSchema> {
+): Tool<typeof listDirSchema> {
   return {
     name: "list_dir",
     label: "List Directory",

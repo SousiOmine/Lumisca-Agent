@@ -2,7 +2,6 @@ import { Agent } from "@earendil-works/pi-agent-core";
 import type {
   AgentEvent,
   AgentMessage,
-  AgentTool,
   StreamFn,
 } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -13,12 +12,14 @@ import type { McpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import { createMcpTools } from "../mcp/tools.ts";
+import type { Tool } from "../tools/schema.ts";
+import { toAgentTool } from "../tools/pi-adapter.ts";
 
 export interface SessionAgentOptions {
   sessionId: string;
   systemPrompt: string;
   model: Model<Api>;
-  tools: AgentTool[];
+  tools: Tool[];
   messages?: AgentMessage[];
   /** Reasoning level for every run of this session ("off" = no thinking). */
   thinkingLevel?: ThinkingLevel;
@@ -59,7 +60,7 @@ export class SessionAgent {
       initialState: {
         systemPrompt: options.systemPrompt,
         model: options.model,
-        tools: options.tools,
+        tools: options.tools.map(toAgentTool),
         messages: options.messages ?? [],
         thinkingLevel: options.thinkingLevel ?? "off",
       },
@@ -122,7 +123,7 @@ export class SessionAgent {
   attachMcpTools(
     config: McpConfig,
     configErrors: string[] = [],
-    cwd = Deno.cwd(),
+    cwd: string = Deno.cwd(),
   ): Promise<void> {
     if (this.mcpAttached) return this.mcpReady;
     this.mcpAttached = true;
@@ -157,7 +158,7 @@ export class SessionAgent {
 
     this.mcpManager = new McpManager(config, cwd);
     try {
-      const tools = await createMcpTools(this.mcpManager);
+      const tools = (await createMcpTools(this.mcpManager)).map(toAgentTool);
       if (tools.length > 0) {
         this.agent.state.tools = [...this.agent.state.tools, ...tools];
         this.agent.state.systemPrompt +=

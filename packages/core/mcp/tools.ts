@@ -1,6 +1,5 @@
-import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { McpManager, McpToolDef } from "./manager.ts";
+import { object, type Tool } from "../tools/schema.ts";
 
 /** Argument schemas larger than this are omitted from the description. */
 const MAX_SCHEMA_CHARS = 8192;
@@ -13,22 +12,24 @@ export function sanitizeServerName(name: string): string {
   return sanitized.slice(0, 64);
 }
 
-/** Build AgentTool wrappers for every tool of an McpManager. The argument
- * schema is intentionally permissive — MCP schemas are arbitrary JSON
- * Schema, so validation is delegated to the server. */
+/** The argument schema is intentionally permissive — MCP schemas are
+ * arbitrary JSON Schema, so validation is delegated to the server. */
+const mcpArgsSchema = object({}, { additionalProperties: true });
+
+/** Build Tool wrappers for every tool of an McpManager. */
 export async function createMcpTools(
   manager: McpManager,
-): Promise<AgentTool[]> {
+): Promise<Tool[]> {
   const defs = await manager.listTools();
   return defs.map((def) => createMcpTool(manager, def));
 }
 
-function createMcpTool(manager: McpManager, def: McpToolDef): AgentTool {
+function createMcpTool(manager: McpManager, def: McpToolDef): Tool {
   return {
     name: `mcp__${sanitizeServerName(def.server)}__${def.name}`,
     label: `${def.server}: ${def.name}`,
     description: buildDescription(def),
-    parameters: Type.Object({}, { additionalProperties: Type.Any() }),
+    parameters: mcpArgsSchema,
     prepareArguments: (args) =>
       (typeof args === "object" && args !== null && !Array.isArray(args)
         ? args

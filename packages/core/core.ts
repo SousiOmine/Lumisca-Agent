@@ -308,7 +308,7 @@ export class LumiscaCore {
   /** Replace the app-level MCP config (validating first), then rebuild
    * every open session so the new tools take effect. Throws `conflict`
    * while any session is streaming. */
-  async setAppMcpConfig(text: string): Promise<McpInfo> {
+  setAppMcpConfig(text: string): McpInfo {
     try {
       // Validate before storing; the result is discarded.
       parseMcpConfig(text, APP_MCP_SOURCE);

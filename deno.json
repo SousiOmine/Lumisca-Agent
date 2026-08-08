@@ -23,8 +23,6 @@
     "@tabler/icons-react": "npm:@tabler/icons-react@3",
     "marked": "npm:marked@15",
     "esbuild": "npm:esbuild@0.25.12",
-    "vite": "npm:vite@8.2.1",
-    "@vitejs/plugin-react": "npm:@vitejs/plugin-react@6.0.5",
     "@std/assert": "jsr:@std/assert@1",
     "@earendil-works/pi-ai": "npm:@earendil-works/pi-ai@0.83.0",
     "@earendil-works/pi-ai/providers/all": "npm:@earendil-works/pi-ai@0.83.0/providers/all",

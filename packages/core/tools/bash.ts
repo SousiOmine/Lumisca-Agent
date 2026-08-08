@@ -1,13 +1,10 @@
-import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { integer, object, optional, string, type Tool } from "./schema.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
-const bashSchema = Type.Object({
-  command: Type.String({ description: "The shell command to execute" }),
-  timeout: Type.Optional(
-    Type.Integer({ description: "Timeout in seconds (default 120)" }),
-  ),
+const bashSchema = object({
+  command: string("The shell command to execute"),
+  timeout: optional(integer("Timeout in seconds (default 120)")),
 });
 
 export interface BashToolOptions {
@@ -26,7 +23,7 @@ export interface BashToolOptions {
  */
 export function createBashTool(
   options: BashToolOptions,
-): AgentTool<typeof bashSchema> {
+): Tool<typeof bashSchema> {
   const defaultTimeoutSec = options.defaultTimeoutSec ?? 120;
 
   return {

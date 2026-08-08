@@ -8,6 +8,7 @@ export type { ClientEvent } from "./types/event.ts";
 export type { AgentMessage } from "@earendil-works/pi-agent-core";
 export { SessionAgent } from "./agent/session-agent.ts";
 export { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
+export type { Infer, Tool, ToolResult, ToolSchema } from "./tools/schema.ts";
 export { contentText } from "./content.ts";
 export {
   loadMcpConfig,

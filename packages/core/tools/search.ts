@@ -1,7 +1,14 @@
 import { join, relative } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Sandbox } from "../workspace/sandbox.ts";
+import {
+  array,
+  boolean,
+  integer,
+  object,
+  optional,
+  string,
+  type Tool,
+} from "./schema.ts";
 import { truncate, truncatedNote } from "./truncate.ts";
 
 interface FsToolContext {
@@ -151,46 +158,28 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const grepSchema = Type.Object({
-  pattern: Type.String({
-    description: "Regular expression (or literal text) to search for",
-  }),
-  path: Type.Optional(
-    Type.String({
-      description:
-        "File or directory to search; defaults to the whole workspace",
-    }),
+const grepSchema = object({
+  pattern: string("Regular expression (or literal text) to search for"),
+  path: optional(string(
+    "File or directory to search; defaults to the whole workspace",
+  )),
+  literal: optional(
+    boolean("Treat `pattern` as literal text instead of a regex"),
   ),
-  literal: Type.Optional(
-    Type.Boolean({
-      description: "Treat `pattern` as literal text instead of a regex",
-    }),
-  ),
-  include: Type.Optional(
-    Type.Array(Type.String({
-      description: "Glob patterns of files to search (e.g. **/*.ts)",
-    })),
-  ),
-  exclude: Type.Optional(
-    Type.Array(Type.String({
-      description: "Glob patterns of paths to skip",
-    })),
-  ),
-  case_sensitive: Type.Optional(
-    Type.Boolean({
-      description: "Case-sensitive matching (default: insensitive)",
-    }),
-  ),
-  max_results: Type.Optional(
-    Type.Integer({
-      description: "Maximum matches to return (default 200, cap 1000)",
-    }),
-  ),
+  include: optional(array(string(
+    "Glob patterns of files to search (e.g. **/*.ts)",
+  ))),
+  exclude: optional(array(string("Glob patterns of paths to skip"))),
+  case_sensitive: optional(boolean(
+    "Case-sensitive matching (default: insensitive)",
+  )),
+  max_results: optional(integer(
+    "Maximum matches to return (default 200, cap 1000)",
+  )),
 });
-
 export function createGrepTool(
   ctx: FsToolContext,
-): AgentTool<typeof grepSchema> {
+): Tool<typeof grepSchema> {
   return {
     name: "grep",
     label: "Grep",
@@ -333,28 +322,20 @@ async function grepFile(
   return out.length > start;
 }
 
-const globSchema = Type.Object({
-  pattern: Type.String({
-    description: "Glob pattern relative to the search root, e.g. **/*.ts",
-  }),
-  path: Type.Optional(
-    Type.String({
-      description: "Directory to search; defaults to the whole workspace",
-    }),
+const globSchema = object({
+  pattern: string("Glob pattern relative to the search root, e.g. **/*.ts"),
+  path: optional(
+    string("Directory to search; defaults to the whole workspace"),
   ),
-  exclude: Type.Optional(
-    Type.Array(Type.String({ description: "Glob patterns of paths to skip" })),
-  ),
-  max_results: Type.Optional(
-    Type.Integer({
-      description: "Maximum paths to return (default 500, cap 2000)",
-    }),
-  ),
+  exclude: optional(array(string("Glob patterns of paths to skip"))),
+  max_results: optional(integer(
+    "Maximum paths to return (default 500, cap 2000)",
+  )),
 });
 
 export function createGlobTool(
   ctx: FsToolContext,
-): AgentTool<typeof globSchema> {
+): Tool<typeof globSchema> {
   return {
     name: "glob",
     label: "Glob",

@@ -7,7 +7,7 @@ import { AppError } from "./util.ts";
 export interface McpApi {
   /** App-level (global) MCP config; applies to every workspace. */
   getAppMcpInfo(): McpInfo;
-  setAppMcpConfig(text: string): Promise<McpInfo>;
+  setAppMcpConfig(text: string): McpInfo;
   /** A workspace's own `.mcp.json` (merged into sessions alongside the
    * app-level config). */
   getMcpInfo(workspaceId: string): McpInfo;
@@ -16,7 +16,7 @@ export interface McpApi {
 
 async function putConfig(
   c: Context,
-  apply: (text: string) => Promise<McpInfo>,
+  apply: (text: string) => McpInfo | Promise<McpInfo>,
 ) {
   const text = await c.req.text();
   if (text.trim().length === 0) {

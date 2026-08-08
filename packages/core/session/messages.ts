@@ -16,6 +16,42 @@ export interface MessageRepo {
   deleteBySession(sessionId: string): void;
 }
 
+/** Version of the stored message envelope. Bump when the AgentMessage
+ * shape changes (e.g. after a pi major upgrade) and add a normalizer to
+ * decodeStoredMessage so older rows keep decoding. */
+const STORAGE_VERSION = 1;
+
+interface StoredEnvelope {
+  v: number;
+  message: AgentMessage;
+}
+
+/** Envelope format: `{ v: <version>, message: <AgentMessage> }`. The
+ * version stamp decouples the database from pi's message shape — a future
+ * pi change is handled by a normalizer, not by losing old history. */
+function encodeStoredMessage(message: AgentMessage): string {
+  return JSON.stringify({ v: STORAGE_VERSION, message });
+}
+
+/** Decode a stored `content` cell. Rows written before versioning (raw
+ * AgentMessage JSON) decode as-is; versioned rows run a per-version
+ * normalizer. */
+function decodeStoredMessage(content: string): AgentMessage {
+  const parsed: unknown = JSON.parse(content);
+  if (typeof parsed === "object" && parsed !== null && "v" in parsed) {
+    const envelope = parsed as StoredEnvelope;
+    switch (envelope.v) {
+      case 1:
+        return envelope.message;
+      default:
+        // Unknown (future) version: keep the payload rather than losing it.
+        return envelope.message;
+    }
+  }
+  // Legacy row: raw AgentMessage JSON (pre-stamping).
+  return parsed as AgentMessage;
+}
+
 export function createMessageRepo(db: LumiscaDb): MessageRepo {
   const insertStmt = db.db.prepare(`
     INSERT INTO messages (id, session_id, role, content, timestamp)
@@ -39,7 +75,7 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       id: row.id,
       sessionId: row.session_id,
       role: row.role,
-      message: JSON.parse(row.content) as AgentMessage,
+      message: decodeStoredMessage(row.content),
       timestamp: row.timestamp,
     };
   }
@@ -60,7 +96,7 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
         id,
         sessionId,
         message.role,
-        JSON.stringify(message),
+        encodeStoredMessage(message),
         timestamp,
       );
       return {
