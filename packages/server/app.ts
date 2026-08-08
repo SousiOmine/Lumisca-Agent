@@ -5,6 +5,7 @@ import { upgradeWebSocket } from "hono/deno";
 import { type LumiscaCore, THEME_KEY } from "@lumisca/core";
 import { bundleClient } from "./bundle.ts";
 import { renderAppMarkup, renderHtmlDocument } from "./render.tsx";
+import { createViteDevServer, type ViteDev } from "./vite-dev.ts";
 import { SourceWatcher } from "./watch.ts";
 import {
   webClientEntry,
@@ -276,16 +277,72 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     }
   };
 
-  // Dev mode: watch frontend sources, invalidate the asset cache, and
-  // tell connected clients to reload so they pick up the new bundle.
+  // Dev mode: serve and hot-reload frontend sources through an in-process
+  // Vite dev server (middleware mode). Vite's connect middleware is
+  // Node-specific, so client modules are served via transformRequest below
+  // and HMR reaches the browser over Vite's own websocket. If Vite cannot
+  // start (deps missing, …), fall back to the esbuild bundle + full page
+  // reload path.
   let watcher: SourceWatcher | null = null;
-  if (watch) {
+  let viteDev: ViteDev | null = null;
+  let viteDevPromise: Promise<ViteDev | null> | null = null;
+  const getViteDev = (): Promise<ViteDev | null> => {
+    if (viteDev !== null) return Promise.resolve(viteDev);
+    if (viteDevPromise === null) {
+      viteDevPromise = createViteDevServer(repoRoot).then(
+        (vd) => {
+          viteDev = vd;
+          return vd;
+        },
+        (error) => {
+          console.error(
+            "Vite dev server failed to start; falling back to esbuild " +
+              "bundling with full page reloads:",
+            error,
+          );
+          viteDevPromise = null;
+          return null;
+        },
+      );
+    }
+    return viteDevPromise;
+  };
+  const startFallbackWatcher = () => {
     watcher = new SourceWatcher(webSrcDir(repoRoot));
     watcher.start(() => {
       assets.invalidate();
       reloadClients();
     });
-    appDisposers.set(app, () => watcher?.stop());
+  };
+  if (watch) {
+    getViteDev().then((vd) => {
+      if (vd === null) startFallbackWatcher();
+    });
+  }
+  appDisposers.set(app, () => {
+    watcher?.stop();
+    viteDev?.close();
+  });
+
+  // Dev mode: serve transformed frontend modules (/@vite/*, /@fs/*,
+  // /src/*, …). Requests Vite does not own fall through to the routes.
+  if (watch) {
+    app.use("*", async (c, next) => {
+      const vd = await getViteDev();
+      if (vd === null) return next();
+      try {
+        const response = await vd.serveModule(c.req.raw);
+        if (response === null) return next();
+        return response;
+      } catch (error) {
+        return c.text(
+          `Vite module transform failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          500,
+        );
+      }
+    });
   }
 
   // The desktop shell (Tauri WebView) calls the API from another origin.
@@ -325,6 +382,22 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   });
 
   const renderPage = async () => {
+    // Dev mode: render from the live sources via Vite's module runner and
+    // let Vite inject its HMR client into the HTML.
+    const vd = watch ? await getViteDev() : null;
+    if (vd !== null) {
+      const markup = await vd.renderAppMarkup(initialData());
+      const html = await vd.transformIndexHtml(
+        "/",
+        renderHtmlDocument(markup, initialData(), "", {
+          dev: true,
+          token: options.token,
+        }),
+      );
+      return new Response(html, {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
     const [markup, css] = await Promise.all([
       renderAppMarkup(initialData()),
       assets.getCss(),
