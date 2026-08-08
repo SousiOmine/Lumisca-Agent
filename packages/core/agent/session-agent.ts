@@ -9,6 +9,10 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared.ts";
+import type { McpConfig } from "../mcp/config.ts";
+import { McpManager } from "../mcp/manager.ts";
+import type { McpServerStatus } from "../mcp/manager.ts";
+import { createMcpTools } from "../mcp/tools.ts";
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -33,6 +37,17 @@ export class SessionAgent {
   private readonly messageRepo: MessageRepo;
   private readonly onEvent: (event: ClientEvent) => void;
   private savedCount: number;
+  private mcpManager: McpManager | null = null;
+  private mcpAttached = false;
+  /** Resolves once MCP tools are attached (or skipped/failed). Prompts
+   * await it so the first turn always sees the MCP tools — without the
+   * gate, a prompt sent right after session creation would start before
+   * the MCP servers have finished spawning. Never rejects. */
+  private mcpReady: Promise<void> = Promise.resolve();
+  /** True when there is nothing to wait for; prompts then skip the await
+   * entirely (an await on a resolved promise would still defer the run by
+   * a microtask and break "already running" conflict checks). */
+  private mcpReadyDone = true;
 
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
@@ -62,11 +77,13 @@ export class SessionAgent {
     return this.agent.state.messages;
   }
 
-  /** Run a prompt to completion. Failures are reported via the
+  /** Run a prompt to completion. Waits for MCP tools to attach first (they
+   * spawn server processes asynchronously). Failures are reported via the
    * `session_error` event, never through the returned promise — callers
    * (HTTP fire-and-forget, CLI) all listen on events, so awaiting here only
    * means "the run finished". */
   async prompt(text: string): Promise<void> {
+    if (!this.mcpReadyDone) await this.mcpReady;
     try {
       await this.agent.prompt(text);
     } catch (error) {
@@ -80,6 +97,93 @@ export class SessionAgent {
 
   abort(): void {
     this.agent.abort();
+  }
+
+  /** Abort the run and release MCP server processes (session closed). */
+  close(): void {
+    this.agent.abort();
+    const manager = this.mcpManager;
+    this.mcpManager = null;
+    if (manager) void manager.close();
+  }
+
+  /** Live MCP server status of this session (null when no MCP config or
+   * the manager has not started yet). */
+  getMcpStatus(): McpServerStatus[] | null {
+    return this.mcpManager?.getStatus() ?? null;
+  }
+
+  /** Attach MCP server tools (merged app-level + workspace config) to the
+   * agent. Runs after construction; config errors are reported as
+   * session_error events and never break the agent loop. The returned
+   * promise (also stored as `mcpReady`) resolves when attachment finished,
+   * so the first prompt can wait for it. `cwd` is the workspace root;
+   * stdio servers spawn there. */
+  attachMcpTools(
+    config: McpConfig,
+    configErrors: string[] = [],
+    cwd = Deno.cwd(),
+  ): Promise<void> {
+    if (this.mcpAttached) return this.mcpReady;
+    this.mcpAttached = true;
+    // Nothing to attach: keep the fast path so prompts start without even
+    // a microtask delay (the "already running" conflict check relies on
+    // startPrompt reaching the agent loop synchronously).
+    if (config.servers.length === 0 && configErrors.length === 0) {
+      return Promise.resolve();
+    }
+    this.mcpReadyDone = false;
+    this.mcpReady = this.doAttachMcpTools(config, configErrors, cwd).finally(
+      () => {
+        this.mcpReadyDone = true;
+      },
+    );
+    return this.mcpReady;
+  }
+
+  private async doAttachMcpTools(
+    config: McpConfig,
+    configErrors: string[],
+    cwd: string,
+  ): Promise<void> {
+    for (const message of configErrors) {
+      this.emit({
+        type: "session_error",
+        sessionId: this.sessionId,
+        message,
+      });
+    }
+    if (config.servers.length === 0) return;
+
+    this.mcpManager = new McpManager(config, cwd);
+    try {
+      const tools = await createMcpTools(this.mcpManager);
+      if (tools.length > 0) {
+        this.agent.state.tools = [...this.agent.state.tools, ...tools];
+        this.agent.state.systemPrompt +=
+          "\n\nNote: MCP tools (names starting with mcp__) can access resources outside the workspace.";
+      }
+      const failed = this.mcpManager
+        .getStatus()
+        .filter((s) => s.status === "error");
+      if (failed.length > 0) {
+        this.emit({
+          type: "session_error",
+          sessionId: this.sessionId,
+          message: `MCP servers failed: ${
+            failed.map((s) => `${s.name}: ${s.error}`).join("; ")
+          }`,
+        });
+      }
+    } catch (error) {
+      this.emit({
+        type: "session_error",
+        sessionId: this.sessionId,
+        message: `MCP error: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
   }
 
   async waitForIdle(): Promise<void> {

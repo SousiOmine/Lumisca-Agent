@@ -9,6 +9,22 @@ export type { AgentMessage } from "@earendil-works/pi-agent-core";
 export { SessionAgent } from "./agent/session-agent.ts";
 export { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
 export { contentText } from "./content.ts";
+export {
+  loadMcpConfig,
+  MCP_CONFIG_FILE,
+  McpConfigError,
+  parseMcpConfig,
+  serializeMcpConfig,
+} from "./mcp/config.ts";
+export type {
+  McpConfig,
+  McpInfo,
+  McpServerConfig,
+  McpServerInfo,
+} from "./mcp/config.ts";
+export { McpManager } from "./mcp/manager.ts";
+export type { McpServerStatus, McpToolDef } from "./mcp/manager.ts";
+export { createMcpTools, sanitizeServerName } from "./mcp/tools.ts";
 export { CREDENTIAL_KEY_PREFIX } from "./settings/credentials.ts";
 export { THEME_KEY } from "./settings/repo.ts";
 export { formatModelMeta } from "./models/meta.ts";

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { realpathSync } from "node:fs";
 import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
 import { assertEquals } from "@std/assert";
@@ -10,6 +11,20 @@ function setup() {
   const port = server.addr.port;
   const base = `http://127.0.0.1:${port}`;
   return { core, server, faux, base };
+}
+
+/** Windows can hold a directory handle briefly after a spawned child exits;
+ * retry removal instead of failing the test. */
+async function removeDirRetry(path: string): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    try {
+      await Deno.remove(path, { recursive: true });
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  await Deno.remove(path, { recursive: true }); // last attempt: surface errors
 }
 
 function json(
@@ -774,5 +789,197 @@ Deno.test("server bundles and serves the client app", async () => {
   } finally {
     server.shutdown();
     core.close();
+  }
+});
+
+Deno.test("MCP config API: get, put, validate and rebuild sessions", async () => {
+  const { core, server, base, faux } = await setup();
+  const providerId = faux.provider.id;
+  const modelId = faux.getModel().id;
+  let root = "";
+  try {
+    root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const fakeServer = join(
+      import.meta.dirname!,
+      "..",
+      "..",
+      "scripts",
+      "fake-mcp-server.ts",
+    );
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+
+    // No .mcp.json yet: empty config, no file.
+    const empty = await json(base, `/api/workspaces/${ws.id}/mcp`);
+    assertEquals(empty.status, 200);
+    const emptyInfo = await empty.json();
+    assertEquals(emptyInfo.servers.length, 0);
+    assertEquals(emptyInfo.exists, false);
+
+    // A session exists before the config is saved; PUT must rebuild it.
+    const session = core.createSession({
+      workspaceId: ws.id,
+      name: "mcp",
+      modelProvider: providerId,
+      modelId,
+    });
+
+    const put = await json(base, `/api/workspaces/${ws.id}/mcp`, {
+      method: "PUT",
+      body: JSON.stringify({
+        mcpServers: {
+          fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+          disabled: { command: "nope", enabled: false },
+        },
+      }),
+    });
+    assertEquals(put.status, 200);
+    const info = await put.json();
+    assertEquals(info.exists, true);
+    assertEquals(info.servers.length, 2);
+    assertEquals(info.servers[0]!.name, "fake");
+    assertEquals(info.servers[0]!.type, "stdio");
+    assertEquals(info.servers[1]!.enabled, false);
+
+    // The file was written; GET reflects it.
+    const again = await json(base, `/api/workspaces/${ws.id}/mcp`);
+    const againInfo = await again.json();
+    assertEquals(againInfo.servers.length, 2);
+
+    // The rebuilt session attaches the MCP tools asynchronously.
+    const agent = core.getAgent(session.id)!;
+    const started = Date.now();
+    while (
+      !agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo") &&
+      Date.now() - started < 10000
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo"),
+      true,
+      "session must attach MCP tools after PUT",
+    );
+    // The disabled server contributes no tools.
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === "mcp__disabled__"),
+      false,
+    );
+  } finally {
+    server.shutdown();
+    core.close();
+    // The MCP server process must be dead before the dir can go.
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("MCP config API rejects invalid input", async () => {
+  const { core, server, base } = await setup();
+  let root = "";
+  try {
+    root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+
+    const invalid = await json(base, `/api/workspaces/${ws.id}/mcp`, {
+      method: "PUT",
+      body: "not json",
+    });
+    assertEquals(invalid.status, 400);
+
+    const emptyBody = await json(base, `/api/workspaces/${ws.id}/mcp`, {
+      method: "PUT",
+      body: "",
+    });
+    assertEquals(emptyBody.status, 400);
+
+    const missingWorkspace = await json(base, "/api/workspaces/nope/mcp");
+    assertEquals(missingWorkspace.status, 404);
+
+    // Nothing was written by the failed requests.
+    const after = await json(base, `/api/workspaces/${ws.id}/mcp`);
+    assertEquals((await after.json()).exists, false);
+
+    await Deno.remove(root, { recursive: true });
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("app-level MCP config API applies to every workspace", async () => {
+  const { core, server, base, faux } = await setup();
+  const providerId = faux.provider.id;
+  const modelId = faux.getModel().id;
+  let root = "";
+  try {
+    const fakeServer = join(
+      import.meta.dirname!,
+      "..",
+      "..",
+      "scripts",
+      "fake-mcp-server.ts",
+    );
+    // No app config yet.
+    const empty = await json(base, "/api/mcp");
+    assertEquals(empty.status, 200);
+    assertEquals((await empty.json()).servers.length, 0);
+
+    // Save an app-level server.
+    const put = await json(base, "/api/mcp", {
+      method: "PUT",
+      body: JSON.stringify({
+        mcpServers: {
+          fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+        },
+      }),
+    });
+    assertEquals(put.status, 200);
+    const info = await put.json();
+    assertEquals(info.servers.length, 1);
+    assertEquals(info.servers[0]!.name, "fake");
+
+    const invalid = await json(base, "/api/mcp", {
+      method: "PUT",
+      body: "nope",
+    });
+    assertEquals(invalid.status, 400);
+
+    // A session in any workspace picks up the app-level tools.
+    root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+    const session = core.createSession({
+      workspaceId: ws.id,
+      name: "app-mcp",
+      modelProvider: providerId,
+      modelId,
+    });
+    const agent = core.getAgent(session.id)!;
+    const started = Date.now();
+    while (
+      !agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo") &&
+      Date.now() - started < 10000
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo"),
+      true,
+      "session must attach app-level MCP tools",
+    );
+  } finally {
+    server.shutdown();
+    core.close();
+    if (root) await removeDirRetry(root);
   }
 });

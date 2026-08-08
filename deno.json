@@ -29,6 +29,9 @@
     "@earendil-works/pi-ai": "npm:@earendil-works/pi-ai@0.83.0",
     "@earendil-works/pi-ai/providers/all": "npm:@earendil-works/pi-ai@0.83.0/providers/all",
     "@earendil-works/pi-agent-core": "npm:@earendil-works/pi-agent-core@0.83.0",
+    "@modelcontextprotocol/sdk/client/index.js": "npm:@modelcontextprotocol/sdk@1.30.0/client/index.js",
+    "@modelcontextprotocol/sdk/client/stdio.js": "npm:@modelcontextprotocol/sdk@1.30.0/client/stdio.js",
+    "@modelcontextprotocol/sdk/client/streamableHttp.js": "npm:@modelcontextprotocol/sdk@1.30.0/client/streamableHttp.js",
     "hono": "npm:hono@4",
     "hono/cors": "npm:hono@4/cors",
     "hono/deno": "npm:hono@4/deno"

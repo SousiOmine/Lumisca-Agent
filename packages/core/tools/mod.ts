@@ -8,6 +8,8 @@ import {
   createWriteFileTool,
 } from "./filesystem.ts";
 import { createBashTool } from "./bash.ts";
+import { createGlobTool, createGrepTool } from "./search.ts";
+import { loadProjectMemory } from "../memory/agents-md.ts";
 
 export interface ToolFactoryOptions {
   /** Default working directory (first workspace folder). */
@@ -30,6 +32,8 @@ export function createCodingTools(
     createWriteFileTool(ctx),
     createEditFileTool(ctx),
     createListDirTool(ctx),
+    createGrepTool(ctx),
+    createGlobTool(ctx),
     createBashTool({ cwd, env: options.env }),
   ];
   return { tools, sandbox, cwd };
@@ -38,6 +42,10 @@ export function createCodingTools(
 /** System prompt describing the agent and its workspace boundaries. */
 export function buildSystemPrompt(workspace: Workspace): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
+  const memory = loadProjectMemory(workspace.folders);
+  const memorySection = memory
+    ? `\n\n# Project memory (AGENTS.md)\n${memory}`
+    : "";
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
@@ -48,5 +56,6 @@ Guidelines:
 - Use relative or absolute paths; everything is resolved against the workspace folders.
 - After making changes, verify them (run tests, builds) when appropriate.
 - Ask the user when a task is ambiguous.
+${memorySection}
 `;
 }

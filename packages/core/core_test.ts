@@ -400,7 +400,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db1.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    1,
+    2,
   );
   db1.close();
 
@@ -409,7 +409,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db2.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    1,
+    2,
   );
   db2.close();
 
@@ -598,4 +598,353 @@ Deno.test("thinking level change is refused while a session using the model stre
     "high",
   );
   core.close();
+});
+
+Deno.test("generated system prompt includes AGENTS.md and is rebuilt on reopen", async () => {
+  const { core, faux: _faux, providerId, modelId } = setup();
+  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
+  await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 2.\n");
+  const ws = await core.createWorkspace("ws", [root]);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+  const agent = core.getAgent(session.id)!;
+  assertEquals(agent.agent.state.systemPrompt.includes("Use Deno 2."), true);
+  assertEquals(session.systemPromptCustom, false);
+
+  // Editing AGENTS.md must be reflected when the session is reopened.
+  await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 3.\n");
+  core.closeSession(session.id);
+  await core.openSession(session.id);
+  const reopened = core.getAgent(session.id)!;
+  assertEquals(
+    reopened.agent.state.systemPrompt.includes("Use Deno 3."),
+    true,
+    "AGENTS.md edit must be picked up on reopen",
+  );
+  assertEquals(
+    reopened.agent.state.systemPrompt.includes("Use Deno 2."),
+    false,
+  );
+
+  core.close();
+  await Deno.remove(root, { recursive: true });
+});
+
+Deno.test("custom system prompt is preserved across reopen", async () => {
+  const { core, faux: _faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+    systemPrompt: "You are a specialized reviewer.",
+  });
+  assertEquals(session.systemPromptCustom, true);
+  const agent = core.getAgent(session.id)!;
+  assertEquals(
+    agent.agent.state.systemPrompt,
+    "You are a specialized reviewer.",
+  );
+
+  core.closeSession(session.id);
+  const reopened = await core.openSession(session.id);
+  assertEquals(reopened.systemPromptCustom, true);
+  assertEquals(
+    core.getAgent(session.id)!.agent.state.systemPrompt,
+    "You are a specialized reviewer.",
+  );
+
+  core.close();
+});
+
+Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const root = realpathSync(
+    await Deno.makeTempDir({ prefix: "lumisca-core-" }),
+  );
+  const fakeServer = join(
+    import.meta.dirname!,
+    "..",
+    "..",
+    "scripts",
+    "fake-mcp-server.ts",
+  );
+  await Deno.writeTextFile(
+    join(root, ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+      },
+    }),
+  );
+  const ws = await core.createWorkspace("ws", [root]);
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  try {
+    // MCP tools attach asynchronously; wait for the spawn + handshake.
+    const agent = core.getAgent(session.id)!;
+    const started = Date.now();
+    while (
+      !agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo") &&
+      Date.now() - started < 10000
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo"),
+      true,
+      "MCP tool never attached",
+    );
+    assertEquals(
+      agent.agent.state.systemPrompt.includes("mcp__"),
+      true,
+      "system prompt must mention MCP boundary",
+    );
+
+    // The model calls the MCP tool and gets the server's answer.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Echoing."),
+        fauxToolCall("mcp__fake__echo", { text: "hi" }),
+      ]),
+      fauxAssistantMessage("Done."),
+    ]);
+    await core.prompt(session.id, "Echo hi");
+
+    const messages = core.getAgent(session.id)!.messages;
+    const toolResults = messages.filter((m) => m.role === "toolResult");
+    assertEquals(toolResults.length, 1);
+    const tr = toolResults[0] as {
+      content: Array<{ type: string; text: string }>;
+    };
+    assertEquals(tr.content[0]!.text, "echo:hi");
+  } finally {
+    core.close();
+    // The MCP server process may hold the directory briefly on Windows.
+    for (let i = 0; i < 20; i++) {
+      try {
+        await Deno.remove(root, { recursive: true });
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  }
+});
+
+async function waitForMcpTools(
+  agent: NonNullable<ReturnType<LumiscaCore["getAgent"]>>,
+  toolName: string,
+): Promise<void> {
+  const started = Date.now();
+  while (
+    !agent.agent.state.tools.some((t) => t.name === toolName) &&
+    Date.now() - started < 10000
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+Deno.test("app-level MCP config persists and applies to sessions", async () => {
+  const { core, faux: _faux, providerId, modelId } = setup();
+  const root = realpathSync(
+    await Deno.makeTempDir({ prefix: "lumisca-core-" }),
+  );
+  const fakeServer = join(
+    import.meta.dirname!,
+    "..",
+    "..",
+    "scripts",
+    "fake-mcp-server.ts",
+  );
+  const ws = await core.createWorkspace("ws", [root]);
+  try {
+    // No app config yet.
+    const empty = core.getAppMcpInfo();
+    assertEquals(empty.servers.length, 0);
+    assertEquals(empty.exists, false);
+
+    // Save an app-level server (no workspace .mcp.json involved).
+    const info = await core.setAppMcpConfig(
+      JSON.stringify({
+        mcpServers: {
+          fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+        },
+      }),
+    );
+    assertEquals(info.servers.length, 1);
+    assertEquals(info.exists, true);
+    assertEquals(core.getAppMcpInfo().servers[0]!.name, "fake");
+
+    // Sessions get the app-level tools.
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const agent = core.getAgent(session.id)!;
+    await waitForMcpTools(agent, "mcp__fake__echo");
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo"),
+      true,
+    );
+    assertEquals(
+      agent.agent.state.systemPrompt.includes("mcp__"),
+      true,
+      "system prompt must mention MCP boundary",
+    );
+
+    // The generic settings surface refuses the MCP key (secrets may live
+    // in env/headers).
+    assertThrows(
+      () => core.getSetting("mcp_servers"),
+      Error,
+      "MCP configuration cannot be accessed",
+    );
+    assertEquals(core.listSettings().has("mcp_servers"), false);
+  } finally {
+    core.close();
+    for (let i = 0; i < 20; i++) {
+      try {
+        await Deno.remove(root, { recursive: true });
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  }
+});
+
+Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
+  const { core, faux: _faux, providerId, modelId } = setup();
+  const root = realpathSync(
+    await Deno.makeTempDir({ prefix: "lumisca-core-" }),
+  );
+  const fakeServer = join(
+    import.meta.dirname!,
+    "..",
+    "..",
+    "scripts",
+    "fake-mcp-server.ts",
+  );
+  // The app-level "fake" points at a binary that cannot start...
+  await core.setAppMcpConfig(
+    JSON.stringify({
+      mcpServers: {
+        fake: { command: "definitely-not-a-real-binary", args: [] },
+        "app-only": { command: Deno.execPath(), args: ["run", fakeServer] },
+      },
+    }),
+  );
+  // ...but the workspace's own .mcp.json overrides it with a working one.
+  await Deno.writeTextFile(
+    join(root, ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+      },
+    }),
+  );
+  const ws = await core.createWorkspace("ws", [root]);
+  try {
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const agent = core.getAgent(session.id)!;
+    // The workspace override wins: the fake server's tools appear even
+    // though the app-level "fake" would fail to start.
+    await waitForMcpTools(agent, "mcp__fake__echo");
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === "mcp__app-only__echo"),
+      true,
+      "app-only server must still be merged in",
+    );
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === "mcp__fake__crash"),
+      true,
+    );
+  } finally {
+    core.close();
+    for (let i = 0; i < 20; i++) {
+      try {
+        await Deno.remove(root, { recursive: true });
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  }
+});
+
+Deno.test("first prompt waits for MCP tools to attach", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const root = realpathSync(
+    await Deno.makeTempDir({ prefix: "lumisca-core-" }),
+  );
+  const fakeServer = join(
+    import.meta.dirname!,
+    "..",
+    "..",
+    "scripts",
+    "fake-mcp-server.ts",
+  );
+  await Deno.writeTextFile(
+    join(root, ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+      },
+    }),
+  );
+  const ws = await core.createWorkspace("ws", [root]);
+  try {
+    // Prompt immediately — no waiting for the async attach: the session
+    // must gate the run on MCP readiness so the FIRST turn already sees
+    // the MCP tools (previously the run started before the servers had
+    // spawned and the tools were missing from the first request).
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Echoing."),
+        fauxToolCall("mcp__fake__echo", { text: "first" }),
+      ]),
+      fauxAssistantMessage("Done."),
+    ]);
+    await core.prompt(session.id, "Echo first");
+
+    const messages = core.getAgent(session.id)!.messages;
+    const toolResults = messages.filter((m) => m.role === "toolResult");
+    assertEquals(toolResults.length, 1);
+    const tr = toolResults[0] as {
+      isError: boolean;
+      content: Array<{ type: string; text: string }>;
+    };
+    assertEquals(tr.isError, false, `tool call failed: ${tr.content[0]?.text}`);
+    assertEquals(tr.content[0]!.text, "echo:first");
+  } finally {
+    core.close();
+    for (let i = 0; i < 20; i++) {
+      try {
+        await Deno.remove(root, { recursive: true });
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  }
 });

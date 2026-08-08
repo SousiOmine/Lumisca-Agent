@@ -1,6 +1,7 @@
 import type {
   AgentMessage,
   ClientEvent,
+  McpInfo,
   ModelInfo,
   ProviderInfo,
   SessionInfo,
@@ -136,6 +137,13 @@ export const api = {
     >(
       `/api/fs/browse?path=${encodeURIComponent(path)}`,
     ),
+  /** App-level (global) MCP config; applies to every workspace. */
+  getMcpConfig: () => request<McpInfo>("/api/mcp"),
+  putMcpConfig: (text: string) =>
+    request<McpInfo>("/api/mcp", {
+      method: "PUT",
+      body: text,
+    }),
   setSetting: (key: string, value: string) =>
     request<{ ok: boolean }>(`/api/settings/${key}`, {
       method: "PUT",

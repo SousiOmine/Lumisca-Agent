@@ -19,7 +19,14 @@ CLI・Web・デスクトップの3つのフロントエンドから同一の機�
 - **セッション永続化**: セッション履歴とメタデータを SQLite に保存。再起動後も再開できます
 - **全プロバイダー対応**: Anthropic, OpenAI, DeepSeek, OpenRouter, Google など
   20+ のプロバイダーを API キー方式で利用可能(モデル選択UI付き)
-- **ツール**: read_file / write_file / edit / list_dir / bash(cmd.exe または /bin/sh)
+- **ツール**: read_file / write_file / edit / list_dir / grep / glob / bash(cmd.exe または /bin/sh)
+- **MCP 対応**: 外部ツールサーバー(MCP)を追加可能。**設定モーダル(⚙ → MCP サーバー)
+  でアプリ単位(全ワークスペース共通)に GUI 管理**でき、ツールは
+  `mcp__<サーバー>__<ツール>` として利用可能(公式 `@modelcontextprotocol/sdk` 使用)。
+  各ワークスペースの `.mcp.json` も自動的にマージされます(同名はワークスペース優先)
+- **プロジェクトメモリ (AGENTS.md)**: ワークスペースのリポジトリにある
+  `AGENTS.md` / `AGENTS.override.md` を自動でシステムプロンプトに取り込みます
+  (`.git` を手がかりにリポジトリルートまで遡り、合計32KBまで。編集は次回オープン時に反映)
 
 ## 構成
 
@@ -28,6 +35,8 @@ packages/
 ├── core/      AI基板(共通)。全フロントエンドはこれだけに依存
 │   ├── agent/       pi-agent-core ラッパー + セッションプール
 │   ├── tools/       ワークスペース境界付きコーディングツール
+│   ├── mcp/         MCP クライアント(公式 SDK ラッパー + .mcp.json 設定)
+│   ├── memory/      AGENTS.md プロジェクトメモリ
 │   ├── workspace/   複数フォルダ管理・サンドボックス
 │   ├── session/     セッション管理 + SQLite 永続化
 │   ├── models/      pi-ai モデル管理
@@ -120,6 +129,51 @@ npm run tauri --prefix packages/desktop -- build      # インストーラ
 自動設定されます(後から切り替え可能)。
 環境変数(`ANTHROPIC_API_KEY` 等)で認証が解決されるプロバイダーも設定済みとして表示されます。
 
+## MCP サーバーの設定
+
+MCP(Model Context Protocol)サーバーを追加すると、その外部ツールを
+エージェントから `mcp__<サーバー名>__<ツール名>` として呼び出せます。
+
+設定は**アプリ単位(全ワークスペース共通)**と**ワークスペース単位**の2段階があり、
+両方が自動的にマージされます(同名のサーバーはワークスペース単位が優先):
+
+1. **アプリ単位(GUI 推奨)**: 設定モーダル(⚙ → MCP サーバー)→
+   「+ サーバーを追加」で名前・種類(stdio / HTTP)・コマンド・引数・環境変数を入力して保存。
+   すべてのワークスペースのセッションに適用されます
+2. **ワークスペース単位(ファイル)**: ワークスペースルートの `.mcp.json`
+   (Claude Code 互換形式)を直接編集
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    },
+    "github": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer x" }
+    }
+  }
+}
+```
+
+- 各サーバーは `enabled: false` で削除せずに一時無効化できます
+- `env` とコマンド/URL 内の `${VAR}` はプロセスの環境変数で展開されます
+- 変更は保存後すぐに、対象の全セッションへ反映されます
+  (実行中のセッションがある場合は保存をブロック)
+- 外部編集との競合時は上書き確認ダイアログが表示されます
+- **注意**: MCP ツールはワークスペースのサンドボックス境界の外にもアクセスできます。
+  アプリ単位の設定は DB に、設定ファイルに秘密情報を含める場合は `.gitignore` への
+  追加を推奨します
+
+## プロジェクトメモリ (AGENTS.md)
+
+ワークスペース内のリポジトリ(`.git` まで遡って検出)にある `AGENTS.md` を自動で
+システムプロンプトに取り込みます。階層ごとの `AGENTS.override.md` は同じ階層の
+`AGENTS.md` を置き換えます。合計32KBまで。ファイルを編集すると、セッションを
+開き直したときに反映されます。
+
 ## データ
 
 - データベース: `./lumisca.db`(既定。`LUMISCA_DB` で変更)
@@ -149,6 +203,14 @@ core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSoc
   インラインスクリプトはページ CSP で禁止しているため外部化しています)
 - セッションのメッセージは message_end ごとに SQLite へ追記保存され、
   再オープン時に完全復元されます
+- システムプロンプトは生成時に AGENTS.md を取り込みます。ユーザー指定の
+  カスタムプロンプト(`system_prompt_custom`)のみ保存され、生成プロンプトは
+  開くたびに再生成されるため、AGENTS.md の編集が次回オープン時に反映されます
+- MCP は公式 `@modelcontextprotocol/sdk` の Client を使用し、`McpManager` が
+  セッションごとにサーバーの起動・ツール発見・呼び出し・終了を管理します
+  (stdio は子プロセス、HTTP は streamable HTTP)。アプリ単位の設定は DB
+  (settings の `mcp_servers` キー、汎用 settings API からは保護)で、
+  ワークスペースの `.mcp.json` とマージして使用します
 - ワークスペース境界の検証は `packages/core/workspace/sandbox.ts` に集約されており、
   実在パスは realpath 解決後にルート集合との包含判定を行います
 - セキュリティ: ループバック限定 + オリジン完全比較(CORS / WS)+

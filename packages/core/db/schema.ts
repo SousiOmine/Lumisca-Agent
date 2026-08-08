@@ -44,6 +44,13 @@ CREATE TABLE IF NOT EXISTS settings (
  * schema of existing databases. */
 const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   (db) => db.exec(BASE_SCHEMA),
+  // Distinguish custom (user-provided) system prompts from generated ones:
+  // generated prompts are rebuilt from the workspace (including AGENTS.md)
+  // whenever a session is opened, so project memory edits take effect.
+  (db) =>
+    db.exec(
+      "ALTER TABLE sessions ADD COLUMN system_prompt_custom INTEGER NOT NULL DEFAULT 0",
+    ),
 ];
 
 /** Apply pending migrations, tracked via PRAGMA user_version. */

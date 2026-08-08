@@ -4,6 +4,8 @@ import type { Message, ToolCall } from "@earendil-works/pi-ai";
 import type {
   AgentMessage,
   ClientEvent as CoreClientEvent,
+  McpInfo,
+  McpServerInfo,
   ModelInfo,
   ProviderInfo,
   SessionInfo,
@@ -12,6 +14,8 @@ import type {
 } from "@lumisca/core";
 export type {
   AgentMessage,
+  McpInfo,
+  McpServerInfo,
   ModelInfo,
   ProviderInfo,
   SessionInfo,

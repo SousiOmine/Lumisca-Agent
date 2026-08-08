@@ -18,6 +18,7 @@ import { workspaceRoutes } from "./routes/workspaces.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 import { providerRoutes } from "./routes/providers.ts";
 import { settingRoutes } from "./routes/settings.ts";
+import { mcpRoutes } from "./routes/mcp.ts";
 import { jsonError } from "./routes/util.ts";
 import type { InitialData } from "@lumisca/web/types";
 
@@ -473,6 +474,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   app.route("/api", fsRoutes());
   app.route("/api", workspaceRoutes(core));
+  app.route("/api", mcpRoutes(core));
   app.route("/api", sessionRoutes(core));
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
