@@ -1,4 +1,4 @@
-import { IconArrowLeft } from "@tabler/icons-react";
+import { IconArrowLeft, IconPlus } from "@tabler/icons-react";
 import { useProviders } from "../../providers.ts";
 
 /** Settings → provider list: configured first, then everything else. */
@@ -84,7 +84,8 @@ export function ProviderList({
 
       <div className="modal-actions">
         <button type="button" className="btn primary" onClick={onAdd}>
-          + プロバイダーを追加
+          <IconPlus size={14} />
+          プロバイダーを追加
         </button>
       </div>
     </>

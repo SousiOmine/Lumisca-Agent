@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { IconArrowLeft, IconChevronRight } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconArrowLeft,
+  IconChevronRight,
+  IconCircleDashed,
+  IconPlugConnected,
+  IconPlus,
+  IconTrash,
+} from "@tabler/icons-react";
 import type { McpInfo, McpServerInfo } from "../../types.ts";
 import { api } from "../../api.ts";
 import { McpDetail } from "./McpDetail.tsx";
@@ -202,10 +210,25 @@ export function McpList({
                 </span>
                 <span className="provider-state configured">
                   {s.status === "ok"
-                    ? `${s.toolCount} tools`
+                    ? (
+                      <>
+                        <IconPlugConnected size={12} />
+                        {s.toolCount} tools
+                      </>
+                    )
                     : s.status === "error"
-                    ? "エラー"
-                    : "未起動"}
+                    ? (
+                      <>
+                        <IconAlertTriangle size={12} />
+                        エラー
+                      </>
+                    )
+                    : (
+                      <>
+                        <IconCircleDashed size={12} />
+                        未起動
+                      </>
+                    )}
                 </span>
                 <IconChevronRight size={14} />
               </button>
@@ -231,6 +254,7 @@ export function McpList({
                 title={`${s.name} を削除`}
                 onClick={() => remove(s.name)}
               >
+                <IconTrash size={13} />
                 削除
               </button>
             </div>
@@ -244,7 +268,8 @@ export function McpList({
           onClick={() => setEditing(null)}
           disabled={!config}
         >
-          + サーバーを追加
+          <IconPlus size={14} />
+          サーバーを追加
         </button>
       </div>
     </>

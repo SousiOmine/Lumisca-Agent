@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { IconChevronRight } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconCheck,
+  IconChevronRight,
+  IconClock,
+  IconLoader2,
+} from "@tabler/icons-react";
 import { contentText } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
 
@@ -47,7 +53,13 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
           <IconChevronRight size={14} />
         </span>
         <span className="tool-name">{toolCall.name}</span>
-        <span className={`tool-state ${state}`}>{stateLabel}</span>
+        <span className={`tool-state ${state}`}>
+          {state === "running" && <IconLoader2 size={11} className="spin" />}
+          {state === "done" && <IconCheck size={11} />}
+          {state === "error" && <IconAlertTriangle size={11} />}
+          {state === "pending" && <IconClock size={11} />}
+          {stateLabel}
+        </span>
       </div>
       {open && (
         <div className="tool-body">

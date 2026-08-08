@@ -169,7 +169,10 @@ export async function pickModel(core: LumiscaCore): Promise<
   const modelId = await selectFromList(
     `モデルを選択 (${models.length} 件)`,
     models.map((m) => {
-      const meta = formatModelMeta(m.contextWindow, m.reasoning);
+      // Terminal-safe thinking marker: the web UI shows a Tabler icon
+      // instead of the emoji (see formatModelMeta in core/shared.ts).
+      const meta = formatModelMeta(m.contextWindow) +
+        (m.reasoning ? " 🧠" : "");
       return {
         label: meta ? `${m.id} ${color.faint(meta)}` : m.id,
         value: m.id,

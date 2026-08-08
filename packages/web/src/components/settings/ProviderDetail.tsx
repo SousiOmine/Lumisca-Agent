@@ -1,5 +1,10 @@
-import { useMemo, useState } from "react";
-import { IconArrowLeft } from "@tabler/icons-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  IconArrowLeft,
+  IconBrain,
+  IconCheck,
+  IconCircleDashed,
+} from "@tabler/icons-react";
 import { api } from "../../api.ts";
 import { formatModelMeta } from "@lumisca/core/shared";
 import { errorText, filterByQuery, useProviders } from "../../providers.ts";
@@ -35,6 +40,18 @@ export function ProviderDetail({
     setAuth(authState);
     setModels(ms);
   };
+
+  // Load auth state and the model list when the detail opens (and again if
+  // the provider changes while mounted). saveKey refreshes after a save.
+  useEffect(() => {
+    let stale = false;
+    load().catch((e) => {
+      if (!stale) setError(e instanceof Error ? e.message : String(e));
+    });
+    return () => {
+      stale = true;
+    };
+  }, [providerId]);
 
   const provider = providers.find((p) => p.id === providerId);
 
@@ -83,8 +100,16 @@ export function ProviderDetail({
         </button>
         <h2>{provider?.name ?? providerId}</h2>
         {auth.configured
-          ? <span className="provider-state configured">設定済み</span>
-          : <span className="provider-state">未設定</span>}
+          ? (
+            <span className="provider-state configured">
+              <IconCheck size={12} /> 設定済み
+            </span>
+          )
+          : (
+            <span className="provider-state">
+              <IconCircleDashed size={12} /> 未設定
+            </span>
+          )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -160,7 +185,14 @@ export function ProviderDetail({
               />
               <span className="model-id">{m.id}</span>
               <span className="model-meta">
-                {formatModelMeta(m.contextWindow, m.reasoning)}
+                {formatModelMeta(m.contextWindow)}
+                {m.reasoning && (
+                  <IconBrain
+                    size={12}
+                    title="思考モデル"
+                    aria-label="思考モデル"
+                  />
+                )}
               </span>
             </label>
           ))}

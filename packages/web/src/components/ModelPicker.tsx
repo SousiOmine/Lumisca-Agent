@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { IconBrain } from "@tabler/icons-react";
 import { api } from "../api.ts";
 import { formatModelMeta } from "@lumisca/core/shared";
 import type { ModelInfo } from "../types.ts";
@@ -149,7 +150,14 @@ export function ModelPicker({
                   >
                     <span className="model-id">{m.id}</span>
                     <span className="model-meta">
-                      {formatModelMeta(m.contextWindow, m.reasoning)}
+                      {formatModelMeta(m.contextWindow)}
+                      {m.reasoning && (
+                        <IconBrain
+                          size={12}
+                          title="思考モデル"
+                          aria-label="思考モデル"
+                        />
+                      )}
                     </span>
                   </div>
                 ))}

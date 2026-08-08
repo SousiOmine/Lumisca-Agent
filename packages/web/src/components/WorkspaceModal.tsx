@@ -5,6 +5,7 @@ import {
   IconChevronRight,
   IconDeviceDesktop,
   IconFolder,
+  IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
 import { api } from "../api.ts";
@@ -99,7 +100,8 @@ export function WorkspaceModal(
                   className="btn"
                   onClick={() => setView({ kind: "browse" })}
                 >
-                  + フォルダを選択
+                  <IconPlus size={14} />
+                  フォルダを選択
                 </button>
               </div>
             </label>
@@ -115,6 +117,7 @@ export function WorkspaceModal(
                       onClick={() =>
                         setFolders((prev) => prev.filter((p) => p !== f))}
                     >
+                      <IconTrash size={13} />
                       削除
                     </button>
                   </div>

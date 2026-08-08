@@ -69,14 +69,11 @@ export function contentText(
     .join("");
 }
 
-/** "123K ctx 🧠" style model metadata for pickers and lists.
- * Shared by the web UI and the CLI so model display stays consistent. */
-export function formatModelMeta(
-  contextWindow?: number,
-  reasoning?: boolean,
-): string {
+/** "123K ctx" style model metadata for pickers and lists.
+ * Text-only: the web UI renders a Tabler icon for reasoning models next to
+ * this, and the CLI appends its own terminal marker (see cli/select.ts). */
+export function formatModelMeta(contextWindow?: number): string {
   const parts: string[] = [];
   if (contextWindow) parts.push(`${Math.round(contextWindow / 1024)}K ctx`);
-  if (reasoning) parts.push("🧠");
   return parts.join(" ");
 }

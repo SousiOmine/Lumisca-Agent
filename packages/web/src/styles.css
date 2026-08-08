@@ -560,6 +560,20 @@ select:focus {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* rotating loader for in-progress states (see ToolCall) */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .tool-head .tool-state.running {
@@ -1025,6 +1039,9 @@ select:focus {
   font-size: 10.5px;
   color: var(--text-faint);
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* ---- settings --------------------------------------------------------------- */
@@ -1095,6 +1112,13 @@ select:focus {
 .provider-row .provider-name {
   flex: 1;
   font-weight: 500;
+}
+
+/* status badge shared by provider detail/list and the MCP list */
+.provider-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .provider-row .provider-state {
@@ -1181,7 +1205,8 @@ select:focus {
 
 @media (prefers-reduced-motion: reduce) {
   .live-dot,
-  .cursor {
+  .cursor,
+  .spin {
     animation: none;
   }
 }

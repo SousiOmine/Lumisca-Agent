@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { IconPlayerPlay } from "@tabler/icons-react";
 import { api } from "../api.ts";
 import type { ModelInfo, ThinkingLevel, Workspace } from "../types.ts";
 import { errorText } from "../providers.ts";
@@ -159,6 +160,7 @@ export function NewSessionView(
               thinkingLevels={model?.thinkingLevels}
               onThinkingLevelChange={changeThinkingLevel}
               submitLabel={busy ? "作成中..." : "開始"}
+              submitIcon={busy ? undefined : IconPlayerPlay}
               submitDisabled={busy || !text.trim() || !workspaceId}
               onSubmit={submit}
             />

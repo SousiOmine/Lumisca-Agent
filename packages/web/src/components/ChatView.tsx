@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
+import { IconSend } from "@tabler/icons-react";
 import { contentText } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
@@ -130,6 +131,8 @@ export function ChatView(
           thinkingLevels={view.info.thinkingLevels}
           onThinkingLevelChange={onThinkingLevelChange}
           submitLabel="送信"
+          submitIcon={IconSend}
+          submitIconOnly
           submitDisabled={!input.trim()}
           onAbort={isRunning ? onAbort : undefined}
           onSubmit={submit}

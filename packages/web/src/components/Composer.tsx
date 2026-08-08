@@ -1,5 +1,5 @@
-import { type KeyboardEvent, useState } from "react";
-import { IconChevronRight } from "@tabler/icons-react";
+import { type ComponentType, type KeyboardEvent, useState } from "react";
+import { IconChevronRight, IconPlayerStop } from "@tabler/icons-react";
 import { THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
 import { ModelPicker } from "./ModelPicker.tsx";
 import type { ModelInfo, ThinkingLevel } from "../types.ts";
@@ -29,6 +29,11 @@ interface ComposerProps {
   thinkingLevels?: ThinkingLevel[];
   onThinkingLevelChange?: (level: ThinkingLevel) => void;
   submitLabel: string;
+  /** Optional Tabler icon shown before the submit label. */
+  submitIcon?: ComponentType<{ size?: number }>;
+  /** Icon-only submit: hide the label text; submitLabel is still used as
+   * the accessible name and tooltip. */
+  submitIconOnly?: boolean;
   submitDisabled?: boolean;
   /** Show an abort button instead of submit while the agent is running. */
   onAbort?: () => void;
@@ -50,6 +55,8 @@ export function Composer({
   thinkingLevels,
   onThinkingLevelChange,
   submitLabel,
+  submitIcon: SubmitIcon,
+  submitIconOnly,
   submitDisabled,
   onAbort,
   onSubmit,
@@ -128,6 +135,7 @@ export function Composer({
         {onAbort
           ? (
             <button type="button" className="btn danger" onClick={onAbort}>
+              <IconPlayerStop size={14} />
               中断
             </button>
           )
@@ -137,8 +145,11 @@ export function Composer({
               className="btn primary"
               onClick={onSubmit}
               disabled={submitDisabled}
+              aria-label={submitIconOnly ? submitLabel : undefined}
+              title={submitIconOnly ? submitLabel : undefined}
             >
-              {submitLabel}
+              {SubmitIcon && <SubmitIcon size={14} />}
+              {!submitIconOnly && submitLabel}
             </button>
           )}
       </div>
