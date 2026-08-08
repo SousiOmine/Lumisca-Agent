@@ -270,25 +270,50 @@ export function App({ initialData }: AppProps): ReactElement {
     setActiveTab(DRAFT_TAB);
   }, []);
 
-  const closeTab = useCallback((sessionId: string) => {
-    if (sessionId !== DRAFT_TAB) {
-      api.closeSession(sessionId).catch(console.error);
+  /** Close the given tabs: tell the server about real sessions and drop the
+   * tabs and views. When the active tab is among them, fall back to the
+   * last remaining tab (kept in the existing order). */
+  const closeTabs = useCallback((ids: string[]) => {
+    const toClose = new Set(ids);
+    for (const id of ids) {
+      if (id !== DRAFT_TAB) {
+        api.closeSession(id).catch(console.error);
+      }
     }
-    setTabs((prev) => {
-      const next = prev.filter((id) => id !== sessionId);
-      return next;
-    });
+    setTabs((prev) => prev.filter((id) => !toClose.has(id)));
     setViews((prev) => {
       const next = new Map(prev);
-      next.delete(sessionId);
+      for (const id of ids) next.delete(id);
       return next;
     });
     setActiveTab((current) => {
-      if (current !== sessionId) return current;
-      const remaining = tabs.filter((id) => id !== sessionId);
-      return remaining.at(-1) ?? null;
+      if (current && !toClose.has(current)) return current;
+      return tabs.filter((id) => !toClose.has(id)).at(-1) ?? null;
     });
   }, [tabs]);
+
+  const closeTab = useCallback((sessionId: string) => {
+    closeTabs([sessionId]);
+  }, [closeTabs]);
+
+  /** Close every tab to the right of the given one. */
+  const closeTabsToRight = useCallback((sessionId: string) => {
+    const index = tabs.indexOf(sessionId);
+    if (index === -1) return;
+    closeTabs(tabs.slice(index + 1));
+  }, [tabs, closeTabs]);
+
+  /** Close every tab to the left of the given one. */
+  const closeTabsToLeft = useCallback((sessionId: string) => {
+    const index = tabs.indexOf(sessionId);
+    if (index === -1) return;
+    closeTabs(tabs.slice(0, index));
+  }, [tabs, closeTabs]);
+
+  /** Close every tab except the given one. */
+  const closeOtherTabs = useCallback((sessionId: string) => {
+    closeTabs(tabs.filter((id) => id !== sessionId));
+  }, [tabs, closeTabs]);
 
   const handleWorkspaceChanged = useCallback((ws: Workspace) => {
     setWorkspaces((prev) => {
@@ -433,6 +458,9 @@ export function App({ initialData }: AppProps): ReactElement {
         theme={theme}
         onSelect={setActiveTab}
         onClose={closeTab}
+        onCloseToRight={closeTabsToRight}
+        onCloseToLeft={closeTabsToLeft}
+        onCloseOthers={closeOtherTabs}
         onNew={openDraftTab}
         onToggleTheme={toggleTheme}
         onOpenSettings={() => setShowSettings(true)}

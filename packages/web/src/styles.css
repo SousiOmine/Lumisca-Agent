@@ -241,6 +241,89 @@ select:focus {
   flex: none;
 }
 
+/* right-click menu on a tab */
+.tab-context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.tab-context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab-context-item:hover {
+  background: var(--surface-2);
+}
+
+.tab-context-item:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.tab-context-item:disabled:hover {
+  background: transparent;
+}
+
+.tab-context-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.tab-context-submenu-trigger {
+  position: relative;
+}
+
+.tab-context-submenu-trigger > svg {
+  margin-left: auto;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.tab-context-submenu {
+  position: absolute;
+  top: 0;
+  left: calc(100% - 2px);
+  min-width: 190px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.tab-context-submenu.flip-left {
+  left: auto;
+  right: calc(100% - 2px);
+}
+
+/* the viewport cannot fit the flipped submenu either: overlay the menu */
+.tab-context-submenu.clamp-left {
+  left: 8px;
+  right: auto;
+}
+
+/* kept mounted (so it can be measured for the flip decision) but inert */
+.tab-context-submenu.hidden {
+  visibility: hidden;
+}
+
 /* live indicator: a pulsing accent dot while the session is working */
 .live-dot {
   width: 7px;
@@ -795,10 +878,11 @@ select:focus {
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12.5px;
+  transition: background-color 100ms ease;
 }
 
 .workspace-option:hover {
-  background: var(--surface-2);
+  background: var(--surface-3);
 }
 
 .workspace-option.selected {
@@ -828,14 +912,19 @@ select:focus {
 }
 
 .workspace-option-actions {
-  display: none;
+  display: flex;
   gap: 2px;
   flex: none;
+  /* Keep space reserved so hover doesn't change row height / meta position. */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
 }
 
 .workspace-option:hover .workspace-option-actions,
 .workspace-option.selected .workspace-option-actions {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
 }
 
 .workspace-option-actions .icon-btn {
