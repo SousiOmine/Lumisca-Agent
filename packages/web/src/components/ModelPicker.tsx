@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconBrain } from "@tabler/icons-react";
 import { api } from "../api.ts";
 import { formatModelMeta } from "@lumisca/core/shared";
@@ -89,12 +89,17 @@ export function ModelPicker({
   }, [providerId]);
 
   // Follow external value changes (e.g. the session model switched while
-  // the picker stayed mounted).
+  // the picker stayed mounted). Only react when the prop itself changes:
+  // comparing against providerId would also fire on the user's own dropdown
+  // selection and yank the picker back to the previously selected provider.
+  const externalProvider = useRef(value?.provider ?? null);
   useEffect(() => {
-    if (value?.provider && value.provider !== providerId) {
-      setProviderId(value.provider);
+    const next = value?.provider ?? null;
+    if (next !== null && next !== externalProvider.current) {
+      externalProvider.current = next;
+      setProviderId(next);
     }
-  }, [value?.provider, providerId]);
+  }, [value?.provider]);
 
   const visible = useMemo(() => {
     const list = enabledOnly
