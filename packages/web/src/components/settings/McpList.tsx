@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   IconAlertTriangle,
-  IconArrowLeft,
   IconChevronRight,
   IconCircleDashed,
   IconPlugConnected,
@@ -57,13 +56,7 @@ function configKey(servers: McpServerInfo[]): string {
 /** Settings → MCP servers. Manages the app-level (global) config, which
  * applies to every workspace; each workspace's own `.mcp.json` is merged in
  * automatically by the server and is not editable here. */
-export function McpList({
-  onBack,
-  onClose,
-}: {
-  onBack: () => void;
-  onClose: () => void;
-}) {
+export function McpList() {
   const [config, setConfig] = useState<McpInfo | null>(null);
   const [baseline, setBaseline] = useState<McpInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -155,13 +148,7 @@ export function McpList({
   return (
     <>
       <div className="modal-header">
-        <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> 戻る
-        </button>
         <h2>MCP サーバー</h2>
-        <button type="button" className="btn push" onClick={onClose}>
-          閉じる
-        </button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

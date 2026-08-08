@@ -1,6 +1,6 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import {
-  IconChevronRight,
   IconPlugConnected,
   IconServer,
   IconWorld,
@@ -17,137 +17,108 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type View =
-  | { kind: "home" }
+type Category = "providers" | "mcp" | "servers";
+
+type ProvidersView =
   | { kind: "list" }
   | { kind: "add" }
-  | { kind: "detail"; providerId: string; isNew: boolean }
-  | { kind: "mcp"; workspaceId: string }
-  | { kind: "servers" };
+  | { kind: "detail"; providerId: string; isNew: boolean };
+
+const CATEGORIES: {
+  id: Category;
+  label: string;
+  icon: ReactNode;
+}[] = [
+  {
+    id: "providers",
+    label: "プロバイダー",
+    icon: <IconPlugConnected size={18} />,
+  },
+  { id: "mcp", label: "MCP サーバー", icon: <IconServer size={18} /> },
+  { id: "servers", label: "接続先サーバー", icon: <IconWorld size={18} /> },
+];
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const [view, setView] = useState<View>({ kind: "home" });
-  const home = () => setView({ kind: "home" });
+  const [category, setCategory] = useState<Category>("providers");
+  const [providersView, setProvidersView] = useState<ProvidersView>({
+    kind: "list",
+  });
+
+  const openCategory = (id: Category) => {
+    setCategory(id);
+    setProvidersView({ kind: "list" });
+  };
 
   return (
-    <Modal width="min(720px, calc(100vw - 48px))" onClose={onClose}>
-      {view.kind === "home" && (
-        <HomeView
-          onOpenProviders={() => setView({ kind: "list" })}
-          onOpenMcp={() => setView({ kind: "mcp", workspaceId: "" })}
-          onOpenServers={() => setView({ kind: "servers" })}
-          onClose={onClose}
-        />
-      )}
-      {view.kind === "list" && (
-        <ProviderList
-          onBack={home}
-          onAdd={() => setView({ kind: "add" })}
-          onOpen={(id) =>
-            setView({ kind: "detail", providerId: id, isNew: false })}
-          onClose={onClose}
-        />
-      )}
-      {view.kind === "add" && (
-        <AddProviderFlow
-          onSelect={(id) =>
-            setView({ kind: "detail", providerId: id, isNew: true })}
-          onBack={() => setView({ kind: "list" })}
-        />
-      )}
-      {view.kind === "detail" && (
-        <ProviderDetail
-          providerId={view.providerId}
-          isNew={view.isNew}
-          onBack={() => setView({ kind: "list" })}
-        />
-      )}
-      {view.kind === "mcp" && <McpList onBack={home} onClose={onClose} />}
-      {view.kind === "servers" && (
-        <ConnectionList onBack={home} onClose={onClose} />
-      )}
-    </Modal>
-  );
-}
-
-// --- settings home -------------------------------------------------------------
-
-function HomeView({
-  onOpenProviders,
-  onOpenMcp,
-  onOpenServers,
-  onClose,
-}: {
-  onOpenProviders: () => void;
-  onOpenMcp: () => void;
-  onOpenServers: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <>
+    <Modal
+      width="min(900px, calc(100vw - 48px))"
+      className="modal-settings"
+      onClose={onClose}
+    >
       <div className="modal-header">
         <h2>設定</h2>
-        <button type="button" className="btn push" onClick={onClose}>
-          <IconX size={14} />
-          閉じる
+        <button
+          type="button"
+          className="btn push"
+          onClick={onClose}
+          title="閉じる"
+          aria-label="閉じる"
+        >
+          <IconX size={16} />
         </button>
       </div>
-      <div className="settings-menu">
-        <button
-          type="button"
-          className="settings-menu-item"
-          onClick={onOpenProviders}
-        >
-          <span className="settings-menu-icon">
-            <IconPlugConnected size={20} />
-          </span>
-          <span className="settings-menu-text">
-            <span className="settings-menu-title">プロバイダー</span>
-            <span className="settings-menu-desc">
-              APIキーの登録と、モデルの有効/無効の管理
-            </span>
-          </span>
-          <span className="chevron">
-            <IconChevronRight size={16} />
-          </span>
-        </button>
-        <button
-          type="button"
-          className="settings-menu-item"
-          onClick={onOpenMcp}
-        >
-          <span className="settings-menu-icon">
-            <IconServer size={20} />
-          </span>
-          <span className="settings-menu-text">
-            <span className="settings-menu-title">MCP サーバー</span>
-            <span className="settings-menu-desc">
-              外部ツールサーバーの追加・編集 (.mcp.json)
-            </span>
-          </span>
-          <span className="chevron">
-            <IconChevronRight size={16} />
-          </span>
-        </button>
-        <button
-          type="button"
-          className="settings-menu-item"
-          onClick={onOpenServers}
-        >
-          <span className="settings-menu-icon">
-            <IconWorld size={20} />
-          </span>
-          <span className="settings-menu-text">
-            <span className="settings-menu-title">接続先サーバー</span>
-            <span className="settings-menu-desc">
-              ローカル / リモートサーバーの接続と切替
-            </span>
-          </span>
-          <span className="chevron">
-            <IconChevronRight size={16} />
-          </span>
-        </button>
+
+      <div className="settings-body">
+        <nav className="settings-nav">
+          {CATEGORIES.map((c) => (
+            <button
+              type="button"
+              key={c.id}
+              className={`settings-nav-item${
+                category === c.id ? " active" : ""
+              }`}
+              onClick={() => openCategory(c.id)}
+            >
+              {c.icon}
+              {c.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="settings-content">
+          {category === "providers" && providersView.kind === "list" && (
+            <ProviderList
+              onAdd={() => setProvidersView({ kind: "add" })}
+              onOpen={(id) =>
+                setProvidersView({
+                  kind: "detail",
+                  providerId: id,
+                  isNew: false,
+                })}
+            />
+          )}
+          {category === "providers" && providersView.kind === "add" && (
+            <AddProviderFlow
+              onSelect={(id) =>
+                setProvidersView({
+                  kind: "detail",
+                  providerId: id,
+                  isNew: true,
+                })}
+              onBack={() => setProvidersView({ kind: "list" })}
+            />
+          )}
+          {category === "providers" && providersView.kind === "detail" && (
+            <ProviderDetail
+              providerId={providersView.providerId}
+              isNew={providersView.isNew}
+              onBack={() => setProvidersView({ kind: "list" })}
+            />
+          )}
+          {category === "mcp" && <McpList />}
+          {category === "servers" && <ConnectionList />}
+        </div>
       </div>
-    </>
+    </Modal>
   );
 }

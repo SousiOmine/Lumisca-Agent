@@ -1,17 +1,13 @@
-import { IconArrowLeft, IconPlus } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-react";
 import { useProviders } from "../../providers.ts";
 
 /** Settings → provider list: configured first, then everything else. */
 export function ProviderList({
-  onBack,
   onAdd,
   onOpen,
-  onClose,
 }: {
-  onBack: () => void;
   onAdd: () => void;
   onOpen: (providerId: string) => void;
-  onClose: () => void;
 }) {
   const { providers } = useProviders();
 
@@ -21,13 +17,7 @@ export function ProviderList({
   return (
     <>
       <div className="modal-header">
-        <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> 戻る
-        </button>
         <h2>プロバイダー</h2>
-        <button type="button" className="btn push" onClick={onClose}>
-          閉じる
-        </button>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

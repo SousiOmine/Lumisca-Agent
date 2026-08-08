@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { IconArrowLeft, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconTrash } from "@tabler/icons-react";
 import type { ConnectionEntry } from "../../types.ts";
 import { api } from "../../api.ts";
 import { shellAvailable, shellCall, type ShellState } from "../../shell.ts";
@@ -34,13 +34,7 @@ function pageUrl(url: string, token: string): string {
  * it lives in THIS server's database and is shared by web and desktop
  * clients alike. The desktop shell bridge only handles the local server
  * and UI switching; everything else goes through the same API. */
-export function ConnectionList({
-  onBack,
-  onClose,
-}: {
-  onBack: () => void;
-  onClose: () => void;
-}) {
+export function ConnectionList() {
   /** null = probing the shell bridge. */
   const [desktop, setDesktop] = useState<boolean | null>(null);
   const [state, setState] = useState<ShellState | null>(null);
@@ -164,13 +158,7 @@ export function ConnectionList({
   return (
     <>
       <div className="modal-header">
-        <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> 戻る
-        </button>
         <h2>接続先サーバー</h2>
-        <button type="button" className="btn push" onClick={onClose}>
-          閉じる
-        </button>
       </div>
 
       {desktop === null && <p className="settings-note">読み込み中…</p>}
