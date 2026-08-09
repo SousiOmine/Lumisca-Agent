@@ -8,9 +8,10 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { api, fed } from "../api.ts";
+import { workspaceApi } from "../api.ts";
 import type { Workspace } from "../types.ts";
 import { Modal } from "./Modal.tsx";
+import { errorText } from "../providers.ts";
 
 interface WorkspaceModalProps {
   /** Present → edit mode (rename / change folders / delete). */
@@ -41,6 +42,8 @@ export function WorkspaceModal(
   const [folders, setFolders] = useState<string[]>(workspace?.folders ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // All API calls target the peer that owns the workspace.
+  const wsApi = workspaceApi(peerId);
 
   const addFolder = (path: string) => {
     setFolders((prev) => (prev.includes(path) ? prev : [...prev, path]));
@@ -53,21 +56,14 @@ export function WorkspaceModal(
     setError(undefined);
     try {
       const ws = editing
-        ? peerId === ""
-          ? await api.updateWorkspace(workspace!.id, {
-            name: name.trim(),
-            folders,
-          })
-          : await fed.updateWorkspace(peerId, workspace!.id, {
-            name: name.trim(),
-            folders,
-          })
-        : peerId === ""
-        ? await api.createWorkspace(name.trim(), folders)
-        : await fed.createWorkspace(peerId, name.trim(), folders);
+        ? await wsApi.update(workspace!.id, {
+          name: name.trim(),
+          folders,
+        })
+        : await wsApi.create(name.trim(), folders);
       onSaved(ws);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -81,7 +77,7 @@ export function WorkspaceModal(
       await onDelete({ peerId, peerName, workspace });
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
       setBusy(false);
     }
   };
@@ -208,12 +204,12 @@ function FolderBrowser({
   const [entries, setEntries] = useState<BrowseEntry[]>([]);
   const [error, setError] = useState<string | undefined>();
   // Browsing happens on the peer that owns the workspace (its filesystem).
-  const fsRoots = () => peerId === "" ? api.fsRoots() : fed.fsRoots(peerId);
-  const fsBrowse = (p: string) =>
-    peerId === "" ? api.fsBrowse(p) : fed.fsBrowse(peerId, p);
+  const wsApi = workspaceApi(peerId);
+  const fsRoots = () => wsApi.fsRoots();
+  const fsBrowse = (p: string) => wsApi.fsBrowse(p);
 
   useEffect(() => {
-    fsRoots().then(setRoots).catch((e) => setError(String(e)));
+    fsRoots().then(setRoots).catch((e) => setError(errorText(e)));
   }, [peerId]);
 
   useEffect(() => {
@@ -228,7 +224,7 @@ function FolderBrowser({
         setEntries(r.entries);
       })
       .catch((e) => {
-        if (!stale) setError(e instanceof Error ? e.message : String(e));
+        if (!stale) setError(errorText(e));
       });
     return () => {
       stale = true;

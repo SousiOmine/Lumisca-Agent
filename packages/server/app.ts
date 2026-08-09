@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { upgradeWebSocket } from "hono/deno";
-import { type LumiscaCore, THEME_KEY } from "@lumisca/core";
+import { errorMessage, type LumiscaCore, THEME_KEY } from "@lumisca/core";
 import { bundleClient } from "./bundle.ts";
 import { renderHtmlDocument } from "./render.ts";
 import { webClientEntry, webFaviconPath, webStylesPath } from "./paths.ts";
@@ -15,7 +15,8 @@ import { mcpRoutes } from "./routes/mcp.ts";
 import { connectionRoutes } from "./routes/connections.ts";
 import { federationRoutes } from "./routes/federation.ts";
 import { FederationClient } from "./federation.ts";
-import { jsonError } from "./routes/util.ts";
+import { isLoopbackHost, jsonError, LOOPBACK_HOSTS } from "./routes/util.ts";
+export { isLoopbackHost } from "./routes/util.ts";
 import type { InitialData } from "@lumisca/web/types";
 
 export interface AppOptions {
@@ -157,14 +158,6 @@ class Assets {
     }
     return this.favicon;
   }
-}
-
-/** Hostnames allowed to reach the server (loopback only, DNS-rebinding guard). */
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
-
-/** True when the hostname is a loopback address. */
-export function isLoopbackHost(host: string): boolean {
-  return LOOPBACK_HOSTS.has(host);
 }
 
 /** Startup validation: a non-loopback bind without a token would expose
@@ -378,9 +371,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       });
     } catch (error) {
       return c.text(
-        `Client bundle build failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Client bundle build failed: ${errorMessage(error)}`,
         500,
       );
     }

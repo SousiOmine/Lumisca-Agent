@@ -25,12 +25,12 @@ export interface ToolFactoryOptions {
 export function createCodingTools(
   workspace: Workspace,
   options: Partial<ToolFactoryOptions> = {},
-): { tools: Tool[]; sandbox: Sandbox; cwd: string } {
+): Tool[] {
   const cwd = options.cwd ?? workspace.folders[0] ?? Deno.cwd();
   const sandbox = new Sandbox(workspace.folders);
   const ctx = { sandbox, cwd };
 
-  const tools: Tool[] = [
+  return [
     createReadFileTool(ctx),
     createWriteFileTool(ctx),
     createEditFileTool(ctx),
@@ -39,7 +39,6 @@ export function createCodingTools(
     createGlobTool(ctx),
     createBashTool({ cwd, env: options.env }),
   ];
-  return { tools, sandbox, cwd };
 }
 
 /** System prompt describing the agent and its workspace boundaries.

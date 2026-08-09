@@ -1,4 +1,5 @@
 import { integer, object, optional, string, type Tool } from "./schema.ts";
+import { TOOL_BASH } from "../shared.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
@@ -27,7 +28,7 @@ export function createBashTool(
   const defaultTimeoutSec = options.defaultTimeoutSec ?? 120;
 
   return {
-    name: "bash",
+    name: TOOL_BASH,
     label: "Bash",
     description:
       "Execute a shell command in the workspace. Output is limited to the last 64KB. " +

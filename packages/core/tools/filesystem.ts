@@ -1,5 +1,11 @@
 import { join } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
+import {
+  TOOL_EDIT,
+  TOOL_LIST_DIR,
+  TOOL_READ_FILE,
+  TOOL_WRITE_FILE,
+} from "../shared.ts";
 import { integer, object, optional, string, type Tool } from "./schema.ts";
 import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 
@@ -24,7 +30,7 @@ export function createReadFileTool(
   ctx: FsToolContext,
 ): Tool<typeof readSchema> {
   return {
-    name: "read_file",
+    name: TOOL_READ_FILE,
     label: "Read File",
     description:
       "Read a file's contents as text. `offset` and `limit` are in bytes. " +
@@ -76,7 +82,7 @@ export function createWriteFileTool(
   ctx: FsToolContext,
 ): Tool<typeof writeSchema> {
   return {
-    name: "write_file",
+    name: TOOL_WRITE_FILE,
     label: "Write File",
     description:
       "Create or overwrite a file with the given text content. Parent directories are created automatically.",
@@ -107,7 +113,7 @@ export function createEditFileTool(
   ctx: FsToolContext,
 ): Tool<typeof editSchema> {
   return {
-    name: "edit",
+    name: TOOL_EDIT,
     label: "Edit File",
     description:
       "Replace the first occurrence of `old_string` with `new_string` in a file. " +
@@ -145,7 +151,7 @@ export function createListDirTool(
   ctx: FsToolContext,
 ): Tool<typeof listDirSchema> {
   return {
-    name: "list_dir",
+    name: TOOL_LIST_DIR,
     label: "List Directory",
     description: "List the contents of a directory within the workspace.",
     parameters: listDirSchema,

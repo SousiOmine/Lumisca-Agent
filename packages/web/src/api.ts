@@ -11,6 +11,7 @@ import type {
   ThinkingLevel,
   Workspace,
 } from "./types.ts";
+import { splitTabKey } from "./tabs.ts";
 
 /** The server serves both the UI and the API on the same origin. */
 const API_BASE = "";
@@ -273,6 +274,86 @@ export const fed = {
       { method: "PUT", body: JSON.stringify({ level }) },
     ),
 };
+
+/** Per-session API routed to the peer that owns the session ("" = this
+ * server). Every call targets the machine running the agent. */
+export function sessionApi(key: string) {
+  const { peerId, sessionId } = splitTabKey(key);
+  if (peerId === "") {
+    return {
+      peerId,
+      sessionId,
+      getSession: () => api.getSession(sessionId),
+      getMessages: () => api.getMessages(sessionId),
+      close: () => api.closeSession(sessionId),
+      prompt: (text: string) => api.prompt(sessionId, text),
+      abort: () => api.abort(sessionId),
+      updateModel: (provider: string, modelId: string) =>
+        api.updateSessionModel(sessionId, provider, modelId),
+    };
+  }
+  return {
+    peerId,
+    sessionId,
+    getSession: () => fed.getSession(peerId, sessionId),
+    getMessages: () => fed.getMessages(peerId, sessionId),
+    close: () => fed.closeSession(peerId, sessionId),
+    prompt: (text: string) => fed.prompt(peerId, sessionId, text),
+    abort: () => fed.abort(peerId, sessionId),
+    updateModel: (provider: string, modelId: string) =>
+      fed.updateSessionModel(peerId, sessionId, provider, modelId),
+  };
+}
+
+/** Workspace CRUD + filesystem browsing routed to the peer that owns the
+ * workspace ("" = this server). */
+export function workspaceApi(peerId: string) {
+  if (peerId === "") {
+    return {
+      create: (name: string, folders: string[]) =>
+        api.createWorkspace(name, folders),
+      update: (id: string, input: { name?: string; folders?: string[] }) =>
+        api.updateWorkspace(id, input),
+      delete: (id: string) => api.deleteWorkspace(id),
+      fsRoots: () => api.fsRoots(),
+      fsBrowse: (path: string) => api.fsBrowse(path),
+    };
+  }
+  return {
+    create: (name: string, folders: string[]) =>
+      fed.createWorkspace(peerId, name, folders),
+    update: (id: string, input: { name?: string; folders?: string[] }) =>
+      fed.updateWorkspace(peerId, id, input),
+    delete: (id: string) => fed.deleteWorkspace(peerId, id),
+    fsRoots: () => fed.fsRoots(peerId),
+    fsBrowse: (path: string) => fed.fsBrowse(peerId, path),
+  };
+}
+
+/** Model-picker data of the peer that owns a session ("" = this server):
+ * remote sessions switch models against the machine running the agent. */
+export function modelApi(peerId: string) {
+  if (peerId === "") {
+    return {
+      listProviders: () => api.listProviders(),
+      listModels: (providerId: string) => api.listModels(providerId),
+      setThinkingLevel: (
+        providerId: string,
+        modelId: string,
+        level: ThinkingLevel,
+      ) => api.setModelThinkingLevel(providerId, modelId, level),
+    };
+  }
+  return {
+    listProviders: () => fed.listProviders(peerId),
+    listModels: (providerId: string) => fed.listModels(peerId, providerId),
+    setThinkingLevel: (
+      providerId: string,
+      modelId: string,
+      level: ThinkingLevel,
+    ) => fed.setModelThinkingLevel(peerId, providerId, modelId, level),
+  };
+}
 
 /** Connect to the WebSocket event stream. Returns a close function.
  * Same origin as the page (the server serves both UI and API).

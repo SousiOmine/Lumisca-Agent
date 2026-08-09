@@ -9,6 +9,17 @@
 /** Settings-table key for the UI theme. */
 export const THEME_KEY = "theme";
 
+/** Tool names of the built-in coding tools. Single source of truth shared
+ * with the UI, so the tool registry can never drift from the
+ * implementations (tool names are part of the agent-visible contract). */
+export const TOOL_READ_FILE = "read_file";
+export const TOOL_WRITE_FILE = "write_file";
+export const TOOL_EDIT = "edit";
+export const TOOL_LIST_DIR = "list_dir";
+export const TOOL_BASH = "bash";
+export const TOOL_GREP = "grep";
+export const TOOL_GLOB = "glob";
+
 /**
  * Reasoning-effort levels for a model. "off" disables thinking; the rest
  * match pi-ai's ThinkingLevel so values pass straight into the agent.

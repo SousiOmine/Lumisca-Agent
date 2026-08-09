@@ -1,7 +1,8 @@
 import { useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import { IconArrowLeft } from "@tabler/icons-react";
 import type { McpServerInfo } from "../../types.ts";
+import { Field } from "../Field.tsx";
 
 /** Parse textarea lines into a string list (blanks removed). */
 function parseLines(text: string): string[] {
@@ -26,17 +27,6 @@ function joinKeyValues(record: Record<string, string>): string {
   return Object.entries(record)
     .map(([k, v]) => `${k}=${v}`)
     .join("\n");
-}
-
-/** A labeled full-width field (label above, input below — matches the
- * other settings forms). */
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <p className="settings-note">{label}</p>
-      {children}
-    </div>
-  );
 }
 
 const fullWidth: CSSProperties = { width: "100%" };

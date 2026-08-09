@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { realpathSync } from "node:fs";
 import { assert, assertEquals } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
+import { errorMessage } from "../errors.ts";
 import { createGlobTool, createGrepTool, globToRegExp } from "./search.ts";
 
 function makeTools(root: string) {
@@ -186,7 +187,7 @@ Deno.test("grep rejects paths outside the workspace", async () => {
     try {
       await grep.execute("1", { pattern: "x", path: outside }, undefined);
     } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
+      message = errorMessage(error);
     }
     assert(message.includes("outside the workspace"), `message: ${message}`);
   } finally {
@@ -203,7 +204,7 @@ Deno.test("grep reports invalid patterns as errors", async () => {
     try {
       await grep.execute("1", { pattern: "(" }, undefined);
     } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
+      message = errorMessage(error);
     }
     assert(message.includes("Invalid pattern"), `message: ${message}`);
   } finally {

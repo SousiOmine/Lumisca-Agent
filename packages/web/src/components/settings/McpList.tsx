@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react";
 import type { McpInfo, McpServerInfo } from "../../types.ts";
 import { api } from "../../api.ts";
+import { errorText } from "../../providers.ts";
 import { McpDetail } from "./McpDetail.tsx";
 
 /** Build the `.mcp.json` text for a server list (UI → PUT body). */
@@ -73,7 +74,7 @@ export function McpList() {
       setConfig(info);
       setBaseline(info);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -104,7 +105,7 @@ export function McpList() {
       setBaseline(info);
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
       return false;
     }
   };

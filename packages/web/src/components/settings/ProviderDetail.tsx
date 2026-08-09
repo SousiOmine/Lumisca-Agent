@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   IconArrowLeft,
   IconCheck,
@@ -23,6 +23,13 @@ export function ProviderDetail({
   const [savingKey, setSavingKey] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [savedNotice, setSavedNotice] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+
+  useEffect(() => {
+    return () => clearTimeout(savedTimer.current);
+  }, []);
 
   const load = async () => {
     const authState = await api.providerAuth(providerId);
@@ -32,7 +39,7 @@ export function ProviderDetail({
   useEffect(() => {
     let stale = false;
     load().catch((e) => {
-      if (!stale) setError(e instanceof Error ? e.message : String(e));
+      if (!stale) setError(errorText(e));
     });
     return () => {
       stale = true;
@@ -49,7 +56,8 @@ export function ProviderDetail({
       await api.setApiKey(providerId, key.trim());
       setKey("");
       setSavedNotice(true);
-      setTimeout(() => setSavedNotice(false), 2000);
+      clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSavedNotice(false), 2000);
       await load();
     } catch (e) {
       setError(errorText(e));

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api.ts";
+import { errorText } from "../../providers.ts";
 
 /** Settings → パーソナライズ. Edits the machine-level AGENTS.md that lives
  * next to the settings file; its content is appended to the end of the
@@ -15,8 +16,12 @@ export function PersonalizePanel() {
   /** Newest typed content; what a save writes, so edits made while a save is
    * in flight are picked up by the next one. */
   const latest = useRef(content);
-  const saveTimer = useRef<number | undefined>(undefined);
-  const savedTimer = useRef<number | undefined>(undefined);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   const load = async () => {
     setLoading(true);
@@ -26,7 +31,7 @@ export function PersonalizePanel() {
       setContent(info.content);
       latest.current = info.content;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setLoading(false);
     }
@@ -58,7 +63,7 @@ export function PersonalizePanel() {
       savedTimer.current = setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setSaving(false);
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   };
 

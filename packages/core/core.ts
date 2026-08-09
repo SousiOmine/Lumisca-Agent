@@ -1,6 +1,5 @@
 import { LumiscaDb } from "./db/mod.ts";
 import { dirname, join } from "node:path";
-import { existsSync } from "node:fs";
 import type { ClientEvent } from "./types/event.ts";
 import type { SessionInfo } from "./types/session.ts";
 import type { Workspace } from "./types/workspace.ts";
@@ -36,15 +35,9 @@ import { SessionAgent } from "./agent/session-agent.ts";
 import { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
 import { CoreError } from "./errors.ts";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import {
-  APP_MCP_SETTINGS_KEY,
-  APP_MCP_SOURCE,
-  loadMcpConfig,
-  MCP_CONFIG_FILE,
-  parseMcpConfig,
-} from "./mcp/config.ts";
-import type { McpConfig, McpInfo } from "./mcp/config.ts";
-import type { McpServerStatus } from "./mcp/manager.ts";
+import { APP_MCP_SETTINGS_KEY } from "./mcp/config.ts";
+import type { McpInfo } from "./mcp/config.ts";
+import { McpService } from "./mcp/service.ts";
 
 export interface CreateSessionInput {
   workspaceId: string;
@@ -68,6 +61,7 @@ export class LumiscaCore {
   private readonly workspaces: WorkspaceRepo;
   private readonly sessions: SessionRepo;
   private readonly messages: MessageRepo;
+  private readonly mcp: McpService;
   private readonly agents = new Map<string, SessionAgent>();
   private readonly listeners = new Set<(event: ClientEvent) => void>();
   private readonly lastErrors = new Map<string, string>();
@@ -85,6 +79,15 @@ export class LumiscaCore {
     this.workspaces = createWorkspaceRepo(db);
     this.sessions = createSessionRepo(db);
     this.messages = createMessageRepo(db);
+    this.mcp = new McpService({
+      settings: this.settings,
+      listSessions: (workspaceId) => this.sessions.list(workspaceId),
+      agentMcpStatus: (sessionId) =>
+        this.agents.get(sessionId)?.getMcpStatus() ?? null,
+      requireWorkspace: (id) => this.requireWorkspace(id),
+      applySessionChange: (sessions, mutate) =>
+        this.applySessionChange(sessions, mutate),
+    });
   }
 
   /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
@@ -304,11 +307,9 @@ export class LumiscaCore {
       );
     }
     const sessions = this.sessions.list(id);
-    this.assertNoStreaming(sessions);
-    this.workspaces.update(id, name, folders);
-    for (const session of sessions) {
-      this.rebuildAgent(session);
-    }
+    this.applySessionChange(sessions, () => {
+      this.workspaces.update(id, name, folders);
+    });
     return this.workspaces.get(id)!;
   }
 
@@ -323,190 +324,31 @@ export class LumiscaCore {
 
   // --- MCP configuration ----------------------------------------------------
 
-  /** Build the McpInfo surface (config + live statuses) for a config. */
-  private toMcpInfo(
-    config: McpConfig,
-    statuses: McpServerStatus[],
-    exists: boolean,
-  ): McpInfo {
-    const statusMap = new Map(statuses.map((s) => [s.name, s]));
-    return {
-      filePath: config.filePath,
-      exists,
-      servers: config.servers.map((server) => {
-        const status = statusMap.get(server.name);
-        return {
-          name: server.name,
-          type: server.type,
-          enabled: server.enabled,
-          command: server.command,
-          args: server.args,
-          env: server.env,
-          cwd: server.cwd,
-          url: server.url,
-          headers: server.headers,
-          toolCount: status?.toolCount ?? 0,
-          status: status?.status ?? "not_started",
-          ...(status?.error !== undefined ? { error: status.error } : {}),
-        };
-      }),
-    };
-  }
-
   /** The app-level (global) MCP config with live statuses from every open
    * session. Stored in the settings file; applies to all workspaces. */
   getAppMcpInfo(): McpInfo {
-    const exists = this.settings.get(APP_MCP_SETTINGS_KEY) !== undefined;
-    const config = this.loadAppMcpConfig();
-    const statuses: McpServerStatus[] = [];
-    for (const session of this.sessions.list()) {
-      const sessionStatuses = this.agents.get(session.id)?.getMcpStatus();
-      if (sessionStatuses) statuses.push(...sessionStatuses);
-    }
-    return this.toMcpInfo(config, statuses, exists);
+    return this.mcp.getAppMcpInfo();
   }
 
   /** Replace the app-level MCP config (validating first), then rebuild
    * every open session so the new tools take effect. Throws `conflict`
    * while any session is streaming. */
   setAppMcpConfig(text: string): McpInfo {
-    try {
-      // Validate before storing; the result is discarded.
-      parseMcpConfig(text, APP_MCP_SOURCE);
-    } catch (error) {
-      throw new CoreError(
-        error instanceof Error ? error.message : String(error),
-        "invalid",
-      );
-    }
-    const sessions = this.sessions.list();
-    this.assertNoStreaming(sessions);
-    this.settings.set(APP_MCP_SETTINGS_KEY, text);
-    for (const session of sessions) {
-      this.rebuildAgent(session);
-    }
-    return this.getAppMcpInfo();
+    return this.mcp.setAppMcpConfig(text);
   }
 
   /** The workspace's own `.mcp.json` with live statuses from the
    * workspace's open sessions. Read fresh from disk each time, so external
    * edits are reflected here too. */
   getMcpInfo(workspaceId: string): McpInfo {
-    const workspace = this.requireWorkspace(workspaceId);
-    const root = workspace.folders[0];
-    if (!root) {
-      return this.toMcpInfo(this.emptyMcpConfig(""), [], false);
-    }
-    let config: McpConfig;
-    try {
-      config = loadMcpConfig(root);
-    } catch (error) {
-      throw new CoreError(
-        `MCP config error: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-        "invalid",
-      );
-    }
-    const statuses: McpServerStatus[] = [];
-    for (const session of this.sessions.list(workspaceId)) {
-      const sessionStatuses = this.agents.get(session.id)?.getMcpStatus();
-      if (sessionStatuses) statuses.push(...sessionStatuses);
-    }
-    return this.toMcpInfo(
-      config,
-      statuses,
-      existsSync(join(root, MCP_CONFIG_FILE)),
-    );
+    return this.mcp.getMcpInfo(workspaceId);
   }
 
   /** Replace the workspace's `.mcp.json` (validating first), then rebuild
    * every session in the workspace so the new tools take effect. Throws
    * `conflict` while any session is streaming. */
-  async setMcpConfig(workspaceId: string, text: string): Promise<McpInfo> {
-    const workspace = this.requireWorkspace(workspaceId);
-    const root = workspace.folders[0];
-    if (!root) throw new CoreError("Workspace has no folders", "invalid");
-    const filePath = join(root, MCP_CONFIG_FILE);
-    try {
-      // Validate before touching the file; the result is discarded.
-      parseMcpConfig(text, filePath);
-    } catch (error) {
-      throw new CoreError(
-        error instanceof Error ? error.message : String(error),
-        "invalid",
-      );
-    }
-    const sessions = this.sessions.list(workspaceId);
-    this.assertNoStreaming(sessions);
-
-    // Atomic write: a temp file + rename keeps the config valid even if
-    // the process dies halfway.
-    const tmp = join(root, `.${MCP_CONFIG_FILE}.tmp-${crypto.randomUUID()}`);
-    await Deno.writeTextFile(tmp, text);
-    await Deno.rename(tmp, filePath);
-
-    for (const session of sessions) {
-      this.rebuildAgent(session);
-    }
-    return this.getMcpInfo(workspaceId);
-  }
-
-  /** The app-level config from the settings file (empty when unset). */
-  private loadAppMcpConfig(): McpConfig {
-    const raw = this.settings.get(APP_MCP_SETTINGS_KEY);
-    if (raw === undefined) return this.emptyMcpConfig(APP_MCP_SOURCE);
-    return parseMcpConfig(raw, APP_MCP_SOURCE);
-  }
-
-  private emptyMcpConfig(filePath: string): McpConfig {
-    return { servers: [], filePath };
-  }
-
-  /** Merge the app-level config with the workspace's `.mcp.json`;
-   * workspace servers override same-named app servers. Config errors are
-   * collected instead of thrown so one broken source cannot break session
-   * creation. */
-  private loadMergedMcpConfig(workspace: Workspace): {
-    config: McpConfig;
-    errors: string[];
-  } {
-    const errors: string[] = [];
-    let app: McpConfig;
-    try {
-      app = this.loadAppMcpConfig();
-    } catch (error) {
-      app = this.emptyMcpConfig(APP_MCP_SOURCE);
-      errors.push(
-        `App MCP config error: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-    let workspaceConfig: McpConfig = this.emptyMcpConfig("");
-    const root = workspace.folders[0];
-    if (root) {
-      try {
-        workspaceConfig = loadMcpConfig(root);
-      } catch (error) {
-        errors.push(
-          `MCP config error: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
-    const byName = new Map(app.servers.map((s) => [s.name, s]));
-    for (const server of workspaceConfig.servers) {
-      byName.set(server.name, server);
-    }
-    return {
-      config: {
-        servers: [...byName.values()],
-        filePath: workspaceConfig.filePath || app.filePath,
-      },
-      errors,
-    };
+  setMcpConfig(workspaceId: string, text: string): McpInfo {
+    return this.mcp.setMcpConfig(workspaceId, text);
   }
 
   // --- sessions -----------------------------------------------------------
@@ -648,9 +490,12 @@ export class LumiscaCore {
         "not_found",
       );
     }
-    this.assertNoStreaming([session]);
-    this.sessions.updateModel(id, provider, modelId);
-    this.rebuildAgent({ ...session, modelProvider: provider, modelId });
+    this.applySessionChange(
+      [{ ...session, modelProvider: provider, modelId }],
+      () => {
+        this.sessions.updateModel(id, provider, modelId);
+      },
+    );
   }
 
   /** Rename a session (persisted). */
@@ -688,11 +533,10 @@ export class LumiscaCore {
     const affected = this.sessions.list().filter(
       (s) => s.modelProvider === providerId && s.modelId === modelId,
     );
-    this.assertNoStreaming(affected);
-    const effective = this.models.setThinkingLevel(providerId, modelId, level);
-    for (const session of affected) {
-      this.rebuildAgent(session);
-    }
+    let effective: ThinkingLevel = "off";
+    this.applySessionChange(affected, () => {
+      effective = this.models.setThinkingLevel(providerId, modelId, level);
+    });
     return effective;
   }
 
@@ -848,7 +692,7 @@ export class LumiscaCore {
         "not_found",
       );
     }
-    const { tools } = createCodingTools(workspace);
+    const tools = createCodingTools(workspace);
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a
     // stored prompt (created before snapshots) rebuild once — and the
@@ -885,7 +729,7 @@ export class LumiscaCore {
     // MCP tools attach asynchronously (they spawn server processes); errors
     // are reported via session_error and never break the agent loop. The
     // merged config = app-level settings + the workspace's .mcp.json.
-    const mcp = this.loadMergedMcpConfig(workspace);
+    const mcp = this.mcp.loadMergedConfig(workspace);
     void agent.attachMcpTools(
       mcp.config,
       mcp.errors,
@@ -914,6 +758,19 @@ export class LumiscaCore {
         session.id,
         this.buildAgent(session, workspace, messages),
       );
+    }
+  }
+
+  /** Refuse configuration changes while any listed session is streaming,
+   * apply the mutation, then rebuild every affected agent. */
+  private applySessionChange(
+    sessions: SessionInfo[],
+    mutate: () => void,
+  ): void {
+    this.assertNoStreaming(sessions);
+    mutate();
+    for (const session of sessions) {
+      this.rebuildAgent(session);
     }
   }
 

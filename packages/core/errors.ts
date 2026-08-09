@@ -16,3 +16,9 @@ export class CoreError extends Error {
     this.name = "CoreError";
   }
 }
+
+/** Human-readable message of any thrown value. Shared by the core, the
+ * server layer, and the web UI so the pattern never varies. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

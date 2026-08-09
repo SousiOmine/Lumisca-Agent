@@ -1,19 +1,10 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import type { ConnectionEntry } from "../../types.ts";
 import { api } from "../../api.ts";
 import { shellAvailable, shellCall, type ShellState } from "../../shell.ts";
-
-/** A labeled full-width field (label above, input below — matches the
- * other settings forms). */
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <p className="settings-note">{label}</p>
-      {children}
-    </div>
-  );
-}
+import { errorText } from "../../providers.ts";
+import { Field } from "../Field.tsx";
 
 const ACTIVE_TAG: React.CSSProperties = {
   fontSize: 11,
@@ -59,7 +50,7 @@ export function ConnectionList() {
       const { connections } = await api.getConnections();
       setServers(connections);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     }
   };
 
@@ -70,7 +61,7 @@ export function ConnectionList() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -150,7 +141,7 @@ export function ConnectionList() {
     } catch (e) {
       return {
         ok: false,
-        text: e instanceof Error ? e.message : String(e),
+        text: errorText(e),
       };
     }
   };
@@ -271,7 +262,7 @@ function ServerCard({
     } catch (e) {
       setResult({
         ok: false,
-        text: e instanceof Error ? e.message : String(e),
+        text: errorText(e),
       });
     } finally {
       setTesting(false);

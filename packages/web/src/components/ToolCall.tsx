@@ -3,43 +3,52 @@ import {
   IconBrain,
   IconCheck,
   IconChevronRight,
-  IconClock,
   IconCode,
   IconEdit,
   IconFile,
   IconFolder,
-  IconLoader2,
   IconLoader,
+  IconLoader2,
   IconSearch,
   IconTerminal2,
   IconWorldSearch,
 } from "@tabler/icons-react";
-import { contentText } from "@lumisca/core/shared";
+import {
+  contentText,
+  TOOL_BASH,
+  TOOL_EDIT,
+  TOOL_GLOB,
+  TOOL_GREP,
+  TOOL_LIST_DIR,
+  TOOL_READ_FILE,
+  TOOL_WRITE_FILE,
+} from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
 
 /** Map tool names to compact icons. */
 function toolIcon(name: string) {
   switch (name) {
     // file reading
-    case "read_file":
+    case TOOL_READ_FILE:
     case "Read":
       return <IconFile size={13} />;
     // file writing / editing
-    case "write_file":
+    case TOOL_WRITE_FILE:
+    case TOOL_EDIT:
     case "Edit":
     case "Write":
       return <IconEdit size={13} />;
     // directory listing
-    case "list_dir":
+    case TOOL_LIST_DIR:
       return <IconFolder size={13} />;
     // shell commands
-    case "bash":
+    case TOOL_BASH:
     case "Bash":
       return <IconTerminal2 size={13} />;
     // search / grep
-    case "grep":
+    case TOOL_GREP:
     case "Grep":
-    case "Glob":
+    case TOOL_GLOB:
     case "Search":
       return <IconSearch size={13} />;
     // web
@@ -61,7 +70,7 @@ function toolIcon(name: string) {
 function toolSummary(name: string, args: Record<string, unknown>): string {
   switch (name) {
     // file reading — argument may be `path`, `file_path`, or `file`
-    case "read_file":
+    case TOOL_READ_FILE:
     case "Read":
       return shortPath(
         typeof args.path === "string"
@@ -70,10 +79,11 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
           ? args.file_path
           : typeof args.file === "string"
           ? args.file
-          : ""
+          : "",
       );
     // file writing / editing
-    case "write_file":
+    case TOOL_WRITE_FILE:
+    case TOOL_EDIT:
     case "Edit":
     case "Write":
       return shortPath(
@@ -81,23 +91,21 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
           ? args.path
           : typeof args.file_path === "string"
           ? args.file_path
-          : ""
+          : "",
       );
     // directory listing — argument may be `path` or `dir`
-    case "list_dir":
+    case TOOL_LIST_DIR:
       return typeof args.path === "string"
         ? args.path
         : typeof args.dir === "string"
         ? args.dir
         : ".";
     // shell commands
-    case "bash":
+    case TOOL_BASH:
     case "Bash":
-      return typeof args.command === "string"
-        ? truncate(args.command, 60)
-        : "";
+      return typeof args.command === "string" ? truncate(args.command, 60) : "";
     // search / grep — argument may be `pattern`, `query`, or `command`
-    case "grep":
+    case TOOL_GREP:
     case "Grep":
       return typeof args.pattern === "string"
         ? args.pattern
@@ -106,12 +114,10 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
         : typeof args.command === "string"
         ? truncate(args.command, 50)
         : "";
-    case "Glob":
+    case TOOL_GLOB:
       return typeof args.pattern === "string" ? args.pattern : "";
     case "Search":
-      return typeof args.query === "string"
-        ? truncate(args.query, 50)
-        : "";
+      return typeof args.query === "string" ? truncate(args.query, 50) : "";
     // web
     case "WebFetch":
       return typeof args.url === "string" ? truncate(args.url, 50) : "";
@@ -161,7 +167,10 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
     ? "running"
     : "pending";
 
-  const summary = toolSummary(toolCall.name, toolCall.arguments as Record<string, unknown>);
+  const summary = toolSummary(
+    toolCall.name,
+    toolCall.arguments as Record<string, unknown>,
+  );
 
   return (
     <div className="tool-timeline">
@@ -184,7 +193,12 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
             <span className="tool-line-summary">{summary}</span>
           </>
         )}
-        {state === "done" && <IconCheck size={12} className="tool-line-check" />}
+        {state === "done" && (
+          <IconCheck
+            size={12}
+            className="tool-line-check"
+          />
+        )}
         {state === "error" && <span className="tool-line-error">error</span>}
       </div>
       {open && (
@@ -193,7 +207,9 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
             {JSON.stringify(toolCall.arguments, null, 2)}
           </div>
           {result && (
-            <pre className={`tool-detail-result${result.isError ? " error" : ""}`}>
+            <pre
+              className={`tool-detail-result${result.isError ? " error" : ""}`}
+            >
               {contentText(result.content)}
             </pre>
           )}

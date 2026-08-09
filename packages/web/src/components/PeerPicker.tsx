@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { IconChevronDown, IconServer } from "@tabler/icons-react";
 import type { FederatedWorkspace, PeerStatus } from "../types.ts";
+import { useClickOutside } from "../hooks/useClickOutside.ts";
 
 interface PeerPickerProps {
   peers: PeerStatus[];
@@ -48,21 +49,7 @@ export function PeerPicker({
   };
 
   // Close on outside click and Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  useClickOutside(rootRef, () => setOpen(false), open);
 
   return (
     <div className="peer-picker" ref={rootRef}>

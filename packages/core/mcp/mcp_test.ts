@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import { errorMessage } from "../errors.ts";
 import {
   loadMcpConfig,
   McpConfigError,
@@ -233,7 +234,7 @@ Deno.test("manager respawns a crashed server on the next call", async () => {
     try {
       await crash.execute("1", {}, undefined);
     } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
+      message = errorMessage(error);
     }
     // The SDK reports the transport failure; the exact wording is not
     // stable across versions, so just require a failure.
@@ -265,7 +266,7 @@ Deno.test("aborting a call rejects and does not kill the server", async () => {
     try {
       await promise;
     } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
+      message = errorMessage(error);
     }
     assert(message.includes("aborted"), `message: ${message}`);
 
@@ -294,7 +295,7 @@ Deno.test("manager.close kills server processes", async () => {
   try {
     await manager.listTools();
   } catch (error) {
-    message = error instanceof Error ? error.message : String(error);
+    message = errorMessage(error);
   }
   assert(message.includes("closed"), `message: ${message}`);
   await removeDirRetry(cwd);

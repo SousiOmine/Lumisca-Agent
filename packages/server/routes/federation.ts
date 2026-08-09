@@ -1,6 +1,7 @@
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Workspace } from "@lumisca/core";
+import { errorMessage } from "@lumisca/core";
 import { AppError, parseBody } from "./util.ts";
 import type { FederationClient } from "../federation.ts";
 
@@ -67,7 +68,7 @@ export function federationRoutes(
             peerName: peer.name,
             workspaces: [] as Workspace[],
             ok: false as const,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage(error),
           };
         }
       }),

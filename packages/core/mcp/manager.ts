@@ -1,5 +1,6 @@
 import type { McpConfig, McpServerConfig } from "./config.ts";
-import { formatContent, McpServerClient } from "./client.ts";
+import { errorMessage } from "../errors.ts";
+import { formatContent, McpServerClient, McpToolError } from "./client.ts";
 
 /** A tool exposed by an MCP server, ready to be wrapped as an AgentTool. */
 export interface McpToolDef {
@@ -9,14 +10,17 @@ export interface McpToolDef {
   inputSchema?: unknown;
 }
 
-/** Status snapshot of one server, for the settings UI. */
+/** Status snapshot of one server, for the settings UI. `status` is
+ * widened to include "not_started" so the same union serves the merged
+ * config+status surface (McpServerInfo); the manager itself only ever
+ * reports "ok" or "error". */
 export interface McpServerStatus {
   name: string;
   type: "stdio" | "http";
   enabled: boolean;
   /** Number of tools discovered (0 until the first successful listing). */
   toolCount: number;
-  status: "ok" | "error";
+  status: "ok" | "error" | "not_started";
   error?: string;
 }
 
@@ -86,7 +90,7 @@ export class McpManager {
       } catch (error) {
         this.errors.set(
           server.name,
-          error instanceof Error ? error.message : String(error),
+          errorMessage(error),
         );
         this.dropClient(server.name); // allow a clean reconnect later
       }
@@ -115,8 +119,7 @@ export class McpManager {
     } catch (error) {
       // Application-level errors (isError results) are final; transport or
       // server failures get one reconnect-and-retry attempt.
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.startsWith("MCP tool ")) throw error;
+      if (error instanceof McpToolError) throw error;
       this.dropClient(server.name);
       const retried = await this.getClient(server);
       const content = await retried.callTool(toolName, args, signal);

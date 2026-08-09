@@ -32,6 +32,15 @@ export function formatContent(content: McpContentBlock[]): string {
   return parts.join("\n");
 }
 
+/** A tool call the server explicitly failed (isError result): final, not a
+ * transport failure — callers must not retry it. */
+export class McpToolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpToolError";
+  }
+}
+
 /**
  * One connected MCP server, backed by the official Model Context Protocol
  * TypeScript SDK. Stdio servers spawn a child process; HTTP servers use the
@@ -95,7 +104,7 @@ export class McpServerClient {
       { signal, timeout: timeoutMs },
     );
     if (result.isError === true) {
-      throw new Error(
+      throw new McpToolError(
         `MCP tool ${name} failed: ${
           formatContent(result.content as McpContentBlock[])
         }`,

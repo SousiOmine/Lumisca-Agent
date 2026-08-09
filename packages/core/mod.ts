@@ -1,6 +1,6 @@
 export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
-export { CoreError } from "./errors.ts";
+export { CoreError, errorMessage } from "./errors.ts";
 export { Sandbox } from "./workspace/sandbox.ts";
 export type { Workspace } from "./types/workspace.ts";
 export type { SessionInfo } from "./types/session.ts";

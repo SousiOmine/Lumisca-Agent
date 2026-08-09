@@ -5,6 +5,7 @@ import type {
   StreamFn,
 } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { errorMessage } from "../errors.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared.ts";
@@ -91,7 +92,7 @@ export class SessionAgent {
       this.emit({
         type: "session_error",
         sessionId: this.sessionId,
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage(error),
       });
     }
   }
@@ -180,9 +181,7 @@ export class SessionAgent {
       this.emit({
         type: "session_error",
         sessionId: this.sessionId,
-        message: `MCP error: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        message: `MCP error: ${errorMessage(error)}`,
       });
     }
   }

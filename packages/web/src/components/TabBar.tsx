@@ -8,6 +8,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { isViewRunning, type SessionView } from "../types.ts";
+import { useClickOutside } from "../hooks/useClickOutside.ts";
 
 interface TabBarProps {
   tabs: string[];
@@ -93,27 +94,10 @@ export function TabBar({
   }, [menu]);
 
   // Close on outside click, Escape, tab-bar scroll and window blur.
-  useEffect(() => {
-    if (!menu) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenu(null);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(null);
-    };
-    const onScroll = () => setMenu(null);
-    const onBlur = () => setMenu(null);
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("scroll", onScroll, true);
-    globalThis.addEventListener("blur", onBlur);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("scroll", onScroll, true);
-      globalThis.removeEventListener("blur", onBlur);
-    };
-  }, [menu]);
+  useClickOutside(menuRef, () => setMenu(null), menu !== null, {
+    onScroll: true,
+    onBlur: true,
+  });
 
   const menuIndex = menu ? tabs.indexOf(menu.tabId) : -1;
   const isRightmost = menuIndex === tabs.length - 1;

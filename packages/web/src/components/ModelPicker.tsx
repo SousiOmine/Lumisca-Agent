@@ -5,7 +5,7 @@ import {
   IconChevronRight,
   IconSettings,
 } from "@tabler/icons-react";
-import { api, fed } from "../api.ts";
+import { modelApi } from "../api.ts";
 import { formatModelMeta } from "@lumisca/core/shared";
 import type { ModelInfo } from "../types.ts";
 import { filterByQuery } from "../providers.ts";
@@ -47,13 +47,12 @@ export function ModelPicker({
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Providers/models of the peer that owns the session.
+  const peerApi = modelApi(peerId);
 
   useEffect(() => {
     let stale = false;
-    const listProviders = peerId === ""
-      ? api.listProviders()
-      : fed.listProviders(peerId);
-    listProviders
+    peerApi.listProviders()
       .then((ps) => {
         if (stale) return;
         const configured = ps.filter((p) => p.configured !== false);
@@ -86,10 +85,7 @@ export function ModelPicker({
     let stale = false;
     setBusy(true);
     setModels([]);
-    const listModels = peerId === ""
-      ? api.listModels(providerId)
-      : fed.listModels(peerId, providerId);
-    listModels
+    peerApi.listModels(providerId)
       .then((ms) => {
         if (!stale) setModels(ms);
       })

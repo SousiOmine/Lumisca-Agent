@@ -86,8 +86,10 @@ export function NewSessionView(
   // A selection the user already made is never overwritten by the late
   // response.
   useEffect(() => {
+    let stale = false;
     api.getDefaultModel()
       .then((m) => {
+        if (stale) return;
         if (m && !modelTouched.current) {
           setModel({
             provider: m.provider,
@@ -98,6 +100,9 @@ export function NewSessionView(
         }
       })
       .catch(() => {});
+    return () => {
+      stale = true;
+    };
   }, []);
 
   // Filter workspaces by the selected peer.

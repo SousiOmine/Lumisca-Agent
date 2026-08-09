@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { IconChevronRight, IconPlugConnected } from "@tabler/icons-react";
 import { api } from "../../api.ts";
-import { filterByQuery, useProviders } from "../../providers.ts";
+import { errorText, filterByQuery, useProviders } from "../../providers.ts";
 import type { ModelInfo } from "../../types.ts";
 
 interface ProviderModels {
@@ -50,7 +50,7 @@ export function ModelList() {
         }
       } catch (e) {
         if (!stale) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(errorText(e));
           setLoading(false);
         }
       }

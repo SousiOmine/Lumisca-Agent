@@ -1,4 +1,6 @@
 import { isAbsolute, join } from "node:path";
+import { errorMessage } from "../errors.ts";
+import type { McpServerStatus } from "./manager.ts";
 
 /** One configured MCP server (normalized form of `.mcp.json`). */
 export interface McpServerConfig {
@@ -23,21 +25,15 @@ export interface McpConfig {
   filePath: string;
 }
 
-/** One server as reported to the settings UI (config + live status). */
-export interface McpServerInfo {
-  name: string;
-  type: "stdio" | "http";
-  enabled: boolean;
+/** One server as reported to the settings UI: its config plus the live
+ * status fields (shared shape with McpServerStatus). */
+export interface McpServerInfo extends McpServerStatus {
   command?: string;
   args: string[];
   env: Record<string, string>;
   cwd?: string;
   url?: string;
   headers: Record<string, string>;
-  /** Number of tools discovered (0 until a session attached the server). */
-  toolCount: number;
-  status: "ok" | "error" | "not_started";
-  error?: string;
 }
 
 /** The MCP configuration surface for the settings UI and API. */
@@ -114,9 +110,7 @@ export function parseMcpConfig(text: string, filePath: string): McpConfig {
     raw = JSON.parse(text);
   } catch (error) {
     throw new McpConfigError(
-      `${filePath} is not valid JSON: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `${filePath} is not valid JSON: ${errorMessage(error)}`,
     );
   }
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {

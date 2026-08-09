@@ -1,6 +1,7 @@
 import type { ClientEvent, ConnectionEntry } from "@lumisca/core";
+import { errorMessage } from "@lumisca/core";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError } from "./routes/util.ts";
+import { AppError, LOOPBACK_HOSTS } from "./routes/util.ts";
 
 /** One peer's reachability, reported to the UI. */
 export interface PeerStatus {
@@ -13,9 +14,6 @@ export interface PeerStatus {
 /** Error thrown when a peer cannot be reached or answers with an error;
  * carries the HTTP status to return to the UI. */
 export class PeerError extends AppError {}
-
-/** Hostnames that always mean "this machine" for the self-guard. */
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
 
 /**
  * Hub-side client for the federated peers (the server-side connection
@@ -131,7 +129,7 @@ export class FederationClient {
             id: peer.id,
             name: peer.name,
             ok: false,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage(error),
           };
         }
       }),

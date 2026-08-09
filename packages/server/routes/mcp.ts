@@ -11,7 +11,7 @@ export interface McpApi {
   /** A workspace's own `.mcp.json` (merged into sessions alongside the
    * app-level config). */
   getMcpInfo(workspaceId: string): McpInfo;
-  setMcpConfig(workspaceId: string, text: string): Promise<McpInfo>;
+  setMcpConfig(workspaceId: string, text: string): McpInfo;
 }
 
 async function putConfig(

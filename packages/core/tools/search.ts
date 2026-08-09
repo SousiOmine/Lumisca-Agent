@@ -1,5 +1,7 @@
 import { join, relative } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
+import { errorMessage } from "../errors.ts";
+import { TOOL_GLOB, TOOL_GREP } from "../shared.ts";
 import {
   array,
   boolean,
@@ -181,7 +183,7 @@ export function createGrepTool(
   ctx: FsToolContext,
 ): Tool<typeof grepSchema> {
   return {
-    name: "grep",
+    name: TOOL_GREP,
     label: "Grep",
     description:
       "Search file contents within the workspace using a regular expression. " +
@@ -197,9 +199,7 @@ export function createGrepTool(
         );
       } catch (error) {
         throw new Error(
-          `Invalid pattern: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Invalid pattern: ${errorMessage(error)}`,
         );
       }
 
@@ -337,7 +337,7 @@ export function createGlobTool(
   ctx: FsToolContext,
 ): Tool<typeof globSchema> {
   return {
-    name: "glob",
+    name: TOOL_GLOB,
     label: "Glob",
     description:
       "Find files by path pattern within the workspace. Supports `**`, `*`, `?` and `{a,b}`. " +
@@ -349,9 +349,7 @@ export function createGlobTool(
         re = globToRegExp(params.pattern.replace(/\\/g, "/"));
       } catch (error) {
         throw new Error(
-          `Invalid pattern: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Invalid pattern: ${errorMessage(error)}`,
         );
       }
       const exclude = params.exclude?.length

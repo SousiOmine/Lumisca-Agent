@@ -1,5 +1,5 @@
-import { createApp } from "./packages/server/app.ts";
-import { LumiscaCore } from "./packages/core/mod.ts";
+import { createApp } from "../packages/server/app.ts";
+import { LumiscaCore } from "../packages/core/mod.ts";
 import { fauxProvider } from "@earendil-works/pi-ai";
 
 const faux = fauxProvider();

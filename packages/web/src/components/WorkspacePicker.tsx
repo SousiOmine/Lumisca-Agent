@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   IconChevronDown,
   IconFolder,
@@ -8,6 +8,7 @@ import {
 } from "@tabler/icons-react";
 import type { FederatedWorkspace } from "../types.ts";
 import { tabKey } from "../tabs.ts";
+import { useClickOutside } from "../hooks/useClickOutside.ts";
 
 interface WorkspacePickerProps {
   workspaces: FederatedWorkspace[];
@@ -38,21 +39,7 @@ export function WorkspacePicker({
   );
 
   // Close on outside click and Escape.
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  useClickOutside(rootRef, () => setOpen(false), open);
 
   return (
     <div className="workspace-picker" ref={rootRef}>
