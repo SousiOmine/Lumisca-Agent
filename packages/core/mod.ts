@@ -2,6 +2,11 @@ export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
 export { CoreError, errorMessage } from "./errors.ts";
 export { Sandbox } from "./workspace/sandbox.ts";
+export {
+  listWorkspaceFiles,
+  suggestWorkspaceFiles,
+} from "./workspace/files.ts";
+export type { WorkspaceFileEntry } from "./workspace/files.ts";
 export type { Workspace } from "./types/workspace.ts";
 export type { SessionInfo } from "./types/session.ts";
 export type { ClientEvent } from "./types/event.ts";

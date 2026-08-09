@@ -10,6 +10,7 @@ import type {
   SessionInfo,
   ThinkingLevel,
   Workspace,
+  WorkspaceFileEntry,
 } from "./types.ts";
 import { splitTabKey } from "./tabs.ts";
 
@@ -58,6 +59,14 @@ export const api = {
     }),
   deleteWorkspace: (id: string) =>
     request<{ ok: boolean }>(`/api/workspaces/${id}`, { method: "DELETE" }),
+  /** @-mention file suggestions: the workspace tree filtered by `query`,
+   * paths in the `FolderName/rel/path` form. */
+  workspaceFiles: (workspaceId: string, query: string) =>
+    request<{ entries: WorkspaceFileEntry[] }>(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/files?query=${
+        encodeURIComponent(query)
+      }`,
+    ),
 
   getDefaultModel: () =>
     request<
@@ -209,6 +218,12 @@ export const fed = {
       }
     >(
       `/api/fed/${peerId}/fs/browse?path=${encodeURIComponent(path)}`,
+    ),
+  workspaceFiles: (peerId: string, workspaceId: string, query: string) =>
+    request<{ entries: WorkspaceFileEntry[] }>(
+      `/api/fed/${peerId}/workspaces/${
+        encodeURIComponent(workspaceId)
+      }/files?query=${encodeURIComponent(query)}`,
     ),
   createSession: (peerId: string, input: {
     workspaceId: string;

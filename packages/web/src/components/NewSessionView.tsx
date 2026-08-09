@@ -287,6 +287,8 @@ export function NewSessionView(
               submitDisabled={busy || !text.trim() || !workspaceKey}
               onSubmit={submit}
               onOpenSettings={onOpenSettings}
+              mentionWorkspaceId={selectedWorkspace?.workspace.id}
+              mentionPeerId={selectedWorkspace?.peerId}
             />
             {error && <div className="error-text">{error}</div>}
           </div>

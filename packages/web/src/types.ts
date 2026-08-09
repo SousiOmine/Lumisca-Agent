@@ -13,6 +13,7 @@ import type {
   ThemeSetting,
   ThinkingLevel,
   Workspace,
+  WorkspaceFileEntry,
 } from "@lumisca/core";
 export type {
   AgentMessage,
@@ -25,6 +26,7 @@ export type {
   ThemeSetting,
   ThinkingLevel,
   Workspace,
+  WorkspaceFileEntry,
 };
 
 export type ClientEvent = CoreClientEvent;

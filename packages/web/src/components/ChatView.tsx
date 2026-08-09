@@ -142,6 +142,8 @@ export function ChatView(
           onAbort={isRunning ? onAbort : undefined}
           onSubmit={submit}
           onOpenSettings={onOpenSettings}
+          mentionWorkspaceId={view.info.workspaceId}
+          mentionPeerId={peerId}
         />
       </div>
     </div>

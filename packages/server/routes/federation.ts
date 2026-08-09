@@ -121,6 +121,22 @@ export function federationRoutes(
     return forward(c, fed.request(peer, "POST", "/api/workspaces", body));
   });
 
+  /** @-mention file suggestions for a workspace owned by a peer. */
+  app.get("/fed/:peerId/workspaces/:wid/files", (c) => {
+    const peer = requirePeer(c);
+    const query = c.req.query("query") ?? "";
+    return forward(
+      c,
+      fed.request(
+        peer,
+        "GET",
+        `/api/workspaces/${
+          encodeURIComponent(c.req.param("wid"))
+        }/files?query=${encodeURIComponent(query)}`,
+      ),
+    );
+  });
+
   app.patch("/fed/:peerId/workspaces/:wid", async (c) => {
     const peer = requirePeer(c);
     const body = await parseBody<{ name?: unknown; folders?: unknown }>(c);

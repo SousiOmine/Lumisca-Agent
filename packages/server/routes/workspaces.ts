@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import type { Workspace } from "@lumisca/core";
+import type { Workspace, WorkspaceFileEntry } from "@lumisca/core";
+import { listWorkspaceFiles, suggestWorkspaceFiles } from "@lumisca/core";
 import { AppError, parseBody } from "./util.ts";
 
 interface WorkspaceBody {
@@ -30,6 +31,15 @@ export interface WorkspaceApi {
   ): Promise<Workspace>;
   deleteWorkspace(id: string): void;
 }
+
+/** File listings are cached per workspace for a short TTL: the walk is the
+ * expensive part, and typing an @-mention queries repeatedly. */
+const FILE_CACHE_TTL_MS = 10_000;
+const FILE_CACHE_MAX = 64;
+const fileCache = new Map<
+  string,
+  { at: number; entries: WorkspaceFileEntry[] }
+>();
 
 export function workspaceRoutes(core: WorkspaceApi): Hono {
   const app = new Hono();
@@ -89,6 +99,35 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
   app.delete("/workspaces/:id", (c) => {
     core.deleteWorkspace(c.req.param("id"));
     return c.json({ ok: true });
+  });
+
+  /** @-mention file suggestions: the workspace tree (folder-relative
+   * paths, e.g. `Aaa/README.md`) filtered by `query`, cached briefly. */
+  app.get("/workspaces/:id/files", async (c) => {
+    const id = c.req.param("id");
+    const ws = core.getWorkspace(id);
+    if (!ws) {
+      throw new AppError(`Workspace not found: ${id}`, 404);
+    }
+    const query = c.req.query("query") ?? "";
+    const cached = fileCache.get(id);
+    let entries: WorkspaceFileEntry[];
+    if (cached && Date.now() - cached.at < FILE_CACHE_TTL_MS) {
+      entries = cached.entries;
+    } else {
+      entries = await listWorkspaceFiles(ws);
+      fileCache.set(id, { at: Date.now(), entries });
+      if (fileCache.size > FILE_CACHE_MAX) {
+        let oldest: string | undefined;
+        for (const [key, value] of fileCache) {
+          if (oldest === undefined || value.at < fileCache.get(oldest)!.at) {
+            oldest = key;
+          }
+        }
+        if (oldest !== undefined) fileCache.delete(oldest);
+      }
+    }
+    return c.json({ entries: suggestWorkspaceFiles(entries, query) });
   });
 
   return app;

@@ -76,6 +76,49 @@ Deno.test("health and workspaces API", async () => {
   }
 });
 
+Deno.test("workspace files API returns @-mention suggestions", async () => {
+  const { core, server, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+    await Deno.mkdir(join(root, "src"), { recursive: true });
+    await Deno.writeTextFile(join(root, "src", "main.ts"), "m");
+    await Deno.writeTextFile(join(root, "README.md"), "r");
+
+    const folderName = Deno.build.os === "windows"
+      ? root.split("\\").pop()!
+      : root.split("/").pop()!;
+
+    const all = await json(base, `/api/workspaces/${ws.id}/files`);
+    assertEquals(all.status, 200);
+    const allEntries = (await all.json()).entries;
+    const allPaths = allEntries.map((e: { path: string }) => e.path);
+    assertEquals(allPaths.includes(`${folderName}/README.md`), true);
+    assertEquals(allPaths.includes(`${folderName}/src/main.ts`), true);
+
+    const filtered = await json(
+      base,
+      `/api/workspaces/${ws.id}/files?query=${encodeURIComponent("main")}`,
+    );
+    const filteredPaths = (await filtered.json()).entries.map(
+      (e: { path: string }) => e.path,
+    );
+    assertEquals(filteredPaths, [`${folderName}/src/main.ts`]);
+
+    const unknown = await json(base, "/api/workspaces/nope/files");
+    assertEquals(unknown.status, 404);
+
+    await Deno.remove(root, { recursive: true });
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("workspace update and delete API", async () => {
   const { core, server, base } = await setup();
   try {
