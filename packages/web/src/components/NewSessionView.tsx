@@ -8,7 +8,7 @@ import type {
   ThinkingLevel,
 } from "../types.ts";
 import { errorText } from "../providers.ts";
-import { tabKey } from "../tabs.ts";
+import { splitTabKey, tabKey } from "../tabs.ts";
 import { Composer, type ComposerModel } from "./Composer.tsx";
 import { PeerPicker } from "./PeerPicker.tsx";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
@@ -36,6 +36,18 @@ interface NewSessionViewProps {
   onOpenSettings?: () => void;
 }
 
+/** localStorage key for the workspace last picked on the new session
+ * screen, so the same one is selected again after a restart. */
+const LAST_WORKSPACE_KEY = "lumisca.draftWorkspace";
+
+function loadLastWorkspaceKey(): string {
+  try {
+    return localStorage.getItem(LAST_WORKSPACE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /** The draft session tab: pick workspace/model and start from the center.
  * Workspaces from every federated server appear here; picking one on
  * another machine runs the agent there (peer default model). */
@@ -49,8 +61,15 @@ export function NewSessionView(
     onOpenSettings,
   }: NewSessionViewProps,
 ) {
-  const [selectedPeerId, setSelectedPeerId] = useState("");
-  const [workspaceKey, setWorkspaceKey] = useState("");
+  // The last selected workspace, restored from localStorage. Kept in a ref
+  // until the (possibly async) workspace list can validate it.
+  const pendingWorkspaceKey = useRef<string | null>(loadLastWorkspaceKey());
+  const [selectedPeerId, setSelectedPeerId] = useState(
+    () => splitTabKey(pendingWorkspaceKey.current ?? "").peerId,
+  );
+  const [workspaceKey, setWorkspaceKey] = useState(
+    pendingWorkspaceKey.current ?? "",
+  );
   const [model, setModel] = useState<DraftModel | null>(null);
   const [text, setText] = useState("");
   const [modalWorkspace, setModalWorkspace] = useState<
@@ -87,10 +106,26 @@ export function NewSessionView(
   );
 
   // Keep a valid selection when the workspace list changes (e.g. after a
-  // delete); fall back to the first remaining workspace.
+  // delete); fall back to the first remaining workspace. A restored key is
+  // applied once the list arrives and validated against it.
   useEffect(() => {
-    setWorkspaceKey((current) =>
-      filteredWorkspaces.some(
+    setWorkspaceKey((current) => {
+      const pending = pendingWorkspaceKey.current;
+      if (pending !== null) {
+        pendingWorkspaceKey.current = null;
+        const valid = filteredWorkspaces.some(
+          (w) => tabKey(w.peerId, w.workspace.id) === pending,
+        );
+        // The list is not loaded yet; keep the restored key.
+        if (filteredWorkspaces.length === 0) return pending;
+        return valid ? pending : (filteredWorkspaces[0]
+          ? tabKey(
+            filteredWorkspaces[0].peerId,
+            filteredWorkspaces[0].workspace.id,
+          )
+          : "");
+      }
+      return filteredWorkspaces.some(
           (w) => tabKey(w.peerId, w.workspace.id) === current,
         )
         ? current
@@ -99,12 +134,18 @@ export function NewSessionView(
             filteredWorkspaces[0].peerId,
             filteredWorkspaces[0].workspace.id,
           )
-          : "")
-    );
+          : "");
+    });
   }, [workspaces, selectedPeerId]);
 
-  // Reset workspace selection when the peer changes.
+  // Reset workspace selection when the peer changes. Skipped on the first
+  // run so a restored peer (from the last workspace) is not overwritten.
+  const peerChanged = useRef(false);
   useEffect(() => {
+    if (!peerChanged.current) {
+      peerChanged.current = true;
+      return;
+    }
     setWorkspaceKey(
       filteredWorkspaces[0]
         ? tabKey(
@@ -114,6 +155,20 @@ export function NewSessionView(
         : "",
     );
   }, [selectedPeerId]);
+
+  // Remember the last selected workspace so it can be restored on the next
+  // visit to the new session screen (after a restart or tab switch).
+  useEffect(() => {
+    try {
+      if (workspaceKey) {
+        localStorage.setItem(LAST_WORKSPACE_KEY, workspaceKey);
+      } else {
+        localStorage.removeItem(LAST_WORKSPACE_KEY);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, [workspaceKey]);
 
   const selectedWorkspace = filteredWorkspaces.find(
     (w) => tabKey(w.peerId, w.workspace.id) === workspaceKey,
