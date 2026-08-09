@@ -1,16 +1,20 @@
 import { integer, object, optional, string, type Tool } from "./schema.ts";
 import { TOOL_BASH } from "../shared.ts";
+import type { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
 const bashSchema = object({
+  cwd: string(
+    "Working directory: a workspace folder name (e.g. `Aaa`) or an absolute path",
+  ),
   command: string("The shell command to execute"),
   timeout: optional(integer("Timeout in seconds (default 120)")),
 });
 
 export interface BashToolOptions {
-  /** Default working directory for commands. */
-  cwd: string;
+  /** Workspace sandbox used to resolve the `cwd` argument. */
+  sandbox: Sandbox;
   /** Extra env vars to expose. */
   env?: Record<string, string>;
   /** Default timeout in seconds. */
@@ -19,8 +23,9 @@ export interface BashToolOptions {
 
 /**
  * Execute a shell command. On Windows uses cmd.exe, elsewhere /bin/sh.
- * The command runs with the workspace folder as its working directory;
- * it is not sandboxed beyond that (same policy as pi).
+ * The working directory is a required argument, resolved against the
+ * workspace; the command itself is not sandboxed beyond that (same
+ * policy as pi).
  */
 export function createBashTool(
   options: BashToolOptions,
@@ -31,10 +36,13 @@ export function createBashTool(
     name: TOOL_BASH,
     label: "Bash",
     description:
-      "Execute a shell command in the workspace. Output is limited to the last 64KB. " +
+      "Execute a shell command in the workspace. `cwd` is required and must be " +
+      "a workspace folder name or an absolute path. Output is limited to the last 64KB. " +
       "Use for build, test, git, and other commands. `timeout` is in seconds.",
     parameters: bashSchema,
     execute: async (_id, params, signal) => {
+      const resolved = await options.sandbox.resolve(params.cwd);
+      if (!resolved.ok) throw new Error(resolved.reason);
       const timeoutSec = params.timeout ?? defaultTimeoutSec;
       const shell = Deno.build.os === "windows"
         ? { file: "cmd.exe", args: ["/d", "/s", "/c"] }
@@ -42,7 +50,7 @@ export function createBashTool(
 
       const command = new Deno.Command(shell.file, {
         args: [...shell.args, params.command],
-        cwd: options.cwd,
+        cwd: resolved.path,
         env: options.env,
         stdout: "piped",
         stderr: "piped",
@@ -98,7 +106,7 @@ export function createBashTool(
         body += `\n[exit code: ${code}]`;
         return {
           content: [{ type: "text", text: body }],
-          details: { exitCode: code, cwd: options.cwd },
+          details: { exitCode: code, cwd: resolved.path },
         };
       } finally {
         clearTimeout(timer);

@@ -15,8 +15,6 @@ import { loadProjectMemory } from "../memory/agents-md.ts";
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
 
 export interface ToolFactoryOptions {
-  /** Default working directory (first workspace folder). */
-  cwd: string;
   /** Extra environment variables for bash commands. */
   env?: Record<string, string>;
 }
@@ -26,9 +24,8 @@ export function createCodingTools(
   workspace: Workspace,
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
-  const cwd = options.cwd ?? workspace.folders[0] ?? Deno.cwd();
   const sandbox = new Sandbox(workspace.folders);
-  const ctx = { sandbox, cwd };
+  const ctx = { sandbox };
 
   return [
     createReadFileTool(ctx),
@@ -37,7 +34,7 @@ export function createCodingTools(
     createListDirTool(ctx),
     createGrepTool(ctx),
     createGlobTool(ctx),
-    createBashTool({ cwd, env: options.env }),
+    createBashTool({ sandbox, env: options.env }),
   ];
 }
 
@@ -68,7 +65,10 @@ ${folders}
 
 Guidelines:
 - Read files before editing them.
-- Use relative or absolute paths; everything is resolved against the workspace folders.
+- Paths are either absolute or relative to the workspace. A relative path must
+  start with the name of a workspace folder above, e.g. \`Aaa/README.md\`.
+- The bash tool requires a \`cwd\` argument: a workspace folder name (e.g.
+  \`Aaa\`) or an absolute path.
 - After making changes, verify them (run tests, builds) when appropriate.
 - Ask the user when a task is ambiguous.
 ${memorySection}${personalSection}

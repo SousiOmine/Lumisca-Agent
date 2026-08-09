@@ -11,7 +11,6 @@ import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 
 interface FsToolContext {
   sandbox: Sandbox;
-  cwd: string;
 }
 
 function fileInfoLine(entry: Deno.DirEntry): string {
@@ -37,7 +36,7 @@ export function createReadFileTool(
       "Large files are read in chunks; the output is truncated to the last portion when larger than 64KB.",
     parameters: readSchema,
     execute: async (_id, params, _signal) => {
-      const resolved = await ctx.sandbox.resolve(params.path, ctx.cwd);
+      const resolved = await ctx.sandbox.resolve(params.path);
       if (!resolved.ok) throw new Error(resolved.reason);
       const stat = await Deno.stat(resolved.path);
       if (stat.isDirectory) throw new Error(`Is a directory: ${params.path}`);
@@ -88,10 +87,10 @@ export function createWriteFileTool(
       "Create or overwrite a file with the given text content. Parent directories are created automatically.",
     parameters: writeSchema,
     execute: async (_id, params) => {
-      const resolved = await ctx.sandbox.resolve(params.path, ctx.cwd);
+      const resolved = await ctx.sandbox.resolve(params.path);
       if (!resolved.ok) throw new Error(resolved.reason);
       const parent = join(resolved.path, "..");
-      const parentResolved = await ctx.sandbox.resolve(parent, ctx.cwd);
+      const parentResolved = await ctx.sandbox.resolve(parent);
       if (!parentResolved.ok) throw new Error(parentResolved.reason);
       await Deno.mkdir(parentResolved.path, { recursive: true });
       await Deno.writeTextFile(resolved.path, params.content);
@@ -120,7 +119,7 @@ export function createEditFileTool(
       "`old_string` must match exactly and appear at least once.",
     parameters: editSchema,
     execute: async (_id, params) => {
-      const resolved = await ctx.sandbox.resolve(params.path, ctx.cwd);
+      const resolved = await ctx.sandbox.resolve(params.path);
       if (!resolved.ok) throw new Error(resolved.reason);
       const content = await Deno.readTextFile(resolved.path);
       const occurrences = content.split(params.old_string).length - 1;
@@ -156,7 +155,7 @@ export function createListDirTool(
     description: "List the contents of a directory within the workspace.",
     parameters: listDirSchema,
     execute: async (_id, params) => {
-      const resolved = await ctx.sandbox.resolve(params.path, ctx.cwd);
+      const resolved = await ctx.sandbox.resolve(params.path);
       if (!resolved.ok) throw new Error(resolved.reason);
       const entries: Deno.DirEntry[] = [];
       for await (const entry of Deno.readDir(resolved.path)) {

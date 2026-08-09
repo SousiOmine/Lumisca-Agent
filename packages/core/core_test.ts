@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -138,12 +138,12 @@ Deno.test("tools block file access outside the workspace", async () => {
   assertEquals(tr.isError, true);
   assertEquals(tr.content[0]!.text.includes("outside the workspace"), true);
 
-  // Inside the workspace reads work.
+  // Inside the workspace reads work (folder-name-relative path).
   await Deno.writeTextFile(join(root, "inside.txt"), "hello");
   faux.setResponses([
     fauxAssistantMessage([
       fauxText("Reading."),
-      fauxToolCall("read_file", { path: "inside.txt" }),
+      fauxToolCall("read_file", { path: `${basename(root)}/inside.txt` }),
     ]),
     fauxAssistantMessage("Read it."),
   ]);

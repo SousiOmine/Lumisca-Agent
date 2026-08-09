@@ -15,7 +15,6 @@ import { truncate, truncatedNote } from "./truncate.ts";
 
 interface FsToolContext {
   sandbox: Sandbox;
-  cwd: string;
 }
 
 /** Directories skipped while walking (on top of hidden entries). */
@@ -268,7 +267,7 @@ async function resolveSearchRoot(
   ctx: FsToolContext,
   requested: string,
 ): Promise<string> {
-  const resolved = await ctx.sandbox.resolve(requested, ctx.cwd);
+  const resolved = await ctx.sandbox.resolve(requested);
   if (!resolved.ok) throw new Error(resolved.reason);
   const stat = await Deno.stat(resolved.path).catch(() => null);
   if (stat === null) throw new Error(`Path does not exist: ${requested}`);

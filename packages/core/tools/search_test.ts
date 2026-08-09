@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { assert, assertEquals } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
@@ -7,7 +7,7 @@ import { createGlobTool, createGrepTool, globToRegExp } from "./search.ts";
 
 function makeTools(root: string) {
   const sandbox = new Sandbox([root]);
-  const ctx = { sandbox, cwd: root };
+  const ctx = { sandbox };
   return {
     grep: createGrepTool(ctx),
     glob: createGlobTool(ctx),
@@ -24,9 +24,9 @@ function toolText(
 /** Fixture tree used by most tests. The root is realpath'd so that paths
  * match what the sandbox resolves (makeTempDir may return 8.3 short names
  * on Windows, e.g. `MAINPC~1`, which realpathSync expands). */
-async function fixture(): Promise<string> {
+async function fixture(prefix = "lumisca-search-"): Promise<string> {
   const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-search-" }),
+    await Deno.makeTempDir({ prefix }),
   );
   await Deno.writeTextFile(
     join(root, "a.ts"),
@@ -242,12 +242,74 @@ Deno.test("glob supports brace alternation and scoped roots", async () => {
 
     const scoped = await glob.execute(
       "1",
-      { pattern: "**/*.ts", path: "sub" },
+      { pattern: "**/*.ts", path: `${basename(root)}/sub` },
       undefined,
     );
     assertEquals(toolText(scoped).includes("c.ts"), true);
     assertEquals(toolText(scoped).includes("a.ts"), false);
   } finally {
     await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("grep and glob search every workspace folder when path is omitted", async () => {
+  const first = await fixture();
+  const second = await fixture();
+  try {
+    const sandbox = new Sandbox([first, second]);
+    const ctx = { sandbox };
+    const grep = createGrepTool(ctx);
+    const glob = createGlobTool(ctx);
+
+    const grepResult = await grep.execute("1", { pattern: "bar" }, undefined);
+    assertEquals(grepResult.details?.matches, 2); // b.js in both folders
+    assertEquals(toolText(grepResult).includes(join(first, "b.js")), true);
+    assertEquals(toolText(grepResult).includes(join(second, "b.js")), true);
+
+    const globResult = await glob.execute(
+      "1",
+      { pattern: "**/*.ts" },
+      undefined,
+    );
+    assertEquals(globResult.details?.count, 4); // a.ts + sub/c.ts in both
+  } finally {
+    await Deno.remove(first, { recursive: true });
+    await Deno.remove(second, { recursive: true });
+  }
+});
+
+Deno.test("grep and glob results are independent of folder registration order", async () => {
+  const a = await fixture("lumisca-aaa-");
+  const z = await fixture("lumisca-zzz-");
+  try {
+    const grep = (sandbox: Sandbox) =>
+      createGrepTool({ sandbox }).execute(
+        "1",
+        { pattern: "const", max_results: 2 },
+        undefined,
+      );
+    const glob = (sandbox: Sandbox) =>
+      createGlobTool({ sandbox }).execute(
+        "1",
+        { pattern: "**/*.ts" },
+        undefined,
+      );
+
+    // The cap is hit inside the first (path-sorted) root; the second root
+    // must never contribute, in either registration order.
+    const r1 = await grep(new Sandbox([a, z]));
+    const r2 = await grep(new Sandbox([z, a]));
+    assertEquals(toolText(r1), toolText(r2));
+    assertEquals(r1.details?.matches, 2);
+    assertEquals(toolText(r1).includes(a), true);
+    assertEquals(toolText(r1).includes(z), false);
+
+    const g1 = await glob(new Sandbox([a, z]));
+    const g2 = await glob(new Sandbox([z, a]));
+    assertEquals(toolText(g1), toolText(g2));
+    assertEquals(g1.details?.count, 4);
+  } finally {
+    await Deno.remove(a, { recursive: true });
+    await Deno.remove(z, { recursive: true });
   }
 });
