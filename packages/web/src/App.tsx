@@ -232,6 +232,9 @@ export function App({ initialData }: AppProps): ReactElement {
           streamingText: "",
           runningTools: new Map(),
           error: undefined,
+          agentStartedAt: undefined,
+          agentEndedAt: undefined,
+          thinkingStartAt: undefined,
         });
       }
       return next;

@@ -10,6 +10,7 @@ import type {
   ToolResultMessage,
 } from "../types.ts";
 import { ToolCall } from "./ToolCall.tsx";
+import { AgentActivity } from "./AgentActivity.tsx";
 import { Composer } from "./Composer.tsx";
 import { renderMarkdown } from "../markdown.ts";
 
@@ -87,6 +88,7 @@ export function ChatView(
     <div className="chat">
       <div className="chat-scroll" ref={scrollRef}>
         <div className="chat-column">
+          <AgentActivity view={view} />
           {view.messages.length === 0 && view.streamingText.length === 0 && (
             <div className="chat-empty" style={{ height: "50vh" }}>
               <div className="chat-empty-inner">

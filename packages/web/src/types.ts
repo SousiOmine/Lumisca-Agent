@@ -67,6 +67,12 @@ export interface SessionView {
   streamingText: string;
   runningTools: Map<string, string>; // toolCallId -> toolName
   error?: string;
+  /** Timestamp when agent_start fired (ms since epoch). */
+  agentStartedAt?: number;
+  /** Timestamp when agent_end fired (ms since epoch). */
+  agentEndedAt?: number;
+  /** Timestamp when the current thinking block started (ms since epoch). */
+  thinkingStartAt?: number;
 }
 
 /** Fresh view state for a newly opened session tab. */

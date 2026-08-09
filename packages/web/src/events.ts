@@ -55,10 +55,24 @@ export function applyEvent(
   switch (event.type) {
     case "agent_start":
       // A new run starts: a stale error from the previous run is gone.
-      return view.error === undefined ? view : { ...view, error: undefined };
+      return {
+        ...view,
+        error: undefined,
+        agentStartedAt: Date.now(),
+        agentEndedAt: undefined,
+        thinkingStartAt: undefined,
+      };
     case "message_start": {
       if (event.message.role === "assistant") {
-        return { ...view, streamingText: "" };
+        // Detect thinking: the assistant message starts with thinking content.
+        const hasThinking = event.message.content.some(
+          (b) => b.type === "thinking",
+        );
+        return {
+          ...view,
+          streamingText: "",
+          thinkingStartAt: hasThinking ? (view.thinkingStartAt ?? Date.now()) : undefined,
+        };
       }
       // User messages are not rendered optimistically; the stream is the
       // only source, so this is always an append.
@@ -71,10 +85,12 @@ export function applyEvent(
       // with the final copy (append when the start event was missed).
       // Assistant messages get the same treatment so a resync race cannot
       // append a duplicate.
+      // Clear thinking indicator once the message is complete.
       return {
         ...view,
         messages: upsertMessage(view.messages, event.message),
         streamingText: "",
+        thinkingStartAt: undefined,
       };
     }
     case "tool_start": {
@@ -90,7 +106,7 @@ export function applyEvent(
     case "session_error":
       return { ...view, error: event.message };
     case "agent_end":
-      return null;
+      return { ...view, agentEndedAt: Date.now() };
     default:
       return null;
   }
