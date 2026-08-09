@@ -432,6 +432,7 @@ select:focus {
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
   min-height: 0;
   padding: 20px 0 10px;
 }
@@ -600,27 +601,65 @@ select:focus {
   }
 }
 
-/* ---- agent activity header ----------------------------------------------- */
+/* ---- completed-turn activity --------------------------------------------- */
 
-.agent-activity {
+.conversation-turn {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-bottom: 4px;
+  gap: 18px;
 }
 
-.agent-activity-row {
-  display: inline-flex;
+.agent-activity {
+  width: 100%;
+  display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
-  color: var(--text-dim);
-  font-family: var(--mono);
+  padding: 0 0 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
 }
 
-.agent-activity-row svg {
-  color: var(--text-faint);
+.agent-activity:not(:disabled) {
+  cursor: pointer;
+}
+
+.agent-activity:not(:disabled):hover {
+  color: var(--text-dim);
+}
+
+.agent-activity:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.agent-activity svg,
+.agent-activity-spacer {
   flex: none;
+}
+
+.agent-activity-spacer {
+  width: 14px;
+}
+
+.agent-activity-chevron {
+  transition: transform 140ms ease;
+}
+
+.agent-activity.expanded .agent-activity-chevron {
+  transform: rotate(90deg);
+}
+
+.agent-work-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
 }
 
 /* ---- tool calls (timeline) ---------------------------------------------- */
@@ -1978,7 +2017,7 @@ select:focus {
     animation: none;
   }
 
-  .agent-activity-row svg.spin {
-    animation: none;
+  .agent-activity-chevron {
+    transition: none;
   }
 }

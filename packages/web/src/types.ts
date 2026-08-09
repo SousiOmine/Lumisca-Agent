@@ -84,5 +84,5 @@ export function emptyView(
 }
 
 export function isViewRunning(view: SessionView): boolean {
-  return view.streamingText.length > 0 || view.runningTools.size > 0;
+  return view.agentStartedAt !== undefined && view.agentEndedAt === undefined;
 }

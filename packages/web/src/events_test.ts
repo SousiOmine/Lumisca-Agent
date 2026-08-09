@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { applyEvent, mergeMessages } from "./events.ts";
-import type { AgentMessage, SessionView } from "./types.ts";
+import { type AgentMessage, isViewRunning, type SessionView } from "./types.ts";
 
 function message(
   role: AgentMessage["role"],
@@ -143,6 +143,9 @@ Deno.test("events: errors are set on session_error and cleared on agent_start", 
   assertEquals(v.error, "boom");
   v = applyEvent({ type: "agent_start", sessionId: "s1" }, v)!;
   assertEquals(v.error, undefined);
+  assertEquals(isViewRunning(v), true);
+  v = applyEvent({ type: "agent_end", sessionId: "s1" }, v)!;
+  assertEquals(isViewRunning(v), false);
 });
 
 Deno.test("events: other sessions and non-view events are ignored", () => {

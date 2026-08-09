@@ -69,26 +69,18 @@ export function ChatView(
     }
   };
 
-  // Pair each assistant message with the tool results that follow it, in a
-  // single forward pass (message rows no longer slice the tail per row).
-  const toolResultsByIndex = new Map<number, Map<string, ToolResultMessage>>();
-  for (let i = 0; i < view.messages.length; i++) {
-    const m = view.messages[i]!;
-    if (m.role !== "assistant") continue;
-    const results = new Map<string, ToolResultMessage>();
-    for (let j = i + 1; j < view.messages.length; j++) {
-      const next = view.messages[j]!;
-      if (next.role !== "toolResult") break;
-      results.set(next.toolCallId, next);
+  const turns = buildTurns(view.messages);
+  const toolResults = new Map<string, ToolResultMessage>();
+  for (const message of view.messages) {
+    if (message.role === "toolResult") {
+      toolResults.set(message.toolCallId, message);
     }
-    toolResultsByIndex.set(i, results);
   }
 
   return (
     <div className="chat">
       <div className="chat-scroll" ref={scrollRef}>
         <div className="chat-column">
-          <AgentActivity view={view} />
           {view.messages.length === 0 && view.streamingText.length === 0 && (
             <div className="chat-empty" style={{ height: "50vh" }}>
               <div className="chat-empty-inner">
@@ -99,12 +91,16 @@ export function ChatView(
               </div>
             </div>
           )}
-          {view.messages.map((m, i) => (
-            <MessageRow
-              key={`${m.role}-${m.timestamp}-${i}`}
-              message={m}
-              toolResults={toolResultsByIndex.get(i) ?? EMPTY_RESULTS}
+          {turns.map((turn, index) => (
+            <ConversationTurn
+              key={`${turn.user.timestamp}-${index}`}
+              turn={turn}
+              toolResults={toolResults}
               runningTools={view.runningTools}
+              running={isRunning && index === turns.length - 1}
+              endedAt={index === turns.length - 1
+                ? view.agentEndedAt
+                : undefined}
             />
           ))}
           {view.streamingText.length > 0 && (
@@ -152,8 +148,98 @@ export function ChatView(
   );
 }
 
-/** Shared empty map for messages without tool results. */
-const EMPTY_RESULTS = new Map<string, ToolResultMessage>();
+interface ConversationTurnData {
+  user: AgentMessage;
+  responses: AgentMessage[];
+}
+
+/** Group the flat agent history by the user message that started each run. */
+export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
+  const turns: ConversationTurnData[] = [];
+  for (const message of messages) {
+    if (message.role === "user") {
+      turns.push({ user: message, responses: [] });
+      continue;
+    }
+    const current = turns.at(-1);
+    if (current) current.responses.push(message);
+  }
+  return turns;
+}
+
+function ConversationTurn({
+  turn,
+  toolResults,
+  runningTools,
+  running,
+  endedAt,
+}: {
+  turn: ConversationTurnData;
+  toolResults: Map<string, ToolResultMessage>;
+  runningTools: Map<string, string>;
+  running: boolean;
+  endedAt?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const assistants = turn.responses.filter(
+    (message): message is AssistantMessage => message.role === "assistant",
+  );
+  const finalAssistant = assistants.at(-1);
+  const intermediate = finalAssistant ? assistants.slice(0, -1) : assistants;
+  const finalToolCalls = finalAssistant?.content.filter(
+    (block): block is ToolCallBlock => block.type === "toolCall",
+  ) ?? [];
+  const expandable = intermediate.length > 0 || finalToolCalls.length > 0;
+  const lastTimestamp = turn.responses.reduce(
+    (latest, message) => Math.max(latest, message.timestamp),
+    turn.user.timestamp,
+  );
+  const completionTime = endedAt ?? lastTimestamp;
+
+  return (
+    <section className="conversation-turn">
+      <MessageRow
+        message={turn.user}
+        toolResults={toolResults}
+        runningTools={runningTools}
+      />
+      {(running || turn.responses.length > 0) && (
+        <AgentActivity
+          startedAt={turn.user.timestamp}
+          endedAt={running ? undefined : completionTime}
+          running={running}
+          expanded={running || expanded}
+          expandable={!running && expandable}
+          onToggle={() => {
+            if (!running && expandable) setExpanded((open) => !open);
+          }}
+        />
+      )}
+      {(running || expanded) && (
+        <div className="agent-work-log">
+          {intermediate.map((message, index) => (
+            <MessageRow
+              key={`${message.timestamp}-${index}`}
+              message={message}
+              toolResults={toolResults}
+              runningTools={runningTools}
+            />
+          ))}
+          {finalAssistant && finalToolCalls.length > 0 && (
+            <AssistantTools
+              assistant={finalAssistant}
+              toolResults={toolResults}
+              runningTools={runningTools}
+            />
+          )}
+        </div>
+      )}
+      {finalAssistant && contentText(finalAssistant.content) && (
+        <AssistantText message={finalAssistant} />
+      )}
+    </section>
+  );
+}
 
 function MessageRow({
   message,
@@ -193,6 +279,44 @@ function MessageRow({
             toolCall={tc}
             result={toolResults.get(tc.id)}
             running={runningTools.has(tc.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AssistantText({ message }: { message: AssistantMessage }) {
+  return (
+    <div className="msg">
+      <div className="msg-body markdown">
+        <MarkdownBlock text={contentText(message.content)} />
+      </div>
+    </div>
+  );
+}
+
+function AssistantTools({
+  assistant,
+  toolResults,
+  runningTools,
+}: {
+  assistant: AssistantMessage;
+  toolResults: Map<string, ToolResultMessage>;
+  runningTools: Map<string, string>;
+}) {
+  const toolCalls = assistant.content.filter(
+    (block): block is ToolCallBlock => block.type === "toolCall",
+  );
+  return (
+    <div className="msg">
+      <div className="msg-body markdown">
+        {toolCalls.map((toolCall) => (
+          <ToolCall
+            key={toolCall.id}
+            toolCall={toolCall}
+            result={toolResults.get(toolCall.id)}
+            running={runningTools.has(toolCall.id)}
           />
         ))}
       </div>

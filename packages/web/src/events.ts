@@ -71,7 +71,9 @@ export function applyEvent(
         return {
           ...view,
           streamingText: "",
-          thinkingStartAt: hasThinking ? (view.thinkingStartAt ?? Date.now()) : undefined,
+          thinkingStartAt: hasThinking
+            ? (view.thinkingStartAt ?? Date.now())
+            : undefined,
         };
       }
       // User messages are not rendered optimistically; the stream is the
@@ -106,7 +108,9 @@ export function applyEvent(
     case "session_error":
       return { ...view, error: event.message };
     case "agent_end":
-      return { ...view, agentEndedAt: Date.now() };
+      return view.agentStartedAt === undefined
+        ? null
+        : { ...view, agentEndedAt: Date.now() };
     default:
       return null;
   }
