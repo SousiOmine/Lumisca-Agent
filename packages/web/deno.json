@@ -1,6 +1,6 @@
 {
   "name": "@lumisca/web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "tasks": {
     "dev": "deno run -A npm:vite@8.0.16 --configLoader native"
   },
