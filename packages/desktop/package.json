@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "build:server": "deno run --allow-all ../../scripts/build-desktop-assets.ts && deno compile --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys --output src-tauri/resources/server/lumisca-server.exe ../../packages/server/mod.ts",
+    "build:server": "deno run --allow-all ../../scripts/build-desktop-assets.ts && node -e \"require('node:fs').rmSync('src-tauri/resources/server/' + (process.platform === 'win32' ? 'lumisca-server.exe' : 'lumisca-server'), { force: true })\" && deno compile --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys --output src-tauri/resources/server/lumisca-server.exe ../../packages/server/mod.ts",
     "build:server:dev": "deno run --allow-all ../../scripts/build-desktop-assets.ts"
   },
   "devDependencies": {

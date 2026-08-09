@@ -117,6 +117,51 @@ npm run tauri --prefix packages/desktop -- build      # インストーラ
 
 パッケージ版はリポジトリレイアウトや Deno 本体に依存せず動作します。
 
+## 配布 (GitHub Releases)
+
+`vX.Y.Z` 形式のタグを push すると、GitHub Actions が Windows インストーラを
+ビルドし、**ドラフトリリース**として作成します(リリースはタグと
+`tauri.conf.json` / `Cargo.toml` のバージョンが一致している場合のみ成功します):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub の Releases ページでドラフトを確認し「Publish release」で公開します。
+新規ユーザーはリリースのアセットから `Lumisca_<ver>_x64-setup.exe` を
+ダウンロードしてインストールします。
+
+リリースには自動更新の準備として署名(`.sig`)と `latest.json` も含まれます。
+署名に使う秘密鍵は GitHub リポジトリの Actions シークレット
+(`TAURI_SIGNING_PRIVATE_KEY` = 秘密鍵の内容 / 
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = パスフレーズ)に設定済み
+である必要があります(未設定だとリリースビルドが失敗します)。
+
+### 署名キー
+
+署名キーは `tauri signer generate` で開発者のローカル環境に生成し、
+**リポジトリ外で厳重に管理してください**(保存場所・内容を README や
+リポジトリに記載しないこと。パスフレーズマネージャーでの管理を推奨)。
+秘密鍵とパスフレーズを紛失すると既存ユーザーへの更新配信が不可能になります。
+
+`createUpdaterArtifacts: true` により、ローカルで `tauri build` する場合も
+署名キーが必要です。鍵ファイルを環境変数で読み込んでから実行してください:
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content "<鍵ファイルのパス>" -Raw).TrimEnd()
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<パスフレーズ>"
+npm run tauri --prefix packages/desktop -- build
+```
+
+### 自動更新 (将来対応)
+
+現在のリリースパイプラインは自動更新に対応したアーティファクト
+(`.sig` / `latest.json`)を生成済みのため、`tauri-plugin-updater` の導入
+(Cargo.toml + lib.rs へのプラグイン登録、`tauri.conf.json` の
+`plugins.updater` に公開鍵と `https://github.com/SousiOmine/Lumisca-Agent/releases/latest/download/latest.json`
+を設定)だけで既存ユーザーへのアプリ内更新が動く状態です。
+
 ## リモートサーバーでのホスティング
 
 エージェントの処理・ファイル操作・DB・APIキーを**別 PC の Lumisca サーバー**で

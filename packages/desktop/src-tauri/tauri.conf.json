@@ -29,8 +29,17 @@
       "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNENzdENTM2N0Y1NENBRjEKUldUeHlsUi9OdFYzUGJuZERCc3paSjRBaXY1VDFkelVJR1VUM3Fkei9NMHdlUmxuWmNwcFU5bmgK",
+      "endpoints": [
+        "https://github.com/SousiOmine/Lumisca-Agent/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "icon": ["icons/icon.ico", "icons/32x32.png", "icons/128x128.png"],
     "resources": {
