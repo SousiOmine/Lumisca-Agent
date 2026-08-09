@@ -64,19 +64,20 @@ packages/
 ### Web(推奨)
 
 ```bash
+deno task dev           # 開発用: Vite HMR + API サーバー
+# → http://127.0.0.1:5173 をブラウザで開く
+
 deno task server        # 本番相当(キャッシュ有効)
-deno task server:dev    # 開発用: ライブリロード付き
 # → http://127.0.0.1:8000 をブラウザで開く
 ```
 
 React アプリはクライアントサイドでレンダリングされます(初期HTMLはテーマ適用済みの
 静的シェル)。クライアントJSは初回アクセス時に esbuild で自動生成され
-(`.lumisca-cache/` にキャッシュ)、`server` / `server:dev` のどちらも同じ経路で
-配信されます。
+(`.lumisca-cache/` にキャッシュ)、`server` から配信されます。
 
-`server:dev` では `packages/web/src` と `packages/core/shared.ts`(バンドルに
-取り込まれる共有モジュール)の変更をファイルウォッチャーが検出し、esbuild で
-再バンドルして接続中のクライアントにリロードを通知します(フルページリロード)。
+`dev` は Vite の開発サーバーと Hono の API サーバーを同時に起動します。
+React コンポーネントと CSS の変更は Vite HMR によりブラウザへ即時反映されます。
+開発画面からの `/api`、`/ws`、初期データのリクエストは Hono へプロキシされます。
 
 `LUMISCA_DB` で DB パス、`LUMISCA_PORT` でポートを変更できます。設定(テーマ・
 APIキー・接続先など)は `~/.config/lumisca-agent/settings.jsonc` に保存されます

@@ -243,11 +243,6 @@ export function App({ initialData }: AppProps): ReactElement {
    * carry the peer id ("" = this server); the tab key resolves the view. */
   const handleEvent = useCallback(
     (event: ClientEvent & { peerId?: string }) => {
-      if (event.type === "reload") {
-        // Dev mode: the server rebuilt the bundle; refresh to pick it up.
-        location.reload();
-        return;
-      }
       if (event.type === "session_created") return;
       const key = tabKey(event.peerId ?? "", event.sessionId);
       setViews((prev) => {

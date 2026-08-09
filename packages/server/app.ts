@@ -5,14 +5,7 @@ import { upgradeWebSocket } from "hono/deno";
 import { type LumiscaCore, THEME_KEY } from "@lumisca/core";
 import { bundleClient } from "./bundle.ts";
 import { renderHtmlDocument } from "./render.ts";
-import { SourceWatcher } from "./watch.ts";
-import {
-  coreSharedPath,
-  webClientEntry,
-  webFaviconPath,
-  webSrcDir,
-  webStylesPath,
-} from "./paths.ts";
+import { webClientEntry, webFaviconPath, webStylesPath } from "./paths.ts";
 import { fsRoutes } from "./routes/fs.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
@@ -28,8 +21,6 @@ import type { InitialData } from "@lumisca/web/types";
 export interface AppOptions {
   /** Repository root (defaults to the current working directory). */
   repoRoot?: string;
-  /** Watch frontend sources; rebundle and notify clients on change. */
-  watch?: boolean;
   /** Address to bind (defaults to 127.0.0.1 — loopback only). Remote
    * hosting sets LUMISCA_HOST. Binding a non-loopback address without a
    * token is refused at startup (see validateHostConfig). */
@@ -60,8 +51,6 @@ export interface AppOptions {
 class Assets {
   private appJs: string | null = null;
   private appJsPromise: Promise<string> | null = null;
-  private buildGen = 0;
-  private buildQueue: Promise<unknown> = Promise.resolve();
   private css: string | null = null;
   private favicon: Uint8Array | null = null;
 
@@ -97,30 +86,13 @@ class Assets {
     }
   }
 
-  /** Drop cached artifacts so the next request rebuilds them. */
-  invalidate(): void {
-    this.appJs = null;
-    this.appJsPromise = null;
-    this.css = null;
-    this.buildGen++;
-  }
-
-  /** Build once; concurrent first requests share the same build. A failed
-   * build resets the cache so the next request retries, and an invalidation
-   * mid-build prevents the stale result from being cached. */
+  /** Build once; concurrent first requests share the same build. */
   getAppJs(): Promise<string> {
     if (this.appJs !== null) return Promise.resolve(this.appJs);
     if (this.appJsPromise === null) {
-      const gen = this.buildGen;
       this.appJsPromise = this.buildAppJs().then(
         (js) => {
-          if (gen === this.buildGen) {
-            this.appJs = js;
-          } else {
-            // Sources changed while this build was running; serve the
-            // result once but do not cache it — the next request rebuilds.
-            this.appJsPromise = null;
-          }
+          this.appJs = js;
           return js;
         },
         (error) => {
@@ -135,7 +107,7 @@ class Assets {
   }
 
   private buildAppJs(): Promise<string> {
-    const run = async (): Promise<string> => {
+    return (async (): Promise<string> => {
       if (!this.hasWebSources()) {
         // Packaged build: serve the prebuilt bundle.
         const embedded = await this.embedded("app.js");
@@ -153,12 +125,7 @@ class Assets {
         outfile,
       });
       return Deno.readTextFile(outfile);
-    };
-    // Serialize builds: the dev watcher can invalidate mid-build, and two
-    // esbuild runs must never write the same outfile concurrently.
-    const next = this.buildQueue.then(run, run);
-    this.buildQueue = next.then(() => {}, () => {});
-    return next;
+    })();
   }
 
   async getCss(): Promise<string> {
@@ -246,7 +213,7 @@ function isAllowedOrigin(origin: string, host: string | undefined): boolean {
   }
 }
 
-/** Cleanup hooks per app instance (dev watcher), reached via disposeServer. */
+/** Cleanup hooks per app instance, reached via disposeServer. */
 const appDisposers = new WeakMap<Hono, () => void>();
 const serverDisposers = new WeakMap<
   Deno.HttpServer<Deno.NetAddr>,
@@ -262,7 +229,6 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const app = new Hono();
   const repoRoot = options.repoRoot ?? Deno.cwd();
   const assets = new Assets(repoRoot, join(repoRoot, ".lumisca-cache"));
-  const watch = options.watch ?? Deno.env.get("LUMISCA_DEV") === "1";
 
   // Federated peers (the server-side connection registry): the hub proxies
   // their workspaces/sessions and relays their events, tagged with the
@@ -333,36 +299,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     return c.text("Not found", 404);
   });
 
-  // Connected websocket clients; used to broadcast reloads in dev mode.
-  const wsClients = new Set<WebSocket>();
-  const reloadClients = () => {
-    const message = JSON.stringify({ type: "reload" });
-    for (const client of wsClients) {
-      try {
-        client.send(message);
-      } catch {
-        wsClients.delete(client);
-      }
-    }
-  };
-
-  // Dev mode: watch the frontend sources (the web package plus
-  // core/shared.ts, which the client bundle embeds via esbuild alias),
-  // rebundle with esbuild and tell connected clients to reload (full page
-  // reload — no HMR).
-  let watcher: SourceWatcher | null = null;
-  if (watch) {
-    watcher = new SourceWatcher([
-      webSrcDir(repoRoot),
-      coreSharedPath(repoRoot),
-    ]);
-    watcher.start(() => {
-      assets.invalidate();
-      reloadClients();
-    });
-  }
   appDisposers.set(app, () => {
-    watcher?.stop();
     fed.close();
   });
 
@@ -500,7 +437,6 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     let unsubscribeFed: (() => void) | undefined;
     return {
       onOpen(_evt, ws) {
-        if (ws.raw) wsClients.add(ws.raw);
         unsubscribe = core.subscribe((event) => {
           // Every event carries the peer id ("" = this server) so the UI
           // routes it to the right session tab.
@@ -508,21 +444,15 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         });
         // Federated peers' events, tagged with their id. The peer's own
         // `peerId` marker ("" on its side) is stripped first, so the tag
-        // is always the id this hub knows. The dev-mode `reload` broadcast
-        // is local to the server that rebuilt its bundle: it must never
-        // cross machine boundaries, or an edit on a peer would reload this
-        // hub's (unchanged) UI. (`reload` is not part of the core event
-        // type, hence the widened cast.)
+        // is always the id this hub knows.
         unsubscribeFed = fed.subscribe((peerId, event) => {
-          if ((event as { type?: string }).type === "reload") return;
           const { peerId: _stale, ...rest } = event as Record<string, unknown>;
           ws.send(JSON.stringify({ peerId, ...rest }));
         });
       },
-      onClose(_evt, ws) {
+      onClose() {
         unsubscribe?.();
         unsubscribeFed?.();
-        if (ws.raw) wsClients.delete(ws.raw);
       },
     };
   });

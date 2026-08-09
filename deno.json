@@ -51,8 +51,12 @@
     "fmt:check": "deno fmt --check",
     "test": "deno test packages/core packages/server packages/cli packages/web --allow-read --allow-write --allow-run --allow-env --allow-net",
     "test:watch": "deno test --watch packages/core packages/server packages/cli packages/web --allow-read --allow-write --allow-run --allow-env --allow-net",
+    "dev": {
+      "dependencies": ["dev:server", "dev:web"]
+    },
+    "dev:server": "deno task server",
+    "dev:web": "deno task --filter @lumisca/web dev",
     "server": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys --allow-ffi packages/server/mod.ts",
-    "server:dev": "LUMISCA_DEV=1 deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys --allow-ffi packages/server/mod.ts",
     "cli": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys packages/cli/mod.ts"
   }
 }

@@ -25,8 +25,7 @@ export type {
   Workspace,
 };
 
-/** Core events plus the dev-mode reload broadcast from the server. */
-export type ClientEvent = CoreClientEvent | { type: "reload" };
+export type ClientEvent = CoreClientEvent;
 
 /** Event as received over the WebSocket: every event carries the peer id
  * of the server that produced it ("" = this server). */

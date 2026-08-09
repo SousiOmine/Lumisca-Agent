@@ -44,8 +44,7 @@ function upsertMessage(
 
 /** Apply one client event to a session view. Pure: returns the updated
  * view or null when the event does not apply (wrong session / no-op /
- * not a view event). The `reload` dev-mode broadcast is handled by the
- * App (it reloads the page), not by views. */
+ * not a view event). */
 export function applyEvent(
   event: ClientEvent,
   view: SessionView,
