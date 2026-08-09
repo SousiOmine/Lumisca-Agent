@@ -12,7 +12,6 @@ export function ProviderList({
   const { providers } = useProviders();
 
   const configured = providers.filter((p) => p.configured !== false);
-  const others = providers.filter((p) => p.configured === false);
 
   return (
     <>
@@ -48,28 +47,6 @@ export function ProviderList({
             </span>
           </button>
         ))}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <p className="settings-note">
-          未設定のプロバイダー
-        </p>
-        {others.slice(0, 12).map((p) => (
-          <button
-            type="button"
-            key={p.id}
-            className="btn"
-            style={{ textAlign: "left" }}
-            onClick={() => onOpen(p.id)}
-          >
-            {p.name}
-          </button>
-        ))}
-        {others.length > 12 && (
-          <p className="settings-note">
-            …ほか {others.length - 12} 件(プロバイダーを追加から選択できます)
-          </p>
-        )}
       </div>
 
       <div className="modal-actions">
