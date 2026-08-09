@@ -22,6 +22,7 @@ interface ChatViewProps {
   onAbort: () => void;
   onModelChange: (provider: string, modelId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
+  onOpenSettings?: () => void;
 }
 
 /** Memoized markdown rendering: message text is static once a message is
@@ -38,6 +39,7 @@ export function ChatView(
     onAbort,
     onModelChange,
     onThinkingLevelChange,
+    onOpenSettings,
   }: ChatViewProps,
 ) {
   const [input, setInput] = useState("");
@@ -141,6 +143,7 @@ export function ChatView(
           submitDisabled={!input.trim()}
           onAbort={isRunning ? onAbort : undefined}
           onSubmit={submit}
+          onOpenSettings={onOpenSettings}
         />
       </div>
     </div>

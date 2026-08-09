@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { IconBrain } from "@tabler/icons-react";
+import { IconBrain, IconCheck, IconChevronRight, IconSettings } from "@tabler/icons-react";
 import { api, fed } from "../api.ts";
 import { formatModelMeta } from "@lumisca/core/shared";
 import type { ModelInfo } from "../types.ts";
@@ -20,21 +20,25 @@ export interface ModelPickerProps {
     modelId: string,
     info?: ModelInfo,
   ) => void;
+  /** Open the settings modal (for "Manage models" link). */
+  onOpenSettings?: () => void;
 }
 
-/** Provider + searchable model selection, shared by modals and the chat bar.
+/** Cascading two-panel model picker: providers on the left, models on the right.
  * Only providers with configured credentials are offered. */
 export function ModelPicker({
   value,
   enabledOnly = true,
   peerId = "",
   onSelect,
+  onOpenSettings,
 }: ModelPickerProps) {
   const [providers, setProviders] = useState<
     Array<{ id: string; name: string }>
   >([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [providerId, setProviderId] = useState(value?.provider ?? "");
+  const [hoveredProvider, setHoveredProvider] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,8 +52,6 @@ export function ModelPicker({
       .then((ps) => {
         if (stale) return;
         const configured = ps.filter((p) => p.configured !== false);
-        // Keep the currently selected provider in the list even when it has
-        // no configured credentials, so the dropdown matches the selection.
         const current = value?.provider;
         const list = current && !configured.some((p) => p.id === current)
           ? [...configured, {
@@ -76,8 +78,6 @@ export function ModelPicker({
 
   useEffect(() => {
     if (!providerId) return;
-    // Drop stale responses: switching providers quickly must never show the
-    // models of a previous provider under the new one.
     let stale = false;
     setBusy(true);
     setModels([]);
@@ -99,10 +99,6 @@ export function ModelPicker({
     };
   }, [providerId, peerId]);
 
-  // Follow external value changes (e.g. the session model switched while
-  // the picker stayed mounted). Only react when the prop itself changes:
-  // comparing against providerId would also fire on the user's own dropdown
-  // selection and yank the picker back to the previously selected provider.
   const externalProvider = useRef(value?.provider ?? null);
   useEffect(() => {
     const next = value?.provider ?? null;
@@ -119,8 +115,11 @@ export function ModelPicker({
     return filterByQuery(list, search);
   }, [models, search, enabledOnly]);
 
+  // The actively displayed provider: hovered > selected
+  const activeProvider = hoveredProvider ?? providerId;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div className="model-picker">
       {error !== null
         ? <div className="error-text">{error}</div>
         : providers.length === 0
@@ -132,40 +131,54 @@ export function ModelPicker({
         )
         : (
           <>
-            <label>
-              プロバイダー
-              <select
-                value={providerId}
-                onChange={(e) => {
-                  setProviderId(e.target.value);
-                  setSearch("");
-                }}
+            {/* Left column: providers */}
+            <div className="mp-providers">
+              {providers.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`mp-provider${activeProvider === p.id ? " active" : ""}`}
+                  onClick={() => setProviderId(p.id)}
+                  onMouseEnter={() => setHoveredProvider(p.id)}
+                  onMouseLeave={() => setHoveredProvider(null)}
+                >
+                  <span className="mp-provider-name">{p.name}</span>
+                  {activeProvider === p.id && <IconCheck size={14} className="mp-check" />}
+                  <IconChevronRight size={14} className="mp-chevron" />
+                </button>
+              ))}
+              <div className="mp-sep" />
+              <button
+                type="button"
+                className="mp-manage"
+                onClick={onOpenSettings}
               >
-                {providers.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              モデル{busy && (
-                <span style={{ color: "var(--accent)" }}>読み込み中...</span>
-              )}
+                <IconSettings size={14} />
+                <span>設定画面</span>
+              </button>
+            </div>
+
+            {/* Right column: models */}
+            <div className="mp-models">
               <input
+                className="mp-model-search"
                 placeholder="モデルを検索..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              <div className="model-list">
+              {busy && (
+                <div className="mp-loading">読み込み中...</div>
+              )}
+              <div className="mp-model-list">
                 {visible.slice(0, 200).map((m) => (
-                  <div
+                  <button
                     key={m.id}
-                    className={`model-item${
-                      value?.modelId === m.id ? " selected" : ""
-                    }`}
+                    type="button"
+                    className={`mp-model${value?.modelId === m.id ? " selected" : ""}`}
                     onClick={() => onSelect(providerId, m.id, m)}
                   >
-                    <span className="model-id">{m.id}</span>
-                    <span className="model-meta">
+                    <span className="mp-model-id">{m.id}</span>
+                    <span className="mp-model-meta">
                       {formatModelMeta(m.contextWindow)}
                       {m.reasoning && (
                         <IconBrain
@@ -175,23 +188,20 @@ export function ModelPicker({
                         />
                       )}
                     </span>
-                  </div>
+                    {value?.modelId === m.id && (
+                      <IconCheck size={14} className="mp-check" />
+                    )}
+                  </button>
                 ))}
-                {visible.length === 0 && (
-                  <div
-                    style={{
-                      padding: 8,
-                      fontSize: 12,
-                      color: "var(--text-faint)",
-                    }}
-                  >
+                {visible.length === 0 && !busy && (
+                  <div className="mp-empty">
                     {enabledOnly && models.length > 0
                       ? "有効なモデルがありません(設定でモデルを有効にしてください)"
                       : "該当するモデルがありません"}
                   </div>
                 )}
               </div>
-            </label>
+            </div>
           </>
         )}
     </div>

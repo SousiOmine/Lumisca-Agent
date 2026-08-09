@@ -32,6 +32,7 @@ interface NewSessionViewProps {
   onWorkspaceChanged: (fws: FederatedWorkspace) => void;
   /** The single delete flow owned by the App (confirm + API + state). */
   onDeleteWorkspace: (fws: FederatedWorkspace) => Promise<void>;
+  onOpenSettings?: () => void;
 }
 
 /** The draft session tab: pick workspace/model and start from the center.
@@ -44,6 +45,7 @@ export function NewSessionView(
     onStart,
     onWorkspaceChanged,
     onDeleteWorkspace,
+    onOpenSettings,
   }: NewSessionViewProps,
 ) {
   const selected = workspaces[0]
@@ -194,6 +196,7 @@ export function NewSessionView(
               submitIcon={busy ? undefined : IconPlayerPlay}
               submitDisabled={busy || !text.trim() || !workspaceKey}
               onSubmit={submit}
+              onOpenSettings={onOpenSettings}
             />
             {error && <div className="error-text">{error}</div>}
           </div>

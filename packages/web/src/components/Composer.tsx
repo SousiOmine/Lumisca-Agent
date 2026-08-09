@@ -46,6 +46,8 @@ interface ComposerProps {
    * selected workspace is on another server: the session is created with
    * the peer's default model). */
   hideModelSwitch?: boolean;
+  /** Open the settings modal from the model picker's "Manage models" link. */
+  onOpenSettings?: () => void;
 }
 
 /** Shared chat input: textarea + model picker + submit, in one rounded box.
@@ -70,6 +72,7 @@ export function Composer({
   onSubmit,
   peerId,
   hideModelSwitch,
+  onOpenSettings,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
 
@@ -151,6 +154,10 @@ export function Composer({
                     onSelect={(provider, modelId, info) => {
                       onModelSelect(provider, modelId, info);
                       setShowModelPicker(false);
+                    }}
+                    onOpenSettings={() => {
+                      setShowModelPicker(false);
+                      onOpenSettings?.();
                     }}
                   />
                 </div>

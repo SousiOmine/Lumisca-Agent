@@ -562,6 +562,7 @@ export function App({ initialData }: AppProps): ReactElement {
                 activeView.info.modelId,
                 level,
               )}
+            onOpenSettings={() => setShowSettings(true)}
           />
         )
         : (
@@ -571,6 +572,7 @@ export function App({ initialData }: AppProps): ReactElement {
             onStart={startSession}
             onWorkspaceChanged={handleWorkspaceChanged}
             onDeleteWorkspace={deleteWorkspace}
+            onOpenSettings={() => setShowSettings(true)}
           />
         )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
