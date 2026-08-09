@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import {
   IconBrain,
+  IconPalette,
   IconPlugConnected,
   IconServer,
   IconUser,
@@ -16,12 +17,22 @@ import { ModelList } from "./settings/ModelList.tsx";
 import { McpList } from "./settings/McpList.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
+import { AppearancePanel } from "./settings/AppearancePanel.tsx";
+import type { ThemeSetting } from "../types.ts";
 
 interface SettingsModalProps {
+  theme: ThemeSetting;
+  onThemeChange: (theme: ThemeSetting) => void;
   onClose: () => void;
 }
 
-type Category = "providers" | "models" | "mcp" | "servers" | "personalize";
+type Category =
+  | "providers"
+  | "models"
+  | "mcp"
+  | "servers"
+  | "personalize"
+  | "appearance";
 
 type ProvidersView =
   | { kind: "list" }
@@ -34,6 +45,17 @@ const CATEGORIES: {
   icon: ReactNode;
 }[] = [
   {
+    id: "appearance",
+    label: "外観",
+    icon: <IconPalette size={18} />,
+  },
+  {
+    id: "personalize",
+    label: "パーソナライズ",
+    icon: <IconUser size={18} />,
+  },
+  { id: "servers", label: "接続先サーバー", icon: <IconWorld size={18} /> },
+  {
     id: "providers",
     label: "プロバイダー",
     icon: <IconPlugConnected size={18} />,
@@ -44,15 +66,13 @@ const CATEGORIES: {
     icon: <IconBrain size={18} />,
   },
   { id: "mcp", label: "MCP サーバー", icon: <IconServer size={18} /> },
-  { id: "servers", label: "接続先サーバー", icon: <IconWorld size={18} /> },
-  {
-    id: "personalize",
-    label: "パーソナライズ",
-    icon: <IconUser size={18} />,
-  },
 ];
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export function SettingsModal({
+  theme,
+  onThemeChange,
+  onClose,
+}: SettingsModalProps) {
   const [category, setCategory] = useState<Category>("providers");
   const [providersView, setProvidersView] = useState<ProvidersView>({
     kind: "list",
@@ -124,6 +144,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           {category === "mcp" && <McpList />}
           {category === "servers" && <ConnectionList />}
           {category === "personalize" && <PersonalizePanel />}
+          {category === "appearance" && (
+            <AppearancePanel
+              theme={theme}
+              onThemeChange={onThemeChange}
+            />
+          )}
         </div>
       </div>
     </Modal>

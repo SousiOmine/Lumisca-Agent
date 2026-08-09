@@ -24,7 +24,7 @@ export interface AppProps {
 }
 
 export function App({ initialData }: AppProps): ReactElement {
-  const { theme, toggleTheme } = useTheme(initialData?.theme ?? "dark");
+  const { theme, setTheme } = useTheme(initialData?.theme ?? "dark");
   const {
     workspaces,
     peers,
@@ -175,14 +175,12 @@ export function App({ initialData }: AppProps): ReactElement {
         tabs={tabs}
         views={views}
         activeTab={activeTab}
-        theme={theme}
         onSelect={setActiveTab}
         onClose={closeTab}
         onCloseToRight={closeTabsToRight}
         onCloseToLeft={closeTabsToLeft}
         onCloseOthers={closeOtherTabs}
         onNew={openDraftTab}
-        onToggleTheme={toggleTheme}
         onOpenSettings={() => setShowSettings(true)}
       />
       {loadError && (
@@ -223,7 +221,13 @@ export function App({ initialData }: AppProps): ReactElement {
             onOpenSettings={() => setShowSettings(true)}
           />
         )}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsModal
+          theme={theme}
+          onThemeChange={setTheme}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
     </div>
   );
 }

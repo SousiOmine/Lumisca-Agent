@@ -9,6 +9,10 @@
 /** Settings-table key for the UI theme. */
 export const THEME_KEY = "theme";
 
+/** Theme preference stored in settings; "system" follows the OS color
+ * scheme. The resolved "light"|"dark" scheme is applied on the client. */
+export type ThemeSetting = "light" | "dark" | "system";
+
 /** Tool names of the built-in coding tools. Single source of truth shared
  * with the UI, so the tool registry can never drift from the
  * implementations (tool names are part of the agent-visible contract). */

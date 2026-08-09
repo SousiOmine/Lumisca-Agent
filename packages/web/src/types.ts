@@ -10,6 +10,7 @@ import type {
   ModelInfo,
   ProviderInfo,
   SessionInfo,
+  ThemeSetting,
   ThinkingLevel,
   Workspace,
 } from "@lumisca/core";
@@ -21,6 +22,7 @@ export type {
   ModelInfo,
   ProviderInfo,
   SessionInfo,
+  ThemeSetting,
   ThinkingLevel,
   Workspace,
 };
@@ -57,7 +59,7 @@ export type ToolCallBlock = ToolCall;
 /** Initial data served by the server's bootstrap script (/assets/initial-data.js). */
 export interface InitialData {
   workspaces: Workspace[];
-  theme: "light" | "dark";
+  theme: ThemeSetting;
 }
 
 /** Live state of one open session tab. */

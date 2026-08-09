@@ -2,7 +2,12 @@ import { join } from "node:path";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { upgradeWebSocket } from "hono/deno";
-import { errorMessage, type LumiscaCore, THEME_KEY } from "@lumisca/core";
+import {
+  errorMessage,
+  type LumiscaCore,
+  THEME_KEY,
+  type ThemeSetting,
+} from "@lumisca/core";
 import { bundleClient } from "./bundle.ts";
 import { renderHtmlDocument } from "./render.ts";
 import { webClientEntry, webFaviconPath, webStylesPath } from "./paths.ts";
@@ -324,9 +329,19 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   // --- HTML page ------------------------------------------------------------
 
-  /** Theme for the shell's first paint, read from the core settings. */
-  const theme = (): "light" | "dark" =>
-    core.getSetting(THEME_KEY) === "light" ? "light" : "dark";
+  /** Theme preference from the core settings ("system" when unset/unknown).
+   * The client resolves "system" via prefers-color-scheme; the server only
+   * knows it, so the shell falls back to dark for the first paint. */
+  const theme = (): ThemeSetting =>
+    core.getSetting(THEME_KEY) === "light"
+      ? "light"
+      : core.getSetting(THEME_KEY) === "system"
+      ? "system"
+      : "dark";
+
+  /** Resolved theme for the shell's first paint (no client-side flash). */
+  const resolvedTheme = (): "light" | "dark" =>
+    theme() === "light" ? "light" : "dark";
 
   /** Initial data for the app bootstrap, served as the externalized
    * /assets/initial-data.js script (inline scripts are banned by the page
@@ -340,7 +355,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const renderPage = async (c: Context) => {
     const css = await assets.getCss();
     return new Response(
-      renderHtmlDocument(css, theme(), {
+      renderHtmlDocument(css, resolvedTheme(), {
         // The page's own host, so the CSP can name the WebSocket endpoint
         // (the UI's event stream) even when the page is served remotely.
         pageHost: c.req.header("host"),

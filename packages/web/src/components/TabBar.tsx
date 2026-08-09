@@ -1,10 +1,8 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import {
   IconChevronRight,
-  IconMoon,
   IconPlus,
   IconSettings,
-  IconSun,
   IconX,
 } from "@tabler/icons-react";
 import { isViewRunning, type SessionView } from "../types.ts";
@@ -14,14 +12,12 @@ interface TabBarProps {
   tabs: string[];
   views: Map<string, SessionView>;
   activeTab: string | null;
-  theme: "light" | "dark";
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onCloseToRight: (id: string) => void;
   onCloseToLeft: (id: string) => void;
   onCloseOthers: (id: string) => void;
   onNew: () => void;
-  onToggleTheme: () => void;
   onOpenSettings: () => void;
 }
 
@@ -38,14 +34,12 @@ export function TabBar({
   tabs,
   views,
   activeTab,
-  theme,
   onSelect,
   onClose,
   onCloseToRight,
   onCloseToLeft,
   onCloseOthers,
   onNew,
-  onToggleTheme,
   onOpenSettings,
 }: TabBarProps) {
   const [menu, setMenu] = useState<TabMenu | null>(null);
@@ -153,16 +147,6 @@ export function TabBar({
         <IconPlus size={17} />
       </button>
       <div className="tabbar-actions">
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onToggleTheme}
-          title={theme === "dark"
-            ? "ライトモードに切り替え"
-            : "ダークモードに切り替え"}
-        >
-          {theme === "dark" ? <IconSun size={17} /> : <IconMoon size={17} />}
-        </button>
         <button
           type="button"
           className="icon-btn"
