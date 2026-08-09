@@ -138,11 +138,6 @@ export function ProviderDetail({
             APIキーを保存しました
           </p>
         )}
-        {isNew && !auth.configured && (
-          <p className="settings-note">
-            APIキーを保存するとこのプロバイダーが利用可能になります(プロバイダー追加完了)。
-          </p>
-        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

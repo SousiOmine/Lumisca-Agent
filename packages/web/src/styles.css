@@ -1416,6 +1416,11 @@ select:focus {
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12.5px;
+  text-align: left;
+}
+
+.model-item input[type="checkbox"] {
+  accent-color: var(--text-dim);
 }
 
 .model-item:hover {
@@ -1507,6 +1512,10 @@ select:focus {
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
+}
+
+.settings-content input[type="checkbox"] {
+  accent-color: var(--text-dim);
 }
 
 .provider-row {
