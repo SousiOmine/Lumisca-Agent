@@ -11,6 +11,9 @@ import { createGlobTool, createGrepTool } from "./search.ts";
 import type { Tool } from "./schema.ts";
 import { loadProjectMemory } from "../memory/agents-md.ts";
 
+/** Personalization budget (same cap as project memory). */
+const MAX_PERSONALIZATION_BYTES = 32 * 1024;
+
 export interface ToolFactoryOptions {
   /** Default working directory (first workspace folder). */
   cwd: string;
@@ -39,12 +42,25 @@ export function createCodingTools(
   return { tools, sandbox, cwd };
 }
 
-/** System prompt describing the agent and its workspace boundaries. */
-export function buildSystemPrompt(workspace: Workspace): string {
+/** System prompt describing the agent and its workspace boundaries.
+ * `personalInstructions` (the machine-level AGENTS.md next to the settings
+ * file) is appended at the very end, after project memory. */
+export function buildSystemPrompt(
+  workspace: Workspace,
+  personalInstructions?: string,
+): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
   const memory = loadProjectMemory(workspace.folders);
   const memorySection = memory
     ? `\n\n# Project memory (AGENTS.md)\n${memory}`
+    : "";
+  const personal = (personalInstructions ?? "").trim();
+  const personalSection = personal
+    ? `\n\n# Personal instructions (AGENTS.md)\n${
+      personal.length > MAX_PERSONALIZATION_BYTES
+        ? personal.slice(0, MAX_PERSONALIZATION_BYTES)
+        : personal
+    }`
     : "";
   return `You are Lumisca, a coding agent that works inside a workspace.
 
@@ -56,6 +72,6 @@ Guidelines:
 - Use relative or absolute paths; everything is resolved against the workspace folders.
 - After making changes, verify them (run tests, builds) when appropriate.
 - Ask the user when a task is ambiguous.
-${memorySection}
+${memorySection}${personalSection}
 `;
 }

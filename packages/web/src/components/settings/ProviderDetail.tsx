@@ -10,11 +10,9 @@ import { errorText, useProviders } from "../../providers.ts";
 /** Settings → one provider: API key entry only. */
 export function ProviderDetail({
   providerId,
-  isNew,
   onBack,
 }: {
   providerId: string;
-  isNew: boolean;
   onBack: () => void;
 }) {
   const { providers } = useProviders();

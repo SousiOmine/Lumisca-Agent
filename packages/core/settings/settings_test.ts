@@ -156,6 +156,20 @@ Deno.test("in-memory settings repo: basic roundtrip", () => {
   assertEquals(repo.list().size, 1);
 });
 
+// --- dir() -------------------------------------------------------------------
+
+Deno.test("file settings repo exposes its directory; in-memory has none", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
+  try {
+    const path = join(dir, "nested", "settings.jsonc");
+    const repo = createFileSettingsRepo(path);
+    assertEquals(repo.dir(), join(dir, "nested"));
+    assertEquals(createInMemorySettingsRepo().dir(), undefined);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
 // --- resolveSettingsPath ----------------------------------------------------
 
 Deno.test("resolveSettingsPath honors XDG_CONFIG_HOME", () => {

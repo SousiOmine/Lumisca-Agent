@@ -6,6 +6,8 @@ import { AppError, parseBody } from "./util.ts";
 export interface SettingsApi {
   listSettings(): Map<string, string>;
   setSetting(key: string, value: string): void;
+  getPersonalization(): { path: string; content: string };
+  setPersonalization(content: string): void;
 }
 
 export function settingRoutes(core: SettingsApi): Hono {
@@ -24,6 +26,19 @@ export function settingRoutes(core: SettingsApi): Hono {
     }
     core.setSetting(c.req.param("key"), body.value);
     return c.json({ ok: true });
+  });
+
+  app.get("/personalize", (c) => {
+    return c.json(core.getPersonalization());
+  });
+
+  app.put("/personalize", async (c) => {
+    const body = await parseBody<{ content?: unknown }>(c);
+    if (!body || typeof body.content !== "string") {
+      throw new AppError("content (string) is required", 400);
+    }
+    core.setPersonalization(body.content);
+    return c.json(core.getPersonalization());
   });
 
   return app;

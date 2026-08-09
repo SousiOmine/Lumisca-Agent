@@ -95,7 +95,10 @@ export function NewSessionView(
         )
         ? current
         : (filteredWorkspaces[0]
-          ? tabKey(filteredWorkspaces[0].peerId, filteredWorkspaces[0].workspace.id)
+          ? tabKey(
+            filteredWorkspaces[0].peerId,
+            filteredWorkspaces[0].workspace.id,
+          )
           : "")
     );
   }, [workspaces, selectedPeerId]);
@@ -104,7 +107,10 @@ export function NewSessionView(
   useEffect(() => {
     setWorkspaceKey(
       filteredWorkspaces[0]
-        ? tabKey(filteredWorkspaces[0].peerId, filteredWorkspaces[0].workspace.id)
+        ? tabKey(
+          filteredWorkspaces[0].peerId,
+          filteredWorkspaces[0].workspace.id,
+        )
         : "",
     );
   }, [selectedPeerId]);
@@ -170,7 +176,6 @@ export function NewSessionView(
                 <span>ワークスペース</span>
                 <WorkspacePicker
                   workspaces={filteredWorkspaces}
-                  peers={peers}
                   value={workspaceKey}
                   onChange={setWorkspaceKey}
                   onEdit={(fws) => {

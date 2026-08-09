@@ -499,6 +499,47 @@ Deno.test("settings API refuses to write credentials", async () => {
   }
 });
 
+Deno.test("personalize API reads and writes AGENTS.md next to the settings file", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "lumisca-pers-" });
+  const core = LumiscaCore.open(
+    join(dir, "lumisca.db"),
+    join(dir, "settings.jsonc"),
+  );
+  const server = startServer(core, 0);
+  const base = `http://127.0.0.1:${server.addr.port}`;
+  const agentFile = join(dir, "AGENTS.md");
+  try {
+    // Absent file → empty content, but the expected path is reported.
+    const empty = await fetch(`${base}/api/personalize`);
+    assertEquals(empty.status, 200);
+    const emptyInfo = await empty.json() as { path: string; content: string };
+    assertEquals(emptyInfo.path, agentFile);
+    assertEquals(emptyInfo.content, "");
+
+    const put = await json(base, "/api/personalize", {
+      method: "PUT",
+      body: JSON.stringify({ content: "Answer in Japanese.\n" }),
+    });
+    assertEquals(put.status, 200);
+    assertEquals(Deno.readTextFileSync(agentFile), "Answer in Japanese.\n");
+
+    const get = await fetch(`${base}/api/personalize`);
+    const info = await get.json() as { path: string; content: string };
+    assertEquals(info.path, agentFile);
+    assertEquals(info.content, "Answer in Japanese.\n");
+
+    const bad = await json(base, "/api/personalize", {
+      method: "PUT",
+      body: JSON.stringify({ content: 42 }),
+    });
+    assertEquals(bad.status, 400);
+  } finally {
+    server.shutdown();
+    core.close();
+    await removeDirRetry(dir);
+  }
+});
+
 Deno.test("server rejects non-loopback Host headers (DNS rebinding guard)", async () => {
   // Deno's fetch forbids overriding Host, so exercise the handler directly
   // with requests that target external hostnames.

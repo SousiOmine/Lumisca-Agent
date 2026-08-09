@@ -17,6 +17,7 @@ export interface SessionRepo {
   touch(id: string, updatedAt?: number): void;
   updateModel(id: string, provider: string, modelId: string): void;
   rename(id: string, name: string): void;
+  updateSystemPrompt(id: string, systemPrompt: string): void;
 }
 
 function toSession(row: {
@@ -64,6 +65,9 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
   );
   const renameStmt = db.db.prepare(
     "UPDATE sessions SET name = ?, updated_at = ? WHERE id = ?",
+  );
+  const updateSystemPromptStmt = db.db.prepare(
+    "UPDATE sessions SET system_prompt = ? WHERE id = ?",
   );
 
   return {
@@ -123,6 +127,10 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
 
     rename(id: string, name: string): void {
       renameStmt.run(name, Date.now(), id);
+    },
+
+    updateSystemPrompt(id: string, systemPrompt: string): void {
+      updateSystemPromptStmt.run(systemPrompt, id);
     },
   };
 }

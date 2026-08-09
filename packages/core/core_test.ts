@@ -642,7 +642,7 @@ Deno.test("thinking level change is refused while a session using the model stre
   core.close();
 });
 
-Deno.test("generated system prompt includes AGENTS.md and is rebuilt on reopen", async () => {
+Deno.test("generated system prompt is snapshotted at creation, not rebuilt on reopen", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
   await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 2.\n");
@@ -657,22 +657,100 @@ Deno.test("generated system prompt includes AGENTS.md and is rebuilt on reopen",
   assertEquals(agent.agent.state.systemPrompt.includes("Use Deno 2."), true);
   assertEquals(session.systemPromptCustom, false);
 
-  // Editing AGENTS.md must be reflected when the session is reopened.
+  // Editing AGENTS.md must NOT affect the existing session: the prompt is
+  // a snapshot taken at creation and reused verbatim on reopen.
   await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 3.\n");
   core.closeSession(session.id);
   await core.openSession(session.id);
   const reopened = core.getAgent(session.id)!;
   assertEquals(
-    reopened.agent.state.systemPrompt.includes("Use Deno 3."),
+    reopened.agent.state.systemPrompt.includes("Use Deno 2."),
     true,
-    "AGENTS.md edit must be picked up on reopen",
+    "the creation-time snapshot must be kept on reopen",
   );
   assertEquals(
-    reopened.agent.state.systemPrompt.includes("Use Deno 2."),
+    reopened.agent.state.systemPrompt.includes("Use Deno 3."),
     false,
+    "AGENTS.md edits must not reach existing sessions",
+  );
+
+  // A session created after the edit picks up the new content.
+  const fresh = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+  assertEquals(
+    core.getAgent(fresh.id)!.agent.state.systemPrompt.includes("Use Deno 3."),
+    true,
+    "new sessions must read the current AGENTS.md",
   );
 
   core.close();
+  await Deno.remove(root, { recursive: true });
+});
+
+Deno.test("personalization (machine AGENTS.md) is appended last and frozen per session", async () => {
+  const faux = fauxProvider();
+  const dir = await Deno.makeTempDir({ prefix: "lumisca-core-" });
+  const core = LumiscaCore.open(
+    join(dir, "lumisca.db"),
+    join(dir, "settings.jsonc"),
+  );
+  core.models.models.setProvider(faux.provider);
+
+  const root = await Deno.makeTempDir({ prefix: "lumisca-ws-" });
+  await Deno.writeTextFile(join(root, "AGENTS.md"), "Workspace memory.\n");
+  const ws = await core.createWorkspace("ws", [root]);
+
+  // Personalization lives in AGENTS.md next to the settings file.
+  const agentFile = join(dir, "AGENTS.md");
+  await Deno.writeTextFile(agentFile, "Answer in Japanese.\n");
+  assertEquals(core.getPersonalization().path, agentFile);
+  assertEquals(core.getPersonalization().content, "Answer in Japanese.\n");
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: faux.provider.id,
+    modelId: faux.getModel().id,
+  });
+  const prompt = core.getAgent(session.id)!.agent.state.systemPrompt;
+  assertEquals(prompt.includes("Workspace memory."), true);
+  assertEquals(prompt.includes("Answer in Japanese."), true);
+  assertEquals(
+    prompt.indexOf("Answer in Japanese.") > prompt.indexOf("Workspace memory."),
+    true,
+    "personalization must be appended after project memory",
+  );
+
+  // Changing the file must not affect the existing session...
+  await Deno.writeTextFile(agentFile, "Answer in English.\n");
+  core.closeSession(session.id);
+  await core.openSession(session.id);
+  const reopenedPrompt = core.getAgent(session.id)!.agent.state.systemPrompt;
+  assertEquals(reopenedPrompt.includes("Answer in Japanese."), true);
+  assertEquals(reopenedPrompt.includes("Answer in English."), false);
+
+  // ...but a new session picks it up.
+  const fresh = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: faux.provider.id,
+    modelId: faux.getModel().id,
+  });
+  assertEquals(
+    core.getAgent(fresh.id)!.agent.state.systemPrompt.includes(
+      "Answer in English.",
+    ),
+    true,
+    "new sessions must read the current personalization",
+  );
+
+  // setPersonalization writes the file.
+  core.setPersonalization("New instructions.\n");
+  assertEquals(Deno.readTextFileSync(agentFile), "New instructions.\n");
+
+  core.close();
+  await Deno.remove(dir, { recursive: true });
   await Deno.remove(root, { recursive: true });
 });
 

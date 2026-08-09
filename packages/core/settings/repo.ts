@@ -8,6 +8,10 @@ export interface SettingsRepo {
   set(key: string, value: string): void;
   delete(key: string): void;
   list(): Map<string, string>;
+  /** Directory containing the settings file. Undefined for in-memory repos
+   * (they have no file location); the machine-level AGENTS.md
+   * (personalization) lives there. */
+  dir(): string | undefined;
 }
 
 /** Values that parse as JSON (arrays, objects, numbers) are written natively
@@ -70,6 +74,9 @@ export function createFileSettingsRepo(path: string): SettingsRepo {
       }
       return out;
     },
+    dir(): string {
+      return dirname(path);
+    },
   };
 }
 
@@ -99,6 +106,9 @@ export function createInMemorySettingsRepo(): SettingsRepo {
     },
     list(): Map<string, string> {
       return new Map(data);
+    },
+    dir(): undefined {
+      return undefined;
     },
   };
 }

@@ -153,6 +153,15 @@ export const api = {
       body: JSON.stringify({ value }),
     }),
 
+  /** Machine-level personalization: AGENTS.md next to the settings file. */
+  getPersonalization: () =>
+    request<{ path: string; content: string }>("/api/personalize"),
+  putPersonalization: (content: string) =>
+    request<{ path: string; content: string }>("/api/personalize", {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }),
+
   /** Server-side connection registry (the federated peer list). */
   getConnections: () =>
     request<{ connections: ConnectionEntry[] }>("/api/connections"),

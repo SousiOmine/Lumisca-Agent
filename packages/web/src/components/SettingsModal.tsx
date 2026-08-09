@@ -1,11 +1,12 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import {
+  IconBrain,
   IconPlugConnected,
   IconServer,
+  IconUser,
   IconWorld,
   IconX,
-  IconBrain,
 } from "@tabler/icons-react";
 import { Modal } from "./Modal.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
@@ -14,17 +15,18 @@ import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ModelList } from "./settings/ModelList.tsx";
 import { McpList } from "./settings/McpList.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
+import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 
 interface SettingsModalProps {
   onClose: () => void;
 }
 
-type Category = "providers" | "models" | "mcp" | "servers";
+type Category = "providers" | "models" | "mcp" | "servers" | "personalize";
 
 type ProvidersView =
   | { kind: "list" }
   | { kind: "add" }
-  | { kind: "detail"; providerId: string; isNew: boolean };
+  | { kind: "detail"; providerId: string };
 
 const CATEGORIES: {
   id: Category;
@@ -43,6 +45,11 @@ const CATEGORIES: {
   },
   { id: "mcp", label: "MCP サーバー", icon: <IconServer size={18} /> },
   { id: "servers", label: "接続先サーバー", icon: <IconWorld size={18} /> },
+  {
+    id: "personalize",
+    label: "パーソナライズ",
+    icon: <IconUser size={18} />,
+  },
 ];
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
@@ -97,34 +104,26 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             <ProviderList
               onAdd={() => setProvidersView({ kind: "add" })}
               onOpen={(id) =>
-                setProvidersView({
-                  kind: "detail",
-                  providerId: id,
-                  isNew: false,
-                })}
+                setProvidersView({ kind: "detail", providerId: id })}
             />
           )}
           {category === "providers" && providersView.kind === "add" && (
             <AddProviderFlow
               onSelect={(id) =>
-                setProvidersView({
-                  kind: "detail",
-                  providerId: id,
-                  isNew: true,
-                })}
+                setProvidersView({ kind: "detail", providerId: id })}
               onBack={() => setProvidersView({ kind: "list" })}
             />
           )}
           {category === "providers" && providersView.kind === "detail" && (
             <ProviderDetail
               providerId={providersView.providerId}
-              isNew={providersView.isNew}
               onBack={() => setProvidersView({ kind: "list" })}
             />
           )}
           {category === "models" && <ModelList />}
           {category === "mcp" && <McpList />}
           {category === "servers" && <ConnectionList />}
+          {category === "personalize" && <PersonalizePanel />}
         </div>
       </div>
     </Modal>

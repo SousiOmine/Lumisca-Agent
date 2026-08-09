@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { IconBrain, IconCheck, IconChevronRight, IconSettings } from "@tabler/icons-react";
+import {
+  IconBrain,
+  IconCheck,
+  IconChevronRight,
+  IconSettings,
+} from "@tabler/icons-react";
 import { api, fed } from "../api.ts";
 import { formatModelMeta } from "@lumisca/core/shared";
 import type { ModelInfo } from "../types.ts";
@@ -137,13 +142,17 @@ export function ModelPicker({
                 <button
                   key={p.id}
                   type="button"
-                  className={`mp-provider${activeProvider === p.id ? " active" : ""}`}
+                  className={`mp-provider${
+                    activeProvider === p.id ? " active" : ""
+                  }`}
                   onClick={() => setProviderId(p.id)}
                   onMouseEnter={() => setHoveredProvider(p.id)}
                   onMouseLeave={() => setHoveredProvider(null)}
                 >
                   <span className="mp-provider-name">{p.name}</span>
-                  {activeProvider === p.id && <IconCheck size={14} className="mp-check" />}
+                  {activeProvider === p.id && (
+                    <IconCheck size={14} className="mp-check" />
+                  )}
                   <IconChevronRight size={14} className="mp-chevron" />
                 </button>
               ))}
@@ -166,15 +175,15 @@ export function ModelPicker({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              {busy && (
-                <div className="mp-loading">読み込み中...</div>
-              )}
+              {busy && <div className="mp-loading">読み込み中...</div>}
               <div className="mp-model-list">
                 {visible.slice(0, 200).map((m) => (
                   <button
                     key={m.id}
                     type="button"
-                    className={`mp-model${value?.modelId === m.id ? " selected" : ""}`}
+                    className={`mp-model${
+                      value?.modelId === m.id ? " selected" : ""
+                    }`}
                     onClick={() => onSelect(providerId, m.id, m)}
                   >
                     <span className="mp-model-id">{m.id}</span>

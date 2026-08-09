@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  IconChevronRight,
-  IconPlugConnected,
-} from "@tabler/icons-react";
+import { IconChevronRight, IconPlugConnected } from "@tabler/icons-react";
 import { api } from "../../api.ts";
 import { filterByQuery, useProviders } from "../../providers.ts";
 import type { ModelInfo } from "../../types.ts";
@@ -66,7 +63,9 @@ export function ModelList() {
       }
     };
     loadAll();
-    return () => { stale = true; };
+    return () => {
+      stale = true;
+    };
   }, [providers]);
 
   const toggleExpand = (providerId: string) => {
@@ -82,11 +81,11 @@ export function ModelList() {
       prev.map((pm) =>
         pm.providerId === providerId
           ? {
-              ...pm,
-              models: pm.models.map((m) =>
-                m.id === modelId ? { ...m, enabled } : m
-              ),
-            }
+            ...pm,
+            models: pm.models.map((m) =>
+              m.id === modelId ? { ...m, enabled } : m
+            ),
+          }
           : pm
       )
     );
@@ -98,11 +97,11 @@ export function ModelList() {
         prev.map((pm) =>
           pm.providerId === providerId
             ? {
-                ...pm,
-                models: pm.models.map((m) =>
-                  m.id === modelId ? { ...m, enabled: !enabled } : m
-                ),
-              }
+              ...pm,
+              models: pm.models.map((m) =>
+                m.id === modelId ? { ...m, enabled: !enabled } : m
+              ),
+            }
             : pm
         )
       );
@@ -133,9 +132,7 @@ export function ModelList() {
         onChange={(e) => setSearch(e.target.value)}
       />
 
-      {loading && (
-        <div className="faint-box">読み込み中...</div>
-      )}
+      {loading && <div className="faint-box">読み込み中...</div>}
 
       {!loading && filtered.length === 0 && (
         <div className="faint-box">
@@ -161,7 +158,9 @@ export function ModelList() {
               >
                 <IconChevronRight
                   size={14}
-                  className={`model-group-chevron${isExpanded ? " expanded" : ""}`}
+                  className={`model-group-chevron${
+                    isExpanded ? " expanded" : ""
+                  }`}
                 />
                 <IconPlugConnected size={14} className="model-group-icon" />
                 <span className="model-group-name">{pm.providerName}</span>

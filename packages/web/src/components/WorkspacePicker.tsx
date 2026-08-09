@@ -6,7 +6,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import type { FederatedWorkspace, PeerStatus } from "../types.ts";
+import type { FederatedWorkspace } from "../types.ts";
 import { tabKey } from "../tabs.ts";
 
 interface WorkspacePickerProps {
@@ -18,8 +18,6 @@ interface WorkspacePickerProps {
   onDelete: (fws: FederatedWorkspace) => void;
   /** Called when the user wants to create a new workspace. */
   onCreate: () => void;
-  /** Peers that did not answer the workspace list fetch. */
-  peers: PeerStatus[];
 }
 
 /** Custom workspace dropdown with per-item edit/delete actions.
@@ -31,7 +29,6 @@ export function WorkspacePicker({
   onEdit,
   onDelete,
   onCreate,
-  peers,
 }: WorkspacePickerProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -68,9 +65,7 @@ export function WorkspacePicker({
         title={selected ? selected.workspace.name : "ワークスペースを選択"}
       >
         <span className="workspace-picker-name">
-          {selected
-            ? selected.workspace.name
-            : "(ワークスペースがありません)"}
+          {selected ? selected.workspace.name : "(ワークスペースがありません)"}
         </span>
         <span className={`workspace-picker-chevron${open ? " open" : ""}`}>
           <IconChevronDown size={15} />

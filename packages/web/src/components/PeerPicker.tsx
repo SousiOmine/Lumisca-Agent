@@ -95,9 +95,9 @@ export function PeerPicker({
                 key={peerId}
                 role="option"
                 aria-selected={peerId === value}
-                className={`peer-option${
-                  peerId === value ? " selected" : ""
-                }${!reachable ? " unreachable" : ""}`}
+                className={`peer-option${peerId === value ? " selected" : ""}${
+                  !reachable ? " unreachable" : ""
+                }`}
                 title={error}
                 onClick={() => {
                   onChange(peerId);
@@ -107,7 +107,9 @@ export function PeerPicker({
                 <span className="peer-option-icon">
                   <IconServer size={14} />
                 </span>
-                <span className={`peer-option-dot${reachable ? " ok" : " err"}`} />
+                <span
+                  className={`peer-option-dot${reachable ? " ok" : " err"}`}
+                />
                 <span className="peer-option-name">
                   {displayName(peerId)}
                 </span>

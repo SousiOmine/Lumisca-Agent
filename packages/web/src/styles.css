@@ -1462,6 +1462,33 @@ select:focus {
   color: var(--text-faint);
 }
 
+/* personalization panel */
+.settings-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.personalize-textarea {
+  flex: 1;
+  min-height: 300px;
+  resize: vertical;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-saved {
+  font-size: 12px;
+  color: var(--ok);
+}
+
 /* two-pane settings modal: left category sidebar, right content */
 .modal-settings {
   height: min(720px, calc(100vh - 48px));

@@ -1,5 +1,5 @@
 import { LumiscaDb } from "./db/mod.ts";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import type { ClientEvent } from "./types/event.ts";
 import type { SessionInfo } from "./types/session.ts";
@@ -220,6 +220,48 @@ export class LumiscaCore {
 
   async setProviderApiKey(providerId: string, key: string): Promise<void> {
     await setApiKey(this.credentials, providerId, key);
+  }
+
+  // --- personalization (machine-level AGENTS.md) --------------------------
+
+  /** The machine-level AGENTS.md (next to the settings file) with the path
+   * it lives at. Absent file → empty content. */
+  getPersonalization(): { path: string; content: string } {
+    const path = this.personalizationPath();
+    return {
+      path: path ?? "",
+      content: this.loadPersonalInstructions() ?? "",
+    };
+  }
+
+  /** Replace the machine-level AGENTS.md. Applies to sessions created from
+   * now on; existing sessions keep their snapshot. */
+  setPersonalization(content: string): void {
+    const path = this.personalizationPath();
+    if (path === undefined) {
+      throw new CoreError("No settings directory", "unavailable");
+    }
+    Deno.mkdirSync(dirname(path), { recursive: true });
+    Deno.writeTextFileSync(path, content, { mode: 0o600 });
+  }
+
+  /** The path of the machine-level AGENTS.md, or undefined when the core
+   * has no settings directory (in-memory repos). */
+  private personalizationPath(): string | undefined {
+    const dir = this.settings.dir();
+    return dir === undefined ? undefined : join(dir, "AGENTS.md");
+  }
+
+  /** Personal instructions to append to generated system prompts. Reads the
+   * machine-level AGENTS.md next to the settings file (absent → undefined). */
+  private loadPersonalInstructions(): string | undefined {
+    const path = this.personalizationPath();
+    if (path === undefined) return undefined;
+    try {
+      return Deno.readTextFileSync(path);
+    } catch {
+      return undefined;
+    }
   }
 
   // --- workspaces ---------------------------------------------------------
@@ -498,16 +540,20 @@ export class LumiscaCore {
   createSession(input: CreateSessionInput): SessionInfo {
     const workspace = this.requireWorkspace(input.workspaceId);
     const model = this.resolveDefaultModel(input.modelProvider, input.modelId);
-    // Custom prompts are stored verbatim; generated prompts are not — they
-    // are rebuilt from the workspace (including AGENTS.md) whenever the
-    // session is opened, so project memory edits take effect.
+    // Generated prompts are snapshotted here, at creation time (workspace
+    // AGENTS.md + personalization included), and stored with the session:
+    // later edits to either AGENTS.md must not affect this session. Custom
+    // prompts are stored verbatim and never augmented.
     const isCustom = input.systemPrompt !== undefined;
+    const systemPrompt = isCustom
+      ? input.systemPrompt
+      : this.buildGeneratedPrompt(workspace);
     const session = this.sessions.create({
       workspaceId: workspace.id,
       name: input.name ?? `Session ${new Date().toLocaleString()}`,
       modelProvider: model.provider,
       modelId: model.modelId,
-      systemPrompt: isCustom ? input.systemPrompt : undefined,
+      systemPrompt,
       systemPromptCustom: isCustom,
     });
     this.agents.set(session.id, this.buildAgent(session, workspace, []));
@@ -719,6 +765,13 @@ export class LumiscaCore {
     return workspace;
   }
 
+  /** The full generated system prompt for a workspace: base prompt +
+   * project memory (workspace AGENTS.md) + personalization (machine
+   * AGENTS.md, appended last). */
+  private buildGeneratedPrompt(workspace: Workspace): string {
+    return buildSystemPrompt(workspace, this.loadPersonalInstructions());
+  }
+
   /** Resolve workspace folders to real paths; rejects missing ones. */
   private async resolveFolders(folders: string[]): Promise<string[]> {
     const resolved: string[] = [];
@@ -796,12 +849,16 @@ export class LumiscaCore {
       );
     }
     const { tools } = createCodingTools(workspace);
-    // Custom prompts are preserved verbatim; generated prompts are rebuilt
-    // from the current workspace so AGENTS.md edits are picked up on open.
-    const systemPrompt =
-      session.systemPromptCustom === true && session.systemPrompt
-        ? session.systemPrompt
-        : buildSystemPrompt(workspace);
+    // The system prompt is a per-session snapshot taken at creation
+    // (custom prompts are stored verbatim). Only legacy sessions without a
+    // stored prompt (created before snapshots) rebuild once — and the
+    // rebuilt prompt is persisted right away so subsequent opens stay
+    // frozen against AGENTS.md edits.
+    let systemPrompt = session.systemPrompt;
+    if (systemPrompt === undefined) {
+      systemPrompt = this.buildGeneratedPrompt(workspace);
+      this.sessions.updateSystemPrompt(session.id, systemPrompt);
+    }
     const agent = new SessionAgent({
       sessionId: session.id,
       systemPrompt,
