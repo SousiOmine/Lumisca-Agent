@@ -795,6 +795,17 @@ select:focus {
   font-weight: 600;
 }
 
+.new-session-select-row {
+  display: flex;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.new-session-select-row > .new-session-select {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
 .new-session-select {
   display: flex;
   align-items: center;
@@ -805,6 +816,140 @@ select:focus {
 
 .new-session-select select {
   min-width: 170px;
+}
+
+/* ---- peer picker ----------------------------------------------------------- */
+
+.peer-picker {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.peer-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.peer-picker-trigger:hover {
+  border-color: var(--accent);
+}
+
+.peer-picker-dot-wrapper {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.peer-picker-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.peer-picker-dot.ok {
+  background: var(--green, #22c55e);
+}
+
+.peer-picker-dot.err {
+  background: var(--red, #ef4444);
+}
+
+.peer-picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-picker-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  transition: transform 120ms ease;
+}
+
+.peer-picker-chevron.open {
+  transform: rotate(180deg);
+}
+
+.peer-picker-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 4px;
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.peer-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+  transition: background-color 100ms ease;
+}
+
+.peer-option:hover {
+  background: var(--surface-3);
+}
+
+.peer-option.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.peer-option.unreachable {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.peer-option-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.peer-option-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.peer-option-dot.ok {
+  background: var(--green, #22c55e);
+}
+
+.peer-option-dot.err {
+  background: var(--red, #ef4444);
+}
+
+.peer-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- workspace picker ------------------------------------------------------ */
@@ -935,6 +1080,7 @@ select:focus {
 }
 
 .workspace-option.create {
+  width: 100%;
   margin-top: 2px;
   border-top: 1px solid var(--border);
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);

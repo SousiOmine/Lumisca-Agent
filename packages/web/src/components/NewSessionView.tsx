@@ -10,6 +10,7 @@ import type {
 import { errorText } from "../providers.ts";
 import { tabKey } from "../tabs.ts";
 import { Composer, type ComposerModel } from "./Composer.tsx";
+import { PeerPicker } from "./PeerPicker.tsx";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
 import { WorkspacePicker } from "./WorkspacePicker.tsx";
 
@@ -48,10 +49,8 @@ export function NewSessionView(
     onOpenSettings,
   }: NewSessionViewProps,
 ) {
-  const selected = workspaces[0]
-    ? tabKey(workspaces[0].peerId, workspaces[0].workspace.id)
-    : "";
-  const [workspaceKey, setWorkspaceKey] = useState(selected);
+  const [selectedPeerId, setSelectedPeerId] = useState("");
+  const [workspaceKey, setWorkspaceKey] = useState("");
   const [model, setModel] = useState<DraftModel | null>(null);
   const [text, setText] = useState("");
   const [modalWorkspace, setModalWorkspace] = useState<
@@ -82,21 +81,35 @@ export function NewSessionView(
       .catch(() => {});
   }, []);
 
+  // Filter workspaces by the selected peer.
+  const filteredWorkspaces = workspaces.filter(
+    (w) => w.peerId === selectedPeerId,
+  );
+
   // Keep a valid selection when the workspace list changes (e.g. after a
   // delete); fall back to the first remaining workspace.
   useEffect(() => {
     setWorkspaceKey((current) =>
-      workspaces.some(
+      filteredWorkspaces.some(
           (w) => tabKey(w.peerId, w.workspace.id) === current,
         )
         ? current
-        : (workspaces[0]
-          ? tabKey(workspaces[0].peerId, workspaces[0].workspace.id)
+        : (filteredWorkspaces[0]
+          ? tabKey(filteredWorkspaces[0].peerId, filteredWorkspaces[0].workspace.id)
           : "")
     );
-  }, [workspaces]);
+  }, [workspaces, selectedPeerId]);
 
-  const selectedWorkspace = workspaces.find(
+  // Reset workspace selection when the peer changes.
+  useEffect(() => {
+    setWorkspaceKey(
+      filteredWorkspaces[0]
+        ? tabKey(filteredWorkspaces[0].peerId, filteredWorkspaces[0].workspace.id)
+        : "",
+    );
+  }, [selectedPeerId]);
+
+  const selectedWorkspace = filteredWorkspaces.find(
     (w) => tabKey(w.peerId, w.workspace.id) === workspaceKey,
   );
   // Sessions on another server are created with that server's default
@@ -152,26 +165,37 @@ export function NewSessionView(
         <div className="new-session-center">
           <div className="new-session-card">
             <h2>新しいセッション</h2>
-            <label className="new-session-select">
-              <span>ワークスペース</span>
-              <WorkspacePicker
-                workspaces={workspaces}
-                peers={peers}
-                value={workspaceKey}
-                onChange={setWorkspaceKey}
-                onEdit={(fws) => {
-                  setModalWorkspace(fws);
-                  setModalPeerId(fws.peerId);
-                  setShowWorkspaceModal(true);
-                }}
-                onDelete={deleteWorkspace}
-                onCreate={(peerId) => {
-                  setModalWorkspace(undefined);
-                  setModalPeerId(peerId);
-                  setShowWorkspaceModal(true);
-                }}
-              />
-            </label>
+            <div className="new-session-select-row">
+              <label className="new-session-select">
+                <span>ワークスペース</span>
+                <WorkspacePicker
+                  workspaces={filteredWorkspaces}
+                  peers={peers}
+                  value={workspaceKey}
+                  onChange={setWorkspaceKey}
+                  onEdit={(fws) => {
+                    setModalWorkspace(fws);
+                    setModalPeerId(fws.peerId);
+                    setShowWorkspaceModal(true);
+                  }}
+                  onDelete={deleteWorkspace}
+                  onCreate={() => {
+                    setModalWorkspace(undefined);
+                    setModalPeerId(selectedPeerId);
+                    setShowWorkspaceModal(true);
+                  }}
+                />
+              </label>
+              <label className="new-session-select">
+                <span>マシン</span>
+                <PeerPicker
+                  peers={peers}
+                  workspaces={workspaces}
+                  value={selectedPeerId}
+                  onChange={setSelectedPeerId}
+                />
+              </label>
+            </div>
             <Composer
               value={text}
               onChange={setText}

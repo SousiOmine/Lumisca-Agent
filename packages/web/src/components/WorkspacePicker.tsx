@@ -16,29 +16,14 @@ interface WorkspacePickerProps {
   onChange: (key: string) => void;
   onEdit: (fws: FederatedWorkspace) => void;
   onDelete: (fws: FederatedWorkspace) => void;
-  /** Called with the peer the new workspace should be created on (the
-   * peer of the current selection, "" = this server). */
-  onCreate: (peerId: string) => void;
+  /** Called when the user wants to create a new workspace. */
+  onCreate: () => void;
   /** Peers that did not answer the workspace list fetch. */
   peers: PeerStatus[];
 }
 
-const BADGE: React.CSSProperties = {
-  fontSize: 10.5,
-  padding: "1px 7px",
-  borderRadius: 999,
-  border: "1px solid var(--accent-dim)",
-  color: "var(--accent-dim)",
-  marginLeft: 6,
-  whiteSpace: "nowrap",
-};
-
-function peerName(peerId: string, peerName: string): string {
-  return peerId === "" ? "このPC" : peerName || "リモート";
-}
-
-/** Custom workspace dropdown with per-item edit/delete actions. Shows the
- * owning machine's name next to every federated workspace. */
+/** Custom workspace dropdown with per-item edit/delete actions.
+ * Machine selection is handled by a separate PeerPicker. */
 export function WorkspacePicker({
   workspaces,
   value,
@@ -84,9 +69,7 @@ export function WorkspacePicker({
       >
         <span className="workspace-picker-name">
           {selected
-            ? `${selected.workspace.name} (${
-              peerName(selected.peerId, selected.peerName)
-            })`
+            ? selected.workspace.name
             : "(ワークスペースがありません)"}
         </span>
         <span className={`workspace-picker-chevron${open ? " open" : ""}`}>
@@ -124,9 +107,6 @@ export function WorkspacePicker({
                   title={fws.workspace.name}
                 >
                   {fws.workspace.name}
-                  <span style={BADGE}>
-                    {peerName(fws.peerId, fws.peerName)}
-                  </span>
                 </span>
                 <span className="workspace-option-meta">
                   {fws.workspace.folders.length} フォルダ
@@ -162,28 +142,12 @@ export function WorkspacePicker({
               </div>
             );
           })}
-          {peers.filter((p) => !p.ok).map((p) => (
-            <div
-              key={p.id}
-              className="workspace-option"
-              style={{ opacity: 0.6, pointerEvents: "none" }}
-              title={p.error}
-            >
-              <span className="workspace-option-icon">
-                <IconFolder size={14} />
-              </span>
-              <span className="workspace-option-name">
-                サーバーに接続できません: {p.name}
-                <span style={BADGE}>{p.name}</span>
-              </span>
-            </div>
-          ))}
           <button
             type="button"
             className="workspace-option create"
             onClick={() => {
               setOpen(false);
-              onCreate(selected?.peerId ?? "");
+              onCreate();
             }}
           >
             <IconPlus size={14} />
