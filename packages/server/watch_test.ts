@@ -29,6 +29,24 @@ Deno.test("SourceWatcher fires on source file changes", async () => {
   await Deno.remove(dir, { recursive: true });
 });
 
+Deno.test("SourceWatcher fires for watched files outside the main dir", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "lumisca-watch-" });
+  // A file outside the watched directory (like core/shared.ts, which the
+  // client bundle embeds): changes to it must trigger too.
+  const file = join(dir, "outside.ts");
+  await Deno.writeTextFile(file, "export const b = 1;");
+  const watcher = new SourceWatcher([dir, file]);
+  let fired = 0;
+  await watcher.start(() => fired++);
+
+  await Deno.writeTextFile(file, "export const b = 2;");
+  await delay(600);
+  assertEquals(fired, 1, "change to an explicitly watched file should fire");
+
+  watcher.stop();
+  await Deno.remove(dir, { recursive: true });
+});
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -37,7 +37,7 @@ function resolveAllowedHosts(): string[] {
 }
 
 // Optional auth token (the desktop shell sets one): /api, /ws and — unless
-// a local dev server — the SSR page then require it, so only clients that
+// a local dev server — the page then require it, so only clients that
 // know the token can drive the agent.
 const token = Deno.env.get("LUMISCA_TOKEN") || undefined;
 

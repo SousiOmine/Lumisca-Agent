@@ -4,9 +4,10 @@ import { cors } from "hono/cors";
 import { upgradeWebSocket } from "hono/deno";
 import { type LumiscaCore, THEME_KEY } from "@lumisca/core";
 import { bundleClient } from "./bundle.ts";
-import { renderAppMarkup, renderHtmlDocument } from "./render.tsx";
+import { renderHtmlDocument } from "./render.ts";
 import { SourceWatcher } from "./watch.ts";
 import {
+  coreSharedPath,
   webClientEntry,
   webFaviconPath,
   webSrcDir,
@@ -40,7 +41,7 @@ export interface AppOptions {
   allowedHosts?: string[];
   /** When set, requests require this token (X-Lumisca-Token header, the
    * `token` query parameter for browser WebSockets, or `?token=` on the
-   * SSR page URL). In production mode the SSR page itself is also
+   * page URL). In production mode the page itself is also
    * guarded, so the token is a real capability, not just a barrier for
    * casual local processes. Used by the desktop shell so only its own
    * spawned server instance answers. */
@@ -295,7 +296,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   // Optional bearer token: blocks arbitrary local processes (curl, other
   // apps) from driving the agent, and — for remote hosting — anyone without
-  // the token from reaching the SSR page itself. The token is accepted as
+  // the token from reaching the page itself. The token is accepted as
   // the X-Lumisca-Token header, the `token` query parameter (WebSocket
   // handshakes), or `?token=` on the page URL (the desktop shell opens the
   // page that way). Static assets stay public (they contain no secrets) so
@@ -345,11 +346,16 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     }
   };
 
-  // Dev mode: watch the frontend sources, rebundle with esbuild and tell
-  // connected clients to reload (full page reload — no HMR).
+  // Dev mode: watch the frontend sources (the web package plus
+  // core/shared.ts, which the client bundle embeds via esbuild alias),
+  // rebundle with esbuild and tell connected clients to reload (full page
+  // reload — no HMR).
   let watcher: SourceWatcher | null = null;
   if (watch) {
-    watcher = new SourceWatcher(webSrcDir(repoRoot));
+    watcher = new SourceWatcher([
+      webSrcDir(repoRoot),
+      coreSharedPath(repoRoot),
+    ]);
     watcher.start(() => {
       assets.invalidate();
       reloadClients();
@@ -386,23 +392,25 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   app.get("/api/health", (c) => c.json({ ok: true }));
 
-  // --- SSR page -------------------------------------------------------------
+  // --- HTML page ------------------------------------------------------------
 
-  /** Initial data for the app shell, shared by the SSR page and the
-   * externalized /assets/initial-data.js script (inline scripts are banned
-   * by the page CSP). */
+  /** Theme for the shell's first paint, read from the core settings. */
+  const theme = (): "light" | "dark" =>
+    core.getSetting(THEME_KEY) === "light" ? "light" : "dark";
+
+  /** Initial data for the app bootstrap, served as the externalized
+   * /assets/initial-data.js script (inline scripts are banned by the page
+   * CSP). Fresh per request — the client re-reads the data on every load,
+   * so it can never go stale relative to the server's state. */
   const initialData = (): InitialData => ({
     workspaces: core.listWorkspaces(),
-    theme: core.getSetting(THEME_KEY) === "light" ? "light" : "dark",
+    theme: theme(),
   });
 
   const renderPage = async (c: Context) => {
-    const [markup, css] = await Promise.all([
-      renderAppMarkup(initialData()),
-      assets.getCss(),
-    ]);
+    const css = await assets.getCss();
     return new Response(
-      renderHtmlDocument(markup, initialData(), css, {
+      renderHtmlDocument(css, theme(), {
         // The page's own host, so the CSP can name the WebSocket endpoint
         // (the UI's event stream) even when the page is served remotely.
         pageHost: c.req.header("host"),
@@ -500,8 +508,13 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         });
         // Federated peers' events, tagged with their id. The peer's own
         // `peerId` marker ("" on its side) is stripped first, so the tag
-        // is always the id this hub knows.
+        // is always the id this hub knows. The dev-mode `reload` broadcast
+        // is local to the server that rebuilt its bundle: it must never
+        // cross machine boundaries, or an edit on a peer would reload this
+        // hub's (unchanged) UI. (`reload` is not part of the core event
+        // type, hence the widened cast.)
         unsubscribeFed = fed.subscribe((peerId, event) => {
+          if ((event as { type?: string }).type === "reload") return;
           const { peerId: _stale, ...rest } = event as Record<string, unknown>;
           ws.send(JSON.stringify({ peerId, ...rest }));
         });

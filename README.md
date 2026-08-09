@@ -6,11 +6,10 @@ CLI・Web・デスクトップの3つのフロントエンドから同一の機�
 
 ## 特徴
 
-- **サーバーサイドレンダリング(SSR)**: React を Hono サーバー上で直接レンダリング。
-  ビルドステップ不要で `deno task server` だけで完結します(クライアントJSは
-  起動時に esbuild が自動バンドル)
+- **ビルドステップ不要**: クライアントJSは初回アクセス時に esbuild が自動バンドル。
+  `deno task server` だけで完結します(UI はクライアントサイドレンダリング)
 - **Fluent デザイン**: フラット・シンプルな UI。ダーク/ライトモードをサイドバー下部の
-  アイコンで切り替え可能(設定はデータベースに保存され、SSR で引き継がれます)。アイコンは tabler icons
+  アイコンで切り替え可能(設定はデータベースに保存され、初回描画時に反映されます)。アイコンは tabler icons
 - **タブ式セッション管理**: ブラウザのように上部タブで複数セッションを同時に切り替え
   (Web / デスクトップ)。各セッションは独立して並行稼働します
 - **フェデレーション**: ⚙ → 接続先サーバー で登録した**別のマシンのサーバー**
@@ -46,8 +45,8 @@ packages/
 │   ├── models/      pi-ai モデル管理
 │   ├── settings/    設定(`~/.config/lumisca-agent/settings.jsonc` バック)
 │   └── db/          SQLite(node:sqlite)
-├── server/    Hono HTTP + WebSocket(127.0.0.1 ローカル専用)+ React SSR + esbuild バンドル
-├── web/       React フロントエンドのソース(SSR/ハイドレーション共用)
+├── server/    Hono HTTP + WebSocket(127.0.0.1 ローカル専用)+ 静的シェル + esbuild バンドル
+├── web/       React フロントエンドのソース(クライアントレンダリング)
 ├── cli/       シングルセッションの対話 CLI
 └── desktop/   Tauri 2 デスクトップシェル
 ```
@@ -67,20 +66,20 @@ deno task server:dev    # 開発用: ライブリロード付き
 # → http://127.0.0.1:8000 をブラウザで開く
 ```
 
-React の初期HTMLはサーバーでレンダリングされます。ハイドレーション用の
-クライアントJSは初回アクセス時に esbuild で自動生成され(`.lumisca-cache/`
-にキャッシュ)、`server` / `server:dev` のどちらも同じ経路で配信されます。
+React アプリはクライアントサイドでレンダリングされます(初期HTMLはテーマ適用済みの
+静的シェル)。クライアントJSは初回アクセス時に esbuild で自動生成され
+(`.lumisca-cache/` にキャッシュ)、`server` / `server:dev` のどちらも同じ経路で
+配信されます。
 
-`server:dev` では `packages/web/src` の変更をファイルウォッチャーが検出し、
-esbuild で再バンドルして接続中のクライアントにリロードを通知します
-(フルページリロード。ソース変更は次回アクセス時にサーバー側レンダリングにも
-反映されます)。
+`server:dev` では `packages/web/src` と `packages/core/shared.ts`(バンドルに
+取り込まれる共有モジュール)の変更をファイルウォッチャーが検出し、esbuild で
+再バンドルして接続中のクライアントにリロードを通知します(フルページリロード)。
 
 `LUMISCA_DB` で DB パス、`LUMISCA_PORT` でポートを変更できます。設定(テーマ・
 APIキー・接続先など)は `~/.config/lumisca-agent/settings.jsonc` に保存されます
 (`$XDG_CONFIG_HOME` が設定されていれば `$XDG_CONFIG_HOME/lumisca-agent/settings.jsonc`)。
 
-`LUMISCA_TOKEN` を設定すると、API・WebSocket・SSR ページにトークン認証がかかります
+`LUMISCA_TOKEN` を設定すると、API・WebSocket・ページにトークン認証がかかります
 (ヘッダー `X-Lumisca-Token`、WS の `?token=`、ページの `?token=`)。デスクトップアプリは
 起動のたびにトークンを生成して渡すため、別のローカルプロセスからエージェントを
 操作できません。未設定なら従来どおり認証なしで動きます(リモートホスティング時は
@@ -302,17 +301,17 @@ deno task fmt        # フォーマット(適用)
 deno task fmt:check  # フォーマット(確認のみ)
 ```
 
-core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSocket / SSR / バンドル)の
+core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSocket / 静的シェル / バンドル)の
 テストを含みます。CI(GitHub Actions)では fmt / lint / check / test を実行します。
 
 ## 設計メモ
 
 - エージェントループは pi の `Agent`(イベント購読ベース)を使用し、
   イベントを WebSocket / CLI へ中継します
-- SSR では初期データ(ワークスペース・セッション一覧)を `/assets/initial-data.js`
-  として外部化し、クライアントが `hydrateRoot` で引き継ぎます
-  (ハイドレーションミスマッチ防止のため `window.__INITIAL_DATA__` を利用。
-  インラインスクリプトはページ CSP で禁止しているため外部化しています)
+- UI はクライアントサイドレンダリング(サーバーは静的シェルのみ)。初期データ
+  (ワークスペース・テーマ)は `/assets/initial-data.js` として外部化して配信し、
+  クライアントが読み込みます(インラインスクリプトはページ CSP で禁止しているため
+  外部化しています)
 - セッションのメッセージは message_end ごとに SQLite へ追記保存され、
   再オープン時に完全復元されます
 - システムプロンプトは生成時に AGENTS.md を取り込みます。ユーザー指定の
@@ -327,6 +326,6 @@ core(サンドボックス・永続化・ツール境界)、server(HTTP / WebSoc
   実在パスは realpath 解決後にルート集合との包含判定を行います
 - セキュリティ: ループバック限定 + `LUMISCA_ALLOWED_HOSTS`(リモートホスティング時)
   + オリジン完全比較(CORS / WS)+ 任意の `LUMISCA_TOKEN` 認証
-  (非ループバックバインド時は必須。認証付きサーバーでは SSR ページ自体もトークン必須)。
+  (非ループバックバインド時は必須。認証付きサーバーではページ自体もトークン必須)。
   Markdown レンダラーは画像 URL を https/http + 非ループバックに制限します
 

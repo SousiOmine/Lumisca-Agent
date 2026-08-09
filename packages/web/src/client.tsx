@@ -1,9 +1,10 @@
-import { hydrateRoot } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import type { InitialData } from "./types.ts";
 
 declare global {
-  /** Initial data injected by the SSR server (window.__INITIAL_DATA__). */
+  /** Initial data injected by the server bootstrap script
+   * (window.__INITIAL_DATA__). */
   var __INITIAL_DATA__: InitialData | undefined;
 }
 
@@ -18,4 +19,5 @@ if (location.search.includes("token=")) {
 const root = document.getElementById("root");
 if (!root) throw new Error("root element not found");
 
-hydrateRoot(root, <App initialData={globalThis.__INITIAL_DATA__} />);
+// The app is rendered client-side; the server only serves a static shell.
+createRoot(root).render(<App initialData={globalThis.__INITIAL_DATA__} />);

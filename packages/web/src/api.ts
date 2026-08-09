@@ -12,15 +12,15 @@ import type {
   Workspace,
 } from "./types.ts";
 
-/** The SSR server serves both the UI and the API on the same origin. */
+/** The server serves both the UI and the API on the same origin. */
 const API_BASE = "";
 
 declare global {
-  /** Embedded by the SSR server when LUMISCA_TOKEN auth is enabled. */
+  /** Embedded by the server when LUMISCA_TOKEN auth is enabled. */
   var __LUMISCA_TOKEN__: string | undefined;
 }
 
-/** Optional per-instance token (embedded in the SSR page by the server).
+/** Optional per-instance token (embedded in the page by the server).
  * Attached to every request; browsers cannot set WebSocket headers, so the
  * WS URL carries it as a query parameter instead. */
 const token = globalThis.__LUMISCA_TOKEN__;
@@ -266,7 +266,7 @@ export const fed = {
 };
 
 /** Connect to the WebSocket event stream. Returns a close function.
- * Same origin as the page (the SSR server serves both UI and API).
+ * Same origin as the page (the server serves both UI and API).
  * `onOpen` fires on every (re)connection so callers can re-sync state. */
 export function connectEvents(
   onEvent: (event: ClientEvent) => void,

@@ -55,7 +55,7 @@ export type ToolResultMessage = Extract<Message, { role: "toolResult" }>;
 /** A tool call block inside an assistant message. */
 export type ToolCallBlock = ToolCall;
 
-/** Initial data rendered into the SSR HTML and hydrated on the client. */
+/** Initial data served by the server's bootstrap script (/assets/initial-data.js). */
 export interface InitialData {
   workspaces: Workspace[];
   theme: "light" | "dark";

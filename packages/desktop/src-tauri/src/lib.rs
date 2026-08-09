@@ -198,7 +198,7 @@ fn parse_remote_url(url: &str) -> Result<(String, u16), String> {
 }
 
 /// The page URL to open for a connection: the base URL plus `/?token=`
-/// (the SSR page is token-guarded in production mode).
+/// (the page is token-guarded in production mode).
 fn page_url(base: &str, token: &str) -> String {
     format!("{}/?token={}", base.trim_end_matches('/'), token)
 }

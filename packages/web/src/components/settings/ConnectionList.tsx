@@ -24,7 +24,7 @@ const ACTIVE_TAG: React.CSSProperties = {
   marginLeft: 8,
 };
 
-/** The page URL to open for a connection (`?token=` — the SSR page is
+/** The page URL to open for a connection (`?token=` — the page is
  * token-guarded in production mode). */
 function pageUrl(url: string, token: string): string {
   return `${url.replace(/\/+$/, "")}/?token=${encodeURIComponent(token)}`;

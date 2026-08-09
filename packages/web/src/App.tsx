@@ -66,7 +66,7 @@ function sessionApi(key: string) {
 }
 
 export interface AppProps {
-  /** Preloaded data rendered into the SSR HTML; undefined when not SSR. */
+  /** Preloaded data from the bootstrap script; undefined when not served. */
   initialData?: InitialData;
 }
 
@@ -187,7 +187,7 @@ export function App({ initialData }: AppProps): ReactElement {
   }, []);
 
   useEffect(() => {
-    // With SSR the data is already present; refresh only in the non-SSR path.
+    // The bootstrap script already provides the data; refresh only when it is absent.
     if (!initialData) {
       load();
     }

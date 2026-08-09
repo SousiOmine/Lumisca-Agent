@@ -597,7 +597,7 @@ Deno.test("websocket rejects cross-port origins", async () => {
   }
 });
 
-Deno.test("token auth guards the API, websocket and SSR page", async () => {
+Deno.test("token auth guards the API, websocket and page", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
@@ -642,7 +642,7 @@ Deno.test("token auth guards the API, websocket and SSR page", async () => {
     );
     assertEquals(wsOk.status !== 401 && wsOk.status !== 403, true);
 
-    // The SSR page itself is guarded too (the token is a real capability).
+    // The page itself is guarded too (the token is a real capability).
     const pageDenied = await app.fetch(
       new Request("http://127.0.0.1:8000/", { headers: HOST }),
     );
@@ -1086,7 +1086,7 @@ function joinMissing(): string {
   return `Z:\\definitely\\not\\here\\lumisca-${crypto.randomUUID()}`;
 }
 
-Deno.test("server SSR-renders the app shell", async () => {
+Deno.test("server serves the app shell", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const server = startServer(core, 0, { repoRoot: Deno.cwd() });
@@ -1095,9 +1095,10 @@ Deno.test("server SSR-renders the app shell", async () => {
     const index = await fetch(`${base}/`);
     assertEquals(index.status, 200);
     const html = await index.text();
-    // Server-rendered markup, externalized initial data (inline scripts are
-    // banned by the page CSP), and the hydration script.
-    assertEquals(html.includes('<div id="root">'), true);
+    // Static shell: an empty #root (the app renders client-side), the
+    // externalized initial data (inline scripts are banned by the page
+    // CSP), and the client bundle script.
+    assertEquals(html.includes('<div id="root"></div>'), true);
     assertEquals(html.includes('src="/assets/initial-data.js"'), true);
     assertEquals(html.includes('src="/assets/app.js"'), true);
     assertEquals(html.includes("styles.css") || html.includes("<style>"), true);
@@ -1138,7 +1139,7 @@ Deno.test("server bundles and serves the client app", async () => {
     assertEquals(res.status, 200);
     const js = await res.text();
     assertEquals(js.length > 10_000, true, "bundle should include react");
-    assertEquals(js.includes("hydrateRoot"), true);
+    assertEquals(js.includes("createRoot"), true);
   } finally {
     server.shutdown();
     core.close();

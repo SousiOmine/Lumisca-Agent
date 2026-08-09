@@ -1,23 +1,13 @@
-import { renderToReadableStream } from "react-dom/server";
-import { App } from "@lumisca/web/app";
-import type { InitialData } from "@lumisca/web/types";
-
-/** Server-render the React app and return the markup for `#root`. */
-export async function renderAppMarkup(data: InitialData): Promise<string> {
-  const stream = await renderToReadableStream(<App initialData={data} />);
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let html = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    html += decoder.decode(value, { stream: true });
-  }
-  return html;
-}
+/**
+ * The HTML document served by the app: a static shell. The React app is
+ * rendered entirely client-side, so the shell only carries the theme (the
+ * first paint is already themed — no flash), the inlined styles, and two
+ * scripts: the externalized initial data + auth token (inline scripts are
+ * banned by the page CSP), and the bundled client app.
+ */
 
 /**
- * Content-Security-Policy for the SSR page. Inline scripts are banned, so
+ * Content-Security-Policy for the page. Inline scripts are banned, so
  * the initial data and auth token are served from /assets/initial-data.js
  * instead of an inline <script>. Inline style attributes (React style
  * props) need 'unsafe-inline' for styles. connect-src names the page's own
@@ -53,15 +43,15 @@ export interface HtmlDocumentOptions {
   pageHost?: string;
 }
 
-/** Assemble the full HTML document around the rendered markup. */
+/** Assemble the full HTML document: the empty #root (client-rendered app),
+ * themed first paint, and the two module scripts. */
 export function renderHtmlDocument(
-  markup: string,
-  data: InitialData,
   css: string,
+  theme: "light" | "dark",
   options: HtmlDocumentOptions = {},
 ): string {
   return `<!doctype html>
-<html lang="ja" data-theme="${data.theme}">
+<html lang="ja" data-theme="${theme}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -74,7 +64,7 @@ export function renderHtmlDocument(
     <style>${css}</style>
   </head>
   <body>
-    <div id="root">${markup}</div>
+    <div id="root"></div>
     <script type="module" src="/assets/initial-data.js${
     options.token === undefined
       ? ""

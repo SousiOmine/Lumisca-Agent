@@ -1,6 +1,8 @@
 /** Watch the frontend sources for changes and notify a callback.
  * Used in dev mode to trigger rebundling and client reloads.
- * Events are debounced so a burst of filesystem events fires once. */
+ * Events are debounced so a burst of filesystem events fires once.
+ * Multiple paths (directories and/or single files) are watched; the bundle
+ * depends on more than packages/web/src (e.g. @lumisca/core/shared). */
 export class SourceWatcher {
   private watcher: Deno.FsWatcher | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -8,7 +10,7 @@ export class SourceWatcher {
   private readonly debounceMs: number;
 
   constructor(
-    private readonly srcDir: string,
+    private readonly paths: string | string[],
     debounceMs = 120,
   ) {
     this.debounceMs = debounceMs;
@@ -16,7 +18,7 @@ export class SourceWatcher {
 
   start(onChange: () => void): void {
     this.stopped = false;
-    this.watcher = Deno.watchFs(this.srcDir, { recursive: true });
+    this.watcher = Deno.watchFs(this.paths, { recursive: true });
     (async () => {
       for (;;) {
         const watcher = this.watcher;
@@ -50,7 +52,7 @@ export class SourceWatcher {
           console.error("source watcher failed, restarting:", error);
           await new Promise((resolve) => setTimeout(resolve, 500));
           if (this.stopped) return;
-          this.watcher = Deno.watchFs(this.srcDir, { recursive: true });
+          this.watcher = Deno.watchFs(this.paths, { recursive: true });
         }
       }
     })();
