@@ -47,13 +47,6 @@ export function ModelList() {
         if (!stale) {
           setProviderModels(results);
           setLoading(false);
-          // Auto-expand providers that have enabled models
-          const autoExpand: Record<string, boolean> = {};
-          for (const r of results) {
-            const hasEnabled = r.models.some((m) => m.enabled !== false);
-            if (hasEnabled) autoExpand[r.providerId] = true;
-          }
-          setExpanded((prev) => ({ ...autoExpand, ...prev }));
         }
       } catch (e) {
         if (!stale) {

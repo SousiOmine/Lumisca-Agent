@@ -1,5 +1,10 @@
 import { type ComponentType, type KeyboardEvent, useState } from "react";
-import { IconChevronRight, IconPlayerStop } from "@tabler/icons-react";
+import {
+  IconBrain,
+  IconCheck,
+  IconChevronRight,
+  IconPlayerStop,
+} from "@tabler/icons-react";
 import { THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
 import { ModelPicker } from "./ModelPicker.tsx";
 import type { ModelInfo, ThinkingLevel } from "../types.ts";
@@ -75,6 +80,7 @@ export function Composer({
   onOpenSettings,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showThinkingPicker, setShowThinkingPicker] = useState(false);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && e.ctrlKey) {
@@ -111,7 +117,10 @@ export function Composer({
               <button
                 type="button"
                 className="model-switch"
-                onClick={() => setShowModelPicker((o) => !o)}
+                onClick={() => {
+                  setShowModelPicker((o) => !o);
+                  setShowThinkingPicker(false);
+                }}
                 title="モデルを選択"
               >
                 <span
@@ -132,19 +141,49 @@ export function Composer({
                 </span>
               </button>
               {canThink && onThinkingLevelChange && (
-                <select
-                  className="thinking-select"
-                  value={thinkingLevel ?? "off"}
-                  title="思考強度"
-                  onChange={(e) =>
-                    onThinkingLevelChange(e.target.value as ThinkingLevel)}
-                >
-                  {levels.map((level) => (
-                    <option key={level} value={level}>
-                      {THINKING_LEVEL_LABELS[level]}
-                    </option>
-                  ))}
-                </select>
+                <div className="thinking-control">
+                  <button
+                    type="button"
+                    className="thinking-switch"
+                    onClick={() => {
+                      setShowThinkingPicker((o) => !o);
+                      setShowModelPicker(false);
+                    }}
+                    title="思考強度"
+                  >
+                    <IconBrain size={13} />
+                    <span>{THINKING_LEVEL_LABELS[thinkingLevel ?? "off"]}</span>
+                    <span
+                      className={`chevron${showThinkingPicker ? " open" : ""}`}
+                    >
+                      <IconChevronRight size={13} />
+                    </span>
+                  </button>
+                  {showThinkingPicker && (
+                    <div className="thinking-popover">
+                      {levels.map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          className={`thinking-option${
+                            (thinkingLevel ?? "off") === level
+                              ? " selected"
+                              : ""
+                          }`}
+                          onClick={() => {
+                            onThinkingLevelChange(level);
+                            setShowThinkingPicker(false);
+                          }}
+                        >
+                          <span>{THINKING_LEVEL_LABELS[level]}</span>
+                          {(thinkingLevel ?? "off") === level && (
+                            <IconCheck size={13} className="thinking-check" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
               {showModelPicker && (
                 <div className="model-popover">
