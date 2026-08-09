@@ -1,16 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   IconArrowLeft,
-  IconBrain,
   IconCheck,
   IconCircleDashed,
 } from "@tabler/icons-react";
 import { api } from "../../api.ts";
-import { formatModelMeta } from "@lumisca/core/shared";
-import { errorText, filterByQuery, useProviders } from "../../providers.ts";
-import type { ModelInfo } from "../../types.ts";
+import { errorText, useProviders } from "../../providers.ts";
 
-/** Settings → one provider: API key entry and model enablement. */
+/** Settings → one provider: API key entry only. */
 export function ProviderDetail({
   providerId,
   isNew,
@@ -26,23 +23,14 @@ export function ProviderDetail({
   });
   const [key, setKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [search, setSearch] = useState("");
-  const [showDisabled, setShowDisabled] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [savedNotice, setSavedNotice] = useState(false);
 
   const load = async () => {
-    const [authState, ms] = await Promise.all([
-      api.providerAuth(providerId),
-      api.listModels(providerId),
-    ]);
+    const authState = await api.providerAuth(providerId);
     setAuth(authState);
-    setModels(ms);
   };
 
-  // Load auth state and the model list when the detail opens (and again if
-  // the provider changes while mounted). saveKey refreshes after a save.
   useEffect(() => {
     let stale = false;
     load().catch((e) => {
@@ -54,13 +42,6 @@ export function ProviderDetail({
   }, [providerId]);
 
   const provider = providers.find((p) => p.id === providerId);
-
-  const visible = useMemo(() => {
-    const base = showDisabled
-      ? models.filter((m) => m.enabled === false)
-      : models;
-    return filterByQuery(base, search);
-  }, [models, search, showDisabled]);
 
   const saveKey = async () => {
     if (!key.trim()) return;
@@ -78,19 +59,6 @@ export function ProviderDetail({
       setSavingKey(false);
     }
   };
-
-  const toggleModel = async (modelId: string, enabled: boolean) => {
-    setModels((ms) =>
-      ms.map((m) => (m.id === modelId ? { ...m, enabled } : m))
-    );
-    try {
-      await api.setModelEnabled(providerId, modelId, enabled);
-    } catch (e) {
-      setError(errorText(e));
-    }
-  };
-
-  const enabledCount = models.filter((m) => m.enabled !== false).length;
 
   return (
     <>
@@ -138,65 +106,6 @@ export function ProviderDetail({
             APIキーを保存しました
           </p>
         )}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <p className="settings-note" style={{ flex: 1 }}>
-            モデル({enabledCount}/{models.length} 有効)
-          </p>
-          <label
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-              fontSize: 12,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={showDisabled}
-              onChange={(e) => setShowDisabled(e.target.checked)}
-            />
-            無効のみ表示
-          </label>
-        </div>
-        <input
-          placeholder="モデルを検索..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <div className="model-list" style={{ maxHeight: 280 }}>
-          {visible.slice(0, 300).map((m) => (
-            <label
-              key={m.id}
-              className="model-item"
-              style={{ cursor: "pointer" }}
-            >
-              <input
-                type="checkbox"
-                checked={m.enabled !== false}
-                onChange={(e) => toggleModel(m.id, e.target.checked)}
-              />
-              <span className="model-id">{m.id}</span>
-              <span className="model-meta">
-                {formatModelMeta(m.contextWindow)}
-                {m.reasoning && (
-                  <IconBrain
-                    size={12}
-                    title="思考モデル"
-                    aria-label="思考モデル"
-                  />
-                )}
-              </span>
-            </label>
-          ))}
-          {visible.length === 0 && (
-            <div className="faint-box">
-              該当するモデルがありません
-            </div>
-          )}
-        </div>
       </div>
 
       {error && <div className="error-text">{error}</div>}
