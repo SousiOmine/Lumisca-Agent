@@ -1516,6 +1516,7 @@ select:focus {
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .settings-content input[type="checkbox"] {
@@ -1555,6 +1556,129 @@ select:focus {
 
 .provider-row input {
   width: 260px;
+}
+
+/* ---- model list (settings) -------------------------------------------------- */
+
+.model-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.model-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: background 120ms ease;
+}
+
+.model-group-header:hover {
+  background: var(--surface-3, var(--surface-2));
+}
+
+.model-group-chevron {
+  flex: none;
+  color: var(--text-dim);
+  transition: transform 150ms ease;
+}
+
+.model-group-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.model-group-icon {
+  flex: none;
+  color: var(--text-dim);
+}
+
+.model-group-name {
+  flex: 1;
+}
+
+.model-group-count {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.model-group-items {
+  display: flex;
+  flex-direction: column;
+}
+
+.model-toggle-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px 8px 36px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.model-toggle-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- toggle switch ---------------------------------------------------------- */
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-3, #ccc);
+  border-radius: 20px;
+  transition: background 200ms ease;
+}
+
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 200ms ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent, #4f7df5);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
 }
 
 /* ---- workspace folder picker ------------------------------------------------ */

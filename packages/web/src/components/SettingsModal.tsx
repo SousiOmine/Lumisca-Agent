@@ -5,11 +5,13 @@ import {
   IconServer,
   IconWorld,
   IconX,
+  IconBrain,
 } from "@tabler/icons-react";
 import { Modal } from "./Modal.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
+import { ModelList } from "./settings/ModelList.tsx";
 import { McpList } from "./settings/McpList.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 
@@ -17,7 +19,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type Category = "providers" | "mcp" | "servers";
+type Category = "providers" | "models" | "mcp" | "servers";
 
 type ProvidersView =
   | { kind: "list" }
@@ -33,6 +35,11 @@ const CATEGORIES: {
     id: "providers",
     label: "プロバイダー",
     icon: <IconPlugConnected size={18} />,
+  },
+  {
+    id: "models",
+    label: "モデル",
+    icon: <IconBrain size={18} />,
   },
   { id: "mcp", label: "MCP サーバー", icon: <IconServer size={18} /> },
   { id: "servers", label: "接続先サーバー", icon: <IconWorld size={18} /> },
@@ -115,6 +122,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               onBack={() => setProvidersView({ kind: "list" })}
             />
           )}
+          {category === "models" && <ModelList />}
           {category === "mcp" && <McpList />}
           {category === "servers" && <ConnectionList />}
         </div>
