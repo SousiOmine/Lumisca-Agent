@@ -23,6 +23,7 @@ export const TOOL_LIST_DIR = "list_dir";
 export const TOOL_BASH = "bash";
 export const TOOL_GREP = "grep";
 export const TOOL_GLOB = "glob";
+export const TOOL_SKILL = "skill";
 
 /**
  * Reasoning-effort levels for a model. "off" disables thinking; the rest

@@ -14,6 +14,18 @@ export type { AgentMessage } from "@earendil-works/pi-agent-core";
 export { SessionAgent } from "./agent/session-agent.ts";
 export { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
 export type { Infer, Tool, ToolResult, ToolSchema } from "./tools/schema.ts";
+export {
+  discoverSkills,
+  formatAvailableSkills,
+  loadSkillContent,
+} from "./skills/discover.ts";
+export type {
+  DiscoverOptions,
+  SkillDef,
+  SkillSource,
+} from "./skills/discover.ts";
+export { createSkillTool } from "./skills/tool.ts";
+export { parseSkillFrontmatter } from "./skills/frontmatter.ts";
 export { contentText } from "./content.ts";
 export {
   loadMcpConfig,

@@ -10,6 +10,8 @@ import { createBashTool } from "./bash.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import type { Tool } from "./schema.ts";
 import { loadProjectMemory } from "../memory/agents-md.ts";
+import { discoverSkills, formatAvailableSkills } from "../skills/discover.ts";
+import { createSkillTool } from "../skills/tool.ts";
 
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
@@ -35,6 +37,7 @@ export function createCodingTools(
     createGrepTool(ctx),
     createGlobTool(ctx),
     createBashTool({ sandbox, env: options.env }),
+    createSkillTool({ skills: discoverSkills(workspace.folders) }),
   ];
 }
 
@@ -49,6 +52,16 @@ export function buildSystemPrompt(
   const memory = loadProjectMemory(workspace.folders);
   const memorySection = memory
     ? `\n\n# Project memory (AGENTS.md)\n${memory}`
+    : "";
+  const skills = discoverSkills(workspace.folders);
+  const skillsSection = skills.length > 0
+    ? `\n\n# Skills\nSkills are reusable instructions stored as SKILL.md files. ` +
+      `When a task matches one of the skills below, load it with the skill ` +
+      `tool — the tool returns the skill's full instructions (and can read ` +
+      `additional files from the skill directory via read_followup).\n` +
+      `<available_skills>\n${
+        formatAvailableSkills(skills)
+      }\n</available_skills>`
     : "";
   const personal = (personalInstructions ?? "").trim();
   const personalSection = personal
@@ -71,6 +84,6 @@ Guidelines:
   \`Aaa\`) or an absolute path.
 - After making changes, verify them (run tests, builds) when appropriate.
 - Ask the user when a task is ambiguous.
-${memorySection}${personalSection}
+${memorySection}${skillsSection}${personalSection}
 `;
 }
