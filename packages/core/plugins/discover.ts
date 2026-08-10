@@ -1,5 +1,5 @@
 import { basename, join } from "node:path";
-import { findRepoRoot } from "../memory/agents-md.ts";
+import { repoChain } from "../memory/agents-md.ts";
 import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { McpServerConfig } from "../mcp/config.ts";
@@ -49,18 +49,7 @@ export function discoverPlugins(
 ): PluginDef[] {
   const byName = new Map<string, PluginDef>();
   for (const folder of folders) {
-    const root = findRepoRoot(folder);
-    // Walk from the folder up to the root, then reverse so root-first.
-    const chain: string[] = [folder];
-    let current = folder;
-    while (current !== root) {
-      const parent = join(current, "..");
-      if (parent === current) break;
-      chain.push(parent);
-      current = parent;
-    }
-    chain.reverse();
-    for (const dir of chain) {
+    for (const dir of repoChain(folder)) {
       scanPluginsDir(join(dir, AGENTS_PLUGINS_DIR), options, byName);
     }
   }

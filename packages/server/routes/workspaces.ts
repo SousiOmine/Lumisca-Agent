@@ -33,16 +33,18 @@ export interface WorkspaceApi {
 }
 
 /** File listings are cached per workspace for a short TTL: the walk is the
- * expensive part, and typing an @-mention queries repeatedly. */
+ * expensive part, and typing an @-mention queries repeatedly. The cache is
+ * scoped to the app instance (not module-global) so instances and tests
+ * never share state. */
 const FILE_CACHE_TTL_MS = 10_000;
 const FILE_CACHE_MAX = 64;
-const fileCache = new Map<
-  string,
-  { at: number; entries: WorkspaceFileEntry[] }
->();
 
 export function workspaceRoutes(core: WorkspaceApi): Hono {
   const app = new Hono();
+  const fileCache = new Map<
+    string,
+    { at: number; entries: WorkspaceFileEntry[] }
+  >();
 
   app.get("/workspaces", (c) => c.json(core.listWorkspaces()));
 
@@ -82,18 +84,6 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
         : {}),
     });
     return c.json(ws);
-  });
-
-  app.patch("/workspaces/:id/folders", async (c) => {
-    const body = await parseBody<WorkspaceBody>(c);
-    if (!body || !Array.isArray(body.folders)) {
-      throw new AppError("folders (string[]) is required", 400);
-    }
-    await core.updateWorkspace(
-      c.req.param("id"),
-      { folders: folderList(body.folders) },
-    );
-    return c.json({ ok: true });
   });
 
   app.delete("/workspaces/:id", (c) => {

@@ -1,5 +1,5 @@
 import { isAbsolute, join, normalize, sep } from "node:path";
-import { findRepoRoot } from "../memory/agents-md.ts";
+import { repoChain } from "../memory/agents-md.ts";
 import { parseSkillFrontmatter } from "./frontmatter.ts";
 
 /** Directory holding skills inside a repository level or in the home
@@ -50,18 +50,7 @@ export function discoverSkills(
   const seenPaths = new Set<string>();
 
   for (const folder of folders) {
-    const root = findRepoRoot(folder);
-    // Walk from the folder up to the root, then reverse so root-first.
-    const chain: string[] = [folder];
-    let current = folder;
-    while (current !== root) {
-      const parent = join(current, "..");
-      if (parent === current) break;
-      chain.push(parent);
-      current = parent;
-    }
-    chain.reverse();
-    for (const dir of chain) {
+    for (const dir of repoChain(folder)) {
       scanSkillsDir(
         join(dir, AGENTS_SKILLS_DIR),
         "workspace",

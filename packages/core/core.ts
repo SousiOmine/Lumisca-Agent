@@ -31,10 +31,10 @@ import { createWorkspaceRepo, type WorkspaceRepo } from "./workspace/repo.ts";
 import { Sandbox } from "./workspace/sandbox.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
-import { SessionAgent } from "./agent/session-agent.ts";
-import { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
+import type { SessionAgent } from "./agent/session-agent.ts";
+import { SessionPool } from "./agent/pool.ts";
+import { buildSystemPrompt } from "./tools/mod.ts";
 import { CoreError } from "./errors.ts";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { APP_MCP_SETTINGS_KEY } from "./mcp/config.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
@@ -61,10 +61,9 @@ export class LumiscaCore {
   private readonly workspaces: WorkspaceRepo;
   private readonly sessions: SessionRepo;
   private readonly messages: MessageRepo;
+  private readonly pool: SessionPool;
   private readonly mcp: McpService;
-  private readonly agents = new Map<string, SessionAgent>();
   private readonly listeners = new Set<(event: ClientEvent) => void>();
-  private readonly lastErrors = new Map<string, string>();
 
   private constructor(db: LumiscaDb, settings: SettingsRepo) {
     this.db = db;
@@ -79,14 +78,30 @@ export class LumiscaCore {
     this.workspaces = createWorkspaceRepo(db);
     this.sessions = createSessionRepo(db);
     this.messages = createMessageRepo(db);
+    this.pool = new SessionPool({
+      getModel: (provider, modelId) => this.models.getModel(provider, modelId),
+      getThinkingLevel: (provider, modelId) =>
+        this.models.getThinkingLevel(provider, modelId),
+      buildGeneratedPrompt: (workspace) => this.buildGeneratedPrompt(workspace),
+      updateSystemPrompt: (id, systemPrompt) =>
+        this.sessions.updateSystemPrompt(id, systemPrompt),
+      streamFn: this.models.models.streamSimple.bind(this.models.models),
+      messageRepo: this.messages,
+      // Resolved lazily (open) so the circular wiring stays one-way:
+      // the pool references the service, the service references the pool
+      // via the injected applySessionChange / agentMcpStatus below.
+      loadMergedMcp: (workspace) => this.mcp.loadMergedConfig(workspace),
+      requireWorkspace: (id) => this.requireWorkspace(id),
+      emit: (event) => this.emit(event),
+    });
     this.mcp = new McpService({
       settings: this.settings,
       listSessions: (workspaceId) => this.sessions.list(workspaceId),
       agentMcpStatus: (sessionId) =>
-        this.agents.get(sessionId)?.getMcpStatus() ?? null,
+        this.pool.get(sessionId)?.getMcpStatus() ?? null,
       requireWorkspace: (id) => this.requireWorkspace(id),
       applySessionChange: (sessions, mutate) =>
-        this.applySessionChange(sessions, mutate),
+        this.pool.applyChange(sessions, mutate),
     });
   }
 
@@ -122,10 +137,7 @@ export class LumiscaCore {
   }
 
   close(): void {
-    for (const agent of this.agents.values()) {
-      agent.close();
-    }
-    this.agents.clear();
+    this.pool.closeAll();
     this.db.close();
   }
 
@@ -177,30 +189,32 @@ export class LumiscaCore {
     this.settings.set(CONNECTIONS_KEY, JSON.stringify(entries));
   }
 
-  private assertNotProtected(key: string): void {
+  /** The protected-key category of a settings key, or undefined when the
+   * key is safe to expose through the generic settings surface. Credentials
+   * have their own API (/providers/:id/api-key), the app MCP config its own
+   * (/api/mcp), and the connection registry its own (/api/connections);
+   * touching any of them through the generic settings surface would bypass
+   * those APIs. Single source of truth for both the read/write guard and
+   * the listSettings filter. */
+  private protectedKeyReason(key: string): string | undefined {
     if (key.startsWith(CREDENTIAL_KEY_PREFIX)) {
-      // Credentials have their own API (/providers/:id/api-key); touching
-      // them through the generic settings surface would bypass it.
-      throw new CoreError(
-        "credentials cannot be accessed through this endpoint",
-        "forbidden",
-      );
+      return "credentials cannot be accessed through this endpoint";
     }
     if (key === APP_MCP_SETTINGS_KEY) {
-      // The app MCP config has its own API (/api/mcp); it may contain
-      // secrets (env vars, headers) and must not leak via generic settings.
-      throw new CoreError(
-        "MCP configuration cannot be accessed through this endpoint",
-        "forbidden",
-      );
+      // The app MCP config may contain secrets (env vars, headers).
+      return "MCP configuration cannot be accessed through this endpoint";
     }
     if (key === CONNECTIONS_KEY) {
-      // The connection registry contains server tokens and has its own
-      // API (/api/connections).
-      throw new CoreError(
-        "connection registry cannot be accessed through this endpoint",
-        "forbidden",
-      );
+      // The connection registry contains server tokens.
+      return "connection registry cannot be accessed through this endpoint";
+    }
+    return undefined;
+  }
+
+  private assertNotProtected(key: string): void {
+    const reason = this.protectedKeyReason(key);
+    if (reason !== undefined) {
+      throw new CoreError(reason, "forbidden");
     }
   }
 
@@ -209,13 +223,7 @@ export class LumiscaCore {
   listSettings(): Map<string, string> {
     const safe = new Map<string, string>();
     for (const [key, value] of this.settings.list()) {
-      if (
-        key.startsWith(CREDENTIAL_KEY_PREFIX) ||
-        key === APP_MCP_SETTINGS_KEY ||
-        key === CONNECTIONS_KEY
-      ) {
-        continue;
-      }
+      if (this.protectedKeyReason(key) !== undefined) continue;
       safe.set(key, value);
     }
     return safe;
@@ -307,7 +315,7 @@ export class LumiscaCore {
       );
     }
     const sessions = this.sessions.list(id);
-    this.applySessionChange(sessions, () => {
+    this.pool.applyChange(sessions, () => {
       this.workspaces.update(id, name, folders);
     });
     return this.workspaces.get(id)!;
@@ -315,9 +323,7 @@ export class LumiscaCore {
 
   deleteWorkspace(id: string): void {
     for (const session of this.sessions.list(id)) {
-      this.agents.get(session.id)?.close();
-      this.agents.delete(session.id);
-      this.lastErrors.delete(session.id);
+      this.pool.delete(session.id);
     }
     this.workspaces.delete(id);
   }
@@ -398,7 +404,7 @@ export class LumiscaCore {
       systemPrompt,
       systemPromptCustom: isCustom,
     });
-    this.agents.set(session.id, this.buildAgent(session, workspace, []));
+    this.pool.open(session, workspace, []);
     this.emit({ type: "session_created", session });
     return this.decorateSession(session);
   }
@@ -418,35 +424,32 @@ export class LumiscaCore {
     if (!session) {
       throw new CoreError(`Session not found: ${id}`, "not_found");
     }
-    if (!this.agents.has(id)) {
+    if (!this.pool.get(id)) {
       const workspace = this.requireWorkspace(session.workspaceId);
       const messages = this.messages.listMessages(id);
-      this.agents.set(id, this.buildAgent(session, workspace, messages));
+      this.pool.open(session, workspace, messages);
     }
     return this.decorateSession(session);
   }
 
   closeSession(id: string): void {
-    this.agents.get(id)?.close();
-    this.agents.delete(id);
+    this.pool.close(id);
   }
 
   deleteSession(id: string): void {
-    this.agents.get(id)?.close();
-    this.agents.delete(id);
-    this.lastErrors.delete(id);
+    this.pool.delete(id);
     this.sessions.delete(id);
   }
 
   getAgent(id: string): SessionAgent | undefined {
-    return this.agents.get(id);
+    return this.pool.get(id);
   }
 
   /** The last failure of a session, if any. Cleared when a new run starts.
    * Lets non-WebSocket clients (curl, the desktop shell) learn about
    * failures of fire-and-forget prompts instead of losing them. */
   getSessionLastError(id: string): string | undefined {
-    return this.lastErrors.get(id);
+    return this.pool.lastError(id);
   }
 
   /** Fire-and-forget prompt: completion and failures arrive as events
@@ -454,7 +457,7 @@ export class LumiscaCore {
    * holding a connection open for the whole run. Throws when the session
    * is already streaming. */
   startPrompt(id: string, text: string): void {
-    const agent = this.requireAgent(id);
+    const agent = this.pool.require(id);
     if (agent.isStreaming) {
       throw new CoreError(`Session is already running: ${id}`, "conflict");
     }
@@ -466,13 +469,13 @@ export class LumiscaCore {
 
   /** Await the prompt (CLI). Errors are reported via session_error events. */
   async prompt(id: string, text: string): Promise<void> {
-    const agent = this.requireAgent(id);
+    const agent = this.pool.require(id);
     this.sessions.touch(id);
     await agent.prompt(text);
   }
 
   abort(id: string): void {
-    this.requireAgent(id).abort();
+    this.pool.require(id).abort();
   }
 
   /** Switch the model used by a session (persisted). Throws `conflict`
@@ -490,7 +493,7 @@ export class LumiscaCore {
         "not_found",
       );
     }
-    this.applySessionChange(
+    this.pool.applyChange(
       [{ ...session, modelProvider: provider, modelId }],
       () => {
         this.sessions.updateModel(id, provider, modelId);
@@ -534,7 +537,7 @@ export class LumiscaCore {
       (s) => s.modelProvider === providerId && s.modelId === modelId,
     );
     let effective: ThinkingLevel = "off";
-    this.applySessionChange(affected, () => {
+    this.pool.applyChange(affected, () => {
       effective = this.models.setThinkingLevel(providerId, modelId, level);
     });
     return effective;
@@ -653,11 +656,7 @@ export class LumiscaCore {
   }
 
   private requireAgent(id: string): SessionAgent {
-    const agent = this.agents.get(id);
-    if (!agent) {
-      throw new CoreError(`Session is not open: ${id}`, "not_found");
-    }
-    return agent;
+    return this.pool.require(id);
   }
 
   /** Attach the session's model thinking level so the UI can render the
@@ -675,114 +674,5 @@ export class LumiscaCore {
       ),
       thinkingLevels: getSupportedThinkingLevels(model),
     };
-  }
-
-  private buildAgent(
-    session: SessionInfo,
-    workspace: Workspace,
-    messages: AgentMessage[],
-  ): SessionAgent {
-    const model = this.models.getModel(
-      session.modelProvider,
-      session.modelId,
-    );
-    if (!model) {
-      throw new CoreError(
-        `Model not found: ${session.modelProvider}/${session.modelId}`,
-        "not_found",
-      );
-    }
-    const tools = createCodingTools(workspace);
-    // The system prompt is a per-session snapshot taken at creation
-    // (custom prompts are stored verbatim). Only legacy sessions without a
-    // stored prompt (created before snapshots) rebuild once — and the
-    // rebuilt prompt is persisted right away so subsequent opens stay
-    // frozen against AGENTS.md edits.
-    let systemPrompt = session.systemPrompt;
-    if (systemPrompt === undefined) {
-      systemPrompt = this.buildGeneratedPrompt(workspace);
-      this.sessions.updateSystemPrompt(session.id, systemPrompt);
-    }
-    const agent = new SessionAgent({
-      sessionId: session.id,
-      systemPrompt,
-      model,
-      tools,
-      messages,
-      thinkingLevel: this.models.getThinkingLevel(
-        session.modelProvider,
-        session.modelId,
-      ),
-      streamFn: this.models.models.streamSimple.bind(this.models.models),
-      messageRepo: this.messages,
-      onEvent: (event) => {
-        // Remember failures for clients that do not see the WS stream;
-        // a new run clears the stale error.
-        if (event.type === "session_error") {
-          this.lastErrors.set(event.sessionId, event.message);
-        } else if (event.type === "agent_start") {
-          this.lastErrors.delete(event.sessionId);
-        }
-        this.emit(event);
-      },
-    });
-    // MCP tools attach asynchronously (they spawn server processes); errors
-    // are reported via session_error and never break the agent loop. The
-    // merged config = app-level settings + the workspace's .mcp.json.
-    const mcp = this.mcp.loadMergedConfig(workspace);
-    void agent.attachMcpTools(
-      mcp.config,
-      mcp.errors,
-      workspace.folders[0] ?? Deno.cwd(),
-    );
-    return agent;
-  }
-
-  private rebuildAgent(session: SessionInfo): void {
-    const workspace = this.requireWorkspace(session.workspaceId);
-    const current = this.agents.get(session.id);
-    if (current) {
-      // Never replace a live agent: the old run would keep executing
-      // against the same message array and duplicate DB rows (see the
-      // streaming guards in updateWorkspace / setSessionModel).
-      if (current.isStreaming) {
-        throw new CoreError(
-          `Session is already running: ${session.id}`,
-          "conflict",
-        );
-      }
-      const messages = current.messages;
-      current.close(); // also releases the old agent's MCP servers
-      this.agents.delete(session.id);
-      this.agents.set(
-        session.id,
-        this.buildAgent(session, workspace, messages),
-      );
-    }
-  }
-
-  /** Refuse configuration changes while any listed session is streaming,
-   * apply the mutation, then rebuild every affected agent. */
-  private applySessionChange(
-    sessions: SessionInfo[],
-    mutate: () => void,
-  ): void {
-    this.assertNoStreaming(sessions);
-    mutate();
-    for (const session of sessions) {
-      this.rebuildAgent(session);
-    }
-  }
-
-  /** Refuse configuration changes while any listed session is streaming. */
-  private assertNoStreaming(sessions: SessionInfo[]): void {
-    for (const session of sessions) {
-      if (this.agents.get(session.id)?.isStreaming) {
-        throw new CoreError(
-          `Session is already running: ${session.id}`,
-          "conflict",
-        );
-      }
-    }
   }
 }

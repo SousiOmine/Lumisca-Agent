@@ -332,12 +332,14 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   /** Theme preference from the core settings ("system" when unset/unknown).
    * The client resolves "system" via prefers-color-scheme; the server only
    * knows it, so the shell falls back to dark for the first paint. */
-  const theme = (): ThemeSetting =>
-    core.getSetting(THEME_KEY) === "light"
+  const theme = (): ThemeSetting => {
+    const stored = core.getSetting(THEME_KEY);
+    return stored === "light"
       ? "light"
-      : core.getSetting(THEME_KEY) === "system"
+      : stored === "system"
       ? "system"
       : "dark";
+  };
 
   /** Resolved theme for the shell's first paint (no client-side flash). */
   const resolvedTheme = (): "light" | "dark" =>

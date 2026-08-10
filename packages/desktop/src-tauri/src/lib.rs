@@ -1,12 +1,9 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-
 use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, StatusCode};
 use tauri::{AppHandle, Manager, WindowEvent};
 
@@ -123,19 +120,15 @@ fn resolve_port() -> u16 {
         .unwrap_or(DEFAULT_PORT)
 }
 
-/// Per-instance auth token for the spawned server. Beyond blocking casual
-/// local processes from driving the agent, it lets the health check tell
-/// OUR server apart from a stale instance of a previous run (which has a
-/// different token and answers 401 to ours).
+/// Per-instance auth token for the spawned server. 128 bits from the OS
+/// CSPRNG. Beyond blocking casual local processes from driving the agent,
+/// it lets the health check tell OUR server apart from a stale instance
+/// of a previous run (which has a different token and answers 401 to
+/// ours).
 fn generate_token() -> String {
-    let mut hasher = DefaultHasher::new();
-    std::process::id().hash(&mut hasher);
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or_default();
-    nanos.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes).expect("OS random number source must be available");
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Check a server's GET /api/health over raw TCP. `host` may be a hostname
@@ -143,12 +136,7 @@ fn generate_token() -> String {
 /// without it). The Host header names the target host so the server's Host
 /// guard accepts the probe. Replaces a bare TCP connect, which would accept
 /// ANY process on the port — e.g. a stale server with a different database.
-fn health_check(
-    host: &str,
-    port: u16,
-    token: Option<&str>,
-    timeout: Duration,
-) -> bool {
+fn health_check(host: &str, port: u16, token: Option<&str>, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     // Bracketed IPv6 literals for the Host header and the connect address.
     let is_ipv6 = host.contains(':') && !host.starts_with('[');
@@ -310,18 +298,19 @@ fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         port,
         token: token.clone(),
     });
-    Ok(page_url(
-        &format!("http://127.0.0.1:{port}"),
-        &token,
-    ))
+    Ok(page_url(&format!("http://127.0.0.1:{port}"), &token))
 }
 
 /// Navigate the main window to a URL (local server page or remote server
 /// page).
 fn navigate_main(app: &AppHandle, url: &str) -> Result<(), String> {
-    let parsed = url.parse::<url::Url>().map_err(|e| format!("URL が不正です: {e}"))?;
+    let parsed = url
+        .parse::<url::Url>()
+        .map_err(|e| format!("URL が不正です: {e}"))?;
     if let Some(window) = app.get_webview_window("main") {
-        window.navigate(parsed).map_err(|e| format!("画面遷移に失敗しました: {e}"))?;
+        window
+            .navigate(parsed)
+            .map_err(|e| format!("画面遷移に失敗しました: {e}"))?;
     }
     Ok(())
 }
@@ -332,7 +321,8 @@ fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String
         return Err(format!("サーバーに接続できません: {url}"));
     }
     let page = page_url(url, token);
-    *app.state::<AppState>().last_remote.lock().unwrap() = Some((url.to_string(), token.to_string()));
+    *app.state::<AppState>().last_remote.lock().unwrap() =
+        Some((url.to_string(), token.to_string()));
     navigate_main(app, &page)?;
     Ok(page)
 }
@@ -359,11 +349,21 @@ fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
 /// Current display's auth token (the bridge key).
 fn current_connection_token(app: &AppHandle) -> Option<String> {
     let state = app.state::<AppState>();
-    let remote = state.last_remote.lock().unwrap().as_ref().map(|(_, t)| t.clone());
+    let remote = state
+        .last_remote
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|(_, t)| t.clone());
     if remote.is_some() {
         return remote;
     }
-    let local = state.local.lock().unwrap().as_ref().map(|l| l.token.clone());
+    let local = state
+        .local
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|l| l.token.clone());
     local
 }
 
@@ -413,11 +413,19 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
                 "local"
             };
             let url = if mode == "remote" {
-                state.last_remote.lock().unwrap().as_ref().map(|(u, t)| page_url(u, t))
+                state
+                    .last_remote
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|(u, t)| page_url(u, t))
             } else {
-                state.local.lock().unwrap().as_ref().map(|l| {
-                    page_url(&format!("http://127.0.0.1:{}", l.port), &l.token)
-                })
+                state
+                    .local
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|l| page_url(&format!("http://127.0.0.1:{}", l.port), &l.token))
             };
             let state = ConnectionState {
                 mode: mode.to_string(),
@@ -431,14 +439,18 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
                 _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
             };
             match connect_remote_impl(app, &url, &token) {
-                Ok(page) => {
-                    bridge_json(StatusCode::OK, serde_json::json!({ "ok": true, "url": page }))
-                }
+                Ok(page) => bridge_json(
+                    StatusCode::OK,
+                    serde_json::json!({ "ok": true, "url": page }),
+                ),
                 Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
             }
         }
         "connect-local" => match connect_local_impl(app) {
-            Ok(url) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true, "url": url })),
+            Ok(url) => bridge_json(
+                StatusCode::OK,
+                serde_json::json!({ "ok": true, "url": url }),
+            ),
             Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
         },
         "test" => {
@@ -446,14 +458,13 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
                 (Some(url), token) => (url, token.unwrap_or_default()),
                 _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
             };
-            match parse_remote_url(&url)
-                .and_then(|(host, port)| {
-                    if health_check(&host, port, Some(&token), Duration::from_secs(5)) {
-                        Ok(())
-                    } else {
-                        Err(format!("サーバーに接続できません: {url}"))
-                    }
-                }) {
+            match parse_remote_url(&url).and_then(|(host, port)| {
+                if health_check(&host, port, Some(&token), Duration::from_secs(5)) {
+                    Ok(())
+                } else {
+                    Err(format!("サーバーに接続できません: {url}"))
+                }
+            }) {
                 Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
                 Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
             }

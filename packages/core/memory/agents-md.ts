@@ -24,6 +24,23 @@ export function findRepoRoot(folder: string): string {
   return folder;
 }
 
+/** The directory chain from `folder` up to (and including) the repository
+ * root, ordered root-first. Shared by project memory, skills and plugin
+ * discovery so every `.git`-based walk follows the same rule. */
+export function repoChain(folder: string): string[] {
+  const root = findRepoRoot(folder);
+  const chain: string[] = [folder];
+  let current = folder;
+  while (current !== root) {
+    const parent = join(current, "..");
+    if (parent === current) break;
+    chain.push(parent);
+    current = parent;
+  }
+  chain.reverse();
+  return chain;
+}
+
 function readIfExists(dir: string, name: string): string | undefined {
   const path = join(dir, name);
   try {
@@ -46,19 +63,7 @@ export function loadProjectMemory(folders: string[]): string {
   let budget = MAX_MEMORY_BYTES;
 
   for (const folder of folders) {
-    const root = findRepoRoot(folder);
-    // Walk from the folder up to the root, then reverse so root-first.
-    const chain: string[] = [folder];
-    let current = folder;
-    while (current !== root) {
-      const parent = join(current, "..");
-      if (parent === current) break;
-      chain.push(parent);
-      current = parent;
-    }
-    chain.reverse();
-
-    for (const dir of chain) {
+    for (const dir of repoChain(folder)) {
       const override = readIfExists(dir, "AGENTS.override.md");
       const content = override ?? readIfExists(dir, "AGENTS.md");
       if (content === undefined) continue;
