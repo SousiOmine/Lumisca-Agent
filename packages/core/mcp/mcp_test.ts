@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { errorMessage } from "../errors.ts";
 import {
+  APP_MCP_SETTINGS_KEY,
   loadMcpConfig,
   McpConfigError,
   parseMcpConfig,
@@ -10,6 +11,9 @@ import {
 } from "./config.ts";
 import { McpManager } from "./manager.ts";
 import { createMcpTools, sanitizeServerName } from "./tools.ts";
+import { McpService } from "./service.ts";
+import { createInMemorySettingsRepo } from "../settings/repo.ts";
+import type { Workspace } from "../types/workspace.ts";
 
 // --- config -----------------------------------------------------------------
 
@@ -433,4 +437,76 @@ Deno.test("http servers work over streamable HTTP with session ids", async () =>
   } finally {
     await server.shutdown();
   }
+});
+
+// --- plugin integration (McpService.loadMergedConfig) -----------------------
+
+Deno.test("loadMergedConfig merges app, workspace and plugin MCP servers", async () => {
+  const root = realpathSync(
+    await Deno.makeTempDir({ prefix: "lumisca-mcp-plugins-" }),
+  );
+  const pluginDir = join(root, ".agents", "plugins", "demo");
+  await Deno.mkdir(pluginDir, { recursive: true });
+  await Deno.writeTextFile(
+    join(pluginDir, "plugin.json"),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name: "demo",
+    }),
+  );
+  await Deno.writeTextFile(
+    join(pluginDir, "mcp.json"),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+      mcpServers: {
+        "plugin-server": { type: "stdio", command: "./bin/server" },
+        clash: { type: "stdio", command: "./bin/plugin-clash" },
+        broken: { type: "stdio" }, // invalid entry: skipped with a warning
+      },
+    }),
+  );
+  await Deno.writeTextFile(
+    join(root, ".mcp.json"),
+    JSON.stringify({ mcpServers: { clash: { command: "workspace-clash" } } }),
+  );
+
+  const settings = createInMemorySettingsRepo();
+  settings.set(
+    APP_MCP_SETTINGS_KEY,
+    JSON.stringify({
+      mcpServers: {
+        "app-server": { command: "npx", args: ["-y", "app"] },
+        clash: { command: "app-clash" },
+      },
+    }),
+  );
+  const workspace: Workspace = {
+    id: "w",
+    name: "w",
+    folders: [root],
+    createdAt: 0,
+  };
+  const service = new McpService({
+    settings,
+    listSessions: () => [],
+    agentMcpStatus: () => null,
+    requireWorkspace: () => workspace,
+    applySessionChange: () => {},
+  });
+
+  const merged = service.loadMergedConfig(workspace);
+  const names = merged.config.servers.map((s) => s.name);
+  assertEquals(names, ["app-server", "clash", "plugin-server"]);
+  // Explicit user configuration (workspace over app) wins over plugins.
+  const clash = merged.config.servers.find((s) => s.name === "clash")!;
+  assertEquals(clash.command, "workspace-clash");
+  // Plugin servers get the plugin root as cwd, PLUGIN_ROOT and PLUGIN_DATA.
+  const plugin = merged.config.servers.find((s) => s.name === "plugin-server")!;
+  assertEquals(plugin.command, join(pluginDir, "bin", "server"));
+  assertEquals(plugin.cwd, pluginDir);
+  assertEquals(plugin.env.PLUGIN_ROOT, pluginDir);
+  // The broken plugin entry is reported, not fatal.
+  assertEquals(merged.errors, [
+    'Plugin "demo": MCP server "broken" is invalid; entry skipped',
+  ]);
 });

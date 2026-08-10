@@ -14,6 +14,7 @@ import {
   parseMcpConfig,
 } from "./config.ts";
 import type { McpServerStatus } from "./manager.ts";
+import { discoverPlugins } from "../plugins/discover.ts";
 
 /** The core surface this service needs (implemented by LumiscaCore). */
 export interface McpServiceDeps {
@@ -153,10 +154,12 @@ export class McpService {
     return this.getMcpInfo(workspaceId);
   }
 
-  /** Merge the app-level config with the workspace's `.mcp.json`;
-   * workspace servers override same-named app servers. Config errors are
-   * collected instead of thrown so one broken source cannot break session
-   * creation. */
+  /** Merge the app-level config with the workspace's `.mcp.json` and any
+   * MCP servers contributed by agent plugins; workspace servers override
+   * same-named app servers, and both override same-named plugin servers
+   * (explicit user configuration wins over third-party plugins). Config
+   * errors are collected instead of thrown so one broken source cannot
+   * break session creation. */
   loadMergedConfig(workspace: Workspace): {
     config: McpConfig;
     errors: string[];
@@ -181,6 +184,16 @@ export class McpService {
     const byName = new Map(app.servers.map((s) => [s.name, s]));
     for (const server of workspaceConfig.servers) {
       byName.set(server.name, server);
+    }
+    for (const plugin of discoverPlugins(workspace.folders)) {
+      for (const warning of plugin.warnings) {
+        errors.push(`Plugin "${plugin.name}": ${warning}`);
+      }
+      // Plugin servers fill names no explicit config took (first plugin
+      // wins among plugins).
+      for (const server of plugin.mcpServers) {
+        if (!byName.has(server.name)) byName.set(server.name, server);
+      }
     }
     return {
       config: {

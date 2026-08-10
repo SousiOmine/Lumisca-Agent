@@ -12,7 +12,7 @@ export const MAX_AVAILABLE_SKILLS_BYTES = 16 * 1024;
 /** Cap for a single skill file (SKILL.md or a follow-up read). */
 export const MAX_SKILL_FILE_BYTES = 64 * 1024;
 
-export type SkillSource = "workspace" | "global";
+export type SkillSource = "workspace" | "plugin" | "global";
 
 export interface SkillDef {
   name: string;
@@ -28,13 +28,20 @@ export interface DiscoverOptions {
   /** Global skills directories to scan instead of ~/.agents/skills.
    * Used by tests to avoid touching the real home directory. */
   globalDirs?: string[];
+  /** Skills contributed by discovered agent plugins. They slot in after
+   * workspace skills and before global ones: a workspace skill shadows a
+   * plugin skill of the same name, and a plugin skill shadows a global
+   * one. */
+  pluginSkills?: SkillDef[];
 }
 
 /** Discover skills for a set of workspace folders. For each folder the
  * repository root is located (via `.git`), then every `.agents/skills`
  * directory from the root down to the folder is scanned (root first, like
- * project memory). Global skills (~/.agents/skills) are appended after, so
- * a workspace skill always shadows a global one of the same name. */
+ * project memory). Plugin skills (if given) are merged next, then global
+ * skills (~/.agents/skills) are appended after, so a workspace skill
+ * always shadows a plugin skill, and a plugin skill shadows a global one
+ * of the same name. */
 export function discoverSkills(
   folders: string[],
   options: DiscoverOptions = {},
@@ -62,6 +69,9 @@ export function discoverSkills(
         seenPaths,
       );
     }
+  }
+  for (const skill of options.pluginSkills ?? []) {
+    if (!byName.has(skill.name)) byName.set(skill.name, skill);
   }
   for (const dir of resolveGlobalDirs(options.globalDirs)) {
     scanSkillsDir(dir, "global", byName, seenPaths);

@@ -10,11 +10,26 @@ import { createBashTool } from "./bash.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import type { Tool } from "./schema.ts";
 import { loadProjectMemory } from "../memory/agents-md.ts";
-import { discoverSkills, formatAvailableSkills } from "../skills/discover.ts";
+import {
+  discoverSkills,
+  formatAvailableSkills,
+  type SkillDef,
+} from "../skills/discover.ts";
 import { createSkillTool } from "../skills/tool.ts";
+import { discoverPlugins } from "../plugins/discover.ts";
 
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
+
+/** Skills for a session, in precedence order: workspace `.agents/skills`,
+ * then agent plugin skills (`skills/` of `.agents/plugins` plugins), then
+ * global `~/.agents/skills`. */
+function sessionSkills(folders: string[]): SkillDef[] {
+  const plugins = discoverPlugins(folders);
+  return discoverSkills(folders, {
+    pluginSkills: plugins.flatMap((p) => p.skills),
+  });
+}
 
 export interface ToolFactoryOptions {
   /** Extra environment variables for bash commands. */
@@ -37,7 +52,7 @@ export function createCodingTools(
     createGrepTool(ctx),
     createGlobTool(ctx),
     createBashTool({ sandbox, env: options.env }),
-    createSkillTool({ skills: discoverSkills(workspace.folders) }),
+    createSkillTool({ skills: sessionSkills(workspace.folders) }),
   ];
 }
 
@@ -53,7 +68,7 @@ export function buildSystemPrompt(
   const memorySection = memory
     ? `\n\n# Project memory (AGENTS.md)\n${memory}`
     : "";
-  const skills = discoverSkills(workspace.folders);
+  const skills = sessionSkills(workspace.folders);
   const skillsSection = skills.length > 0
     ? `\n\n# Skills\nSkills are reusable instructions stored as SKILL.md files. ` +
       `When a task matches one of the skills below, load it with the skill ` +

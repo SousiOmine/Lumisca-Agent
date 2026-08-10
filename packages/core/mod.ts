@@ -43,6 +43,20 @@ export type {
 export { McpManager } from "./mcp/manager.ts";
 export type { McpServerStatus, McpToolDef } from "./mcp/manager.ts";
 export { createMcpTools, sanitizeServerName } from "./mcp/tools.ts";
+export { AGENTS_PLUGINS_DIR, discoverPlugins } from "./plugins/discover.ts";
+export type { DiscoverPluginsOptions, PluginDef } from "./plugins/discover.ts";
+export { parsePluginManifest, PLUGIN_SCHEMA_URL } from "./plugins/manifest.ts";
+export type {
+  ManifestLoadResult,
+  PluginAuthor,
+  PluginManifest,
+} from "./plugins/manifest.ts";
+export {
+  MCP_SCHEMA_URL,
+  parsePluginMcp,
+  resolvePluginDataRoot,
+} from "./plugins/mcp.ts";
+export type { PluginMcpResult } from "./plugins/mcp.ts";
 export { CREDENTIAL_KEY_PREFIX } from "./settings/credentials.ts";
 export { THEME_KEY } from "./settings/repo.ts";
 export type { ThemeSetting } from "./shared.ts";
