@@ -22,11 +22,12 @@
         "width": 1280,
         "height": 860,
         "minWidth": 800,
-        "minHeight": 600
+        "minHeight": 600,
+        "backgroundColor": "#1b1b1b"
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://lumisca.localhost; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'"
     }
   },
   "plugins": {

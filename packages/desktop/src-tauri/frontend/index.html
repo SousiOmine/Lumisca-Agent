@@ -2,9 +2,76 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
+    <meta name="color-scheme" content="dark" />
     <title>Lumisca</title>
+    <style>
+      /* Splash shown while the desktop shell starts the bundled server.
+         Colors match the app's dark theme (packages/web/src/styles.css). */
+      :root {
+        --bg: #1b1b1b;
+        --text: #ffffff;
+        --text-dim: #9d9d9d;
+        --accent: #d6d6d6;
+        --error: #f1707b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        user-select: none;
+      }
+      .splash {
+        text-align: center;
+      }
+      .wordmark {
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        margin-bottom: 28px;
+      }
+      .spinner {
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 18px;
+        border: 3px solid rgba(255, 255, 255, 0.15);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .status {
+        color: var(--text-dim);
+        font-size: 13px;
+        margin: 0;
+      }
+      .status.error {
+        color: var(--error);
+        max-width: 420px;
+        line-height: 1.5;
+      }
+    </style>
   </head>
   <body>
-    <p>Lumisca desktop shell: the UI is served by the bundled Lumisca server.</p>
+    <div class="splash">
+      <div class="wordmark">Lumisca</div>
+      <div class="spinner" id="spinner"></div>
+      <p class="status" id="status">起動中…</p>
+    </div>
+    <script src="splash.js"></script>
   </body>
 </html>

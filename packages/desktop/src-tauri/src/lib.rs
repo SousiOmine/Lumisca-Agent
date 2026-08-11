@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, StatusCode};
 use tauri::{AppHandle, Manager, WindowEvent};
@@ -19,6 +19,32 @@ struct AppState {
     update: Mutex<UpdateState>,
     /// Downloaded update awaiting installation.
     pending: Mutex<Option<PendingUpdate>>,
+    /// Local server startup progress, read by the splash page (the
+    /// initial frontend) through the bridge until the window navigates.
+    startup: Mutex<StartupStatus>,
+    /// The in-flight local server start: the background thread fills it
+    /// with the result. connect-local waits on it instead of spawning a
+    /// second server while the startup is still running.
+    startup_task: Mutex<Option<Arc<Mutex<Option<Result<String, String>>>>>>,
+}
+
+/// Local server startup progress, surfaced to the splash page.
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct StartupStatus {
+    /// "starting" | "ready" | "error"
+    status: String,
+    /// Error message when status is "error".
+    error: Option<String>,
+}
+
+impl StartupStatus {
+    fn new(status: &str, error: Option<String>) -> Self {
+        Self {
+            status: status.to_string(),
+            error,
+        }
+    }
 }
 
 /// Auto-update state. Written by the background check/download tasks, read
@@ -68,13 +94,18 @@ struct LocalServer {
     token: String,
 }
 
-/// Current display, shown by the settings UI.
+/// Current display, shown by the settings UI. Also carries the local
+/// server startup progress for the splash page.
 #[derive(serde::Serialize)]
 struct ConnectionState {
     /// "local" | "remote"
     mode: String,
     /// Page URL of the current display, if known.
     url: Option<String>,
+    /// "starting" | "ready" | "error" — local server startup progress.
+    status: String,
+    /// Error message when status is "error".
+    error: Option<String>,
 }
 
 /// JSON body of a lumisca://shell/* bridge response.
@@ -82,6 +113,14 @@ type BridgeResponse = HttpResponse<Vec<u8>>;
 
 const DEFAULT_PORT: u16 = 8000;
 const SERVER_PORT_ENV: &str = "LUMISCA_PORT";
+/// Poll interval while waiting for the local server to come up (the
+/// compiled server answers in ~0.3s; a fast poll keeps the switch to the
+/// app page snappy).
+const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(50);
+/// How long one local startup attempt may wait before the port is
+/// abandoned and a fresh one is tried. 3s covers a cold deno run; a
+/// healthy server answers in well under a second.
+const LOCAL_START_TIMEOUT: Duration = Duration::from_secs(3);
 
 fn find_deno() -> Option<PathBuf> {
     // Respect an explicit override.
@@ -240,7 +279,7 @@ fn health_check(host: &str, port: u16, token: Option<&str>, timeout: Duration) -
                 }
             }
         }
-        std::thread::sleep(Duration::from_millis(200));
+        std::thread::sleep(HEALTH_POLL_INTERVAL);
     }
     false
 }
@@ -354,7 +393,7 @@ fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
     for attempt in 0..10 {
         let port = resolve_port();
         let mut child = start_server(app, port, &token)?;
-        if health_check("127.0.0.1", port, Some(&token), Duration::from_secs(5)) {
+        if health_check("127.0.0.1", port, Some(&token), LOCAL_START_TIMEOUT) {
             server_child = Some(child);
             server_port = Some(port);
             break;
@@ -374,6 +413,47 @@ fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         token: token.clone(),
     });
     Ok(page_url(&format!("http://127.0.0.1:{port}"), &token))
+}
+
+/// Start the local server in the background and navigate the main window
+/// to its page once it is healthy. setup() returns immediately so the
+/// splash page paints without waiting; the bridge state reports the
+/// progress ("starting" → "ready"/"error") for the splash to poll.
+fn start_local_server_async(app: &AppHandle) {
+    let shared: Arc<Mutex<Option<Result<String, String>>>> =
+        Arc::new(Mutex::new(None));
+    *app.state::<AppState>().startup_task.lock().unwrap() = Some(shared.clone());
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let result = ensure_local_server(&handle);
+        let (status, error) = match &result {
+            Ok(_) => ("ready", None),
+            Err(message) => ("error", Some(message.clone())),
+        };
+        {
+            let state = handle.state::<AppState>();
+            *shared.lock().unwrap() = Some(result.clone());
+            *state.startup_task.lock().unwrap() = None;
+            *state.startup.lock().unwrap() = StartupStatus::new(status, error);
+        }
+        if let Ok(url) = result {
+            let handle = handle.clone();
+            let inside = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                // A remote connection made while the local server was
+                // starting wins: don't yank the window back to local.
+                let remote = inside
+                    .state::<AppState>()
+                    .last_remote
+                    .lock()
+                    .unwrap()
+                    .is_some();
+                if !remote {
+                    let _ = navigate_main(&inside, &url);
+                }
+            });
+        }
+    });
 }
 
 /// Navigate the main window to a URL (local server page or remote server
@@ -403,6 +483,22 @@ fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String
 }
 
 fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
+    // If the background startup is still running, wait for its result
+    // instead of spawning a second server instance.
+    let pending = app
+        .state::<AppState>()
+        .startup_task
+        .lock()
+        .unwrap()
+        .clone();
+    if let Some(shared) = pending {
+        loop {
+            if let Some(result) = shared.lock().unwrap().clone() {
+                return result;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
     let url = ensure_local_server(app)?;
     *app.state::<AppState>().last_remote.lock().unwrap() = None;
     navigate_main(app, &url)?;
@@ -688,6 +784,7 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
     match action.as_str() {
         "state" => {
             let state = app.state::<AppState>();
+            let startup = state.startup.lock().unwrap();
             let mode = if state.last_remote.lock().unwrap().is_some() {
                 "remote"
             } else {
@@ -711,6 +808,8 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
             let state = ConnectionState {
                 mode: mode.to_string(),
                 url,
+                status: startup.status.clone(),
+                error: startup.error.clone(),
             };
             bridge_json(StatusCode::OK, serde_json::to_value(state).unwrap())
         }
@@ -799,12 +898,16 @@ pub fn run() {
                 last_remote: Mutex::new(None),
                 update: Mutex::new(UpdateState::new(settings.auto_update)),
                 pending: Mutex::new(None),
+                startup: Mutex::new(StartupStatus::new("starting", None)),
+                startup_task: Mutex::new(None),
             });
 
-            // Always start local; the federated view of every registered
-            // server is served by this hub.
-            let url = ensure_local_server(&handle)?;
-            navigate_main(&handle, &url)?;
+            // Start the local server in the background: the initial splash
+            // page paints right away and the window navigates to the
+            // server as soon as it answers /api/health. Blocking setup
+            // here would keep the placeholder visible for the whole
+            // server startup.
+            start_local_server_async(&handle);
 
             // Periodic auto-update loop: the first check shortly after
             // startup so the UI is up, then every 6 hours. Each cycle is
