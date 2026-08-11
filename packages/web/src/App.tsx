@@ -1,4 +1,11 @@
-import { type ReactElement, useCallback, useRef, useState } from "react";
+import {
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { IconDownload, IconX } from "@tabler/icons-react";
 import { api, fed, modelApi, sessionApi } from "./api.ts";
 import type {
   FederatedWorkspace,
@@ -13,6 +20,7 @@ import { splitTabKey, tabKey } from "./tabs.ts";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
+import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
 import { TabBar } from "./components/TabBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
@@ -48,6 +56,21 @@ export function App({ initialData }: AppProps): ReactElement {
   const [showSettings, setShowSettings] = useState(false);
   // Serial number for model switches: a stale response is discarded.
   const modelChangeSeq = useRef(0);
+  // Auto-update state (desktop only); polled here and shared with the
+  // settings panel and the update banner below.
+  const update = useUpdateStatus(true);
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
+  // Re-show the banner when a new update finishes downloading (the ready
+  // flag toggles false -> true), but not on every poll while it stays
+  // ready.
+  const updateReadyRef = useRef(false);
+  useEffect(() => {
+    const ready = update.status?.ready ?? false;
+    if (ready && !updateReadyRef.current) {
+      setUpdateBannerDismissed(false);
+    }
+    updateReadyRef.current = ready;
+  }, [update.status?.ready]);
 
   /** Create a session from the draft tab and send the first prompt. The
    * session runs on the peer that owns the workspace (remote workspaces
@@ -188,6 +211,31 @@ export function App({ initialData }: AppProps): ReactElement {
         onNew={openDraftTab}
         onOpenSettings={() => setShowSettings(true)}
       />
+      {update.status?.ready && !updateBannerDismissed && (
+        <div className="update-banner">
+          <IconDownload size={16} />
+          <span className="update-banner-text">
+            Lumisca v{update.status.latestVersion}{" "}
+            のアップデートが準備できました。インストールするとアプリが再起動します。
+          </span>
+          <button
+            type="button"
+            className="btn push"
+            onClick={update.install}
+          >
+            インストール
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setUpdateBannerDismissed(true)}
+            title="閉じる"
+            aria-label="閉じる"
+          >
+            <IconX size={14} />
+          </button>
+        </div>
+      )}
       {loadError && (
         <div className="msg">
           <div className="msg-body error-text">
@@ -231,6 +279,7 @@ export function App({ initialData }: AppProps): ReactElement {
         <SettingsModal
           theme={theme}
           onThemeChange={setTheme}
+          update={update}
           onClose={() => setShowSettings(false)}
         />
       )}

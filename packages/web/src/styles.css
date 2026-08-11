@@ -2217,6 +2217,99 @@ select:focus {
   transform: translateX(16px);
 }
 
+/* ---- general settings (app info / auto-update) ---------------------------- */
+
+.update-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+
+.update-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.update-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.update-desc {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.update-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+}
+
+.update-status-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.update-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.update-progress {
+  width: 140px;
+  height: 6px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--surface-3, #ccc);
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
+.update-percent {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- update banner -------------------------------------------------------- */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.update-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.update-banner .btn {
+  flex: none;
+}
+
 /* ---- workspace folder picker ------------------------------------------------ */
 
 .folder-picker {

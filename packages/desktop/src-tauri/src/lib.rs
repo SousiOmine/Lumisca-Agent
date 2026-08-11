@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, StatusCode};
 use tauri::{AppHandle, Manager, WindowEvent};
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 /// State shared by the shell bridge and the window lifecycle.
 struct AppState {
@@ -14,6 +15,50 @@ struct AppState {
     /// The last remote server the user switched to (url, token) — the
     /// "current display" reported by the bridge state.
     last_remote: Mutex<Option<(String, String)>>,
+    /// Auto-update state, surfaced to the settings UI through the bridge.
+    update: Mutex<UpdateState>,
+    /// Downloaded update awaiting installation.
+    pending: Mutex<Option<PendingUpdate>>,
+}
+
+/// Auto-update state. Written by the background check/download tasks, read
+/// by the bridge (and thus the settings UI).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateState {
+    auto_update: bool,
+    checking: bool,
+    available: bool,
+    latest_version: Option<String>,
+    downloading: bool,
+    progress: Option<f64>,
+    downloaded: Option<u64>,
+    total: Option<u64>,
+    ready: bool,
+    error: Option<String>,
+}
+
+impl UpdateState {
+    fn new(auto_update: bool) -> Self {
+        Self {
+            auto_update,
+            checking: false,
+            available: false,
+            latest_version: None,
+            downloading: false,
+            progress: None,
+            downloaded: None,
+            total: None,
+            ready: false,
+            error: None,
+        }
+    }
+}
+
+/// A downloaded update awaiting installation.
+struct PendingUpdate {
+    update: Update,
+    bytes: Vec<u8>,
 }
 
 /// A locally spawned server process.
@@ -104,6 +149,36 @@ fn server_db_path(app: &AppHandle) -> PathBuf {
     let dir = app_data_dir(app);
     let _ = std::fs::create_dir_all(&dir);
     dir.join("lumisca.db")
+}
+
+/// Desktop-level settings (auto-update etc.). Kept next to the server
+/// database: the settings UI may be served by a remote server, so these
+/// flags cannot live in that server's settings.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct DesktopSettings {
+    auto_update: bool,
+}
+
+impl Default for DesktopSettings {
+    fn default() -> Self {
+        Self { auto_update: true }
+    }
+}
+
+fn desktop_settings_path(app: &AppHandle) -> PathBuf {
+    app_data_dir(app).join("settings.json")
+}
+
+fn load_desktop_settings(app: &AppHandle) -> DesktopSettings {
+    std::fs::read_to_string(desktop_settings_path(app))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_desktop_settings(app: &AppHandle, settings: &DesktopSettings) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    std::fs::write(desktop_settings_path(app), json).map_err(|e| e.to_string())
 }
 
 /// Pick a free port by binding to port 0, unless one was requested.
@@ -334,6 +409,209 @@ fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
     Ok(url)
 }
 
+// --- auto-update ------------------------------------------------------------
+//
+// The desktop shell checks GitHub Releases through tauri-plugin-updater
+// (configured in tauri.conf.json). The settings UI is served by the
+// (possibly remote) server, so it drives updates through the bridge and
+// polls the state below while a check/download is in flight.
+
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+const FIRST_UPDATE_CHECK_DELAY: Duration = Duration::from_secs(10);
+
+/// The current update state as JSON for the bridge, plus the running app
+/// version (shown in the 一般 settings panel).
+fn update_status_json(app: &AppHandle) -> serde_json::Value {
+    let state = app.state::<AppState>();
+    let st = state.update.lock().unwrap();
+    let mut value = serde_json::to_value(&*st).unwrap_or_else(|_| serde_json::json!({}));
+    value["currentVersion"] = app.package_info().version.to_string().into();
+    value
+}
+
+fn fail_update(app: &AppHandle, message: &str) {
+    let state = app.state::<AppState>();
+    let mut st = state.update.lock().unwrap();
+    st.checking = false;
+    st.downloading = false;
+    st.error = Some(message.to_string());
+}
+
+/// Check for a new version. In auto mode (startup, the periodic loop,
+/// turning the toggle on) an available update is downloaded right away; a
+/// manual check only records it and leaves the download to the user.
+async fn check_for_updates(app: AppHandle, auto: bool) {
+    // Decide what to do while holding the lock; the guard must be dropped
+    // before the awaits below.
+    let auto_download = {
+        let state = app.state::<AppState>();
+        let mut st = state.update.lock().unwrap();
+        if st.checking || st.downloading || st.ready {
+            return;
+        }
+        if st.available {
+            // Already known (e.g. from a manual check); auto mode proceeds
+            // to the download, otherwise there is nothing to do.
+            if !(auto && st.auto_update) {
+                return;
+            }
+            true
+        } else {
+            st.checking = true;
+            st.error = None;
+            false
+        }
+    };
+
+    if auto_download {
+        download_update(app).await;
+        return;
+    }
+
+    // A fresh network check (the state was not marked available).
+    let cleanup_app = app.clone();
+    let updater = match app
+        .updater_builder()
+        .on_before_exit(move || {
+            if let Some(mut local) = cleanup_app.state::<AppState>().local.lock().unwrap().take() {
+                kill_process_tree(&mut local.child);
+            }
+            cleanup_app.cleanup_before_exit();
+        })
+        .build()
+    {
+        Ok(updater) => updater,
+        Err(e) => {
+            fail_update(&app, &format!("更新の確認に失敗しました: {e}"));
+            return;
+        }
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            {
+                let state = app.state::<AppState>();
+                let mut st = state.update.lock().unwrap();
+                st.checking = false;
+                st.available = true;
+                st.latest_version = Some(update.version.to_string());
+            }
+            *app.state::<AppState>().pending.lock().unwrap() = Some(PendingUpdate {
+                update,
+                bytes: Vec::new(),
+            });
+            if auto {
+                download_update(app).await;
+            }
+        }
+        Ok(None) => {
+            let state = app.state::<AppState>();
+            let mut st = state.update.lock().unwrap();
+            st.checking = false;
+            st.available = false;
+            st.latest_version = None;
+            st.ready = false;
+            st.downloading = false;
+            st.progress = None;
+            st.downloaded = None;
+            st.total = None;
+        }
+        Err(e) => fail_update(&app, &format!("更新の確認に失敗しました: {e}")),
+    }
+}
+
+/// Download the available update into memory, reporting progress through
+/// the state. The bytes stay in `pending` until the user installs.
+async fn download_update(app: AppHandle) {
+    {
+        let state = app.state::<AppState>();
+        let mut st = state.update.lock().unwrap();
+        if !st.available || st.downloading || st.ready {
+            return;
+        }
+        st.downloading = true;
+        st.progress = Some(0.0);
+        st.downloaded = Some(0);
+        st.error = None;
+    }
+
+    let pending = app.state::<AppState>().pending.lock().unwrap().take();
+    let Some(pending) = pending else {
+        let state = app.state::<AppState>();
+        let mut st = state.update.lock().unwrap();
+        st.downloading = false;
+        st.error =
+            Some("ダウンロードできる更新が見つかりません。もう一度確認してください。".into());
+        return;
+    };
+
+    let mut received = 0u64;
+    let result = pending
+        .update
+        .download(
+            |chunk, total| {
+                received += chunk as u64;
+                let state = app.state::<AppState>();
+                let mut st = state.update.lock().unwrap();
+                st.downloaded = Some(received);
+                st.total = total;
+                st.progress = total.map(|t| received as f64 / t as f64);
+            },
+            || {},
+        )
+        .await;
+
+    match result {
+        Ok(bytes) => {
+            *app.state::<AppState>().pending.lock().unwrap() = Some(PendingUpdate {
+                update: pending.update,
+                bytes,
+            });
+            let state = app.state::<AppState>();
+            let mut st = state.update.lock().unwrap();
+            st.downloading = false;
+            st.ready = true;
+            st.progress = Some(1.0);
+        }
+        Err(e) => {
+            // Keep the update record so the download can be retried.
+            *app.state::<AppState>().pending.lock().unwrap() = Some(PendingUpdate {
+                update: pending.update,
+                bytes: Vec::new(),
+            });
+            let state = app.state::<AppState>();
+            let mut st = state.update.lock().unwrap();
+            st.downloading = false;
+            st.ready = false;
+            st.progress = None;
+            st.error = Some(format!("ダウンロードに失敗しました: {e}"));
+        }
+    }
+}
+
+/// Install the downloaded update. On Windows this launches the NSIS
+/// installer and exits the process (the installer relaunches the app). The
+/// updater's `on_before_exit` hook stops the local server only after the
+/// installer is ready to launch, so an earlier failure leaves the UI alive.
+fn install_update(app: AppHandle) {
+    std::thread::spawn(move || {
+        let pending = app.state::<AppState>().pending.lock().unwrap().take();
+        let Some(pending) = pending else {
+            let state = app.state::<AppState>();
+            let mut st = state.update.lock().unwrap();
+            st.error = Some("インストールできる更新がありません。".into());
+            return;
+        };
+        if let Err(e) = pending.update.install(&pending.bytes) {
+            *app.state::<AppState>().pending.lock().unwrap() = Some(pending);
+            let state = app.state::<AppState>();
+            let mut st = state.update.lock().unwrap();
+            st.error = Some(format!("インストールに失敗しました: {e}"));
+        }
+        // On success the installer is running and this process has exited.
+    });
+}
+
 // --- lumisca://shell bridge -------------------------------------------------
 //
 // The settings UI is served by the (possibly remote) server, so it cannot
@@ -469,6 +747,39 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
                 Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
             }
         }
+        // --- auto-update ---
+        "update/status" => bridge_json(StatusCode::OK, update_status_json(app)),
+        "update/set-auto" => {
+            let enabled = match get("enabled").and_then(|v| v.parse::<bool>().ok()) {
+                Some(enabled) => enabled,
+                None => return bridge_error(StatusCode::BAD_REQUEST, "enabled required"),
+            };
+            let mut settings = load_desktop_settings(app);
+            settings.auto_update = enabled;
+            match save_desktop_settings(app, &settings) {
+                Ok(()) => {
+                    app.state::<AppState>().update.lock().unwrap().auto_update = enabled;
+                    // Turning it on kicks off the first check immediately.
+                    if enabled {
+                        tauri::async_runtime::spawn(check_for_updates(app.clone(), true));
+                    }
+                    bridge_json(StatusCode::OK, update_status_json(app))
+                }
+                Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
+            }
+        }
+        "update/check" => {
+            tauri::async_runtime::spawn(check_for_updates(app.clone(), false));
+            bridge_json(StatusCode::OK, update_status_json(app))
+        }
+        "update/download" => {
+            tauri::async_runtime::spawn(download_update(app.clone()));
+            bridge_json(StatusCode::OK, update_status_json(app))
+        }
+        "update/install" => {
+            install_update(app.clone());
+            bridge_json(StatusCode::OK, update_status_json(app))
+        }
         _ => bridge_error(StatusCode::NOT_FOUND, "unknown action"),
     }
 }
@@ -476,17 +787,37 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
+            let settings = load_desktop_settings(&handle);
             app.manage(AppState {
                 local: Mutex::new(None),
                 last_remote: Mutex::new(None),
+                update: Mutex::new(UpdateState::new(settings.auto_update)),
+                pending: Mutex::new(None),
             });
 
             // Always start local; the federated view of every registered
             // server is served by this hub.
             let url = ensure_local_server(&handle)?;
             navigate_main(&handle, &url)?;
+
+            // Periodic auto-update loop: the first check shortly after
+            // startup so the UI is up, then every 6 hours. Each cycle is
+            // skipped while a check, download or pending install is in
+            // flight.
+            std::thread::spawn(move || {
+                std::thread::sleep(FIRST_UPDATE_CHECK_DELAY);
+                loop {
+                    let state = handle.state::<AppState>();
+                    let auto = state.update.lock().unwrap().auto_update;
+                    if auto {
+                        tauri::async_runtime::spawn(check_for_updates(handle.clone(), true));
+                    }
+                    std::thread::sleep(UPDATE_CHECK_INTERVAL);
+                }
+            });
 
             Ok(())
         })

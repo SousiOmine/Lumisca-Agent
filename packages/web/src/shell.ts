@@ -55,3 +55,37 @@ export function shellAvailable(): Promise<boolean> {
 
 /** Registry entries as exposed by the shell bridge. */
 export type ShellServer = ConnectionEntry;
+
+/** Auto-update state reported by the shell bridge (`update/status`). */
+export interface UpdateStatus {
+  /** 自動アップデートが有効か (設定の永続値)。 */
+  autoUpdate: boolean;
+  /** 更新チェック実行中。 */
+  checking: boolean;
+  /** 新しいバージョンが存在する。 */
+  available: boolean;
+  /** 最新バージョン (確認済みのときのみ)。 */
+  latestVersion: string | null;
+  /** ダウンロード実行中。 */
+  downloading: boolean;
+  /** ダウンロード進捗 0..1 (総サイズ不明時は null)。 */
+  progress: number | null;
+  downloaded: number | null;
+  total: number | null;
+  /** ダウンロード完了・インストール待ち。 */
+  ready: boolean;
+  error: string | null;
+  /** 現在実行中のアプリバージョン。 */
+  currentVersion: string;
+}
+
+/** Auto-update actions. Every call returns the fresh status so the UI can
+ * update immediately without waiting for the next poll. */
+export const updateApi = {
+  status: () => shellCall<UpdateStatus>("update/status"),
+  setAuto: (enabled: boolean) =>
+    shellCall<UpdateStatus>("update/set-auto", { enabled: String(enabled) }),
+  check: () => shellCall<UpdateStatus>("update/check"),
+  download: () => shellCall<UpdateStatus>("update/download"),
+  install: () => shellCall<UpdateStatus>("update/install"),
+};

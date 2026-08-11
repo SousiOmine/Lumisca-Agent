@@ -5,6 +5,7 @@ import {
   IconPalette,
   IconPlugConnected,
   IconServer,
+  IconSettings,
   IconUser,
   IconWorld,
   IconX,
@@ -19,15 +20,19 @@ import { McpList } from "./settings/McpList.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { AppearancePanel } from "./settings/AppearancePanel.tsx";
+import { GeneralPanel } from "./settings/GeneralPanel.tsx";
+import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import type { ThemeSetting } from "../types.ts";
 
 interface SettingsModalProps {
   theme: ThemeSetting;
   onThemeChange: (theme: ThemeSetting) => void;
+  update: UpdateControls;
   onClose: () => void;
 }
 
 type Category =
+  | "general"
   | "providers"
   | "models"
   | "mcp"
@@ -45,6 +50,11 @@ const CATEGORIES: {
   label: string;
   icon: ReactNode;
 }[] = [
+  {
+    id: "general",
+    label: "一般",
+    icon: <IconSettings size={18} />,
+  },
   {
     id: "appearance",
     label: "外観",
@@ -72,9 +82,10 @@ const CATEGORIES: {
 export function SettingsModal({
   theme,
   onThemeChange,
+  update,
   onClose,
 }: SettingsModalProps) {
-  const [category, setCategory] = useState<Category>("providers");
+  const [category, setCategory] = useState<Category>("general");
   const [providersView, setProvidersView] = useState<ProvidersView>({
     kind: "list",
   });
@@ -121,6 +132,15 @@ export function SettingsModal({
         </nav>
 
         <div className="settings-content">
+          {category === "general" && (
+            <GeneralPanel
+              status={update.status}
+              onSetAuto={update.setAuto}
+              onCheck={update.check}
+              onDownload={update.download}
+              onInstall={update.install}
+            />
+          )}
           {category === "providers" && providersView.kind === "list" && (
             <ProviderList
               onAdd={() => setProvidersView({ kind: "add" })}
