@@ -55,7 +55,6 @@ export interface CreateSessionInput {
   /** Omitted → the last-used model (or the first enabled model) is used. */
   modelProvider?: string;
   modelId?: string;
-  systemPrompt?: string;
 }
 
 /**
@@ -95,7 +94,8 @@ export class LumiscaCore {
       renameSession: (id, name) => this.setSessionName(id, name),
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
-      buildGeneratedPrompt: (workspace) => this.buildGeneratedPrompt(workspace),
+      buildGeneratedPrompt: (workspace, model) =>
+        this.buildGeneratedPrompt(workspace, model),
       updateSystemPrompt: (id, systemPrompt) =>
         this.sessions.updateSystemPrompt(id, systemPrompt),
       streamFn: this.models.models.streamSimple.bind(this.models.models),
@@ -421,20 +421,15 @@ export class LumiscaCore {
     const workspace = this.requireWorkspace(input.workspaceId);
     const model = this.resolveDefaultModel(input.modelProvider, input.modelId);
     // Generated prompts are snapshotted here, at creation time (workspace
-    // AGENTS.md + personalization included), and stored with the session:
-    // later edits to either AGENTS.md must not affect this session. Custom
-    // prompts are stored verbatim and never augmented.
-    const isCustom = input.systemPrompt !== undefined;
-    const systemPrompt = isCustom
-      ? input.systemPrompt
-      : this.buildGeneratedPrompt(workspace);
+    // AGENTS.md + environment + personalization included), and stored with
+    // the session: later edits to either AGENTS.md must not affect it.
+    const systemPrompt = this.buildGeneratedPrompt(workspace, model);
     const session = this.sessions.create({
       workspaceId: workspace.id,
       name: input.name ?? `Session ${new Date().toLocaleString()}`,
       modelProvider: model.provider,
       modelId: model.modelId,
       systemPrompt,
-      systemPromptCustom: isCustom,
     });
     this.pool.open(session, workspace, []);
     this.emit({ type: "session_created", session });
@@ -649,10 +644,24 @@ export class LumiscaCore {
   }
 
   /** The full generated system prompt for a workspace: base prompt +
-   * project memory (workspace AGENTS.md) + personalization (machine
-   * AGENTS.md, appended last). */
-  private buildGeneratedPrompt(workspace: Workspace): string {
-    return buildSystemPrompt(workspace, this.loadPersonalInstructions());
+   * environment section + project memory (workspace AGENTS.md) +
+   * personalization (machine AGENTS.md, appended last). `model` fills in
+   * the environment section's model line. */
+  private buildGeneratedPrompt(
+    workspace: Workspace,
+    model?: { provider: string; modelId: string },
+  ): string {
+    const resolved = model
+      ? {
+        ...model,
+        name: this.models.getModel(model.provider, model.modelId)?.name,
+      }
+      : undefined;
+    return buildSystemPrompt(
+      workspace,
+      this.loadPersonalInstructions(),
+      resolved,
+    );
   }
 
   /** Resolve workspace folders to real paths; rejects missing ones. */

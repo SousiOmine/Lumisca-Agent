@@ -48,6 +48,9 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     ),
   // Settings moved out of the database into ~/.config/lumisca-agent/settings.jsonc.
   (db) => db.exec("DROP TABLE IF EXISTS settings"),
+  // Custom system prompts were removed: sessions always use the generated
+  // prompt, snapshotted at creation. Drop the distinguishing flag.
+  (db) => db.exec("ALTER TABLE sessions DROP COLUMN system_prompt_custom"),
 ];
 
 /** Apply pending migrations, tracked via PRAGMA user_version. */

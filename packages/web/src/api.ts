@@ -103,7 +103,6 @@ export const api = {
     name?: string;
     modelProvider?: string;
     modelId?: string;
-    systemPrompt?: string;
   }) =>
     request<SessionInfo>("/api/sessions", {
       method: "POST",

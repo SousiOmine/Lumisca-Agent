@@ -27,7 +27,6 @@ function toSession(row: {
   model_provider: string;
   model_id: string;
   system_prompt: string | null;
-  system_prompt_custom: number;
   created_at: number;
   updated_at: number;
 }): SessionRecord {
@@ -38,7 +37,6 @@ function toSession(row: {
     modelProvider: row.model_provider,
     modelId: row.model_id,
     systemPrompt: row.system_prompt ?? undefined,
-    systemPromptCustom: row.system_prompt_custom === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -46,8 +44,8 @@ function toSession(row: {
 
 export function createSessionRepo(db: LumiscaDb): SessionRepo {
   const insertStmt = db.db.prepare(`
-    INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, system_prompt_custom, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getStmt = db.db.prepare("SELECT * FROM sessions WHERE id = ?");
   const listStmt = db.db.prepare(
@@ -82,7 +80,6 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         input.modelProvider,
         input.modelId,
         input.systemPrompt ?? null,
-        input.systemPromptCustom === true ? 1 : 0,
         createdAt,
         updatedAt,
       );
@@ -93,7 +90,6 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         modelProvider: input.modelProvider,
         modelId: input.modelId,
         systemPrompt: input.systemPrompt,
-        systemPromptCustom: input.systemPromptCustom === true,
         createdAt,
         updatedAt,
       };

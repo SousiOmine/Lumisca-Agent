@@ -29,8 +29,11 @@ export interface SessionPoolDeps {
   getThinkingLevel(provider: string, modelId: string): ThinkingLevel;
   /** Full generated system prompt for a workspace (project memory +
    * personalization included); used only for legacy sessions that predate
-   * prompt snapshots. */
-  buildGeneratedPrompt(workspace: Workspace): string;
+   * prompt snapshots. `model` fills in the environment section. */
+  buildGeneratedPrompt(
+    workspace: Workspace,
+    model?: { provider: string; modelId: string },
+  ): string;
   /** Persist a rebuilt system prompt (legacy-session migration). */
   updateSystemPrompt(id: string, systemPrompt: string): void;
   streamFn: StreamFn;
@@ -113,7 +116,10 @@ export class SessionPool {
     // frozen against AGENTS.md edits.
     let systemPrompt = session.systemPrompt;
     if (systemPrompt === undefined) {
-      systemPrompt = this.deps.buildGeneratedPrompt(workspace);
+      systemPrompt = this.deps.buildGeneratedPrompt(workspace, {
+        provider: session.modelProvider,
+        modelId: session.modelId,
+      });
       this.deps.updateSystemPrompt(session.id, systemPrompt);
     }
     const agent = new SessionAgentImpl({

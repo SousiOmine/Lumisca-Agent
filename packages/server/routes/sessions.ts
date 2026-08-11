@@ -12,7 +12,6 @@ interface SessionBody {
   name?: unknown;
   modelProvider?: unknown;
   modelId?: unknown;
-  systemPrompt?: unknown;
 }
 
 /** Attachments allowed per prompt, and the base64 length cap per image
@@ -138,9 +137,6 @@ export function sessionRoutes(core: SessionApi): Hono {
         ? body.modelProvider
         : undefined,
       modelId: typeof body.modelId === "string" ? body.modelId : undefined,
-      systemPrompt: typeof body.systemPrompt === "string"
-        ? body.systemPrompt
-        : undefined,
     });
     return c.json(session, 201);
   });

@@ -432,7 +432,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db1.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    3,
+    4,
   );
   db1.close();
 
@@ -441,7 +441,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db2.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    3,
+    4,
   );
   db2.close();
 
@@ -453,8 +453,25 @@ Deno.test("migration drops the legacy settings table", async () => {
   const path = join(dir, "legacy.db");
 
   // A database created before settings moved to the settings file still
-  // carries the settings table; opening it must drop it.
+  // carries the settings table; opening it must drop it. It also predates
+  // the custom-system-prompt removal, so its sessions table still has the
+  // system_prompt_custom column, which the latest migration drops.
   const legacy = new DatabaseSync(path);
+  legacy.exec(
+    `CREATE TABLE sessions (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      model_provider TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      system_prompt TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`,
+  );
+  legacy.exec(
+    "ALTER TABLE sessions ADD COLUMN system_prompt_custom INTEGER NOT NULL DEFAULT 0",
+  );
   legacy.exec(
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
   );
@@ -468,10 +485,15 @@ Deno.test("migration drops the legacy settings table", async () => {
     )
     .get();
   assertEquals(table, undefined);
+  const column = db.db
+    .prepare("PRAGMA table_info(sessions)")
+    .all()
+    .find((c) => c.name === "system_prompt_custom");
+  assertEquals(column, undefined);
   assertEquals(
     (db.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    3,
+    4,
   );
   db.close();
 
@@ -675,7 +697,6 @@ Deno.test("generated system prompt is snapshotted at creation, not rebuilt on re
   });
   const agent = core.getAgent(session.id)!;
   assertEquals(agent.agent.state.systemPrompt.includes("Use Deno 2."), true);
-  assertEquals(session.systemPromptCustom, false);
 
   // Editing AGENTS.md must NOT affect the existing session: the prompt is
   // a snapshot taken at creation and reused verbatim on reopen.
@@ -772,34 +793,6 @@ Deno.test("personalization (machine AGENTS.md) is appended last and frozen per s
   core.close();
   await Deno.remove(dir, { recursive: true });
   await Deno.remove(root, { recursive: true });
-});
-
-Deno.test("custom system prompt is preserved across reopen", async () => {
-  const { core, faux: _faux, providerId, modelId } = setup();
-  const { ws } = await makeWorkspace(core);
-
-  const session = core.createSession({
-    workspaceId: ws.id,
-    modelProvider: providerId,
-    modelId,
-    systemPrompt: "You are a specialized reviewer.",
-  });
-  assertEquals(session.systemPromptCustom, true);
-  const agent = core.getAgent(session.id)!;
-  assertEquals(
-    agent.agent.state.systemPrompt,
-    "You are a specialized reviewer.",
-  );
-
-  core.closeSession(session.id);
-  const reopened = await core.openSession(session.id);
-  assertEquals(reopened.systemPromptCustom, true);
-  assertEquals(
-    core.getAgent(session.id)!.agent.state.systemPrompt,
-    "You are a specialized reviewer.",
-  );
-
-  core.close();
 });
 
 Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => {

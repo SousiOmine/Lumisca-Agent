@@ -13,6 +13,10 @@ import { createGlobTool, createGrepTool } from "./search.ts";
 import type { Tool } from "./schema.ts";
 import { loadProjectMemory } from "../memory/agents-md.ts";
 import {
+  buildEnvironmentSection,
+  type EnvironmentModel,
+} from "../environment.ts";
+import {
   discoverSkills,
   formatAvailableSkills,
   type SkillDef,
@@ -67,10 +71,13 @@ export function createCodingTools(
 
 /** System prompt describing the agent and its workspace boundaries.
  * `personalInstructions` (the machine-level AGENTS.md next to the settings
- * file) is appended at the very end, after project memory. */
+ * file) is appended at the very end, after project memory. `model` (the
+ * session's model, when known) appears in the environment section between
+ * the workspace folders and the guidelines. */
 export function buildSystemPrompt(
   workspace: Workspace,
   personalInstructions?: string,
+  model?: EnvironmentModel,
 ): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
   const memory = loadProjectMemory(workspace.folders);
@@ -98,24 +105,35 @@ export function buildSystemPrompt(
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
-${folders}
+${folders}${buildEnvironmentSection(model)}
 
 Guidelines:
-- Read files before editing them.
 - Paths are either absolute or relative to the workspace. A relative path must
   start with the name of a workspace folder above, e.g. \`Aaa/README.md\`.
-- The bash tool requires a \`cwd\` argument: a workspace folder name (e.g.
-  \`Aaa\`) or an absolute path.
 - Long-running commands (dev servers, watchers, downloads) should be started
   with async_bash instead of bash: it returns immediately and the command
   keeps running after the run ends. Check progress with async_bash_status,
-  stop a command with async_bash_kill. Commands killed with async_bash_kill
-  produce no completion notification - the tool result is the confirmation.
+  stop a command with async_bash_kill.
 - A user message starting with "[Background command ...]" is a system
   notification about a background command, not a message from the user:
   acknowledge it, but do not mistake it for user input.
+- Use the dedicated tools: read to read files, edit to edit them, grep to
+  search, glob to explore structure.
 - After making changes, verify them (run tests, builds) when appropriate.
 - Ask the user when a task is ambiguous.
+- Prioritize correctness above all else.
+- Write code with future maintainers in mind.
+- Avoid unnecessary allocations and computation.
+- Never discard changes the user has already made.
+- For multi-file changes, plan before editing, investigate existing patterns
+  before implementing, and fix root causes rather than symptoms. Do a clean
+  cutover: leave no old callers or compatibility shims behind.
+- Do not stop halfway: carry the work through until the deliverable is
+  complete.
+- Never fabricate tool or test results.
+- Do not silently narrow the requested scope.
+- Do not hand in TODOs or placeholder implementations as finished work.
+- Do not ask the user for information you can obtain from your tools.
 ${memorySection}${skillsSection}${personalSection}
 `;
 }
