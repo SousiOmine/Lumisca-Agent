@@ -21,6 +21,11 @@ import type { McpServerStatus } from "../mcp/manager.ts";
 import { createMcpTools } from "../mcp/tools.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
+import type {
+  BackgroundCommandDone,
+  BackgroundProcessManager,
+} from "../tools/background.ts";
+import { formatCompletionNotification } from "../tools/background.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 
@@ -41,6 +46,10 @@ export interface SessionAgentOptions {
   /** The configured fast model: generates the session title from the
    * first user message (see TitleGenerator). */
   fastModel?: Model<Api>;
+  /** Background-command manager backing the async_bash tools. Its
+   * completion events are injected into the agent loop as notifications
+   * (see notifyBackgroundCommand). */
+  backgroundManager?: BackgroundProcessManager;
   /** Persist a new session title (also notifies clients). */
   renameSession: (name: string) => void;
 }
@@ -73,6 +82,13 @@ export class SessionAgent {
    * no fast model is configured). */
   private readonly titleGenerator: TitleGenerator | null;
   private readonly renameSession: (name: string) => void;
+  /** Background-command manager (null when the async_bash tools are not
+   * built for this session). */
+  private readonly backgroundManager: BackgroundProcessManager | null;
+  private readonly backgroundUnsubscribe: (() => void) | null;
+  /** Set by close(): completion notifications of killed background
+   * commands must not reach the discarded agent. */
+  private closed = false;
   /** Title generation runs once per session, concurrently with the first
    * run; this guards against re-triggering (e.g. after a failed first run
    * that left savedCount at 0). */
@@ -94,6 +110,12 @@ export class SessionAgent {
     this.titleGenerator = options.fastModel !== undefined
       ? new TitleGenerator(options.fastModel, options.streamFn)
       : null;
+    this.backgroundManager = options.backgroundManager ?? null;
+    this.backgroundUnsubscribe = this.backgroundManager === null
+      ? null
+      : this.backgroundManager.onExit((done) => {
+        this.notifyBackgroundCommand(done);
+      });
 
     this.agent = new Agent({
       initialState: {
@@ -164,6 +186,49 @@ export class SessionAgent {
     }
   }
 
+  /** A background command finished: inject its completion notification
+   * into the agent loop so the agent can react. While streaming, the
+   * message is steered in at the next turn boundary; while idle, a new
+   * run starts. Notifications are user messages starting with
+   * "[Background command ...]" (the system prompt teaches the agent they
+   * are system notifications, not user input).
+   *
+   * Commands killed via async_bash_kill are not notified: the tool's own
+   * result already reports the kill, so a notification would be
+   * redundant. Natural exits and timeouts are silent without a
+   * notification, so they are always injected. */
+  private notifyBackgroundCommand(done: BackgroundCommandDone): void {
+    if (this.closed) return;
+    if (done.reason === "killed") return;
+    const message: AgentMessage = {
+      role: "user",
+      content: [{ type: "text", text: formatCompletionNotification(done) }],
+      timestamp: Date.now(),
+    };
+    if (this.isStreaming) {
+      this.agent.steer(message);
+      return;
+    }
+    if (!this.mcpReadyDone) {
+      // MCP attachment may still be in flight (a very fast command); wait
+      // for it, then re-check — a user prompt may have started meanwhile.
+      void this.mcpReady.then(() => this.startBackgroundRun(message));
+      return;
+    }
+    this.startBackgroundRun(message);
+  }
+
+  /** Start a run that carries a background-completion notification. If a
+   * run started concurrently (e.g. a user prompt), queue instead — the
+   * message is processed at that run's next turn boundary. */
+  private async startBackgroundRun(message: AgentMessage): Promise<void> {
+    try {
+      await this.agent.prompt(message);
+    } catch {
+      this.agent.steer(message);
+    }
+  }
+
   /** Convert the transcript to LLM messages, replacing image blocks with
    * their analysis text (the transcript itself is never mutated, so the
    * UI and the database keep the original images). Mirrors pi's default
@@ -200,9 +265,14 @@ export class SessionAgent {
     this.agent.abort();
   }
 
-  /** Abort the run and release MCP server processes (session closed). */
+  /** Abort the run, release MCP server processes, and unsubscribe from
+   * background-command completions. Background commands themselves are
+   * stopped by the session pool when the session closes — they survive
+   * agent rebuilds (model/workspace changes) while the session is open. */
   close(): void {
+    this.closed = true;
     this.agent.abort();
+    this.backgroundUnsubscribe?.();
     const manager = this.mcpManager;
     this.mcpManager = null;
     if (manager) void manager.close();

@@ -2,6 +2,7 @@ import { integer, object, optional, string, type Tool } from "./schema.ts";
 import { TOOL_BASH } from "../shared.ts";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
+import { killProcessTree } from "./background.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
 const bashSchema = object({
@@ -57,26 +58,7 @@ export function createBashTool(
       });
 
       const child = command.spawn();
-      const kill = () => {
-        try {
-          if (Deno.build.os === "windows") {
-            // Killing cmd.exe alone orphans everything it spawned (npm run
-            // dev, deno run, ...); taskkill /T /F tears down the tree.
-            new Deno.Command("taskkill", {
-              args: ["/PID", String(child.pid), "/T", "/F"],
-              stdout: "null",
-              stderr: "null",
-            }).output().catch(() => {});
-          } else {
-            // Note: without a process group the shell's children may
-            // survive on POSIX; they receive SIGHUP when the parent dies
-            // in most terminals, which is the best available without setsid.
-            child.kill("SIGKILL");
-          }
-        } catch {
-          // already exited
-        }
-      };
+      const kill = () => killProcessTree(child);
       const onAbort = () => kill();
       signal?.addEventListener("abort", onAbort, { once: true });
       const timer = setTimeout(kill, timeoutSec * 1000);

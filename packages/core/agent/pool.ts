@@ -6,6 +6,7 @@ import type { ClientEvent } from "../types/event.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { createCodingTools } from "../tools/mod.ts";
+import { BackgroundProcessManager } from "../tools/background.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
@@ -49,6 +50,12 @@ export interface SessionPoolDeps {
  */
 export class SessionPool {
   private readonly agents = new Map<string, SessionAgent>();
+  /** Background-command managers, one per open session. Owned by the pool
+   * (not the agent) so background commands survive agent rebuilds — model
+   * and workspace changes rebuild the agent while the session stays open,
+   * and the commands must keep running. They are stopped when the session
+   * closes (close/delete/closeAll). */
+  private readonly background = new Map<string, BackgroundProcessManager>();
   private readonly lastErrors = new Map<string, string>();
 
   constructor(private readonly deps: SessionPoolDeps) {}
@@ -88,7 +95,17 @@ export class SessionPool {
         "not_found",
       );
     }
-    const tools = createCodingTools(workspace);
+    // Reuse the session's manager when one exists (agent rebuild); create
+    // it on first open. Shared by the async_bash tools and the session
+    // agent: the tools start/check/kill commands, the agent turns
+    // completions into notifications. Commands die with the session (pool
+    // close/delete/closeAll → killAll), not with the agent.
+    let background = this.background.get(session.id);
+    if (!background) {
+      background = new BackgroundProcessManager();
+      this.background.set(session.id, background);
+    }
+    const tools = createCodingTools(workspace, { background });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a
     // stored prompt (created before snapshots) rebuild once — and the
@@ -111,6 +128,7 @@ export class SessionPool {
       ),
       streamFn: this.deps.streamFn,
       messageRepo: this.deps.messageRepo,
+      backgroundManager: background,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
       renameSession: (name) => this.deps.renameSession(session.id, name),
@@ -135,11 +153,14 @@ export class SessionPool {
     return agent;
   }
 
-  /** Close a session's agent (releasing its MCP servers) and drop it from
-   * memory. The persisted session stays; openSession rebuilds it. */
+  /** Close a session's agent (releasing its MCP servers and unsubscribing
+   * from background completions) and stop its background commands. The
+   * persisted session stays; openSession rebuilds it with a fresh manager. */
   close(id: string): void {
     this.agents.get(id)?.close();
     this.agents.delete(id);
+    this.background.get(id)?.killAll();
+    this.background.delete(id);
   }
 
   /** Close and forget a session entirely (persisted rows are deleted by
@@ -149,12 +170,16 @@ export class SessionPool {
     this.lastErrors.delete(id);
   }
 
-  /** Close every agent and drop all state (core shutdown). */
+  /** Close every agent and stop every background command (core shutdown). */
   closeAll(): void {
     for (const agent of this.agents.values()) {
       agent.close();
     }
+    for (const manager of this.background.values()) {
+      manager.killAll();
+    }
     this.agents.clear();
+    this.background.clear();
     this.lastErrors.clear();
   }
 

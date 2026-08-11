@@ -7,6 +7,8 @@ import {
   createWriteFileTool,
 } from "./filesystem.ts";
 import { createBashTool } from "./bash.ts";
+import { createAsyncBashTools } from "./background.ts";
+import type { BackgroundProcessManager } from "./background.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import type { Tool } from "./schema.ts";
 import { loadProjectMemory } from "../memory/agents-md.ts";
@@ -34,6 +36,10 @@ function sessionSkills(folders: string[]): SkillDef[] {
 export interface ToolFactoryOptions {
   /** Extra environment variables for bash commands. */
   env?: Record<string, string>;
+  /** Background-command manager backing the async_bash tools. Owned by the
+   * caller (the session pool) so the session agent can subscribe to its
+   * completion events too; omitted → the async_bash tools are not built. */
+  background?: BackgroundProcessManager;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -52,6 +58,9 @@ export function createCodingTools(
     createGrepTool(ctx),
     createGlobTool(ctx),
     createBashTool({ sandbox, env: options.env }),
+    ...(options.background !== undefined
+      ? createAsyncBashTools({ manager: options.background, sandbox })
+      : []),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
   ];
 }
@@ -97,6 +106,14 @@ Guidelines:
   start with the name of a workspace folder above, e.g. \`Aaa/README.md\`.
 - The bash tool requires a \`cwd\` argument: a workspace folder name (e.g.
   \`Aaa\`) or an absolute path.
+- Long-running commands (dev servers, watchers, downloads) should be started
+  with async_bash instead of bash: it returns immediately and the command
+  keeps running after the run ends. Check progress with async_bash_status,
+  stop a command with async_bash_kill. Commands killed with async_bash_kill
+  produce no completion notification - the tool result is the confirmation.
+- A user message starting with "[Background command ...]" is a system
+  notification about a background command, not a message from the user:
+  acknowledge it, but do not mistake it for user input.
 - After making changes, verify them (run tests, builds) when appropriate.
 - Ask the user when a task is ambiguous.
 ${memorySection}${skillsSection}${personalSection}
