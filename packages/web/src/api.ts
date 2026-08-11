@@ -176,6 +176,7 @@ export const api = {
       method: "PUT",
       body: text,
     }),
+  getSettings: () => request<Record<string, string>>("/api/settings"),
   setSetting: (key: string, value: string) =>
     request<{ ok: boolean }>(`/api/settings/${key}`, {
       method: "PUT",
@@ -266,7 +267,12 @@ export const fed = {
     request<SessionInfoDto>(`/api/fed/${peerId}/sessions/${sessionId}/open`, {
       method: "POST",
     }),
-  prompt: (peerId: string, sessionId: string, text: string, images?: PendingImage[]) =>
+  prompt: (
+    peerId: string,
+    sessionId: string,
+    text: string,
+    images?: PendingImage[],
+  ) =>
     request<{ ok: boolean }>(
       `/api/fed/${peerId}/sessions/${sessionId}/prompt`,
       {

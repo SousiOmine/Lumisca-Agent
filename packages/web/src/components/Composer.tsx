@@ -1,6 +1,6 @@
 import {
-  type ComponentType,
   type ClipboardEvent,
+  type ComponentType,
   type DragEvent,
   type KeyboardEvent,
   useEffect,

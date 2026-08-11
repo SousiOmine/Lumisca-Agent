@@ -14,6 +14,9 @@ export interface ModelPickerProps {
   value: { provider: string; modelId: string } | null;
   /** Only show models the user enabled in settings. Default true. */
   enabledOnly?: boolean;
+  /** Only show models that accept image input. Used by the image-analysis
+   * model picker, where a text-only model would be useless. */
+  imageOnly?: boolean;
   /** Peer owning the session ("" = this server). When set, the provider
    * and model lists come from that peer, so remote sessions switch models
    * against the machine that runs the agent. */
@@ -34,6 +37,7 @@ export interface ModelPickerProps {
 export function ModelPicker({
   value,
   enabledOnly = true,
+  imageOnly = false,
   peerId = "",
   onSelect,
   onOpenSettings,
@@ -110,11 +114,10 @@ export function ModelPicker({
   }, [value?.provider]);
 
   const visible = useMemo(() => {
-    const list = enabledOnly
-      ? models.filter((m) => m.enabled !== false)
-      : models;
+    let list = enabledOnly ? models.filter((m) => m.enabled !== false) : models;
+    if (imageOnly) list = list.filter((m) => m.input?.includes("image"));
     return filterByQuery(list, search);
-  }, [models, search, enabledOnly]);
+  }, [models, search, enabledOnly, imageOnly]);
 
   // The actively displayed provider: hovered > selected
   const activeProvider = hoveredProvider ?? providerId;
@@ -200,7 +203,9 @@ export function ModelPicker({
                 ))}
                 {visible.length === 0 && !busy && (
                   <div className="mp-empty">
-                    {enabledOnly && models.length > 0
+                    {imageOnly && models.length > 0
+                      ? "画像対応モデルがありません"
+                      : enabledOnly && models.length > 0
                       ? "有効なモデルがありません(設定でモデルを有効にしてください)"
                       : "該当するモデルがありません"}
                   </div>

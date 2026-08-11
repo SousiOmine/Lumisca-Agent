@@ -14,6 +14,7 @@ import { ProviderList } from "./settings/ProviderList.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ModelList } from "./settings/ModelList.tsx";
+import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
 import { McpList } from "./settings/McpList.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
@@ -140,7 +141,12 @@ export function SettingsModal({
               onBack={() => setProvidersView({ kind: "list" })}
             />
           )}
-          {category === "models" && <ModelList />}
+          {category === "models" && (
+            <>
+              <ModelPreferencePanel />
+              <ModelList />
+            </>
+          )}
           {category === "mcp" && <McpList />}
           {category === "servers" && <ConnectionList />}
           {category === "personalize" && <PersonalizePanel />}

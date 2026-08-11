@@ -293,7 +293,8 @@ export function NewSessionView(
               submitLabel={busy ? "作成中..." : "開始"}
               submitIcon={IconArrowUp}
               submitIconOnly
-              submitDisabled={busy || (!text.trim() && images.length === 0) || !workspaceKey}
+              submitDisabled={busy || (!text.trim() && images.length === 0) ||
+                !workspaceKey}
               onSubmit={submit}
               onOpenSettings={onOpenSettings}
               mentionWorkspaceId={selectedWorkspace?.workspace.id}

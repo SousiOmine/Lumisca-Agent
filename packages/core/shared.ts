@@ -9,6 +9,49 @@
 /** Settings-table key for the UI theme. */
 export const THEME_KEY = "theme";
 
+/** Settings-table key for the fast/cheap auxiliary model. Configured in
+ * the settings dialog's model section, separate from the per-session model
+ * chosen in the chatbox picker. */
+export const FAST_MODEL_KEY = "model_fast";
+
+/** Settings-table key for the model that interprets images on behalf of
+ * models without image support. Configured in the settings dialog's model
+ * section; the value is the JSON of a {@link ModelPreference}. */
+export const IMAGE_MODEL_KEY = "model_image";
+
+/** A global model preference (fast model / image analysis model): the
+ * provider + model id pair stored as JSON under the keys above. */
+export interface ModelPreference {
+  provider: string;
+  modelId: string;
+}
+
+/** Serialize a model preference for the settings store. */
+export function serializeModelPreference(pref: ModelPreference): string {
+  return JSON.stringify(pref);
+}
+
+/** Parse a stored model preference; undefined when unset, empty, or
+ * malformed. */
+export function parseModelPreference(
+  raw: string | undefined | null,
+): ModelPreference | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed === "object" && parsed !== null &&
+      typeof (parsed as ModelPreference).provider === "string" &&
+      typeof (parsed as ModelPreference).modelId === "string"
+    ) {
+      return parsed as ModelPreference;
+    }
+  } catch {
+    // fall through
+  }
+  return undefined;
+}
+
 /** Theme preference stored in settings; "system" follows the OS color
  * scheme. The resolved "light"|"dark" scheme is applied on the client. */
 export type ThemeSetting = "light" | "dark" | "system";

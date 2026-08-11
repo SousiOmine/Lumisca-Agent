@@ -71,10 +71,19 @@ Deno.test("parsePromptBody rejects invalid bodies", () => {
     },
     "8",
   );
-  expect400({ text: "hi", images: [{ data: "x", mimeType: "text/plain" }] }, "image/*");
-  expect400({ text: "hi", images: [{ data: 42, mimeType: "image/png" }] }, "data");
   expect400(
-    { text: "hi", images: [{ data: "x".repeat(21 * 1024 * 1024), mimeType: "image/png" }] },
+    { text: "hi", images: [{ data: "x", mimeType: "text/plain" }] },
+    "image/*",
+  );
+  expect400(
+    { text: "hi", images: [{ data: 42, mimeType: "image/png" }] },
+    "data",
+  );
+  expect400(
+    {
+      text: "hi",
+      images: [{ data: "x".repeat(21 * 1024 * 1024), mimeType: "image/png" }],
+    },
     "size limit",
   );
 });

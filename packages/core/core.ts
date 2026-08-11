@@ -20,7 +20,12 @@ import {
   setApiKey,
 } from "./settings/credentials.ts";
 import type { CredentialStore, Provider } from "@earendil-works/pi-ai";
-import type { Api, AuthCheck, ImageContent, Model } from "@earendil-works/pi-ai";
+import type {
+  Api,
+  AuthCheck,
+  ImageContent,
+  Model,
+} from "@earendil-works/pi-ai";
 import { createDbModelsStore, ModelManager } from "./models/mod.ts";
 import {
   getSupportedThinkingLevels,
@@ -469,7 +474,11 @@ export class LumiscaCore {
   }
 
   /** Await the prompt (CLI). Errors are reported via session_error events. */
-  async prompt(id: string, text: string, images?: ImageContent[]): Promise<void> {
+  async prompt(
+    id: string,
+    text: string,
+    images?: ImageContent[],
+  ): Promise<void> {
     const agent = this.pool.require(id);
     this.sessions.touch(id);
     await agent.prompt(text, images);
