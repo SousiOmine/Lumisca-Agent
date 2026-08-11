@@ -32,6 +32,7 @@ import {
   isThinkingLevel,
 } from "./models/thinking.ts";
 import type { ThinkingLevel } from "./shared.ts";
+import { IMAGE_MODEL_KEY, parseModelPreference } from "./shared.ts";
 import { createWorkspaceRepo, type WorkspaceRepo } from "./workspace/repo.ts";
 import { Sandbox } from "./workspace/sandbox.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
@@ -85,6 +86,7 @@ export class LumiscaCore {
     this.messages = createMessageRepo(db);
     this.pool = new SessionPool({
       getModel: (provider, modelId) => this.models.getModel(provider, modelId),
+      getImageAnalysisModel: () => this.getImageAnalysisModel(),
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
       buildGeneratedPrompt: (workspace) => this.buildGeneratedPrompt(workspace),
@@ -363,6 +365,16 @@ export class LumiscaCore {
   }
 
   // --- sessions -----------------------------------------------------------
+
+  /** The configured image-analysis model (the `model_image` setting), or
+   * undefined when unset or the model is no longer in the catalog. It
+   * interprets images as text for sessions whose main model cannot see
+   * them (see agent/image-analysis.ts). */
+  getImageAnalysisModel(): Model<Api> | undefined {
+    const pref = parseModelPreference(this.settings.get(IMAGE_MODEL_KEY));
+    if (pref === undefined) return undefined;
+    return this.models.getModel(pref.provider, pref.modelId);
+  }
 
   /** The model a new session would get: the last used model, or the first
    * enabled model. Null when no model can be resolved. Includes the model's

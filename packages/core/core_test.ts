@@ -2,6 +2,7 @@ import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import {
+  type Context,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
@@ -10,6 +11,7 @@ import {
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
+import { IMAGE_MODEL_KEY, serializeModelPreference } from "./shared.ts";
 
 function setup() {
   const faux = fauxProvider();
@@ -1067,4 +1069,236 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
       }
     }
   }
+});
+
+// --- image analysis model (画像分析モデル) --------------------------------
+
+/** Minimal 1x1 transparent PNG (67 bytes). */
+const MINI_PNG = new Uint8Array([
+  0x89,
+  0x50,
+  0x4e,
+  0x47,
+  0x0d,
+  0x0a,
+  0x1a,
+  0x0a,
+  0x00,
+  0x00,
+  0x00,
+  0x0d,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x00,
+  0x01,
+  0x08,
+  0x06,
+  0x00,
+  0x00,
+  0x00,
+  0x1f,
+  0x15,
+  0xc4,
+  0x89,
+  0x00,
+  0x00,
+  0x00,
+  0x0d,
+  0x49,
+  0x44,
+  0x41,
+  0x54,
+  0x78,
+  0x9c,
+  0x62,
+  0x00,
+  0x01,
+  0x00,
+  0x00,
+  0x05,
+  0x00,
+  0x01,
+  0x0d,
+  0x0a,
+  0x2d,
+  0xb4,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x49,
+  0x45,
+  0x4e,
+  0x44,
+  0xae,
+  0x42,
+  0x60,
+  0x82,
+]);
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+/** A text-only main model plus a vision-capable analysis model on one
+ * provider; the analysis model is selected through the model_image setting
+ * (see ModelPreferencePanel in the web UI). */
+function setupImageAnalysis() {
+  const faux = fauxProvider({
+    models: [
+      { id: "text-only", input: ["text"] },
+      { id: "vision", input: ["text", "image"] },
+    ],
+  });
+  const core = LumiscaCore.forTesting([faux.provider]);
+  core.setSetting(
+    IMAGE_MODEL_KEY,
+    serializeModelPreference({
+      provider: faux.provider.id,
+      modelId: "vision",
+    }),
+  );
+  return { core, faux, providerId: faux.provider.id };
+}
+
+/** Capture every LLM call: model id + messages, in call order. */
+type CapturedCall = {
+  model: string;
+  messages: Array<{
+    role: string;
+    content: Array<{ type: string; text?: string; data?: string }>;
+  }>;
+};
+
+function makeImageAnalysisResponses(
+  captured: CapturedCall[],
+  script: Array<
+    (call: CapturedCall) => ReturnType<typeof fauxAssistantMessage>
+  >,
+) {
+  return script.map(
+    (step) =>
+    (
+      context: Context,
+      _options: unknown,
+      _state: unknown,
+      model: { id: string },
+    ) => {
+      const call: CapturedCall = {
+        model: model.id,
+        messages: context.messages as CapturedCall["messages"],
+      };
+      captured.push(call);
+      return step(call);
+    },
+  );
+}
+
+Deno.test("text-only model: user images are analyzed and passed as text", async () => {
+  const { core, faux, providerId } = setupImageAnalysis();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId: "text-only",
+  });
+
+  const captured: CapturedCall[] = [];
+  faux.setResponses(makeImageAnalysisResponses(captured, [
+    () => fauxAssistantMessage("analysis text"),
+    () => fauxAssistantMessage("done"),
+  ]));
+
+  await core.prompt(session.id, "what is this?", [{
+    type: "image",
+    data: bytesToBase64(MINI_PNG),
+    mimeType: "image/png",
+  }]);
+
+  assertEquals(captured.length, 2);
+  // The analysis call went to the vision model with the image attached.
+  assertEquals(captured[0]!.model, "vision");
+  assertEquals(
+    captured[0]!.messages[0]!.content.some(
+      (b) => b.type === "image" && b.data !== undefined,
+    ),
+    true,
+  );
+  // The text-only main model got the analysis text instead of the image.
+  assertEquals(captured[1]!.model, "text-only");
+  const mainContent = captured[1]!.messages[0]!.content;
+  assertEquals(mainContent.some((b) => b.type === "image"), false);
+  assertEquals(
+    mainContent.some(
+      (b) => b.type === "text" && b.text?.includes("analysis text"),
+    ),
+    true,
+  );
+  // The transcript (what the UI shows and the DB stores) keeps the image.
+  const userMessage = core.getAgent(session.id)!.messages[0]!;
+  const userContent = (userMessage as { content: Array<{ type: string }> })
+    .content;
+  assertEquals(userContent.some((b) => b.type === "image"), true);
+  core.close();
+});
+
+Deno.test("text-only model: read tool images are analyzed and passed as text", async () => {
+  const { core, faux, providerId } = setupImageAnalysis();
+  const { ws, root } = await makeWorkspace(core);
+  await Deno.writeFile(join(root, "pic.png"), MINI_PNG);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId: "text-only",
+  });
+
+  const captured: CapturedCall[] = [];
+  faux.setResponses(makeImageAnalysisResponses(captured, [
+    // Turn 1: the main model asks to read the image file.
+    () =>
+      fauxAssistantMessage([
+        fauxText("Reading the image."),
+        fauxToolCall("read_file", { path: join(root, "pic.png") }),
+      ]),
+    // Turn 2: the analysis model interprets the tool result image.
+    () => fauxAssistantMessage("tool result described"),
+    () => fauxAssistantMessage("done"),
+  ]));
+
+  await core.prompt(session.id, "read pic.png");
+
+  assertEquals(captured.length, 3);
+  assertEquals(captured[0]!.model, "text-only");
+  assertEquals(captured[1]!.model, "vision");
+  assertEquals(captured[2]!.model, "text-only");
+
+  // The tool-result image reached the vision model as an image block.
+  assertEquals(
+    captured[1]!.messages[0]!.content.some((b) => b.type === "image"),
+    true,
+  );
+  // The text-only main model saw the analysis text, not the image.
+  const toolResult = captured[2]!.messages.find((m) => m.role === "toolResult");
+  assertEquals(toolResult !== undefined, true);
+  assertEquals(toolResult!.content.some((b) => b.type === "image"), false);
+  assertEquals(
+    toolResult!.content.some(
+      (b) => b.type === "text" && b.text?.includes("tool result described"),
+    ),
+    true,
+  );
+
+  core.close();
 });

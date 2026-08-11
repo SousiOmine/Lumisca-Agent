@@ -4,7 +4,13 @@ import type {
   AgentMessage,
   StreamFn,
 } from "@earendil-works/pi-agent-core";
-import type { Api, ImageContent, Model } from "@earendil-works/pi-ai";
+import type {
+  Api,
+  ImageContent,
+  Message,
+  Model,
+  TextContent,
+} from "@earendil-works/pi-ai";
 import { errorMessage } from "../errors.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
@@ -15,6 +21,7 @@ import type { McpServerStatus } from "../mcp/manager.ts";
 import { createMcpTools } from "../mcp/tools.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
+import { ImageAnalyzer } from "./image-analysis.ts";
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -27,6 +34,9 @@ export interface SessionAgentOptions {
   streamFn: StreamFn;
   messageRepo: MessageRepo;
   onEvent: (event: ClientEvent) => void;
+  /** The configured image-analysis model: interprets images as text when
+   * `model` cannot see them (see ImageAnalyzer). */
+  imageAnalysisModel?: Model<Api>;
 }
 
 /**
@@ -50,12 +60,22 @@ export class SessionAgent {
    * entirely (an await on a resolved promise would still defer the run by
    * a microtask and break "already running" conflict checks). */
   private mcpReadyDone = true;
+  /** Interprets images for a text-only main model (null when the main
+   * model sees images or no analysis model is configured). */
+  private readonly imageAnalyzer: ImageAnalyzer | null;
 
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
     this.messageRepo = options.messageRepo;
     this.onEvent = options.onEvent;
     this.savedCount = options.messages?.length ?? 0;
+
+    // A vision-capable main model passes images through as-is; only a
+    // text-only model with an analysis model configured needs rewriting.
+    this.imageAnalyzer = options.imageAnalysisModel !== undefined &&
+        !(options.model.input ?? []).includes("image")
+      ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
+      : null;
 
     this.agent = new Agent({
       initialState: {
@@ -67,6 +87,9 @@ export class SessionAgent {
       },
       streamFn: options.streamFn,
       sessionId: options.sessionId,
+      convertToLlm: this.imageAnalyzer !== null
+        ? (messages) => this.convertWithAnalysis(messages)
+        : undefined,
     });
     this.agent.subscribe((event) => this.handleEvent(event));
   }
@@ -97,6 +120,38 @@ export class SessionAgent {
         message: errorMessage(error),
       });
     }
+  }
+
+  /** Convert the transcript to LLM messages, replacing image blocks with
+   * their analysis text (the transcript itself is never mutated, so the
+   * UI and the database keep the original images). Mirrors pi's default
+   * convertToLlm (role filter) for messages without images. */
+  private async convertWithAnalysis(
+    messages: AgentMessage[],
+  ): Promise<Message[]> {
+    const out: Message[] = [];
+    for (const message of messages) {
+      if (
+        message.role !== "user" &&
+        message.role !== "assistant" &&
+        message.role !== "toolResult"
+      ) {
+        continue;
+      }
+      const content = message.content;
+      if (
+        typeof content === "string" ||
+        !content.some((block) => block.type === "image")
+      ) {
+        out.push(message as Message);
+        continue;
+      }
+      const analyzed = await this.imageAnalyzer!.analyzeContent(
+        content as Array<TextContent | ImageContent>,
+      );
+      out.push({ ...message, content: analyzed } as Message);
+    }
+    return out;
   }
 
   abort(): void {

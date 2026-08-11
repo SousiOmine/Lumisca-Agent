@@ -16,6 +16,9 @@ import type { MessageRepo } from "../session/messages.ts";
 export interface SessionPoolDeps {
   /** Resolve the model of a session (undefined when the model is gone). */
   getModel(provider: string, modelId: string): Model<Api> | undefined;
+  /** The configured image-analysis model (undefined when unset): interprets
+   * images as text for text-only session models. */
+  getImageAnalysisModel(): Model<Api> | undefined;
   /** The stored thinking level of a model, clamped to what it supports. */
   getThinkingLevel(provider: string, modelId: string): ThinkingLevel;
   /** Full generated system prompt for a workspace (project memory +
@@ -103,6 +106,7 @@ export class SessionPool {
       ),
       streamFn: this.deps.streamFn,
       messageRepo: this.deps.messageRepo,
+      imageAnalysisModel: this.deps.getImageAnalysisModel(),
       onEvent: (event) => {
         // Remember failures for clients that do not see the WS stream;
         // a new run clears the stale error.
