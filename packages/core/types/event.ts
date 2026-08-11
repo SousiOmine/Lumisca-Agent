@@ -24,4 +24,7 @@ export type ClientEvent =
     isError: boolean;
   }
   | { type: "agent_end"; sessionId: string }
-  | { type: "session_error"; sessionId: string; message: string };
+  | { type: "session_error"; sessionId: string; message: string }
+  /** The session title changed (e.g. auto-generated from the first
+   * message by the fast model). Clients update the displayed name. */
+  | { type: "session_renamed"; sessionId: string; name: string };

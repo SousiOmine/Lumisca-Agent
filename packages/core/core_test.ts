@@ -11,7 +11,11 @@ import {
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
-import { IMAGE_MODEL_KEY, serializeModelPreference } from "./shared.ts";
+import {
+  FAST_MODEL_KEY,
+  IMAGE_MODEL_KEY,
+  serializeModelPreference,
+} from "./shared.ts";
 
 function setup() {
   const faux = fauxProvider();
@@ -1174,6 +1178,7 @@ function setupImageAnalysis() {
 /** Capture every LLM call: model id + messages, in call order. */
 type CapturedCall = {
   model: string;
+  systemPrompt?: string;
   messages: Array<{
     role: string;
     content: Array<{ type: string; text?: string; data?: string }>;
@@ -1196,6 +1201,7 @@ function makeImageAnalysisResponses(
     ) => {
       const call: CapturedCall = {
         model: model.id,
+        systemPrompt: context.systemPrompt,
         messages: context.messages as CapturedCall["messages"],
       };
       captured.push(call);
@@ -1299,6 +1305,115 @@ Deno.test("text-only model: read tool images are analyzed and passed as text", a
     ),
     true,
   );
+
+  core.close();
+});
+
+// --- fast model title generation (高速モデルによるタイトル自動生成) -------
+
+/** A main model plus a fast model on one provider; the fast model is
+ * selected through the model_fast setting (see ModelPreferencePanel). */
+function setupFastTitle() {
+  const faux = fauxProvider({
+    models: [
+      { id: "main", input: ["text"] },
+      { id: "fast", input: ["text"] },
+    ],
+  });
+  const core = LumiscaCore.forTesting([faux.provider]);
+  core.setSetting(
+    FAST_MODEL_KEY,
+    serializeModelPreference({
+      provider: faux.provider.id,
+      modelId: "fast",
+    }),
+  );
+  return { core, faux, providerId: faux.provider.id };
+}
+
+Deno.test("fast model: first prompt auto-generates the session title", async () => {
+  const { core, faux, providerId } = setupFastTitle();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId: "main",
+  });
+  assertEquals(session.name.startsWith("Session "), true); // provisional
+
+  const captured: CapturedCall[] = [];
+  faux.setResponses(makeImageAnalysisResponses(captured, [
+    // The title call (fast model) fires concurrently with the run.
+    () => fauxAssistantMessage('"Fix login bug"'),
+    () => fauxAssistantMessage("Hello!"),
+  ]));
+
+  await core.prompt(session.id, "Please fix the login bug");
+
+  // The title call used the fast model and the first message text.
+  assertEquals(captured.length, 2);
+  assertEquals(captured[0]!.model, "fast");
+  assertEquals(
+    captured[0]!.messages[0]!.content[0]!.text,
+    "Please fix the login bug",
+  );
+  assertEquals(captured[0]!.systemPrompt?.includes("title"), true);
+  // The main run went to the session model.
+  assertEquals(captured[1]!.model, "main");
+  // The provisional name was replaced by the generated title.
+  assertEquals(core.getSession(session.id)!.name, "Fix login bug");
+
+  core.close();
+});
+
+Deno.test("no fast model: session keeps its provisional name", async () => {
+  const { core, faux, providerId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId: faux.getModel().id,
+  });
+
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await core.prompt(session.id, "hello");
+
+  assertEquals(core.getSession(session.id)!.name, session.name);
+  assertEquals(session.name.startsWith("Session "), true);
+
+  core.close();
+});
+
+Deno.test("reopened session with history does not regenerate the title", async () => {
+  const { core, faux, providerId } = setupFastTitle();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId: "main",
+  });
+
+  const captured: CapturedCall[] = [];
+  faux.setResponses(makeImageAnalysisResponses(captured, [
+    () => fauxAssistantMessage("Title A"),
+    () => fauxAssistantMessage("first reply"),
+    () => fauxAssistantMessage("second reply"),
+  ]));
+
+  await core.prompt(session.id, "first message");
+  assertEquals(core.getSession(session.id)!.name, "Title A");
+
+  // Reopen with history and prompt again: no new title generation.
+  core.closeSession(session.id);
+  await core.openSession(session.id);
+  await core.prompt(session.id, "second message");
+
+  assertEquals(core.getSession(session.id)!.name, "Title A");
+  assertEquals(captured.length, 3); // title + first run + second run only
+  assertEquals(captured[2]!.model, "main");
 
   core.close();
 });

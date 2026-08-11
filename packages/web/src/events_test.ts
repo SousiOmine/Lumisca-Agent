@@ -184,3 +184,28 @@ Deno.test("events: mergeMessages is idempotent and order-preserving", () => {
   // Running the merge again with the same inputs must not grow the list.
   assertEquals(mergeMessages(merged, fetched).length, 3);
 });
+
+Deno.test("events: session_renamed updates the session name", () => {
+  let v = view();
+  v = applyEvent(
+    { type: "session_renamed", sessionId: "s1", name: "Fix login bug" },
+    v,
+  )!;
+  assertEquals(v.info.name, "Fix login bug");
+
+  // Same name: no-op (same reference).
+  assertEquals(
+    applyEvent({
+      type: "session_renamed",
+      sessionId: "s1",
+      name: "Fix login bug",
+    }, v),
+    null,
+  );
+
+  // Other sessions are ignored.
+  assertEquals(
+    applyEvent({ type: "session_renamed", sessionId: "s2", name: "x" }, v),
+    null,
+  );
+});

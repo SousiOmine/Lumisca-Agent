@@ -19,6 +19,11 @@ export interface SessionPoolDeps {
   /** The configured image-analysis model (undefined when unset): interprets
    * images as text for text-only session models. */
   getImageAnalysisModel(): Model<Api> | undefined;
+  /** The configured fast model (undefined when unset): generates session
+   * titles from the first user message. */
+  getFastModel(): Model<Api> | undefined;
+  /** Persist a new session title and notify clients. */
+  renameSession(id: string, name: string): void;
   /** The stored thinking level of a model, clamped to what it supports. */
   getThinkingLevel(provider: string, modelId: string): ThinkingLevel;
   /** Full generated system prompt for a workspace (project memory +
@@ -107,6 +112,8 @@ export class SessionPool {
       streamFn: this.deps.streamFn,
       messageRepo: this.deps.messageRepo,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
+      fastModel: this.deps.getFastModel(),
+      renameSession: (name) => this.deps.renameSession(session.id, name),
       onEvent: (event) => {
         // Remember failures for clients that do not see the WS stream;
         // a new run clears the stale error.

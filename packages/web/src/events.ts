@@ -111,6 +111,12 @@ export function applyEvent(
       return view.agentStartedAt === undefined
         ? null
         : { ...view, agentEndedAt: Date.now() };
+    case "session_renamed":
+      // The session title changed (e.g. auto-generated from the first
+      // message); the tab shows the new name.
+      return view.info.name === event.name
+        ? null
+        : { ...view, info: { ...view.info, name: event.name } };
     default:
       return null;
   }

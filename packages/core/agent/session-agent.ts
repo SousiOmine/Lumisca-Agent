@@ -22,6 +22,7 @@ import { createMcpTools } from "../mcp/tools.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
+import { TitleGenerator } from "./title-generation.ts";
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -37,6 +38,11 @@ export interface SessionAgentOptions {
   /** The configured image-analysis model: interprets images as text when
    * `model` cannot see them (see ImageAnalyzer). */
   imageAnalysisModel?: Model<Api>;
+  /** The configured fast model: generates the session title from the
+   * first user message (see TitleGenerator). */
+  fastModel?: Model<Api>;
+  /** Persist a new session title (also notifies clients). */
+  renameSession: (name: string) => void;
 }
 
 /**
@@ -63,11 +69,20 @@ export class SessionAgent {
   /** Interprets images for a text-only main model (null when the main
    * model sees images or no analysis model is configured). */
   private readonly imageAnalyzer: ImageAnalyzer | null;
+  /** Generates the session title from the first user message (null when
+   * no fast model is configured). */
+  private readonly titleGenerator: TitleGenerator | null;
+  private readonly renameSession: (name: string) => void;
+  /** Title generation runs once per session, concurrently with the first
+   * run; this guards against re-triggering (e.g. after a failed first run
+   * that left savedCount at 0). */
+  private titleGenerated = false;
 
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
     this.messageRepo = options.messageRepo;
     this.onEvent = options.onEvent;
+    this.renameSession = options.renameSession;
     this.savedCount = options.messages?.length ?? 0;
 
     // A vision-capable main model passes images through as-is; only a
@@ -75,6 +90,9 @@ export class SessionAgent {
     this.imageAnalyzer = options.imageAnalysisModel !== undefined &&
         !(options.model.input ?? []).includes("image")
       ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
+      : null;
+    this.titleGenerator = options.fastModel !== undefined
+      ? new TitleGenerator(options.fastModel, options.streamFn)
       : null;
 
     this.agent = new Agent({
@@ -111,6 +129,16 @@ export class SessionAgent {
    * means "the run finished". */
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
+    // First prompt of a fresh session (no history): kick off title
+    // generation concurrently with the run; the generated title replaces
+    // the provisional "Session <date>" name once ready.
+    if (
+      !this.titleGenerated && this.titleGenerator !== null &&
+      this.savedCount === 0
+    ) {
+      this.titleGenerated = true;
+      void this.generateTitle(text);
+    }
     try {
       await this.agent.prompt(text, images);
     } catch (error) {
@@ -119,6 +147,20 @@ export class SessionAgent {
         sessionId: this.sessionId,
         message: errorMessage(error),
       });
+    }
+  }
+
+  /** Best-effort title generation from the first user message. Failures
+   * (and empty text) leave the provisional name in place; the run is
+   * never affected. */
+  private async generateTitle(firstMessage: string): Promise<void> {
+    const text = firstMessage.trim();
+    if (!text) return;
+    try {
+      const title = await this.titleGenerator!.generateTitle(text);
+      this.renameSession(title);
+    } catch {
+      // Keep the provisional name.
     }
   }
 

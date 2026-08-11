@@ -32,7 +32,11 @@ import {
   isThinkingLevel,
 } from "./models/thinking.ts";
 import type { ThinkingLevel } from "./shared.ts";
-import { IMAGE_MODEL_KEY, parseModelPreference } from "./shared.ts";
+import {
+  FAST_MODEL_KEY,
+  IMAGE_MODEL_KEY,
+  parseModelPreference,
+} from "./shared.ts";
 import { createWorkspaceRepo, type WorkspaceRepo } from "./workspace/repo.ts";
 import { Sandbox } from "./workspace/sandbox.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
@@ -87,6 +91,8 @@ export class LumiscaCore {
     this.pool = new SessionPool({
       getModel: (provider, modelId) => this.models.getModel(provider, modelId),
       getImageAnalysisModel: () => this.getImageAnalysisModel(),
+      getFastModel: () => this.getFastModel(),
+      renameSession: (id, name) => this.setSessionName(id, name),
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
       buildGeneratedPrompt: (workspace) => this.buildGeneratedPrompt(workspace),
@@ -376,6 +382,15 @@ export class LumiscaCore {
     return this.models.getModel(pref.provider, pref.modelId);
   }
 
+  /** The configured fast model (the `model_fast` setting), or undefined
+   * when unset or the model is no longer in the catalog. It generates
+   * session titles from the first user message (see agent/title-generation.ts). */
+  getFastModel(): Model<Api> | undefined {
+    const pref = parseModelPreference(this.settings.get(FAST_MODEL_KEY));
+    if (pref === undefined) return undefined;
+    return this.models.getModel(pref.provider, pref.modelId);
+  }
+
   /** The model a new session would get: the last used model, or the first
    * enabled model. Null when no model can be resolved. Includes the model's
    * thinking level so the draft tab can show the right control. */
@@ -523,9 +538,12 @@ export class LumiscaCore {
     );
   }
 
-  /** Rename a session (persisted). */
+  /** Rename a session (persisted) and notify clients, so open tabs show
+   * the new title. The single path for every rename (auto-generated
+   * titles and any future manual rename). */
   setSessionName(id: string, name: string): void {
     this.sessions.rename(id, name);
+    this.emit({ type: "session_renamed", sessionId: id, name });
   }
 
   /** The thinking level stored for a model (the level its sessions use). */
