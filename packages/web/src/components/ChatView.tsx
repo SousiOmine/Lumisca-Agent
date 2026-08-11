@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { IconSend } from "@tabler/icons-react";
+import { IconCheck, IconClipboard, IconSend } from "@tabler/icons-react";
 import { contentImages, contentText } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
@@ -249,6 +249,49 @@ function ConversationTurn({
   );
 }
 
+function CopyableUserMessage({
+  text,
+  images,
+}: {
+  text: string;
+  images: { type: "image"; data: string; mimeType: string }[];
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // fallback: select text
+    }
+  };
+
+  return (
+    <div className="msg-user-wrap">
+      <div className="msg user">
+        <div className="msg-body">
+          {images.length > 0 && <ContentImages images={images} />}
+          {text && <p>{text}</p>}
+        </div>
+      </div>
+      {text && (
+        <button
+          className="msg-copy-btn"
+          title="メッセージをコピー"
+          onClick={handleCopy}
+        >
+          {copied
+            ? <IconCheck size={16} stroke={2} />
+            : <IconClipboard size={16} stroke={1.5} />}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function MessageRow({
   message,
   toolResults,
@@ -264,12 +307,7 @@ function MessageRow({
     const text = contentText(message.content);
     const imageBlocks = contentImages(message.content);
     return (
-      <div className="msg user">
-        <div className="msg-body">
-          {imageBlocks.length > 0 && <ContentImages images={imageBlocks} />}
-          {text && <p>{text}</p>}
-        </div>
-      </div>
+      <CopyableUserMessage text={text} images={imageBlocks} />
     );
   }
 

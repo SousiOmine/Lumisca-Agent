@@ -472,6 +472,34 @@ select:focus {
   padding: 10px 14px;
 }
 
+.msg-user-wrap {
+  position: relative;
+}
+
+.msg-copy-btn {
+  display: block;
+  margin-left: auto;
+  margin-top: 2px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  font-size: 11px;
+}
+
+.msg-user-wrap:hover .msg-copy-btn {
+  opacity: 1;
+}
+
+.msg-copy-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
 .msg-body {
   min-width: 0;
   font-size: 14px;
