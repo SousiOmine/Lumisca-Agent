@@ -11,9 +11,16 @@ export type { Workspace } from "./types/workspace.ts";
 export type { SessionInfo } from "./types/session.ts";
 export type { ClientEvent } from "./types/event.ts";
 export type { AgentMessage } from "@earendil-works/pi-agent-core";
+export type { ImageContent } from "@earendil-works/pi-ai";
 export { SessionAgent } from "./agent/session-agent.ts";
 export { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
-export type { Infer, Tool, ToolResult, ToolSchema } from "./tools/schema.ts";
+export type {
+  Infer,
+  Tool,
+  ToolContentBlock,
+  ToolResult,
+  ToolSchema,
+} from "./tools/schema.ts";
 export {
   discoverSkills,
   formatAvailableSkills,

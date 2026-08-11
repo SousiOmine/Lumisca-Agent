@@ -20,7 +20,7 @@ import {
   setApiKey,
 } from "./settings/credentials.ts";
 import type { CredentialStore, Provider } from "@earendil-works/pi-ai";
-import type { Api, AuthCheck, Model } from "@earendil-works/pi-ai";
+import type { Api, AuthCheck, ImageContent, Model } from "@earendil-works/pi-ai";
 import { createDbModelsStore, ModelManager } from "./models/mod.ts";
 import {
   getSupportedThinkingLevels,
@@ -454,24 +454,25 @@ export class LumiscaCore {
 
   /** Fire-and-forget prompt: completion and failures arrive as events
    * (agent_end / session_error). The HTTP layer should use this instead of
-   * holding a connection open for the whole run. Throws when the session
-   * is already streaming. */
-  startPrompt(id: string, text: string): void {
+   * holding a connection open for the whole run. `images` (base64) are
+   * attached to the user message for vision-capable models. Throws when the
+   * session is already streaming. */
+  startPrompt(id: string, text: string, images?: ImageContent[]): void {
     const agent = this.pool.require(id);
     if (agent.isStreaming) {
       throw new CoreError(`Session is already running: ${id}`, "conflict");
     }
     this.sessions.touch(id);
-    void agent.prompt(text).catch(() => {
+    void agent.prompt(text, images).catch(() => {
       // SessionAgent.prompt reports failures via session_error events.
     });
   }
 
   /** Await the prompt (CLI). Errors are reported via session_error events. */
-  async prompt(id: string, text: string): Promise<void> {
+  async prompt(id: string, text: string, images?: ImageContent[]): Promise<void> {
     const agent = this.pool.require(id);
     this.sessions.touch(id);
-    await agent.prompt(text);
+    await agent.prompt(text, images);
   }
 
   abort(id: string): void {

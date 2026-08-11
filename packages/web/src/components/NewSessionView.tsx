@@ -5,6 +5,7 @@ import type {
   FederatedWorkspace,
   ModelInfo,
   PeerStatus,
+  PendingImage,
   ThinkingLevel,
 } from "../types.ts";
 import { errorText } from "../providers.ts";
@@ -29,6 +30,7 @@ interface NewSessionViewProps {
     fws: FederatedWorkspace,
     model: ComposerModel | null,
     text: string,
+    images: PendingImage[],
   ) => Promise<void>;
   onWorkspaceChanged: (fws: FederatedWorkspace) => void;
   /** The single delete flow owned by the App (confirm + API + state). */
@@ -72,6 +74,7 @@ export function NewSessionView(
   );
   const [model, setModel] = useState<DraftModel | null>(null);
   const [text, setText] = useState("");
+  const [images, setImages] = useState<PendingImage[]>([]);
   const [modalWorkspace, setModalWorkspace] = useState<
     FederatedWorkspace | undefined
   >(undefined);
@@ -184,11 +187,17 @@ export function NewSessionView(
 
   const submit = async () => {
     const trimmed = text.trim();
-    if (!trimmed || !workspaceKey || !selectedWorkspace || busy) return;
+    if (
+      (!trimmed && images.length === 0) ||
+      !workspaceKey || !selectedWorkspace || busy
+    ) {
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
-      await onStart(selectedWorkspace, model, trimmed);
+      await onStart(selectedWorkspace, model, trimmed, images);
+      setImages([]);
     } catch (e) {
       setError(errorText(e));
       setBusy(false);
@@ -284,11 +293,13 @@ export function NewSessionView(
               submitLabel={busy ? "作成中..." : "開始"}
               submitIcon={IconArrowUp}
               submitIconOnly
-              submitDisabled={busy || !text.trim() || !workspaceKey}
+              submitDisabled={busy || (!text.trim() && images.length === 0) || !workspaceKey}
               onSubmit={submit}
               onOpenSettings={onOpenSettings}
               mentionWorkspaceId={selectedWorkspace?.workspace.id}
               mentionPeerId={selectedWorkspace?.peerId}
+              images={images}
+              onImagesChange={setImages}
             />
             {error && <div className="error-text">{error}</div>}
           </div>

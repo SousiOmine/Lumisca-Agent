@@ -1,5 +1,7 @@
 import {
   type ComponentType,
+  type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
   useEffect,
   useRef,
@@ -12,11 +14,20 @@ import {
   IconFile,
   IconFolder,
   IconPlayerStop,
+  IconX,
 } from "@tabler/icons-react";
 import { THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
 import { api, fed } from "../api.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
-import type { ModelInfo, ThinkingLevel, WorkspaceFileEntry } from "../types.ts";
+import type {
+  ModelInfo,
+  PendingImage,
+  ThinkingLevel,
+  WorkspaceFileEntry,
+} from "../types.ts";
+
+/** Maximum attachments accepted per prompt (mirrors the server limit). */
+const MAX_IMAGES = 8;
 
 export interface ComposerModel {
   provider: string;
@@ -67,6 +78,10 @@ interface ComposerProps {
    * non-empty), in which case suggestions come from that machine. */
   mentionWorkspaceId?: string;
   mentionPeerId?: string;
+  /** Images attached for the next send (data URLs). Dropped/pasted files
+   * are appended here; the parent clears them after a successful submit. */
+  images?: PendingImage[];
+  onImagesChange?: (images: PendingImage[]) => void;
 }
 
 /** An active `@` mention: the caret is inside a query started by `@`. */
@@ -172,6 +187,8 @@ export function Composer({
   onOpenSettings,
   mentionWorkspaceId,
   mentionPeerId = "",
+  images = [],
+  onImagesChange,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showThinkingPicker, setShowThinkingPicker] = useState(false);
@@ -179,11 +196,67 @@ export function Composer({
   const [caretPos, setCaretPos] = useState<{ x: number; y: number } | null>(
     null,
   );
+  const [dragging, setDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Bumped per fetch so a stale response can never overwrite a newer one.
   const fetchSeq = useRef(0);
+  // Latest images, read inside the async FileReader callback so a burst of
+  // drops/pastes never appends from a stale closure.
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
 
   const mentionEnabled = mentionWorkspaceId !== undefined;
+
+  /** Add a pasted/dropped image file to the attachments. */
+  const addImage = (file: File) => {
+    if (imagesRef.current.length >= MAX_IMAGES) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      onImagesChange?.([
+        ...imagesRef.current,
+        {
+          data: reader.result,
+          mimeType: file.type || "image/png",
+          name: file.name,
+        },
+      ]);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  /** Paste support: image items in the clipboard become attachments; text
+   * pastes behave as usual (no preventDefault). */
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.items)
+      .filter((item) => item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f !== null);
+    if (files.length === 0) return;
+    e.preventDefault(); // never paste raw image bytes into the textarea
+    for (const file of files) addImage(file);
+  };
+
+  const handleDragOver = (e: DragEvent) => {
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      setDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: DragEvent) => {
+    // Fires when entering children; only clear when leaving the composer.
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setDragging(false);
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    for (const file of Array.from(e.dataTransfer.files)) {
+      if (file.type.startsWith("image/")) addImage(file);
+    }
+  };
 
   /** Re-evaluate the mention under the caret after typing or caret moves. */
   const updateMention = (nextValue: string, caret: number) => {
@@ -315,7 +388,33 @@ export function Composer({
   const showMentionAbove = !(large && caretPos !== null && caretPos.y < 60);
 
   return (
-    <div className="input-composer">
+    <div
+      className={`input-composer${dragging ? " dragging" : ""}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {images.length > 0 && (
+        <div className="input-images">
+          {images.map((image, index) => (
+            <div
+              key={`${image.name ?? "image"}-${index}`}
+              className="input-image"
+            >
+              <img src={image.data} alt={image.name ?? "attachment"} />
+              <button
+                type="button"
+                className="input-image-remove"
+                title="画像を削除"
+                onClick={() =>
+                  onImagesChange?.(images.filter((_, i) => i !== index))}
+              >
+                <IconX size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="input-box-wrap">
         <textarea
           ref={textareaRef}
@@ -333,6 +432,7 @@ export function Composer({
             );
           }}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           autoFocus={autoFocus}
         />
         {mention && caretPos && (

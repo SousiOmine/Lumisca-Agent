@@ -485,6 +485,28 @@ select:focus {
   margin-bottom: 0;
 }
 
+/* ---- images inside messages / tool results -------------------------------- */
+
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.msg-images:last-child {
+  margin-bottom: 0;
+}
+
+.msg-image {
+  max-width: 320px;
+  max-height: 240px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  object-fit: contain;
+}
+
 .msg-body pre {
   font-family: var(--mono);
   font-size: 12.5px;
@@ -763,6 +785,15 @@ select:focus {
   color: var(--error);
 }
 
+.tool-detail-result pre {
+  margin: 0;
+}
+
+.tool-detail-result .msg-images {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
 /* ---- tool calls (legacy boxed style, unused) ---------------------------- */
 
 .tool {
@@ -884,6 +915,58 @@ select:focus {
 
 .input-box-wrap {
   position: relative;
+}
+
+/* ---- image attachments (composer preview) --------------------------------- */
+
+.input-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 2px 2px;
+}
+
+.input-image {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.input-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.input-image-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.input-image-remove:hover {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+/* highlight the composer while files are dragged over it */
+.input-composer.dragging {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 /* ---- @mention file suggestions ------------------------------------------ */

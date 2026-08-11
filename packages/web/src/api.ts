@@ -6,6 +6,7 @@ import type {
   McpInfo,
   ModelInfo,
   PeerStatus,
+  PendingImage,
   ProviderInfo,
   SessionInfo,
   ThinkingLevel,
@@ -44,6 +45,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 /** Session info as served by the API: includes the last run error, if any. */
 export type SessionInfoDto = SessionInfo & { lastError?: string };
+
+/** Build a prompt request body. Images are data URLs; the payload sent to
+ * the agent is the base64 data without the `data:<mime>;base64,` header. */
+function promptBody(text: string, images?: PendingImage[]) {
+  return {
+    text,
+    ...(images && images.length > 0
+      ? {
+        images: images.map((image) => ({
+          data: image.data.startsWith("data:")
+            ? image.data.slice(image.data.indexOf(",") + 1)
+            : image.data,
+          mimeType: image.mimeType,
+        })),
+      }
+      : {}),
+  };
+}
 
 export const api = {
   listWorkspaces: () => request<Workspace[]>("/api/workspaces"),
@@ -97,10 +116,10 @@ export const api = {
     request<{ ok: boolean }>(`/api/sessions/${id}/close`, { method: "POST" }),
   getMessages: (id: string) =>
     request<AgentMessage[]>(`/api/sessions/${id}/messages`),
-  prompt: (id: string, text: string) =>
+  prompt: (id: string, text: string, images?: PendingImage[]) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/prompt`, {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(promptBody(text, images)),
     }),
   abort: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/abort`, { method: "POST" }),
@@ -247,12 +266,12 @@ export const fed = {
     request<SessionInfoDto>(`/api/fed/${peerId}/sessions/${sessionId}/open`, {
       method: "POST",
     }),
-  prompt: (peerId: string, sessionId: string, text: string) =>
+  prompt: (peerId: string, sessionId: string, text: string, images?: PendingImage[]) =>
     request<{ ok: boolean }>(
       `/api/fed/${peerId}/sessions/${sessionId}/prompt`,
       {
         method: "POST",
-        body: JSON.stringify({ text }),
+        body: JSON.stringify(promptBody(text, images)),
       },
     ),
   abort: (peerId: string, sessionId: string) =>
@@ -301,7 +320,8 @@ export function sessionApi(key: string) {
       getSession: () => api.getSession(sessionId),
       getMessages: () => api.getMessages(sessionId),
       close: () => api.closeSession(sessionId),
-      prompt: (text: string) => api.prompt(sessionId, text),
+      prompt: (text: string, images?: PendingImage[]) =>
+        api.prompt(sessionId, text, images),
       abort: () => api.abort(sessionId),
       updateModel: (provider: string, modelId: string) =>
         api.updateSessionModel(sessionId, provider, modelId),
@@ -313,7 +333,8 @@ export function sessionApi(key: string) {
     getSession: () => fed.getSession(peerId, sessionId),
     getMessages: () => fed.getMessages(peerId, sessionId),
     close: () => fed.closeSession(peerId, sessionId),
-    prompt: (text: string) => fed.prompt(peerId, sessionId, text),
+    prompt: (text: string, images?: PendingImage[]) =>
+      fed.prompt(peerId, sessionId, text, images),
     abort: () => fed.abort(peerId, sessionId),
     updateModel: (provider: string, modelId: string) =>
       fed.updateSessionModel(peerId, sessionId, provider, modelId),

@@ -3,6 +3,7 @@ import { api, fed, modelApi, sessionApi } from "./api.ts";
 import type {
   FederatedWorkspace,
   InitialData,
+  PendingImage,
   SessionView,
   ThinkingLevel,
 } from "./types.ts";
@@ -56,6 +57,7 @@ export function App({ initialData }: AppProps): ReactElement {
       fws: FederatedWorkspace,
       model: ComposerModel | null,
       text: string,
+      images: PendingImage[],
     ) => {
       const { peerId, workspace } = fws;
       const session = peerId === ""
@@ -80,7 +82,7 @@ export function App({ initialData }: AppProps): ReactElement {
         return next;
       });
       try {
-        await sessionApi(key).prompt(text.trim());
+        await sessionApi(key).prompt(text.trim(), images);
       } catch (error) {
         setViewError(key, error);
       }
@@ -88,17 +90,20 @@ export function App({ initialData }: AppProps): ReactElement {
     [setTabs, setActiveTab, setViews, setViewError],
   );
 
-  const prompt = useCallback(async (key: string, text: string) => {
-    const textTrimmed = text.trim();
-    if (!textTrimmed) return;
-    // The user message appears via the WebSocket event stream
-    // (message_start), so no optimistic append is needed.
-    try {
-      await sessionApi(key).prompt(textTrimmed);
-    } catch (error) {
-      setViewError(key, error);
-    }
-  }, [setViewError]);
+  const prompt = useCallback(
+    async (key: string, text: string, images: PendingImage[]) => {
+      const textTrimmed = text.trim();
+      if (!textTrimmed && images.length === 0) return;
+      // The user message appears via the WebSocket event stream
+      // (message_start), so no optimistic append is needed.
+      try {
+        await sessionApi(key).prompt(textTrimmed, images);
+      } catch (error) {
+        setViewError(key, error);
+      }
+    },
+    [setViewError],
+  );
 
   const abort = useCallback((key: string) => {
     sessionApi(key).abort().catch(console.error);
@@ -198,7 +203,8 @@ export function App({ initialData }: AppProps): ReactElement {
             key={activeTab ?? undefined}
             view={activeView}
             peerId={activeTab ? splitTabKey(activeTab).peerId : ""}
-            onPrompt={(text) => activeTab && prompt(activeTab, text)}
+            onPrompt={(text, images) =>
+              activeTab && prompt(activeTab, text, images)}
             onAbort={() => activeTab && abort(activeTab)}
             onModelChange={(provider, modelId) =>
               activeTab && changeModel(activeTab, provider, modelId)}

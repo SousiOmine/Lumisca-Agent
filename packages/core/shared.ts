@@ -85,6 +85,19 @@ export function contentText(
     .join("");
 }
 
+/** The image blocks of a message/tool-result content array (`data` is
+ * base64, `mimeType` like `image/png`). */
+export function contentImages(
+  content: string | Array<{ type: string; data?: string; mimeType?: string }>,
+): Array<{ type: "image"; data: string; mimeType: string }> {
+  if (typeof content === "string") return [];
+  return content.filter(
+    (b): b is { type: "image"; data: string; mimeType: string } =>
+      b.type === "image" && typeof b.data === "string" &&
+      typeof b.mimeType === "string",
+  );
+}
+
 /** "123K ctx" style model metadata for pickers and lists.
  * Text-only: the web UI renders a Tabler icon for reasoning models next to
  * this, and the CLI appends its own terminal marker (see cli/select.ts). */

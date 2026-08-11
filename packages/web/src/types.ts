@@ -58,6 +58,15 @@ export type ToolResultMessage = Extract<Message, { role: "toolResult" }>;
 /** A tool call block inside an assistant message. */
 export type ToolCallBlock = ToolCall;
 
+/** An image attached in the composer before sending. `data` is a data URL
+ * (used both for the preview thumbnail and, minus the header, as the
+ * base64 payload sent to the server). */
+export interface PendingImage {
+  data: string;
+  mimeType: string;
+  name?: string;
+}
+
 /** Initial data served by the server's bootstrap script (/assets/initial-data.js). */
 export interface InitialData {
   workspaces: Workspace[];

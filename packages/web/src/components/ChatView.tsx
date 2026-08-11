@@ -1,10 +1,11 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { IconSend } from "@tabler/icons-react";
-import { contentText } from "@lumisca/core/shared";
+import { contentImages, contentText } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
   AgentMessage,
   AssistantMessage,
+  PendingImage,
   ThinkingLevel,
   ToolCallBlock,
   ToolResultMessage,
@@ -12,6 +13,7 @@ import type {
 import { ToolCall } from "./ToolCall.tsx";
 import { AgentActivity } from "./AgentActivity.tsx";
 import { Composer } from "./Composer.tsx";
+import { ContentImages } from "./ContentImages.tsx";
 import { renderMarkdown } from "../markdown.ts";
 
 interface ChatViewProps {
@@ -19,7 +21,7 @@ interface ChatViewProps {
   /** Peer owning the session ("" = this server); forwarded to the model
    * picker so remote sessions list the peer's models. */
   peerId?: string;
-  onPrompt: (text: string) => void;
+  onPrompt: (text: string, images: PendingImage[]) => void;
   onAbort: () => void;
   onModelChange: (provider: string, modelId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
@@ -44,6 +46,7 @@ export function ChatView(
   }: ChatViewProps,
 ) {
   const [input, setInput] = useState("");
+  const [images, setImages] = useState<PendingImage[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isRunning = isViewRunning(view);
 
@@ -57,9 +60,10 @@ export function ChatView(
   }, [view.messages.length, view.streamingText.length]);
 
   const submit = () => {
-    if (!input.trim() || isRunning) return;
-    onPrompt(input);
+    if ((!input.trim() && images.length === 0) || isRunning) return;
+    onPrompt(input, images);
     setInput("");
+    setImages([]);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -138,12 +142,14 @@ export function ChatView(
           submitLabel="送信"
           submitIcon={IconSend}
           submitIconOnly
-          submitDisabled={!input.trim()}
+          submitDisabled={!input.trim() && images.length === 0}
           onAbort={isRunning ? onAbort : undefined}
           onSubmit={submit}
           onOpenSettings={onOpenSettings}
           mentionWorkspaceId={view.info.workspaceId}
           mentionPeerId={peerId}
+          images={images}
+          onImagesChange={setImages}
         />
       </div>
     </div>
@@ -256,10 +262,12 @@ function MessageRow({
 
   if (message.role === "user") {
     const text = contentText(message.content);
+    const imageBlocks = contentImages(message.content);
     return (
       <div className="msg user">
         <div className="msg-body">
-          <p>{text}</p>
+          {imageBlocks.length > 0 && <ContentImages images={imageBlocks} />}
+          {text && <p>{text}</p>}
         </div>
       </div>
     );

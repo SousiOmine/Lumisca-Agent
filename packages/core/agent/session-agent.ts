@@ -4,7 +4,7 @@ import type {
   AgentMessage,
   StreamFn,
 } from "@earendil-works/pi-agent-core";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, ImageContent, Model } from "@earendil-works/pi-ai";
 import { errorMessage } from "../errors.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
@@ -79,15 +79,17 @@ export class SessionAgent {
     return this.agent.state.messages;
   }
 
-  /** Run a prompt to completion. Waits for MCP tools to attach first (they
-   * spawn server processes asynchronously). Failures are reported via the
+  /** Run a prompt to completion. `images` are attached to the user message
+   * (base64, passed through to vision-capable models; pi omits them for
+   * text-only models). Waits for MCP tools to attach first (they spawn
+   * server processes asynchronously). Failures are reported via the
    * `session_error` event, never through the returned promise — callers
    * (HTTP fire-and-forget, CLI) all listen on events, so awaiting here only
    * means "the run finished". */
-  async prompt(text: string): Promise<void> {
+  async prompt(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
     try {
-      await this.agent.prompt(text);
+      await this.agent.prompt(text, images);
     } catch (error) {
       this.emit({
         type: "session_error",

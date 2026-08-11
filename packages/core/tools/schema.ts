@@ -152,10 +152,17 @@ export function object<P extends Record<string, ToolSchema>>(
 
 // --- tool interface -----------------------------------------------------------
 
-/** Result of a tool execution: text content (structurally compatible with
- * pi's TextContent) plus structured details for the UI. */
+/** A content block of a tool result: text, or an image (base64 `data`).
+ * Structurally compatible with pi's TextContent / ImageContent so results
+ * pass through toAgentTool() unchanged. */
+export type ToolContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
+/** Result of a tool execution: text/image content (structurally compatible
+ * with pi's TextContent/ImageContent) plus structured details for the UI. */
 export interface ToolResult {
-  content: Array<{ type: "text"; text: string }>;
+  content: ToolContentBlock[];
   details: Record<string, unknown>;
 }
 

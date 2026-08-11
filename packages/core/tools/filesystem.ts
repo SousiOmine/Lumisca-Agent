@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import {
   TOOL_EDIT,
@@ -11,6 +11,27 @@ import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 
 interface FsToolContext {
   sandbox: Sandbox;
+}
+
+/** Raster image extensions read as image content blocks (vision models see
+ * the pixels). Vector images (SVG) are XML and stay on the text path. */
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+};
+
+/** Largest image handed to the model as an image block; anything bigger
+ * falls back to the (garbled) text read. */
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 function fileInfoLine(entry: Deno.DirEntry): string {
@@ -33,13 +54,45 @@ export function createReadFileTool(
     label: "Read File",
     description:
       "Read a file's contents as text. `offset` and `limit` are in bytes. " +
-      "Large files are read in chunks; the output is truncated to the last portion when larger than 64KB.",
+      "Large files are read in chunks; the output is truncated to the last portion when larger than 64KB. " +
+      "Raster images (PNG/JPEG/GIF/WebP/BMP, up to 10MB) are passed to the model as images when read in full.",
     parameters: readSchema,
     execute: async (_id, params, _signal) => {
       const resolved = await ctx.sandbox.resolve(params.path);
       if (!resolved.ok) throw new Error(resolved.reason);
       const stat = await Deno.stat(resolved.path);
       if (stat.isDirectory) throw new Error(`Is a directory: ${params.path}`);
+      const wholeFile = params.offset === undefined &&
+        params.limit === undefined;
+      // Whole-file reads of raster images become an image block (vision
+      // models see the pixels); everything else stays on the text path.
+      const mimeType = IMAGE_MIME_BY_EXT[extname(resolved.path).toLowerCase()];
+      if (wholeFile && mimeType !== undefined && stat.size <= MAX_IMAGE_BYTES) {
+        const file = await Deno.open(resolved.path, { read: true });
+        try {
+          const buffer = new Uint8Array(stat.size);
+          let read = 0;
+          while (read < buffer.length) {
+            const n = await file.read(buffer.subarray(read));
+            if (n === null) break;
+            read += n;
+          }
+          const name = resolved.path.split(/[\\/]/).pop() ?? resolved.path;
+          return {
+            content: [
+              { type: "text", text: `[image: ${name} (${read} bytes)]` },
+              {
+                type: "image",
+                data: bytesToBase64(buffer.subarray(0, read)),
+                mimeType,
+              },
+            ],
+            details: { path: resolved.path, size: stat.size },
+          };
+        } finally {
+          file.close();
+        }
+      }
       const offset = params.offset ?? 0;
       const limit = params.limit ?? DEFAULT_READ_LIMIT;
       const file = await Deno.open(resolved.path, { read: true });

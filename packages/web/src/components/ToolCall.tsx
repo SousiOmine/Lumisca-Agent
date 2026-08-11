@@ -14,6 +14,7 @@ import {
   IconWorldSearch,
 } from "@tabler/icons-react";
 import {
+  contentImages,
   contentText,
   TOOL_BASH,
   TOOL_EDIT,
@@ -24,6 +25,7 @@ import {
   TOOL_WRITE_FILE,
 } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
+import { ContentImages } from "./ContentImages.tsx";
 
 /** Map tool names to compact icons. */
 function toolIcon(name: string) {
@@ -207,11 +209,14 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
             {JSON.stringify(toolCall.arguments, null, 2)}
           </div>
           {result && (
-            <pre
+            <div
               className={`tool-detail-result${result.isError ? " error" : ""}`}
             >
-              {contentText(result.content)}
-            </pre>
+              <pre>{contentText(result.content)}</pre>
+              {contentImages(result.content).length > 0 && (
+                <ContentImages images={contentImages(result.content)} />
+              )}
+            </div>
           )}
         </div>
       )}

@@ -204,7 +204,9 @@ export function federationRoutes(
 
   app.post("/fed/:peerId/sessions/:sid/prompt", async (c) => {
     const peer = requirePeer(c);
-    const body = await parseBody<{ text?: unknown }>(c);
+    // The body is forwarded verbatim (text + optional images); the target
+    // server validates it.
+    const body = await parseBody<{ text?: unknown; images?: unknown }>(c);
     return forward(
       c,
       fed.request(
