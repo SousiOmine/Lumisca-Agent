@@ -309,9 +309,7 @@ function MessageRow({
   if (message.role === "user") {
     const text = contentText(message.content);
     const imageBlocks = contentImages(message.content);
-    return (
-      <CopyableUserMessage text={text} images={imageBlocks} />
-    );
+    return <CopyableUserMessage text={text} images={imageBlocks} />;
   }
 
   const assistant = message as AssistantMessage;

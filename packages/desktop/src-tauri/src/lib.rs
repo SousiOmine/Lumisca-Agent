@@ -202,7 +202,7 @@ fn resolve_port() -> u16 {
 /// ours).
 fn generate_token() -> String {
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("OS random number source must be available");
+    getrandom::fill(&mut bytes).expect("OS random number source must be available");
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
