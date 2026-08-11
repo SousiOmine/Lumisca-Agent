@@ -477,7 +477,7 @@ Deno.test("sessions API returns 404 for unknown sessions", async () => {
   }
 });
 
-Deno.test("prompt API rejects while the session is streaming", async () => {
+Deno.test("prompt API steers a prompt sent while the session is streaming", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -492,6 +492,7 @@ Deno.test("prompt API rejects while the session is streaming", async () => {
         await new Promise((resolve) => setTimeout(resolve, 200));
         return fauxAssistantMessage("slow");
       },
+      fauxAssistantMessage("follow-up"),
     ]);
     const sessionRes = await json(base, "/api/sessions", {
       method: "POST",
@@ -509,14 +510,19 @@ Deno.test("prompt API rejects while the session is streaming", async () => {
     });
     assertEquals(first.status, 200);
 
+    // While the first run is streaming, a second prompt is accepted (200)
+    // and steered into the running loop instead of being rejected with 409.
     const second = await json(base, `/api/sessions/${session.id}/prompt`, {
       method: "POST",
       body: JSON.stringify({ text: "again" }),
     });
-    assertEquals(second.status, 409);
-    assertEquals((await second.json()).error.includes("already running"), true);
+    assertEquals(second.status, 200);
 
     await core.getAgent(session.id)!.waitForIdle();
+    const userTexts = core.getAgent(session.id)!.messages
+      .filter((m) => m.role === "user")
+      .map((m) => (m.content[0] as { text: string }).text);
+    assertEquals(userTexts, ["go", "again"]);
     await Deno.remove(root, { recursive: true });
   } finally {
     server.shutdown();

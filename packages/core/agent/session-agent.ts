@@ -172,6 +172,49 @@ export class SessionAgent {
     }
   }
 
+  /** Send a user prompt even while a run is active (fire-and-forget; the
+   * web UI path). An active run steers the message in at the next turn
+   * boundary — the same mechanism background-command notifications use —
+   * so it is processed after the current turn (tool executions included)
+   * completes; an idle agent starts a fresh run.
+   *
+   * The message is announced immediately (synthetic message_start/end
+   * events) so clients render it right away. When the loop drains it, it
+   * re-emits the same events for the same message (identical role +
+   * timestamp), which the UI dedups, and persistMessages saves it exactly
+   * once at that point. */
+  promptWhileRunning(text: string, images?: ImageContent[]): void {
+    const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
+    if (images !== undefined && images.length > 0) {
+      content.push(...images);
+    }
+    const message: AgentMessage = {
+      role: "user",
+      content,
+      timestamp: Date.now(),
+    };
+    this.emit({ type: "message_start", sessionId: this.sessionId, message });
+    this.emit({ type: "message_end", sessionId: this.sessionId, message });
+    if (this.isStreaming) {
+      this.agent.steer(message);
+      return;
+    }
+    void this.startSteeredRun(message);
+  }
+
+  /** Start a run that carries a steered user message. Mirrors
+   * startBackgroundRun: MCP attachment may still be in flight (a prompt
+   * sent right after session creation), so wait for it; if a run started
+   * concurrently the prompt fails and the message is steered instead. */
+  private async startSteeredRun(message: AgentMessage): Promise<void> {
+    if (!this.mcpReadyDone) await this.mcpReady;
+    try {
+      await this.agent.prompt(message);
+    } catch {
+      this.agent.steer(message);
+    }
+  }
+
   /** Best-effort title generation from the first user message. Failures
    * (and empty text) leave the provisional name in place; the run is
    * never affected. */

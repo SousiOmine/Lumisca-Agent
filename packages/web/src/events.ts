@@ -77,8 +77,11 @@ export function applyEvent(
         };
       }
       // User messages are not rendered optimistically; the stream is the
-      // only source, so this is always an append.
-      return { ...view, messages: [...view.messages, event.message] };
+      // only source. Upsert (not append): a message sent while the agent is
+      // running is announced immediately by the server and re-emitted when
+      // the run drains it — same role + timestamp — so it must never show
+      // twice.
+      return { ...view, messages: upsertMessage(view.messages, event.message) };
     }
     case "message_delta":
       return { ...view, streamingText: view.streamingText + event.delta };

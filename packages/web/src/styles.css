@@ -1106,6 +1106,14 @@ select:focus {
   gap: 8px;
 }
 
+/* Buttons grouped at the row's right edge: the abort button stays glued
+   to the submit button instead of floating in the space-between gap. */
+.input-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .input-composer .model-switch {
   background: transparent;
   border-color: transparent;

@@ -487,17 +487,13 @@ export class LumiscaCore {
   /** Fire-and-forget prompt: completion and failures arrive as events
    * (agent_end / session_error). The HTTP layer should use this instead of
    * holding a connection open for the whole run. `images` (base64) are
-   * attached to the user message for vision-capable models. Throws when the
-   * session is already streaming. */
+   * attached to the user message for vision-capable models. While the
+   * session is streaming the prompt is steered into the running loop
+   * (processed at the next turn boundary) instead of being refused. */
   startPrompt(id: string, text: string, images?: ImageContent[]): void {
     const agent = this.pool.require(id);
-    if (agent.isStreaming) {
-      throw new CoreError(`Session is already running: ${id}`, "conflict");
-    }
     this.sessions.touch(id);
-    void agent.prompt(text, images).catch(() => {
-      // SessionAgent.prompt reports failures via session_error events.
-    });
+    agent.promptWhileRunning(text, images);
   }
 
   /** Await the prompt (CLI). Errors are reported via session_error events. */

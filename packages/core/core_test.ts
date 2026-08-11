@@ -286,7 +286,7 @@ Deno.test("workspace update rebuilds session tools", async () => {
   await Deno.remove(extra, { recursive: true });
 });
 
-Deno.test("startPrompt throws while the session is streaming", async () => {
+Deno.test("startPrompt steers a prompt sent while streaming", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -296,22 +296,36 @@ Deno.test("startPrompt throws while the session is streaming", async () => {
     modelId,
   });
 
-  // A slow response keeps the session streaming while we probe.
+  // A slow response keeps the session streaming while the second prompt
+  // arrives; it must be steered into the running loop, not refused.
   faux.setResponses([
     async () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
       return fauxAssistantMessage("slow reply");
     },
+    fauxAssistantMessage("follow-up reply"),
   ]);
   core.startPrompt(session.id, "go");
-  assertThrows(
-    () => core.startPrompt(session.id, "again"),
-    Error,
-    "already running",
-  );
+  core.startPrompt(session.id, "again");
 
   await core.getAgent(session.id)!.waitForIdle();
-  assertEquals(core.getAgent(session.id)!.isStreaming, false);
+  const agent = core.getAgent(session.id)!;
+  assertEquals(agent.isStreaming, false);
+
+  const userTexts = agent.messages
+    .filter((m) => m.role === "user")
+    .map((m) => (m.content[0] as { text: string }).text);
+  assertEquals(userTexts, ["go", "again"]);
+
+  // Close and reopen: the steered message is persisted exactly once.
+  core.closeSession(session.id);
+  core.openSession(session.id);
+  const restored = core.getAgent(session.id)!.messages;
+  const restoredUserTexts = restored
+    .filter((m) => m.role === "user")
+    .map((m) => (m.content[0] as { text: string }).text);
+  assertEquals(restoredUserTexts, ["go", "again"]);
+
   core.close();
 });
 

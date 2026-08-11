@@ -60,7 +60,9 @@ export function ChatView(
   }, [view.messages.length, view.streamingText.length]);
 
   const submit = () => {
-    if ((!input.trim() && images.length === 0) || isRunning) return;
+    if (!input.trim() && images.length === 0) return;
+    // While the agent is running the prompt is steered into the running
+    // loop (the server accepts it, no need to block the send button).
     onPrompt(input, images);
     setInput("");
     setImages([]);
@@ -279,6 +281,7 @@ function CopyableUserMessage({
       </div>
       {text && (
         <button
+          type="button"
           className="msg-copy-btn"
           title="メッセージをコピー"
           onClick={handleCopy}

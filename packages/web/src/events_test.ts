@@ -77,6 +77,20 @@ Deno.test("events: assistant message_end never duplicates after a resync", () =>
   assertEquals(v.streamingText, "");
 });
 
+Deno.test("events: user message_start never duplicates (steered while running)", () => {
+  // A message sent while the agent runs is announced immediately by the
+  // server and re-emitted when the running loop drains it; the second
+  // emission has the same role + timestamp and must not append a copy.
+  const m = message("user", 100, "stop");
+  let v = view();
+  v = applyEvent({ type: "message_start", sessionId: "s1", message: m }, v)!;
+  assertEquals(v.messages.length, 1);
+  v = applyEvent({ type: "message_start", sessionId: "s1", message: m }, v)!;
+  assertEquals(v.messages.length, 1);
+  v = applyEvent({ type: "message_end", sessionId: "s1", message: m }, v)!;
+  assertEquals(v.messages.length, 1);
+});
+
 Deno.test("events: assistant stream accumulates deltas and clears on start", () => {
   let v = view();
   v = applyEvent(

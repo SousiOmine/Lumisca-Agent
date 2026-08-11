@@ -60,7 +60,8 @@ interface ComposerProps {
    * the accessible name and tooltip. */
   submitIconOnly?: boolean;
   submitDisabled?: boolean;
-  /** Show an abort button instead of submit while the agent is running. */
+  /** Show an abort button next to submit while the agent is running
+   * (sending stays enabled so the user can steer the running task). */
   onAbort?: () => void;
   onSubmit: () => void;
   /** Peer owning the session ("" = this server). The model picker then
@@ -579,26 +580,30 @@ export function Composer({
               )}
             </div>
           )}
-        {onAbort
-          ? (
-            <button type="button" className="btn danger" onClick={onAbort}>
-              <IconPlayerStop size={14} />
-              中断
-            </button>
-          )
-          : (
+        <div className="input-actions">
+          {onAbort && (
             <button
               type="button"
-              className="btn primary"
-              onClick={onSubmit}
-              disabled={submitDisabled}
-              aria-label={submitIconOnly ? submitLabel : undefined}
-              title={submitIconOnly ? submitLabel : undefined}
+              className="btn danger"
+              onClick={onAbort}
+              aria-label="中断"
+              title="中断"
             >
-              {SubmitIcon && <SubmitIcon size={14} />}
-              {!submitIconOnly && submitLabel}
+              <IconPlayerStop size={14} />
             </button>
           )}
+          <button
+            type="button"
+            className="btn primary"
+            onClick={onSubmit}
+            disabled={submitDisabled}
+            aria-label={submitIconOnly ? submitLabel : undefined}
+            title={submitIconOnly ? submitLabel : undefined}
+          >
+            {SubmitIcon && <SubmitIcon size={14} />}
+            {!submitIconOnly && submitLabel}
+          </button>
+        </div>
       </div>
     </div>
   );
