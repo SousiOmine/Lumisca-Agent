@@ -666,8 +666,11 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
         Ok(parsed) => parsed,
         Err(_) => return bridge_error(StatusCode::BAD_REQUEST, "invalid uri"),
     };
+    // Action = everything after the `/shell/` prefix (`state`,
+    // `connect-remote`, `update/status`, ...), not just one segment.
     let mut segments = parsed.path().trim_start_matches('/').split('/');
-    let action = segments.nth(1).unwrap_or("");
+    segments.next(); // skip "shell"
+    let action = segments.collect::<Vec<_>>().join("/");
     let params: std::collections::HashMap<String, String> =
         parsed.query_pairs().into_owned().collect();
 
@@ -682,7 +685,7 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
     }
 
     let get = |name: &str| params.get(name).cloned();
-    match action {
+    match action.as_str() {
         "state" => {
             let state = app.state::<AppState>();
             let mode = if state.last_remote.lock().unwrap().is_some() {
