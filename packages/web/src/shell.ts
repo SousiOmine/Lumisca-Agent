@@ -53,6 +53,27 @@ export function shellAvailable(): Promise<boolean> {
   return Promise.race([probe, timeout]);
 }
 
+/** Whether the OS folder picker can be used: the shell bridge must answer
+ * AND display the local server (only then are picked paths on the machine
+ * owning the workspaces; against a remote server they would be wrong). */
+export function nativeFolderPickerAvailable(): Promise<boolean> {
+  const probe = shellCall<ShellState>("state").then(
+    (s) => s.mode === "local",
+    () => false,
+  );
+  const timeout = new Promise<boolean>((resolve) =>
+    setTimeout(() => resolve(false), 2500)
+  );
+  return Promise.race([probe, timeout]);
+}
+
+/** Open the OS folder picker through the shell bridge. Returns the picked
+ * path, or null when the user cancelled. */
+export async function pickFolder(): Promise<string | null> {
+  const res = await shellCall<{ path: string | null }>("pick-folder");
+  return res.path;
+}
+
 /** Registry entries as exposed by the shell bridge. */
 export type ShellServer = ConnectionEntry;
 

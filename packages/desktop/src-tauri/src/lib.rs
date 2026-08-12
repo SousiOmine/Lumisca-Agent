@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, StatusCode};
 use tauri::{AppHandle, Manager, WindowEvent};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 #[cfg(windows)]
@@ -900,6 +901,26 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
             }
             bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
         }
+        // Open the OS folder picker; the picked path is on THIS machine,
+        // so the frontend only offers this for local workspaces.
+        "pick-folder" => {
+            let picked = match app.get_webview_window("main") {
+                Some(win) => win
+                    .dialog()
+                    .file()
+                    .set_title("フォルダを選択")
+                    .blocking_pick_folder(),
+                None => app
+                    .dialog()
+                    .file()
+                    .set_title("フォルダを選択")
+                    .blocking_pick_folder(),
+            };
+            let path = picked
+                .and_then(|p| p.into_path().ok())
+                .map(|p| p.to_string_lossy().into_owned());
+            bridge_json(StatusCode::OK, serde_json::json!({ "path": path }))
+        }
         _ => bridge_error(StatusCode::NOT_FOUND, "unknown action"),
     }
 }
@@ -908,6 +929,7 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let handle = app.handle().clone();
             let settings = load_desktop_settings(&handle);

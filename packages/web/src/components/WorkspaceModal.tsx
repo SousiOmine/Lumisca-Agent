@@ -12,6 +12,7 @@ import { workspaceApi } from "../api.ts";
 import type { Workspace } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 import { errorText } from "../providers.ts";
+import { nativeFolderPickerAvailable, pickFolder } from "../shell.ts";
 
 interface WorkspaceModalProps {
   /** Present → edit mode (rename / change folders / delete). */
@@ -42,12 +43,44 @@ export function WorkspaceModal(
   const [folders, setFolders] = useState<string[]>(workspace?.folders ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // True when the desktop shell is displaying the local server, so the OS
+  // folder picker (which returns paths on this machine) is meaningful.
+  const [nativePicker, setNativePicker] = useState(false);
+  const [picking, setPicking] = useState(false);
   // All API calls target the peer that owns the workspace.
   const wsApi = workspaceApi(peerId);
+
+  useEffect(() => {
+    nativeFolderPickerAvailable().then(setNativePicker);
+  }, []);
 
   const addFolder = (path: string) => {
     setFolders((prev) => (prev.includes(path) ? prev : [...prev, path]));
     setView({ kind: "main" });
+  };
+
+  const pickNative = async () => {
+    setPicking(true);
+    setError(undefined);
+    try {
+      const path = await pickFolder();
+      if (path) addFolder(path);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  // The native OS picker returns paths on this machine, so it only applies
+  // to workspaces owned by the displayed local server; otherwise fall back
+  // to the in-app browser.
+  const chooseFolder = () => {
+    if (nativePicker && peerId === "") {
+      pickNative();
+    } else {
+      setView({ kind: "browse" });
+    }
   };
 
   const save = async () => {
@@ -116,10 +149,11 @@ export function WorkspaceModal(
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => setView({ kind: "browse" })}
+                  onClick={chooseFolder}
+                  disabled={picking}
                 >
                   <IconPlus size={14} />
-                  フォルダを選択
+                  {picking ? "選択中..." : "フォルダを選択"}
                 </button>
               </div>
             </label>
