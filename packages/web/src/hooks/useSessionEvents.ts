@@ -65,6 +65,7 @@ export function useSessionEvents() {
           ...v,
           streamingText: "",
           runningTools: new Map(),
+          pendingQuestions: [],
           error: undefined,
           agentStartedAt: undefined,
           agentEndedAt: undefined,

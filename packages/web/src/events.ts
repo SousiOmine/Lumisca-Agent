@@ -66,10 +66,12 @@ export function applyEvent(
   if (event.sessionId !== view.info.id) return null;
   switch (event.type) {
     case "agent_start":
-      // A new run starts: a stale error from the previous run is gone.
+      // A new run starts: a stale error from the previous run is gone, and
+      // any question left over from it can no longer be answered.
       return {
         ...view,
         error: undefined,
+        pendingQuestions: [],
         agentStartedAt: Date.now(),
         agentEndedAt: undefined,
         thinkingStartAt: undefined,
@@ -118,7 +120,29 @@ export function applyEvent(
     case "tool_end": {
       const runningTools = new Map(view.runningTools);
       runningTools.delete(event.toolCallId);
-      return { ...view, runningTools };
+      // The ask tool resolved (answered or failed): its questions are gone.
+      const pendingQuestions = view.pendingQuestions.filter(
+        (q) => q.toolCallId !== event.toolCallId,
+      );
+      return pendingQuestions.length === view.pendingQuestions.length
+        ? { ...view, runningTools }
+        : { ...view, runningTools, pendingQuestions };
+    }
+    case "question": {
+      // The agent asked the user a question; show it above the composer.
+      // Dedup by tool call id: a resync could re-deliver the event.
+      if (
+        view.pendingQuestions.some((q) => q.toolCallId === event.toolCallId)
+      ) {
+        return view;
+      }
+      return {
+        ...view,
+        pendingQuestions: [
+          ...view.pendingQuestions,
+          { toolCallId: event.toolCallId, questions: event.questions },
+        ],
+      };
     }
     case "session_error":
       return { ...view, error: event.message };
@@ -126,7 +150,7 @@ export function applyEvent(
       // The transcript was rewound from a user message onward: drop the
       // exact messages the server removed, and tombstone their keys so an
       // append-only resync cannot resurrect them. Run state is cleared
-      // too (a running run was aborted by the rewind).
+      // too (a running run was aborted by the rewind), questions included.
       const removedKeys = new Set(event.removed.map((m) => messageKey(m)));
       const removed = new Set(view.removed);
       for (const key of removedKeys) removed.add(key);
@@ -136,6 +160,7 @@ export function applyEvent(
         removed,
         streamingText: "",
         runningTools: new Map(),
+        pendingQuestions: [],
         error: undefined,
         agentStartedAt: undefined,
         agentEndedAt: undefined,
@@ -143,9 +168,11 @@ export function applyEvent(
       };
     }
     case "agent_end":
-      return view.agentStartedAt === undefined
-        ? null
-        : { ...view, agentEndedAt: Date.now() };
+      return view.agentStartedAt === undefined ? null : {
+        ...view,
+        pendingQuestions: [],
+        agentEndedAt: Date.now(),
+      };
     case "session_renamed":
       // The session title changed (e.g. auto-generated from the first
       // message); the tab shows the new name.

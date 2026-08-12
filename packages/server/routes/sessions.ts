@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type {
+  AskAnswer,
   CreateSessionInput,
   ImageContent,
   SessionAgent,
@@ -23,6 +24,42 @@ const MAX_IMAGE_BASE64_LENGTH = 20 * 1024 * 1024;
 interface PromptBody {
   text?: unknown;
   images?: unknown;
+}
+
+interface AnswerBody {
+  toolCallId?: unknown;
+  answers?: unknown;
+}
+
+/** Validate an answer request body for a pending ask (the ask tool): the
+ * tool call id and the answer list shape. The core validates the values
+ * against the pending questions (ids and option labels). */
+export function parseAnswerBody(body: AnswerBody): {
+  toolCallId: string;
+  answers: AskAnswer[];
+} {
+  if (typeof body.toolCallId !== "string" || body.toolCallId.length === 0) {
+    throw new AppError("toolCallId (string) is required", 400);
+  }
+  if (!Array.isArray(body.answers) || body.answers.length === 0) {
+    throw new AppError("answers (array) is required", 400);
+  }
+  const answers: AskAnswer[] = [];
+  for (const item of body.answers as Array<Record<string, unknown>>) {
+    const { id, values } = item;
+    if (
+      typeof id !== "string" ||
+      !Array.isArray(values) ||
+      values.some((v) => typeof v !== "string")
+    ) {
+      throw new AppError(
+        "each answer must have an `id` (string) and `values` (array of strings)",
+        400,
+      );
+    }
+    answers.push({ id, values: values as string[] });
+  }
+  return { toolCallId: body.toolCallId, answers };
 }
 
 /** Validate a prompt request body; `images` are base64 data + mimeType,
@@ -83,6 +120,8 @@ export interface SessionApi {
   abort(id: string): void;
   rewind(id: string, timestamp: number): Promise<void>;
   setSessionModel(id: string, provider: string, modelId: string): void;
+  /** Resolve a pending ask (the ask tool) with the user's answers. */
+  answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
 }
 
 export function sessionRoutes(core: SessionApi): Hono {
@@ -169,6 +208,19 @@ export function sessionRoutes(core: SessionApi): Hono {
 
   app.post("/sessions/:id/abort", (c) => {
     core.abort(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+
+  /** Answer a pending ask (the ask tool): resolves the blocked run with
+   * the user's answers. Throws 404 when the ask is gone (already answered,
+   * or the run was aborted/rewound), 400 for malformed or mismatched
+   * answers. */
+  app.post("/sessions/:id/answer", async (c) => {
+    const body = await parseBody<AnswerBody>(c);
+    const { toolCallId, answers } = parseAnswerBody(body ?? {});
+    const id = c.req.param("id");
+    requireSession(id);
+    core.answerQuestion(id, toolCallId, answers);
     return c.json({ ok: true });
   });
 

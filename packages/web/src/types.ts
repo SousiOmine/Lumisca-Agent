@@ -3,6 +3,8 @@ import type { Message, ToolCall } from "@earendil-works/pi-ai";
 /** Shared domain types; single source of truth in packages/core. */
 import type {
   AgentMessage,
+  AskAnswer,
+  AskQuestion,
   ClientEvent as CoreClientEvent,
   ConnectionEntry,
   McpInfo,
@@ -17,6 +19,8 @@ import type {
 } from "@lumisca/core";
 export type {
   AgentMessage,
+  AskAnswer,
+  AskQuestion,
   ConnectionEntry,
   McpInfo,
   McpServerInfo,
@@ -73,12 +77,23 @@ export interface InitialData {
   theme: ThemeSetting;
 }
 
+/** One pending ask (the `ask` tool): questions awaiting the user's answers,
+ * tied to the tool call that asked them. */
+export interface PendingQuestion {
+  toolCallId: string;
+  questions: AskQuestion[];
+}
+
 /** Live state of one open session tab. */
 export interface SessionView {
   info: SessionInfo;
   messages: AgentMessage[];
   streamingText: string;
   runningTools: Map<string, string>; // toolCallId -> toolName
+  /** Questions the agent asked (ask tool) that are still waiting for the
+   * user's answers; rendered above the composer, cleared when the tool
+   * call resolves or the run ends. */
+  pendingQuestions: PendingQuestion[];
   /** Keys (role:timestamp) of messages deleted by rewind. Kept so a later
    * resync (merge is append-only) cannot resurrect them. */
   removed: Set<string>;
@@ -101,6 +116,7 @@ export function emptyView(
     messages,
     streamingText: "",
     runningTools: new Map(),
+    pendingQuestions: [],
     removed: new Set(),
   };
 }

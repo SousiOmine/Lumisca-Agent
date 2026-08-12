@@ -24,6 +24,7 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
     messages: [],
     streamingText: "",
     runningTools: new Map(),
+    pendingQuestions: [],
     removed: new Set(),
     ...overrides,
   };
@@ -300,4 +301,114 @@ Deno.test("events: session_renamed updates the session name", () => {
     applyEvent({ type: "session_renamed", sessionId: "s2", name: "x" }, v),
     null,
   );
+});
+
+const QUESTION = {
+  id: "q1",
+  question: "Which language?",
+  options: [{ label: "Deno" }, { label: "Node" }],
+};
+
+Deno.test("events: question is shown and cleared by tool_end", () => {
+  let v = view();
+  v = applyEvent(
+    {
+      type: "question",
+      sessionId: "s1",
+      toolCallId: "t1",
+      questions: [QUESTION],
+    },
+    v,
+  )!;
+  assertEquals(v.pendingQuestions.length, 1);
+  assertEquals(v.pendingQuestions[0]!.toolCallId, "t1");
+
+  // A re-delivered event (resync) must not duplicate the panel.
+  v = applyEvent(
+    {
+      type: "question",
+      sessionId: "s1",
+      toolCallId: "t1",
+      questions: [QUESTION],
+    },
+    v,
+  )!;
+  assertEquals(v.pendingQuestions.length, 1);
+
+  // The tool call resolved: the panel is gone.
+  v = applyEvent(
+    {
+      type: "tool_end",
+      sessionId: "s1",
+      toolCallId: "t1",
+      toolName: "ask",
+      result: {},
+      isError: false,
+    },
+    v,
+  )!;
+  assertEquals(v.pendingQuestions.length, 0);
+});
+
+Deno.test("events: two pending asks coexist and resolve independently", () => {
+  let v = view();
+  v = applyEvent(
+    {
+      type: "question",
+      sessionId: "s1",
+      toolCallId: "t1",
+      questions: [QUESTION],
+    },
+    v,
+  )!;
+  v = applyEvent(
+    {
+      type: "question",
+      sessionId: "s1",
+      toolCallId: "t2",
+      questions: [{ ...QUESTION, id: "q2" }],
+    },
+    v,
+  )!;
+  assertEquals(v.pendingQuestions.length, 2);
+
+  v = applyEvent(
+    {
+      type: "tool_end",
+      sessionId: "s1",
+      toolCallId: "t1",
+      toolName: "ask",
+      result: {},
+      isError: false,
+    },
+    v,
+  )!;
+  assertEquals(v.pendingQuestions.map((q) => q.toolCallId), ["t2"]);
+});
+
+Deno.test("events: pending questions are cleared on run teardown", () => {
+  // agent_end (abort or completion) clears the panels.
+  let v = view({
+    pendingQuestions: [{ toolCallId: "t1", questions: [QUESTION] }],
+    agentStartedAt: 1,
+  });
+  v = applyEvent({ type: "agent_end", sessionId: "s1" }, v)!;
+  assertEquals(v.pendingQuestions.length, 0);
+
+  // agent_start (new run) clears stale panels from a previous run.
+  v = view({ pendingQuestions: [{ toolCallId: "t1", questions: [QUESTION] }] });
+  v = applyEvent({ type: "agent_start", sessionId: "s1" }, v)!;
+  assertEquals(v.pendingQuestions.length, 0);
+
+  // messages_truncated (rewind aborted the run) clears them too.
+  v = view({ pendingQuestions: [{ toolCallId: "t1", questions: [QUESTION] }] });
+  v = applyEvent(
+    {
+      type: "messages_truncated",
+      sessionId: "s1",
+      removed: [{ role: "user", timestamp: 100 }],
+    },
+    v,
+  )!;
+  assertEquals(v.pendingQuestions.length, 0);
 });

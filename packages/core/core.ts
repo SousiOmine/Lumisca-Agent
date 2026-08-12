@@ -32,6 +32,7 @@ import {
   isThinkingLevel,
 } from "./models/thinking.ts";
 import type { ThinkingLevel } from "./shared.ts";
+import type { AskAnswer } from "./shared.ts";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
@@ -504,6 +505,14 @@ export class LumiscaCore {
 
   abort(id: string): void {
     this.pool.require(id).abort();
+  }
+
+  /** Resolve a pending ask (the ask tool) of a session with the user's
+   * answers, letting the blocked run continue. Throws when the session is
+   * closed, the ask is gone (answered or cancelled), or the answers do not
+   * match the pending questions. */
+  answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void {
+    this.pool.require(id).answerQuestion(toolCallId, answers);
   }
 
   /** Undo the transcript from a user message onward (see

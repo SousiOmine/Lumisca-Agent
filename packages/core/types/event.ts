@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AskQuestion } from "../shared.ts";
 import type { SessionInfo } from "./session.ts";
 
 /** Events emitted by the core and forwarded to any client (WebSocket, CLI). */
@@ -37,4 +38,13 @@ export type ClientEvent =
   }
   /** The session title changed (e.g. auto-generated from the first
    * message by the fast model). Clients update the displayed name. */
-  | { type: "session_renamed"; sessionId: string; name: string };
+  | { type: "session_renamed"; sessionId: string; name: string }
+  /** The agent asked the user a question (the ask tool). The run waits
+   * for the answer; clients show the questions in the UI and post the
+   * answers back via the answer endpoint. */
+  | {
+    type: "question";
+    sessionId: string;
+    toolCallId: string;
+    questions: AskQuestion[];
+  };

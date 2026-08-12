@@ -9,6 +9,7 @@ import {
   IconFolder,
   IconLoader,
   IconLoader2,
+  IconMessageQuestion,
   IconSearch,
   IconTerminal2,
   IconWorldSearch,
@@ -16,6 +17,7 @@ import {
 import {
   contentImages,
   contentText,
+  TOOL_ASK,
   TOOL_BASH,
   TOOL_EDIT,
   TOOL_EVAL,
@@ -63,6 +65,9 @@ function toolIcon(name: string) {
     // code evaluation
     case TOOL_EVAL:
       return <IconCode size={13} />;
+    // asking the user a question
+    case TOOL_ASK:
+      return <IconMessageQuestion size={13} />;
     // task list
     case "TodoWrite":
     case "TodoRead":
@@ -113,6 +118,19 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
     // code evaluation — show the snippet
     case TOOL_EVAL:
       return typeof args.code === "string" ? truncate(args.code, 60) : "";
+    // asking the user — show the number of questions / first question
+    case TOOL_ASK: {
+      const questions = Array.isArray(args.questions)
+        ? args.questions as Array<{ question?: unknown }>
+        : [];
+      if (questions.length === 0) return "";
+      if (questions.length === 1) {
+        return typeof questions[0]!.question === "string"
+          ? truncate(questions[0]!.question as string, 50)
+          : "1 question";
+      }
+      return `${questions.length} questions`;
+    }
     // search / grep — argument may be `pattern`, `query`, or `command`
     case TOOL_GREP:
     case "Grep":

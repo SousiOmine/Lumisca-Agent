@@ -9,6 +9,7 @@ import { contentImages, contentText } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
   AgentMessage,
+  AskAnswer,
   AssistantMessage,
   PendingImage,
   ThinkingLevel,
@@ -19,6 +20,7 @@ import { ToolCall } from "./ToolCall.tsx";
 import { AgentActivity } from "./AgentActivity.tsx";
 import { Composer } from "./Composer.tsx";
 import { ContentImages } from "./ContentImages.tsx";
+import { QuestionPanel } from "./QuestionPanel.tsx";
 import { renderMarkdown } from "../markdown.ts";
 
 interface ChatViewProps {
@@ -33,6 +35,10 @@ interface ChatViewProps {
    * Resolves once the deletion is complete; rejects when nothing was
    * deleted. */
   onRewind: (timestamp: number) => Promise<void>;
+  /** Answer a pending ask (the ask tool) with the user's selections.
+   * Resolves when the answer was accepted; rejects when the question is
+   * gone or the answers are invalid. */
+  onAnswer: (toolCallId: string, answers: AskAnswer[]) => Promise<void>;
   onModelChange: (provider: string, modelId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   onOpenSettings?: () => void;
@@ -55,6 +61,7 @@ export function ChatView(
     onPrompt,
     onAbort,
     onRewind,
+    onAnswer,
     onModelChange,
     onThinkingLevelChange,
     onOpenSettings,
@@ -179,6 +186,7 @@ export function ChatView(
         </div>
       </div>
       <div className="input-area">
+        <QuestionPanel pending={view.pendingQuestions} onAnswer={onAnswer} />
         <Composer
           value={input}
           onChange={setInput}

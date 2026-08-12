@@ -7,6 +7,7 @@ import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { createCodingTools } from "../tools/mod.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
+import { AskHub } from "../tools/ask.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
@@ -108,7 +109,10 @@ export class SessionPool {
       background = new BackgroundProcessManager();
       this.background.set(session.id, background);
     }
-    const tools = createCodingTools(workspace, { background });
+    // One hub per open agent: it holds the questions of the live run, so a
+    // rebuild (which closes the old agent first) starts with a clean slate.
+    const askHub = new AskHub(session.id, (event) => this.deps.emit(event));
+    const tools = createCodingTools(workspace, { background, ask: askHub });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a
     // stored prompt (created before snapshots) rebuild once — and the
@@ -135,6 +139,7 @@ export class SessionPool {
       streamFn: this.deps.streamFn,
       messageRepo: this.deps.messageRepo,
       backgroundManager: background,
+      askHub,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
       renameSession: (name) => this.deps.renameSession(session.id, name),

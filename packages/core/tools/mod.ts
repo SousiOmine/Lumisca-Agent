@@ -24,6 +24,7 @@ import {
 } from "../skills/discover.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
+import { type AskHub, createAskTool } from "./ask.ts";
 
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
@@ -45,6 +46,9 @@ export interface ToolFactoryOptions {
    * caller (the session pool) so the session agent can subscribe to its
    * completion events too; omitted → the async_bash tools are not built. */
   background?: BackgroundProcessManager;
+  /** Question hub backing the ask tool (asks the user in the UI and waits
+   * for the answer). Omitted → the ask tool is not built. */
+  ask?: AskHub;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -68,6 +72,7 @@ export function createCodingTools(
       : []),
     createEvalTool(),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
+    ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
   ];
 }
 

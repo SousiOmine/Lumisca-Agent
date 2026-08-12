@@ -21,6 +21,8 @@ import type { McpServerStatus } from "../mcp/manager.ts";
 import { createMcpTools } from "../mcp/tools.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
+import type { AskHub } from "../tools/ask.ts";
+import type { AskAnswer } from "../shared.ts";
 import type {
   BackgroundCommandDone,
   BackgroundProcessManager,
@@ -50,6 +52,9 @@ export interface SessionAgentOptions {
    * completion events are injected into the agent loop as notifications
    * (see notifyBackgroundCommand). */
   backgroundManager?: BackgroundProcessManager;
+  /** Question hub backing the ask tool (one per session): registers the
+   * questions the agent asks and resolves them with the user's answers. */
+  askHub: AskHub;
   /** Persist a new session title (also notifies clients). */
   renameSession: (name: string) => void;
 }
@@ -82,6 +87,9 @@ export class SessionAgent {
    * no fast model is configured). */
   private readonly titleGenerator: TitleGenerator | null;
   private readonly renameSession: (name: string) => void;
+  /** Question hub backing the ask tool; rejects pending asks when the run
+   * ends or the session closes (see rejectPendingAsks). */
+  private readonly askHub: AskHub;
   /** Background-command manager (null when the async_bash tools are not
    * built for this session). */
   private readonly backgroundManager: BackgroundProcessManager | null;
@@ -99,6 +107,7 @@ export class SessionAgent {
     this.messageRepo = options.messageRepo;
     this.onEvent = options.onEvent;
     this.renameSession = options.renameSession;
+    this.askHub = options.askHub;
     this.savedCount = options.messages?.length ?? 0;
 
     // A vision-capable main model passes images through as-is; only a
@@ -305,7 +314,23 @@ export class SessionAgent {
   }
 
   abort(): void {
+    this.rejectPendingAsks();
     this.agent.abort();
+  }
+
+  /** Resolve a pending ask (the ask tool) with the user's answers, letting
+   * the blocked run continue. The answers are validated against the
+   * pending questions; throws when the ask is gone or malformed. */
+  answerQuestion(toolCallId: string, answers: AskAnswer[]): void {
+    this.askHub.answer(toolCallId, answers);
+  }
+
+  /** Reject every pending ask. The run that asked them is ending or the
+   * session is closing, so the tool promises must settle — otherwise a
+   * torn-down run would leave them hanging (and the UI's question panel
+   * would never clear). Idempotent: safe to call from every teardown path. */
+  private rejectPendingAsks(): void {
+    this.askHub.rejectAll();
   }
 
   /** Undo the transcript from a user message onward: the message itself
@@ -328,7 +353,10 @@ export class SessionAgent {
    * throws not_found. */
   async rewind(timestamp: number): Promise<void> {
     if (this.isStreaming) {
-      this.agent.abort();
+      // Rejects pending asks first (via abort), so a run waiting on the
+      // user's answer unwinds immediately — waitForIdle below would hang
+      // until the ask tool's promise settles otherwise.
+      this.abort();
       await this.agent.waitForIdle();
     }
     const messages = this.agent.state.messages;
@@ -382,6 +410,7 @@ export class SessionAgent {
    * agent rebuilds (model/workspace changes) while the session is open. */
   close(): void {
     this.closed = true;
+    this.rejectPendingAsks();
     this.agent.abort();
     this.backgroundUnsubscribe?.();
     const manager = this.mcpManager;
@@ -529,6 +558,9 @@ export class SessionAgent {
         });
         break;
       case "agent_end":
+        // The run ended (normally or aborted); any ask that is still
+        // pending can never be answered within this run.
+        this.rejectPendingAsks();
         this.emit({ type: "agent_end", sessionId: this.sessionId });
         break;
       default:

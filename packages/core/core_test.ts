@@ -9,7 +9,7 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
-import type { AgentMessage } from "./mod.ts";
+import type { AgentMessage, ClientEvent } from "./mod.ts";
 import { LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
 import {
@@ -1657,6 +1657,121 @@ Deno.test("reopened session with history does not regenerate the title", async (
   assertEquals(core.getSession(session.id)!.name, "Title A");
   assertEquals(captured.length, 3); // title + first run + second run only
   assertEquals(captured[2]!.model, "main");
+
+  core.close();
+});
+
+/** Wait for the next `question` event of a session (the ask tool fired).
+ * The run blocks until the test answers. */
+function waitForQuestion(
+  core: LumiscaCore,
+  sessionId: string,
+): Promise<Extract<ClientEvent, { type: "question" }>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("question event never arrived")),
+      5000,
+    );
+    const unsubscribe = core.subscribe((event) => {
+      if (event.type === "question" && event.sessionId === sessionId) {
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(event);
+      }
+    });
+  });
+}
+
+Deno.test("ask tool blocks the run until the user answers, then continues", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([
+    fauxAssistantMessage([
+      fauxToolCall("ask", {
+        questions: [{
+          id: "lang",
+          question: "Which language?",
+          options: [{ label: "Deno" }, { label: "Node" }],
+        }],
+      }),
+    ]),
+    fauxAssistantMessage("Great choice!"),
+  ]);
+
+  const events: ClientEvent[] = [];
+  const unsubscribe = core.subscribe((event) => events.push(event));
+
+  // The run blocks on the ask tool until the answer arrives.
+  const run = core.prompt(session.id, "Which language should I use?");
+  const question = await waitForQuestion(core, session.id);
+  assertEquals(question.toolCallId.length > 0, true);
+  core.answerQuestion(question.sessionId, question.toolCallId, [
+    { id: "lang", values: ["Deno"] },
+  ]);
+  await run;
+
+  // The tool result carried the answer and the run continued normally.
+  const messages = core.getAgent(session.id)!.messages;
+  const toolResults = messages.filter((m) => m.role === "toolResult");
+  assertEquals(toolResults.length, 1);
+  const resultText = (toolResults[0] as { content: Array<{ text: string }> })
+    .content[0]!.text;
+  assertEquals(resultText, "Answers from the user:\n- Which language?: Deno");
+  const last = messages.at(-1) as { content: Array<{ text: string }> };
+  assertEquals(last.content[0]!.text, "Great choice!");
+  assertEquals(events.some((e) => e.type === "question"), true);
+
+  unsubscribe();
+  core.close();
+});
+
+Deno.test("rewind while a question is pending aborts the run cleanly", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([
+    fauxAssistantMessage([
+      fauxToolCall("ask", {
+        questions: [{
+          id: "lang",
+          question: "Which language?",
+          options: [{ label: "Deno" }, { label: "Node" }],
+        }],
+      }),
+    ]),
+    fauxAssistantMessage("Great choice!"),
+  ]);
+
+  const run = core.prompt(session.id, "Which language should I use?");
+  const question = await waitForQuestion(core, session.id);
+
+  // Rewind must not hang on the blocked run: the pending ask is rejected
+  // first, letting the loop unwind.
+  const messages = core.getAgent(session.id)!.messages;
+  const userMessage = messages.find((m) => m.role === "user")!;
+  await core.rewind(session.id, userMessage.timestamp);
+
+  // The ask is gone: a late answer is refused.
+  assertThrows(
+    () =>
+      core.answerQuestion(session.id, question.toolCallId, [
+        { id: "lang", values: ["Deno"] },
+      ]),
+    Error,
+    "No pending question for tool call",
+  );
+  await run;
 
   core.close();
 });

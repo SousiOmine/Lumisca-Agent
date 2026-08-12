@@ -226,6 +226,22 @@ export function federationRoutes(
     );
   });
 
+  app.post("/fed/:peerId/sessions/:sid/answer", async (c) => {
+    const peer = requirePeer(c);
+    // The body is forwarded verbatim (the target server validates the
+    // tool call id and answers against its pending question).
+    const body = await parseBody<Record<string, unknown>>(c);
+    return forward(
+      c,
+      fed.request(
+        peer,
+        "POST",
+        `/api/sessions/${c.req.param("sid")}/answer`,
+        body,
+      ),
+    );
+  });
+
   app.post("/fed/:peerId/sessions/:sid/rewind", async (c) => {
     const peer = requirePeer(c);
     // The body is forwarded verbatim (the target server validates the

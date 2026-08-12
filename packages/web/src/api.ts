@@ -1,5 +1,6 @@
 import type {
   AgentMessage,
+  AskAnswer,
   ClientEvent,
   ConnectionEntry,
   FederatedWorkspace,
@@ -126,6 +127,12 @@ export const api = {
     request<{ ok: boolean }>(`/api/sessions/${id}/rewind`, {
       method: "POST",
       body: JSON.stringify({ timestamp }),
+    }),
+  /** Answer a pending ask (the ask tool) with the user's selections. */
+  answer: (id: string, toolCallId: string, answers: AskAnswer[]) =>
+    request<{ ok: boolean }>(`/api/sessions/${id}/answer`, {
+      method: "POST",
+      body: JSON.stringify({ toolCallId, answers }),
     }),
 
   listProviders: () => request<ProviderInfo[]>("/api/providers"),
@@ -293,6 +300,18 @@ export const fed = {
       `/api/fed/${peerId}/sessions/${sessionId}/rewind`,
       { method: "POST", body: JSON.stringify({ timestamp }) },
     ),
+  /** Answer a pending ask of a remote session (the agent runs on the peer;
+   * the answer is forwarded to the machine holding the question). */
+  answer: (
+    peerId: string,
+    sessionId: string,
+    toolCallId: string,
+    answers: AskAnswer[],
+  ) =>
+    request<{ ok: boolean }>(
+      `/api/fed/${peerId}/sessions/${sessionId}/answer`,
+      { method: "POST", body: JSON.stringify({ toolCallId, answers }) },
+    ),
   updateSessionModel: (
     peerId: string,
     sessionId: string,
@@ -339,6 +358,8 @@ export function sessionApi(key: string) {
         api.prompt(sessionId, text, images),
       abort: () => api.abort(sessionId),
       rewind: (timestamp: number) => api.rewind(sessionId, timestamp),
+      answer: (toolCallId: string, answers: AskAnswer[]) =>
+        api.answer(sessionId, toolCallId, answers),
       updateModel: (provider: string, modelId: string) =>
         api.updateSessionModel(sessionId, provider, modelId),
     };
@@ -353,6 +374,8 @@ export function sessionApi(key: string) {
       fed.prompt(peerId, sessionId, text, images),
     abort: () => fed.abort(peerId, sessionId),
     rewind: (timestamp: number) => fed.rewind(peerId, sessionId, timestamp),
+    answer: (toolCallId: string, answers: AskAnswer[]) =>
+      fed.answer(peerId, sessionId, toolCallId, answers),
     updateModel: (provider: string, modelId: string) =>
       fed.updateSessionModel(peerId, sessionId, provider, modelId),
   };

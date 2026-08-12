@@ -8,6 +8,7 @@ import {
 import { IconDownload, IconX } from "@tabler/icons-react";
 import { api, fed, modelApi, sessionApi } from "./api.ts";
 import type {
+  AskAnswer,
   FederatedWorkspace,
   InitialData,
   PendingImage,
@@ -131,6 +132,17 @@ export function App({ initialData }: AppProps): ReactElement {
   const abort = useCallback((key: string) => {
     sessionApi(key).abort().catch(console.error);
   }, []);
+
+  /** Answer a pending ask (the ask tool): the answer is sent to the server
+   * owning the session, which resolves the blocked run. Errors surface in
+   * the question panel (the question may already be gone, e.g. after a
+   * rewind). */
+  const answer = useCallback(
+    async (key: string, toolCallId: string, answers: AskAnswer[]) => {
+      await sessionApi(key).answer(toolCallId, answers);
+    },
+    [],
+  );
 
   /** Rewind the transcript from a user message onward (deletes the message
    * and everything after it; an active run is aborted server-side first).
@@ -272,6 +284,10 @@ export function App({ initialData }: AppProps): ReactElement {
             onAbort={() => activeTab && abort(activeTab)}
             onRewind={(timestamp) =>
               activeTab ? rewind(activeTab, timestamp) : Promise.resolve()}
+            onAnswer={(toolCallId, answers) =>
+              activeTab
+                ? answer(activeTab, toolCallId, answers)
+                : Promise.reject()}
             onModelChange={(provider, modelId) =>
               activeTab && changeModel(activeTab, provider, modelId)}
             onThinkingLevelChange={(level) =>

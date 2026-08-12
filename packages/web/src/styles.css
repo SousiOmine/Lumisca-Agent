@@ -926,6 +926,129 @@ select:focus {
   color: var(--error);
 }
 
+/* ---- agent questions (ask tool) ------------------------------------------ */
+
+.question-panel {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.question-card {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.question-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.question-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.question-header {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.question-text {
+  font-size: 13.5px;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.question-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-align: left;
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.question-option:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.question-option.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.question-option-mark {
+  flex: none;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+.question-option.selected .question-option-mark {
+  color: var(--accent);
+}
+
+.question-option-label {
+  font-weight: 600;
+}
+
+.question-option-desc {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+.question-option.selected .question-option-desc {
+  color: var(--text-dim);
+}
+
+.question-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.question-error {
+  font-size: 12px;
+  color: var(--error);
+}
+
 /* ---- input --------------------------------------------------------------- */
 
 .input-area {

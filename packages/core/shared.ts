@@ -71,6 +71,33 @@ export const TOOL_GREP = "grep";
 export const TOOL_GLOB = "glob";
 export const TOOL_SKILL = "skill";
 export const TOOL_EVAL = "eval";
+export const TOOL_ASK = "ask";
+
+/** One option of an ask question, shown as a selectable chip in the UI. */
+export interface AskOption {
+  label: string;
+  description?: string;
+}
+
+/** One question the agent asks the user (the `ask` tool). The UI renders
+ * it above the composer; the user's answer is returned as the tool result.
+ * `multi` (default false) allows several options; `recommended` preselects
+ * the option at that index when the question appears. */
+export interface AskQuestion {
+  id: string;
+  question: string;
+  options: AskOption[];
+  header?: string;
+  multi?: boolean;
+  recommended?: number;
+}
+
+/** The user's answer to one question: the selected option labels (`values`
+ * holds one label for single choice, several for multi). */
+export interface AskAnswer {
+  id: string;
+  values: string[];
+}
 
 /**
  * Reasoning-effort levels for a model. "off" disables thinking; the rest
