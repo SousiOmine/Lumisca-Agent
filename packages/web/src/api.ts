@@ -122,6 +122,11 @@ export const api = {
     }),
   abort: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/abort`, { method: "POST" }),
+  rewind: (id: string, timestamp: number) =>
+    request<{ ok: boolean }>(`/api/sessions/${id}/rewind`, {
+      method: "POST",
+      body: JSON.stringify({ timestamp }),
+    }),
 
   listProviders: () => request<ProviderInfo[]>("/api/providers"),
   listModels: (providerId: string) =>
@@ -283,6 +288,11 @@ export const fed = {
     request<{ ok: boolean }>(`/api/fed/${peerId}/sessions/${sessionId}/abort`, {
       method: "POST",
     }),
+  rewind: (peerId: string, sessionId: string, timestamp: number) =>
+    request<{ ok: boolean }>(
+      `/api/fed/${peerId}/sessions/${sessionId}/rewind`,
+      { method: "POST", body: JSON.stringify({ timestamp }) },
+    ),
   updateSessionModel: (
     peerId: string,
     sessionId: string,
@@ -328,6 +338,7 @@ export function sessionApi(key: string) {
       prompt: (text: string, images?: PendingImage[]) =>
         api.prompt(sessionId, text, images),
       abort: () => api.abort(sessionId),
+      rewind: (timestamp: number) => api.rewind(sessionId, timestamp),
       updateModel: (provider: string, modelId: string) =>
         api.updateSessionModel(sessionId, provider, modelId),
     };
@@ -341,6 +352,7 @@ export function sessionApi(key: string) {
     prompt: (text: string, images?: PendingImage[]) =>
       fed.prompt(peerId, sessionId, text, images),
     abort: () => fed.abort(peerId, sessionId),
+    rewind: (timestamp: number) => fed.rewind(peerId, sessionId, timestamp),
     updateModel: (provider: string, modelId: string) =>
       fed.updateSessionModel(peerId, sessionId, provider, modelId),
   };

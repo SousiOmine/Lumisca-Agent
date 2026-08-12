@@ -81,6 +81,7 @@ export interface SessionApi {
   getDefaultModel(): { provider: string; modelId: string } | null;
   startPrompt(id: string, text: string, images?: ImageContent[]): void;
   abort(id: string): void;
+  rewind(id: string, timestamp: number): Promise<void>;
   setSessionModel(id: string, provider: string, modelId: string): void;
 }
 
@@ -168,6 +169,25 @@ export function sessionRoutes(core: SessionApi): Hono {
 
   app.post("/sessions/:id/abort", (c) => {
     core.abort(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+
+  /** Rewind the transcript from a user message onward (deletes that
+   * message and everything after it; an active run is aborted first). The
+   * request resolves once the truncation is complete so the client can
+   * restore the rewound text to the composer. */
+  app.post("/sessions/:id/rewind", async (c) => {
+    const body = await parseBody<{ timestamp?: unknown }>(c);
+    if (
+      !body || typeof body.timestamp !== "number" ||
+      !Number.isFinite(body.timestamp)
+    ) {
+      throw new AppError("timestamp (number) is required", 400);
+    }
+    const id = c.req.param("id");
+    requireSession(id);
+    await core.openSession(id);
+    await core.rewind(id, body.timestamp);
     return c.json({ ok: true });
   });
 

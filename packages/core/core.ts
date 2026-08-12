@@ -506,6 +506,15 @@ export class LumiscaCore {
     this.pool.require(id).abort();
   }
 
+  /** Undo the transcript from a user message onward (see
+   * SessionAgent.rewind): an active run is aborted first. Resolves once
+   * the truncation is complete (memory + database). */
+  async rewind(id: string, timestamp: number): Promise<void> {
+    const agent = this.pool.require(id);
+    this.sessions.touch(id);
+    await agent.rewind(timestamp);
+  }
+
   /** Switch the model used by a session (persisted). Throws `conflict`
    * while the session is streaming (rebuilding a live agent would orphan
    * the running loop). */

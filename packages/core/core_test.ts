@@ -8,7 +8,8 @@ import {
   fauxText,
   fauxToolCall,
 } from "@earendil-works/pi-ai";
-import { assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import type { AgentMessage } from "./mod.ts";
 import { LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
 import {
@@ -32,6 +33,17 @@ async function makeWorkspace(core: LumiscaCore, name = "ws") {
   const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
   const ws = await core.createWorkspace(name, [root]);
   return { ws, root };
+}
+
+/** First-block text of every transcript message (test messages are
+ * text-only). Narrowed explicitly: AgentMessage also includes custom
+ * messages without `content` (e.g. BashExecutionMessage). */
+function textsOf(messages: AgentMessage[]): string[] {
+  return messages
+    .filter(
+      (m): m is Extract<AgentMessage, { content: unknown }> => "content" in m,
+    )
+    .map((m) => (m.content[0] as { text: string }).text);
 }
 
 Deno.test("workspace creation resolves folders and rejects missing ones", async () => {
@@ -325,6 +337,230 @@ Deno.test("startPrompt steers a prompt sent while streaming", async () => {
     .filter((m) => m.role === "user")
     .map((m) => (m.content[0] as { text: string }).text);
   assertEquals(restoredUserTexts, ["go", "again"]);
+
+  core.close();
+});
+
+Deno.test("rewind deletes a user message and everything after it", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([
+    fauxAssistantMessage("first reply"),
+    fauxAssistantMessage("second reply"),
+  ]);
+  await core.prompt(session.id, "one");
+  await core.prompt(session.id, "two");
+
+  const agent = core.getAgent(session.id)!;
+  assertEquals(agent.messages.length, 4);
+
+  // Rewind the first user message: later turns are removed too.
+  const firstUser = agent.messages[0]!;
+  await core.rewind(session.id, firstUser.timestamp);
+  assertEquals(agent.messages.length, 0);
+
+  // Close and reopen: the database was truncated as well.
+  core.closeSession(session.id);
+  core.openSession(session.id);
+  assertEquals(core.getAgent(session.id)!.messages.length, 0);
+
+  core.close();
+});
+
+Deno.test("rewind mid-history keeps earlier turns and persists without duplicates", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([
+    fauxAssistantMessage("first reply"),
+    fauxAssistantMessage("second reply"),
+  ]);
+  await core.prompt(session.id, "one");
+  // Distinct user-message timestamps (the rewind target is matched by
+  // role + timestamp; the faux provider can finish a turn within one
+  // millisecond).
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await core.prompt(session.id, "two");
+
+  const events: string[] = [];
+  core.subscribe((event) => {
+    if (event.type === "messages_truncated") {
+      events.push(`${event.sessionId}:${event.removed.length}`);
+    }
+  });
+
+  const agent = core.getAgent(session.id)!;
+  const secondUser = agent.messages[2]!;
+  await core.rewind(session.id, secondUser.timestamp);
+
+  // Only the first turn remains; the truncation event was emitted.
+  const texts = textsOf(agent.messages);
+  assertEquals(texts, ["one", "first reply"]);
+  assert(
+    events.includes(`${session.id}:2`),
+    "messages_truncated event must be emitted",
+  );
+
+  // A new prompt after the rewind persists without duplicates or the
+  // deleted turn coming back.
+  faux.setResponses([fauxAssistantMessage("redo reply")]);
+  await core.prompt(session.id, "one (fixed)");
+  core.closeSession(session.id);
+  core.openSession(session.id);
+  const restored = core.getAgent(session.id)!.messages;
+  assertEquals(restored.length, 4);
+  assertEquals(textsOf(restored), [
+    "one",
+    "first reply",
+    "one (fixed)",
+    "redo reply",
+  ]);
+
+  core.close();
+});
+
+Deno.test("rewind while running aborts the run and truncates cleanly", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  // A slow response keeps the session streaming while the rewind arrives.
+  faux.setResponses([
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return fauxAssistantMessage("slow reply");
+    },
+  ]);
+  const userTimestamps: number[] = [];
+  core.subscribe((event) => {
+    if (event.type === "message_end" && event.message.role === "user") {
+      userTimestamps.push(event.message.timestamp);
+    }
+  });
+  core.startPrompt(session.id, "go");
+  assertEquals(userTimestamps.length, 1);
+
+  // Wait until the run has actually started streaming (the synthetic
+  // announcement is synchronous; the run starts a microtask later).
+  const agent = core.getAgent(session.id)!;
+  while (!agent.isStreaming) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  await core.rewind(session.id, userTimestamps[0]!);
+  assertEquals(agent.isStreaming, false);
+  // The aborted run's failure message is removed with the rewound turn.
+  assertEquals(agent.messages.length, 0);
+
+  core.closeSession(session.id);
+  core.openSession(session.id);
+  assertEquals(core.getAgent(session.id)!.messages.length, 0);
+
+  core.close();
+});
+
+Deno.test("rewind of a queued steer drops it without resurrecting it", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return fauxAssistantMessage("slow reply");
+    },
+    fauxAssistantMessage("second reply"),
+  ]);
+
+  const userTimestamps: number[] = [];
+  const truncations: Array<Array<{ role: string; timestamp: number }>> = [];
+  core.subscribe((event) => {
+    if (event.type === "message_end" && event.message.role === "user") {
+      userTimestamps.push(event.message.timestamp);
+    }
+    if (event.type === "messages_truncated") {
+      truncations.push(event.removed);
+    }
+  });
+  core.startPrompt(session.id, "go");
+  const agent = core.getAgent(session.id)!;
+  while (!agent.isStreaming) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  // Wait past the millisecond of the first prompt: a rewind boundary at
+  // the same timestamp would also match the earlier message.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  // Sent while streaming: announced to clients, queued in the agent. The
+  // last announced user message is the queued steer.
+  core.startPrompt(session.id, "fix");
+  const fixTimestamp = userTimestamps.at(-1)!;
+
+  await core.rewind(session.id, fixTimestamp);
+  // The run was aborted: only the first user message remains (the failure
+  // message and the queued steer are gone).
+  assertEquals(textsOf(agent.messages), ["go"]);
+  // The steer itself never entered the transcript, but it was announced
+  // to clients — the deletion notice must include it so they drop it
+  // from the view.
+  assert(
+    truncations.at(-1)!.some(
+      (m) => m.role === "user" && m.timestamp === fixTimestamp,
+    ),
+    "messages_truncated must include the queued steer",
+  );
+
+  // A later prompt must not resurrect the queued "fix".
+  faux.setResponses([fauxAssistantMessage("redo reply")]);
+  await core.prompt(session.id, "fresh");
+  core.closeSession(session.id);
+  core.openSession(session.id);
+  const restored = core.getAgent(session.id)!.messages;
+  assertEquals(textsOf(restored), ["go", "fresh", "redo reply"]);
+
+  core.close();
+});
+
+Deno.test("rewind with an unknown timestamp throws not_found", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([fauxAssistantMessage("reply")]);
+  await core.prompt(session.id, "hello");
+
+  await assertRejects(
+    () => core.rewind(session.id, 1),
+    Error,
+    "User message not found",
+  );
 
   core.close();
 });

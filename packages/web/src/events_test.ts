@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { applyEvent, mergeMessages } from "./events.ts";
+import { applyEvent, filterRemoved, mergeMessages } from "./events.ts";
 import { type AgentMessage, isViewRunning, type SessionView } from "./types.ts";
 
 function message(
@@ -24,6 +24,7 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
     messages: [],
     streamingText: "",
     runningTools: new Map(),
+    removed: new Set(),
     ...overrides,
   };
 }
@@ -197,6 +198,83 @@ Deno.test("events: mergeMessages is idempotent and order-preserving", () => {
   assertEquals(merged[2]!.timestamp, 300);
   // Running the merge again with the same inputs must not grow the list.
   assertEquals(mergeMessages(merged, fetched).length, 3);
+});
+
+Deno.test("events: messages_truncated drops the exact removed messages", () => {
+  let v = view({
+    messages: [
+      message("user", 100),
+      message("assistant", 100), // same millisecond as the boundary: kept
+      message("user", 300),
+      message("assistant", 400),
+    ],
+    streamingText: "partial",
+    runningTools: new Map([["t1", "bash"]]),
+    error: "boom",
+    agentStartedAt: 1,
+    agentEndedAt: undefined,
+    thinkingStartAt: 2,
+  });
+
+  v = applyEvent(
+    {
+      type: "messages_truncated",
+      sessionId: "s1",
+      removed: [
+        { role: "user", timestamp: 300 },
+        { role: "assistant", timestamp: 400 },
+      ],
+    },
+    v,
+  )!;
+
+  // Exactly the removed messages are gone — a message sharing the
+  // boundary's millisecond is kept.
+  assertEquals(
+    v.messages.map((m) => `${m.role}:${m.timestamp}`),
+    ["user:100", "assistant:100"],
+  );
+  // Run state is cleared (a running run was aborted).
+  assertEquals(v.streamingText, "");
+  assertEquals(v.runningTools.size, 0);
+  assertEquals(v.error, undefined);
+  assertEquals(v.agentStartedAt, undefined);
+  assertEquals(v.agentEndedAt, undefined);
+  assertEquals(v.thinkingStartAt, undefined);
+  // The removed keys are tombstoned for the append-only resync.
+  assertEquals(
+    [...v.removed].sort(),
+    ["user:300", "assistant:400"].sort(),
+  );
+
+  // Other sessions are ignored.
+  assertEquals(
+    applyEvent(
+      {
+        type: "messages_truncated",
+        sessionId: "s2",
+        removed: [{ role: "user", timestamp: 100 }],
+      },
+      view({ messages: [message("user", 100)] }),
+    ),
+    null,
+  );
+});
+
+Deno.test("events: filterRemoved drops tombstoned messages from a resync", () => {
+  const fetched = [
+    message("user", 100),
+    message("assistant", 200),
+    message("user", 300),
+  ];
+  const removed = new Set(["user:300"]);
+  const filtered = filterRemoved(fetched, removed);
+  assertEquals(
+    filtered.map((m) => m.timestamp),
+    [100, 200],
+  );
+  // An empty tombstone set is a no-op (same reference).
+  assertEquals(filterRemoved(fetched, new Set()), fetched);
 });
 
 Deno.test("events: session_renamed updates the session name", () => {

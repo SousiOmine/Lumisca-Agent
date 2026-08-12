@@ -65,3 +65,57 @@ Deno.test("messages: legacy rows (raw AgentMessage JSON) still decode", () => {
     db.close();
   }
 });
+
+Deno.test("messages: deleteFrom removes a positional suffix", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    // Rows are inserted in transcript order (rowid == position), so
+    // deleteFrom cuts the suffix at the given 0-based index. Timestamps
+    // are deliberately non-unique: the cut must be positional, not
+    // timestamp-based, so messages sharing a millisecond with the
+    // boundary are handled exactly.
+    for (const timestamp of [100, 100, 200, 200]) {
+      repo.append("s1", {
+        role: "user",
+        content: [{ type: "text", text: `m${timestamp}` }],
+        timestamp,
+      } as AgentMessage);
+    }
+
+    repo.deleteFrom("s1", 2);
+    assertEquals(
+      repo.list("s1").map((m) => m.timestamp),
+      [100, 100],
+    );
+
+    // Cutting at 0 empties the session.
+    repo.deleteFrom("s1", 0);
+    assertEquals(repo.list("s1").length, 0);
+
+    // An index past the last row matches nothing.
+    const kept = repo.append("s1", {
+      role: "user",
+      content: [{ type: "text", text: "keep" }],
+      timestamp: 300,
+    } as AgentMessage);
+    repo.deleteFrom("s1", 10);
+    assertEquals(repo.list("s1"), [kept]);
+
+    // Other sessions are unaffected.
+    db.db.prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+       VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
+    ).run();
+    const other = repo.append("s2", {
+      role: "user",
+      content: [{ type: "text", text: "keep" }],
+      timestamp: 500,
+    } as AgentMessage);
+    repo.deleteFrom("s1", 0);
+    assertEquals(repo.list("s2"), [other]);
+  } finally {
+    db.close();
+  }
+});

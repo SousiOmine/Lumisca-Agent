@@ -211,6 +211,95 @@ Deno.test("session prompt roundtrip via API", async () => {
   }
 });
 
+Deno.test("rewind truncates messages via the API and rejects bad bodies", async () => {
+  const { core, server, faux, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+
+    faux.setResponses([
+      fauxAssistantMessage("first reply"),
+      fauxAssistantMessage("second reply"),
+    ]);
+    const sessionRes = await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    });
+    const session = await sessionRes.json();
+
+    // Two prompts; the prompt endpoint is fire-and-forget, so poll until
+    // both turns are in the transcript. The pause keeps the user messages
+    // in distinct milliseconds — the rewind target is matched by role +
+    // timestamp, and the faux provider can finish a turn within one
+    // millisecond.
+    await json(base, `/api/sessions/${session.id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "one" }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await json(base, `/api/sessions/${session.id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "two" }),
+    });
+    let messages: Array<{ role: string; timestamp: number }> = [];
+    for (let i = 0; i < 100 && messages.length < 4; i++) {
+      messages = await (
+        await json(base, `/api/sessions/${session.id}/messages`)
+      ).json();
+      if (messages.length < 4) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    }
+    assertEquals(messages.length, 4);
+
+    // Bad bodies are rejected with 400.
+    const noTimestamp = await json(base, `/api/sessions/${session.id}/rewind`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    assertEquals(noTimestamp.status, 400);
+    const stringTimestamp = await json(
+      base,
+      `/api/sessions/${session.id}/rewind`,
+      { method: "POST", body: JSON.stringify({ timestamp: "300" }) },
+    );
+    assertEquals(stringTimestamp.status, 400);
+
+    // Rewind the second turn: only the first turn remains.
+    const rewindRes = await json(base, `/api/sessions/${session.id}/rewind`, {
+      method: "POST",
+      body: JSON.stringify({ timestamp: messages[2]!.timestamp }),
+    });
+    assertEquals(rewindRes.status, 200);
+    const truncated = await (
+      await json(base, `/api/sessions/${session.id}/messages`)
+    ).json();
+    assertEquals(truncated.length, 2);
+    assertEquals(truncated[0].role, "user");
+    assertEquals(truncated[1].role, "assistant");
+
+    // Unknown timestamps map to 404.
+    const unknown = await json(base, `/api/sessions/${session.id}/rewind`, {
+      method: "POST",
+      body: JSON.stringify({ timestamp: 1 }),
+    });
+    assertEquals(unknown.status, 404);
+
+    await Deno.remove(root, { recursive: true });
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("websocket streams agent events", async () => {
   const { core, server, faux, base } = await setup();
   try {

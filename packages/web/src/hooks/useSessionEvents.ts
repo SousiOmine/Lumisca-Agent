@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { connectEvents, sessionApi } from "../api.ts";
 import { errorText } from "../providers.ts";
-import { applyEvent, mergeMessages } from "../events.ts";
+import { applyEvent, filterRemoved, mergeMessages } from "../events.ts";
 import { tabKey } from "../tabs.ts";
 import type { AgentMessage, ClientEvent, SessionView } from "../types.ts";
 
@@ -42,7 +42,12 @@ export function useSessionEvents() {
       for (const [id, messages] of fetched) {
         const v = next.get(id);
         if (!v) continue;
-        const merged = mergeMessages(v.messages, messages);
+        // Rewind tombstones: messages deleted while the socket was down
+        // must not come back through the append-only merge.
+        const merged = filterRemoved(
+          mergeMessages(v.messages, messages),
+          v.removed,
+        );
         if (merged.length === v.messages.length) continue;
         next.set(id, { ...v, messages: merged });
       }

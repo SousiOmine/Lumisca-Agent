@@ -11,7 +11,7 @@ import type {
   Model,
   TextContent,
 } from "@earendil-works/pi-ai";
-import { errorMessage } from "../errors.ts";
+import { CoreError, errorMessage } from "../errors.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared.ts";
@@ -306,6 +306,74 @@ export class SessionAgent {
 
   abort(): void {
     this.agent.abort();
+  }
+
+  /** Undo the transcript from a user message onward: the message itself
+   * and everything after it are removed from memory and the database, and
+   * clients are told to drop them too. The user can then re-send a
+   * corrected prompt (the rewound text is restored to the composer).
+   *
+   * While a run is active it is aborted first and the drain is awaited, so
+   * the run's artifacts (e.g. the empty failure message pi pushes on
+   * abort) are part of the removed suffix rather than left dangling. The
+   * steering/follow-up queues are cleared as well: queued prompts were
+   * already announced to clients (synthetic message events) but are not in
+   * the transcript yet, so they must not resurface on the next run.
+   *
+   * Truncation is positional (the target's exact index), matching the
+   * database row order, so messages sharing a millisecond with the target
+   * are handled exactly. A timestamp newer than every user message is
+   * treated as a queued steer (it sits at the very end, so only the
+   * aborted run's artifacts follow it); any other unknown timestamp
+   * throws not_found. */
+  async rewind(timestamp: number): Promise<void> {
+    if (this.isStreaming) {
+      this.agent.abort();
+      await this.agent.waitForIdle();
+    }
+    const messages = this.agent.state.messages;
+    const index = messages.findIndex(
+      (m) => m.role === "user" && m.timestamp === timestamp,
+    );
+    let removed: Array<{ role: string; timestamp: number }> = [];
+    if (index !== -1) {
+      removed = messages.splice(index).map(({ role, timestamp: ts }) => ({
+        role,
+        timestamp: ts,
+      }));
+      this.savedCount = messages.length;
+      this.messageRepo.deleteFrom(this.sessionId, index);
+    } else if (
+      messages.every((m) => m.role !== "user" || m.timestamp < timestamp)
+    ) {
+      // A queued steer: announced to clients but not in the transcript
+      // yet. It is the newest message, so only messages newer than it
+      // (the aborted run's artifacts) follow it in the transcript.
+      const cut = messages.findIndex((m) => m.timestamp > timestamp);
+      if (cut !== -1) {
+        removed = messages.splice(cut).map(({ role, timestamp: ts }) => ({
+          role,
+          timestamp: ts,
+        }));
+        this.savedCount = messages.length;
+        this.messageRepo.deleteFrom(this.sessionId, cut);
+      }
+      // The steer itself has no transcript row, but clients were already
+      // told about it (synthetic message events) — include it in the
+      // deletion notice so they drop it from the view too.
+      removed.push({ role: "user", timestamp });
+    } else {
+      throw new CoreError(
+        `User message not found: ${timestamp}`,
+        "not_found",
+      );
+    }
+    this.agent.clearAllQueues();
+    this.emit({
+      type: "messages_truncated",
+      sessionId: this.sessionId,
+      removed,
+    });
   }
 
   /** Abort the run, release MCP server processes, and unsubscribe from

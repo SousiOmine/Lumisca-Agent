@@ -132,6 +132,22 @@ export function App({ initialData }: AppProps): ReactElement {
     sessionApi(key).abort().catch(console.error);
   }, []);
 
+  /** Rewind the transcript from a user message onward (deletes the message
+   * and everything after it; an active run is aborted server-side first).
+   * The error is rethrown after being shown so the caller (ChatView) does
+   * not restore the text to the composer when nothing was deleted. */
+  const rewind = useCallback(
+    async (key: string, timestamp: number) => {
+      try {
+        await sessionApi(key).rewind(timestamp);
+      } catch (error) {
+        setViewError(key, error);
+        throw error;
+      }
+    },
+    [setViewError],
+  );
+
   const changeModel = useCallback(
     async (key: string, provider: string, modelId: string) => {
       const seq = ++modelChangeSeq.current;
@@ -254,6 +270,8 @@ export function App({ initialData }: AppProps): ReactElement {
             onPrompt={(text, images) =>
               activeTab && prompt(activeTab, text, images)}
             onAbort={() => activeTab && abort(activeTab)}
+            onRewind={(timestamp) =>
+              activeTab ? rewind(activeTab, timestamp) : Promise.resolve()}
             onModelChange={(provider, modelId) =>
               activeTab && changeModel(activeTab, provider, modelId)}
             onThinkingLevelChange={(level) =>

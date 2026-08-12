@@ -1,5 +1,10 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { IconCheck, IconClipboard, IconSend } from "@tabler/icons-react";
+import {
+  IconArrowBackUp,
+  IconCheck,
+  IconClipboard,
+  IconSend,
+} from "@tabler/icons-react";
 import { contentImages, contentText } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
@@ -23,10 +28,19 @@ interface ChatViewProps {
   peerId?: string;
   onPrompt: (text: string, images: PendingImage[]) => void;
   onAbort: () => void;
+  /** Rewind the transcript from a user message onward (the message and
+   * everything after it are deleted; an active run is aborted first).
+   * Resolves once the deletion is complete; rejects when nothing was
+   * deleted. */
+  onRewind: (timestamp: number) => Promise<void>;
   onModelChange: (provider: string, modelId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   onOpenSettings?: () => void;
 }
+
+/** An image content block of a user message (`data` is base64 without the
+ * `data:<mime>;base64,` header; see ContentImages). */
+type UserMessageImage = { type: "image"; data: string; mimeType: string };
 
 /** Memoized markdown rendering: message text is static once a message is
  * complete, so a text delta must not re-parse every historical message. */
@@ -40,6 +54,7 @@ export function ChatView(
     peerId,
     onPrompt,
     onAbort,
+    onRewind,
     onModelChange,
     onThinkingLevelChange,
     onOpenSettings,
@@ -75,6 +90,24 @@ export function ChatView(
     }
   };
 
+  /** Rewind the transcript from a user message onward, then restore the
+   * message text and images to the composer so the user can re-send a
+   * corrected prompt. The composer is only filled once the deletion
+   * succeeded (a failure is shown as a session error); the rewound
+   * message's images replace any current attachments. */
+  const handleRewind = async (
+    timestamp: number,
+    text: string,
+    images: UserMessageImage[],
+  ) => {
+    await onRewind(timestamp);
+    setInput(text);
+    setImages(images.map(({ data, mimeType }) => ({
+      data: `data:${mimeType};base64,${data}`,
+      mimeType,
+    })));
+  };
+
   const turns = buildTurns(view.messages);
   const toolResults = new Map<string, ToolResultMessage>();
   for (const message of view.messages) {
@@ -107,6 +140,7 @@ export function ChatView(
               endedAt={index === turns.length - 1
                 ? view.agentEndedAt
                 : undefined}
+              onRewind={handleRewind}
             />
           ))}
           {view.streamingText.length > 0 && (
@@ -183,12 +217,18 @@ function ConversationTurn({
   runningTools,
   running,
   endedAt,
+  onRewind,
 }: {
   turn: ConversationTurnData;
   toolResults: Map<string, ToolResultMessage>;
   runningTools: Map<string, string>;
   running: boolean;
   endedAt?: number;
+  onRewind: (
+    timestamp: number,
+    text: string,
+    images: UserMessageImage[],
+  ) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const assistants = turn.responses.filter(
@@ -212,6 +252,7 @@ function ConversationTurn({
         message={turn.user}
         toolResults={toolResults}
         runningTools={runningTools}
+        onRewind={onRewind}
       />
       {(running || turn.responses.length > 0) && (
         <AgentActivity
@@ -254,9 +295,17 @@ function ConversationTurn({
 function CopyableUserMessage({
   text,
   images,
+  timestamp,
+  onRewind,
 }: {
   text: string;
-  images: { type: "image"; data: string; mimeType: string }[];
+  images: UserMessageImage[];
+  timestamp: number;
+  onRewind: (
+    timestamp: number,
+    text: string,
+    images: UserMessageImage[],
+  ) => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -279,18 +328,26 @@ function CopyableUserMessage({
           {text && <p>{text}</p>}
         </div>
       </div>
-      {text && (
+      <div className="msg-user-actions">
         <button
           type="button"
-          className="msg-copy-btn"
-          title="メッセージをコピー"
-          onClick={handleCopy}
+          className="msg-action-btn"
+          onClick={() => onRewind(timestamp, text, images)}
         >
-          {copied
-            ? <IconCheck size={16} stroke={2} />
-            : <IconClipboard size={16} stroke={1.5} />}
+          <IconArrowBackUp size={16} stroke={1.5} />
         </button>
-      )}
+        {text && (
+          <button
+            type="button"
+            className="msg-action-btn"
+            onClick={handleCopy}
+          >
+            {copied
+              ? <IconCheck size={16} stroke={2} />
+              : <IconClipboard size={16} stroke={1.5} />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -299,17 +356,30 @@ function MessageRow({
   message,
   toolResults,
   runningTools,
+  onRewind,
 }: {
   message: AgentMessage;
   toolResults: Map<string, ToolResultMessage>;
   runningTools: Map<string, string>;
+  onRewind?: (
+    timestamp: number,
+    text: string,
+    images: UserMessageImage[],
+  ) => void;
 }) {
   if (message.role === "toolResult") return null;
 
   if (message.role === "user") {
     const text = contentText(message.content);
     const imageBlocks = contentImages(message.content);
-    return <CopyableUserMessage text={text} images={imageBlocks} />;
+    return (
+      <CopyableUserMessage
+        text={text}
+        images={imageBlocks}
+        timestamp={message.timestamp}
+        onRewind={onRewind ?? (() => {})}
+      />
+    );
   }
 
   const assistant = message as AssistantMessage;

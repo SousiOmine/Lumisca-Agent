@@ -79,6 +79,9 @@ export interface SessionView {
   messages: AgentMessage[];
   streamingText: string;
   runningTools: Map<string, string>; // toolCallId -> toolName
+  /** Keys (role:timestamp) of messages deleted by rewind. Kept so a later
+   * resync (merge is append-only) cannot resurrect them. */
+  removed: Set<string>;
   error?: string;
   /** Timestamp when agent_start fired (ms since epoch). */
   agentStartedAt?: number;
@@ -93,7 +96,13 @@ export function emptyView(
   info: SessionInfo,
   messages: AgentMessage[] = [],
 ): SessionView {
-  return { info, messages, streamingText: "", runningTools: new Map() };
+  return {
+    info,
+    messages,
+    streamingText: "",
+    runningTools: new Map(),
+    removed: new Set(),
+  };
 }
 
 export function isViewRunning(view: SessionView): boolean {

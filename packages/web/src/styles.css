@@ -476,10 +476,16 @@ select:focus {
   position: relative;
 }
 
-.msg-copy-btn {
-  display: block;
-  margin-left: auto;
+.msg-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
   margin-top: 2px;
+}
+
+.msg-action-btn {
+  display: flex;
+  align-items: center;
   padding: 4px 6px;
   border: none;
   border-radius: var(--radius-sm);
@@ -491,11 +497,11 @@ select:focus {
   font-size: 11px;
 }
 
-.msg-user-wrap:hover .msg-copy-btn {
+.msg-user-wrap:hover .msg-action-btn {
   opacity: 1;
 }
 
-.msg-copy-btn:hover {
+.msg-action-btn:hover {
   background: var(--accent-soft);
   color: var(--text);
 }

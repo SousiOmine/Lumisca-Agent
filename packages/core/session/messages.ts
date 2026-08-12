@@ -13,6 +13,11 @@ export interface MessageRepo {
   append(sessionId: string, message: AgentMessage): StoredMessage;
   list(sessionId: string): StoredMessage[];
   listMessages(sessionId: string): AgentMessage[];
+  /** Delete every row at or after `index` (a 0-based transcript position;
+   * rows are inserted in transcript order, so rowid == position). Used by
+   * the rewind feature: positional (not timestamp-based) so messages that
+   * share a millisecond with the rewind boundary are handled exactly. */
+  deleteFrom(sessionId: string, index: number): void;
   deleteBySession(sessionId: string): void;
 }
 
@@ -63,6 +68,19 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
   const deleteStmt = db.db.prepare(
     "DELETE FROM messages WHERE session_id = ?",
   );
+  // Positional truncation: rows are inserted in transcript order, so the
+  // row at OFFSET `index` is the first message to remove (an OFFSET past
+  // the last row matches nothing — nothing persisted to delete).
+  const deleteFromStmt = db.db.prepare(`
+    DELETE FROM messages
+    WHERE session_id = ?
+      AND rowid >= (
+        SELECT rowid FROM messages
+        WHERE session_id = ?
+        ORDER BY rowid
+        LIMIT 1 OFFSET ?
+      )
+  `);
 
   function toStored(row: {
     id: string;
@@ -112,6 +130,10 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
 
     listMessages(sessionId: string): AgentMessage[] {
       return list(sessionId).map((m) => m.message);
+    },
+
+    deleteFrom(sessionId: string, index: number): void {
+      deleteFromStmt.run(sessionId, sessionId, index);
     },
 
     deleteBySession(sessionId: string): void {

@@ -1,9 +1,21 @@
 import type { AgentMessage, ClientEvent, SessionView } from "./types.ts";
 
 /** Identity key for dedup: messages are keyed by role + timestamp (the
- * same pair used by the persisted rows). */
-function messageKey(m: AgentMessage): string {
+ * same pair used by the persisted rows). The minimal shape also accepts
+ * the role+timestamp pairs carried by the messages_truncated event. */
+export function messageKey(m: { role: string; timestamp: number }): string {
   return `${m.role}:${m.timestamp}`;
+}
+
+/** Drop messages whose key is in the `removed` set (rewind tombstones).
+ * mergeMessages is append-only, so without this a resync would resurrect
+ * messages a rewind deleted while the socket was down. */
+export function filterRemoved(
+  messages: AgentMessage[],
+  removed: Set<string>,
+): AgentMessage[] {
+  if (removed.size === 0) return messages;
+  return messages.filter((m) => !removed.has(messageKey(m)));
 }
 
 /** Merge fetched (persisted) messages into the current list without
@@ -110,6 +122,26 @@ export function applyEvent(
     }
     case "session_error":
       return { ...view, error: event.message };
+    case "messages_truncated": {
+      // The transcript was rewound from a user message onward: drop the
+      // exact messages the server removed, and tombstone their keys so an
+      // append-only resync cannot resurrect them. Run state is cleared
+      // too (a running run was aborted by the rewind).
+      const removedKeys = new Set(event.removed.map((m) => messageKey(m)));
+      const removed = new Set(view.removed);
+      for (const key of removedKeys) removed.add(key);
+      return {
+        ...view,
+        messages: view.messages.filter((m) => !removedKeys.has(messageKey(m))),
+        removed,
+        streamingText: "",
+        runningTools: new Map(),
+        error: undefined,
+        agentStartedAt: undefined,
+        agentEndedAt: undefined,
+        thinkingStartAt: undefined,
+      };
+    }
     case "agent_end":
       return view.agentStartedAt === undefined
         ? null
