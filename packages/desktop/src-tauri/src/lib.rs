@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -7,6 +8,23 @@ use std::time::{Duration, Instant};
 use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, StatusCode};
 use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_updater::{Update, UpdaterExt};
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Create a child process without letting console executables open a
+/// Command Prompt window beside the desktop UI on Windows.
+fn background_command<S: AsRef<OsStr>>(program: S) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+type StartupTask = Arc<Mutex<Option<Result<String, String>>>>;
 
 /// State shared by the shell bridge and the window lifecycle.
 struct AppState {
@@ -25,7 +43,7 @@ struct AppState {
     /// The in-flight local server start: the background thread fills it
     /// with the result. connect-local waits on it instead of spawning a
     /// second server while the startup is still running.
-    startup_task: Mutex<Option<Arc<Mutex<Option<Result<String, String>>>>>>,
+    startup_task: Mutex<Option<StartupTask>>,
 }
 
 /// Local server startup progress, surfaced to the splash page.
@@ -315,7 +333,7 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
             // Packaged build: prebuilt frontend assets sit next to the
             // binary in the resources dir.
             let assets_file = bin.parent().unwrap_or(Path::new(".")).join("assets.json");
-            Command::new(&bin)
+            background_command(&bin)
                 .env("LUMISCA_DB", &db_path)
                 .env("LUMISCA_PORT", port.to_string())
                 .env("LUMISCA_TOKEN", token)
@@ -339,7 +357,7 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| PathBuf::from("."));
-            Command::new(&deno)
+            background_command(&deno)
                 .args([
                     "run",
                     "--allow-net",
@@ -368,7 +386,7 @@ fn kill_process_tree(child: &mut Child) {
     #[cfg(windows)]
     {
         let pid = child.id();
-        let _ = Command::new("taskkill")
+        let _ = background_command("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .spawn();
     }
@@ -420,8 +438,7 @@ fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
 /// splash page paints without waiting; the bridge state reports the
 /// progress ("starting" → "ready"/"error") for the splash to poll.
 fn start_local_server_async(app: &AppHandle) {
-    let shared: Arc<Mutex<Option<Result<String, String>>>> =
-        Arc::new(Mutex::new(None));
+    let shared: StartupTask = Arc::new(Mutex::new(None));
     *app.state::<AppState>().startup_task.lock().unwrap() = Some(shared.clone());
     let handle = app.clone();
     std::thread::spawn(move || {
@@ -485,12 +502,7 @@ fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String
 fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
     // If the background startup is still running, wait for its result
     // instead of spawning a second server instance.
-    let pending = app
-        .state::<AppState>()
-        .startup_task
-        .lock()
-        .unwrap()
-        .clone();
+    let pending = app.state::<AppState>().startup_task.lock().unwrap().clone();
     if let Some(shared) = pending {
         loop {
             if let Some(result) = shared.lock().unwrap().clone() {
