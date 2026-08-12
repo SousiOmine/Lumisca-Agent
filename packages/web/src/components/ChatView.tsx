@@ -63,13 +63,25 @@ export function ChatView(
   const [input, setInput] = useState("");
   const [images, setImages] = useState<PendingImage[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Set on submit: the sent message must become visible even if the user was
+  // scrolled up reading earlier messages. The user message arrives
+  // asynchronously via the event stream, so the intent is remembered until
+  // the next transcript change forces the scroll.
+  const pendingSubmitScroll = useRef(false);
   const isRunning = isViewRunning(view);
 
   // Follow the stream when the user is at the bottom; never yank the scroll
-  // position out from under someone reading earlier messages.
+  // position out from under someone reading earlier messages. A submitted
+  // message is the exception: the user asked to send it, so it is shown
+  // regardless of the previous scroll position.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    if (pendingSubmitScroll.current) {
+      pendingSubmitScroll.current = false;
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [view.messages.length, view.streamingText.length]);
@@ -81,6 +93,12 @@ export function ChatView(
     onPrompt(input, images);
     setInput("");
     setImages([]);
+    // Bring the scroll to the bottom right away and force it again when the
+    // sent message arrives (see the effect above) so it is never left hidden
+    // below the fold.
+    pendingSubmitScroll.current = true;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
