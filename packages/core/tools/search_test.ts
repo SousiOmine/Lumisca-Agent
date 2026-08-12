@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs";
 import { assert, assertEquals } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { errorMessage } from "../errors.ts";
+import { GitignoreMatcher } from "./gitignore.ts";
 import { createGlobTool, createGrepTool, globToRegExp } from "./search.ts";
 
 function makeTools(root: string) {
@@ -63,25 +64,26 @@ Deno.test("globToRegExp handles core patterns", () => {
   assertEquals(globToRegExp("a.ts").test("aXts"), false);
 });
 
-Deno.test("grep finds matches and skips node_modules, hidden and binary files", async () => {
+Deno.test("grep searches hidden files and node_modules by default, skips binary files", async () => {
   const root = await fixture();
   try {
     const { grep } = makeTools(root);
     const result = await grep.execute("1", { pattern: "foo" }, undefined);
     const text = toolText(result);
     assertEquals(text.includes(`${join(root, "a.ts")}:1:`), true);
-    assertEquals(text.includes("node_modules"), false);
-    assertEquals(text.includes(".hidden"), false);
-    assertEquals(text.includes("bin.dat"), false);
-    // "foo" matches a.ts:1 and sub/c.ts:1 ("FOO" — default is insensitive).
-    assertEquals(result.details?.matches, 2);
-    assertEquals(result.details?.files, 2);
+    assertEquals(text.includes("node_modules"), true);
+    assertEquals(text.includes(".hidden"), true);
+    assertEquals(text.includes("bin.dat"), false); // binary (NUL byte)
+    // "foo" matches a.ts:1, sub/c.ts:1 ("FOO"), node_modules/pkg/d.ts:1 and
+    // .hidden/e.ts:1 — the default is case-insensitive.
+    assertEquals(result.details?.matches, 4);
+    assertEquals(result.details?.files, 4);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
 });
 
-Deno.test("grep is case-insensitive by default and honors case_sensitive", async () => {
+Deno.test("grep is case-insensitive by default and honors case", async () => {
   const root = await fixture();
   try {
     const { grep } = makeTools(root);
@@ -93,7 +95,7 @@ Deno.test("grep is case-insensitive by default and honors case_sensitive", async
 
     const sensitive = await grep.execute(
       "1",
-      { pattern: "foo", case_sensitive: true },
+      { pattern: "foo", case: true },
       undefined,
     );
     assertEquals(toolText(sensitive).includes("sub"), false);
@@ -102,57 +104,129 @@ Deno.test("grep is case-insensitive by default and honors case_sensitive", async
   }
 });
 
-Deno.test("grep literal mode treats the pattern as text", async () => {
+Deno.test("grep respects .gitignore by default and gitignore: false includes them", async () => {
   const root = await fixture();
   try {
     const { grep } = makeTools(root);
-    // "baz" is literal; as a regex it would also be valid, but "." patterns
-    // must not match "aXts" — here the fixture only has baz.
-    const result = await grep.execute(
+    await Deno.mkdir(join(root, "generated"), { recursive: true });
+    await Deno.writeTextFile(join(root, "generated", "out.txt"), "foo bar\n");
+    await Deno.writeTextFile(
+      join(root, ".gitignore"),
+      "node_modules/\ngenerated/\n",
+    );
+
+    const skipped = await grep.execute("1", { pattern: "foo" }, undefined);
+    const skippedText = toolText(skipped);
+    assertEquals(skipped.details?.matches, 3); // a.ts, sub/c.ts, .hidden/e.ts
+    assertEquals(skippedText.includes("node_modules"), false);
+    assertEquals(skippedText.includes("out.txt"), false);
+
+    const included = await grep.execute(
       "1",
-      { pattern: "b.z", literal: true },
+      { pattern: "foo", gitignore: false },
       undefined,
     );
-    assertEquals(result.details?.matches, 0);
-    const regex = await grep.execute("1", { pattern: "b.z" }, undefined);
-    assertEquals(regex.details?.matches, 1);
+    const includedText = toolText(included);
+    assertEquals(included.details?.matches, 5);
+    assertEquals(includedText.includes("out.txt"), true);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
 });
 
-Deno.test("grep honors include and exclude filters", async () => {
+Deno.test("grep applies .gitignore rules when path targets a subdirectory", async () => {
   const root = await fixture();
   try {
+    await Deno.writeTextFile(join(root, ".gitignore"), "*.log\n");
+    await Deno.writeTextFile(join(root, "sub", "app.log"), "foo\n");
     const { grep } = makeTools(root);
-    const include = await grep.execute(
+    const skipped = await grep.execute(
       "1",
-      { pattern: "bar", include: ["**/*.js"] },
+      { pattern: "foo", path: join(root, "sub") },
       undefined,
     );
-    assertEquals(toolText(include).includes("b.js"), true);
-    assertEquals(toolText(include).includes("a.ts"), false);
+    const skippedText = toolText(skipped);
+    assertEquals(skippedText.includes("app.log"), false);
+    assertEquals(skippedText.includes("c.ts"), true); // sub/c.ts still searched
 
-    const exclude = await grep.execute(
+    const included = await grep.execute(
       "1",
-      { pattern: "bar", exclude: ["**/*.ts"] },
+      { pattern: "foo", path: join(root, "sub"), gitignore: false },
       undefined,
     );
-    assertEquals(toolText(exclude).includes("b.js"), true);
-    assertEquals(toolText(exclude).includes("a.ts"), false);
-    // Basename-only pattern filters by name at any depth.
-    const byName = await grep.execute(
-      "1",
-      { pattern: "bar", include: ["*.js"] },
-      undefined,
-    );
-    assertEquals(toolText(byName).includes("b.js"), true);
+    assertEquals(toolText(included).includes("app.log"), true);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
 });
 
-Deno.test("grep with an explicit path can search hidden files and caps results", async () => {
+Deno.test("grep honors negated .gitignore rules", async () => {
+  const root = await fixture();
+  try {
+    await Deno.writeTextFile(
+      join(root, ".gitignore"),
+      "*.log\n!important.log\n",
+    );
+    await Deno.writeTextFile(join(root, "app.log"), "foo\n");
+    await Deno.mkdir(join(root, "logs"), { recursive: true });
+    await Deno.writeTextFile(join(root, "logs", "app.log"), "foo\n");
+    await Deno.writeTextFile(join(root, "important.log"), "foo\n");
+
+    const { grep } = makeTools(root);
+    const result = await grep.execute("1", { pattern: "foo" }, undefined);
+    const text = toolText(result);
+    assertEquals(text.includes("app.log"), false); // any depth
+    assertEquals(text.includes("logs"), false);
+    assertEquals(text.includes("important.log"), true); // re-included
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("GitignoreMatcher applies git rule semantics", async () => {
+  const root = await fixture("lumisca-gi-");
+  try {
+    await Deno.writeTextFile(
+      join(root, ".gitignore"),
+      [
+        "# comment",
+        "node_modules/",
+        "*.log",
+        "/rooted.ts",
+        "!important.log",
+        "sub/ignored.ts",
+      ].join("\n"),
+    );
+    const matcher = await GitignoreMatcher.load([root]);
+    // Dir-only rule matches directories, not files with the same name.
+    assertEquals(matcher.ignores(root, "node_modules", true), true);
+    assertEquals(matcher.ignores(root, "node_modules", false), false);
+    // Basename patterns match at any depth, and files too.
+    assertEquals(matcher.ignores(root, "app.log", false), true);
+    assertEquals(matcher.ignores(root, "deep/dir/app.log", false), true);
+    // Leading `/` anchors the pattern to the root.
+    assertEquals(matcher.ignores(root, "rooted.ts", false), true);
+    assertEquals(matcher.ignores(root, "sub/rooted.ts", false), false);
+    // Negation wins as the last matching rule.
+    assertEquals(matcher.ignores(root, "important.log", false), false);
+    // A pattern containing `/` is anchored.
+    assertEquals(matcher.ignores(root, "sub/ignored.ts", false), true);
+    assertEquals(matcher.ignores(root, "ignored.ts", false), false);
+    // Unmatched paths are not ignored.
+    assertEquals(matcher.ignores(root, "a.ts", false), false);
+    // A subdirectory walk root (the resolved `path` argument) resolves to
+    // the owning root's rules, with paths re-based onto that root.
+    assertEquals(matcher.ignores(join(root, "deep"), "app.log", false), true);
+    assertEquals(matcher.ignores(join(root, "sub"), "ignored.ts", false), true);
+    // Anchored rules stay anchored to the root, not the subdirectory.
+    assertEquals(matcher.ignores(join(root, "sub"), "rooted.ts", false), false);
+    assertEquals(matcher.ignores(join(root, "sub"), "c.ts", false), false);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("grep with an explicit path bypasses filters and caps results", async () => {
   const root = await fixture();
   try {
     const { grep } = makeTools(root);
@@ -212,7 +286,7 @@ Deno.test("grep reports invalid patterns as errors", async () => {
   }
 });
 
-Deno.test("glob finds files by pattern", async () => {
+Deno.test("glob finds files by pattern, searching hidden files by default", async () => {
   const root = await fixture();
   try {
     const { glob } = makeTools(root);
@@ -221,8 +295,65 @@ Deno.test("glob finds files by pattern", async () => {
     assertEquals(text.includes(join(root, "a.ts")), true);
     assertEquals(text.includes(join(root, "sub", "c.ts")), true);
     assertEquals(text.includes("b.js"), false);
-    assertEquals(text.includes("node_modules"), false);
-    assertEquals(result.details?.count, 2);
+    assertEquals(text.includes("node_modules"), true);
+    assertEquals(text.includes(".hidden"), true);
+    // a.ts, sub/c.ts, node_modules/pkg/d.ts, .hidden/e.ts
+    assertEquals(result.details?.count, 4);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("glob skips hidden files with hidden: false", async () => {
+  const root = await fixture();
+  try {
+    const { glob } = makeTools(root);
+    const result = await glob.execute(
+      "1",
+      { pattern: "**/*.ts", hidden: false },
+      undefined,
+    );
+    const text = toolText(result);
+    assertEquals(text.includes(join(root, "a.ts")), true);
+    assertEquals(text.includes(join(root, "sub", "c.ts")), true);
+    // node_modules is not hidden; it is only excluded via .gitignore.
+    assertEquals(text.includes("node_modules"), true);
+    assertEquals(text.includes(".hidden"), false);
+    // a.ts, sub/c.ts, node_modules/pkg/d.ts
+    assertEquals(result.details?.count, 3);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("glob respects .gitignore by default and gitignore: false includes them", async () => {
+  const root = await fixture();
+  try {
+    const { glob } = makeTools(root);
+    await Deno.writeTextFile(join(root, ".gitignore"), "node_modules/\n");
+
+    const skipped = await glob.execute("1", { pattern: "**/*.ts" }, undefined);
+    const skippedText = toolText(skipped);
+    // a.ts, sub/c.ts, .hidden/e.ts — node_modules is gitignored.
+    assertEquals(skipped.details?.count, 3);
+    assertEquals(skippedText.includes("node_modules"), false);
+
+    const included = await glob.execute(
+      "1",
+      { pattern: "**/*.ts", gitignore: false },
+      undefined,
+    );
+    assertEquals(included.details?.count, 4);
+
+    // hidden: false + gitignore: false — hidden excluded, but non-hidden
+    // gitignored files (node_modules) included.
+    const noHiddenNoIgnore = await glob.execute(
+      "1",
+      { pattern: "**/*.ts", hidden: false, gitignore: false },
+      undefined,
+    );
+    assertEquals(noHiddenNoIgnore.details?.count, 3);
+    assertEquals(toolText(noHiddenNoIgnore).includes("node_modules"), true);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -238,7 +369,7 @@ Deno.test("glob supports brace alternation and scoped roots", async () => {
       undefined,
     );
     assertEquals(toolText(braces).includes("b.js"), true);
-    assertEquals(braces.details?.count, 3);
+    assertEquals(braces.details?.count, 5);
 
     const scoped = await glob.execute(
       "1",
@@ -271,7 +402,8 @@ Deno.test("grep and glob search every workspace folder when path is omitted", as
       { pattern: "**/*.ts" },
       undefined,
     );
-    assertEquals(globResult.details?.count, 4); // a.ts + sub/c.ts in both
+    // a.ts + sub/c.ts + node_modules/pkg/d.ts + .hidden/e.ts in both
+    assertEquals(globResult.details?.count, 8);
   } finally {
     await Deno.remove(first, { recursive: true });
     await Deno.remove(second, { recursive: true });
@@ -307,7 +439,7 @@ Deno.test("grep and glob results are independent of folder registration order", 
     const g1 = await glob(new Sandbox([a, z]));
     const g2 = await glob(new Sandbox([z, a]));
     assertEquals(toolText(g1), toolText(g2));
-    assertEquals(g1.details?.count, 4);
+    assertEquals(g1.details?.count, 8);
   } finally {
     await Deno.remove(a, { recursive: true });
     await Deno.remove(z, { recursive: true });

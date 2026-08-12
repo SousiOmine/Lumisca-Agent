@@ -1,13 +1,13 @@
 import { extname, join } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
+import { TOOL_EDIT, TOOL_LIST_DIR, TOOL_READ, TOOL_WRITE } from "../shared.ts";
+import { object, string, type Tool } from "./schema.ts";
 import {
-  TOOL_EDIT,
-  TOOL_LIST_DIR,
-  TOOL_READ_FILE,
-  TOOL_WRITE_FILE,
-} from "../shared.ts";
-import { integer, object, optional, string, type Tool } from "./schema.ts";
-import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
+  DEFAULT_READ_LIMIT,
+  MAX_TOOL_OUTPUT,
+  truncate,
+  truncatedNote,
+} from "./truncate.ts";
 
 interface FsToolContext {
   sandbox: Sandbox;
@@ -28,6 +28,9 @@ const IMAGE_MIME_BY_EXT: Record<string, string> = {
  * falls back to the (garbled) text read. */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
+/** Line count suggested by the "file continues" note for a next chunk. */
+const SUGGESTED_RANGE_LINES = 2000;
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -40,34 +43,213 @@ function fileInfoLine(entry: Deno.DirEntry): string {
   return `${entry.name}`;
 }
 
+// --- line ranges --------------------------------------------------------------
+
+/** One line range: 1-based, inclusive. */
+interface LineRange {
+  from: number;
+  to: number;
+}
+
+/** One comma-separated segment: `50`, `50-100` or `50+20`. */
+const RANGE_SEGMENT = /^(\d+)(?:-(\d+)|\+(\d+))?$/;
+
+/** Full range-list grammar: `50-100`, `50+20`, `5-16,960-973`, … */
+const RANGE_LIST = /^\d+(?:-\d+|\+\d+)?(?:,\d+(?:-\d+|\+\d+)?)*$/;
+
+function invalidRange(path: string, spec: string): Error {
+  return new Error(
+    `Invalid line range "${spec}" in "${path}": expected e.g. "50-100", "50+20" or "5-16,960-973"`,
+  );
+}
+
+/** Split a requested path into the file path and its optional line range
+ * suffix. The text after the last `:` is treated as a range only when it
+ * fully matches the range grammar, so Windows drive letters (`C:\...`) and
+ * colons inside file names stay part of the path. Suffixes that do not match
+ * the grammar at all are not ranges and stay in the path (the resolver then
+ * reports them as a missing file). */
+function splitRangeSuffix(
+  requested: string,
+): { path: string; spec: string; ranges: LineRange[] | undefined } {
+  const colon = requested.lastIndexOf(":");
+  if (colon === -1) return { path: requested, spec: "", ranges: undefined };
+  const spec = requested.slice(colon + 1);
+  if (!RANGE_LIST.test(spec)) {
+    return { path: requested, spec: "", ranges: undefined };
+  }
+  const ranges: LineRange[] = [];
+  for (const segment of spec.split(",")) {
+    const match = RANGE_SEGMENT.exec(segment);
+    if (match === null) throw invalidRange(requested, spec);
+    const from = Number(match[1]);
+    let to: number;
+    if (match[2] !== undefined) {
+      to = Number(match[2]);
+      if (to < from) throw invalidRange(requested, spec);
+    } else if (match[3] !== undefined) {
+      const count = Number(match[3]);
+      if (count < 1) throw invalidRange(requested, spec);
+      to = from + count - 1;
+    } else {
+      to = from;
+    }
+    if (from < 1) throw invalidRange(requested, spec);
+    ranges.push({ from, to });
+  }
+  return { path: requested.slice(0, colon), spec, ranges };
+}
+
+/** Sort ranges by start and merge overlaps/adjacency, so membership checks
+ * run against a small sorted list without materializing every line number. */
+function mergeRanges(ranges: LineRange[]): LineRange[] {
+  const sorted = [...ranges].sort((a, b) => a.from - b.from);
+  const merged: LineRange[] = [];
+  for (const range of sorted) {
+    const last = merged[merged.length - 1];
+    if (last !== undefined && range.from <= last.to + 1) {
+      last.to = Math.max(last.to, range.to);
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  return merged;
+}
+
+/** Stream a file's lines as [1-based line number, text]. The trailing `\n`
+ * is stripped; a trailing `\r` (CRLF files) is preserved so the text matches
+ * the raw bytes. Stops early when the consumer breaks. */
+async function* readLines(path: string): AsyncGenerator<[number, string]> {
+  const file = await Deno.open(path, { read: true });
+  const decoder = new TextDecoder();
+  const buffer = new Uint8Array(64 * 1024);
+  let lineNo = 1;
+  let carry = "";
+  try {
+    while (true) {
+      const n = await file.read(buffer);
+      if (n === null) break;
+      carry += decoder.decode(buffer.subarray(0, n), { stream: true });
+      // A single line can exceed the output budget by far (minified
+      // files); keep only its tail so a line-ranged read never buffers
+      // the whole file in memory.
+      if (carry.length > MAX_TOOL_OUTPUT) {
+        carry = carry.slice(-MAX_TOOL_OUTPUT);
+      }
+      let start = 0;
+      for (let i = 0; i < carry.length; i++) {
+        if (carry[i] === "\n") {
+          yield [lineNo++, carry.slice(start, i)];
+          start = i + 1;
+        }
+      }
+      carry = carry.slice(start);
+    }
+    const tail = carry + decoder.decode();
+    if (tail.length > 0) yield [lineNo, tail];
+  } finally {
+    file.close();
+  }
+}
+
+/** Read the requested line ranges, streaming; stops once the last needed
+ * line is past. `endOfFile` reports whether the file ended before the
+ * requested range was satisfied, `lastLine` the highest line seen. */
+async function readLineRanges(
+  path: string,
+  ranges: LineRange[],
+): Promise<{ lines: string[]; endOfFile: boolean; lastLine: number }> {
+  const merged = mergeRanges(ranges);
+  const maxTo = merged[merged.length - 1]!.to;
+  const lines: string[] = [];
+  let collectedBytes = 0;
+  let startIndex = 0;
+  let lastLine = 0;
+  let index = 0;
+  let pastMax = false;
+  for await (const [no, text] of readLines(path)) {
+    lastLine = no;
+    while (index < merged.length && no > merged[index]!.to) index++;
+    const current = merged[index];
+    if (current === undefined) {
+      pastMax = true;
+      break;
+    }
+    if (no >= current.from) {
+      lines.push(text);
+      collectedBytes += text.length + 1;
+      // Only the last MAX_TOOL_OUTPUT bytes can ever be displayed; drop
+      // the front as the collection exceeds that (keeping at least one
+      // line) so huge ranges stay memory-bounded.
+      while (
+        collectedBytes > MAX_TOOL_OUTPUT && startIndex < lines.length - 1
+      ) {
+        collectedBytes -= lines[startIndex]!.length + 1;
+        startIndex++;
+      }
+    }
+  }
+  return {
+    lines: lines.slice(startIndex),
+    endOfFile: !pastMax && lastLine < maxTo,
+    lastLine,
+  };
+}
+
+function countNewlines(bytes: Uint8Array): number {
+  let count = 0;
+  for (const byte of bytes) {
+    if (byte === 0x0a) count++;
+  }
+  return count;
+}
+
 const readSchema = object({
-  path: string("Path to the file"),
-  offset: optional(integer("Byte offset to start reading from")),
-  limit: optional(integer("Maximum number of bytes to read")),
+  path: string(
+    "Path to the file, optionally with a line range: `src/main.ts:50-100`, `src/main.ts:50+20` (50 lines from 50), or `src/main.ts:5-16,960-973` (multiple ranges)",
+  ),
 });
 
 export function createReadFileTool(
   ctx: FsToolContext,
 ): Tool<typeof readSchema> {
   return {
-    name: TOOL_READ_FILE,
+    name: TOOL_READ,
     label: "Read File",
     description:
-      "Read a file's contents as text. `offset` and `limit` are in bytes. " +
-      "Large files are read in chunks; the output is truncated to the last portion when larger than 64KB. " +
-      "Raster images (PNG/JPEG/GIF/WebP/BMP, up to 10MB) are passed to the model as images when read in full.",
+      "Read a file's contents as text. Append a line range to the path to " +
+      "read only those lines: `src/main.ts:50-100` (inclusive), " +
+      "`src/main.ts:50+20` (50 lines starting at 50), or " +
+      "`src/main.ts:5-16,960-973` (multiple ranges). Large files are read " +
+      "in chunks; the output is truncated to the last 64KB. Raster images " +
+      "(PNG/JPEG/GIF/WebP/BMP, up to 10MB) are passed to the model as images " +
+      "when read in full.",
     parameters: readSchema,
     execute: async (_id, params, _signal) => {
-      const resolved = await ctx.sandbox.resolve(params.path);
+      const { path, spec, ranges } = splitRangeSuffix(params.path);
+      const resolved = await ctx.sandbox.resolve(path);
       if (!resolved.ok) throw new Error(resolved.reason);
       const stat = await Deno.stat(resolved.path);
       if (stat.isDirectory) throw new Error(`Is a directory: ${params.path}`);
-      const wholeFile = params.offset === undefined &&
-        params.limit === undefined;
-      // Whole-file reads of raster images become an image block (vision
-      // models see the pixels); everything else stays on the text path.
+
+      if (ranges !== undefined) {
+        const { lines, endOfFile, lastLine } = await readLineRanges(
+          resolved.path,
+          ranges,
+        );
+        const { text, truncated } = truncate(lines.join("\n"));
+        let output = `--- ${path} lines ${spec} ---\n${text}`;
+        if (truncated) output += truncatedNote("output");
+        if (endOfFile) output += `\n[end of file: ${lastLine} lines]`;
+        return {
+          content: [{ type: "text", text: output }],
+          details: { path: resolved.path, size: stat.size },
+        };
+      }
+
+      // Whole-file read: image blocks for raster images, else text.
       const mimeType = IMAGE_MIME_BY_EXT[extname(resolved.path).toLowerCase()];
-      if (wholeFile && mimeType !== undefined && stat.size <= MAX_IMAGE_BYTES) {
+      if (mimeType !== undefined && stat.size <= MAX_IMAGE_BYTES) {
         const file = await Deno.open(resolved.path, { read: true });
         try {
           const buffer = new Uint8Array(stat.size);
@@ -93,12 +275,10 @@ export function createReadFileTool(
           file.close();
         }
       }
-      const offset = params.offset ?? 0;
-      const limit = params.limit ?? DEFAULT_READ_LIMIT;
+
       const file = await Deno.open(resolved.path, { read: true });
       try {
-        await file.seek(offset, Deno.SeekMode.Start);
-        const buffer = new Uint8Array(limit);
+        const buffer = new Uint8Array(DEFAULT_READ_LIMIT);
         const read = await file.read(buffer);
         const bytes = read === null
           ? new Uint8Array(0)
@@ -109,10 +289,10 @@ export function createReadFileTool(
         if (truncated) {
           note = truncatedNote("output");
         }
-        if (offset + bytes.length < stat.size) {
-          note += `\n[file continues; read with offset=${
-            offset + bytes.length
-          }]`;
+        if (bytes.length < stat.size) {
+          const nextLine = countNewlines(bytes) + 1;
+          note +=
+            `\n[file continues; read with ${params.path}:${nextLine}+${SUGGESTED_RANGE_LINES}]`;
         }
         return {
           content: [{ type: "text", text: trimmed + note }],
@@ -134,7 +314,7 @@ export function createWriteFileTool(
   ctx: FsToolContext,
 ): Tool<typeof writeSchema> {
   return {
-    name: TOOL_WRITE_FILE,
+    name: TOOL_WRITE,
     label: "Write File",
     description:
       "Create or overwrite a file with the given text content. Parent directories are created automatically.",

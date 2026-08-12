@@ -10,6 +10,7 @@ import { createBashTool } from "./bash.ts";
 import { createAsyncBashTools } from "./background.ts";
 import type { BackgroundProcessManager } from "./background.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
+import { createEvalTool } from "./eval.ts";
 import type { Tool } from "./schema.ts";
 import { loadProjectMemory } from "../memory/agents-md.ts";
 import {
@@ -65,6 +66,7 @@ export function createCodingTools(
     ...(options.background !== undefined
       ? createAsyncBashTools({ manager: options.background, sandbox })
       : []),
+    createEvalTool(),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
   ];
 }
@@ -119,6 +121,8 @@ Guidelines:
   acknowledge it, but do not mistake it for user input.
 - Use the dedicated tools: read to read files, edit to edit them, grep to
   search, glob to explore structure.
+- Use eval for quick calculations and data processing instead of spawning
+  python or node from bash.
 - After making changes, verify them (run tests, builds) when appropriate.
 - Ask the user when a task is ambiguous.
 - Prioritize correctness above all else.

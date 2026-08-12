@@ -43,7 +43,7 @@ faux.setResponses([
     if (text.includes("read")) {
       return fauxAssistantMessage([
         fauxText("README.md を読みます。"),
-        fauxToolCall("read_file", { path: "README.md" }),
+        fauxToolCall("read", { path: "README.md" }),
       ]);
     }
     return fauxAssistantMessage(

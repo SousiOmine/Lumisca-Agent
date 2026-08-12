@@ -1,4 +1,11 @@
-import { integer, object, optional, string, type Tool } from "./schema.ts";
+import {
+  integer,
+  object,
+  optional,
+  string,
+  stringMap,
+  type Tool,
+} from "./schema.ts";
 import { TOOL_BASH } from "../shared.ts";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
@@ -11,6 +18,7 @@ const bashSchema = object({
   ),
   command: string("The shell command to execute"),
   timeout: optional(integer("Timeout in seconds (default 120)")),
+  env: optional(stringMap("Environment variables to pass to the command")),
 });
 
 export interface BashToolOptions {
@@ -52,7 +60,8 @@ export function createBashTool(
       const command = new Deno.Command(shell.file, {
         args: [...shell.args, params.command],
         cwd: resolved.path,
-        env: options.env,
+        // Per-call env vars override the tool-level env.
+        env: { ...options.env, ...params.env },
         stdout: "piped",
         stderr: "piped",
       });

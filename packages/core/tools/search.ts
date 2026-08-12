@@ -2,8 +2,8 @@ import { join, relative } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { errorMessage } from "../errors.ts";
 import { TOOL_GLOB, TOOL_GREP } from "../shared.ts";
+import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
 import {
-  array,
   boolean,
   integer,
   object,
@@ -13,12 +13,12 @@ import {
 } from "./schema.ts";
 import { truncate, truncatedNote } from "./truncate.ts";
 
+/** Re-exported so existing importers (tests) keep importing from here. */
+export { globToRegExp };
+
 interface FsToolContext {
   sandbox: Sandbox;
 }
-
-/** Directories skipped while walking (on top of hidden entries). */
-const DEFAULT_EXCLUDED_DIRS = new Set(["node_modules"]);
 
 /** Files larger than this are skipped by grep (avoid loading huge files). */
 const MAX_GREP_FILE_SIZE = 8 * 1024 * 1024;
@@ -32,87 +32,21 @@ function linePreview(line: string, max = 200): string {
   return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}…`;
 }
 
-/** Convert a glob pattern to a RegExp. Supports `**`, `*`, `?`, `{a,b}`.
- * A double-star segment matches zero or more directories, so a pattern like
- * `a` + `**` + slash + `b.ts` also matches `a/b.ts`. */
-export function globToRegExp(glob: string): RegExp {
-  let out = "";
-  let i = 0;
-  while (i < glob.length) {
-    const c = glob[i]!;
-    if (c === "*" && glob[i + 1] === "*") {
-      if (glob[i + 2] === "/") {
-        out += "(?:.*/)?";
-        i += 3;
-      } else {
-        out += ".*";
-        i += 2;
-      }
-    } else if (c === "*") {
-      out += "[^/]*";
-      i += 1;
-    } else if (c === "?") {
-      out += "[^/]";
-      i += 1;
-    } else if (c === "{") {
-      const end = glob.indexOf("}", i);
-      if (end > i) {
-        const alts = glob
-          .slice(i + 1, end)
-          .split(",")
-          .map((a) => a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-          .join("|");
-        out += `(?:${alts})`;
-        i = end + 1;
-      } else {
-        out += "\\{";
-        i += 1;
-      }
-    } else {
-      out += c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      i += 1;
-    }
-  }
-  return new RegExp(`^${out}$`);
-}
-
-/** A glob filter for paths relative to a search root. Patterns without a
- * separator match against the basename (ripgrep `-g` semantics), others
- * against the full relative path. */
-class GlobFilter {
-  private readonly matchers: Array<{ basenameOnly: boolean; re: RegExp }>;
-
-  constructor(patterns: string[]) {
-    this.matchers = patterns.map((p) => {
-      const normalized = p.replace(/\\/g, "/");
-      return {
-        basenameOnly: !normalized.includes("/"),
-        re: globToRegExp(normalized),
-      };
-    });
-  }
-
-  matches(relPath: string, isDir: boolean): boolean {
-    const normalized = relPath.replace(/\\/g, "/");
-    for (const { basenameOnly, re } of this.matchers) {
-      const candidate = basenameOnly && !isDir
-        ? normalized.slice(normalized.lastIndexOf("/") + 1)
-        : normalized;
-      if (re.test(candidate)) return true;
-    }
-    return false;
-  }
-}
-
 /**
- * Recursively yield files under `root`. Hidden entries (`.`-prefixed) and
- * `node_modules` are skipped by default; symlinks are never followed.
- * `exclude` patterns prune directories as the walk descends.
+ * Recursively yield files under `root`. With `skipHidden` (default) hidden
+ * entries (`.`-prefixed) are skipped; symlinks are never followed.
+ * `gitignore` prunes ignored directories and drops ignored files (this is
+ * what normally excludes node_modules).
  */
 async function* walkFiles(
   root: string,
-  options: { exclude?: GlobFilter; maxDepth?: number },
+  options: {
+    skipHidden?: boolean;
+    gitignore?: GitignoreMatcher;
+    maxDepth?: number;
+  } = {},
 ): AsyncGenerator<string> {
+  const skipHidden = options.skipHidden ?? true;
   const maxDepth = options.maxDepth ?? 32;
   async function* walk(dir: string, depth: number): AsyncGenerator<string> {
     if (depth > maxDepth) return;
@@ -127,15 +61,15 @@ async function* walkFiles(
       const full = join(dir, entry.name);
       if (entry.isSymlink) continue; // never follow symlinks
       if (entry.isDirectory) {
-        if (entry.name.startsWith(".")) continue;
-        if (DEFAULT_EXCLUDED_DIRS.has(entry.name)) continue;
+        if (skipHidden && entry.name.startsWith(".")) continue;
         const rel = relative(root, full);
-        if (options.exclude?.matches(rel, true)) continue;
+        // An ignored directory means everything below it is ignored too.
+        if (options.gitignore?.ignores(root, rel, true)) continue;
         yield* walk(full, depth + 1);
       } else if (entry.isFile) {
-        if (entry.name.startsWith(".")) continue;
+        if (skipHidden && entry.name.startsWith(".")) continue;
         const rel = relative(root, full);
-        if (options.exclude?.matches(rel, false)) continue;
+        if (options.gitignore?.ignores(root, rel, false)) continue;
         yield full;
       }
     }
@@ -155,24 +89,16 @@ async function looksBinary(path: string): Promise<boolean> {
   }
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 const grepSchema = object({
-  pattern: string("Regular expression (or literal text) to search for"),
+  pattern: string("Regular expression to search for"),
   path: optional(string(
     "File or directory to search; defaults to the whole workspace",
   )),
-  literal: optional(
-    boolean("Treat `pattern` as literal text instead of a regex"),
-  ),
-  include: optional(array(string(
-    "Glob patterns of files to search (e.g. **/*.ts)",
-  ))),
-  exclude: optional(array(string("Glob patterns of paths to skip"))),
-  case_sensitive: optional(boolean(
+  case: optional(boolean(
     "Case-sensitive matching (default: insensitive)",
+  )),
+  gitignore: optional(boolean(
+    "Skip files matched by .gitignore (default: true)",
   )),
   max_results: optional(integer(
     "Maximum matches to return (default 200, cap 1000)",
@@ -186,28 +112,23 @@ export function createGrepTool(
     label: "Grep",
     description:
       "Search file contents within the workspace using a regular expression. " +
-      "Hidden files and node_modules are skipped unless `path` points at a specific file. " +
-      "Matches are returned as path:line: text. Binary files and files larger than 8MB are skipped.",
+      "Files matched by .gitignore are skipped; set `gitignore` to false to " +
+      "search them too. Matches are returned as path:line: text. Binary " +
+      "files and files larger than 8MB are skipped.",
     parameters: grepSchema,
     execute: async (_id, params) => {
       let re: RegExp;
       try {
-        re = new RegExp(
-          params.literal ? escapeRegExp(params.pattern) : params.pattern,
-          params.case_sensitive ? "" : "i",
-        );
+        re = new RegExp(params.pattern, params.case ? "" : "i");
       } catch (error) {
         throw new Error(
           `Invalid pattern: ${errorMessage(error)}`,
         );
       }
 
-      const include = params.include?.length
-        ? new GlobFilter(params.include)
-        : undefined;
-      const exclude = params.exclude?.length
-        ? new GlobFilter(params.exclude)
-        : undefined;
+      const gitignore = params.gitignore === false
+        ? undefined
+        : await GitignoreMatcher.load(ctx.sandbox.roots);
       const maxResults = Math.min(params.max_results ?? 200, 1000);
 
       const lines: string[] = [];
@@ -216,17 +137,10 @@ export function createGrepTool(
         const resolved = await resolveSearchRoot(ctx, params.path);
         const stat = await Deno.stat(resolved);
         if (stat.isFile) {
-          // Explicitly targeted files bypass include/exclude filters.
+          // Explicitly targeted files bypass gitignore filtering.
           if (await grepFile(resolved, re, lines, maxResults)) files++;
         } else {
-          files += await grepTree(
-            resolved,
-            re,
-            include,
-            exclude,
-            lines,
-            maxResults,
-          );
+          files += await grepTree(resolved, re, gitignore, lines, maxResults);
         }
       } else {
         for (const root of ctx.sandbox.roots) {
@@ -235,14 +149,7 @@ export function createGrepTool(
           if (stat.isFile) {
             if (await grepFile(root, re, lines, maxResults)) files++;
           } else {
-            files += await grepTree(
-              root,
-              re,
-              include,
-              exclude,
-              lines,
-              maxResults,
-            );
+            files += await grepTree(root, re, gitignore, lines, maxResults);
           }
           if (lines.length >= maxResults) break;
         }
@@ -274,19 +181,17 @@ async function resolveSearchRoot(
   return resolved.path;
 }
 
-/** Grep every file under a directory, honoring include/exclude filters. */
+/** Grep every file under a directory, honoring gitignore filtering (hidden
+ * files and node_modules are searched too). */
 async function grepTree(
   root: string,
   re: RegExp,
-  include: GlobFilter | undefined,
-  exclude: GlobFilter | undefined,
+  gitignore: GitignoreMatcher | undefined,
   out: string[],
   maxResults: number,
 ): Promise<number> {
   let files = 0;
-  for await (const file of walkFiles(root, { exclude })) {
-    const rel = relative(root, file);
-    if (include && !include.matches(rel, false)) continue;
+  for await (const file of walkFiles(root, { skipHidden: false, gitignore })) {
     if (await grepFile(file, re, out, maxResults)) files++;
     if (out.length >= maxResults) break;
   }
@@ -326,7 +231,12 @@ const globSchema = object({
   path: optional(
     string("Directory to search; defaults to the whole workspace"),
   ),
-  exclude: optional(array(string("Glob patterns of paths to skip"))),
+  gitignore: optional(boolean(
+    "Skip files matched by .gitignore (default: true)",
+  )),
+  hidden: optional(boolean(
+    "Search hidden files (dot-prefixed, default: true)",
+  )),
   max_results: optional(integer(
     "Maximum paths to return (default 500, cap 2000)",
   )),
@@ -340,7 +250,9 @@ export function createGlobTool(
     label: "Glob",
     description:
       "Find files by path pattern within the workspace. Supports `**`, `*`, `?` and `{a,b}`. " +
-      "Hidden files and node_modules are skipped.",
+      "Files matched by .gitignore are skipped; set `gitignore` to false to " +
+      "search them too. Hidden files are searched; set `hidden` to false to " +
+      "skip them.",
     parameters: globSchema,
     execute: async (_id, params) => {
       let re: RegExp;
@@ -351,10 +263,15 @@ export function createGlobTool(
           `Invalid pattern: ${errorMessage(error)}`,
         );
       }
-      const exclude = params.exclude?.length
-        ? new GlobFilter(params.exclude)
-        : undefined;
+      const gitignore = params.gitignore === false
+        ? undefined
+        : await GitignoreMatcher.load(ctx.sandbox.roots);
       const maxResults = Math.min(params.max_results ?? 500, 2000);
+      const walk = (root: string) =>
+        walkFiles(root, {
+          skipHidden: params.hidden === false,
+          gitignore,
+        });
 
       const found: string[] = [];
       if (params.path !== undefined) {
@@ -363,7 +280,7 @@ export function createGlobTool(
         if (stat.isFile) {
           if (re.test(root)) found.push(root);
         } else {
-          for await (const file of walkFiles(root, { exclude })) {
+          for await (const file of walk(root)) {
             if (re.test(relative(root, file).replace(/\\/g, "/"))) {
               found.push(file);
               if (found.length >= maxResults) break;
@@ -377,7 +294,7 @@ export function createGlobTool(
           if (stat.isFile) {
             if (re.test(root)) found.push(root);
           } else {
-            for await (const file of walkFiles(root, { exclude })) {
+            for await (const file of walk(root)) {
               if (re.test(relative(root, file).replace(/\\/g, "/"))) {
                 found.push(file);
                 if (found.length >= maxResults) break;

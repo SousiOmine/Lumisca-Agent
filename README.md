@@ -23,7 +23,7 @@ CLI・Web・デスクトップの3つのフロントエンドから同一の機�
 - **セッション永続化**: セッション履歴とメタデータを SQLite に保存。再起動後も再開できます
 - **全プロバイダー対応**: Anthropic, OpenAI, DeepSeek, OpenRouter, Google など
   20+ のプロバイダーを API キー方式で利用可能(モデル選択UI付き)
-- **ツール**: read_file / write_file / edit / list_dir / grep / glob / bash(cmd.exe または /bin/sh)。
+- **ツール**: read / write / edit / list_dir / grep / glob / eval / bash(cmd.exe または /bin/sh)。
   grep / glob は `path` 省略時に**全ワークスペースフォルダ**を探索。bash は
   **`cwd` が必須引数**で、ワークスペースフォルダ名または絶対パスで指定します
 - **MCP 対応**: 外部ツールサーバー(MCP)を追加可能。**設定モーダル(⚙ → MCP サーバー)

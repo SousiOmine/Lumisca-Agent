@@ -80,7 +80,7 @@ for (let i = 1; i <= nPairs; i++) {
         {
           type: "toolCall",
           id: callIds[1]!,
-          name: "read_file",
+          name: "read",
           arguments: { path: "README.md" },
         },
       ],
@@ -102,7 +102,7 @@ for (let i = 1; i <= nPairs; i++) {
       JSON.stringify({
         role: "toolResult",
         toolCallId: callIds[k]!,
-        toolName: k === 0 ? "list_dir" : "read_file",
+        toolName: k === 0 ? "list_dir" : "read",
         content: [{
           type: "text",
           text:

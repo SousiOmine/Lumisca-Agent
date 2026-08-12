@@ -1,4 +1,11 @@
-import { integer, object, optional, string, type Tool } from "./schema.ts";
+import {
+  integer,
+  object,
+  optional,
+  string,
+  stringMap,
+  type Tool,
+} from "./schema.ts";
 import {
   TOOL_ASYNC_BASH,
   TOOL_ASYNC_BASH_KILL,
@@ -175,6 +182,8 @@ export class BackgroundProcessManager {
     cwd: string;
     command: string;
     timeoutSec?: number;
+    /** Per-command env vars; override the manager-level env. */
+    env?: Record<string, string>;
   }): { commandId: string; pid: number } {
     if (this.records.size >= MAX_BACKGROUND_COMMANDS) {
       throw new Error(
@@ -188,7 +197,7 @@ export class BackgroundProcessManager {
     const child = new Deno.Command(shell.file, {
       args: [...shell.args, input.command],
       cwd: input.cwd,
-      env: this.options.env,
+      env: { ...this.options.env, ...input.env },
       stdout: "piped",
       stderr: "piped",
     }).spawn();
@@ -373,6 +382,7 @@ const startSchema = object({
       "Timeout in seconds (default: no timeout; the command is killed on expiry)",
     ),
   ),
+  env: optional(stringMap("Environment variables to pass to the command")),
 });
 
 const statusSchema = object({
@@ -432,7 +442,7 @@ export function createAsyncBashTools(
       "async_bash_status, stop the command with async_bash_kill. You are " +
       "notified when it finishes (a user message starting with " +
       '"[Background command ...]"). Aborting this run does NOT stop the ' +
-      "command. `timeout` is in seconds.",
+      "command.",
     parameters: startSchema,
     execute: async (_id, params) => {
       const resolved = await sandbox.resolve(params.cwd);
@@ -441,6 +451,7 @@ export function createAsyncBashTools(
         cwd: resolved.path,
         command: params.command,
         timeoutSec: params.timeout,
+        env: params.env,
       });
       return {
         content: [{
@@ -497,11 +508,9 @@ export function createAsyncBashTools(
     name: TOOL_ASYNC_BASH_KILL,
     label: "Async Bash Kill",
     description:
-      "Force-stop a background command (its whole process tree). No " +
-      "completion notification is sent for a command killed with this tool " +
-      "- the tool result is the confirmation; use async_bash_status to " +
-      "check the final state. Safe to call on an already-finished command " +
-      "(no-op). Use the `commandId` returned by async_bash.",
+      "Force-stop a background command (its whole process tree). Safe to " +
+      "call on an already-finished command (no-op). Use the `commandId` " +
+      "returned by async_bash.",
     parameters: killSchema,
     execute: async (_id, params) => {
       const { alreadyExited, timedOut } = await manager.kill(params.id);

@@ -128,3 +128,44 @@ Deno.test("decodeOutput is stable against the real cmd.exe output", async () => 
   assertEquals(text.includes("\uFFFD"), false);
   assert(/\d{3}/.test(text), `code page missing: ${text}`);
 });
+
+Deno.test("bash tool passes env vars to the command", async () => {
+  const { tool, root } = makeTool();
+  try {
+    const echo = Deno.build.os === "windows"
+      ? "echo %LUMISCA_TEST_VAR%"
+      : "echo $LUMISCA_TEST_VAR";
+    const result = await tool.execute(
+      "1",
+      { cwd: root, command: echo, env: { LUMISCA_TEST_VAR: "hello-env" } },
+      undefined,
+    );
+    assertEquals(toolText(result).includes("hello-env"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("bash tool per-call env overrides the tool-level env", async () => {
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
+  const sandbox = new Sandbox([root]);
+  const tool = createBashTool({
+    sandbox,
+    env: { LUMISCA_TEST_VAR: "tool-level" },
+  });
+  try {
+    const echo = Deno.build.os === "windows"
+      ? "echo %LUMISCA_TEST_VAR%"
+      : "echo $LUMISCA_TEST_VAR";
+    const result = await tool.execute(
+      "1",
+      { cwd: root, command: echo, env: { LUMISCA_TEST_VAR: "call-level" } },
+      undefined,
+    );
+    const text = toolText(result);
+    assertEquals(text.includes("call-level"), true);
+    assertEquals(text.includes("tool-level"), false);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});

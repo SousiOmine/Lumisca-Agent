@@ -184,7 +184,7 @@ Deno.test("sandbox resolves deep new paths in full (no truncation)", async () =>
   if (r2.ok) assertEquals(r2.path, join(real(root), "new", "file.txt"));
 
   // A write through that path must land on the full target (after the
-  // parents are created, mirroring what write_file does).
+  // parents are created, mirroring what write does).
   await Deno.mkdir(join(real(root), "a", "b", "c"), { recursive: true });
   await Deno.writeTextFile(r.ok ? r.path : "", "content");
   assertEquals(

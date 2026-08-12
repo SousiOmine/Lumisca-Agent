@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import {
   fauxAssistantMessage,
@@ -92,6 +93,59 @@ Deno.test("status reports state, exit code and output tail", async () => {
   const tail = (await manager.tail(commandId)) ?? "";
   assert(tail.includes("done"), `tail missing output: ${tail}`);
   assert(tailWhileRunning !== undefined);
+});
+
+Deno.test("per-command env vars are passed and override the manager-level env", async () => {
+  const manager = new BackgroundProcessManager({
+    env: { LUMISCA_TEST_ENV: "manager-level" },
+  });
+  const exitPromise = waitForExit(manager);
+  const echo = Deno.build.os === "windows"
+    ? "echo %LUMISCA_TEST_ENV%"
+    : "echo $LUMISCA_TEST_ENV";
+  const { commandId } = await manager.start({
+    cwd: Deno.cwd(),
+    command: echo,
+    env: { LUMISCA_TEST_ENV: "command-level" },
+  });
+  const done = await exitPromise;
+  assertEquals(done.commandId, commandId);
+  assertEquals(done.reason, "exited");
+  assert(done.tail.includes("command-level"), `tail: ${done.tail}`);
+  assert(!done.tail.includes("manager-level"), `tail: ${done.tail}`);
+});
+
+Deno.test("async_bash start tool forwards env vars", async () => {
+  const manager = new BackgroundProcessManager();
+  const exitPromise = waitForExit(manager);
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-async-env-" });
+  const sandbox = new Sandbox([root]);
+  try {
+    const [start] = createAsyncBashTools({ manager, sandbox });
+    if (start === undefined) throw new Error("start tool missing");
+    const echo = Deno.build.os === "windows"
+      ? "echo %LUMISCA_TEST_ENV%"
+      : "echo $LUMISCA_TEST_ENV";
+    const result = await start.execute(
+      "1",
+      {
+        cwd: basename(root),
+        command: echo,
+        env: { LUMISCA_TEST_ENV: "hello-env" },
+      },
+      undefined,
+    );
+    assert(
+      toolText(result).includes("Started background command #1"),
+      `start result: ${toolText(result)}`,
+    );
+    const done = await exitPromise;
+    assertEquals(done.reason, "exited");
+    assert(done.tail.includes("hello-env"), `tail: ${done.tail}`);
+  } finally {
+    manager.killAll();
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test("kill stops the process tree and is idempotent", async () => {

@@ -46,12 +46,22 @@ export interface SchemaObject<
   description?: string;
 }
 
+/** An object whose values are all strings — e.g. environment variables.
+ * Plain JSON Schema: `{ type: "object", additionalProperties: { type:
+ * "string" } }`. */
+export interface SchemaStringMap {
+  type: "object";
+  additionalProperties: SchemaString;
+  description?: string;
+}
+
 export type ToolSchema =
   | SchemaString
   | SchemaInteger
   | SchemaBoolean
   | SchemaArray
-  | SchemaObject;
+  | SchemaObject
+  | SchemaStringMap;
 
 // --- optional marker ----------------------------------------------------------
 
@@ -81,6 +91,7 @@ export type Infer<S extends ToolSchema> = S extends SchemaObject<infer P> ?
     }
     & (S extends { additionalProperties: true } ? Record<string, unknown>
       : unknown)
+  : S extends SchemaStringMap ? Record<string, string>
   : S extends SchemaArray<infer I> ? Array<Infer<I>>
   : S extends SchemaString ? string
   : S extends SchemaInteger ? number
@@ -114,6 +125,13 @@ export function array<I extends ToolSchema>(
   return description === undefined
     ? { type: "array", items }
     : { type: "array", items, description };
+}
+
+/** An object whose values are all strings — e.g. environment variables. */
+export function stringMap(description?: string): SchemaStringMap {
+  return description === undefined
+    ? { type: "object", additionalProperties: string() }
+    : { type: "object", additionalProperties: string(), description };
 }
 
 /** Build an object schema. The returned `properties` have the optional

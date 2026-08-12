@@ -140,7 +140,7 @@ Deno.test("tools block file access outside the workspace", async () => {
   faux.setResponses([
     fauxAssistantMessage([
       fauxText("Reading the file."),
-      fauxToolCall("read_file", { path: join(outside, "secret.txt") }),
+      fauxToolCall("read", { path: join(outside, "secret.txt") }),
     ]),
     fauxAssistantMessage("Done."),
   ]);
@@ -161,7 +161,7 @@ Deno.test("tools block file access outside the workspace", async () => {
   faux.setResponses([
     fauxAssistantMessage([
       fauxText("Reading."),
-      fauxToolCall("read_file", { path: `${basename(root)}/inside.txt` }),
+      fauxToolCall("read", { path: `${basename(root)}/inside.txt` }),
     ]),
     fauxAssistantMessage("Read it."),
   ]);
@@ -1519,7 +1519,7 @@ Deno.test("text-only model: read tool images are analyzed and passed as text", a
     () =>
       fauxAssistantMessage([
         fauxText("Reading the image."),
-        fauxToolCall("read_file", { path: join(root, "pic.png") }),
+        fauxToolCall("read", { path: join(root, "pic.png") }),
       ]),
     // Turn 2: the analysis model interprets the tool result image.
     () => fauxAssistantMessage("tool result described"),

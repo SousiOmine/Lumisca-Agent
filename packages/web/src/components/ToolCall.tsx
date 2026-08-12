@@ -18,11 +18,12 @@ import {
   contentText,
   TOOL_BASH,
   TOOL_EDIT,
+  TOOL_EVAL,
   TOOL_GLOB,
   TOOL_GREP,
   TOOL_LIST_DIR,
-  TOOL_READ_FILE,
-  TOOL_WRITE_FILE,
+  TOOL_READ,
+  TOOL_WRITE,
 } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
 import { ContentImages } from "./ContentImages.tsx";
@@ -31,11 +32,11 @@ import { ContentImages } from "./ContentImages.tsx";
 function toolIcon(name: string) {
   switch (name) {
     // file reading
-    case TOOL_READ_FILE:
+    case TOOL_READ:
     case "Read":
       return <IconFile size={13} />;
     // file writing / editing
-    case TOOL_WRITE_FILE:
+    case TOOL_WRITE:
     case TOOL_EDIT:
     case "Edit":
     case "Write":
@@ -59,6 +60,9 @@ function toolIcon(name: string) {
     // sub-agent
     case "Agent":
       return <IconBrain size={13} />;
+    // code evaluation
+    case TOOL_EVAL:
+      return <IconCode size={13} />;
     // task list
     case "TodoWrite":
     case "TodoRead":
@@ -72,7 +76,7 @@ function toolIcon(name: string) {
 function toolSummary(name: string, args: Record<string, unknown>): string {
   switch (name) {
     // file reading — argument may be `path`, `file_path`, or `file`
-    case TOOL_READ_FILE:
+    case TOOL_READ:
     case "Read":
       return shortPath(
         typeof args.path === "string"
@@ -84,7 +88,7 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
           : "",
       );
     // file writing / editing
-    case TOOL_WRITE_FILE:
+    case TOOL_WRITE:
     case TOOL_EDIT:
     case "Edit":
     case "Write":
@@ -106,6 +110,9 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
     case TOOL_BASH:
     case "Bash":
       return typeof args.command === "string" ? truncate(args.command, 60) : "";
+    // code evaluation — show the snippet
+    case TOOL_EVAL:
+      return typeof args.code === "string" ? truncate(args.code, 60) : "";
     // search / grep — argument may be `pattern`, `query`, or `command`
     case TOOL_GREP:
     case "Grep":
