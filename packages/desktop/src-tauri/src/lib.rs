@@ -150,17 +150,17 @@ enum ServerCommand {
 }
 
 /// Locate the server runtime:
-/// 1. packaged: resources/server/lumisca-server(.exe) next to the app exe
+/// 1. packaged: server/lumisca-server(.exe) in Tauri's resource directory
 /// 2. repository layout during development (cwd is packages/desktop/src-tauri)
-fn find_server_command() -> Option<ServerCommand> {
-    // Bundled resource: resources/server/lumisca-server.exe
-    if let Ok(exe) = std::env::current_exe() {
-        let bin = if cfg!(windows) {
+fn find_server_command(app: &AppHandle) -> Option<ServerCommand> {
+    // `tauri.conf.json` maps the bundled files to `server/*` relative to
+    // Tauri's platform-specific resource directory.
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let bundled = resource_dir.join("server").join(if cfg!(windows) {
             "lumisca-server.exe"
         } else {
             "lumisca-server"
-        };
-        let bundled = exe.parent()?.join("resources/server").join(bin);
+        });
         if bundled.is_file() {
             return Some(ServerCommand::Compiled(bundled));
         }
@@ -307,7 +307,7 @@ fn page_url(base: &str, token: &str) -> String {
 
 fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String> {
     let db_path = server_db_path(app);
-    let command = find_server_command()
+    let command = find_server_command(app)
         .ok_or_else(|| "Lumisca server not found. Build the project first.".to_string())?;
 
     let child = match command {
