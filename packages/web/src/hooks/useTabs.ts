@@ -7,7 +7,12 @@ import {
   useState,
 } from "react";
 import { sessionApi, type SessionInfoDto } from "../api.ts";
-import { type AgentMessage, emptyView, type SessionView } from "../types.ts";
+import {
+  type AgentMessage,
+  emptyView,
+  type SessionView,
+  type TodoPhase,
+} from "../types.ts";
 /** Tab id for the not-yet-created "new session" draft tab. */
 export const DRAFT_TAB = "__new__";
 
@@ -20,9 +25,11 @@ const ACTIVE_TAB_KEY = "lumisca.activeTab";
 function restoreView(
   info: SessionInfoDto,
   messages: AgentMessage[],
+  todos: TodoPhase[] = [],
 ): SessionView {
   const v = emptyView(info, messages);
   if (info.lastError) v.error = info.lastError;
+  v.todos = todos;
   return v;
 }
 
@@ -55,11 +62,14 @@ export function useTabs(
           // GET /sessions/:id (not /open) for the info: the messages
           // endpoint already opens the session, and the response carries
           // the last run error so a failed run is visible after a restart.
-          const [info, messages] = await Promise.all([
+          // The todo plan is fetched alongside — todo events are only
+          // emitted on mutations, so a fresh page must restore it here.
+          const [info, messages, todo] = await Promise.all([
             sessionApi(id).getSession(),
             sessionApi(id).getMessages(),
+            sessionApi(id).getTodo(),
           ]);
-          restoredViews.set(id, restoreView(info, messages));
+          restoredViews.set(id, restoreView(info, messages, todo.todos));
         } catch {
           // The session no longer exists; skip it.
         }

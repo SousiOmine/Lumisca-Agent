@@ -1731,6 +1731,80 @@ Deno.test("ask tool blocks the run until the user answers, then continues", asyn
   core.close();
 });
 
+Deno.test("todo tool plans, updates, and auto-advances the plan", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([
+    fauxAssistantMessage([
+      fauxToolCall("todo", {
+        action: "plan",
+        phases: [{
+          name: "実装",
+          tasks: ["調査する", "実装する", "テストする"],
+        }],
+      }),
+    ]),
+    fauxAssistantMessage([
+      fauxToolCall("todo", {
+        action: "update",
+        phase: "p1",
+        task: "t1",
+        status: "completed",
+      }),
+    ]),
+    fauxAssistantMessage("finished!"),
+  ]);
+
+  const events: ClientEvent[] = [];
+  const unsubscribe = core.subscribe((event) => events.push(event));
+  await core.prompt(session.id, "Plan and track the work");
+
+  // Every mutation emitted a `todo` snapshot event for this session.
+  const todoEvents = events.filter(
+    (e): e is Extract<ClientEvent, { type: "todo" }> => e.type === "todo",
+  );
+  assertEquals(todoEvents.length, 2);
+  const planned = todoEvents[0]!.todos[0]!.tasks.map((t) => [t.name, t.status]);
+  assertEquals(planned, [
+    ["調査する", "pending"],
+    ["実装する", "pending"],
+    ["テストする", "pending"],
+  ]);
+  // Completing the current task auto-advanced to the next pending one.
+  const updated = todoEvents.at(-1)!.todos[0]!.tasks.map((t) => [
+    t.name,
+    t.status,
+  ]);
+  assertEquals(updated, [
+    ["調査する", "completed"],
+    ["実装する", "in_progress"],
+    ["テストする", "pending"],
+  ]);
+
+  // The run saw the plan in the tool results and continued normally.
+  const messages = core.getAgent(session.id)!.messages;
+  const toolResults = messages.filter((m) => m.role === "toolResult");
+  assertEquals(toolResults.length, 2);
+  const firstResult = (toolResults[0] as { content: Array<{ text: string }> })
+    .content[0]!.text;
+  assertEquals(
+    firstResult,
+    "Todo (1 phase, 3 tasks):\n[実装]\n" +
+      "  [ ] 調査する (pending)\n  [ ] 実装する (pending)\n  [ ] テストする (pending)",
+  );
+  const last = messages.at(-1) as { content: Array<{ text: string }> };
+  assertEquals(last.content[0]!.text, "finished!");
+
+  unsubscribe();
+  core.close();
+});
+
 Deno.test("rewind while a question is pending aborts the run cleanly", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);

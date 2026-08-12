@@ -926,6 +926,123 @@ select:focus {
   color: var(--error);
 }
 
+/* ---- todo progress panel -------------------------------------------------- */
+
+/* The session's todo plan, fixed to the top-right of the chat. A rounded
+ * card that follows the theme tokens; hidden by the component while the
+ * plan is empty. */
+.todo-panel {
+  position: fixed;
+  top: calc(var(--tab-height) + 8px);
+  right: 12px;
+  z-index: 45;
+  width: 264px;
+  max-width: calc(100vw - 24px);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px var(--shadow);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.todo-panel-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.todo-panel-header:hover {
+  background: var(--accent-soft);
+}
+
+.todo-panel-title {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.todo-panel-summary {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.todo-panel-body {
+  border-top: 1px solid var(--border);
+  max-height: min(50vh, 360px);
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.todo-phase-name {
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.todo-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todo-task {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.todo-task-mark {
+  flex: none;
+  width: 12px;
+  text-align: center;
+}
+
+/* status colors: current task pops in the accent, done in the ok color,
+ * blocked in the error color, abandoned fades out. */
+.todo-task.in_progress {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.todo-task.in_progress .todo-task-mark {
+  color: var(--accent);
+}
+
+.todo-task.completed {
+  color: var(--text-dim);
+}
+
+.todo-task.completed .todo-task-mark {
+  color: var(--ok);
+}
+
+.todo-task.blocked .todo-task-mark {
+  color: var(--error);
+}
+
+.todo-task.abandoned {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
 /* ---- agent questions (ask tool) ------------------------------------------ */
 
 .question-panel {

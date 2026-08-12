@@ -1,13 +1,14 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
 import { CoreError } from "../errors.ts";
-import type { ThinkingLevel } from "../shared.ts";
+import type { ThinkingLevel, TodoPhase } from "../shared.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { createCodingTools } from "../tools/mod.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
 import { AskHub } from "../tools/ask.ts";
+import { TodoHub } from "../tools/todo.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
@@ -60,6 +61,10 @@ export class SessionPool {
    * and the commands must keep running. They are stopped when the session
    * closes (close/delete/closeAll). */
   private readonly background = new Map<string, BackgroundProcessManager>();
+  /** Todo hubs, one per open session. Owned by the pool (not the agent) so
+   * the plan survives agent rebuilds — the same reason as `background`.
+   * Discarded when the session closes (close/delete/closeAll). */
+  private readonly todos = new Map<string, TodoHub>();
   private readonly lastErrors = new Map<string, string>();
 
   constructor(private readonly deps: SessionPoolDeps) {}
@@ -81,6 +86,14 @@ export class SessionPool {
    * failures of fire-and-forget prompts instead of losing them. */
   lastError(id: string): string | undefined {
     return this.lastErrors.get(id);
+  }
+
+  /** The session's current todo plan (the todo tool); empty when the
+   * session is not open or has no plan yet. Lets clients restore the
+   * progress panel after a WS drop or page reload — todo events are
+   * snapshots, but only mutations emit them, so they are not replayed. */
+  getTodo(id: string): TodoPhase[] {
+    return this.todos.get(id)?.getPlan() ?? [];
   }
 
   /** Build the agent of a session (replacing any existing one) and keep it
@@ -112,7 +125,19 @@ export class SessionPool {
     // One hub per open agent: it holds the questions of the live run, so a
     // rebuild (which closes the old agent first) starts with a clean slate.
     const askHub = new AskHub(session.id, (event) => this.deps.emit(event));
-    const tools = createCodingTools(workspace, { background, ask: askHub });
+    // Reuse the session's todo hub when one exists (agent rebuild): the
+    // plan is the session's progress, not the agent's, so it must survive.
+    // Created on first open; discarded when the session closes.
+    let todo = this.todos.get(session.id);
+    if (!todo) {
+      todo = new TodoHub(session.id, (event) => this.deps.emit(event));
+      this.todos.set(session.id, todo);
+    }
+    const tools = createCodingTools(workspace, {
+      background,
+      ask: askHub,
+      todo,
+    });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a
     // stored prompt (created before snapshots) rebuild once — and the
@@ -165,13 +190,15 @@ export class SessionPool {
   }
 
   /** Close a session's agent (releasing its MCP servers and unsubscribing
-   * from background completions) and stop its background commands. The
-   * persisted session stays; openSession rebuilds it with a fresh manager. */
+   * from background completions), stop its background commands, and
+   * discard its todo plan. The persisted session stays; openSession
+   * rebuilds it with a fresh manager and an empty plan. */
   close(id: string): void {
     this.agents.get(id)?.close();
     this.agents.delete(id);
     this.background.get(id)?.killAll();
     this.background.delete(id);
+    this.todos.delete(id);
   }
 
   /** Close and forget a session entirely (persisted rows are deleted by
@@ -191,6 +218,7 @@ export class SessionPool {
     }
     this.agents.clear();
     this.background.clear();
+    this.todos.clear();
     this.lastErrors.clear();
   }
 

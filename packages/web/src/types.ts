@@ -14,6 +14,9 @@ import type {
   SessionInfo,
   ThemeSetting,
   ThinkingLevel,
+  TodoPhase,
+  TodoStatus,
+  TodoTask,
   Workspace,
   WorkspaceFileEntry,
 } from "@lumisca/core";
@@ -29,6 +32,9 @@ export type {
   SessionInfo,
   ThemeSetting,
   ThinkingLevel,
+  TodoPhase,
+  TodoStatus,
+  TodoTask,
   Workspace,
   WorkspaceFileEntry,
 };
@@ -94,6 +100,9 @@ export interface SessionView {
    * user's answers; rendered above the composer, cleared when the tool
    * call resolves or the run ends. */
   pendingQuestions: PendingQuestion[];
+  /** The session's todo plan (todo tool), shown in the progress panel.
+   * Replaced wholesale by every `todo` event. */
+  todos: TodoPhase[];
   /** Keys (role:timestamp) of messages deleted by rewind. Kept so a later
    * resync (merge is append-only) cannot resurrect them. */
   removed: Set<string>;
@@ -117,6 +126,7 @@ export function emptyView(
     streamingText: "",
     runningTools: new Map(),
     pendingQuestions: [],
+    todos: [],
     removed: new Set(),
   };
 }

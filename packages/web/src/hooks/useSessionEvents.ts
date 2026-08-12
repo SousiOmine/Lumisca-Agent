@@ -1,15 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { connectEvents, sessionApi } from "../api.ts";
 import { errorText } from "../providers.ts";
-import { applyEvent, filterRemoved, mergeMessages } from "../events.ts";
+import {
+  applyEvent,
+  filterRemoved,
+  mergeMessages,
+  sameTodoPlan,
+} from "../events.ts";
 import { tabKey } from "../tabs.ts";
-import type { AgentMessage, ClientEvent, SessionView } from "../types.ts";
+import type {
+  AgentMessage,
+  ClientEvent,
+  SessionView,
+  TodoPhase,
+} from "../types.ts";
 
-/** Period between opportunistic message re-syncs (see syncMessages). */
+/** Period between opportunistic state re-syncs (see syncState). */
 const SYNC_INTERVAL_MS = 20_000;
 
 /** Session views plus the WebSocket event stream that feeds them:
- * reconnect with resync on drop, periodic message sync, and per-view error
+ * reconnect with resync on drop, periodic state sync, and per-view error
  * recording. The returned setViews is shared with the tab and session
  * action logic. */
 export function useSessionEvents() {
@@ -22,41 +32,61 @@ export function useSessionEvents() {
     viewsRef.current = views;
   }, [views]);
 
-  /** Re-fetch persisted messages for every open tab and merge them in
-   * without duplicating what is already shown. Runs on reconnect and on an
-   * interval so a run that completes while the socket was down is not lost
-   * until the next WS drop. */
-  const syncMessages = useCallback(async () => {
+  /** Re-fetch persisted messages and the todo plan for every open tab and
+   * merge them in without duplicating what is already shown. Runs on
+   * reconnect and on an interval so a run that completes while the socket
+   * was down — and todo mutations whose snapshot events were lost — are
+   * not missed until the next WS drop. The todo plan is a snapshot fetch
+   * (the events only fire on mutations), so the fetched state replaces
+   * the view's plan wholesale. */
+  const syncState = useCallback(async () => {
     const ids = [...viewsRef.current.keys()];
-    const fetched = new Map<string, AgentMessage[]>();
+    const messages = new Map<string, AgentMessage[]>();
+    const todos = new Map<string, TodoPhase[]>();
     await Promise.all(ids.map(async (id) => {
+      // Fetch independently: one failing (e.g. the session was deleted)
+      // must not drop the other.
       try {
-        fetched.set(id, await sessionApi(id).getMessages());
+        messages.set(id, await sessionApi(id).getMessages());
       } catch {
         // Server not reachable yet; keep the current list.
       }
+      try {
+        const { todos: plan } = await sessionApi(id).getTodo();
+        todos.set(id, plan);
+      } catch {
+        // Server not reachable yet; keep the current plan.
+      }
     }));
-    if (fetched.size === 0) return;
+    if (messages.size === 0 && todos.size === 0) return;
     setViews((prev) => {
       const next = new Map(prev);
-      for (const [id, messages] of fetched) {
+      for (const id of new Set([...messages.keys(), ...todos.keys()])) {
         const v = next.get(id);
         if (!v) continue;
+        const fetched = messages.get(id);
         // Rewind tombstones: messages deleted while the socket was down
         // must not come back through the append-only merge.
-        const merged = filterRemoved(
-          mergeMessages(v.messages, messages),
-          v.removed,
-        );
-        if (merged.length === v.messages.length) continue;
-        next.set(id, { ...v, messages: merged });
+        const merged = fetched === undefined
+          ? v.messages
+          : filterRemoved(mergeMessages(v.messages, fetched), v.removed);
+        const todo = todos.get(id);
+        const todoChanged = todo !== undefined &&
+          !sameTodoPlan(todo, v.todos);
+        if (merged.length === v.messages.length && !todoChanged) continue;
+        next.set(id, {
+          ...v,
+          messages: merged,
+          ...(todoChanged ? { todos: todo } : {}),
+        });
       }
       return next;
     });
   }, []);
 
   /** Clear per-session transient state (stuck streaming/tool indicators)
-   * and re-fetch persisted messages, so nothing is lost after a WS drop. */
+   * and re-fetch persisted messages and the todo plan, so nothing is lost
+   * after a WS drop. */
   const resync = useCallback(async () => {
     setViews((prev) => {
       const next = new Map(prev);
@@ -74,8 +104,8 @@ export function useSessionEvents() {
       }
       return next;
     });
-    await syncMessages();
-  }, [syncMessages]);
+    await syncState();
+  }, [syncState]);
 
   /** Apply a WS event to the matching session view (pure reducer). Events
    * carry the peer id ("" = this server); the tab key resolves the view. */
@@ -128,9 +158,10 @@ export function useSessionEvents() {
     connect();
 
     // Opportunistic sync: a run that finishes entirely inside a disconnect
-    // window would otherwise only appear at the next WS drop.
+    // window — or a todo mutation whose snapshot event was lost — would
+    // otherwise only appear at the next WS drop.
     const syncTimer = setInterval(() => {
-      syncMessages();
+      syncState();
     }, SYNC_INTERVAL_MS);
 
     return () => {
@@ -139,7 +170,7 @@ export function useSessionEvents() {
       clearInterval(syncTimer);
       disconnect?.();
     };
-  }, [handleEvent, resync, syncMessages]);
+  }, [handleEvent, resync, syncState]);
 
   return { views, setViews, setViewError };
 }

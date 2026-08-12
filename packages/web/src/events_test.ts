@@ -1,6 +1,16 @@
 import { assertEquals } from "@std/assert";
-import { applyEvent, filterRemoved, mergeMessages } from "./events.ts";
-import { type AgentMessage, isViewRunning, type SessionView } from "./types.ts";
+import {
+  applyEvent,
+  filterRemoved,
+  mergeMessages,
+  sameTodoPlan,
+} from "./events.ts";
+import {
+  type AgentMessage,
+  isViewRunning,
+  type SessionView,
+  type TodoPhase,
+} from "./types.ts";
 
 function message(
   role: AgentMessage["role"],
@@ -25,6 +35,7 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
     streamingText: "",
     runningTools: new Map(),
     pendingQuestions: [],
+    todos: [],
     removed: new Set(),
     ...overrides,
   };
@@ -348,6 +359,48 @@ Deno.test("events: question is shown and cleared by tool_end", () => {
     v,
   )!;
   assertEquals(v.pendingQuestions.length, 0);
+});
+
+const TODOS: TodoPhase[] = [{
+  id: "p1",
+  name: "実装",
+  tasks: [
+    { id: "t1", name: "調査する", status: "completed" },
+    { id: "t2", name: "実装する", status: "in_progress" },
+    { id: "t3", name: "テストする", status: "pending" },
+  ],
+}];
+
+Deno.test("events: todo snapshot replaces the plan", () => {
+  let v = view();
+  v = applyEvent({ type: "todo", sessionId: "s1", todos: TODOS }, v)!;
+  assertEquals(v.todos, TODOS);
+
+  // A re-delivered event (resync) converges to the same snapshot.
+  v = applyEvent({ type: "todo", sessionId: "s1", todos: TODOS }, v)!;
+  assertEquals(v.todos, TODOS);
+
+  // Another session's todo events do not touch this view.
+  assertEquals(
+    applyEvent({ type: "todo", sessionId: "s2", todos: [] }, v),
+    null,
+  );
+});
+
+Deno.test("events: sameTodoPlan compares snapshots exactly", () => {
+  assertEquals(sameTodoPlan([], []), true);
+  assertEquals(sameTodoPlan(TODOS, structuredClone(TODOS)), true);
+  // Any difference in ids, names, order, or statuses is detected.
+  const statusChanged = structuredClone(TODOS);
+  statusChanged[0]!.tasks[2]!.status = "blocked";
+  assertEquals(sameTodoPlan(TODOS, statusChanged), false);
+  const reordered = structuredClone(TODOS);
+  reordered[0]!.tasks.reverse();
+  assertEquals(sameTodoPlan(TODOS, reordered), false);
+  const renamed = structuredClone(TODOS);
+  renamed[0]!.name = "別フェーズ";
+  assertEquals(sameTodoPlan(TODOS, renamed), false);
+  assertEquals(sameTodoPlan(TODOS, []), false);
 });
 
 Deno.test("events: two pending asks coexist and resolve independently", () => {

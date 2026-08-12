@@ -72,6 +72,7 @@ export const TOOL_GLOB = "glob";
 export const TOOL_SKILL = "skill";
 export const TOOL_EVAL = "eval";
 export const TOOL_ASK = "ask";
+export const TOOL_TODO = "todo";
 
 /** One option of an ask question, shown as a selectable chip in the UI. */
 export interface AskOption {
@@ -97,6 +98,31 @@ export interface AskQuestion {
 export interface AskAnswer {
   id: string;
   values: string[];
+}
+
+/** State of one todo task (the `todo` tool). `in_progress` is the current
+ * task of the plan; at most one task carries it at a time. */
+export type TodoStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "abandoned"
+  | "blocked";
+
+/** One task of a todo phase. `id` is stable within the session and
+ * assigned by the server when the plan is set (e.g. `t1`, `t2`). */
+export interface TodoTask {
+  id: string;
+  name: string;
+  status: TodoStatus;
+}
+
+/** One phase of the todo plan: a group of tasks (e.g. 調査・実装・テスト).
+ * `id` is stable within the session (e.g. `p1`, `p2`). */
+export interface TodoPhase {
+  id: string;
+  name: string;
+  tasks: TodoTask[];
 }
 
 /**

@@ -1,8 +1,12 @@
 import { join } from "node:path";
 import { realpathSync } from "node:fs";
-import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
+import {
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxToolCall,
+} from "@earendil-works/pi-ai";
 import { assertEquals } from "@std/assert";
-import { LumiscaCore } from "@lumisca/core";
+import { LumiscaCore, type TodoPhase } from "@lumisca/core";
 import {
   createApp,
   disposeServer,
@@ -1510,6 +1514,67 @@ Deno.test("app-level MCP config API applies to every workspace", async () => {
       true,
       "session must attach app-level MCP tools",
     );
+  } finally {
+    server.shutdown();
+    core.close();
+    if (root) await removeDirRetry(root);
+  }
+});
+
+Deno.test("todo API returns the session's current plan", async () => {
+  const { core, server, faux, base } = await setup();
+  let root: string | undefined;
+  try {
+    root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+    const created = await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        // The faux provider's default model is not the faux one; pick the
+        // tool-calling model explicitly (same as the core tests).
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    });
+    const session = await created.json();
+
+    // No plan yet: the endpoint returns an empty list (and opens the session).
+    const empty = await json(base, `/api/sessions/${session.id}/todo`);
+    assertEquals(empty.status, 200);
+    assertEquals((await empty.json()).todos, []);
+
+    // Drive a run that plans a todo list via the tool.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("todo", {
+          action: "plan",
+          phases: [{ name: "実装", tasks: ["調査する", "実装する"] }],
+        }),
+      ]),
+      fauxAssistantMessage("planned"),
+    ]);
+    await core.prompt(session.id, "Plan the work");
+
+    const res = await json(base, `/api/sessions/${session.id}/todo`);
+    const { todos } = await res.json() as { todos: TodoPhase[] };
+    assertEquals(todos.length, 1);
+    assertEquals(todos[0]!.name, "実装");
+    assertEquals(
+      todos[0]!.tasks.map((t) => [t.name, t.status]),
+      [
+        ["調査する", "pending"],
+        ["実装する", "pending"],
+      ],
+    );
+
+    // Unknown sessions 404.
+    const missing = await json(base, "/api/sessions/nope/todo");
+    assertEquals(missing.status, 404);
   } finally {
     server.shutdown();
     core.close();

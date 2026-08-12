@@ -25,6 +25,7 @@ import {
 import { createSkillTool } from "../skills/tool.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
 import { type AskHub, createAskTool } from "./ask.ts";
+import { createTodoTool, type TodoHub } from "./todo.ts";
 
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
@@ -49,6 +50,9 @@ export interface ToolFactoryOptions {
   /** Question hub backing the ask tool (asks the user in the UI and waits
    * for the answer). Omitted → the ask tool is not built. */
   ask?: AskHub;
+  /** Todo hub backing the todo tool (per-session plan state, emitted to
+   * clients as `todo` events). Omitted → the todo tool is not built. */
+  todo?: TodoHub;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -73,6 +77,7 @@ export function createCodingTools(
     createEvalTool(),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
+    ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
   ];
 }
 
@@ -128,6 +133,9 @@ Guidelines:
   search, glob to explore structure.
 - Use eval for quick calculations and data processing instead of spawning
   python or node from bash.
+- Plan multi-step work with the todo tool (phases and tasks) and keep it
+  up to date as you go; completing the current task advances automatically.
+  The user watches your progress live in the UI.
 - After making changes, verify them (run tests, builds) when appropriate.
 - Ask the user when a task is ambiguous.
 - Prioritize correctness above all else.

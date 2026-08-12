@@ -1,4 +1,9 @@
-import type { AgentMessage, ClientEvent, SessionView } from "./types.ts";
+import type {
+  AgentMessage,
+  ClientEvent,
+  SessionView,
+  TodoPhase,
+} from "./types.ts";
 
 /** Identity key for dedup: messages are keyed by role + timestamp (the
  * same pair used by the persisted rows). The minimal shape also accepts
@@ -52,6 +57,23 @@ function upsertMessage(
   const next = [...messages];
   next[index] = message;
   return next;
+}
+
+/** True when two todo plan snapshots are identical (ids, names, and
+ * statuses). The resync replaces the whole plan, so an unchanged snapshot
+ * must not trigger a view update on every sync tick. */
+export function sameTodoPlan(a: TodoPhase[], b: TodoPhase[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((phase, i) => {
+    const other = b[i]!;
+    if (phase.id !== other.id || phase.name !== other.name) return false;
+    if (phase.tasks.length !== other.tasks.length) return false;
+    return phase.tasks.every((task, j) => {
+      const otherTask = other.tasks[j]!;
+      return task.id === otherTask.id && task.name === otherTask.name &&
+        task.status === otherTask.status;
+    });
+  });
 }
 
 /** Apply one client event to a session view. Pure: returns the updated
@@ -143,6 +165,11 @@ export function applyEvent(
           { toolCallId: event.toolCallId, questions: event.questions },
         ],
       };
+    }
+    case "todo": {
+      // The todo plan changed; the event carries the full snapshot, so a
+      // resync that re-delivers it converges to the same state.
+      return { ...view, todos: event.todos };
     }
     case "session_error":
       return { ...view, error: event.message };

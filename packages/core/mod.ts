@@ -34,7 +34,9 @@ export type {
 export { createSkillTool } from "./skills/tool.ts";
 export { parseSkillFrontmatter } from "./skills/frontmatter.ts";
 export { AskHub } from "./tools/ask.ts";
+export { TodoHub } from "./tools/todo.ts";
 export type { AskAnswer, AskOption, AskQuestion } from "./shared.ts";
+export type { TodoPhase, TodoStatus, TodoTask } from "./shared.ts";
 export { contentText } from "./content.ts";
 export {
   loadMcpConfig,

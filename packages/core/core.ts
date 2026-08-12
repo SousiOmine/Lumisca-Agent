@@ -33,6 +33,7 @@ import {
 } from "./models/thinking.ts";
 import type { ThinkingLevel } from "./shared.ts";
 import type { AskAnswer } from "./shared.ts";
+import type { TodoPhase } from "./shared.ts";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
@@ -471,6 +472,13 @@ export class LumiscaCore {
 
   getAgent(id: string): SessionAgent | undefined {
     return this.pool.get(id);
+  }
+
+  /** The session's current todo plan (the todo tool); empty when the
+   * session is not open or has no plan yet. Lets clients restore the
+   * progress panel after a WS drop or page reload. */
+  getTodo(id: string): TodoPhase[] {
+    return this.pool.getTodo(id);
   }
 
   /** The last failure of a session, if any. Cleared when a new run starts.

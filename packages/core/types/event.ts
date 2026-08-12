@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AskQuestion } from "../shared.ts";
+import type { AskQuestion, TodoPhase } from "../shared.ts";
 import type { SessionInfo } from "./session.ts";
 
 /** Events emitted by the core and forwarded to any client (WebSocket, CLI). */
@@ -47,4 +47,8 @@ export type ClientEvent =
     sessionId: string;
     toolCallId: string;
     questions: AskQuestion[];
-  };
+  }
+  /** The todo plan of a session changed (the todo tool): the full plan is
+   * carried so clients can replace their view idempotently (resync-safe).
+   * Emitted on every mutation (plan / update / clear). */
+  | { type: "todo"; sessionId: string; todos: TodoPhase[] };

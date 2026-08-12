@@ -5,6 +5,7 @@ import type {
   ImageContent,
   SessionAgent,
   SessionInfo,
+  TodoPhase,
 } from "@lumisca/core";
 import { AppError, parseBody } from "./util.ts";
 
@@ -122,6 +123,8 @@ export interface SessionApi {
   setSessionModel(id: string, provider: string, modelId: string): void;
   /** Resolve a pending ask (the ask tool) with the user's answers. */
   answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
+  /** The session's current todo plan (empty when there is none). */
+  getTodo(id: string): TodoPhase[];
 }
 
 export function sessionRoutes(core: SessionApi): Hono {
@@ -163,6 +166,17 @@ export function sessionRoutes(core: SessionApi): Hono {
       throw new AppError(`Session is not open: ${id}`, 404);
     }
     return c.json(agent.messages);
+  });
+
+  /** The session's current todo plan (the todo tool). todo events are
+   * snapshots, but only mutations emit them, so clients re-fetch this
+   * after a WS drop or page reload to restore the progress panel. Opens
+   * the session like the messages endpoint (the plan lives in memory). */
+  app.get("/sessions/:id/todo", async (c) => {
+    const id = c.req.param("id");
+    requireSession(id);
+    await core.openSession(id);
+    return c.json({ todos: core.getTodo(id) });
   });
 
   app.post("/sessions", async (c) => {
