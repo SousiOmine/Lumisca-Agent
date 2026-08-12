@@ -241,6 +241,51 @@ select:focus {
   flex: none;
 }
 
+/* hamburger app menu */
+.app-menu-wrapper {
+  position: relative;
+}
+
+.app-menu {
+  z-index: 50;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.app-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-menu-item:hover {
+  background: var(--surface-2);
+}
+
+.app-menu-shortcut {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.app-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
 /* right-click menu on a tab */
 .tab-context-menu {
   position: fixed;

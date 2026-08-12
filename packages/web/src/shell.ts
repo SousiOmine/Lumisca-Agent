@@ -79,6 +79,11 @@ export interface UpdateStatus {
   currentVersion: string;
 }
 
+/** Quit the desktop application. No-op (rejected) in a plain browser. */
+export function quit(): Promise<void> {
+  return shellCall("quit").then(() => {});
+}
+
 /** Auto-update actions. Every call returns the fresh status so the UI can
  * update immediately without waiting for the next poll. */
 export const updateApi = {

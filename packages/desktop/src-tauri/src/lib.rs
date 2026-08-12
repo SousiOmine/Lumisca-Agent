@@ -882,6 +882,12 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
             install_update(app.clone());
             bridge_json(StatusCode::OK, update_status_json(app))
         }
+        "quit" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.close();
+            }
+            bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
+        }
         _ => bridge_error(StatusCode::NOT_FOUND, "unknown action"),
     }
 }

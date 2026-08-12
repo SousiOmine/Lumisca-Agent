@@ -22,6 +22,7 @@ import { useTheme } from "./hooks/useTheme.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
+import { quit } from "./shell.ts";
 import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
 import { TabBar } from "./components/TabBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
@@ -238,6 +239,8 @@ export function App({ initialData }: AppProps): ReactElement {
         onCloseOthers={closeOtherTabs}
         onNew={openDraftTab}
         onOpenSettings={() => setShowSettings(true)}
+        isDesktop={update.status !== null}
+        onQuit={quit}
       />
       {update.status?.ready && !updateBannerDismissed && (
         <div className="update-banner">

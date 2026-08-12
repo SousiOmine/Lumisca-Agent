@@ -1,7 +1,9 @@
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import {
   IconChevronRight,
+  IconMenu2,
   IconPlus,
+  IconPower,
   IconSettings,
   IconX,
 } from "@tabler/icons-react";
@@ -19,6 +21,8 @@ interface TabBarProps {
   onCloseOthers: (id: string) => void;
   onNew: () => void;
   onOpenSettings: () => void;
+  isDesktop: boolean;
+  onQuit: () => void;
 }
 
 /** State of the open right-click menu: target tab and cursor position. */
@@ -41,8 +45,14 @@ export function TabBar({
   onCloseOthers,
   onNew,
   onOpenSettings,
+  isDesktop,
+  onQuit,
 }: TabBarProps) {
   const [menu, setMenu] = useState<TabMenu | null>(null);
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
+  const appMenuRef = useRef<HTMLDivElement>(null);
+  const appMenuBtnRef = useRef<HTMLButtonElement>(null);
+  const [appMenuPos, setAppMenuPos] = useState({ x: 0, y: 0 });
   // Clamped menu position: rendered at the cursor first, then adjusted once
   // the menu is measured so it never leaves the viewport.
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -92,6 +102,9 @@ export function TabBar({
     onScroll: true,
     onBlur: true,
   });
+
+  // Close the hamburger app menu on outside click.
+  useClickOutside(appMenuRef, () => setAppMenuOpen(false), appMenuOpen);
 
   const menuIndex = menu ? tabs.indexOf(menu.tabId) : -1;
   const isRightmost = menuIndex === tabs.length - 1;
@@ -147,14 +160,72 @@ export function TabBar({
         <IconPlus size={17} />
       </button>
       <div className="tabbar-actions">
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onOpenSettings}
-          title="設定"
-        >
-          <IconSettings size={17} />
-        </button>
+        <div className="app-menu-wrapper" ref={appMenuRef}>
+          <button
+            type="button"
+            className="icon-btn"
+            ref={appMenuBtnRef}
+            onClick={() => {
+              if (!appMenuOpen && appMenuBtnRef.current) {
+                const rect = appMenuBtnRef.current.getBoundingClientRect();
+                setAppMenuPos({ x: rect.right, y: rect.bottom + 4 });
+              }
+              setAppMenuOpen((v) => !v);
+            }}
+            title="アプリケーションメニュー"
+            aria-haspopup="menu"
+            aria-expanded={appMenuOpen}
+          >
+            <IconMenu2 size={17} />
+          </button>
+          {appMenuOpen && (
+            <div className="app-menu" role="menu" style={{ position: "fixed", top: appMenuPos.y, right: globalThis.innerWidth - appMenuPos.x }}>
+              <button
+                type="button"
+                className="app-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setAppMenuOpen(false);
+                  onNew();
+                }}
+              >
+                <IconPlus size={14} />
+                <span>新しいタブ</span>
+                <span className="app-menu-shortcut">Ctrl+T</span>
+              </button>
+              <div className="app-menu-sep" role="separator" />
+              <button
+                type="button"
+                className="app-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setAppMenuOpen(false);
+                  onOpenSettings();
+                }}
+              >
+                <IconSettings size={14} />
+                <span>設定</span>
+              </button>
+              {isDesktop && (
+                <>
+                  <div className="app-menu-sep" role="separator" />
+                  <button
+                    type="button"
+                    className="app-menu-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setAppMenuOpen(false);
+                      onQuit();
+                    }}
+                  >
+                    <IconPower size={14} />
+                    <span>終了</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {menu && (
