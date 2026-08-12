@@ -1255,6 +1255,10 @@ Deno.test("unknown static assets return 404, not the HTML shell", async () => {
     const base = `http://127.0.0.1:${server.addr.port}`;
     const favicon = await fetch(`${base}/favicon.ico`);
     assertEquals(favicon.status, 404);
+    const png = await fetch(`${base}/favicon.png`);
+    assertEquals(png.status, 200);
+    assertEquals(png.headers.get("content-type"), "image/png");
+    assertEquals((await png.arrayBuffer()).byteLength > 0, true);
     const stale = await fetch(`${base}/assets/app.deadbeef.js`);
     assertEquals(stale.status, 404);
     const content = await stale.text();

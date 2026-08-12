@@ -179,7 +179,15 @@ export function TabBar({
             <IconMenu2 size={17} />
           </button>
           {appMenuOpen && (
-            <div className="app-menu" role="menu" style={{ position: "fixed", top: appMenuPos.y, right: globalThis.innerWidth - appMenuPos.x }}>
+            <div
+              className="app-menu"
+              role="menu"
+              style={{
+                position: "fixed",
+                top: appMenuPos.y,
+                right: globalThis.innerWidth - appMenuPos.x,
+              }}
+            >
               <button
                 type="button"
                 className="app-menu-item"

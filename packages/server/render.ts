@@ -61,6 +61,7 @@ export function renderHtmlDocument(
     )
   }" />
     <title>Lumisca Agent</title>
+    <link rel="icon" href="/favicon.png" />
     <style>${css}</style>
   </head>
   <body>

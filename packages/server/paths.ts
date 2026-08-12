@@ -19,7 +19,7 @@ export function webStylesPath(repoRoot: string): string {
 }
 
 export function webFaviconPath(repoRoot: string): string {
-  return join(repoRoot, "packages", "web", "public", "favicon.svg");
+  return join(repoRoot, "packages", "web", "public", "favicon.png");
 }
 
 /** esbuild alias target for `@lumisca/core/shared` (the browser-safe

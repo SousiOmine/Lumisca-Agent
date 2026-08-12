@@ -40,9 +40,17 @@ await bundleClient({
 const appJs = await Deno.readTextFile(tmpBundle);
 await Deno.remove(tmpBundle).catch(() => {});
 
-// 2. Read the static assets.
+// 2. Read the static assets. The favicon is binary, so it is base64-encoded
+// for the JSON manifest (the server decodes it back at runtime). Chunked so
+// any icon size stays within the call-stack limits of spread + String.fromCharCode.
 const css = await Deno.readTextFile(webStylesPath(repoRoot));
-const favicon = await Deno.readTextFile(webFaviconPath(repoRoot));
+const faviconBytes = await Deno.readFile(webFaviconPath(repoRoot));
+let faviconB64 = "";
+for (let i = 0; i < faviconBytes.length; i += 0x8000) {
+  faviconB64 += btoa(
+    String.fromCharCode(...faviconBytes.subarray(i, i + 0x8000)),
+  );
+}
 
 // 3. Write the JSON manifest.
 await Deno.mkdir(outDir, { recursive: true });
@@ -51,7 +59,7 @@ await Deno.writeTextFile(
   JSON.stringify({
     "app.js": appJs,
     "styles.css": css,
-    "favicon.svg": favicon,
+    "favicon.png": faviconB64,
   }),
 );
 
