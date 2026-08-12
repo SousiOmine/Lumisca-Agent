@@ -129,10 +129,67 @@ select:focus {
 
 /* ---- tab bar ------------------------------------------------------------- */
 
+/* ---- custom title bar (desktop) ----------------------------------------- */
+/* The desktop window is undecorated (tauri.conf.json); this strip hosts
+ * the tab bar on the left and the app menu + window controls on the
+ * right, and its empty area is the drag handle (see TitleBar.tsx). */
+
+.titlebar {
+  display: flex;
+  align-items: stretch;
+  height: var(--tab-height);
+  flex: none;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The tab bar inside the title bar drops its own chrome (background and
+ * bottom border) and fills the space left of the window controls. */
+.titlebar .tabbar {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: transparent;
+  border-bottom: none;
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  margin-left: auto;
+}
+
+.titlebar-controls .app-menu-wrapper {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.titlebar-btn {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 100%;
+  color: var(--text-dim);
+}
+
+.titlebar-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.titlebar-btn.close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
 .tabbar {
   display: flex;
   align-items: stretch;
-  gap: 4px;
+  gap: 3px;
   padding: 0 4px;
   background: var(--surface);
   height: var(--tab-height);
@@ -149,10 +206,10 @@ select:focus {
 .tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px 0 12px;
-  min-width: 130px;
-  max-width: 240px;
+  gap: 5px;
+  padding: 0 7px 0 10px;
+  min-width: 104px;
+  max-width: 192px;
   /* an invisible border keeps the box identical to the active card, so
    * selecting a tab never shifts the layout */
   border: 1px solid transparent;

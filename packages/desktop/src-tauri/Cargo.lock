@@ -1855,6 +1855,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-updater",
  "url",
+ "windows",
 ]
 
 [[package]]

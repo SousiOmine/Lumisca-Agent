@@ -20,6 +20,15 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 getrandom = "0.4"
 
+[target.'cfg(windows)'.dependencies]
+# Same version tauri/tao already use (no duplicate in the tree). Used to
+# force-activate the window before a bridge-started caption drag.
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
 [profile.release]
 codegen-units = 1
 lto = true

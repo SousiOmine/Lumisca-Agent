@@ -15,6 +15,8 @@ export interface ShellState {
   url: string | null;
   name: string | null;
   id: string | null;
+  /** Whether the main window is maximized (custom title bar icon). */
+  maximized: boolean;
 }
 
 /** Bridge base URL (the `lumisca://` custom protocol, http-homed for
@@ -104,6 +106,19 @@ export interface UpdateStatus {
 export function quit(): Promise<void> {
   return shellCall("quit").then(() => {});
 }
+
+/** Window controls for the custom title bar (the desktop window is
+ * undecorated, see tauri.conf.json). No-ops (rejected) in a plain
+ * browser. */
+export const windowApi = {
+  minimize: () => shellCall("window/minimize"),
+  toggleMaximize: () => shellCall("window/toggle-maximize"),
+  close: () => shellCall("window/close"),
+  /** Start moving the window (the page has no Tauri IPC, so the native
+   * `data-tauri-drag-region` path is unavailable; the bridge starts the
+   * OS drag instead). */
+  startDrag: () => shellCall("window/start-drag"),
+};
 
 /** Auto-update actions. Every call returns the fresh status so the UI can
  * update immediately without waiting for the next poll. */

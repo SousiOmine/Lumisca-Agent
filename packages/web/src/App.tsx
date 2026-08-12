@@ -25,6 +25,7 @@ import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { quit } from "./shell.ts";
 import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
 import { TabBar } from "./components/TabBar.tsx";
+import { TitleBar } from "./components/TitleBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
 import { SettingsModal } from "./components/SettingsModal.tsx";
@@ -228,20 +229,31 @@ export function App({ initialData }: AppProps): ReactElement {
 
   return (
     <div className="app">
-      <TabBar
-        tabs={tabs}
-        views={views}
-        activeTab={activeTab}
-        onSelect={setActiveTab}
-        onClose={closeTab}
-        onCloseToRight={closeTabsToRight}
-        onCloseToLeft={closeTabsToLeft}
-        onCloseOthers={closeOtherTabs}
+      {
+        /* The desktop window is undecorated; the title bar strip holds the
+       * tab bar, the app menu and the window controls (in a plain browser
+       * the tab bar renders on its own). */
+      }
+      <TitleBar
         onNew={openDraftTab}
         onOpenSettings={() => setShowSettings(true)}
-        isDesktop={update.status !== null}
         onQuit={quit}
-      />
+      >
+        <TabBar
+          tabs={tabs}
+          views={views}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+          onClose={closeTab}
+          onCloseToRight={closeTabsToRight}
+          onCloseToLeft={closeTabsToLeft}
+          onCloseOthers={closeOtherTabs}
+          onNew={openDraftTab}
+          onOpenSettings={() => setShowSettings(true)}
+          isDesktop={update.status !== null}
+          onQuit={quit}
+        />
+      </TitleBar>
       {update.status?.ready && !updateBannerDismissed && (
         <div className="update-banner">
           <IconDownload size={16} />

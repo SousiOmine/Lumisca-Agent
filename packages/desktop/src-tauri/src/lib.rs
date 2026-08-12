@@ -13,6 +13,38 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// Force-activate the window so DefWindowProc starts the caption drag on
+/// the first gesture even when the app is unfocused. The drag press lands
+/// in the WebView2 child process, so the app itself never gains
+/// foreground rights; the classic AttachThreadInput trick grants them.
+#[cfg(windows)]
+fn focus_window_for_drag(window: &tauri::WebviewWindow) {
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    };
+
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    unsafe {
+        if SetForegroundWindow(hwnd).as_bool() {
+            return;
+        }
+        let foreground = GetForegroundWindow();
+        if foreground.0.is_null() {
+            return;
+        }
+        let foreground_thread = GetWindowThreadProcessId(foreground, None);
+        let current_thread = GetCurrentThreadId();
+        if foreground_thread != current_thread {
+            let _ = AttachThreadInput(current_thread, foreground_thread, true);
+            let _ = SetForegroundWindow(hwnd);
+            let _ = AttachThreadInput(current_thread, foreground_thread, false);
+        }
+    }
+}
+
 /// Create a child process without letting console executables open a
 /// Command Prompt window beside the desktop UI on Windows.
 fn background_command<S: AsRef<OsStr>>(program: S) -> Command {
@@ -125,6 +157,8 @@ struct ConnectionState {
     status: String,
     /// Error message when status is "error".
     error: Option<String>,
+    /// Whether the main window is maximized (custom title bar icon).
+    maximized: bool,
 }
 
 /// JSON body of a lumisca://shell/* bridge response.
@@ -784,8 +818,11 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
         parsed.query_pairs().into_owned().collect();
 
     // Key gate: only the page of the currently displayed server may drive
-    // the bridge. Tokenless servers leave it open (matching their own
-    // auth posture).
+    // the bridge, window controls included. Tokenless servers leave it
+    // open (matching their own auth posture), and while no server is
+    // displayed yet — the splash page, or a failed startup — there is no
+    // token either, so the gate is open and the splash can drive the
+    // window controls. Once a token exists, every action requires it.
     if let Some(current) = current_connection_token(app) {
         let supplied = params.get("key").map(String::as_str);
         if supplied != Some(current.as_str()) {
@@ -818,11 +855,16 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
                     .as_ref()
                     .map(|l| page_url(&format!("http://127.0.0.1:{}", l.port), &l.token))
             };
+            let maximized = app
+                .get_webview_window("main")
+                .map(|window| window.is_maximized().unwrap_or(false))
+                .unwrap_or(false);
             let state = ConnectionState {
                 mode: mode.to_string(),
                 url,
                 status: startup.status.clone(),
                 error: startup.error.clone(),
+                maximized,
             };
             bridge_json(StatusCode::OK, serde_json::to_value(state).unwrap())
         }
@@ -894,6 +936,53 @@ fn handle_shell_request(app: &AppHandle, request: HttpRequest<Vec<u8>>) -> Bridg
         "update/install" => {
             install_update(app.clone());
             bridge_json(StatusCode::OK, update_status_json(app))
+        }
+        // --- custom title bar window controls ----------------------------
+        //
+        // The window is undecorated (tauri.conf.json), so the page draws
+        // its own title bar and drives these. They go through the same
+        // key gate as every other action: the displayed server's page
+        // carries the key, and the splash page (the only other page that
+        // drives them) runs while no token exists yet, when the gate is
+        // open.
+        //
+        // The app page is served from http://127.0.0.1 (or a remote
+        // server), so it has no Tauri IPC and `data-tauri-drag-region`
+        // cannot work; dragging goes through the bridge instead.
+        "window/minimize" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.minimize();
+            }
+            bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
+        }
+        "window/toggle-maximize" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let maximized = window.is_maximized().unwrap_or(false);
+                let _ = if maximized {
+                    window.unmaximize()
+                } else {
+                    window.maximize()
+                };
+            }
+            bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
+        }
+        "window/close" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.close();
+            }
+            bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
+        }
+        "window/start-drag" => {
+            if let Some(window) = app.get_webview_window("main") {
+                // DefWindowProc starts the caption drag only on the active
+                // window; force the activation first so the first drag on
+                // an unfocused window moves it instead of merely
+                // activating it.
+                #[cfg(windows)]
+                focus_window_for_drag(&window);
+                let _ = window.start_dragging();
+            }
+            bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
         }
         "quit" => {
             if let Some(window) = app.get_webview_window("main") {

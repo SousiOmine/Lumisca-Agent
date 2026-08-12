@@ -9,6 +9,8 @@
          Colors match the app's dark theme (packages/web/src/styles.css). */
       :root {
         --bg: #1b1b1b;
+        --surface: #2d2d2d;
+        --border: #3b3b3b;
         --text: #ffffff;
         --text-dim: #9d9d9d;
         --accent: #d6d6d6;
@@ -27,11 +29,60 @@
         color: var(--text);
         font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
         display: flex;
-        align-items: center;
-        justify-content: center;
+        flex-direction: column;
         user-select: none;
       }
+      /* Custom title bar: the desktop window is undecorated
+         (tauri.conf.json), so the splash draws its own drag handle and
+         window controls. */
+      .titlebar {
+        display: flex;
+        align-items: center;
+        height: 32px;
+        flex: none;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        user-select: none;
+      }
+      .titlebar-wordmark {
+        padding: 0 12px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--text-dim);
+      }
+      .titlebar-controls {
+        display: flex;
+        align-items: stretch;
+        height: 100%;
+        margin-left: auto;
+      }
+      .titlebar-btn {
+        display: grid;
+        place-items: center;
+        width: 46px;
+        height: 100%;
+        color: var(--text-dim);
+        background: none;
+        border: none;
+        cursor: pointer;
+      }
+      .titlebar-btn:hover {
+        background: #424242;
+        color: #ffffff;
+      }
+      .titlebar-btn.close:hover {
+        background: #c42b1c;
+      }
+      .hidden {
+        display: none;
+      }
       .splash {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
         text-align: center;
       }
       .wordmark {
@@ -67,6 +118,81 @@
     </style>
   </head>
   <body>
+    <div class="titlebar" id="titlebar">
+      <span class="titlebar-wordmark">Lumisca</span>
+      <div class="titlebar-controls">
+        <button
+          type="button"
+          class="titlebar-btn"
+          id="btn-min"
+          title="最小化"
+          aria-label="最小化"
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M5 12h14" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="titlebar-btn"
+          id="btn-max"
+          title="最大化"
+          aria-label="最大化"
+        >
+          <svg
+            id="icon-max"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect x="5" y="5" width="14" height="14" rx="1" />
+          </svg>
+          <svg
+            id="icon-restore"
+            class="hidden"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M9 5h9a1 1 0 0 1 1 1v9" />
+            <rect x="5" y="9" width="11" height="11" rx="1" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="titlebar-btn close"
+          id="btn-close"
+          title="閉じる"
+          aria-label="閉じる"
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+    </div>
     <div class="splash">
       <div class="wordmark">Lumisca</div>
       <div class="spinner" id="spinner"></div>
