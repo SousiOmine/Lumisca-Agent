@@ -116,9 +116,15 @@ function mergeRanges(ranges: LineRange[]): LineRange[] {
   return merged;
 }
 
+/** Strip a trailing `\r` so CRLF lines read back as clean LF lines (edits
+ * match line endings leniently, so the raw bytes are not needed here). */
+function stripTrailingCR(line: string): string {
+  return line.endsWith("\r") ? line.slice(0, -1) : line;
+}
+
 /** Stream a file's lines as [1-based line number, text]. The trailing `\n`
- * is stripped; a trailing `\r` (CRLF files) is preserved so the text matches
- * the raw bytes. Stops early when the consumer breaks. */
+ * and a trailing `\r` (CRLF files) are stripped, so the model always sees
+ * LF-style lines. Stops early when the consumer breaks. */
 async function* readLines(path: string): AsyncGenerator<[number, string]> {
   const file = await Deno.open(path, { read: true });
   const decoder = new TextDecoder();
@@ -139,14 +145,14 @@ async function* readLines(path: string): AsyncGenerator<[number, string]> {
       let start = 0;
       for (let i = 0; i < carry.length; i++) {
         if (carry[i] === "\n") {
-          yield [lineNo++, carry.slice(start, i)];
+          yield [lineNo++, stripTrailingCR(carry.slice(start, i))];
           start = i + 1;
         }
       }
       carry = carry.slice(start);
     }
     const tail = carry + decoder.decode();
-    if (tail.length > 0) yield [lineNo, tail];
+    if (tail.length > 0) yield [lineNo, stripTrailingCR(tail)];
   } finally {
     file.close();
   }
@@ -284,7 +290,11 @@ export function createReadFileTool(
           ? new Uint8Array(0)
           : buffer.subarray(0, read);
         const text = new TextDecoder().decode(bytes);
-        const { text: trimmed, truncated } = truncate(text);
+        // Normalize CRLF so the model sees the same LF-style lines as
+        // line-ranged reads (edits match line endings leniently).
+        const { text: trimmed, truncated } = truncate(
+          text.replaceAll("\r\n", "\n"),
+        );
         let note = "";
         if (truncated) {
           note = truncatedNote("output");
@@ -326,10 +336,22 @@ export function createWriteFileTool(
       const parentResolved = await ctx.sandbox.resolve(parent);
       if (!parentResolved.ok) throw new Error(parentResolved.reason);
       await Deno.mkdir(parentResolved.path, { recursive: true });
-      await Deno.writeTextFile(resolved.path, params.content);
+      // Keep an existing file's CRLF style when overwriting it, so a full
+      // rewrite never flips the whole file to LF (new files stay as sent,
+      // normally LF).
+      let content = params.content;
+      try {
+        const existing = await Deno.readTextFile(resolved.path);
+        if (existing.includes("\r\n")) {
+          content = content.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
+        }
+      } catch {
+        // File does not exist yet: write the content as-is.
+      }
+      await Deno.writeTextFile(resolved.path, content);
       return {
         content: [{ type: "text", text: `Wrote ${resolved.path}` }],
-        details: { path: resolved.path, bytes: params.content.length },
+        details: { path: resolved.path, bytes: content.length },
       };
     },
   };
@@ -341,6 +363,30 @@ const editSchema = object({
   new_string: string("Replacement text"),
 });
 
+/** Map an offset in a CRLF-normalized string (`\r\n` shrunk to `\n`) back to
+ * the matching offset in the original string. Offsets never cross `\n`, so
+ * walking the original string side by side stays exact. */
+function mapOffset(original: string, normOffset: number): number {
+  let normSeen = 0;
+  let origSeen = 0;
+  while (normSeen < normOffset && origSeen < original.length) {
+    if (original[origSeen] === "\r" && original[origSeen + 1] === "\n") {
+      origSeen += 2;
+    } else {
+      origSeen += 1;
+    }
+    normSeen += 1;
+  }
+  return origSeen;
+}
+
+/** Convert `new_string` to the file's line-ending style so an edit never
+ * introduces mixed line endings. */
+function toFileNewlines(newString: string, fileContent: string): string {
+  if (!fileContent.includes("\r\n")) return newString;
+  return newString.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
+}
+
 export function createEditFileTool(
   ctx: FsToolContext,
 ): Tool<typeof editSchema> {
@@ -349,17 +395,29 @@ export function createEditFileTool(
     label: "Edit File",
     description:
       "Replace the first occurrence of `old_string` with `new_string` in a file. " +
-      "`old_string` must match exactly and appear at least once.",
+      "`old_string` must appear at least once; line endings (CRLF vs LF) are " +
+      "matched leniently and the replacement keeps the file's existing " +
+      "line-ending style.",
     parameters: editSchema,
     execute: async (_id, params) => {
       const resolved = await ctx.sandbox.resolve(params.path);
       if (!resolved.ok) throw new Error(resolved.reason);
       const content = await Deno.readTextFile(resolved.path);
-      const occurrences = content.split(params.old_string).length - 1;
-      if (occurrences === 0) {
+      // Match leniently: models usually reproduce `old_string` with LF even
+      // when the file is CRLF, so compare both sides normalized to LF and
+      // map the match position back into the original bytes.
+      const normalized = content.replaceAll("\r\n", "\n");
+      const needle = params.old_string.replaceAll("\r\n", "\n");
+      const normIndex = normalized.indexOf(needle);
+      if (normIndex === -1) {
         throw new Error(`old_string not found in ${params.path}`);
       }
-      const updated = content.replace(params.old_string, params.new_string);
+      const occurrences = normalized.split(needle).length - 1;
+      const origIndex = mapOffset(content, normIndex);
+      const origEnd = mapOffset(content, normIndex + needle.length);
+      const updated = content.slice(0, origIndex) +
+        toFileNewlines(params.new_string, content) +
+        content.slice(origEnd);
       await Deno.writeTextFile(resolved.path, updated);
       const note = occurrences > 1
         ? `\n[warning: old_string appeared ${occurrences} times; only the first was replaced]`

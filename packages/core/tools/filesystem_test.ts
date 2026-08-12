@@ -2,7 +2,11 @@ import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
-import { createReadFileTool } from "./filesystem.ts";
+import {
+  createEditFileTool,
+  createReadFileTool,
+  createWriteFileTool,
+} from "./filesystem.ts";
 
 /** Minimal 1x1 transparent PNG (67 bytes). */
 const MINI_PNG = new Uint8Array([
@@ -297,6 +301,204 @@ Deno.test("read line ranges stay memory-bounded on huge single-line files", asyn
     const text = toolText(result);
     assert(text.includes(tail), `tail missing: ${text.slice(-100)}`);
     assert(text.length < 200 * 1024, `output too large: ${text.length}`);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+// --- edit / write / line endings -------------------------------------------
+
+/** Write a file with CRLF line endings. */
+async function writeCrlf(path: string, lines: string[]): Promise<void> {
+  await Deno.writeFile(
+    path,
+    new TextEncoder().encode(lines.join("\r\n") + "\r\n"),
+  );
+}
+
+function makeFs(root: string) {
+  const sandbox = new Sandbox([root]);
+  return {
+    edit: createEditFileTool({ sandbox }),
+    write: createWriteFileTool({ sandbox }),
+  };
+}
+
+/** A temp dir plus `folder` (basename) for tool paths, like `fixture`. */
+async function fsFixture(): Promise<{ root: string; folder: string }> {
+  const root = realpathSync(
+    await Deno.makeTempDir({ prefix: "lumisca-fs-" }),
+  );
+  return { root, folder: basename(root) };
+}
+
+Deno.test("edit matches CRLF files with an LF old_string and keeps CRLF", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await writeCrlf(file, ["const a = 1;", "const b = 2;", "const c = 3;"]);
+    const result = await makeFs(root).edit.execute("id", {
+      path: `${folder}/sample.txt`,
+      old_string: "const a = 1;\nconst b = 2;", // LF, as models typically send
+      new_string: "const a = 1;\nconst b = 20;", // LF too
+    });
+    assert(toolText(result).startsWith("Edited"), toolText(result));
+    const text = new TextDecoder().decode(await Deno.readFile(file));
+    assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("edit matches CRLF files with a CRLF old_string", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await writeCrlf(file, ["const a = 1;", "const b = 2;", "const c = 3;"]);
+    await makeFs(root).edit.execute("id", {
+      path: `${folder}/sample.txt`,
+      old_string: "const a = 1;\r\nconst b = 2;",
+      new_string: "const a = 1;\r\nconst b = 20;",
+    });
+    const text = new TextDecoder().decode(await Deno.readFile(file));
+    assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("edit matches LF files with a CRLF old_string", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await Deno.writeTextFile(
+      file,
+      "const a = 1;\nconst b = 2;\nconst c = 3;\n",
+    );
+    await makeFs(root).edit.execute("id", {
+      path: `${folder}/sample.txt`,
+      old_string: "const a = 1;\r\nconst b = 2;",
+      new_string: "const a = 1;\nconst b = 20;",
+    });
+    const text = new TextDecoder().decode(await Deno.readFile(file));
+    assertEquals(text, "const a = 1;\nconst b = 20;\nconst c = 3;\n");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("edit converts an LF new_string to CRLF in a CRLF file", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await writeCrlf(file, ["const a = 1;", "const b = 2;", "const c = 3;"]);
+    await makeFs(root).edit.execute("id", {
+      path: `${folder}/sample.txt`,
+      old_string: "const b = 2;",
+      new_string: "const b = 20;\nconst d = 4;", // LF only
+    });
+    const text = new TextDecoder().decode(await Deno.readFile(file));
+    // No mixed line endings: the replacement follows the file's CRLF.
+    assertEquals(
+      text,
+      "const a = 1;\r\nconst b = 20;\r\nconst d = 4;\r\nconst c = 3;\r\n",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("edit throws when old_string is missing", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await Deno.writeTextFile(file, "hello\nworld\n");
+    await assertRejects(
+      () =>
+        makeFs(root).edit.execute("id", {
+          path: `${folder}/sample.txt`,
+          old_string: "nope\nnope",
+          new_string: "x",
+        }),
+      Error,
+      "old_string not found",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("edit replaces only the first occurrence and warns", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await Deno.writeTextFile(file, "a\nb\na\nb\n");
+    const result = await makeFs(root).edit.execute("id", {
+      path: `${folder}/sample.txt`,
+      old_string: "a\nb",
+      new_string: "A\nB",
+    });
+    assertEquals(
+      new TextDecoder().decode(await Deno.readFile(file)),
+      "A\nB\na\nb\n",
+    );
+    assert(
+      toolText(result).includes("appeared 2 times"),
+      toolText(result),
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("write keeps an existing CRLF file's line endings", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await writeCrlf(file, ["const a = 1;", "const b = 2;"]);
+    await makeFs(root).write.execute("id", {
+      path: `${folder}/sample.txt`,
+      content: "const a = 1;\nconst b = 20;\nconst c = 3;\n", // LF as sent
+    });
+    const text = new TextDecoder().decode(await Deno.readFile(file));
+    assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("write creates new files with line endings as sent", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "new.txt");
+  try {
+    await makeFs(root).write.execute("id", {
+      path: `${folder}/new.txt`,
+      content: "a\nb\n",
+    });
+    assertEquals(
+      new TextDecoder().decode(await Deno.readFile(file)),
+      "a\nb\n",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("read strips CR so CRLF files display as clean LF lines", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "crlf.txt");
+  try {
+    await writeCrlf(file, ["one", "two", "three"]);
+    const read = makeRead(root);
+    const ranged = toolText(
+      await read.execute("id", { path: `${folder}/crlf.txt:1-3` }),
+    );
+    assertEquals(bodyOf(ranged), "one\ntwo\nthree");
+    const whole = toolText(
+      await read.execute("id", { path: `${folder}/crlf.txt` }),
+    );
+    assert(!whole.includes("\r"), `CR leaked into read output: ${whole}`);
+    assertEquals(whole, "one\ntwo\nthree\n");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
