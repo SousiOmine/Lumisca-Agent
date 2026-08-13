@@ -259,7 +259,7 @@ export function ChatView(
           submitIconOnly
           submitDisabled={!input.trim() && images.length === 0}
           onAbort={isRunning ? onAbort : undefined}
-          onSubmit={submit}
+          onSubmit={() => submit()}
           onOpenSettings={onOpenSettings}
           mentionWorkspaceId={view.info.workspaceId}
           mentionPeerId={peerId}

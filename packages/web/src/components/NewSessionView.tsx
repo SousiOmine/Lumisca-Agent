@@ -314,7 +314,7 @@ export function NewSessionView(
               submitIconOnly
               submitDisabled={busy || (!text.trim() && images.length === 0) ||
                 !workspaceKey}
-              onSubmit={submit}
+              onSubmit={() => void submit()}
               onOpenSettings={onOpenSettings}
               mentionWorkspaceId={selectedWorkspace?.workspace.id}
               mentionPeerId={selectedWorkspace?.peerId}
