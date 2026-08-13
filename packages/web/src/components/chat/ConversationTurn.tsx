@@ -16,11 +16,19 @@ export type { ConversationTurnData } from "./types.ts";
 
 /** Group the flat agent history by the message that started each run: a
  * user prompt or a system notification (background command completions and
- * sub-agent messages also start a run so the agent can react to them). */
+ * sub-agent messages also start a run so the agent can react to them).
+ * Empty-response retries (kind "retry") are an internal repair and must
+ * not split the turn: the retried response then lands in the same turn,
+ * and the whole thing collapses together when the run ends. */
 export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   const turns: ConversationTurnData[] = [];
   for (const message of messages) {
-    if (message.role === "user" || message.role === "notification") {
+    if (message.role === "user") {
+      turns.push({ user: message, responses: [] });
+      continue;
+    }
+    if (message.role === "notification") {
+      if (message.kind === "retry") continue;
       turns.push({ user: message, responses: [] });
       continue;
     }

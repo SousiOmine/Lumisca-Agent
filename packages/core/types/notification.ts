@@ -6,9 +6,11 @@ import type { Message } from "@earendil-works/pi-ai";
 import "./pi-augmentation.ts";
 
 /** Kind of a system notification injected into an agent loop: background
- * command completions (async_bash), sub-agent task completions (task), and
- * agent-to-agent messages (send_message). */
-export type NotificationKind = "background" | "task" | "message";
+ * command completions (async_bash), sub-agent task completions (task),
+ * agent-to-agent messages (send_message), and empty-response retries (the
+ * session agent retries a response that produced neither text nor a tool
+ * call). */
+export type NotificationKind = "background" | "task" | "message" | "retry";
 
 /** Outcome of the event a notification reports. The UI shows a check for
  * success, an error badge for failure, and nothing for neutral. */

@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-agent-core";
 import type {
   Api,
+  AssistantMessage,
   ImageContent,
   Message,
   Model,
@@ -35,6 +36,41 @@ import type {
 import { toLlmMessages } from "../types/notification.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
+
+/** Maximum consecutive vacant responses (no text, no tool call) to retry
+ * before giving up and ending the run normally. */
+export const MAX_EMPTY_RESPONSE_RETRIES = 3;
+
+/** True when the assistant response produced neither text nor a tool call:
+ * the model ended its turn without any output. Thinking blocks alone don't
+ * count as output (the user never sees them), and error/aborted stops are
+ * handled by the loop itself — they terminate the run, so a retry message
+ * must never be queued behind them (it would leak into the next run). */
+export function isVacantResponse(message: AssistantMessage): boolean {
+  if (message.stopReason === "error" || message.stopReason === "aborted") {
+    return false;
+  }
+  return message.content.every(
+    (block) =>
+      block.type !== "toolCall" &&
+      (block.type !== "text" || block.text.trim().length === 0),
+  );
+}
+
+/** The notification queued to retry a vacant response. The text is
+ * self-contained (no system-prompt prefix contract): the model reads it as
+ * a user message telling it its previous response was empty. */
+export function buildRetryNotification(attempt: number): NotificationMessage {
+  return {
+    role: "notification",
+    kind: "retry",
+    title: `Previous response was empty (retry ${attempt})`,
+    body:
+      "You produced neither text nor a tool call. Continue: respond with text or call a tool.",
+    status: "neutral",
+    timestamp: Date.now(),
+  };
+}
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -112,6 +148,10 @@ export class SessionAgent {
   /** Set by close(): completion notifications of killed background
    * commands must not reach the discarded agent. */
   private closed = false;
+  /** Consecutive vacant responses (no text, no tool call) in the current
+   * run. Each one is retried via followUp (see handleTurnEnd) up to
+   * MAX_EMPTY_RESPONSE_RETRIES; a response with output resets the count. */
+  private emptyResponseRetries = 0;
   /** Title generation runs once per session, concurrently with the first
    * run; this guards against re-triggering (e.g. after a failed first run
    * that left savedCount at 0). */
@@ -504,6 +544,9 @@ export class SessionAgent {
   private handleEvent(event: AgentEvent): void {
     switch (event.type) {
       case "agent_start":
+        // A new run does not inherit the previous run's vacant-response
+        // history (a user prompt after a silent run starts fresh).
+        this.emptyResponseRetries = 0;
         this.emit({ type: "agent_start", sessionId: this.sessionId });
         break;
       case "message_start":
@@ -551,6 +594,9 @@ export class SessionAgent {
           isError: event.isError,
         });
         break;
+      case "turn_end":
+        this.handleTurnEnd(event.message);
+        break;
       case "agent_end":
         // The run ended (normally or aborted); any ask that is still
         // pending can never be answered within this run.
@@ -560,6 +606,29 @@ export class SessionAgent {
       default:
         break;
     }
+  }
+
+  /** Retry a vacant assistant response (no text, no tool call): the model
+   * ended its turn without producing anything, leaving the user with a
+   * silent run. A retry notification is queued via followUp — the loop
+   * picks it up right where it was about to stop, so the retry happens
+   * within the same run and the UI keeps the turn expanded until it
+   * completes. A response with output resets the consecutive-retry count;
+   * once the limit is hit the run ends normally. */
+  private handleTurnEnd(message: AgentMessage): void {
+    if (message.role !== "assistant") return;
+    const assistant = message as AssistantMessage;
+    if (!isVacantResponse(assistant)) {
+      this.emptyResponseRetries = 0;
+      return;
+    }
+    if (
+      this.closed || this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES
+    ) {
+      return;
+    }
+    this.emptyResponseRetries++;
+    this.agent.followUp(buildRetryNotification(this.emptyResponseRetries));
   }
 
   /** Append only the messages added since the last save. */

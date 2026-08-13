@@ -3,6 +3,7 @@ import {
   IconBrain,
   IconCheck,
   IconChevronRight,
+  IconRefresh,
   IconSend,
   IconTerminal2,
 } from "@tabler/icons-react";
@@ -17,6 +18,8 @@ function kindIcon(kind: NotificationMessage["kind"]) {
       return <IconBrain size={13} />;
     case "message":
       return <IconSend size={13} />;
+    case "retry":
+      return <IconRefresh size={13} />;
   }
 }
 
