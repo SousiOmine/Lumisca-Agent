@@ -76,25 +76,48 @@ export function ChatView(
   // Set on submit: the sent message must become visible even if the user was
   // scrolled up reading earlier messages. The user message arrives
   // asynchronously via the event stream, so the intent is remembered until
-  // the next transcript change forces the scroll.
+  // the next content change forces the scroll.
   const pendingSubmitScroll = useRef(false);
+  // Whether the user has scrolled up from the bottom to read earlier
+  // messages. While false the view stays pinned to the newest content.
+  const userScrolledUp = useRef(false);
   const isRunning = isViewRunning(view);
 
-  // Follow the stream when the user is at the bottom; never yank the scroll
-  // position out from under someone reading earlier messages. A submitted
-  // message is the exception: the user asked to send it, so it is shown
-  // regardless of the previous scroll position.
+  // Pin the scroll to the newest content while the user is at the bottom.
+  // A ResizeObserver fires on every content layout change (streaming
+  // deltas, tool state changes, images, error rows), so the follow does not
+  // depend on listing each source of growth. User intent comes from the
+  // scroll events instead of a proximity check at update time: a single
+  // large delta (a whole code block in one chunk) must not leave the view
+  // stuck above the fold with the scrollbar reading "bottom". Never yank
+  // the position out from under someone reading earlier messages; a
+  // submitted message is the exception.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (pendingSubmitScroll.current) {
-      pendingSubmitScroll.current = false;
-      el.scrollTop = el.scrollHeight;
-      return;
-    }
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [view.messages.length, view.streamingText.length]);
+    const pin = () => {
+      if (pendingSubmitScroll.current) {
+        pendingSubmitScroll.current = false;
+        el.scrollTop = el.scrollHeight;
+        return;
+      }
+      if (!userScrolledUp.current) el.scrollTop = el.scrollHeight;
+    };
+    const onScroll = () => {
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      userScrolledUp.current = !nearBottom;
+    };
+    pin();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const observer = new ResizeObserver(pin);
+    observer.observe(el);
+    const content = el.firstElementChild;
+    if (content) observer.observe(content);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+    };
+  }, []);
 
   const submit = () => {
     if (!input.trim() && images.length === 0) return;
