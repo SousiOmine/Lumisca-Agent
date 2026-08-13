@@ -1,5 +1,10 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AskQuestion, TodoPhase } from "../shared.ts";
+import type {
+  AskQuestion,
+  SubagentStatus,
+  SubagentType,
+  TodoPhase,
+} from "../shared.ts";
 import type { SessionInfo } from "./session.ts";
 
 /** Events emitted by the core and forwarded to any client (WebSocket, CLI). */
@@ -51,4 +56,26 @@ export type ClientEvent =
   /** The todo plan of a session changed (the todo tool): the full plan is
    * carried so clients can replace their view idempotently (resync-safe).
    * Emitted on every mutation (plan / update / clear). */
-  | { type: "todo"; sessionId: string; todos: TodoPhase[] };
+  | { type: "todo"; sessionId: string; todos: TodoPhase[] }
+  /** A sub-agent task started (the task tool). Clients add it to the tasks
+   * panel; its live response arrives as `task_delta` events. */
+  | {
+    type: "task_start";
+    sessionId: string;
+    agentId: string;
+    parentAgentId: string;
+    subagentType: SubagentType;
+    description: string;
+  }
+  /** A chunk of a sub-agent's live response. Clients append it to the
+   * task's view; the stream restarts after a reload (deltas are not
+   * replayed, the resync endpoint carries only the tail). */
+  | { type: "task_delta"; sessionId: string; agentId: string; delta: string }
+  /** A sub-agent task finished, failed, or was aborted. Clients update the
+   * task's status in the panel. */
+  | {
+    type: "task_end";
+    sessionId: string;
+    agentId: string;
+    status: SubagentStatus;
+  };

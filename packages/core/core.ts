@@ -33,7 +33,7 @@ import {
 } from "./models/thinking.ts";
 import type { ThinkingLevel } from "./shared.ts";
 import type { AskAnswer } from "./shared.ts";
-import type { TodoPhase } from "./shared.ts";
+import type { TaskInfo, TodoPhase } from "./shared.ts";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
@@ -93,6 +93,7 @@ export class LumiscaCore {
       getModel: (provider, modelId) => this.models.getModel(provider, modelId),
       getImageAnalysisModel: () => this.getImageAnalysisModel(),
       getFastModel: () => this.getFastModel(),
+      getFastModelInfo: () => this.getFastModelInfo(),
       renameSession: (id, name) => this.setSessionName(id, name),
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
@@ -388,9 +389,20 @@ export class LumiscaCore {
    * when unset or the model is no longer in the catalog. It generates
    * session titles from the first user message (see agent/title-generation.ts). */
   getFastModel(): Model<Api> | undefined {
+    return this.getFastModelInfo()?.model;
+  }
+
+  /** The configured fast model with its provider/model ids, or undefined
+   * when unset or the model is no longer in the catalog. Sub-agents (the
+   * task tool) run on this model, with its stored thinking level. */
+  getFastModelInfo():
+    | { provider: string; modelId: string; model: Model<Api> }
+    | undefined {
     const pref = parseModelPreference(this.settings.get(FAST_MODEL_KEY));
     if (pref === undefined) return undefined;
-    return this.models.getModel(pref.provider, pref.modelId);
+    const model = this.models.getModel(pref.provider, pref.modelId);
+    if (model === undefined) return undefined;
+    return { provider: pref.provider, modelId: pref.modelId, model };
   }
 
   /** The model a new session would get: the last used model, or the first
@@ -479,6 +491,13 @@ export class LumiscaCore {
    * progress panel after a WS drop or page reload. */
   getTodo(id: string): TodoPhase[] {
     return this.pool.getTodo(id);
+  }
+
+  /** Snapshots of the session's sub-agent tasks (the task tool); empty
+   * when the session is not open or has no tasks yet. Restores the tasks
+   * panel after a WS drop or page reload. */
+  getTasks(id: string): TaskInfo[] {
+    return this.pool.getTasks(id);
   }
 
   /** The last failure of a session, if any. Cleared when a new run starts.

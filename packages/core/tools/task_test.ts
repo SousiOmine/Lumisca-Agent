@@ -1,0 +1,812 @@
+import { assert, assertEquals, assertRejects } from "@std/assert";
+import { join } from "node:path";
+import type { StreamFn } from "@earendil-works/pi-agent-core";
+import type { Model } from "@earendil-works/pi-ai";
+import type { Api } from "@earendil-works/pi-ai";
+import {
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxText,
+  fauxToolCall,
+} from "@earendil-works/pi-ai";
+import { CoreError, LumiscaCore } from "../mod.ts";
+import { McpAttachment } from "../mcp/attachment.ts";
+import { parseMcpConfig } from "../mcp/config.ts";
+import { McpManager } from "../mcp/manager.ts";
+import type { ThinkingLevel } from "../shared.ts";
+import type { ClientEvent } from "../types/event.ts";
+import type { Workspace } from "../types/workspace.ts";
+import {
+  createSendMessageTool,
+  createTaskOutputTool,
+  createTaskTool,
+  MAX_SUBAGENTS,
+  TaskHub,
+} from "./task.ts";
+
+function makeWorkspace(root: string): Workspace {
+  return { id: "ws", name: "ws", folders: [root], createdAt: Date.now() };
+}
+
+/** A stream function that never settles: sub-agents stay running until the
+ * test tears the hub down. */
+const hangingStream: StreamFn = () => new Promise<never>(() => {});
+
+interface HubFixture {
+  core: LumiscaCore;
+  events: ClientEvent[];
+  root: string;
+  hub: TaskHub;
+  model: Model<Api>;
+}
+
+/** A hub with the given stream function, a real model from the faux
+ * provider, and a recording event sink. */
+function makeHub(streamFn: StreamFn = hangingStream): HubFixture {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
+  const events: ClientEvent[] = [];
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-task-" });
+  const hub = new TaskHub({
+    sessionId: "session-1",
+    resolveRuntime: () => ({
+      workspace: makeWorkspace(root),
+      model,
+      thinkingLevel: "off",
+    }),
+    streamFn,
+    emit: (event) => events.push(event),
+  });
+  return { core, events, root, hub, model };
+}
+
+/** A hub whose sub-agents stream from the scripted faux responses. */
+function makeScriptedHub() {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
+  const streamFn = core.models.models.streamSimple.bind(core.models.models);
+  const events: ClientEvent[] = [];
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-task-" });
+  const hub = new TaskHub({
+    sessionId: "session-1",
+    resolveRuntime: () => ({
+      workspace: makeWorkspace(root),
+      model,
+      thinkingLevel: "off",
+    }),
+    streamFn,
+    emit: (event) => events.push(event),
+  });
+  return { faux, core, events, root, hub };
+}
+
+/** Poll until `predicate` holds (bounded so a hang fails the test). */
+async function waitFor(
+  predicate: () => boolean,
+  what: string,
+  timeoutMs = 15000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/** Concatenate the text blocks of a message (works on the agent's message
+ * union, which mixes content-carrying and non-content variants). */
+function messageText(message: unknown): string {
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.filter((b) => (b as { type?: string }).type === "text")
+    .map((b) => (b as { text?: string }).text ?? "").join("");
+}
+
+// --- hub: spawn and lifecycle -------------------------------------------------
+
+Deno.test("spawn returns a running snapshot immediately and emits task_start", () => {
+  const { events, hub } = makeHub();
+  try {
+    const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    assertEquals(info.agentId, "agent_1");
+    assertEquals(info.parentAgentId, "session-1");
+    assertEquals(info.subagentType, "explore");
+    assertEquals(info.status, "running");
+    assert(info.startedAt > 0, "startedAt missing");
+    assertEquals(events.filter((e) => e.type === "task_start").length, 1);
+    const start = events.find((e) => e.type === "task_start")!;
+    assertEquals(start.agentId, "agent_1");
+    assertEquals(start.subagentType, "explore");
+    assertEquals(start.description, "調査");
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("the sub-agent runtime is resolved at spawn time", () => {
+  const { events, hub, model, root } = makeHub();
+  try {
+    // The resolver (refreshed on every session open) is read per spawn, so
+    // model/thinking-level changes apply to new sub-agents without waiting
+    // for a session rebuild.
+    let resolutions = 0;
+    let level: ThinkingLevel = "off";
+    hub.setRuntimeResolver(() => {
+      resolutions++;
+      return { workspace: makeWorkspace(root), model, thinkingLevel: level };
+    });
+    hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    level = "high";
+    hub.spawn("session-1", 0, "explore", "調査2", "Do research");
+    assertEquals(resolutions, 2);
+    assertEquals(
+      events.filter((e) => e.type === "task_start").length,
+      2,
+    );
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("the per-session concurrency limit is enforced", () => {
+  const { hub } = makeHub();
+  try {
+    for (let i = 0; i < MAX_SUBAGENTS; i++) {
+      hub.spawn("session-1", 0, "explore", `job ${i}`, "work");
+    }
+    let message = "";
+    try {
+      hub.spawn("session-1", 0, "explore", "one too many", "work");
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    assert(message.includes("Too many agents running"), message);
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("close aborts every running sub-agent and settles waiters", async () => {
+  const { events, hub } = makeHub();
+  const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+  // A waiter registered before the close receives the aborted snapshot
+  // instead of hanging.
+  const waited = hub.wait(info.agentId, "session-1", 300);
+  hub.close();
+  const snapshot = await waited;
+  assertEquals(snapshot.status, "aborted");
+  assertEquals(hub.list()[0]!.status, "aborted");
+  assertEquals(
+    events.filter((e) => e.type === "task_end" && e.status === "aborted")
+      .length,
+    1,
+  );
+});
+
+// --- hub: send_message (mesh) --------------------------------------------------
+
+Deno.test("send_message rejects unknown, finished, and parentless targets", async () => {
+  const { faux, hub } = makeScriptedHub();
+  try {
+    assertThrowsCoreError(
+      () => hub.sendMessage("session-1", "agent_9", "hi", "hello"),
+      "Unknown agent: agent_9. Known agents: session-1",
+      "not_found",
+    );
+
+    // The main agent has no parent to address.
+    assertThrowsCoreError(
+      () => hub.sendMessage("session-1", "parent", "hi", "hello"),
+      "The main agent has no parent",
+      "invalid",
+    );
+
+    // A finished sub-agent no longer accepts messages.
+    faux.setResponses([fauxAssistantMessage("done")]);
+    const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertThrowsCoreError(
+      () => hub.sendMessage("session-1", info.agentId, "hi", "hello"),
+      "Agent is not active: agent_1 (finished)",
+      "unavailable",
+    );
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("send_message delivers to the parent and to a running sub-agent", () => {
+  const { hub } = makeHub();
+  const received: string[] = [];
+  hub.setParentDelivery({
+    isActive: () => true,
+    deliver: (text) => received.push(text),
+  });
+  try {
+    const info = hub.spawn("session-1", 0, "general", "調査", "Do research");
+
+    // Sub-agent → parent (the "parent" alias resolves to the main agent).
+    const toParent = hub.sendMessage(
+      info.agentId,
+      "parent",
+      "need input",
+      "Which file?",
+    );
+    assertEquals(toParent.deliveredTo, "session-1");
+    assertEquals(
+      received,
+      ["[Message from agent_1 (need input)]\nWhich file?"],
+    );
+
+    // Main agent → running sub-agent: steered into its loop.
+    const toSub = hub.sendMessage(
+      "session-1",
+      info.agentId,
+      "hint",
+      "Look at src/",
+    );
+    assertEquals(toSub.deliveredTo, "agent_1");
+  } finally {
+    hub.close();
+  }
+});
+
+// --- hub: task_output wait ------------------------------------------------------
+
+Deno.test("wait returns the current state on timeout", async () => {
+  const { hub } = makeHub();
+  try {
+    const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    const before = Date.now();
+    const snapshot = await hub.wait(info.agentId, "session-1", 1);
+    assert(Date.now() - before >= 800, "wait did not honor the timeout");
+    assertEquals(snapshot.status, "running");
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("wait rejects when the caller's run aborts", async () => {
+  const { hub } = makeHub();
+  try {
+    const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+
+    // An already-aborted signal settles immediately.
+    const aborted = new AbortController();
+    aborted.abort();
+    await assertRejects(
+      () => hub.wait(info.agentId, "session-1", 30, aborted.signal),
+      CoreError,
+      "Cancelled while waiting for agent_1",
+    );
+
+    // An abort mid-wait settles the pending wait.
+    const controller = new AbortController();
+    const waiting = hub.wait(info.agentId, "session-1", 30, controller.signal);
+    setTimeout(() => controller.abort(), 50);
+    await assertRejects(
+      () => waiting,
+      CoreError,
+      "Cancelled while waiting for agent_1",
+    );
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("wait on a finished task resolves immediately with the result", async () => {
+  const { faux, hub } = makeScriptedHub();
+  try {
+    faux.setResponses([fauxAssistantMessage("Answer: 42")]);
+    const info = hub.spawn("session-1", 0, "general", "調査", "Do research");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    const snapshot = await hub.wait(info.agentId, "session-1", 30);
+    assertEquals(snapshot.status, "finished");
+    assert(snapshot.text.includes("Answer: 42"), snapshot.text);
+  } finally {
+    hub.close();
+  }
+});
+
+// --- sub-agent tool sets (depth / type gating) -----------------------------------
+
+Deno.test("a general sub-agent can delegate once more, but not beyond the depth limit", async () => {
+  const { faux, hub } = makeScriptedHub();
+  try {
+    // Depth-1 general agent: has the task tool; its first turn spawns a
+    // grandchild (depth 2), which answers; the agent wraps up and finally
+    // reacts to the grandchild's completion notification (a fourth turn).
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Delegating deeper."),
+        fauxToolCall("task", {
+          subagent_type: "explore",
+          description: "深掘り",
+          prompt: "Look deeper",
+        }),
+      ]),
+      fauxAssistantMessage("Deep answer."),
+      fauxAssistantMessage("All done."),
+      fauxAssistantMessage("Received the deep answer."),
+    ]);
+    hub.spawn("session-1", 0, "general", "調査", "Do research");
+    await waitFor(() => hub.list().length === 2, "grandchild spawn");
+    await waitFor(
+      () => hub.list().every((t) => t.status === "finished"),
+      "chain finish",
+    );
+    const [newest] = hub.list();
+    assertEquals(newest!.agentId, "agent_2");
+    assertEquals(newest!.parentAgentId, "agent_1");
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("a depth-2 agent has no task tool: the call fails instead of spawning", async () => {
+  const { faux, hub } = makeScriptedHub();
+  try {
+    // Spawned at parent depth 1, so its own depth is 2 (the limit).
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Trying to delegate."),
+        fauxToolCall("task", {
+          subagent_type: "explore",
+          description: "さらに深く",
+          prompt: "Go deeper",
+        }),
+      ]),
+      fauxAssistantMessage("Delegation failed."),
+    ]);
+    hub.spawn("session-1", 1, "general", "調査", "Do research");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list().length, 1, "a grandchild was spawned");
+    const snapshot = hub.list()[0]!;
+    assert(
+      snapshot.text.includes("Delegation failed."),
+      snapshot.text,
+    );
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("an explore sub-agent has no task tool", async () => {
+  const { faux, hub } = makeScriptedHub();
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Trying to delegate."),
+        fauxToolCall("task", {
+          subagent_type: "explore",
+          description: "委譲",
+          prompt: "Do it",
+        }),
+      ]),
+      fauxAssistantMessage("Delegation failed."),
+    ]);
+    hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list().length, 1, "a sub-agent was spawned");
+  } finally {
+    hub.close();
+  }
+});
+
+// --- tools: validation -----------------------------------------------------------
+
+Deno.test("the task tool rejects an unknown subagent type", () => {
+  const { hub } = makeHub();
+  try {
+    const tool = createTaskTool(hub, "session-1", 0);
+    assertThrowsCoreError(
+      () =>
+        tool.execute("1", {
+          subagent_type: "intern" as "explore",
+          description: "調査",
+          prompt: "Do research",
+        }, undefined),
+      'Unknown subagent_type "intern": expected "general" or "explore"',
+      "invalid",
+    );
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("the task_output tool validates timeout_sec and unknown ids", async () => {
+  const { hub } = makeHub();
+  try {
+    const tool = createTaskOutputTool(hub, "session-1");
+
+    await assertRejects(
+      () =>
+        tool.execute("1", { agent_id: "agent_1", timeout_sec: 0 }, undefined),
+      CoreError,
+      "timeout_sec must be between 1 and 300",
+    );
+    await assertRejects(
+      () => tool.execute("2", { agent_id: "agent_9" }, undefined),
+      CoreError,
+      "Unknown agent: agent_9. Known agents: session-1",
+    );
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("the send_message tool reports the delivery target", () => {
+  const { hub } = makeHub();
+  const received: string[] = [];
+  hub.setParentDelivery({
+    isActive: () => true,
+    deliver: (text) => received.push(text),
+  });
+  try {
+    hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    const tool = createSendMessageTool(hub, "agent_1");
+    const result = tool.execute("1", {
+      to: "parent",
+      summary: "question",
+      message: "Where?",
+    }, undefined);
+    return result.then((r) => {
+      assertEquals(r.details.to, "session-1");
+      assertEquals(received[0], "[Message from agent_1 (question)]\nWhere?");
+    });
+  } finally {
+    hub.close();
+  }
+});
+
+/** Assert that `fn` throws a CoreError with the expected message and kind. */
+function assertThrowsCoreError(
+  fn: () => void,
+  message: string,
+  kind: string,
+): void {
+  try {
+    fn();
+    assert(false, `expected an error: ${message}`);
+  } catch (error) {
+    assertEquals(
+      error instanceof Error ? error.message : String(error),
+      message,
+    );
+    assertEquals((error as { kind?: string }).kind, kind);
+  }
+}
+
+// --- end to end: the parent agent ------------------------------------------------
+
+Deno.test("a task runs in the background and its completion reaches the parent", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const events: ClientEvent[] = [];
+  const unsubscribe = core.subscribe((event) => events.push(event));
+  const root = await Deno.makeTempDir({ prefix: "lumisca-task-e2e-" });
+  try {
+    const ws = await core.createWorkspace("ws", [root]);
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: faux.provider.id,
+      modelId: faux.getModel().id,
+    });
+
+    // Turn 1: the parent delegates. The sub-agent answers (it streams first:
+    // its request is issued inside the task tool, before the parent's next
+    // turn); turn 2 wraps the parent run up; turn 3 reacts to the
+    // completion notification (steered in, or a fresh run if already idle).
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Delegating."),
+        fauxToolCall("task", {
+          subagent_type: "general",
+          description: "調査",
+          prompt: "Find the answer",
+        }),
+      ]),
+      fauxAssistantMessage("Answer: 42"),
+      fauxAssistantMessage("Launched."),
+      fauxAssistantMessage("The task finished."),
+    ]);
+    await core.prompt(session.id, "Do the research in the background");
+
+    const agent = core.getAgent(session.id)!;
+    await waitFor(
+      () => agent.messages.some((m) => messageText(m) === "The task finished."),
+      "the parent's reaction to the completion",
+    );
+    const transcript = agent.messages.map(messageText);
+    assert(
+      transcript.some((t) =>
+        t.startsWith("[Task agent_1 (調査) finished]") &&
+        t.includes("Answer: 42")
+      ),
+      `completion notification missing: ${JSON.stringify(transcript)}`,
+    );
+    assert(
+      events.some((e) => e.type === "task_start" && e.agentId === "agent_1"),
+      "task_start missing",
+    );
+    assert(
+      events.some((e) =>
+        e.type === "task_end" && e.agentId === "agent_1" &&
+        e.status === "finished"
+      ),
+      "task_end missing",
+    );
+    assert(
+      events.some((e) => e.type === "task_delta" && e.agentId === "agent_1"),
+      "task_delta missing",
+    );
+  } finally {
+    unsubscribe();
+    core.close();
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("a waiting task_output receives the result and suppresses the notification", async () => {
+  // The sub-agent's answer streams slowly enough (a long padded text) that
+  // the parent registers its blocking task_output wait before the sub-agent
+  // finishes; the completion notification must then be suppressed.
+  const faux = fauxProvider({ tokensPerSecond: 50 });
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const root = await Deno.makeTempDir({ prefix: "lumisca-task-wait-" });
+  try {
+    const ws = await core.createWorkspace("ws", [root]);
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: faux.provider.id,
+      modelId: faux.getModel().id,
+    });
+    const longAnswer = "Answer: 42. " + "padding ".repeat(120);
+
+    // Turn 1: delegate; the sub-agent answers slowly; turn 2: wait for it;
+    // turn 3: use the result.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Delegating."),
+        fauxToolCall("task", {
+          subagent_type: "general",
+          description: "調査",
+          prompt: "Find the answer",
+        }),
+      ]),
+      fauxAssistantMessage(longAnswer),
+      fauxAssistantMessage([
+        fauxText("Waiting."),
+        fauxToolCall("task_output", { agent_id: "agent_1", wait: true }),
+      ]),
+      fauxAssistantMessage("Got the result."),
+    ]);
+    await core.prompt(session.id, "Do the research and wait for it");
+
+    const agent = core.getAgent(session.id)!;
+    await waitFor(
+      () => agent.messages.some((m) => messageText(m) === "Got the result."),
+      "the parent's reaction to the result",
+    );
+    const transcript = agent.messages.map(messageText);
+    assert(
+      transcript.some((t) => t.includes("Answer: 42")),
+      `task_output result missing: ${JSON.stringify(transcript)}`,
+    );
+    assert(
+      !transcript.some((t) => t.startsWith("[Task agent_1")),
+      `the completion notification was not suppressed: ${
+        JSON.stringify(transcript)
+      }`,
+    );
+  } finally {
+    core.close();
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("sub-agents survive a session rebuild and remain listed", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const root = await Deno.makeTempDir({ prefix: "lumisca-task-rebuild-" });
+  try {
+    const ws = await core.createWorkspace("ws", [root]);
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: faux.provider.id,
+      modelId: faux.getModel().id,
+    });
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Delegating."),
+        fauxToolCall("task", {
+          subagent_type: "explore",
+          description: "調査",
+          prompt: "Find the answer",
+        }),
+      ]),
+      fauxAssistantMessage("Answer: 42"),
+      fauxAssistantMessage("Launched."),
+    ]);
+    await core.prompt(session.id, "Start research in the background");
+    await waitFor(
+      () => core.getTasks(session.id).some((t) => t.status === "finished"),
+      "the task to finish",
+    );
+
+    // A model change rebuilds the agent; the task hub is session-owned and
+    // keeps its tasks.
+    core.setSessionModel(session.id, faux.provider.id, faux.getModel().id);
+    const tasks = core.getTasks(session.id);
+    assertEquals(tasks.length, 1);
+    assertEquals(tasks[0]!.agentId, "agent_1");
+    assertEquals(tasks[0]!.status, "finished");
+  } finally {
+    core.close();
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+// --- sub-agents and MCP tools ----------------------------------------------------
+
+/** A minimal streamable-HTTP MCP server exposing one `ping` tool (mirrors
+ * mcp_test.ts): answers initialize with a session id and tools/call over
+ * plain JSON. */
+function startPingMcpServer(): { port: number; shutdown: () => void } {
+  let sessionId: string | null = null;
+  const controller = new AbortController();
+  const server = Deno.serve(
+    { port: 0, onListen: () => {}, signal: controller.signal },
+    async (req) => {
+      if (req.method !== "POST") return new Response("nope", { status: 405 });
+      const body = await req.json() as {
+        id?: string;
+        method?: string;
+      };
+      if (body.method === "initialize") {
+        sessionId = crypto.randomUUID();
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              protocolVersion: "2024-11-05",
+              capabilities: { tools: {} },
+              serverInfo: { name: "http-fake", version: "1" },
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "Mcp-Session-Id": sessionId,
+            },
+          },
+        );
+      }
+      if (body.method === "tools/list") {
+        return Response.json({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: {
+            tools: [{
+              name: "ping",
+              description: "Pings",
+              inputSchema: { type: "object" },
+            }],
+          },
+        });
+      }
+      if (body.method === "tools/call") {
+        const sentSession = req.headers.get("mcp-session-id");
+        const text = sentSession === sessionId
+          ? "pong (session ok)"
+          : `pong (session missing: ${sentSession ?? "none"})`;
+        return Response.json({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { content: [{ type: "text", text }] },
+        });
+      }
+      return Response.json({
+        jsonrpc: "2.0",
+        id: body.id,
+        error: { code: -32601, message: `unknown: ${body.method}` },
+      });
+    },
+  );
+  return { port: server.addr.port, shutdown: () => controller.abort() };
+}
+
+/** A session's shared MCP attachment pointed at the ping server. */
+async function makePingAttachment(
+  root: string,
+): Promise<{ attachment: McpAttachment; shutdown: () => void }> {
+  const mcp = startPingMcpServer();
+  const config = parseMcpConfig(
+    JSON.stringify({
+      mcpServers: { remote: { url: `http://127.0.0.1:${mcp.port}/mcp` } },
+    }),
+    join(root, ".mcp.json"),
+  );
+  const attachment = new McpAttachment(new McpManager(config, root), config);
+  await attachment.ready;
+  return { attachment, shutdown: mcp.shutdown };
+}
+
+Deno.test("general sub-agents get the session's MCP tools", async () => {
+  const { faux, hub, root } = makeScriptedHub();
+  const { attachment, shutdown } = await makePingAttachment(root);
+  hub.setMcp(attachment);
+  try {
+    // The sub-agent is the only consumer of the scripted responses, so the
+    // turn sequence is deterministic: call the MCP tool, then assert the
+    // pong reached the transcript and report.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Calling MCP."),
+        fauxToolCall("mcp__remote__ping", {}),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("pong (session ok)"),
+          `MCP result missing from the sub-agent transcript: ${text}`,
+        );
+        return fauxAssistantMessage("MCP worked.");
+      },
+    ]);
+    hub.spawn(
+      "session-1",
+      0,
+      "general",
+      "MCP呼び出し",
+      "Call the mcp__remote__ping tool and report the result",
+    );
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "MCP worked.");
+  } finally {
+    hub.close();
+    shutdown();
+  }
+});
+
+Deno.test("explore sub-agents have no MCP tools", async () => {
+  const { faux, hub, root } = makeScriptedHub();
+  const { attachment, shutdown } = await makePingAttachment(root);
+  hub.setMcp(attachment);
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Trying MCP."),
+        fauxToolCall("mcp__remote__ping", {}),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("Tool mcp__remote__ping not found"),
+          `the call should have failed: ${text}`,
+        );
+        assert(
+          !text.includes("pong"),
+          `the MCP tool must not have executed: ${text}`,
+        );
+        return fauxAssistantMessage("No MCP here.");
+      },
+    ]);
+    hub.spawn(
+      "session-1",
+      0,
+      "explore",
+      "MCP調査",
+      "Try to call the mcp__remote__ping tool",
+    );
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "No MCP here.");
+  } finally {
+    hub.close();
+    shutdown();
+  }
+});

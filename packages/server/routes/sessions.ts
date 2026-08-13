@@ -5,6 +5,7 @@ import type {
   ImageContent,
   SessionAgent,
   SessionInfo,
+  TaskInfo,
   TodoPhase,
 } from "@lumisca/core";
 import { AppError, parseBody } from "./util.ts";
@@ -125,6 +126,8 @@ export interface SessionApi {
   answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
   /** The session's current todo plan (empty when there is none). */
   getTodo(id: string): TodoPhase[];
+  /** Snapshots of the session's sub-agent tasks (empty when there are none). */
+  getTasks(id: string): TaskInfo[];
 }
 
 export function sessionRoutes(core: SessionApi): Hono {
@@ -177,6 +180,16 @@ export function sessionRoutes(core: SessionApi): Hono {
     requireSession(id);
     await core.openSession(id);
     return c.json({ todos: core.getTodo(id) });
+  });
+
+  /** Snapshots of the session's sub-agent tasks (the task tool), for the
+   * same resync as /todo: task events are not replayed, so clients
+   * re-fetch after a WS drop or page reload to restore the tasks panel. */
+  app.get("/sessions/:id/tasks", async (c) => {
+    const id = c.req.param("id");
+    requireSession(id);
+    await core.openSession(id);
+    return c.json({ tasks: core.getTasks(id) });
   });
 
   app.post("/sessions", async (c) => {

@@ -3,12 +3,15 @@ import {
   applyEvent,
   filterRemoved,
   mergeMessages,
+  mergeTasks,
   sameTodoPlan,
 } from "./events.ts";
 import {
   type AgentMessage,
   isViewRunning,
   type SessionView,
+  type TaskInfo,
+  type TaskView,
   type TodoPhase,
 } from "./types.ts";
 
@@ -36,6 +39,7 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
     runningTools: new Map(),
     pendingQuestions: [],
     todos: [],
+    tasks: [],
     removed: new Set(),
     ...overrides,
   };
@@ -464,4 +468,97 @@ Deno.test("events: pending questions are cleared on run teardown", () => {
     v,
   )!;
   assertEquals(v.pendingQuestions.length, 0);
+});
+
+// --- task events (the task tool) ----------------------------------------------
+
+Deno.test("events: task events add, feed, and settle tasks", () => {
+  let v = view();
+  const start = {
+    type: "task_start" as const,
+    sessionId: "s1",
+    agentId: "agent_1",
+    parentAgentId: "s1",
+    subagentType: "general" as const,
+    description: "調査",
+  };
+  v = applyEvent(start, v)!;
+  assertEquals(v.tasks.length, 1);
+  assertEquals(v.tasks[0]!.status, "running");
+
+  // A re-delivered task_start (resync race) must not duplicate the task.
+  v = applyEvent(start, v)!;
+  assertEquals(v.tasks.length, 1);
+
+  v = applyEvent(
+    {
+      type: "task_delta",
+      sessionId: "s1",
+      agentId: "agent_1",
+      delta: "hello ",
+    },
+    v,
+  )!;
+  v = applyEvent(
+    { type: "task_delta", sessionId: "s1", agentId: "agent_1", delta: "world" },
+    v,
+  )!;
+  assertEquals(v.tasks[0]!.liveText, "hello world");
+
+  // Deltas of another agent do not touch this task.
+  v = applyEvent(
+    { type: "task_delta", sessionId: "s1", agentId: "agent_9", delta: "x" },
+    v,
+  )!;
+  assertEquals(v.tasks[0]!.liveText, "hello world");
+
+  v = applyEvent(
+    {
+      type: "task_end",
+      sessionId: "s1",
+      agentId: "agent_1",
+      status: "finished",
+    },
+    v,
+  )!;
+  assertEquals(v.tasks[0]!.status, "finished");
+});
+
+Deno.test("events: mergeTasks merges snapshots without losing live deltas", () => {
+  const existing: TaskView[] = [{
+    agentId: "agent_1",
+    subagentType: "general",
+    description: "調査",
+    status: "running",
+    liveText: "a longer live response",
+  }];
+  const fetched: TaskInfo[] = [
+    {
+      agentId: "agent_1",
+      parentAgentId: "s1",
+      subagentType: "general",
+      description: "調査",
+      status: "finished",
+      startedAt: 1,
+      text: "final",
+    },
+    {
+      agentId: "agent_2",
+      parentAgentId: "s1",
+      subagentType: "explore",
+      description: "深掘り",
+      status: "running",
+      startedAt: 2,
+      text: "tail",
+    },
+  ];
+  const merged = mergeTasks(existing, fetched);
+  assertEquals(merged.length, 2);
+  // Known task: status from the snapshot; the longer view text wins over
+  // the point-in-time snapshot text.
+  assertEquals(merged[0]!.status, "finished");
+  assertEquals(merged[0]!.liveText, "a longer live response");
+  // Unknown task: appended from the snapshot.
+  assertEquals(merged[1]!.agentId, "agent_2");
+  assertEquals(merged[1]!.liveText, "tail");
 });

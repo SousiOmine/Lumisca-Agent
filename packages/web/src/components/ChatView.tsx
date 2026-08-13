@@ -22,6 +22,7 @@ import { Composer } from "./Composer.tsx";
 import { ContentImages } from "./ContentImages.tsx";
 import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
+import { TaskPanel } from "./TaskPanel.tsx";
 import { renderMarkdown } from "../markdown.ts";
 
 interface ChatViewProps {
@@ -144,7 +145,10 @@ export function ChatView(
 
   return (
     <div className="chat">
-      <TodoPanel todos={view.todos} />
+      <div className="chat-panels">
+        <TodoPanel todos={view.todos} />
+        <TaskPanel tasks={view.tasks} />
+      </div>
       <div className="chat-scroll" ref={scrollRef}>
         <div className="chat-column">
           {view.messages.length === 0 && view.streamingText.length === 0 && (

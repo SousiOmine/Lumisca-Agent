@@ -26,6 +26,7 @@ import { createSkillTool } from "../skills/tool.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
 import { type AskHub, createAskTool } from "./ask.ts";
 import { createTodoTool, type TodoHub } from "./todo.ts";
+import type { TaskHub } from "./task.ts";
 
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
@@ -53,6 +54,10 @@ export interface ToolFactoryOptions {
   /** Todo hub backing the todo tool (per-session plan state, emitted to
    * clients as `todo` events). Omitted → the todo tool is not built. */
   todo?: TodoHub;
+  /** Sub-agent hub backing the task / task_output / send_message tools
+   * (delegation and agent-to-agent messaging). Omitted → the tools are not
+   * built. */
+  task?: TaskHub;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -78,6 +83,7 @@ export function createCodingTools(
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
+    ...(options.task !== undefined ? options.task.parentTools() : []),
   ];
 }
 
@@ -129,6 +135,14 @@ Guidelines:
 - A user message starting with "[Background command ...]" is a system
   notification about a background command, not a message from the user:
   acknowledge it, but do not mistake it for user input.
+- Delegate independent work to sub-agents with the task tool: it starts the
+  agent in the background and returns immediately, so keep working while it
+  runs. The result arrives as a "[Task ...]" notification, or fetch it with
+  task_output (wait: true) when your next step depends on it. Reach a
+  running sub-agent with send_message.
+- A user message starting with "[Task ...]" or "[Message from ...]" is a
+  system notification from a sub-agent or another agent, not a message from
+  the user: acknowledge it, but do not mistake it for user input.
 - Use the dedicated tools: read to read files, edit to edit them, grep to
   search, glob to explore structure.
 - Use eval for quick calculations and data processing instead of spawning

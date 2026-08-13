@@ -12,6 +12,9 @@ import type {
   ModelInfo,
   ProviderInfo,
   SessionInfo,
+  SubagentStatus,
+  SubagentType,
+  TaskInfo,
   ThemeSetting,
   ThinkingLevel,
   TodoPhase,
@@ -30,6 +33,9 @@ export type {
   ModelInfo,
   ProviderInfo,
   SessionInfo,
+  SubagentStatus,
+  SubagentType,
+  TaskInfo,
   ThemeSetting,
   ThinkingLevel,
   TodoPhase,
@@ -90,6 +96,17 @@ export interface PendingQuestion {
   questions: AskQuestion[];
 }
 
+/** One sub-agent task (the `task` tool) as shown in the tasks panel. The
+ * live response text is accumulated from `task_delta` events while the
+ * task runs, and seeded from the resync snapshot's tail. */
+export interface TaskView {
+  agentId: string;
+  subagentType: SubagentType;
+  description: string;
+  status: SubagentStatus;
+  liveText: string;
+}
+
 /** Live state of one open session tab. */
 export interface SessionView {
   info: SessionInfo;
@@ -103,6 +120,10 @@ export interface SessionView {
   /** The session's todo plan (todo tool), shown in the progress panel.
    * Replaced wholesale by every `todo` event. */
   todos: TodoPhase[];
+  /** The session's sub-agent tasks (task tool), shown in the tasks panel.
+   * Added by `task_start`, fed by `task_delta`, settled by `task_end`; the
+   * resync replaces the list from the server snapshot. */
+  tasks: TaskView[];
   /** Keys (role:timestamp) of messages deleted by rewind. Kept so a later
    * resync (merge is append-only) cannot resurrect them. */
   removed: Set<string>;
@@ -127,6 +148,7 @@ export function emptyView(
     runningTools: new Map(),
     pendingQuestions: [],
     todos: [],
+    tasks: [],
     removed: new Set(),
   };
 }

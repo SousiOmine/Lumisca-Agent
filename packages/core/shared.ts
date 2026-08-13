@@ -73,6 +73,9 @@ export const TOOL_SKILL = "skill";
 export const TOOL_EVAL = "eval";
 export const TOOL_ASK = "ask";
 export const TOOL_TODO = "todo";
+export const TOOL_TASK = "task";
+export const TOOL_TASK_OUTPUT = "task_output";
+export const TOOL_SEND_MESSAGE = "send_message";
 
 /** One option of an ask question, shown as a selectable chip in the UI. */
 export interface AskOption {
@@ -123,6 +126,29 @@ export interface TodoPhase {
   id: string;
   name: string;
   tasks: TodoTask[];
+}
+
+/** Kind of sub-agent the `task` tool launches. `explore` is read-only
+ * research; `general` carries the full coding tool set. */
+export type SubagentType = "explore" | "general";
+
+/** Lifecycle state of one sub-agent task. */
+export type SubagentStatus = "running" | "finished" | "failed" | "aborted";
+
+/** Snapshot of one sub-agent task (the `task` tool). Carried by the task
+ * events and the tasks resync endpoint, so it lives in the frontend-safe
+ * shared module (like the todo plan). */
+export interface TaskInfo {
+  agentId: string;
+  parentAgentId: string;
+  subagentType: SubagentType;
+  description: string;
+  status: SubagentStatus;
+  startedAt: number;
+  finishedAt?: number;
+  /** The final response text (finished states) or the tail of the live
+   * response (running). */
+  text: string;
 }
 
 /**

@@ -15,10 +15,8 @@ import { CoreError, errorMessage } from "../errors.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared.ts";
-import type { McpConfig } from "../mcp/config.ts";
-import { McpManager } from "../mcp/manager.ts";
+import type { McpAttachment } from "../mcp/attachment.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
-import { createMcpTools } from "../mcp/tools.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { AskHub } from "../tools/ask.ts";
@@ -28,6 +26,7 @@ import type {
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { formatCompletionNotification } from "../tools/background.ts";
+import type { TaskHub } from "../tools/task.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 
@@ -55,6 +54,10 @@ export interface SessionAgentOptions {
   /** Question hub backing the ask tool (one per session): registers the
    * questions the agent asks and resolves them with the user's answers. */
   askHub: AskHub;
+  /** Task hub backing the task / task_output / send_message tools. The
+   * agent registers itself as the delivery target for sub-agent completion
+   * notifications and messages (see setParentDelivery). */
+  taskHub?: TaskHub;
   /** Persist a new session title (also notifies clients). */
   renameSession: (name: string) => void;
 }
@@ -69,7 +72,9 @@ export class SessionAgent {
   private readonly messageRepo: MessageRepo;
   private readonly onEvent: (event: ClientEvent) => void;
   private savedCount: number;
-  private mcpManager: McpManager | null = null;
+  /** The session's shared MCP attachment (owned by the session pool); its
+   * tools are added to this agent once discovery finished. */
+  private mcpAttachment: McpAttachment | null = null;
   private mcpAttached = false;
   /** Resolves once MCP tools are attached (or skipped/failed). Prompts
    * await it so the first turn always sees the MCP tools — without the
@@ -90,6 +95,10 @@ export class SessionAgent {
   /** Question hub backing the ask tool; rejects pending asks when the run
    * ends or the session closes (see rejectPendingAsks). */
   private readonly askHub: AskHub;
+  /** Task hub backing the task / task_output / send_message tools; this
+   * agent is its delivery target for sub-agent notifications while the
+   * session is open (deregistered on close). */
+  private readonly taskHub: TaskHub | null;
   /** Background-command manager (null when the async_bash tools are not
    * built for this session). */
   private readonly backgroundManager: BackgroundProcessManager | null;
@@ -125,6 +134,11 @@ export class SessionAgent {
       : this.backgroundManager.onExit((done) => {
         this.notifyBackgroundCommand(done);
       });
+    this.taskHub = options.taskHub ?? null;
+    this.taskHub?.setParentDelivery({
+      isActive: () => !this.closed,
+      deliver: (text) => this.injectNotification(text),
+    });
 
     this.agent = new Agent({
       initialState: {
@@ -239,22 +253,28 @@ export class SessionAgent {
   }
 
   /** A background command finished: inject its completion notification
-   * into the agent loop so the agent can react. While streaming, the
-   * message is steered in at the next turn boundary; while idle, a new
-   * run starts. Notifications are user messages starting with
-   * "[Background command ...]" (the system prompt teaches the agent they
-   * are system notifications, not user input).
+   * into the agent loop so the agent can react (see injectNotification).
    *
    * Commands killed via async_bash_kill are not notified: the tool's own
    * result already reports the kill, so a notification would be
    * redundant. Natural exits and timeouts are silent without a
    * notification, so they are always injected. */
   private notifyBackgroundCommand(done: BackgroundCommandDone): void {
-    if (this.closed) return;
     if (done.reason === "killed") return;
+    this.injectNotification(formatCompletionNotification(done));
+  }
+
+  /** Inject a notification user message into the agent loop (background
+   * command completions, sub-agent task completions, agent messages).
+   * While streaming, the message is steered in at the next turn boundary;
+   * while idle, a new run starts. The system prompt teaches the agent that
+   * notification prefixes ("[Background command ...]", "[Task ...]",
+   * "[Message from ...]") mark system notifications, not user input. */
+  private injectNotification(text: string): void {
+    if (this.closed) return;
     const message: AgentMessage = {
       role: "user",
-      content: [{ type: "text", text: formatCompletionNotification(done) }],
+      content: [{ type: "text", text }],
       timestamp: Date.now(),
     };
     if (this.isStreaming) {
@@ -404,95 +424,66 @@ export class SessionAgent {
     });
   }
 
-  /** Abort the run, release MCP server processes, and unsubscribe from
-   * background-command completions. Background commands themselves are
-   * stopped by the session pool when the session closes — they survive
-   * agent rebuilds (model/workspace changes) while the session is open. */
+  /** Abort the run and unsubscribe from background-command completions.
+   * Background commands themselves are stopped by the session pool when
+   * the session closes — they survive agent rebuilds (model/workspace
+   * changes) while the session is open. The MCP attachment likewise stays
+   * with the pool (its server processes serve the sub-agents too). */
   close(): void {
     this.closed = true;
     this.rejectPendingAsks();
     this.agent.abort();
     this.backgroundUnsubscribe?.();
-    const manager = this.mcpManager;
-    this.mcpManager = null;
-    if (manager) void manager.close();
+    this.taskHub?.setParentDelivery(null);
   }
 
   /** Live MCP server status of this session (null when no MCP config or
    * the manager has not started yet). */
   getMcpStatus(): McpServerStatus[] | null {
-    return this.mcpManager?.getStatus() ?? null;
+    return this.mcpAttachment?.manager.getStatus() ?? null;
   }
 
-  /** Attach MCP server tools (merged app-level + workspace config) to the
-   * agent. Runs after construction; config errors are reported as
-   * session_error events and never break the agent loop. The returned
-   * promise (also stored as `mcpReady`) resolves when attachment finished,
-   * so the first prompt can wait for it. `cwd` is the workspace root;
-   * stdio servers spawn there. */
-  attachMcpTools(
-    config: McpConfig,
-    configErrors: string[] = [],
-    cwd: string = Deno.cwd(),
-  ): Promise<void> {
+  /** Attach the session's shared MCP attachment (owned by the session
+   * pool; its server processes also serve the sub-agents). The tools are
+   * added to the agent once discovery finished; the returned promise (also
+   * stored as `mcpReady`) resolves when attachment finished, so the first
+   * prompt can wait for it. Config errors are reported by the pool, never
+   * here. */
+  attachMcp(attachment: McpAttachment): Promise<void> {
     if (this.mcpAttached) return this.mcpReady;
     this.mcpAttached = true;
-    // Nothing to attach: keep the fast path so prompts start without even
-    // a microtask delay (the "already running" conflict check relies on
-    // startPrompt reaching the agent loop synchronously).
-    if (config.servers.length === 0 && configErrors.length === 0) {
+    this.mcpAttachment = attachment;
+    if (attachment.done) {
+      this.addMcpTools(attachment.getTools());
+      return Promise.resolve();
+    }
+    // Nothing to discover (no servers configured): keep the fast path so
+    // prompts start without even a microtask delay (the "already running"
+    // conflict check relies on startPrompt reaching the agent loop
+    // synchronously).
+    if (attachment.config.servers.length === 0) {
       return Promise.resolve();
     }
     this.mcpReadyDone = false;
-    this.mcpReady = this.doAttachMcpTools(config, configErrors, cwd).finally(
-      () => {
-        this.mcpReadyDone = true;
-      },
-    );
+    this.mcpReady = attachment.ready.then((tools) => {
+      if (this.closed) return;
+      this.addMcpTools(tools);
+    }).finally(() => {
+      this.mcpReadyDone = true;
+    });
     return this.mcpReady;
   }
 
-  private async doAttachMcpTools(
-    config: McpConfig,
-    configErrors: string[],
-    cwd: string,
-  ): Promise<void> {
-    for (const message of configErrors) {
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message,
-      });
-    }
-    if (config.servers.length === 0) return;
-
-    this.mcpManager = new McpManager(config, cwd);
-    try {
-      const tools = (await createMcpTools(this.mcpManager)).map(toAgentTool);
-      if (tools.length > 0) {
-        this.agent.state.tools = [...this.agent.state.tools, ...tools];
-        this.agent.state.systemPrompt +=
-          "\n\nNote: MCP tools (names starting with mcp__) can access resources outside the workspace.";
-      }
-      const failed = this.mcpManager
-        .getStatus()
-        .filter((s) => s.status === "error");
-      if (failed.length > 0) {
-        this.emit({
-          type: "session_error",
-          sessionId: this.sessionId,
-          message: `MCP servers failed: ${
-            failed.map((s) => `${s.name}: ${s.error}`).join("; ")
-          }`,
-        });
-      }
-    } catch (error) {
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message: `MCP error: ${errorMessage(error)}`,
-      });
-    }
+  /** Add the attachment's tools to the agent and teach it about their
+   * out-of-workspace access. */
+  private addMcpTools(tools: Tool[]): void {
+    if (tools.length === 0) return;
+    this.agent.state.tools = [
+      ...this.agent.state.tools,
+      ...tools.map(toAgentTool),
+    ];
+    this.agent.state.systemPrompt +=
+      "\n\nNote: MCP tools (names starting with mcp__) can access resources outside the workspace.";
   }
 
   async waitForIdle(): Promise<void> {

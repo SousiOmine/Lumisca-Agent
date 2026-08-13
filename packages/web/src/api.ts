@@ -10,6 +10,7 @@ import type {
   PendingImage,
   ProviderInfo,
   SessionInfo,
+  TaskInfo,
   ThinkingLevel,
   TodoPhase,
   Workspace,
@@ -122,6 +123,11 @@ export const api = {
    * snapshots, but only mutations emit them, so they are not replayed). */
   getTodo: (id: string) =>
     request<{ todos: TodoPhase[] }>(`/api/sessions/${id}/todo`),
+  /** Snapshots of the session's sub-agent tasks (the task tool); re-fetched
+   * after a WS drop or page reload to restore the tasks panel (task events
+   * are not replayed). */
+  getTasks: (id: string) =>
+    request<{ tasks: TaskInfo[] }>(`/api/sessions/${id}/tasks`),
   prompt: (id: string, text: string, images?: PendingImage[]) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/prompt`, {
       method: "POST",
@@ -280,6 +286,10 @@ export const fed = {
     request<{ todos: TodoPhase[] }>(
       `/api/fed/${peerId}/sessions/${sessionId}/todo`,
     ),
+  getTasks: (peerId: string, sessionId: string) =>
+    request<{ tasks: TaskInfo[] }>(
+      `/api/fed/${peerId}/sessions/${sessionId}/tasks`,
+    ),
   closeSession: (peerId: string, sessionId: string) =>
     request<{ ok: boolean }>(`/api/fed/${peerId}/sessions/${sessionId}/close`, {
       method: "POST",
@@ -364,6 +374,7 @@ export function sessionApi(key: string) {
       getSession: () => api.getSession(sessionId),
       getMessages: () => api.getMessages(sessionId),
       getTodo: () => api.getTodo(sessionId),
+      getTasks: () => api.getTasks(sessionId),
       close: () => api.closeSession(sessionId),
       prompt: (text: string, images?: PendingImage[]) =>
         api.prompt(sessionId, text, images),
@@ -381,6 +392,7 @@ export function sessionApi(key: string) {
     getSession: () => fed.getSession(peerId, sessionId),
     getMessages: () => fed.getMessages(peerId, sessionId),
     getTodo: () => fed.getTodo(peerId, sessionId),
+    getTasks: () => fed.getTasks(peerId, sessionId),
     close: () => fed.closeSession(peerId, sessionId),
     prompt: (text: string, images?: PendingImage[]) =>
       fed.prompt(peerId, sessionId, text, images),

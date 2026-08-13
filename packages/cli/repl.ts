@@ -33,6 +33,23 @@ function printToolStart(toolName: string, args: unknown): void {
   console.log(color.cyan(`  ⚙ ${toolName} ${color.faint(argsText)}`));
 }
 
+function printTaskStart(
+  agentId: string,
+  subagentType: string,
+  description: string,
+): void {
+  console.log(
+    color.blue(
+      `  ◉ task ${agentId} (${subagentType}) ${color.faint(description)}`,
+    ),
+  );
+}
+
+function printTaskEnd(agentId: string, status: string): void {
+  const mark = status === "finished" ? color.green("✓") : color.red("✗");
+  console.log(color.blue(`  ${mark} task ${agentId} ${status}`));
+}
+
 function printToolEnd(
   toolName: string,
   result: unknown,
@@ -88,6 +105,16 @@ export async function runRepl(
           break;
         case "tool_end":
           printToolEnd(event.toolName, event.result, event.isError);
+          break;
+        case "task_start":
+          printTaskStart(
+            event.agentId,
+            event.subagentType,
+            event.description,
+          );
+          break;
+        case "task_end":
+          printTaskEnd(event.agentId, event.status);
           break;
         case "session_error":
           if (streaming) process.stdout.write("\n");

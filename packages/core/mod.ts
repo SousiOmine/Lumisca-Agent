@@ -35,8 +35,12 @@ export { createSkillTool } from "./skills/tool.ts";
 export { parseSkillFrontmatter } from "./skills/frontmatter.ts";
 export { AskHub } from "./tools/ask.ts";
 export { TodoHub } from "./tools/todo.ts";
+export { TaskHub } from "./tools/task.ts";
+export type { ParentDelivery } from "./tools/task.ts";
+export { MAX_SUBAGENT_DEPTH, MAX_SUBAGENTS } from "./tools/task.ts";
 export type { AskAnswer, AskOption, AskQuestion } from "./shared.ts";
 export type { TodoPhase, TodoStatus, TodoTask } from "./shared.ts";
+export type { SubagentStatus, SubagentType, TaskInfo } from "./shared.ts";
 export { contentText } from "./content.ts";
 export {
   loadMcpConfig,
@@ -53,6 +57,7 @@ export type {
 } from "./mcp/config.ts";
 export { McpManager } from "./mcp/manager.ts";
 export type { McpServerStatus, McpToolDef } from "./mcp/manager.ts";
+export { McpAttachment } from "./mcp/attachment.ts";
 export { createMcpTools, sanitizeServerName } from "./mcp/tools.ts";
 export { AGENTS_PLUGINS_DIR, discoverPlugins } from "./plugins/discover.ts";
 export type { DiscoverPluginsOptions, PluginDef } from "./plugins/discover.ts";

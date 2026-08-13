@@ -2,6 +2,8 @@ import type {
   AgentMessage,
   ClientEvent,
   SessionView,
+  TaskInfo,
+  TaskView,
   TodoPhase,
 } from "./types.ts";
 
@@ -74,6 +76,55 @@ export function sameTodoPlan(a: TodoPhase[], b: TodoPhase[]): boolean {
         task.status === otherTask.status;
     });
   });
+}
+
+/** True when two task lists are identical (ids, types, descriptions, and
+ * statuses). The resync replaces the whole list, so an unchanged snapshot
+ * must not trigger a view update on every sync tick. The live response
+ * text is derived state (deltas) and deliberately not compared. */
+export function sameTasks(a: TaskView[], b: TaskView[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((task, i) => {
+    const other = b[i]!;
+    return task.agentId === other.agentId &&
+      task.subagentType === other.subagentType &&
+      task.description === other.description &&
+      task.status === other.status;
+  });
+}
+
+/** Merge the server's task snapshot into the view's task list: known tasks
+ * take the snapshot's status/description (and its text when longer — the
+ * snapshot is a point-in-time tail, so the live view may be ahead of it);
+ * unknown tasks are appended oldest first (the snapshot is newest first). */
+export function mergeTasks(
+  existing: TaskView[],
+  fetched: TaskInfo[],
+): TaskView[] {
+  const byId = new Map(fetched.map((info) => [info.agentId, info]));
+  const merged = existing.map((t) => {
+    const info = byId.get(t.agentId);
+    if (info === undefined) return t;
+    return {
+      ...t,
+      subagentType: info.subagentType,
+      description: info.description,
+      status: info.status,
+      liveText: info.text.length > t.liveText.length ? info.text : t.liveText,
+    };
+  });
+  const known = new Set(existing.map((t) => t.agentId));
+  for (const info of [...fetched].reverse()) {
+    if (known.has(info.agentId)) continue;
+    merged.push({
+      agentId: info.agentId,
+      subagentType: info.subagentType,
+      description: info.description,
+      status: info.status,
+      liveText: info.text,
+    });
+  }
+  return merged;
 }
 
 /** Apply one client event to a session view. Pure: returns the updated
@@ -170,6 +221,40 @@ export function applyEvent(
       // The todo plan changed; the event carries the full snapshot, so a
       // resync that re-delivers it converges to the same state.
       return { ...view, todos: event.todos };
+    }
+    case "task_start": {
+      // A sub-agent started (the task tool). Dedup by agent id: a resync
+      // could re-deliver the event.
+      if (view.tasks.some((t) => t.agentId === event.agentId)) return view;
+      return {
+        ...view,
+        tasks: [
+          ...view.tasks,
+          {
+            agentId: event.agentId,
+            subagentType: event.subagentType,
+            description: event.description,
+            status: "running",
+            liveText: "",
+          },
+        ],
+      };
+    }
+    case "task_delta": {
+      // A chunk of a sub-agent's live response; append to the task's view
+      // (bounded, the server keeps only the tail anyway).
+      const tasks = view.tasks.map((t) => {
+        if (t.agentId !== event.agentId) return t;
+        return { ...t, liveText: (t.liveText + event.delta).slice(-8192) };
+      });
+      return { ...view, tasks };
+    }
+    case "task_end": {
+      // A sub-agent settled; the panel shows its final status.
+      const tasks = view.tasks.map((t) =>
+        t.agentId === event.agentId ? { ...t, status: event.status } : t
+      );
+      return { ...view, tasks };
     }
     case "session_error":
       return { ...view, error: event.message };

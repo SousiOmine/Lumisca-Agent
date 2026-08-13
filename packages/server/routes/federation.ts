@@ -186,6 +186,14 @@ export function federationRoutes(
     );
   });
 
+  app.get("/fed/:peerId/sessions/:sid/tasks", (c) => {
+    const peer = requirePeer(c);
+    return forward(
+      c,
+      fed.request(peer, "GET", `/api/sessions/${c.req.param("sid")}/tasks`),
+    );
+  });
+
   app.post("/fed/:peerId/sessions/:sid/open", (c) => {
     const peer = requirePeer(c);
     return forward(

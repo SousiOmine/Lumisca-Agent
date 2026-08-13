@@ -5,6 +5,8 @@ import {
   applyEvent,
   filterRemoved,
   mergeMessages,
+  mergeTasks,
+  sameTasks,
   sameTodoPlan,
 } from "../events.ts";
 import { tabKey } from "../tabs.ts";
@@ -12,6 +14,7 @@ import type {
   AgentMessage,
   ClientEvent,
   SessionView,
+  TaskInfo,
   TodoPhase,
 } from "../types.ts";
 
@@ -32,17 +35,19 @@ export function useSessionEvents() {
     viewsRef.current = views;
   }, [views]);
 
-  /** Re-fetch persisted messages and the todo plan for every open tab and
-   * merge them in without duplicating what is already shown. Runs on
-   * reconnect and on an interval so a run that completes while the socket
-   * was down — and todo mutations whose snapshot events were lost — are
-   * not missed until the next WS drop. The todo plan is a snapshot fetch
-   * (the events only fire on mutations), so the fetched state replaces
-   * the view's plan wholesale. */
+  /** Re-fetch persisted messages, the todo plan, and the task snapshots for
+   * every open tab and merge them in without duplicating what is already
+   * shown. Runs on reconnect and on an interval so a run that completes
+   * while the socket was down — and todo/task mutations whose snapshot
+   * events were lost — are not missed until the next WS drop. The todo
+   * plan is a snapshot fetch (the events only fire on mutations), so the
+   * fetched state replaces the view's plan wholesale; tasks merge per
+   * agent id so live deltas are preserved. */
   const syncState = useCallback(async () => {
     const ids = [...viewsRef.current.keys()];
     const messages = new Map<string, AgentMessage[]>();
     const todos = new Map<string, TodoPhase[]>();
+    const tasks = new Map<string, TaskInfo[]>();
     await Promise.all(ids.map(async (id) => {
       // Fetch independently: one failing (e.g. the session was deleted)
       // must not drop the other.
@@ -57,11 +62,23 @@ export function useSessionEvents() {
       } catch {
         // Server not reachable yet; keep the current plan.
       }
+      try {
+        const { tasks: snapshot } = await sessionApi(id).getTasks();
+        tasks.set(id, snapshot);
+      } catch {
+        // Server not reachable yet; keep the current tasks.
+      }
     }));
-    if (messages.size === 0 && todos.size === 0) return;
+    if (messages.size === 0 && todos.size === 0 && tasks.size === 0) return;
     setViews((prev) => {
       const next = new Map(prev);
-      for (const id of new Set([...messages.keys(), ...todos.keys()])) {
+      for (
+        const id of new Set([
+          ...messages.keys(),
+          ...todos.keys(),
+          ...tasks.keys(),
+        ])
+      ) {
         const v = next.get(id);
         if (!v) continue;
         const fetched = messages.get(id);
@@ -73,11 +90,22 @@ export function useSessionEvents() {
         const todo = todos.get(id);
         const todoChanged = todo !== undefined &&
           !sameTodoPlan(todo, v.todos);
-        if (merged.length === v.messages.length && !todoChanged) continue;
+        const fetchedTasks = tasks.get(id);
+        const mergedTasks = fetchedTasks === undefined
+          ? v.tasks
+          : mergeTasks(v.tasks, fetchedTasks);
+        const tasksChanged = fetchedTasks !== undefined &&
+          !sameTasks(mergedTasks, v.tasks);
+        if (
+          merged.length === v.messages.length && !todoChanged && !tasksChanged
+        ) {
+          continue;
+        }
         next.set(id, {
           ...v,
           messages: merged,
           ...(todoChanged ? { todos: todo } : {}),
+          ...(tasksChanged ? { tasks: mergedTasks } : {}),
         });
       }
       return next;

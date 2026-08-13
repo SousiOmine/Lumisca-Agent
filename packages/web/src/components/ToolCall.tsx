@@ -11,7 +11,9 @@ import {
   IconLoader2,
   IconMessageQuestion,
   IconSearch,
+  IconSend,
   IconTerminal2,
+  IconUsers,
   IconWorldSearch,
 } from "@tabler/icons-react";
 import {
@@ -25,6 +27,9 @@ import {
   TOOL_GREP,
   TOOL_LIST_DIR,
   TOOL_READ,
+  TOOL_SEND_MESSAGE,
+  TOOL_TASK,
+  TOOL_TASK_OUTPUT,
   TOOL_WRITE,
 } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
@@ -61,7 +66,14 @@ function toolIcon(name: string) {
       return <IconWorldSearch size={13} />;
     // sub-agent
     case "Agent":
+    case TOOL_TASK:
       return <IconBrain size={13} />;
+    // sub-agent output
+    case TOOL_TASK_OUTPUT:
+      return <IconUsers size={13} />;
+    // agent-to-agent message
+    case TOOL_SEND_MESSAGE:
+      return <IconSend size={13} />;
     // code evaluation
     case TOOL_EVAL:
       return <IconCode size={13} />;
@@ -150,10 +162,21 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
       return typeof args.url === "string" ? truncate(args.url, 50) : "";
     // sub-agent
     case "Agent":
+    case TOOL_TASK:
       return typeof args.description === "string"
         ? truncate(args.description, 50)
         : typeof args.prompt === "string"
         ? truncate(args.prompt, 50)
+        : "";
+    case TOOL_TASK_OUTPUT:
+      return typeof args.agent_id === "string"
+        ? `${args.agent_id}${args.wait === true ? " (wait)" : ""}`
+        : "";
+    case TOOL_SEND_MESSAGE:
+      return typeof args.to === "string"
+        ? `to ${args.to}: ${
+          typeof args.summary === "string" ? truncate(args.summary, 40) : ""
+        }`
         : "";
     // task list
     case "TodoWrite":

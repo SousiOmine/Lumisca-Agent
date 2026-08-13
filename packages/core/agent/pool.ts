@@ -9,7 +9,11 @@ import { createCodingTools } from "../tools/mod.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
 import { AskHub } from "../tools/ask.ts";
 import { TodoHub } from "../tools/todo.ts";
+import { TaskHub } from "../tools/task.ts";
+import type { TaskInfo } from "../shared.ts";
 import type { McpConfig } from "../mcp/config.ts";
+import { McpManager } from "../mcp/manager.ts";
+import { McpAttachment } from "../mcp/attachment.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { MessageRepo } from "../session/messages.ts";
@@ -25,6 +29,12 @@ export interface SessionPoolDeps {
   /** The configured fast model (undefined when unset): generates session
    * titles from the first user message. */
   getFastModel(): Model<Api> | undefined;
+  /** The configured fast model with its provider/model ids (undefined when
+   * unset or gone from the catalog). Sub-agents run on it, with its stored
+   * thinking level. */
+  getFastModelInfo():
+    | { provider: string; modelId: string; model: Model<Api> }
+    | undefined;
   /** Persist a new session title and notify clients. */
   renameSession(id: string, name: string): void;
   /** The stored thinking level of a model, clamped to what it supports. */
@@ -48,23 +58,45 @@ export interface SessionPoolDeps {
   emit(event: ClientEvent): void;
 }
 
+/** True when two merged configs describe the same servers (the merge keeps
+ * a stable insertion order). A rebuild with an unchanged config reuses the
+ * session's MCP attachment — and its server processes — instead of
+ * respawning them. */
+function sameMcpConfig(a: McpConfig, b: McpConfig): boolean {
+  return JSON.stringify(a.servers) === JSON.stringify(b.servers);
+}
+
 /**
  * Owns the live session agents: construction, lifecycle (open / close /
  * delete), and the streaming guards behind configuration changes. Kept out
  * of LumiscaCore so the core stays a thin facade over the repositories.
  */
 export class SessionPool {
-  private readonly agents = new Map<string, SessionAgent>();
-  /** Background-command managers, one per open session. Owned by the pool
+  private readonly agents = new Map<
+    string,
+    SessionAgent
+  >(); /** Background-command managers, one per open session. Owned by the pool
    * (not the agent) so background commands survive agent rebuilds — model
    * and workspace changes rebuild the agent while the session stays open,
    * and the commands must keep running. They are stopped when the session
    * closes (close/delete/closeAll). */
+
   private readonly background = new Map<string, BackgroundProcessManager>();
   /** Todo hubs, one per open session. Owned by the pool (not the agent) so
    * the plan survives agent rebuilds — the same reason as `background`.
    * Discarded when the session closes (close/delete/closeAll). */
   private readonly todos = new Map<string, TodoHub>();
+  /** Task hubs, one per open session. Owned by the pool (not the agent) so
+   * sub-agents survive agent rebuilds — they run independently of the agent
+   * run, like background commands. All sub-agents are aborted when the
+   * session closes (close/delete/closeAll). */
+  private readonly tasks = new Map<string, TaskHub>();
+  /** Shared MCP attachments, one per open session. Owned by the pool (not
+   * the agent) so the server processes serve every agent of the session —
+   * the main agent and the sub-agents — and survive agent rebuilds while
+   * the merged config is unchanged. Closed when the session closes
+   * (close/delete/closeAll). */
+  private readonly mcp = new Map<string, McpAttachment>();
   private readonly lastErrors = new Map<string, string>();
 
   constructor(private readonly deps: SessionPoolDeps) {}
@@ -96,6 +128,13 @@ export class SessionPool {
     return this.todos.get(id)?.getPlan() ?? [];
   }
 
+  /** Snapshots of the session's sub-agent tasks (the task tool); empty
+   * when the session is not open or has no tasks yet. Restores the tasks
+   * panel after a WS drop or page reload (task events are not replayed). */
+  getTasks(id: string): TaskInfo[] {
+    return this.tasks.get(id)?.list() ?? [];
+  }
+
   /** Build the agent of a session (replacing any existing one) and keep it
    * in memory. MCP tools attach asynchronously — they spawn server
    * processes — and errors are reported via session_error events, never
@@ -111,6 +150,45 @@ export class SessionPool {
         `Model not found: ${session.modelProvider}/${session.modelId}`,
         "not_found",
       );
+    }
+    // One shared MCP attachment per session: its server processes serve
+    // every agent of the session (the main agent and the sub-agents) and
+    // survive agent rebuilds while the merged config is unchanged. A
+    // changed config rebuilds the attachment and tears down the old
+    // processes. Config errors and failed servers are reported once per
+    // attachment, so a rebuild must not re-report them.
+    const mergedMcp = this.deps.loadMergedMcp(workspace);
+    let mcp = this.mcp.get(session.id);
+    if (mcp === undefined || !sameMcpConfig(mcp.config, mergedMcp.config)) {
+      const previous = mcp;
+      mcp = new McpAttachment(
+        new McpManager(mergedMcp.config, workspace.folders[0] ?? Deno.cwd()),
+        mergedMcp.config,
+      );
+      this.mcp.set(session.id, mcp);
+      if (previous !== undefined) void previous.manager.close();
+      const emitError = (message: string) => {
+        this.lastErrors.set(session.id, message);
+        this.deps.emit({
+          type: "session_error",
+          sessionId: session.id,
+          message,
+        });
+      };
+      for (const message of mergedMcp.errors) emitError(message);
+      const attachment = mcp;
+      void attachment.ready.then(() => {
+        const failed = attachment.manager
+          .getStatus()
+          .filter((s) => s.status === "error");
+        if (failed.length > 0) {
+          emitError(
+            `MCP servers failed: ${
+              failed.map((s) => `${s.name}: ${s.error}`).join("; ")
+            }`,
+          );
+        }
+      });
     }
     // Reuse the session's manager when one exists (agent rebuild); create
     // it on first open. Shared by the async_bash tools and the session
@@ -133,10 +211,55 @@ export class SessionPool {
       todo = new TodoHub(session.id, (event) => this.deps.emit(event));
       this.todos.set(session.id, todo);
     }
+    // Sub-agents run on the fast model when configured, otherwise on the
+    // session model; the thinking level follows the chosen model's stored
+    // level. One hub per session (it owns the live sub-agents, which
+    // survive agent rebuilds). The runtime is resolved at spawn time, so
+    // model/workspace/thinking-level changes apply to new sub-agents even
+    // without a rebuild; the resolver itself is refreshed on every open
+    // (it must never hold a stale session).
+    const runtimeResolver = () => {
+      const fast = this.deps.getFastModelInfo();
+      const workspace = this.deps.requireWorkspace(session.workspaceId);
+      if (fast !== undefined) {
+        return {
+          workspace,
+          model: fast.model,
+          thinkingLevel: this.deps.getThinkingLevel(
+            fast.provider,
+            fast.modelId,
+          ),
+        };
+      }
+      return {
+        workspace,
+        model,
+        thinkingLevel: this.deps.getThinkingLevel(
+          session.modelProvider,
+          session.modelId,
+        ),
+      };
+    };
+    let tasks = this.tasks.get(session.id);
+    if (!tasks) {
+      tasks = new TaskHub({
+        sessionId: session.id,
+        resolveRuntime: runtimeResolver,
+        streamFn: this.deps.streamFn,
+        emit: (event: ClientEvent) => this.deps.emit(event),
+      });
+      this.tasks.set(session.id, tasks);
+    } else {
+      tasks.setRuntimeResolver(runtimeResolver);
+    }
+    // The sub-agents share the session's MCP attachment (general
+    // sub-agents get its tools).
+    tasks.setMcp(mcp);
     const tools = createCodingTools(workspace, {
       background,
       ask: askHub,
       todo,
+      task: tasks,
     });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a
@@ -165,6 +288,7 @@ export class SessionPool {
       messageRepo: this.deps.messageRepo,
       backgroundManager: background,
       askHub,
+      taskHub: tasks,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
       renameSession: (name) => this.deps.renameSession(session.id, name),
@@ -179,26 +303,25 @@ export class SessionPool {
         this.deps.emit(event);
       },
     });
-    const mcp = this.deps.loadMergedMcp(workspace);
-    void agent.attachMcpTools(
-      mcp.config,
-      mcp.errors,
-      workspace.folders[0] ?? Deno.cwd(),
-    );
+    agent.attachMcp(mcp);
     this.agents.set(session.id, agent);
     return agent;
   }
 
-  /** Close a session's agent (releasing its MCP servers and unsubscribing
-   * from background completions), stop its background commands, and
-   * discard its todo plan. The persisted session stays; openSession
-   * rebuilds it with a fresh manager and an empty plan. */
+  /** Close a session's agent (unsubscribing from background completions),
+   * stop its background commands, abort its sub-agents, tear down its MCP
+   * server processes, and discard its todo plan. The persisted session
+   * stays; openSession rebuilds it with fresh managers and an empty plan. */
   close(id: string): void {
     this.agents.get(id)?.close();
     this.agents.delete(id);
     this.background.get(id)?.killAll();
     this.background.delete(id);
     this.todos.delete(id);
+    this.tasks.get(id)?.close();
+    this.tasks.delete(id);
+    void this.mcp.get(id)?.manager.close();
+    this.mcp.delete(id);
   }
 
   /** Close and forget a session entirely (persisted rows are deleted by
@@ -208,7 +331,8 @@ export class SessionPool {
     this.lastErrors.delete(id);
   }
 
-  /** Close every agent and stop every background command (core shutdown). */
+  /** Close every agent, stop every background command, abort every
+   * sub-agent, and tear down every MCP attachment (core shutdown). */
   closeAll(): void {
     for (const agent of this.agents.values()) {
       agent.close();
@@ -216,9 +340,17 @@ export class SessionPool {
     for (const manager of this.background.values()) {
       manager.killAll();
     }
+    for (const tasks of this.tasks.values()) {
+      tasks.close();
+    }
+    for (const mcp of this.mcp.values()) {
+      void mcp.manager.close();
+    }
     this.agents.clear();
     this.background.clear();
     this.todos.clear();
+    this.tasks.clear();
+    this.mcp.clear();
     this.lastErrors.clear();
   }
 

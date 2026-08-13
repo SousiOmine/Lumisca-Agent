@@ -4,8 +4,9 @@ import {
   IMAGE_MODEL_KEY,
   parseModelPreference,
   serializeModelPreference,
+  THINKING_LEVEL_LABELS,
 } from "@lumisca/core/shared";
-import type { ModelPreference } from "@lumisca/core/shared";
+import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
 import { useClickOutside } from "../../hooks/useClickOutside.ts";
 import { errorText } from "../../providers.ts";
@@ -17,13 +18,18 @@ interface ModelPrefRow {
   description: string;
   /** Restrict the picker to models that accept image input. */
   imageOnly?: boolean;
+  /** Show the model's stored thinking level (used by the sub-agents that
+   * run on this model). */
+  thinking?: boolean;
 }
 
 const ROWS: ModelPrefRow[] = [
   {
     key: FAST_MODEL_KEY,
     label: "高速モデル",
-    description: "エージェント本体とは別に、高速で安価な補助処理に使うモデル。",
+    description:
+      "エージェント本体とは別に、高速で安価な補助処理（サブエージェントの実行など）に使うモデル。",
+    thinking: true,
   },
   {
     key: IMAGE_MODEL_KEY,
@@ -38,8 +44,9 @@ const MENU_MARGIN = 8;
 
 /** Settings → モデル: the auxiliary model preferences (fast model, image
  * analysis model). Configured here in the settings dialog, separate from
- * the per-session model chosen in the chatbox picker. The runtime use of
- * these models is implemented by later features. */
+ * the per-session model chosen in the chatbox picker. The fast model runs
+ * the sub-agents (the task tool) and generates session titles; its
+ * thinking level is the sub-agents' reasoning level. */
 export function ModelPreferencePanel() {
   const [values, setValues] = useState<
     Record<string, ModelPreference | undefined>
@@ -50,19 +57,36 @@ export function ModelPreferencePanel() {
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | undefined>();
+  /** Stored thinking level of the fast model (the one sub-agents run on),
+   * loaded from the model catalog. */
+  const [levels, setLevels] = useState<
+    { current: ThinkingLevel; supported: ThinkingLevel[] } | undefined
+  >();
+  const [savingLevel, setSavingLevel] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const anchors = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  // Load the stored preferences once.
+  /** Load the stored preferences once, plus the fast model's thinking
+   * level (sub-agents use it). */
   useEffect(() => {
     let stale = false;
     api.getSettings()
-      .then((settings) => {
+      .then(async (settings) => {
         if (stale) return;
         setValues({
           [FAST_MODEL_KEY]: parseModelPreference(settings[FAST_MODEL_KEY]),
           [IMAGE_MODEL_KEY]: parseModelPreference(settings[IMAGE_MODEL_KEY]),
         });
+        const fast = parseModelPreference(settings[FAST_MODEL_KEY]);
+        if (fast !== undefined) {
+          try {
+            const fetched = await fetchLevels(fast);
+            if (stale) return;
+            setLevels(fetched);
+          } catch {
+            // The catalog is unreachable; the control simply stays hidden.
+          }
+        }
         setLoaded(true);
       })
       .catch((e) => {
@@ -72,6 +96,22 @@ export function ModelPreferencePanel() {
       stale = true;
     };
   }, []);
+
+  /** The stored + supported thinking levels of one model, for the level
+   * control (undefined when the model is gone or has no levels). */
+  const fetchLevels = async (
+    pref: ModelPreference,
+  ): Promise<
+    { current: ThinkingLevel; supported: ThinkingLevel[] } | undefined
+  > => {
+    const models = await api.listModels(pref.provider);
+    const model = models.find((m) => m.id === pref.modelId);
+    if (model === undefined) return undefined;
+    const supported = model.thinkingLevels ?? [];
+    return supported.length <= 1
+      ? undefined
+      : { current: model.thinkingLevel ?? "off", supported };
+  };
 
   // Close on outside click, Escape, scroll and window blur (the settings
   // content scrolls independently of the fixed-position popover).
@@ -111,6 +151,11 @@ export function ModelPreferencePanel() {
       await api.setSetting(rowKey, pref ? serializeModelPreference(pref) : "");
       setValues((prev) => ({ ...prev, [rowKey]: pref }));
       setOpenRow(null);
+      // The fast model's thinking level follows the model: refresh it (and
+      // clear it when the model is unset).
+      if (rowKey === FAST_MODEL_KEY) {
+        setLevels(pref !== undefined ? await fetchLevels(pref) : undefined);
+      }
     } catch (e) {
       setSaveError(errorText(e));
     } finally {
@@ -140,9 +185,46 @@ export function ModelPreferencePanel() {
                 ? <span className="model-pref-unset">読み込み中...</span>
                 : value
                 ? (
-                  <span className="mono">
-                    {value.provider}/{value.modelId}
-                  </span>
+                  <>
+                    <span className="mono">
+                      {value.provider}/{value.modelId}
+                    </span>
+                    {row.thinking && levels && (
+                      <label className="model-pref-level" title="思考強度">
+                        <select
+                          value={levels.current}
+                          disabled={savingLevel}
+                          onChange={async (e) => {
+                            const level = e.target.value as ThinkingLevel;
+                            setSavingLevel(true);
+                            try {
+                              const { thinkingLevel } = await api
+                                .setModelThinkingLevel(
+                                  value.provider,
+                                  value.modelId,
+                                  level,
+                                );
+                              setLevels((prev) =>
+                                prev === undefined
+                                  ? prev
+                                  : { ...prev, current: thinkingLevel }
+                              );
+                            } catch (err) {
+                              setSaveError(errorText(err));
+                            } finally {
+                              setSavingLevel(false);
+                            }
+                          }}
+                        >
+                          {levels.supported.map((level) => (
+                            <option key={level} value={level}>
+                              {THINKING_LEVEL_LABELS[level]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </>
                 )
                 : <span className="model-pref-unset">未設定</span>}
             </div>
