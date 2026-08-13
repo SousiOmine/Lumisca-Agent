@@ -11,6 +11,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "../settings/repo.ts";
 import type { ThinkingLevel } from "../shared.ts";
+import { loadCustomProviders } from "./custom.ts";
 import { clampThinkingLevel } from "./thinking.ts";
 
 const CATALOG_PREFIX = "model_catalog:";
@@ -52,6 +53,16 @@ export class ModelManager {
   ) {
     this.models = builtinModels({ credentials, modelsStore }) as MutableModels;
     this.settings = settings;
+    // Custom OpenAI-compatible providers (env vars / models.json) are
+    // registered after the builtins. setProvider upserts by id, so:
+    // - a models.json provider may intentionally replace a builtin
+    //   provider of the same id (e.g. point "openai" at a compatible
+    //   endpoint) — this is the override mechanism, not an accident;
+    // - the env-var provider is registered last, so it wins collisions
+    //   with models.json ids.
+    for (const provider of loadCustomProviders()) {
+      this.models.setProvider(provider);
+    }
   }
 
   getProviders(): readonly Provider[] {

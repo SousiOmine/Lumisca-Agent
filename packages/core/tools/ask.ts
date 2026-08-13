@@ -27,22 +27,33 @@ interface PendingAsk {
  * the user's answers (arriving via the HTTP layer), and the tool then hands
  * them back to the agent as its result.
  *
+ * In headless mode (autoAnswer) there is no user to answer: every ask is
+ * resolved immediately with the recommended (or first) option of each
+ * question, so the run never blocks. The `question` event is still emitted
+ * as a record of what happened.
+ *
  * The lifecycle is bound to the session agent: the agent rejects every
  * pending ask when its run ends or the session closes (abort, rewind,
  * close), so no ask can hang past the run that asked it.
  */
 export class AskHub {
   private readonly pending = new Map<string, PendingAsk>();
+  private readonly autoAnswer: boolean;
 
   constructor(
     private readonly sessionId: string,
     private readonly emit: (event: ClientEvent) => void,
-  ) {}
+    options: { autoAnswer?: boolean } = {},
+  ) {
+    this.autoAnswer = options.autoAnswer ?? false;
+  }
 
   /** Register questions for one tool call and wait for the user's answers.
    * The questions are announced to clients via a `question` event. The
    * returned promise resolves with the answers, or rejects when the run is
-   * torn down first (abort / rewind / close). */
+   * torn down first (abort / rewind / close). In autoAnswer mode the
+   * answers are chosen immediately (recommended option, else the first)
+   * and the promise never blocks. */
   ask(toolCallId: string, questions: AskQuestion[]): Promise<AskAnswer[]> {
     if (this.pending.has(toolCallId)) {
       return Promise.reject(
@@ -55,6 +66,13 @@ export class AskHub {
       toolCallId,
       questions,
     });
+    if (this.autoAnswer) {
+      const answers = questions.map((q) => {
+        const option = q.options[q.recommended ?? 0];
+        return { id: q.id, values: option ? [option.label] : [] };
+      });
+      return Promise.resolve(answers);
+    }
     return new Promise<AskAnswer[]>((resolve, reject) => {
       this.pending.set(toolCallId, { questions, resolve, reject });
     });

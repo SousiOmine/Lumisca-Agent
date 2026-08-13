@@ -58,6 +58,11 @@ export interface CreateSessionInput {
   /** Omitted → the last-used model (or the first enabled model) is used. */
   modelProvider?: string;
   modelId?: string;
+  /** Headless run (the CLI `run` command, harness use): the ask tool
+   * auto-answers with the recommended/first option and title generation
+   * is skipped. The flag shapes the open agent only; it is not persisted
+   * with the session. */
+  headless?: boolean;
 }
 
 /**
@@ -438,7 +443,12 @@ export class LumiscaCore {
     // Generated prompts are snapshotted here, at creation time (workspace
     // AGENTS.md + environment + personalization included), and stored with
     // the session: later edits to either AGENTS.md must not affect it.
-    const systemPrompt = this.buildGeneratedPrompt(workspace, model);
+    // Headless sessions get the headless guidance variant.
+    const systemPrompt = this.buildGeneratedPrompt(
+      workspace,
+      model,
+      input.headless ?? false,
+    );
     const session = this.sessions.create({
       workspaceId: workspace.id,
       name: input.name ?? `Session ${new Date().toLocaleString()}`,
@@ -446,7 +456,9 @@ export class LumiscaCore {
       modelId: model.modelId,
       systemPrompt,
     });
-    this.pool.open(session, workspace, []);
+    this.pool.open(session, workspace, [], {
+      headless: input.headless ?? false,
+    });
     this.emit({ type: "session_created", session });
     return this.decorateSession(session);
   }
@@ -699,10 +711,12 @@ export class LumiscaCore {
   /** The full generated system prompt for a workspace: base prompt +
    * environment section + project memory (workspace AGENTS.md) +
    * personalization (machine AGENTS.md, appended last). `model` fills in
-   * the environment section's model line. */
+   * the environment section's model line. `headless` selects the headless
+   * guidance variant (auto-answered asks). */
   private buildGeneratedPrompt(
     workspace: Workspace,
     model?: { provider: string; modelId: string },
+    headless = false,
   ): string {
     const resolved = model
       ? {
@@ -714,6 +728,7 @@ export class LumiscaCore {
       workspace,
       this.loadPersonalInstructions(),
       resolved,
+      headless,
     );
   }
 

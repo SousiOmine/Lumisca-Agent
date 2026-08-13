@@ -89,6 +89,10 @@ export interface SessionAgentOptions {
   /** The configured fast model: generates the session title from the
    * first user message (see TitleGenerator). */
   fastModel?: Model<Api>;
+  /** Skip title generation even when a fast model is configured. Headless
+   * runs (CLI `run`, harness use) must not fire an extra LLM request per
+   * session — the title is never seen by anyone. */
+  disableTitleGeneration?: boolean;
   /** Background-command manager backing the async_bash tools. Its
    * completion events are injected into the agent loop as notifications
    * (see notifyBackgroundCommand). */
@@ -171,9 +175,10 @@ export class SessionAgent {
         !(options.model.input ?? []).includes("image")
       ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
       : null;
-    this.titleGenerator = options.fastModel !== undefined
-      ? new TitleGenerator(options.fastModel, options.streamFn)
-      : null;
+    this.titleGenerator =
+      options.fastModel !== undefined && !options.disableTitleGeneration
+        ? new TitleGenerator(options.fastModel, options.streamFn)
+        : null;
     this.backgroundManager = options.backgroundManager ?? null;
     this.backgroundUnsubscribe = this.backgroundManager === null
       ? null

@@ -2,7 +2,14 @@ import { LumiscaCore } from "@lumisca/core";
 import { runRepl } from "./repl.ts";
 import { pickWorkspace, selectFromList, sessionLabel } from "./select.ts";
 import { createSession } from "./session.ts";
-import { error, info } from "./ui.ts";
+import { error, errorText, info } from "./ui.ts";
+import {
+  HelpRequested,
+  parseRunArgs,
+  printRunResult,
+  RUN_USAGE,
+  runOnce,
+} from "./run.ts";
 
 const USAGE = `Lumisca CLI
 
@@ -11,9 +18,13 @@ const USAGE = `Lumisca CLI
   lumisca --workspace <name>  指定ワークスペースで開始
   lumisca --resume            セッション選択から開始
   lumisca --session <id>      セッションIDで開始
+  lumisca run [options]       ワンショット実行(ヘッドレス)
 
 オプション:
   --db <path>       データベースのパス(既定: ./lumisca.db または $LUMISCA_DB)
+
+サブコマンド:
+  run                詳細は "lumisca run --help" を参照
 `;
 
 interface CliOptions {
@@ -29,10 +40,21 @@ function parseArgs(args: string[]): CliOptions {
     resume: false,
   };
 
+  // Flag names this parser knows. flagValue treats a following known flag
+  // as a missing value, but accepts other "--"-prefixed text as a value.
+  const KNOWN_FLAGS = new Set([
+    "--db",
+    "--workspace",
+    "--resume",
+    "--session",
+    "--help",
+    "-h",
+  ]);
+
   /** Read the value of a flag that takes an argument; exits on missing value. */
   const flagValue = (flag: string, i: number): string => {
     const value = args[i + 1];
-    if (value === undefined || value.startsWith("--")) {
+    if (value === undefined || KNOWN_FLAGS.has(value)) {
       error(`--${flag} には値が必要です`);
       Deno.exit(1);
     }
@@ -41,7 +63,8 @@ function parseArgs(args: string[]): CliOptions {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
-    // `deno task cli -- <flags>` inserts a "--" separator; skip it.
+    // `deno task cli -- <flags>` inserts a "--" separator; skip it (there
+    // are no positional args, so flags after it are parsed normally).
     if (arg === "--") continue;
     if (arg === "--help" || arg === "-h") {
       console.log(USAGE);
@@ -69,8 +92,46 @@ function parseArgs(args: string[]): CliOptions {
   return opts;
 }
 
-async function main(): Promise<void> {
-  const opts = parseArgs(Deno.args);
+/** The one-shot `lumisca run` path: parse args, execute the run, print
+ * the result, and return the process exit code. The core is closed in the
+ * finally block before the code leaves this function — exiting from inside
+ * the try (Deno.exit) would skip it and orphan MCP server processes. */
+async function runCommand(args: string[]): Promise<number> {
+  let options;
+  try {
+    options = parseRunArgs(args);
+  } catch (e) {
+    if (e instanceof HelpRequested) {
+      console.log(RUN_USAGE);
+      return 0;
+    }
+    error(errorText(e));
+    console.log(RUN_USAGE);
+    return 1;
+  }
+  const core = LumiscaCore.open(options.dbPath);
+  try {
+    const result = await runOnce(core, options);
+    printRunResult(result, options.json);
+    if (result.error) {
+      error(`エラー: ${result.error}`);
+      return 1;
+    }
+    return 0;
+  } catch (e) {
+    error(errorText(e));
+    return 1;
+  } finally {
+    core.close();
+  }
+}
+
+async function main(): Promise<number> {
+  const args = Deno.args;
+  if (args[0] === "run") {
+    return await runCommand(args.slice(1));
+  }
+  const opts = parseArgs(args);
   const core = LumiscaCore.open(opts.dbPath);
 
   // Ctrl+C: close the database and abort live agents instead of dying
@@ -87,11 +148,11 @@ async function main(): Promise<void> {
       const session = core.getSession(opts.sessionId);
       if (!session) {
         error(`セッションが見つかりません: ${opts.sessionId}`);
-        Deno.exit(1);
+        return 1;
       }
       await core.openSession(session.id);
       await runRepl(core, session.id);
-      return;
+      return 0;
     }
 
     // Workspace selection
@@ -104,12 +165,12 @@ async function main(): Promise<void> {
         workspaceId = ws.id;
       } else {
         error(`ワークスペースが見つかりません: ${opts.workspaceName}`);
-        Deno.exit(1);
+        return 1;
       }
     } else {
       workspaceId = await pickWorkspace(core);
     }
-    if (workspaceId === null) return;
+    if (workspaceId === null) return 0;
 
     // Session selection
     let sessionId: string | null = null;
@@ -131,16 +192,17 @@ async function main(): Promise<void> {
     if (!sessionId) {
       // new session (also the default path)
       sessionId = await createSession(core, workspaceId);
-      if (!sessionId) return;
+      if (!sessionId) return 0;
     }
 
     await core.openSession(sessionId);
     await runRepl(core, sessionId);
+    return 0;
   } finally {
     core.close();
   }
 }
 
 if (import.meta.main) {
-  await main();
+  Deno.exit(await main());
 }

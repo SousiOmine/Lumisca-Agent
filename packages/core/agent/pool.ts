@@ -99,6 +99,12 @@ export class SessionPool {
    * (close/delete/closeAll). */
   private readonly mcp = new Map<string, McpAttachment>();
   private readonly lastErrors = new Map<string, string>();
+  /** Sessions currently open with `headless: true` (the CLI `run` path).
+   * The flag is not persisted, but it must survive agent rebuilds (model
+   * / thinking-level / MCP / workspace changes) — a rebuild re-opens the
+   * agent and would otherwise lose the auto-answer behavior. Updated on
+   * every open() call (a normal reopen clears it) and on close. */
+  private readonly headlessSessions = new Set<string>();
 
   constructor(private readonly deps: SessionPoolDeps) {}
 
@@ -147,12 +153,28 @@ export class SessionPool {
   /** Build the agent of a session (replacing any existing one) and keep it
    * in memory. MCP tools attach asynchronously — they spawn server
    * processes — and errors are reported via session_error events, never
-   * thrown here. */
+   * thrown here.
+   *
+   * `headless` (the CLI `run` path) changes the session's interaction with
+   * the user: the ask tool auto-answers with the recommended/first option
+   * instead of blocking, and title generation is skipped (no one sees it).
+   * The flag is a runtime property of the open agent, not persisted — a
+   * headless session reopened through the normal paths behaves like any
+   * other session. */
   open(
     session: SessionInfo,
     workspace: Workspace,
     messages: AgentMessage[],
+    options: { headless?: boolean } = {},
   ): SessionAgent {
+    // Track the headless flag per session (see headlessSessions): it is a
+    // runtime property of the open agent, so an explicit headless open
+    // records it and a plain reopen (openSession) clears it.
+    if (options.headless) {
+      this.headlessSessions.add(session.id);
+    } else {
+      this.headlessSessions.delete(session.id);
+    }
     const model = this.deps.getModel(session.modelProvider, session.modelId);
     if (!model) {
       throw new CoreError(
@@ -214,7 +236,10 @@ export class SessionPool {
     }
     // One hub per open agent: it holds the questions of the live run, so a
     // rebuild (which closes the old agent first) starts with a clean slate.
-    const askHub = new AskHub(session.id, (event) => this.deps.emit(event));
+    // Headless runs auto-answer every ask (recommended/first option).
+    const askHub = new AskHub(session.id, (event) => this.deps.emit(event), {
+      autoAnswer: options.headless ?? false,
+    });
     // Reuse the session's todo hub when one exists (agent rebuild): the
     // plan is the session's progress, not the agent's, so it must survive.
     // Created on first open; discarded when the session closes.
@@ -303,6 +328,7 @@ export class SessionPool {
       taskHub: tasks,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
+      disableTitleGeneration: options.headless ?? false,
       renameSession: (name) => this.deps.renameSession(session.id, name),
       onEvent: (event) => {
         // Remember failures for clients that do not see the WS stream;
@@ -332,6 +358,7 @@ export class SessionPool {
     this.todos.delete(id);
     this.tasks.get(id)?.close();
     this.tasks.delete(id);
+    this.headlessSessions.delete(id);
     void this.mcp.get(id)?.manager.close();
     this.mcp.delete(id);
   }
@@ -363,6 +390,7 @@ export class SessionPool {
     this.todos.clear();
     this.tasks.clear();
     this.mcp.clear();
+    this.headlessSessions.clear();
     this.lastErrors.clear();
   }
 
@@ -380,9 +408,13 @@ export class SessionPool {
         );
       }
       const messages = current.messages;
+      const headless = this.headlessSessions.has(session.id);
       current.close(); // also releases the old agent's MCP servers
       this.agents.delete(session.id);
-      this.agents.set(session.id, this.open(session, workspace, messages));
+      this.agents.set(
+        session.id,
+        this.open(session, workspace, messages, { headless }),
+      );
     }
   }
 

@@ -111,11 +111,15 @@ export function createCodingTools(
  * `personalInstructions` (the machine-level AGENTS.md next to the settings
  * file) is appended at the very end, after project memory. `model` (the
  * session's model, when known) appears in the environment section between
- * the workspace folders and the guidelines. */
+ * the workspace folders and the guidelines. `headless` swaps the
+ * ask-the-user guideline for the headless variant (asks are auto-answered
+ * with the recommended/first option, so the model should prefer making a
+ * reasonable assumption). */
 export function buildSystemPrompt(
   workspace: Workspace,
   personalInstructions?: string,
   model?: EnvironmentModel,
+  headless = false,
 ): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
   const memory = loadProjectMemory(workspace.folders);
@@ -171,7 +175,13 @@ Guidelines:
   up to date as you go; completing the current task advances automatically.
   The user watches your progress live in the UI.
 - After making changes, verify them (run tests, builds) when appropriate.
-- Ask the user when a task is ambiguous.
+- Ask the user when a task is ambiguous.${
+    headless
+      ? " (Headless: the ask tool is auto-answered with the " +
+        "recommended/first option — prefer making the best reasonable " +
+        "assumption and stating it.)"
+      : ""
+  }
 - Prioritize correctness above all else.
 - Write code with future maintainers in mind.
 - Avoid unnecessary allocations and computation.
