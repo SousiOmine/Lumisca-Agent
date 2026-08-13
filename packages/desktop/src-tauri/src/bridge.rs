@@ -1,15 +1,19 @@
 //! The `lumisca://` shell bridge.
 //!
 //! The settings UI is served by the (possibly remote) server, so it cannot
-//! call Tauri commands. Instead it fetches `http://lumisca.localhost/shell/
-//! <action>` — the custom protocol re-homed for WebView2, where the scheme
-//! is handled here. The bridge only manages the local server and UI
-//! switching; the peer registry lives in the server's own database.
+//! call Tauri commands. Instead it fetches the shell bridge — the `lumisca://`
+//! custom protocol handled here — under the action path `/shell/<action>`.
+//! The bridge only manages the local server and UI switching; the peer
+//! registry lives in the server's own database.
 //!
-//! Windows-only: this bridge relies on WebView2's custom-protocol handling
-//! (wry re-homes the scheme to `http://lumisca.localhost`). It is NOT
-//! gated with `#[cfg(windows)]`, but non-Windows builds (WKWebView /
-//! WebKitGTK) are unsupported and unverified.
+//! How the bridge URL reaches this handler differs per webview engine, but
+//! the request path is identical in every form (`/shell/<action>`):
+//! - Windows (WebView2) cannot fetch custom schemes, so wry re-homes the
+//!   protocol to `http://lumisca.localhost/...` (its resource filter
+//!   reverts it to `lumisca:///...` before dispatching here).
+//! - macOS (WKWebView) and Linux (WebKitGTK) fetch `lumisca://` directly;
+//!   the frontend uses `lumisca://lumisca.localhost/shell/...` so the host
+//!   does not swallow the first path segment.
 //!
 //! Every request must carry `key` = the auth token of the CURRENTLY
 //! DISPLAYED server — a value only the page served by that server knows, so

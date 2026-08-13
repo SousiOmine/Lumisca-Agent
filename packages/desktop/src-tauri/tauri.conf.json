@@ -28,7 +28,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://lumisca.localhost; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://lumisca.localhost lumisca:; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'"
     }
   },
   "plugins": {
@@ -42,11 +42,9 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["nsis"],
     "icon": ["icons/icon.ico", "icons/32x32.png", "icons/128x128.png"],
     "resources": {
-      "resources/server/assets.json": "server/assets.json",
-      "resources/server/lumisca-server.exe": "server/lumisca-server.exe"
+      "resources/server/assets.json": "server/assets.json"
     }
   }
 }

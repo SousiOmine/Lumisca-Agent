@@ -2,10 +2,19 @@
  * (possibly remote) server, so it cannot call Tauri commands; instead it
  * fetches the shell bridge URL handled by the Tauri custom protocol.
  *
- * WebView2 cannot fetch non-standard schemes, so wry re-hosts custom
- * protocols as `http://<scheme>.localhost` (which its resource filter
- * intercepts and reverts to `lumisca://` before dispatching). In a plain
- * browser that host does not resolve and shellAvailable() is false.
+ * How the custom protocol is reached depends on the webview engine:
+ * - WebView2 (Windows) cannot fetch non-standard schemes, so wry re-homes
+ *   the protocol to `http://<scheme>.localhost` (its resource filter
+ *   intercepts that host and dispatches to the handler). The bridge must
+ *   therefore use the http form there.
+ * - WKWebView (macOS) and WebKitGTK (Linux) fetch the `lumisca://` scheme
+ *   directly. The host is set to `lumisca.localhost` so the request path
+ *   stays `/shell/<action>` — identical to the Windows form — keeping the
+ *   Rust-side parsing platform-independent.
+ *
+ * The platform is detected from the user agent (WebView2 always carries
+ * "Windows NT", WKWebView "Macintosh", WebKitGTK "X11; Linux"). In a plain
+ * browser neither URL resolves, and shellAvailable() reports false.
  */
 
 export interface ShellState {
@@ -17,9 +26,11 @@ export interface ShellState {
   maximized: boolean;
 }
 
-/** Bridge base URL (the `lumisca://` custom protocol, http-homed for
- * WebView2). */
-const BRIDGE = "http://lumisca.localhost/shell";
+/** Bridge base URL (the `lumisca://` custom protocol; http-homed for
+ * WebView2 on Windows, fetched as a custom scheme on macOS/Linux). */
+const BRIDGE = /Windows/i.test(navigator.userAgent)
+  ? "http://lumisca.localhost/shell"
+  : "lumisca://lumisca.localhost/shell";
 
 /** Auth token of the currently connected server. The shell bridge only
  * answers requests carrying it as `key`, so only the page served by that

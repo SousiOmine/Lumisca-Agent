@@ -149,7 +149,6 @@ lumisca.db-*
 *.db-wal
 packages/desktop/src-tauri/target/
 packages/desktop/src-tauri/gen/
-packages/desktop/src-tauri/icons/icon.icns
 packages/desktop/dist/
 .playwright-mcp/
 ui-home.png

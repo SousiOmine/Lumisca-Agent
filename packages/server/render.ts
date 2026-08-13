@@ -13,14 +13,16 @@
  * props) need 'unsafe-inline' for styles. connect-src names the page's own
  * host for the WebSocket event stream — CSP3 would match 'self' for a
  * same-host ws: upgrade, but naming it explicitly is portable — and the
- * shell bridge host used by the desktop app (settings → 接続先サーバー;
- * the custom protocol is re-homed to http://lumisca.localhost for WebView2).
- * In a plain browser that host does not resolve and the bridge is unused.
+ * shell bridge used by the desktop app (settings → 接続先サーバー): the
+ * `lumisca://` custom protocol, which WebView2 (Windows) re-homes to
+ * http://lumisca.localhost while WKWebView (macOS) and WebKitGTK (Linux)
+ * fetch the custom scheme directly, so both forms are allowed. In a plain
+ * browser neither resolves and the bridge is unused.
  */
 export function pageCsp(pageHost: string | undefined): string {
   const wsSrc = pageHost
-    ? `connect-src 'self' ws://${pageHost} http://lumisca.localhost`
-    : "connect-src 'self' ws://127.0.0.1:* ws://localhost:* http://lumisca.localhost";
+    ? `connect-src 'self' ws://${pageHost} http://lumisca.localhost lumisca:`
+    : "connect-src 'self' ws://127.0.0.1:* ws://localhost:* http://lumisca.localhost lumisca:";
   return [
     "default-src 'self'",
     "script-src 'self'",

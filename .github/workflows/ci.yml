@@ -9,9 +9,10 @@ jobs:
   check:
     strategy:
       matrix:
-        # Windows is a first-class platform (cmd.exe shell, OEM code pages,
-        # case-insensitive paths, Tauri) — it must run the same suite.
-        os: [ubuntu-latest, windows-latest]
+        # Windows (cmd.exe shell, OEM code pages, case-insensitive paths)
+        # and macOS are just as first-class as Linux — they must run the
+        # same suite.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -33,12 +34,16 @@ jobs:
         run: deno test packages/core packages/server packages/cli packages/web --allow-read --allow-write --allow-run --allow-env --allow-net
 
   desktop:
-    # The desktop shell was never built in CI, so a broken release packaging
-    # (missing resources, Rust errors) went unnoticed. The toolchain for a
-    # full `tauri build` (NSIS, webkit2gtk) is heavy; compiling the crate and
-    # checking that the server binary + embedded assets are produced covers
-    # the failure modes that have actually bitten this project.
-    runs-on: windows-latest
+    # Compile the desktop shell on every supported OS so a broken release
+    # packaging (missing resources, Rust errors, platform-specific code)
+    # does not go unnoticed. The toolchain for a full `tauri build`
+    # (NSIS, dmg, webkit2gtk bundling) is heavy; compiling the crate and
+    # checking that the server binary + embedded assets are produced
+    # covers the failure modes that have actually bitten this project.
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: packages/desktop
@@ -59,6 +64,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/desktop/src-tauri
+
+      - name: Install Linux system dependencies (webkit2gtk)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
 
       # Generates the embedded frontend assets + server binary slot that
       # tauri-build validates at config-parse time.

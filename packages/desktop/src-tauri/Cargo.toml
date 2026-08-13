@@ -29,6 +29,10 @@ windows = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
+[target.'cfg(unix)'.dependencies]
+# kill(2) for process-group teardown of the local server (server.rs).
+libc = "0.2"
+
 [profile.release]
 codegen-units = 1
 lto = true

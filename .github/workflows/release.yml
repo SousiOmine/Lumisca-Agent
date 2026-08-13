@@ -1,10 +1,17 @@
 name: Release
 
-# Pushing a `vX.Y.Z` tag builds the desktop app and creates a draft
-# GitHub Release. Review the draft on GitHub and publish it — new users
-# download the NSIS installer from there, and the updater artifacts
-# (`.sig` + `latest.json`) are included so the in-app updater can be
-# enabled later without changing the build pipeline.
+# Pushing a `vX.Y.Z` tag builds the desktop app on every supported OS and
+# creates a draft GitHub Release. Review the draft on GitHub and publish
+# it — new users download the installer for their platform from there, and
+# the updater artifacts (`.sig` + `latest.json`, one per platform) are
+# included so the in-app updater can be enabled later without changing the
+# build pipeline.
+#
+# macOS note: CI builds are unsigned. An unsigned app runs when opened
+# manually, but Gatekeeper blocks it after download and the in-app updater
+# cannot install unsigned updates. For production macOS distribution, set
+# the APPLE_* secrets (certificate + notarytool) so tauri-action signs and
+# notarizes the artifacts.
 
 on:
   push:
@@ -13,7 +20,17 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: nsis
+          - os: macos-latest
+            bundles: app,dmg
+          - os: ubuntu-latest
+            bundles: deb,appimage
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     defaults:
@@ -43,6 +60,14 @@ jobs:
         with:
           workspaces: packages/desktop/src-tauri
 
+      - name: Install Linux system dependencies (webkit2gtk)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
       # The tag version must match every place the app version lives;
       # a mismatch would publish a release whose updater manifest points
       # at the wrong version.
@@ -71,4 +96,5 @@ jobs:
           releaseName: "Lumisca v__VERSION__"
           releaseDraft: true
           generateReleaseNotes: true
+          args: --bundles ${{ matrix.bundles }}
           updaterJsonPreferNsis: true

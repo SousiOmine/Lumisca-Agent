@@ -2,7 +2,16 @@
 // The shell navigates the window to the server page once it is ready, so
 // this script only surfaces a startup failure. Polling stops implicitly
 // when the page is navigated away.
-const BRIDGE = "http://lumisca.localhost/shell";
+//
+// Bridge base URL (the `lumisca://` custom protocol): WebView2 (Windows)
+// cannot fetch custom schemes, so wry re-homes it to
+// `http://<scheme>.localhost`; WKWebView (macOS) and WebKitGTK (Linux)
+// fetch the `lumisca://` scheme directly. The platform is detected from
+// the user agent; in a plain browser neither URL resolves and the window
+// controls simply do nothing.
+const BRIDGE = /Windows/i.test(navigator.userAgent)
+  ? "http://lumisca.localhost/shell"
+  : "lumisca://lumisca.localhost/shell";
 const statusEl = document.getElementById("status");
 
 // Window controls for the undecorated window (custom title bar above).

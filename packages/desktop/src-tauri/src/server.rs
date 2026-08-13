@@ -40,13 +40,23 @@ pub(crate) struct LocalServer {
 }
 
 /// Create a child process without letting console executables open a
-/// Command Prompt window beside the desktop UI on Windows.
+/// Command Prompt window beside the desktop UI on Windows, and (on POSIX)
+/// in its own process group so the whole server tree can be killed
+/// together.
 fn background_command<S: AsRef<OsStr>>(program: S) -> Command {
     let mut command = Command::new(program);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Own process group: children spawned by the server (tool
+        // processes) inherit it, so kill_process_tree can take the whole
+        // tree down instead of leaving orphans.
+        command.process_group(0);
     }
     command
 }
@@ -90,7 +100,14 @@ fn find_server_command(app: &AppHandle) -> Option<ServerCommand> {
         } else {
             "lumisca-server"
         });
-        if bundled.is_file() {
+        // In dev (`tauri dev`), the build pipeline only ever copies the
+        // zero-byte placeholder produced by build:server:dev into the
+        // resource directory — the real binary is compiled by
+        // `npm run build:server` during `tauri build`. An empty file is
+        // never a runnable server, so ignore it and fall back to the
+        // repository layout below.
+        let real_binary = bundled.metadata().map(|m| m.len() > 0).unwrap_or(false);
+        if real_binary {
             return Some(ServerCommand::Compiled(bundled));
         }
     }
@@ -247,8 +264,9 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
     Ok(child)
 }
 
-/// Kill the server AND everything it spawned (bash tool children would
-/// otherwise survive on Windows).
+/// Kill the server AND everything it spawned (tool children would
+/// otherwise survive as orphans): taskkill /T on Windows, the whole
+/// process group on POSIX.
 fn kill_process_tree(child: &mut Child) {
     #[cfg(windows)]
     {
@@ -256,6 +274,13 @@ fn kill_process_tree(child: &mut Child) {
         let _ = background_command("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .spawn();
+    }
+    #[cfg(unix)]
+    {
+        // The server was spawned as a process-group leader
+        // (background_command); every process it spawned shares the group.
+        let pid = child.id() as i32;
+        unsafe { libc::kill(-pid, libc::SIGKILL) };
     }
     let _ = child.kill();
     let _ = child.wait();
