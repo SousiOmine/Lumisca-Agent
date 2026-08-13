@@ -9,6 +9,11 @@ import { contentText } from "../content.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
+import type {
+  NotificationMessage,
+  NotificationPayload,
+} from "../types/notification.ts";
+import { toLlmMessages } from "../types/notification.ts";
 import {
   type SubagentStatus,
   type SubagentType,
@@ -151,26 +156,40 @@ function lastAssistantText(messages: AgentMessage[]): string {
   return "";
 }
 
-function userMessage(text: string): AgentMessage {
+function notificationMessage(
+  payload: NotificationPayload,
+): NotificationMessage {
   return {
-    role: "user",
-    content: [{ type: "text", text }],
+    role: "notification",
+    ...payload,
     timestamp: Date.now(),
   };
 }
 
 /** The notification injected into the spawning agent's loop when a
- * sub-agent completes. Starts with "[Task ...]" so system prompts can teach
- * agents to recognize it as a system notification. */
-function formatTaskCompletion(sub: Subagent, failure?: string): string {
+ * sub-agent completes. The title starts with "[Task ...]" so system prompts
+ * can teach agents to recognize it as a system notification. */
+function formatTaskCompletion(
+  sub: Subagent,
+  failure?: string,
+): NotificationPayload {
   if (sub.status === "finished") {
     const result = truncate(sub.resultText, MAX_TOOL_OUTPUT);
-    return `[Task ${sub.id} (${sub.description}) finished]\n${result.text}` +
-      (result.truncated ? truncatedNote("task result") : "");
+    return {
+      kind: "task",
+      title: `[Task ${sub.id} (${sub.description}) finished]`,
+      body: result.text +
+        (result.truncated ? truncatedNote("task result") : ""),
+      status: "success",
+    };
   }
   const verb = sub.status === "aborted" ? "was aborted" : "failed";
-  return `[Task ${sub.id} (${sub.description}) ${verb}]` +
-    (failure !== undefined ? `: ${failure}` : "");
+  return {
+    kind: "task",
+    title: `[Task ${sub.id} (${sub.description}) ${verb}]`,
+    body: failure ?? "",
+    status: "error",
+  };
 }
 
 /** The text shown by task_output for one task. */
@@ -224,7 +243,7 @@ export interface SubagentRuntime {
  * the session agent while the session is open. */
 export interface ParentDelivery {
   isActive(): boolean;
-  deliver(text: string): void;
+  deliver(payload: NotificationPayload): void;
 }
 
 export interface TaskHubOptions {
@@ -401,6 +420,9 @@ export class TaskHub {
       },
       streamFn: this.streamFn,
       sessionId: id,
+      // Steered notifications must reach the sub-agent's LLM as user
+      // messages (the default conversion would drop their role).
+      convertToLlm: (messages) => toLlmMessages(messages),
     });
     const sub: Subagent = {
       id,
@@ -573,12 +595,17 @@ export class TaskHub {
     summary: string,
     message: string,
   ): void {
-    const text = `[Message from ${from} (${summary})]\n${message}`;
+    const payload: NotificationPayload = {
+      kind: "message",
+      title: `[Message from ${from} (${summary})]`,
+      body: message,
+      status: "neutral",
+    };
     if (targetId === this.sessionId) {
       if (this.parentDelivery === null || !this.parentDelivery.isActive()) {
         throw new CoreError("The main agent is not active", "unavailable");
       }
-      this.parentDelivery.deliver(text);
+      this.parentDelivery.deliver(payload);
       return;
     }
     const sub = this.subs.get(targetId);
@@ -594,21 +621,23 @@ export class TaskHub {
         "unavailable",
       );
     }
-    sub.agent.steer(userMessage(text));
+    sub.agent.steer(notificationMessage(payload));
   }
 
   /** Best-effort notification to the agent that spawned a task: the parent
    * agent gets it through the delivery hook (steer while running, a fresh
    * run while idle); a finished or aborted sub-agent can no longer act, so
    * the message is dropped. */
-  private notify(parentId: string, text: string): void {
+  private notify(parentId: string, payload: NotificationPayload): void {
     if (parentId === this.sessionId) {
-      if (this.parentDelivery?.isActive()) this.parentDelivery.deliver(text);
+      if (this.parentDelivery?.isActive()) {
+        this.parentDelivery.deliver(payload);
+      }
       return;
     }
     const sub = this.subs.get(parentId);
     if (sub !== undefined && sub.status === "running") {
-      sub.agent.steer(userMessage(text));
+      sub.agent.steer(notificationMessage(payload));
     }
   }
 

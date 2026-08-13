@@ -11,7 +11,7 @@ import {
   BACKGROUND_TAIL_LIMIT,
   type BackgroundCommandDone,
   BackgroundProcessManager,
-  formatCompletionNotification,
+  formatBackgroundNotification,
   MAX_BACKGROUND_COMMANDS,
   trimIncompleteUtf8,
 } from "./background.ts";
@@ -320,37 +320,60 @@ Deno.test("async_bash tool rejects an unknown cwd", async () => {
 
 // --- notification format ----------------------------------------------------
 
-Deno.test("formatCompletionNotification covers every reason", () => {
-  const exited = formatCompletionNotification({
+Deno.test("formatBackgroundNotification covers every reason", () => {
+  const exited = formatBackgroundNotification({
     commandId: "3",
     exitCode: 0,
     reason: "exited",
     durationSec: 125,
     tail: "listening on :3000",
   });
-  assertEquals(
-    exited,
-    "[Background command #3 finished after 2m 05s (exit code 0)]\nlistening on :3000",
-  );
+  assertEquals(exited, {
+    kind: "background",
+    title: "[Background command #3 finished after 2m 05s (exit code 0)]",
+    body: "listening on :3000",
+    status: "success",
+  });
 
-  const timeout = formatCompletionNotification({
+  const failed = formatBackgroundNotification({
+    commandId: "4",
+    exitCode: 1,
+    reason: "exited",
+    durationSec: 10,
+    tail: "",
+  });
+  assertEquals(failed, {
+    kind: "background",
+    title: "[Background command #4 finished after 10s (exit code 1)]",
+    body: "",
+    status: "error",
+  });
+
+  const timeout = formatBackgroundNotification({
     commandId: "1",
     reason: "timeout",
     durationSec: 60,
     tail: "",
   });
-  assertEquals(
-    timeout,
-    "[Background command #1 was killed after 1m 00s (timeout)]",
-  );
+  assertEquals(timeout, {
+    kind: "background",
+    title: "[Background command #1 was killed after 1m 00s (timeout)]",
+    body: "",
+    status: "error",
+  });
 
-  const killed = formatCompletionNotification({
+  const killed = formatBackgroundNotification({
     commandId: "2",
     reason: "killed",
     durationSec: 5,
     tail: "  ",
   });
-  assertEquals(killed, "[Background command #2 was killed]");
+  assertEquals(killed, {
+    kind: "background",
+    title: "[Background command #2 was killed]",
+    body: "",
+    status: "error",
+  });
 });
 
 Deno.test("trimIncompleteUtf8 drops incomplete trailing sequences", () => {
@@ -369,7 +392,18 @@ Deno.test("trimIncompleteUtf8 drops incomplete trailing sequences", () => {
 /** Concatenate the text blocks of a message (works on the agent's message
  * union, which mixes content-carrying and non-content variants). */
 function messageText(message: unknown): string {
-  const content = (message as { content?: unknown }).content;
+  const m = message as {
+    role?: string;
+    title?: string;
+    body?: string;
+    content?: unknown;
+  };
+  if (m.role === "notification") {
+    return (m.body?.length ?? 0) > 0
+      ? `${m.title}\n${m.body}`
+      : (m.title ?? "");
+  }
+  const content = m.content;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content.filter((b) => (b as { type?: string }).type === "text")

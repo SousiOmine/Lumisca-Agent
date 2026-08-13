@@ -15,6 +15,7 @@ import { parseMcpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import type { ThinkingLevel } from "../shared.ts";
 import type { ClientEvent } from "../types/event.ts";
+import type { NotificationPayload } from "../types/notification.ts";
 import type { Workspace } from "../types/workspace.ts";
 import {
   createSendMessageTool,
@@ -98,7 +99,18 @@ async function waitFor(
 /** Concatenate the text blocks of a message (works on the agent's message
  * union, which mixes content-carrying and non-content variants). */
 function messageText(message: unknown): string {
-  const content = (message as { content?: unknown }).content;
+  const m = message as {
+    role?: string;
+    title?: string;
+    body?: string;
+    content?: unknown;
+  };
+  if (m.role === "notification") {
+    return (m.body?.length ?? 0) > 0
+      ? `${m.title}\n${m.body}`
+      : (m.title ?? "");
+  }
+  const content = m.content;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content.filter((b) => (b as { type?: string }).type === "text")
@@ -220,10 +232,10 @@ Deno.test("send_message rejects unknown, finished, and parentless targets", asyn
 
 Deno.test("send_message delivers to the parent and to a running sub-agent", () => {
   const { hub } = makeHub();
-  const received: string[] = [];
+  const received: NotificationPayload[] = [];
   hub.setParentDelivery({
     isActive: () => true,
-    deliver: (text) => received.push(text),
+    deliver: (payload) => received.push(payload),
   });
   try {
     const info = hub.spawn("session-1", 0, "general", "調査", "Do research");
@@ -236,10 +248,12 @@ Deno.test("send_message delivers to the parent and to a running sub-agent", () =
       "Which file?",
     );
     assertEquals(toParent.deliveredTo, "session-1");
-    assertEquals(
-      received,
-      ["[Message from agent_1 (need input)]\nWhich file?"],
-    );
+    assertEquals(received, [{
+      kind: "message",
+      title: "[Message from agent_1 (need input)]",
+      body: "Which file?",
+      status: "neutral",
+    }]);
 
     // Main agent → running sub-agent: steered into its loop.
     const toSub = hub.sendMessage(
@@ -440,10 +454,10 @@ Deno.test("the task_output tool validates timeout_sec and unknown ids", async ()
 
 Deno.test("the send_message tool reports the delivery target", () => {
   const { hub } = makeHub();
-  const received: string[] = [];
+  const received: NotificationPayload[] = [];
   hub.setParentDelivery({
     isActive: () => true,
-    deliver: (text) => received.push(text),
+    deliver: (payload) => received.push(payload),
   });
   try {
     hub.spawn("session-1", 0, "explore", "調査", "Do research");
@@ -455,7 +469,12 @@ Deno.test("the send_message tool reports the delivery target", () => {
     }, undefined);
     return result.then((r) => {
       assertEquals(r.details.to, "session-1");
-      assertEquals(received[0], "[Message from agent_1 (question)]\nWhere?");
+      assertEquals(received[0], {
+        kind: "message",
+        title: "[Message from agent_1 (question)]",
+        body: "Where?",
+        status: "neutral",
+      });
     });
   } finally {
     hub.close();

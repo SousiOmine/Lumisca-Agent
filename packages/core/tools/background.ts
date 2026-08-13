@@ -14,6 +14,10 @@ import {
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
+import type {
+  NotificationPayload,
+  NotificationStatus,
+} from "../types/notification.ts";
 
 /** Concurrent background commands per session. Bounds resource usage; the
  * agent is told to wait or kill when the limit is reached. */
@@ -124,26 +128,35 @@ export function formatDuration(ms: number): string {
   return `${s}s`;
 }
 
-/** The user message injected into the agent loop when a background command
- * completes. Starts with "[Background command ...]" so the system prompt can
- * teach the agent to recognize it as a system notification. */
-export function formatCompletionNotification(
+/** The notification injected into the agent loop when a background command
+ * completes. The title starts with "[Background command ...]" so the system
+ * prompt can teach the agent to recognize it as a system notification. */
+export function formatBackgroundNotification(
   done: BackgroundCommandDone,
-): string {
+): NotificationPayload {
   const id = done.commandId;
   const duration = formatDuration(done.durationSec * 1000);
-  let head: string;
+  let title: string;
   if (done.reason === "exited") {
-    head = `[Background command #${id} finished after ${duration} (exit code ${
+    title = `[Background command #${id} finished after ${duration} (exit code ${
       done.exitCode ?? "?"
     })]`;
   } else if (done.reason === "timeout") {
-    head = `[Background command #${id} was killed after ${duration} (timeout)]`;
+    title =
+      `[Background command #${id} was killed after ${duration} (timeout)]`;
   } else {
-    head = `[Background command #${id} was killed]`;
+    title = `[Background command #${id} was killed]`;
   }
-  const tail = done.tail.trim();
-  return tail.length > 0 ? `${head}\n${tail}` : head;
+  const status: NotificationStatus = done.reason === "exited" &&
+      done.exitCode === 0
+    ? "success"
+    : "error";
+  return {
+    kind: "background",
+    title,
+    body: done.tail.trim(),
+    status,
+  };
 }
 
 export interface BackgroundProcessManagerOptions {

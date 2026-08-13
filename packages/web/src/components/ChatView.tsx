@@ -23,6 +23,7 @@ import { ContentImages } from "./ContentImages.tsx";
 import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
+import { NotificationRow } from "./NotificationRow.tsx";
 import { renderMarkdown } from "../markdown.ts";
 
 interface ChatViewProps {
@@ -229,11 +230,13 @@ interface ConversationTurnData {
   responses: AgentMessage[];
 }
 
-/** Group the flat agent history by the user message that started each run. */
+/** Group the flat agent history by the message that started each run: a
+ * user prompt or a system notification (background command completions and
+ * sub-agent messages also start a run so the agent can react to them). */
 export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   const turns: ConversationTurnData[] = [];
   for (const message of messages) {
-    if (message.role === "user") {
+    if (message.role === "user" || message.role === "notification") {
       turns.push({ user: message, responses: [] });
       continue;
     }
@@ -400,6 +403,11 @@ function MessageRow({
   ) => void;
 }) {
   if (message.role === "toolResult") return null;
+
+  // System notifications are compact one-line rows, not user messages.
+  if (message.role === "notification") {
+    return <NotificationRow message={message} />;
+  }
 
   if (message.role === "user") {
     const text = contentText(message.content);

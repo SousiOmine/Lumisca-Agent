@@ -10,6 +10,13 @@ export type { WorkspaceFileEntry } from "./workspace/files.ts";
 export type { Workspace } from "./types/workspace.ts";
 export type { SessionInfo } from "./types/session.ts";
 export type { ClientEvent } from "./types/event.ts";
+export { notificationText, toLlmMessages } from "./types/notification.ts";
+export type {
+  NotificationKind,
+  NotificationMessage,
+  NotificationPayload,
+  NotificationStatus,
+} from "./types/notification.ts";
 export type { AgentMessage } from "@earendil-works/pi-agent-core";
 export type { ImageContent } from "@earendil-works/pi-ai";
 export { SessionAgent } from "./agent/session-agent.ts";

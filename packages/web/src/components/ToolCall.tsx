@@ -20,6 +20,9 @@ import {
   contentImages,
   contentText,
   TOOL_ASK,
+  TOOL_ASYNC_BASH,
+  TOOL_ASYNC_BASH_KILL,
+  TOOL_ASYNC_BASH_STATUS,
   TOOL_BASH,
   TOOL_EDIT,
   TOOL_EVAL,
@@ -54,6 +57,10 @@ function toolIcon(name: string) {
     // shell commands
     case TOOL_BASH:
     case "Bash":
+    // background shell commands
+    case TOOL_ASYNC_BASH:
+    case TOOL_ASYNC_BASH_STATUS:
+    case TOOL_ASYNC_BASH_KILL:
       return <IconTerminal2 size={13} />;
     // search / grep
     case TOOL_GREP:
@@ -127,6 +134,13 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
     case TOOL_BASH:
     case "Bash":
       return typeof args.command === "string" ? truncate(args.command, 60) : "";
+    // background shell commands
+    case TOOL_ASYNC_BASH:
+      return typeof args.command === "string" ? truncate(args.command, 60) : "";
+    case TOOL_ASYNC_BASH_STATUS:
+      return typeof args.id === "string" ? `#${args.id}` : "list";
+    case TOOL_ASYNC_BASH_KILL:
+      return typeof args.id === "string" ? `#${args.id}` : "";
     // code evaluation — show the snippet
     case TOOL_EVAL:
       return typeof args.code === "string" ? truncate(args.code, 60) : "";

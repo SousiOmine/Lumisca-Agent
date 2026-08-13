@@ -41,6 +41,30 @@ Deno.test("messages: append/list round-trips through the versioned envelope", ()
   }
 });
 
+Deno.test("messages: notification messages round-trip with their fields", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    const notification = {
+      role: "notification",
+      kind: "background",
+      title: "[Background command #2 finished after 12s (exit code 0)]",
+      body: "listening on :3000",
+      status: "success",
+      timestamp: 1700000000000,
+    } as AgentMessage;
+    const stored = repo.append("s1", notification);
+    assertEquals(stored.role, "notification");
+    assertEquals(stored.message, notification);
+
+    const listed = repo.listMessages("s1");
+    assertEquals(listed, [notification]);
+  } finally {
+    db.close();
+  }
+});
+
 Deno.test("messages: legacy rows (raw AgentMessage JSON) still decode", () => {
   const db = LumiscaDb.openInMemory();
   try {

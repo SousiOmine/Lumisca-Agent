@@ -930,6 +930,94 @@ select:focus {
   margin-bottom: 0;
 }
 
+/* ---- system notifications (compact rows) --------------------------------- */
+
+.notification-timeline {
+  margin: 2px 0;
+}
+
+.notification-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.notification-line.static {
+  cursor: default;
+}
+
+.notification-line:hover {
+  background: var(--accent-soft);
+}
+
+.notification-line-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex: none;
+  transition: transform 120ms ease;
+}
+
+.notification-line.open .notification-line-chevron {
+  transform: rotate(90deg);
+}
+
+.notification-line-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.notification-line-summary {
+  color: var(--text-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.notification-line-check {
+  color: var(--ok);
+  flex: none;
+}
+
+.notification-line-error {
+  color: var(--error);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: none;
+}
+
+.notification-detail {
+  padding: 4px 6px 4px 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+.notification-detail-body {
+  white-space: pre-wrap;
+  color: var(--text);
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.notification-detail-body pre {
+  margin: 0;
+}
+
 /* ---- tool calls (legacy boxed style, unused) ---------------------------- */
 
 .tool {

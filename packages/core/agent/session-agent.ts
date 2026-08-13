@@ -25,8 +25,13 @@ import type {
   BackgroundCommandDone,
   BackgroundProcessManager,
 } from "../tools/background.ts";
-import { formatCompletionNotification } from "../tools/background.ts";
+import { formatBackgroundNotification } from "../tools/background.ts";
 import type { TaskHub } from "../tools/task.ts";
+import type {
+  NotificationMessage,
+  NotificationPayload,
+} from "../types/notification.ts";
+import { toLlmMessages } from "../types/notification.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 
@@ -137,7 +142,7 @@ export class SessionAgent {
     this.taskHub = options.taskHub ?? null;
     this.taskHub?.setParentDelivery({
       isActive: () => !this.closed,
-      deliver: (text) => this.injectNotification(text),
+      deliver: (payload) => this.injectNotification(payload),
     });
 
     this.agent = new Agent({
@@ -150,9 +155,7 @@ export class SessionAgent {
       },
       streamFn: options.streamFn,
       sessionId: options.sessionId,
-      convertToLlm: this.imageAnalyzer !== null
-        ? (messages) => this.convertWithAnalysis(messages)
-        : undefined,
+      convertToLlm: (messages) => this.convertToLlm(messages),
     });
     this.agent.subscribe((event) => this.handleEvent(event));
   }
@@ -261,20 +264,20 @@ export class SessionAgent {
    * notification, so they are always injected. */
   private notifyBackgroundCommand(done: BackgroundCommandDone): void {
     if (done.reason === "killed") return;
-    this.injectNotification(formatCompletionNotification(done));
+    this.injectNotification(formatBackgroundNotification(done));
   }
 
-  /** Inject a notification user message into the agent loop (background
+  /** Inject a notification message into the agent loop (background
    * command completions, sub-agent task completions, agent messages).
    * While streaming, the message is steered in at the next turn boundary;
    * while idle, a new run starts. The system prompt teaches the agent that
    * notification prefixes ("[Background command ...]", "[Task ...]",
    * "[Message from ...]") mark system notifications, not user input. */
-  private injectNotification(text: string): void {
+  private injectNotification(payload: NotificationPayload): void {
     if (this.closed) return;
-    const message: AgentMessage = {
-      role: "user",
-      content: [{ type: "text", text }],
+    const message: NotificationMessage = {
+      role: "notification",
+      ...payload,
       timestamp: Date.now(),
     };
     if (this.isStreaming) {
@@ -301,28 +304,32 @@ export class SessionAgent {
     }
   }
 
-  /** Convert the transcript to LLM messages, replacing image blocks with
-   * their analysis text (the transcript itself is never mutated, so the
-   * UI and the database keep the original images). Mirrors pi's default
-   * convertToLlm (role filter) for messages without images. */
-  private async convertWithAnalysis(
+  /** Convert the transcript for the LLM: notification messages become
+   * user messages carrying their title + body (the prefix contract the
+   * system prompt teaches), then image blocks are replaced by their
+   * analysis text when the main model cannot see images. */
+  private convertToLlm(
     messages: AgentMessage[],
-  ): Promise<Message[]> {
+  ): Message[] | Promise<Message[]> {
+    const mapped = toLlmMessages(messages);
+    return this.imageAnalyzer === null
+      ? mapped
+      : this.convertWithAnalysis(mapped);
+  }
+
+  /** Replace image blocks with their analysis text (the transcript itself
+   * is never mutated, so the UI and the database keep the original
+   * images). Called with the output of toLlmMessages, so every message is
+   * already LLM-compatible. */
+  private async convertWithAnalysis(messages: Message[]): Promise<Message[]> {
     const out: Message[] = [];
     for (const message of messages) {
-      if (
-        message.role !== "user" &&
-        message.role !== "assistant" &&
-        message.role !== "toolResult"
-      ) {
-        continue;
-      }
       const content = message.content;
       if (
         typeof content === "string" ||
         !content.some((block) => block.type === "image")
       ) {
-        out.push(message as Message);
+        out.push(message);
         continue;
       }
       const analyzed = await this.imageAnalyzer!.analyzeContent(
