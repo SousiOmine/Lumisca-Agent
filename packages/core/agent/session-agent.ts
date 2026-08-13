@@ -218,16 +218,7 @@ export class SessionAgent {
    * means "the run finished". */
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
-    // First prompt of a fresh session (no history): kick off title
-    // generation concurrently with the run; the generated title replaces
-    // the provisional "Session <date>" name once ready.
-    if (
-      !this.titleGenerated && this.titleGenerator !== null &&
-      this.savedCount === 0
-    ) {
-      this.titleGenerated = true;
-      void this.generateTitle(text);
-    }
+    this.maybeGenerateTitle(text);
     try {
       await this.agent.prompt(text, images);
     } catch (error) {
@@ -236,6 +227,23 @@ export class SessionAgent {
         sessionId: this.sessionId,
         message: errorMessage(error),
       });
+    }
+  }
+
+  /** Kick off title generation on the first prompt of a fresh session (no
+   * history): it runs concurrently with the run and replaces the
+   * provisional "Session <date>" name once ready. Shared by every prompt
+   * path (CLI `prompt` and the web/HTTP `promptWhileRunning`) — missing
+   * this would leave web sessions with their provisional name forever.
+   * Guarded so it triggers at most once per session, even after a failed
+   * first run that left savedCount at 0. */
+  private maybeGenerateTitle(firstMessage: string): void {
+    if (
+      !this.titleGenerated && this.titleGenerator !== null &&
+      this.savedCount === 0
+    ) {
+      this.titleGenerated = true;
+      void this.generateTitle(firstMessage);
     }
   }
 
@@ -251,6 +259,7 @@ export class SessionAgent {
    * timestamp), which the UI dedups, and persistMessages saves it exactly
    * once at that point. */
   promptWhileRunning(text: string, images?: ImageContent[]): void {
+    this.maybeGenerateTitle(text);
     const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
     if (images !== undefined && images.length > 0) {
       content.push(...images);

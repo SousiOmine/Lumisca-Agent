@@ -1610,6 +1610,41 @@ Deno.test("fast model: first prompt auto-generates the session title", async () 
   core.close();
 });
 
+Deno.test("startPrompt (web path): first prompt auto-generates the session title", async () => {
+  const { core, faux, providerId } = setupFastTitle();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId: "main",
+  });
+  assertEquals(session.name.startsWith("Session "), true); // provisional
+
+  const captured: CapturedCall[] = [];
+  faux.setResponses(makeImageAnalysisResponses(captured, [
+    // The title call (fast model) fires concurrently with the run.
+    () => fauxAssistantMessage('"Fix login bug"'),
+    () => fauxAssistantMessage("Hello!"),
+  ]));
+
+  // The web/HTTP path is fire-and-forget (startPrompt): the title must
+  // still be generated from the first message.
+  core.startPrompt(session.id, "Please fix the login bug");
+  await core.getAgent(session.id)!.waitForIdle();
+
+  assertEquals(captured.length, 2);
+  assertEquals(captured[0]!.model, "fast");
+  assertEquals(
+    captured[0]!.messages[0]!.content[0]!.text,
+    "Please fix the login bug",
+  );
+  assertEquals(captured[1]!.model, "main");
+  assertEquals(core.getSession(session.id)!.name, "Fix login bug");
+
+  core.close();
+});
+
 Deno.test("no fast model: session keeps its provisional name", async () => {
   const { core, faux, providerId } = setup();
   const { ws } = await makeWorkspace(core);
