@@ -1334,7 +1334,7 @@ select:focus {
 
 /* The session's background commands (the async_bash tool), stacked under
  * the task panel. A rounded card that follows the theme tokens; hidden by
- * the component while no command has been started. */
+ * the component while no command is running. */
 .background-panel {
   width: 100%;
   background: var(--surface);
@@ -1403,18 +1403,7 @@ select:focus {
   flex: none;
   width: 12px;
   text-align: center;
-}
-
-.background-item.running .background-mark {
   color: var(--accent);
-}
-
-.background-item.finished .background-mark {
-  color: var(--ok);
-}
-
-.background-item.killed .background-mark {
-  color: var(--text-faint);
 }
 
 /* The command line wraps (unlike .task-name, which truncates): shell
