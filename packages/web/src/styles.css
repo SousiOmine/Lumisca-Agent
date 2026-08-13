@@ -1218,7 +1218,7 @@ select:focus {
 
 /* The session's sub-agent tasks (the task tool), stacked under the todo
  * panel. A rounded card that follows the theme tokens; hidden by the
- * component while no task has been started. */
+ * component while no task is running. */
 .task-panel {
   width: 100%;
   background: var(--surface);
@@ -1287,22 +1287,7 @@ select:focus {
   flex: none;
   width: 12px;
   text-align: center;
-}
-
-.task-item.running .task-mark {
   color: var(--accent);
-}
-
-.task-item.finished .task-mark {
-  color: var(--ok);
-}
-
-.task-item.failed .task-mark {
-  color: var(--error);
-}
-
-.task-item.aborted .task-mark {
-  color: var(--text-faint);
 }
 
 .task-name {
