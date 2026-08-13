@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import {
+  IconArrowLeft,
   IconBrain,
   IconCheck,
   IconChevronRight,
@@ -28,6 +29,24 @@ import type {
 
 /** Maximum attachments accepted per prompt (mirrors the server limit). */
 const MAX_IMAGES = 8;
+
+/** One selectable entry of the slash-command menu: a command (first level)
+ * or one of its subcommands (second level). */
+export interface SlashCommandItem {
+  id: string;
+  label: string;
+  description?: string;
+  icon?: ComponentType<{ size?: number; className?: string }>;
+}
+
+/** A slash command offered when the input starts with `/`. Commands with
+ * `items` open a second level before executing; leaf commands execute
+ * directly. */
+export interface SlashCommand extends SlashCommandItem {
+  /** Subcommands shown after selecting this command (e.g. the review
+   * target). Omitted → the command executes right away. */
+  items?: SlashCommandItem[];
+}
 
 export interface ComposerModel {
   provider: string;
@@ -79,6 +98,15 @@ interface ComposerProps {
    * non-empty), in which case suggestions come from that machine. */
   mentionWorkspaceId?: string;
   mentionPeerId?: string;
+  /** When set, typing `/` at the start of the input opens a command menu
+   * above the textarea (a mode palette). Commands with `items` transition
+   * to a second level; selecting a leaf executes it via onSlashCommand.
+   * The menu is generic: every caller can pass its own command list. */
+  slashCommands?: SlashCommand[];
+  /** A slash command (or one of its subcommands) was chosen. The parent
+   * builds the actual prompt and submits it; the input is cleared by the
+   * parent as with a regular submit. */
+  onSlashCommand?: (command: SlashCommand, item?: SlashCommandItem) => void;
   /** Images attached for the next send (data URLs). Dropped/pasted files
    * are appended here; the parent clears them after a successful submit. */
   images?: PendingImage[];
@@ -95,6 +123,17 @@ interface MentionState {
   loading: boolean;
 }
 
+/** An active `/` command: the caret is inside a query started by `/`. */
+interface SlashState {
+  /** Index of the `/` character in the input. */
+  start: number;
+  query: string;
+  /** Active index in the currently shown list. */
+  active: number;
+  /** Command whose subcommands are shown (null = first level). */
+  submenu: SlashCommand | null;
+}
+
 /** Find the `@query` under the caret. `@` must start a word (preceded by
  * whitespace or a non-word character such as punctuation — Japanese text
  * counts), so emails like `foo@bar` never trigger. */
@@ -106,6 +145,40 @@ function detectMention(
   const match = /(^|[^\w])@([^\s]*)$/.exec(before);
   if (!match || match[1] === undefined) return null;
   return { start: match.index + match[1].length, query: match[2] ?? "" };
+}
+
+/** Find a `/command` under the caret. The `/` must start the input (only
+ * whitespace before it): a slash command replaces the whole message, so it
+ * never triggers mid-text (typing `/` in prose stays literal). */
+function detectSlash(
+  value: string,
+  caret: number,
+): { start: number; query: string } | null {
+  const before = value.slice(0, caret);
+  const match = /^(\s*)\/([^\s]*)$/.exec(before);
+  if (!match || match[1] === undefined) return null;
+  return { start: match[1].length, query: match[2] ?? "" };
+}
+
+/** Commands matching the typed query (empty query → all). Matches the id or
+ * the label, so both `/rev` and `/レビュー` work. */
+function filterSlashCommands(
+  commands: SlashCommand[],
+  query: string,
+): SlashCommand[] {
+  if (query === "") return commands;
+  const q = query.toLowerCase();
+  return commands.filter((command) =>
+    command.id.toLowerCase().includes(q) ||
+    command.label.toLowerCase().includes(q)
+  );
+}
+
+/** Narrowing helper: entries of the first level are commands. */
+function isSlashCommand(
+  entry: SlashCommand | SlashCommandItem,
+): entry is SlashCommand {
+  return "items" in entry;
 }
 
 /** Pixel position of the caret within the textarea (mirror-div technique:
@@ -188,12 +261,15 @@ export function Composer({
   onOpenSettings,
   mentionWorkspaceId,
   mentionPeerId = "",
+  slashCommands,
+  onSlashCommand,
   images = [],
   onImagesChange,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showThinkingPicker, setShowThinkingPicker] = useState(false);
   const [mention, setMention] = useState<MentionState | null>(null);
+  const [slash, setSlash] = useState<SlashState | null>(null);
   const [caretPos, setCaretPos] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -207,6 +283,7 @@ export function Composer({
   imagesRef.current = images;
 
   const mentionEnabled = mentionWorkspaceId !== undefined;
+  const slashEnabled = slashCommands !== undefined;
 
   /** Add a pasted/dropped image file to the attachments. */
   const addImage = (file: File) => {
@@ -259,8 +336,27 @@ export function Composer({
     }
   };
 
-  /** Re-evaluate the mention under the caret after typing or caret moves. */
-  const updateMention = (nextValue: string, caret: number) => {
+  /** Re-evaluate the slash command and the mention under the caret after
+   * typing or caret moves. They are mutually exclusive: a matching `/`
+   * takes over the input, so the two popovers never overlap. */
+  const updateSuggestions = (nextValue: string, caret: number) => {
+    const slashDet = slashEnabled ? detectSlash(nextValue, caret) : null;
+    if (slashDet) {
+      setMention(null);
+      setCaretPos(null);
+      setSlash((prev) =>
+        prev && prev.start === slashDet.start && prev.query === slashDet.query
+          ? prev
+          : {
+            start: slashDet.start,
+            query: slashDet.query,
+            active: 0,
+            submenu: null,
+          }
+      );
+      return;
+    }
+    setSlash(null);
     const det = mentionEnabled ? detectMention(nextValue, caret) : null;
     if (!det) {
       if (mention !== null) {
@@ -311,10 +407,12 @@ export function Composer({
     return () => clearTimeout(timer);
   }, [mention, mentionWorkspaceId, mentionPeerId]);
 
-  // Switching sessions (different workspace) must not leak a stale mention.
+  // Switching sessions (different workspace) must not leak a stale mention
+  // or slash command.
   useEffect(() => {
     setMention(null);
     setCaretPos(null);
+    setSlash(null);
   }, [mentionWorkspaceId, mentionPeerId]);
 
   /** Replace `@query` with the picked path (plus a trailing space). */
@@ -339,11 +437,89 @@ export function Composer({
     });
   };
 
+  /** Entries shown in the slash menu right now: query-filtered commands at
+   * the first level, the subcommand list inside a submenu. */
+  const slashEntries = slash !== null
+    ? slash.submenu !== null
+      ? slash.submenu.items ?? []
+      : filterSlashCommands(slashCommands ?? [], slash.query)
+    : [];
+
+  /** Execute the entry at `index` of the current level, or descend into it
+   * when it is a command with subcommands. Execution hands the selection to
+   * the parent (onSlashCommand), which builds the prompt and submits it. */
+  const selectSlash = (index: number) => {
+    const current = slash;
+    const entry = slashEntries[index];
+    if (!current || !entry) return;
+    if (
+      current.submenu === null && isSlashCommand(entry) &&
+      (entry.items?.length ?? 0) > 0
+    ) {
+      setSlash({ ...current, submenu: entry, active: 0 });
+      return;
+    }
+    setSlash(null);
+    if (current.submenu === null) {
+      onSlashCommand?.(entry as SlashCommand);
+    } else {
+      onSlashCommand?.(current.submenu, entry);
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && e.ctrlKey) {
       e.preventDefault();
       onSubmit();
       return;
+    }
+    if (slash) {
+      if (e.key === "ArrowDown" && slashEntries.length > 0) {
+        e.preventDefault();
+        setSlash({
+          ...slash,
+          active: (slash.active + 1) % slashEntries.length,
+        });
+        return;
+      }
+      if (e.key === "ArrowUp" && slashEntries.length > 0) {
+        e.preventDefault();
+        setSlash({
+          ...slash,
+          active: (slash.active - 1 + slashEntries.length) %
+            slashEntries.length,
+        });
+        return;
+      }
+      // → opens the submenu of the active command; ← returns from a
+      // submenu to the first level.
+      if (e.key === "ArrowRight" && slash.submenu === null) {
+        const entry = slashEntries[slash.active];
+        if (entry && isSlashCommand(entry) && (entry.items?.length ?? 0) > 0) {
+          e.preventDefault();
+          setSlash({ ...slash, submenu: entry, active: 0 });
+          return;
+        }
+      }
+      if (e.key === "ArrowLeft" && slash.submenu !== null) {
+        e.preventDefault();
+        setSlash({ ...slash, submenu: null, active: 0 });
+        return;
+      }
+      if ((e.key === "Enter" || e.key === "Tab") && slashEntries.length > 0) {
+        e.preventDefault();
+        selectSlash(slash.active);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (slash.submenu !== null) {
+          setSlash({ ...slash, submenu: null, active: 0 });
+        } else {
+          setSlash(null);
+        }
+        return;
+      }
     }
     if (mention && mention.items.length > 0) {
       const count = mention.items.length;
@@ -424,10 +600,10 @@ export function Composer({
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
-            updateMention(e.target.value, e.target.selectionStart);
+            updateSuggestions(e.target.value, e.target.selectionStart);
           }}
           onSelect={(e) => {
-            updateMention(
+            updateSuggestions(
               e.currentTarget.value,
               e.currentTarget.selectionStart,
             );
@@ -476,6 +652,62 @@ export function Composer({
                       : <IconFile size={13} className="mention-icon" />}
                     <span className="mention-item-name">{item.name}</span>
                     <span className="mention-item-path">{item.path}</span>
+                  </button>
+                ))
+              )}
+          </div>
+        )}
+        {slash && (
+          <div className="slash-popover">
+            {slash.submenu && (
+              <div className="slash-submenu-header">
+                <button
+                  type="button"
+                  className="slash-back"
+                  title="コマンド一覧に戻る"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() =>
+                    setSlash({ ...slash, submenu: null, active: 0 })}
+                >
+                  <IconArrowLeft size={13} />
+                  <span>{slash.submenu.label}</span>
+                </button>
+              </div>
+            )}
+            {slashEntries.length === 0
+              ? <div className="slash-status">一致するコマンドがありません</div>
+              : (
+                slashEntries.map((item, index) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`slash-item${
+                      index === slash.active ? " active" : ""
+                    }`}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // keep focus in the textarea
+                    }}
+                    onMouseEnter={() =>
+                      setSlash((prev) =>
+                        prev ? { ...prev, active: index } : prev
+                      )}
+                    onClick={() => selectSlash(index)}
+                  >
+                    {item.icon && (
+                      <item.icon size={14} className="slash-icon" />
+                    )}
+                    <span className="slash-item-text">
+                      <span className="slash-item-label">{item.label}</span>
+                      {item.description && (
+                        <span className="slash-item-desc">
+                          {item.description}
+                        </span>
+                      )}
+                    </span>
+                    {slash.submenu === null && isSlashCommand(item) &&
+                      (item.items?.length ?? 0) > 0 && (
+                      <IconChevronRight size={13} className="slash-chevron" />
+                    )}
                   </button>
                 ))
               )}

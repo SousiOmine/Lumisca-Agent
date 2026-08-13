@@ -12,6 +12,9 @@ export default defineConfig({
       "@lumisca/core/shared": fileURLToPath(
         new URL("../core/shared.ts", import.meta.url),
       ),
+      "@lumisca/core/modes": fileURLToPath(
+        new URL("../core/modes/mod.ts", import.meta.url),
+      ),
     },
   },
   server: {

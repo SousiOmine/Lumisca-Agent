@@ -18,7 +18,12 @@ import type {
 } from "../types.ts";
 import { ToolCall } from "./ToolCall.tsx";
 import { AgentActivity } from "./AgentActivity.tsx";
-import { Composer } from "./Composer.tsx";
+import {
+  Composer,
+  type SlashCommand,
+  type SlashCommandItem,
+} from "./Composer.tsx";
+import { slashCommands, slashPrompt } from "../slashCommands.ts";
 import { ContentImages } from "./ContentImages.tsx";
 import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
@@ -119,11 +124,14 @@ export function ChatView(
     };
   }, []);
 
-  const submit = () => {
-    if (!input.trim() && images.length === 0) return;
+  /** Send the composer text, or an explicit message (slash commands build
+   * their own prompt; the input is cleared either way). */
+  const submit = (message?: string) => {
+    const text = (message ?? input).trim();
+    if (!text && images.length === 0) return;
     // While the agent is running the prompt is steered into the running
     // loop (the server accepts it, no need to block the send button).
-    onPrompt(input, images);
+    onPrompt(text, images);
     setInput("");
     setImages([]);
     // Bring the scroll to the bottom right away and force it again when the
@@ -132,6 +140,16 @@ export function ChatView(
     pendingSubmitScroll.current = true;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  /** A slash command (agent mode) was chosen: build its prompt and send it
+   * like a regular submit. */
+  const handleSlashCommand = (
+    command: SlashCommand,
+    item?: SlashCommandItem,
+  ) => {
+    const text = slashPrompt(command, item);
+    if (text !== null) submit(text);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -240,6 +258,8 @@ export function ChatView(
           onOpenSettings={onOpenSettings}
           mentionWorkspaceId={view.info.workspaceId}
           mentionPeerId={peerId}
+          slashCommands={slashCommands}
+          onSlashCommand={handleSlashCommand}
           images={images}
           onImagesChange={setImages}
         />

@@ -27,3 +27,9 @@ export function webFaviconPath(repoRoot: string): string {
 export function coreSharedPath(repoRoot: string): string {
   return join(repoRoot, "packages", "core", "shared.ts");
 }
+
+/** esbuild alias target for `@lumisca/core/modes` (the agent-mode
+ * registry; pure data + prompt building, browser-safe like shared). */
+export function coreModesPath(repoRoot: string): string {
+  return join(repoRoot, "packages", "core", "modes", "mod.ts");
+}

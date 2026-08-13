@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { coreSharedPath } from "./paths.ts";
+import { coreModesPath, coreSharedPath } from "./paths.ts";
 
 export interface BundleOptions {
   /** Repository root (used as esbuild working directory for node_modules resolution). */
@@ -20,10 +20,12 @@ export async function bundleClient(options: BundleOptions): Promise<void> {
     outfile: options.outfile,
     logLevel: "warning",
     define: { "process.env.NODE_ENV": '"production"' },
-    // The web package imports @lumisca/core/shared (pure helpers). esbuild
-    // does not read deno.json workspace exports, so resolve the alias here.
+    // The web package imports @lumisca/core/shared and @lumisca/core/modes
+    // (pure helpers). esbuild does not read deno.json workspace exports, so
+    // resolve the aliases here.
     alias: {
       "@lumisca/core/shared": coreSharedPath(options.cwd),
+      "@lumisca/core/modes": coreModesPath(options.cwd),
     },
   });
 }

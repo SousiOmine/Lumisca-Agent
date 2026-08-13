@@ -10,7 +10,13 @@ import type {
 } from "../types.ts";
 import { errorText } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
-import { Composer, type ComposerModel } from "./Composer.tsx";
+import { slashCommands, slashPrompt } from "../slashCommands.ts";
+import {
+  Composer,
+  type ComposerModel,
+  type SlashCommand,
+  type SlashCommandItem,
+} from "./Composer.tsx";
 import { PeerPicker } from "./PeerPicker.tsx";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
 import { WorkspacePicker } from "./WorkspacePicker.tsx";
@@ -185,8 +191,10 @@ export function NewSessionView(
   // model, so the model picker is hidden for them.
   const remoteWorkspace = (selectedWorkspace?.peerId ?? "") !== "";
 
-  const submit = async () => {
-    const trimmed = text.trim();
+  /** Start the session with the composer text, or an explicit message (slash
+   * commands build their own prompt). */
+  const submit = async (message?: string) => {
+    const trimmed = (message ?? text).trim();
     if (
       (!trimmed && images.length === 0) ||
       !workspaceKey || !selectedWorkspace || busy
@@ -202,6 +210,16 @@ export function NewSessionView(
       setError(errorText(e));
       setBusy(false);
     }
+  };
+
+  /** A slash command (agent mode) was chosen: build its prompt and start
+   * the session with it like a regular submit. */
+  const handleSlashCommand = (
+    command: SlashCommand,
+    item?: SlashCommandItem,
+  ) => {
+    const promptText = slashPrompt(command, item);
+    if (promptText !== null) void submit(promptText);
   };
 
   const deleteWorkspace = async (fws: FederatedWorkspace) => {
@@ -299,6 +317,8 @@ export function NewSessionView(
               onOpenSettings={onOpenSettings}
               mentionWorkspaceId={selectedWorkspace?.workspace.id}
               mentionPeerId={selectedWorkspace?.peerId}
+              slashCommands={selectedWorkspace ? slashCommands : undefined}
+              onSlashCommand={handleSlashCommand}
               images={images}
               onImagesChange={setImages}
             />

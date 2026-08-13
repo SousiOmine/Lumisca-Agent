@@ -20,6 +20,14 @@ export type {
 export type { AgentMessage } from "@earendil-works/pi-agent-core";
 export type { ImageContent } from "@earendil-works/pi-ai";
 export { SessionAgent } from "./agent/session-agent.ts";
+export { AGENT_MODES, findAgentMode } from "./modes/mod.ts";
+export type { AgentMode, AgentModeOption } from "./modes/mod.ts";
+export {
+  buildReviewPrompt,
+  REVIEW_TARGET_LABELS,
+  reviewMode,
+} from "./modes/review.ts";
+export type { ReviewTarget } from "./modes/review.ts";
 export { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
 export type {
   Infer,

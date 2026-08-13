@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "exports": {
     ".": "./mod.ts",
-    "./shared": "./shared.ts"
+    "./shared": "./shared.ts",
+    "./modes": "./modes/mod.ts"
   }
 }
