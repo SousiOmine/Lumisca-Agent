@@ -56,6 +56,12 @@ export { MAX_SUBAGENT_DEPTH, MAX_SUBAGENTS } from "./tools/task.ts";
 export type { AskAnswer, AskOption, AskQuestion } from "./shared.ts";
 export type { TodoPhase, TodoStatus, TodoTask } from "./shared.ts";
 export type { SubagentStatus, SubagentType, TaskInfo } from "./shared.ts";
+export type {
+  BackgroundCommandInfo,
+  BackgroundCommandReason,
+  BackgroundCommandState,
+} from "./tools/background.ts";
+export { BackgroundProcessManager } from "./tools/background.ts";
 export { contentText } from "./content.ts";
 export {
   MAX_PROMPT_IMAGES,

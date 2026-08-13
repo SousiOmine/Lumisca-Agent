@@ -1,5 +1,7 @@
 import type {
   AgentMessage,
+  BackgroundCommandInfo,
+  BackgroundView,
   ClientEvent,
   SessionView,
   TaskInfo,
@@ -123,6 +125,55 @@ export function mergeTasks(
       status: info.status,
       liveText: info.text,
     });
+  }
+  return merged;
+}
+
+/** True when two background-command lists are identical (ids, commands, and
+ * states). The resync replaces the whole list, so an unchanged snapshot
+ * must not trigger a view update on every sync tick. The live output text
+ * is derived state (deltas) and deliberately not compared. */
+export function sameBackgrounds(
+  a: BackgroundView[],
+  b: BackgroundView[],
+): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((cmd, i) => {
+    const other = b[i]!;
+    return cmd.commandId === other.commandId &&
+      cmd.command === other.command &&
+      cmd.state === other.state;
+  });
+}
+
+/** Merge the server's background snapshot into the view's list: known
+ * commands take the snapshot's state/tail (the tail when longer — the
+ * snapshot is a point-in-time tail, so the live view may be ahead of it);
+ * unknown commands are appended oldest first (the snapshot is newest
+ * first). */
+export function mergeBackgrounds(
+  existing: BackgroundView[],
+  fetched: BackgroundCommandInfo[],
+): BackgroundView[] {
+  const byId = new Map(fetched.map((info) => [info.commandId, info]));
+  const merged = existing.map((cmd) => {
+    const info = byId.get(cmd.commandId);
+    if (info === undefined) return cmd;
+    return {
+      ...cmd,
+      state: info.state,
+      finishedAt: info.finishedAt,
+      exitCode: info.exitCode,
+      tail: info.tail.length > cmd.tail.length ? info.tail : cmd.tail,
+      liveText: info.tail.length > cmd.liveText.length
+        ? info.tail
+        : cmd.liveText,
+    };
+  });
+  const known = new Set(existing.map((cmd) => cmd.commandId));
+  for (const info of [...fetched].reverse()) {
+    if (known.has(info.commandId)) continue;
+    merged.push({ ...info, liveText: info.tail });
   }
   return merged;
 }
@@ -262,6 +313,57 @@ export function applyEvent(
         t.agentId === event.agentId ? { ...t, status: event.status } : t
       );
       return { ...view, tasks };
+    }
+    case "background_start": {
+      // A background command started (the async_bash tool). Dedup by
+      // command id: a resync could re-deliver the event.
+      if (view.backgrounds.some((b) => b.commandId === event.commandId)) {
+        return view;
+      }
+      return {
+        ...view,
+        backgrounds: [
+          ...view.backgrounds,
+          {
+            commandId: event.commandId,
+            pid: event.pid,
+            command: event.command,
+            cwd: event.cwd,
+            state: "running",
+            startedAt: event.startedAt,
+            tail: "",
+            liveText: "",
+          },
+        ],
+      };
+    }
+    case "background_delta": {
+      // A chunk of a background command's decoded output; append to the
+      // command's view (bounded, the server keeps only the tail anyway).
+      const backgrounds = view.backgrounds.map((b) => {
+        if (b.commandId !== event.commandId) return b;
+        return { ...b, liveText: (b.liveText + event.delta).slice(-8192) };
+      });
+      return { ...view, backgrounds };
+    }
+    case "background_end": {
+      // A background command settled; the panel shows its final state. The
+      // event's tail is the authoritative output (a resync snapshot may be
+      // behind the live view), so it replaces the accumulated text when
+      // longer.
+      const backgrounds = view.backgrounds.map((b) =>
+        b.commandId !== event.commandId ? b : {
+          ...b,
+          state: event.state,
+          exitCode: event.exitCode,
+          finishedAt: event.finishedAt,
+          tail: event.tail,
+          liveText: event.tail.length > b.liveText.length
+            ? event.tail
+            : b.liveText,
+        }
+      );
+      return { ...view, backgrounds };
     }
     case "session_error":
       return { ...view, error: event.message };

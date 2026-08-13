@@ -4,14 +4,17 @@ import { errorText } from "../providers.ts";
 import {
   applyEvent,
   filterRemoved,
+  mergeBackgrounds,
   mergeMessages,
   mergeTasks,
+  sameBackgrounds,
   sameTasks,
   sameTodoPlan,
 } from "../events.ts";
 import { tabKey } from "../tabs.ts";
 import type {
   AgentMessage,
+  BackgroundCommandInfo,
   ClientEvent,
   SessionView,
   TaskInfo,
@@ -38,20 +41,22 @@ export function useSessionEvents() {
     viewsRef.current = views;
   }, [views]);
 
-  /** Re-fetch persisted messages, the todo plan, and the task snapshots for
-   * every open tab and merge them in without duplicating what is already
-   * shown. Runs on reconnect, on a short interval while the socket is
-   * down, and when a connected tab returns to the foreground, so a run
-   * that completes while the socket was down — and todo/task mutations
-   * whose snapshot events were lost — are not missed until the next WS
-   * drop. The todo plan is a snapshot fetch (the events only fire on
-   * mutations), so the fetched state replaces the view's plan wholesale;
-   * tasks merge per agent id so live deltas are preserved. */
+  /** Re-fetch persisted messages, the todo plan, the task snapshots, and
+   * the background-command snapshots for every open tab and merge them in
+   * without duplicating what is already shown. Runs on reconnect, on a
+   * short interval while the socket is down, and when a connected tab
+   * returns to the foreground, so a run that completes while the socket
+   * was down — and todo/task/background mutations whose snapshot events
+   * were lost — are not missed until the next WS drop. The todo plan is a
+   * snapshot fetch (the events only fire on mutations), so the fetched
+   * state replaces the view's plan wholesale; tasks merge per agent id so
+   * live deltas are preserved. */
   const syncState = useCallback(async () => {
     const ids = [...viewsRef.current.keys()];
     const messages = new Map<string, AgentMessage[]>();
     const todos = new Map<string, TodoPhase[]>();
     const tasks = new Map<string, TaskInfo[]>();
+    const backgrounds = new Map<string, BackgroundCommandInfo[]>();
     await Promise.all(ids.map(async (id) => {
       // Fetch independently: one failing (e.g. the session was deleted)
       // must not drop the other.
@@ -72,8 +77,19 @@ export function useSessionEvents() {
       } catch {
         // Server not reachable yet; keep the current tasks.
       }
+      try {
+        const { backgrounds: snapshot } = await sessionApi(id).getBackground();
+        backgrounds.set(id, snapshot);
+      } catch {
+        // Server not reachable yet; keep the current backgrounds.
+      }
     }));
-    if (messages.size === 0 && todos.size === 0 && tasks.size === 0) return;
+    if (
+      messages.size === 0 && todos.size === 0 && tasks.size === 0 &&
+      backgrounds.size === 0
+    ) {
+      return;
+    }
     setViews((prev) => {
       const next = new Map(prev);
       for (
@@ -81,6 +97,7 @@ export function useSessionEvents() {
           ...messages.keys(),
           ...todos.keys(),
           ...tasks.keys(),
+          ...backgrounds.keys(),
         ])
       ) {
         const v = next.get(id);
@@ -100,8 +117,16 @@ export function useSessionEvents() {
           : mergeTasks(v.tasks, fetchedTasks);
         const tasksChanged = fetchedTasks !== undefined &&
           !sameTasks(mergedTasks, v.tasks);
+        const fetchedBackgrounds = backgrounds.get(id);
+        const mergedBackgrounds = fetchedBackgrounds === undefined
+          ? v.backgrounds
+          : mergeBackgrounds(v.backgrounds, fetchedBackgrounds);
+        const backgroundsChanged = fetchedBackgrounds !== undefined &&
+          !sameBackgrounds(mergedBackgrounds, v.backgrounds);
         if (
-          merged.length === v.messages.length && !todoChanged && !tasksChanged
+          merged.length === v.messages.length && !todoChanged &&
+          !tasksChanged &&
+          !backgroundsChanged
         ) {
           continue;
         }
@@ -110,6 +135,7 @@ export function useSessionEvents() {
           messages: merged,
           ...(todoChanged ? { todos: todo } : {}),
           ...(tasksChanged ? { tasks: mergedTasks } : {}),
+          ...(backgroundsChanged ? { backgrounds: mergedBackgrounds } : {}),
         });
       }
       return next;

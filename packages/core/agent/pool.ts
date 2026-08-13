@@ -7,6 +7,7 @@ import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { createCodingTools } from "../tools/mod.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
+import type { BackgroundCommandInfo } from "../tools/background.ts";
 import { AskHub } from "../tools/ask.ts";
 import { TodoHub } from "../tools/todo.ts";
 import { TaskHub } from "../tools/task.ts";
@@ -135,6 +136,14 @@ export class SessionPool {
     return this.tasks.get(id)?.list() ?? [];
   }
 
+  /** Snapshots of the session's background commands (the async_bash tool);
+   * empty when the session is not open or has no commands yet. Restores
+   * the background panel after a WS drop or page reload (background events
+   * are not replayed). */
+  getBackground(id: string): BackgroundCommandInfo[] {
+    return this.background.get(id)?.list() ?? [];
+  }
+
   /** Build the agent of a session (replacing any existing one) and keep it
    * in memory. MCP tools attach asynchronously — they spawn server
    * processes — and errors are reported via session_error events, never
@@ -197,7 +206,10 @@ export class SessionPool {
     // close/delete/closeAll → killAll), not with the agent.
     let background = this.background.get(session.id);
     if (!background) {
-      background = new BackgroundProcessManager();
+      background = new BackgroundProcessManager({
+        sessionId: session.id,
+        emit: (event) => this.deps.emit(event),
+      });
       this.background.set(session.id, background);
     }
     // One hub per open agent: it holds the questions of the live run, so a

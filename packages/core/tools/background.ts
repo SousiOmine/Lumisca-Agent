@@ -18,6 +18,7 @@ import type {
   NotificationPayload,
   NotificationStatus,
 } from "../types/notification.ts";
+import type { ClientEvent } from "../types/event.ts";
 
 /** Concurrent background commands per session. Bounds resource usage; the
  * agent is told to wait or kill when the limit is reached. Only running
@@ -167,6 +168,12 @@ export function formatBackgroundNotification(
 export interface BackgroundProcessManagerOptions {
   /** Extra env vars to expose to spawned commands. */
   env?: Record<string, string>;
+  /** Session id stamped onto the lifecycle events emitted for the panel. */
+  sessionId?: string;
+  /** Event sink: forwards background lifecycle events (start / delta / end)
+   * to clients. Owned by the session pool, which connects it to the core's
+   * event bus. Absent in tests and standalone use — nothing is emitted. */
+  emit?: (event: ClientEvent) => void;
 }
 
 /**
@@ -251,6 +258,7 @@ export class BackgroundProcessManager {
       }, input.timeoutSec * 1000);
     }
     this.records.set(commandId, record);
+    this.emitStart(record);
 
     const append = (chunk: Uint8Array) => {
       if (chunk.length === 0) return;
@@ -258,6 +266,7 @@ export class BackgroundProcessManager {
       joined.set(record.buffer);
       joined.set(chunk, record.buffer.length);
       record.buffer = joined.slice(-MAX_OUTPUT_BUFFER);
+      this.emitDelta(record, chunk);
     };
     const read = async (stream: ReadableStream<Uint8Array>) => {
       try {
@@ -346,6 +355,66 @@ export class BackgroundProcessManager {
     }
   }
 
+  /** Announce a newly spawned command to the panel (background_start).
+   * Emits nothing when the manager has no event sink (tests, standalone
+   * use). */
+  private emitStart(record: RunningRecord): void {
+    const { emit, sessionId } = this.options;
+    if (emit === undefined || sessionId === undefined) return;
+    emit({
+      type: "background_start",
+      sessionId,
+      commandId: record.info.commandId,
+      pid: record.info.pid,
+      command: record.info.command,
+      cwd: record.info.cwd,
+      startedAt: record.info.startedAt,
+    });
+  }
+
+  /** Decode a fresh output chunk and emit it as a background_delta event
+   * (the panel's live view). Decoding needs the OEM code page label, which
+   * is detected asynchronously on first use; the single cached promise
+   * resolves every pending callback in registration order, so deltas stay
+   * ordered while the label is still being detected. */
+  private emitDelta(record: RunningRecord, chunk: Uint8Array): void {
+    const { emit, sessionId } = this.options;
+    if (emit === undefined || sessionId === undefined) return;
+    const bytes = trimIncompleteUtf8(chunk);
+    if (bytes.length === 0) return;
+    void this.oem().then((label) => {
+      const delta = decodeOutput(bytes, label);
+      if (delta.length === 0) return;
+      emit({
+        type: "background_delta",
+        sessionId,
+        commandId: record.info.commandId,
+        delta,
+      });
+    });
+  }
+
+  /** Announce a settled command to the panel (background_end). `state` is
+   * "finished" for natural exits and "killed" for kills and timeouts (the
+   * same split the manager's info uses). */
+  private emitEnd(
+    record: RunningRecord,
+    tail: string,
+    reason: BackgroundCommandReason,
+  ): void {
+    const { emit, sessionId } = this.options;
+    if (emit === undefined || sessionId === undefined) return;
+    emit({
+      type: "background_end",
+      sessionId,
+      commandId: record.info.commandId,
+      state: reason === "exited" ? "finished" : "killed",
+      exitCode: record.info.exitCode,
+      finishedAt: record.info.finishedAt!,
+      tail,
+    });
+  }
+
   private async decodeTail(record: RunningRecord): Promise<string> {
     const bytes = trimIncompleteUtf8(
       record.buffer.slice(-BACKGROUND_TAIL_LIMIT),
@@ -391,6 +460,7 @@ export class BackgroundProcessManager {
         ),
         tail,
       };
+      this.emitEnd(record, tail, reason);
       for (const listener of this.listeners) {
         try {
           listener(done);

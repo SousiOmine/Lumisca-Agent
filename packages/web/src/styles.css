@@ -1118,9 +1118,10 @@ select:focus {
 
 /* ---- chat progress panels ------------------------------------------------- */
 
-/* Fixed top-right stack of the session's progress cards (todo plan, sub-
- * agent tasks). The container owns the positioning; the panels fill it and
- * are hidden by their components while empty. */
+/* Fixed top-right stack of the session's progress cards (todo plan,
+ * sub-agent tasks, background commands). The container owns the
+ * positioning; the panels fill it and are hidden by their components while
+ * empty. */
 .chat-panels {
   position: fixed;
   top: calc(var(--tab-height) + 8px);
@@ -1317,6 +1318,123 @@ select:focus {
 }
 
 .task-live {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 96px;
+  overflow: hidden;
+}
+
+/* The session's background commands (the async_bash tool), stacked under
+ * the task panel. A rounded card that follows the theme tokens; hidden by
+ * the component while no command has been started. */
+.background-panel {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px var(--shadow);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.background-panel-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.background-panel-header:hover {
+  background: var(--accent-soft);
+}
+
+.background-panel-title {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.background-panel-summary {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.background-panel-body {
+  border-top: 1px solid var(--border);
+  max-height: min(50vh, 360px);
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.background-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.background-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.background-mark {
+  flex: none;
+  width: 12px;
+  text-align: center;
+}
+
+.background-item.running .background-mark {
+  color: var(--accent);
+}
+
+.background-item.finished .background-mark {
+  color: var(--ok);
+}
+
+.background-item.killed .background-mark {
+  color: var(--text-faint);
+}
+
+/* The command line wraps (unlike .task-name, which truncates): shell
+ * commands are read line by line, not skimmed. */
+.background-name {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.background-meta {
+  flex: none;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.background-live {
   margin: 0;
   padding: 6px 8px;
   background: var(--bg);

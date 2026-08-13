@@ -2,12 +2,16 @@ import { assertEquals } from "@std/assert";
 import {
   applyEvent,
   filterRemoved,
+  mergeBackgrounds,
   mergeMessages,
   mergeTasks,
+  sameBackgrounds,
   sameTodoPlan,
 } from "./events.ts";
 import {
   type AgentMessage,
+  type BackgroundCommandInfo,
+  type BackgroundView,
   isViewRunning,
   type SessionView,
   type TaskInfo,
@@ -40,6 +44,7 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
     pendingQuestions: [],
     todos: [],
     tasks: [],
+    backgrounds: [],
     removed: new Set(),
     ...overrides,
   };
@@ -561,4 +566,171 @@ Deno.test("events: mergeTasks merges snapshots without losing live deltas", () =
   // Unknown task: appended from the snapshot.
   assertEquals(merged[1]!.agentId, "agent_2");
   assertEquals(merged[1]!.liveText, "tail");
+});
+
+// --- background events (the async_bash tool) ---------------------------------
+
+const START = {
+  type: "background_start" as const,
+  sessionId: "s1",
+  commandId: "1",
+  pid: 1234,
+  command: "npm run dev",
+  cwd: "/ws",
+  startedAt: 100,
+};
+
+Deno.test("events: background events add, feed, and settle commands", () => {
+  let v = view();
+  v = applyEvent(START, v)!;
+  assertEquals(v.backgrounds.length, 1);
+  assertEquals(v.backgrounds[0]!.state, "running");
+  assertEquals(v.backgrounds[0]!.command, "npm run dev");
+
+  // A re-delivered background_start (resync race) must not duplicate it.
+  v = applyEvent(START, v)!;
+  assertEquals(v.backgrounds.length, 1);
+
+  v = applyEvent(
+    {
+      type: "background_delta",
+      sessionId: "s1",
+      commandId: "1",
+      delta: "listen ",
+    },
+    v,
+  )!;
+  v = applyEvent(
+    { type: "background_delta", sessionId: "s1", commandId: "1", delta: "ing" },
+    v,
+  )!;
+  assertEquals(v.backgrounds[0]!.liveText, "listen ing");
+
+  // Deltas of another command do not touch this one.
+  v = applyEvent(
+    { type: "background_delta", sessionId: "s1", commandId: "9", delta: "x" },
+    v,
+  )!;
+  assertEquals(v.backgrounds[0]!.liveText, "listen ing");
+
+  v = applyEvent(
+    {
+      type: "background_end",
+      sessionId: "s1",
+      commandId: "1",
+      state: "finished",
+      exitCode: 0,
+      finishedAt: 200,
+      tail: "listen ing on :3000",
+    },
+    v,
+  )!;
+  assertEquals(v.backgrounds[0]!.state, "finished");
+  assertEquals(v.backgrounds[0]!.exitCode, 0);
+  // The event's tail is the authoritative output: it replaces the shorter
+  // accumulated live text.
+  assertEquals(v.backgrounds[0]!.liveText, "listen ing on :3000");
+  assertEquals(v.backgrounds[0]!.tail, "listen ing on :3000");
+});
+
+Deno.test("events: background_end keeps a longer live view", () => {
+  // The end event's tail is a point-in-time snapshot: when the live view
+  // (deltas) is already longer, it must not be truncated back.
+  let v = view({
+    backgrounds: [{
+      commandId: "1",
+      pid: 1,
+      command: "echo",
+      cwd: "/ws",
+      state: "running",
+      startedAt: 1,
+      tail: "",
+      liveText: "a very long live output that exceeds the snapshot",
+    }],
+  });
+  v = applyEvent(
+    {
+      type: "background_end",
+      sessionId: "s1",
+      commandId: "1",
+      state: "finished",
+      exitCode: 0,
+      finishedAt: 2,
+      tail: "short",
+    },
+    v,
+  )!;
+  assertEquals(
+    v.backgrounds[0]!.liveText,
+    "a very long live output that exceeds the snapshot",
+  );
+  assertEquals(v.backgrounds[0]!.tail, "short");
+});
+
+Deno.test("events: mergeBackgrounds merges snapshots without losing live deltas", () => {
+  const existing: BackgroundView[] = [{
+    commandId: "1",
+    pid: 1,
+    command: "npm run dev",
+    cwd: "/ws",
+    state: "running",
+    startedAt: 1,
+    tail: "",
+    liveText: "a longer live output",
+  }];
+  const fetched: BackgroundCommandInfo[] = [
+    {
+      commandId: "1",
+      pid: 1,
+      command: "npm run dev",
+      cwd: "/ws",
+      state: "finished",
+      startedAt: 1,
+      finishedAt: 2,
+      exitCode: 0,
+      tail: "final",
+    },
+    {
+      commandId: "2",
+      pid: 2,
+      command: "sleep 60",
+      cwd: "/ws",
+      state: "running",
+      startedAt: 3,
+      tail: "",
+    },
+  ];
+  const merged = mergeBackgrounds(existing, fetched);
+  assertEquals(merged.length, 2);
+  // Known command: state from the snapshot; the longer view text wins over
+  // the point-in-time snapshot tail.
+  assertEquals(merged[0]!.state, "finished");
+  assertEquals(merged[0]!.liveText, "a longer live output");
+  // Unknown command: appended from the snapshot, seeded with its tail.
+  assertEquals(merged[1]!.commandId, "2");
+  assertEquals(merged[1]!.state, "running");
+  assertEquals(merged[1]!.liveText, "");
+});
+
+Deno.test("events: sameBackgrounds compares snapshots exactly", () => {
+  const list: BackgroundView[] = [{
+    commandId: "1",
+    pid: 1,
+    command: "npm run dev",
+    cwd: "/ws",
+    state: "running",
+    startedAt: 1,
+    tail: "",
+    liveText: "x",
+  }];
+  assertEquals(sameBackgrounds([], []), true);
+  assertEquals(sameBackgrounds(list, structuredClone(list)), true);
+  // A state change is detected (live text is deliberately not compared).
+  const stateChanged = structuredClone(list);
+  stateChanged[0]!.state = "finished";
+  assertEquals(sameBackgrounds(list, stateChanged), false);
+  const textChanged = structuredClone(list);
+  textChanged[0]!.liveText = "y";
+  assertEquals(sameBackgrounds(list, textChanged), true);
+  assertEquals(sameBackgrounds(list, []), false);
 });

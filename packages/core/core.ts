@@ -34,6 +34,7 @@ import {
 import type { ThinkingLevel } from "./shared.ts";
 import type { AskAnswer } from "./shared.ts";
 import type { TaskInfo, TodoPhase } from "./shared.ts";
+import type { BackgroundCommandInfo } from "./tools/background.ts";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
@@ -498,6 +499,13 @@ export class LumiscaCore {
    * panel after a WS drop or page reload. */
   getTasks(id: string): TaskInfo[] {
     return this.pool.getTasks(id);
+  }
+
+  /** Snapshots of the session's background commands (the async_bash tool);
+   * empty when the session is not open or has no commands yet. Restores
+   * the background panel after a WS drop or page reload. */
+  getBackground(id: string): BackgroundCommandInfo[] {
+    return this.pool.getBackground(id);
   }
 
   /** The last failure of a session, if any. Cleared when a new run starts.

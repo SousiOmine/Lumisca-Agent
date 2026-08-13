@@ -78,4 +78,36 @@ export type ClientEvent =
     sessionId: string;
     agentId: string;
     status: SubagentStatus;
+  }
+  /** A background command started (the async_bash tool). Clients add it to
+   * the background panel; its live output arrives as `background_delta`
+   * events. */
+  | {
+    type: "background_start";
+    sessionId: string;
+    commandId: string;
+    pid: number;
+    command: string;
+    cwd: string;
+    startedAt: number;
+  }
+  /** A chunk of a background command's decoded output. Clients append it to
+   * the command's view; the stream restarts after a reload (deltas are not
+   * replayed, the resync endpoint carries only the tail). */
+  | {
+    type: "background_delta";
+    sessionId: string;
+    commandId: string;
+    delta: string;
+  }
+  /** A background command finished, was killed, or timed out. Clients update
+   * the command's status in the panel; `tail` is the final output tail. */
+  | {
+    type: "background_end";
+    sessionId: string;
+    commandId: string;
+    state: "finished" | "killed";
+    exitCode?: number;
+    finishedAt: number;
+    tail: string;
   };

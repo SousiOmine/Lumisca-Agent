@@ -1,6 +1,7 @@
 import type {
   AgentMessage,
   AskAnswer,
+  BackgroundCommandInfo,
   ClientEvent,
   ConnectionEntry,
   FederatedWorkspace,
@@ -125,6 +126,13 @@ export const api = {
    * are not replayed). */
   getTasks: (id: string) =>
     request<{ tasks: TaskInfo[] }>(`/api/sessions/${id}/tasks`),
+  /** Snapshots of the session's background commands (the async_bash tool);
+   * re-fetched after a WS drop or page reload to restore the background
+   * panel (background events are not replayed). */
+  getBackground: (id: string) =>
+    request<{ backgrounds: BackgroundCommandInfo[] }>(
+      `/api/sessions/${id}/background`,
+    ),
   prompt: (id: string, text: string, images?: PendingImage[]) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/prompt`, {
       method: "POST",
@@ -287,6 +295,10 @@ export const fed = {
     request<{ tasks: TaskInfo[] }>(
       `/api/fed/${peerId}/sessions/${sessionId}/tasks`,
     ),
+  getBackground: (peerId: string, sessionId: string) =>
+    request<{ backgrounds: BackgroundCommandInfo[] }>(
+      `/api/fed/${peerId}/sessions/${sessionId}/background`,
+    ),
   closeSession: (peerId: string, sessionId: string) =>
     request<{ ok: boolean }>(`/api/fed/${peerId}/sessions/${sessionId}/close`, {
       method: "POST",
@@ -368,6 +380,7 @@ export function sessionApi(key: string) {
       getMessages: () => api.getMessages(sessionId),
       getTodo: () => api.getTodo(sessionId),
       getTasks: () => api.getTasks(sessionId),
+      getBackground: () => api.getBackground(sessionId),
       close: () => api.closeSession(sessionId),
       prompt: (text: string, images?: PendingImage[]) =>
         api.prompt(sessionId, text, images),
@@ -386,6 +399,7 @@ export function sessionApi(key: string) {
     getMessages: () => fed.getMessages(peerId, sessionId),
     getTodo: () => fed.getTodo(peerId, sessionId),
     getTasks: () => fed.getTasks(peerId, sessionId),
+    getBackground: () => fed.getBackground(peerId, sessionId),
     close: () => fed.closeSession(peerId, sessionId),
     prompt: (text: string, images?: PendingImage[]) =>
       fed.prompt(peerId, sessionId, text, images),

@@ -15,6 +15,7 @@ import {
   MAX_BACKGROUND_COMMANDS,
   trimIncompleteUtf8,
 } from "./background.ts";
+import type { ClientEvent } from "../types/event.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { LumiscaCore } from "../mod.ts";
 
@@ -49,6 +50,39 @@ function waitForExit(
   });
 }
 
+/** Resolve when the collected lifecycle events contain the command's end
+ * event (bounded so a hang fails the test instead of running forever). */
+function waitForEndEvent(
+  events: ClientEvent[],
+  timeoutMs = 15000,
+): Promise<Extract<ClientEvent, { type: "background_end" }>> {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + timeoutMs;
+    const poll = () => {
+      const end = events.find(
+        (e): e is Extract<ClientEvent, { type: "background_end" }> =>
+          e.type === "background_end",
+      );
+      if (end !== undefined) {
+        resolve(end);
+        return;
+      }
+      if (Date.now() > deadline) {
+        reject(
+          new Error(
+            `timed out waiting for background_end; events: ${
+              JSON.stringify(events)
+            }`,
+          ),
+        );
+        return;
+      }
+      setTimeout(poll, 20);
+    };
+    poll();
+  });
+}
+
 function toolText(
   result: { content: { type: "text" | "image"; text?: string }[] },
 ): string {
@@ -75,6 +109,80 @@ Deno.test("start returns immediately and notifies on completion", async () => {
   assertEquals(done.exitCode, 0);
   assert(done.tail.includes("done"), `tail missing output: ${done.tail}`);
   assertEquals(manager.get(commandId)!.state, "finished");
+});
+
+Deno.test("lifecycle events announce start, output deltas and end", async () => {
+  const events: ClientEvent[] = [];
+  const manager = new BackgroundProcessManager({
+    sessionId: "s1",
+    emit: (event) => events.push(event),
+  });
+  const startedAt = Date.now();
+  const { commandId } = await manager.start({
+    cwd: Deno.cwd(),
+    command: linesCommand,
+  });
+  // start() must announce the command synchronously, before it can finish.
+  const start = events[0];
+  assertEquals(start?.type, "background_start");
+  if (start?.type !== "background_start") return;
+  assertEquals(start.sessionId, "s1");
+  assertEquals(start.commandId, commandId);
+  assertEquals(start.command, linesCommand);
+  assertEquals(start.cwd, Deno.cwd());
+  assert(start.pid > 0, `pid must be positive: ${start.pid}`);
+  assert(Math.abs(start.startedAt - startedAt) < 5000);
+
+  const end = await waitForEndEvent(events);
+  assertEquals(end.sessionId, "s1");
+  assertEquals(end.commandId, commandId);
+  assertEquals(end.state, "finished");
+  assertEquals(end.exitCode, 0);
+  assert(end.finishedAt >= start.startedAt);
+  assert(end.tail.includes("line2"), `tail missing output: ${end.tail}`);
+
+  // Deltas carry the decoded output and must arrive between start and end.
+  const deltas = events.filter(
+    (e): e is Extract<ClientEvent, { type: "background_delta" }> =>
+      e.type === "background_delta",
+  );
+  assert(deltas.length > 0, "no background_delta events were emitted");
+  const joined = deltas.map((d) => d.delta).join("");
+  assert(joined.includes("line1"), `deltas missing output: ${joined}`);
+  assert(
+    events.findIndex((e) => e.type === "background_start") <
+      events.findIndex((e) => e.type === "background_delta"),
+    "deltas must follow the start event",
+  );
+  assert(
+    events.findIndex((e) => e.type === "background_delta") <
+      events.findIndex((e) => e.type === "background_end"),
+    "end must follow the deltas",
+  );
+});
+
+Deno.test("kill announces a killed end event", async () => {
+  const events: ClientEvent[] = [];
+  const manager = new BackgroundProcessManager({
+    sessionId: "s1",
+    emit: (event) => events.push(event),
+  });
+  const { commandId } = await manager.start({
+    cwd: Deno.cwd(),
+    command: longCommand,
+  });
+  // Let the shell spawn before tearing it down (taskkill needs a live pid).
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await manager.kill(commandId);
+  const end = await waitForEndEvent(events);
+  assertEquals(end.commandId, commandId);
+  assertEquals(end.state, "killed");
+  // The exit code of a killed process is OS-dependent (often a non-zero
+  // code on Windows), so only the state is asserted.
+  assert(
+    end.exitCode === undefined || typeof end.exitCode === "number",
+    `exitCode must be a number or undefined: ${end.exitCode}`,
+  );
 });
 
 Deno.test("status reports state, exit code and output tail", async () => {

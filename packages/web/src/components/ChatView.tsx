@@ -23,6 +23,7 @@ import { slashCommands, slashPrompt } from "../slashCommands.ts";
 import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
+import { BackgroundPanel } from "./BackgroundPanel.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
@@ -193,6 +194,7 @@ export function ChatView(
       <div className="chat-panels">
         <TodoPanel todos={view.todos} />
         <TaskPanel tasks={view.tasks} />
+        <BackgroundPanel commands={view.backgrounds} />
       </div>
       <div className="chat-scroll" ref={scrollRef}>
         <div className="chat-column">

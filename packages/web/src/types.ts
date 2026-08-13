@@ -5,6 +5,7 @@ import type {
   AgentMessage,
   AskAnswer,
   AskQuestion,
+  BackgroundCommandInfo,
   ClientEvent as CoreClientEvent,
   ConnectionEntry,
   McpInfo,
@@ -30,6 +31,7 @@ export type {
   AgentMessage,
   AskAnswer,
   AskQuestion,
+  BackgroundCommandInfo,
   ConnectionEntry,
   McpInfo,
   McpServerInfo,
@@ -109,6 +111,14 @@ export interface TaskView {
   liveText: string;
 }
 
+/** One background command (the async_bash tool) as shown in the background
+ * panel: the command's info plus the live output text accumulated from
+ * `background_delta` events while it runs (the resync snapshot seeds the
+ * tail only at completion). */
+export interface BackgroundView extends BackgroundCommandInfo {
+  liveText: string;
+}
+
 /** Live state of one open session tab. */
 export interface SessionView {
   info: SessionInfo;
@@ -126,6 +136,11 @@ export interface SessionView {
    * Added by `task_start`, fed by `task_delta`, settled by `task_end`; the
    * resync replaces the list from the server snapshot. */
   tasks: TaskView[];
+  /** The session's background commands (async_bash tool), shown in the
+   * background panel. Added by `background_start`, fed by
+   * `background_delta`, settled by `background_end`; the resync replaces
+   * the list from the server snapshot. */
+  backgrounds: BackgroundView[];
   /** Keys (role:timestamp) of messages deleted by rewind. Kept so a later
    * resync (merge is append-only) cannot resurrect them. */
   removed: Set<string>;
@@ -151,6 +166,7 @@ export function emptyView(
     pendingQuestions: [],
     todos: [],
     tasks: [],
+    backgrounds: [],
     removed: new Set(),
   };
 }
