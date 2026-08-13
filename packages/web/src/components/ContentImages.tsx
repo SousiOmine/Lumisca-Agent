@@ -1,3 +1,5 @@
+import { toDataUrl } from "@lumisca/core/shared";
+
 /** Render image content blocks (base64 `data`) as clickable thumbnails.
  * Shared by user messages and tool results. */
 export function ContentImages({
@@ -11,7 +13,7 @@ export function ContentImages({
         <img
           key={index}
           className="msg-image"
-          src={`data:${image.mimeType};base64,${image.data}`}
+          src={toDataUrl(image.mimeType, image.data)}
           alt=""
         />
       ))}

@@ -211,6 +211,30 @@ Deno.test("the per-session concurrency limit is enforced", async () => {
   }
 });
 
+Deno.test("finished commands free their slot for new starts", async () => {
+  const manager = new BackgroundProcessManager();
+  try {
+    // Fill every slot with short commands and let them all finish: the
+    // slot limit is a concurrency limit, so a finished command must not
+    // keep blocking new starts (regression: records were never released).
+    for (let i = 0; i < MAX_BACKGROUND_COMMANDS; i++) {
+      await manager.start({ cwd: Deno.cwd(), command: "echo hi" });
+    }
+    while (
+      manager.list().some((info) => info.state === "running")
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    await manager.start({ cwd: Deno.cwd(), command: "echo ninth" });
+    assertEquals(manager.list().length, MAX_BACKGROUND_COMMANDS + 1);
+    // The finished commands stay queryable via get/tail.
+    const first = manager.get("1");
+    assertEquals(first?.state, "finished");
+  } finally {
+    manager.killAll();
+  }
+});
+
 Deno.test("output tail is capped and keeps the last bytes", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);

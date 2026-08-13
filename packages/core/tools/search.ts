@@ -1,5 +1,6 @@
-import { join, relative } from "node:path";
+import { relative } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
+import { walkEntries } from "../workspace/walk.ts";
 import { errorMessage } from "../errors.ts";
 import { TOOL_GLOB, TOOL_GREP } from "../shared.ts";
 import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
@@ -33,10 +34,9 @@ function linePreview(line: string, max = 200): string {
 }
 
 /**
- * Recursively yield files under `root`. With `skipHidden` (default) hidden
- * entries (`.`-prefixed) are skipped; symlinks are never followed.
- * `gitignore` prunes ignored directories and drops ignored files (this is
- * what normally excludes node_modules).
+ * Recursively yield files under `root` (see walkEntries for the walk
+ * policy: hidden skipped by default, symlinks never followed, gitignore
+ * pruning). With `skipHidden` (default) hidden entries are skipped.
  */
 async function* walkFiles(
   root: string,
@@ -46,35 +46,15 @@ async function* walkFiles(
     maxDepth?: number;
   } = {},
 ): AsyncGenerator<string> {
-  const skipHidden = options.skipHidden ?? true;
-  const maxDepth = options.maxDepth ?? 32;
-  async function* walk(dir: string, depth: number): AsyncGenerator<string> {
-    if (depth > maxDepth) return;
-    let entries: Deno.DirEntry[];
-    try {
-      entries = [...Deno.readDirSync(dir)];
-    } catch {
-      return; // unreadable directory (permissions, race) — skip
-    }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      const full = join(dir, entry.name);
-      if (entry.isSymlink) continue; // never follow symlinks
-      if (entry.isDirectory) {
-        if (skipHidden && entry.name.startsWith(".")) continue;
-        const rel = relative(root, full);
-        // An ignored directory means everything below it is ignored too.
-        if (options.gitignore?.ignores(root, rel, true)) continue;
-        yield* walk(full, depth + 1);
-      } else if (entry.isFile) {
-        if (skipHidden && entry.name.startsWith(".")) continue;
-        const rel = relative(root, full);
-        if (options.gitignore?.ignores(root, rel, false)) continue;
-        yield full;
-      }
-    }
+  for await (
+    const entry of walkEntries(root, {
+      skipHidden: options.skipHidden,
+      gitignore: options.gitignore,
+      maxDepth: options.maxDepth,
+    })
+  ) {
+    if (!entry.isDir) yield entry.path;
   }
-  yield* walk(root, 0);
 }
 
 async function looksBinary(path: string): Promise<boolean> {
@@ -104,6 +84,13 @@ const grepSchema = object({
     "Maximum matches to return (default 200, cap 1000)",
   )),
 });
+/** Model-supplied patterns are applied per line without a timeout; a
+ * length cap keeps catastrophic-backtracking (ReDoS) patterns bounded. */
+const MAX_GREP_PATTERN_CHARS = 256;
+/** Model-supplied glob patterns are compiled to regexes; cap the length so
+ * a pathological pattern cannot build a giant regex. */
+const MAX_GLOB_PATTERN_CHARS = 1024;
+
 export function createGrepTool(
   ctx: FsToolContext,
 ): Tool<typeof grepSchema> {
@@ -117,6 +104,11 @@ export function createGrepTool(
       "files and files larger than 8MB are skipped.",
     parameters: grepSchema,
     execute: async (_id, params) => {
+      if (params.pattern.length > MAX_GREP_PATTERN_CHARS) {
+        throw new Error(
+          `pattern is too long (max ${MAX_GREP_PATTERN_CHARS} chars)`,
+        );
+      }
       let re: RegExp;
       try {
         re = new RegExp(params.pattern, params.case ? "" : "i");
@@ -255,6 +247,11 @@ export function createGlobTool(
       "skip them.",
     parameters: globSchema,
     execute: async (_id, params) => {
+      if (params.pattern.length > MAX_GLOB_PATTERN_CHARS) {
+        throw new Error(
+          `pattern is too long (max ${MAX_GLOB_PATTERN_CHARS} chars)`,
+        );
+      }
       let re: RegExp;
       try {
         re = globToRegExp(params.pattern.replace(/\\/g, "/"));

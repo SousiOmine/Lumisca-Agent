@@ -8,8 +8,6 @@
  * browser that host does not resolve and shellAvailable() is false.
  */
 
-import type { ConnectionEntry } from "./types.ts";
-
 export interface ShellState {
   mode: "local" | "remote";
   url: string | null;
@@ -42,31 +40,38 @@ export async function shellCall<T>(
   return body as T;
 }
 
+/** Race a probe against a timeout (the shell bridge may be unreachable —
+ * a slow DNS failure must not stall the UI). */
+function withTimeout<T>(probe: Promise<T>, fallback: T, ms = 2500): Promise<T> {
+  const timeout = new Promise<T>((resolve) =>
+    setTimeout(() => resolve(fallback), ms)
+  );
+  return Promise.race([probe, timeout]);
+}
+
 /** Whether the desktop shell bridge is reachable (false in browsers).
  * Bounded by a timeout so a slow DNS failure does not stall the UI. */
 export function shellAvailable(): Promise<boolean> {
-  const probe = shellCall<ShellState>("state").then(
-    () => true,
-    () => false,
+  return withTimeout(
+    shellCall<ShellState>("state").then(
+      () => true,
+      () => false,
+    ),
+    false,
   );
-  const timeout = new Promise<boolean>((resolve) =>
-    setTimeout(() => resolve(false), 2500)
-  );
-  return Promise.race([probe, timeout]);
 }
 
 /** Whether the OS folder picker can be used: the shell bridge must answer
  * AND display the local server (only then are picked paths on the machine
  * owning the workspaces; against a remote server they would be wrong). */
 export function nativeFolderPickerAvailable(): Promise<boolean> {
-  const probe = shellCall<ShellState>("state").then(
-    (s) => s.mode === "local",
-    () => false,
+  return withTimeout(
+    shellCall<ShellState>("state").then(
+      (s) => s.mode === "local",
+      () => false,
+    ),
+    false,
   );
-  const timeout = new Promise<boolean>((resolve) =>
-    setTimeout(() => resolve(false), 2500)
-  );
-  return Promise.race([probe, timeout]);
 }
 
 /** Open the OS folder picker through the shell bridge. Returns the picked
@@ -75,9 +80,6 @@ export async function pickFolder(): Promise<string | null> {
   const res = await shellCall<{ path: string | null }>("pick-folder");
   return res.path;
 }
-
-/** Registry entries as exposed by the shell bridge. */
-export type ShellServer = ConnectionEntry;
 
 /** Auto-update state reported by the shell bridge (`update/status`). */
 export interface UpdateStatus {

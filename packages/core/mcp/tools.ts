@@ -1,8 +1,17 @@
+import type { Agent } from "@earendil-works/pi-agent-core";
+import { toAgentTool } from "../tools/pi-adapter.ts";
+import type { Tool } from "../tools/schema.ts";
 import type { McpManager, McpToolDef } from "./manager.ts";
-import { object, type Tool } from "../tools/schema.ts";
+import { object } from "../tools/schema.ts";
 
 /** Argument schemas larger than this are omitted from the description. */
 const MAX_SCHEMA_CHARS = 8192;
+
+/** The system-prompt note teaching agents that MCP tools may leave the
+ * workspace. Shared by every attachment site (session agent, sub-agents)
+ * so the contract text stays in one place. */
+export const MCP_TOOLS_PROMPT_NOTE =
+  "\n\nNote: MCP tools (names starting with mcp__) can access resources outside the workspace.";
 
 /** Make server names safe for provider function-name rules
  * (`^[a-zA-Z0-9_-]{1,64}$`); tool names are already constrained by the
@@ -22,6 +31,23 @@ export async function createMcpTools(
 ): Promise<Tool[]> {
   const defs = await manager.listTools();
   return defs.map((def) => createMcpTool(manager, def));
+}
+
+/** Add the attachment's tools to a pi agent and teach it about their
+ * out-of-workspace access. Shared by the session agent and the sub-agent
+ * hub: any older `mcp__` tools are replaced (a config change tears down the
+ * old manager's processes, so its tools must not stay behind). */
+export function applyMcpToolsToAgent(agent: Agent, tools: Tool[]): void {
+  if (tools.length === 0) return;
+  agent.state.tools = [
+    ...agent.state.tools.filter((t) => !t.name.startsWith("mcp__")),
+    ...tools.map(toAgentTool),
+  ];
+  if (
+    !agent.state.systemPrompt.includes("MCP tools (names starting with mcp__)")
+  ) {
+    agent.state.systemPrompt += MCP_TOOLS_PROMPT_NOTE;
+  }
 }
 
 function createMcpTool(manager: McpManager, def: McpToolDef): Tool {

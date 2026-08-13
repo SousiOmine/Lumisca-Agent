@@ -16,6 +16,7 @@ import type {
   Workspace,
   WorkspaceFileEntry,
 } from "./types.ts";
+import { stripDataUrlHeader } from "@lumisca/core/shared";
 import { splitTabKey } from "./tabs.ts";
 
 /** The server serves both the UI and the API on the same origin. */
@@ -57,9 +58,7 @@ function promptBody(text: string, images?: PendingImage[]) {
     ...(images && images.length > 0
       ? {
         images: images.map((image) => ({
-          data: image.data.startsWith("data:")
-            ? image.data.slice(image.data.indexOf(",") + 1)
-            : image.data,
+          data: stripDataUrlHeader(image.data),
           mimeType: image.mimeType,
         })),
       }
@@ -112,8 +111,6 @@ export const api = {
       body: JSON.stringify(input),
     }),
   getSession: (id: string) => request<SessionInfoDto>(`/api/sessions/${id}`),
-  openSession: (id: string) =>
-    request<SessionInfoDto>(`/api/sessions/${id}/open`, { method: "POST" }),
   closeSession: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/close`, { method: "POST" }),
   getMessages: (id: string) =>
@@ -292,10 +289,6 @@ export const fed = {
     ),
   closeSession: (peerId: string, sessionId: string) =>
     request<{ ok: boolean }>(`/api/fed/${peerId}/sessions/${sessionId}/close`, {
-      method: "POST",
-    }),
-  openSession: (peerId: string, sessionId: string) =>
-    request<SessionInfoDto>(`/api/fed/${peerId}/sessions/${sessionId}/open`, {
       method: "POST",
     }),
   prompt: (

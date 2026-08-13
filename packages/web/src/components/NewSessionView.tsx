@@ -8,7 +8,7 @@ import type {
   PendingImage,
   ThinkingLevel,
 } from "../types.ts";
-import { errorText } from "../providers.ts";
+import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import { slashCommands, slashPrompt } from "../slashCommands.ts";
 import {
@@ -236,7 +236,8 @@ export function NewSessionView(
   const changeThinkingLevel = async (level: ThinkingLevel) => {
     if (!model) return;
     try {
-      const { thinkingLevel } = await api.setModelThinkingLevel(
+      const thinkingLevel = await setModelThinkingLevel(
+        "",
         model.provider,
         model.modelId,
         level,

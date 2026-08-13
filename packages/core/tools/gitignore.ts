@@ -1,21 +1,5 @@
 import { join, relative } from "node:path";
-
-function normalizeCase(p: string): string {
-  return Deno.build.os === "windows" ? p.toLowerCase() : p;
-}
-
-function toPosix(p: string): string {
-  return p.replace(/\\/g, "/");
-}
-
-/** True when `candidate` is `root` itself or sits below it. Both paths are
- * canonical, so a plain normalized-prefix check suffices. */
-function isWithin(root: string, candidate: string): boolean {
-  const r = normalizeCase(toPosix(root));
-  const c = normalizeCase(toPosix(candidate));
-  if (c === r) return true;
-  return c.startsWith(r.endsWith("/") ? r : `${r}/`);
-}
+import { isWithin } from "../workspace/path-util.ts";
 
 /** Convert a glob pattern to a RegExp. Supports `**`, `*`, `?`, `{a,b}`.
  * A double-star segment matches zero or more directories, so a pattern like

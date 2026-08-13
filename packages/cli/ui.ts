@@ -6,13 +6,36 @@ export type PromptFn = (message?: string) => string | null;
 
 let promptFn: PromptFn = (message) => prompt(message);
 
-/** Override the prompt implementation (used by tests). */
+/** Override the prompt implementation (used by tests). Prefer
+ * withPromptFn, which restores the previous function automatically. */
 export function setPromptFn(fn: PromptFn): void {
   promptFn = fn;
 }
 
 export function getPromptFn(): PromptFn {
   return promptFn;
+}
+
+/** Run `body` with a temporary prompt function, restoring the previous one
+ * afterwards (async-safe). Tests use this so they never leak a fake prompt
+ * into other tests. */
+export async function withPromptFn<T>(
+  fn: PromptFn,
+  body: () => Promise<T>,
+): Promise<T> {
+  const previous = promptFn;
+  promptFn = fn;
+  try {
+    return await body();
+  } finally {
+    promptFn = previous;
+  }
+}
+
+/** Human-readable message of any thrown value (shared pattern; the web UI
+ * has the same helper). */
+export function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function wrap(code: string, text: string): string {
@@ -50,8 +73,4 @@ export function error(text: string): void {
 
 export function userLine(text: string): void {
   console.log(color.green(`❯ ${text}`));
-}
-
-export function assistantLine(text: string): void {
-  console.log(color.cyan(`◈ ${text}`));
 }

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AuthCheck, ModelInfo, Provider } from "@lumisca/core";
-import { AppError, parseBody } from "./util.ts";
+import { AppError, parseBody, ttlCache } from "./util.ts";
 
 /** Auth checks are cached briefly; invalidated when an API key changes. */
 const AUTH_CACHE_TTL = 30_000;
@@ -22,26 +22,23 @@ export interface ProviderApi {
 export function providerRoutes(core: ProviderApi): Hono {
   const app = new Hono();
 
-  const authCache = new Map<string, {
-    configured: boolean;
-    source?: string;
-    expires: number;
-  }>();
+  const authCache = ttlCache<string, { configured: boolean; source?: string }>(
+    AUTH_CACHE_TTL,
+  );
   const cachedAuth = async (providerId: string) => {
     const cached = authCache.get(providerId);
-    if (cached && cached.expires > Date.now()) return cached;
+    if (cached) return cached;
     let check: AuthCheck | undefined;
     try {
       check = await core.checkAuth(providerId);
     } catch {
       // A transient checkAuth failure (network) must not be cached as
       // "not configured" — that would lie to the settings UI.
-      return { configured: false, expires: Date.now() + AUTH_CACHE_TTL };
+      return { configured: false };
     }
     const entry = {
       configured: check !== undefined,
       source: check?.source,
-      expires: Date.now() + AUTH_CACHE_TTL,
     };
     authCache.set(providerId, entry);
     return entry;

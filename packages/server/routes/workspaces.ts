@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Workspace, WorkspaceFileEntry } from "@lumisca/core";
 import { listWorkspaceFiles, suggestWorkspaceFiles } from "@lumisca/core";
-import { AppError, parseBody } from "./util.ts";
+import { AppError, parseBody, ttlCache } from "./util.ts";
 
 interface WorkspaceBody {
   name?: unknown;
@@ -41,10 +41,10 @@ const FILE_CACHE_MAX = 64;
 
 export function workspaceRoutes(core: WorkspaceApi): Hono {
   const app = new Hono();
-  const fileCache = new Map<
-    string,
-    { at: number; entries: WorkspaceFileEntry[] }
-  >();
+  const fileCache = ttlCache<string, WorkspaceFileEntry[]>(
+    FILE_CACHE_TTL_MS,
+    FILE_CACHE_MAX,
+  );
 
   app.get("/workspaces", (c) => c.json(core.listWorkspaces()));
 
@@ -100,22 +100,10 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
       throw new AppError(`Workspace not found: ${id}`, 404);
     }
     const query = c.req.query("query") ?? "";
-    const cached = fileCache.get(id);
-    let entries: WorkspaceFileEntry[];
-    if (cached && Date.now() - cached.at < FILE_CACHE_TTL_MS) {
-      entries = cached.entries;
-    } else {
+    let entries = fileCache.get(id);
+    if (entries === undefined) {
       entries = await listWorkspaceFiles(ws);
-      fileCache.set(id, { at: Date.now(), entries });
-      if (fileCache.size > FILE_CACHE_MAX) {
-        let oldest: string | undefined;
-        for (const [key, value] of fileCache) {
-          if (oldest === undefined || value.at < fileCache.get(oldest)!.at) {
-            oldest = key;
-          }
-        }
-        if (oldest !== undefined) fileCache.delete(oldest);
-      }
+      fileCache.set(id, entries);
     }
     return c.json({ entries: suggestWorkspaceFiles(entries, query) });
   });

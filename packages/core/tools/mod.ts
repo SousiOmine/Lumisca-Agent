@@ -33,12 +33,38 @@ const MAX_PERSONALIZATION_BYTES = 32 * 1024;
 
 /** Skills for a session, in precedence order: workspace `.agents/skills`,
  * then agent plugin skills (`skills/` of `.agents/plugins` plugins), then
- * global `~/.agents/skills`. */
-function sessionSkills(folders: string[]): SkillDef[] {
+ * global `~/.agents/skills`. Shared with the sub-agent tool builders
+ * (tools/task.ts) so both agent kinds see the same skill set. */
+export function sessionSkills(folders: string[]): SkillDef[] {
   const plugins = discoverPlugins(folders);
   return discoverSkills(folders, {
     pluginSkills: plugins.flatMap((p) => p.skills),
   });
+}
+
+/** The sandboxed file+search tool set: read, write, edit, list_dir, grep,
+ * glob. The core of every coding tool set (main agent and general
+ * sub-agents share it, so new tools cannot drift between the two). */
+export function sandboxFileTools(sandbox: Sandbox): Tool[] {
+  return [
+    createReadFileTool({ sandbox }),
+    createWriteFileTool({ sandbox }),
+    createEditFileTool({ sandbox }),
+    createListDirTool({ sandbox }),
+    createGrepTool({ sandbox }),
+    createGlobTool({ sandbox }),
+  ];
+}
+
+/** The read-only investigation tool set: read, list_dir, grep, glob.
+ * Backs the `explore` sub-agent (which must never modify files). */
+export function readOnlyInvestigationTools(sandbox: Sandbox): Tool[] {
+  return [
+    createReadFileTool({ sandbox }),
+    createListDirTool({ sandbox }),
+    createGrepTool({ sandbox }),
+    createGlobTool({ sandbox }),
+  ];
 }
 
 export interface ToolFactoryOptions {
@@ -66,15 +92,9 @@ export function createCodingTools(
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
-  const ctx = { sandbox };
 
   return [
-    createReadFileTool(ctx),
-    createWriteFileTool(ctx),
-    createEditFileTool(ctx),
-    createListDirTool(ctx),
-    createGrepTool(ctx),
-    createGlobTool(ctx),
+    ...sandboxFileTools(sandbox),
     createBashTool({ sandbox, env: options.env }),
     ...(options.background !== undefined
       ? createAsyncBashTools({ manager: options.background, sandbox })

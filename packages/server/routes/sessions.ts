@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { MAX_PROMPT_IMAGES } from "@lumisca/core";
 import type {
   AskAnswer,
   CreateSessionInput,
@@ -6,6 +7,7 @@ import type {
   SessionAgent,
   SessionInfo,
   TaskInfo,
+  ThinkingLevel,
   TodoPhase,
 } from "@lumisca/core";
 import { AppError, parseBody } from "./util.ts";
@@ -17,10 +19,10 @@ interface SessionBody {
   modelId?: unknown;
 }
 
-/** Attachments allowed per prompt, and the base64 length cap per image
- * (~15MB binary). Bounds for what a browser can sensibly send; LLM APIs
- * impose their own smaller limits on top of this. */
-const MAX_PROMPT_IMAGES = 8;
+/** Attachments allowed per prompt (shared with the composer's cap), and
+ * the base64 length cap per image (~15MB binary). Bounds for what a
+ * browser can sensibly send; LLM APIs impose their own smaller limits on
+ * top of this. */
 const MAX_IMAGE_BASE64_LENGTH = 20 * 1024 * 1024;
 
 interface PromptBody {
@@ -117,7 +119,14 @@ export interface SessionApi {
   closeSession(id: string): void;
   deleteSession(id: string): void;
   getAgent(id: string): SessionAgent | undefined;
-  getDefaultModel(): { provider: string; modelId: string } | null;
+  /** The model a new session would get, with the thinking control data the
+   * draft tab renders (matches LumiscaCore.getDefaultModel). */
+  getDefaultModel(): {
+    provider: string;
+    modelId: string;
+    thinkingLevel: ThinkingLevel;
+    thinkingLevels: ThinkingLevel[];
+  } | null;
   startPrompt(id: string, text: string, images?: ImageContent[]): void;
   abort(id: string): void;
   rewind(id: string, timestamp: number): Promise<void>;

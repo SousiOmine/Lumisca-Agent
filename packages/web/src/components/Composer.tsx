@@ -3,6 +3,7 @@ import {
   type ComponentType,
   type DragEvent,
   type KeyboardEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -17,36 +18,15 @@ import {
   IconPlayerStop,
   IconX,
 } from "@tabler/icons-react";
-import { THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
-import { api, fed } from "../api.ts";
+import { MAX_PROMPT_IMAGES, THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
 import { ModelPicker } from "./ModelPicker.tsx";
-import type {
-  ModelInfo,
-  PendingImage,
-  ThinkingLevel,
-  WorkspaceFileEntry,
-} from "../types.ts";
-
-/** Maximum attachments accepted per prompt (mirrors the server limit). */
-const MAX_IMAGES = 8;
-
-/** One selectable entry of the slash-command menu: a command (first level)
- * or one of its subcommands (second level). */
-export interface SlashCommandItem {
-  id: string;
-  label: string;
-  description?: string;
-  icon?: ComponentType<{ size?: number; className?: string }>;
-}
-
-/** A slash command offered when the input starts with `/`. Commands with
- * `items` open a second level before executing; leaf commands execute
- * directly. */
-export interface SlashCommand extends SlashCommandItem {
-  /** Subcommands shown after selecting this command (e.g. the review
-   * target). Omitted → the command executes right away. */
-  items?: SlashCommandItem[];
-}
+import { useClickOutside } from "../hooks/useClickOutside.ts";
+import { useCaretPosition } from "../hooks/useCaretPosition.ts";
+import { useMention } from "../hooks/useMention.ts";
+import { isSlashCommand, useSlashMenu } from "../hooks/useSlashMenu.ts";
+import type { SlashCommand, SlashCommandItem } from "../hooks/useSlashMenu.ts";
+export type { SlashCommand, SlashCommandItem };
+import type { ModelInfo, PendingImage, ThinkingLevel } from "../types.ts";
 
 export interface ComposerModel {
   provider: string;
@@ -113,129 +93,6 @@ interface ComposerProps {
   onImagesChange?: (images: PendingImage[]) => void;
 }
 
-/** An active `@` mention: the caret is inside a query started by `@`. */
-interface MentionState {
-  /** Index of the `@` character in the input. */
-  start: number;
-  query: string;
-  items: WorkspaceFileEntry[];
-  active: number;
-  loading: boolean;
-}
-
-/** An active `/` command: the caret is inside a query started by `/`. */
-interface SlashState {
-  /** Index of the `/` character in the input. */
-  start: number;
-  query: string;
-  /** Active index in the currently shown list. */
-  active: number;
-  /** Command whose subcommands are shown (null = first level). */
-  submenu: SlashCommand | null;
-}
-
-/** Find the `@query` under the caret. `@` must start a word (preceded by
- * whitespace or a non-word character such as punctuation — Japanese text
- * counts), so emails like `foo@bar` never trigger. */
-function detectMention(
-  value: string,
-  caret: number,
-): { start: number; query: string } | null {
-  const before = value.slice(0, caret);
-  const match = /(^|[^\w])@([^\s]*)$/.exec(before);
-  if (!match || match[1] === undefined) return null;
-  return { start: match.index + match[1].length, query: match[2] ?? "" };
-}
-
-/** Find a `/command` under the caret. The `/` must start the input (only
- * whitespace before it): a slash command replaces the whole message, so it
- * never triggers mid-text (typing `/` in prose stays literal). */
-function detectSlash(
-  value: string,
-  caret: number,
-): { start: number; query: string } | null {
-  const before = value.slice(0, caret);
-  const match = /^(\s*)\/([^\s]*)$/.exec(before);
-  if (!match || match[1] === undefined) return null;
-  return { start: match[1].length, query: match[2] ?? "" };
-}
-
-/** Commands matching the typed query (empty query → all). Matches the id or
- * the label, so both `/rev` and `/レビュー` work. */
-function filterSlashCommands(
-  commands: SlashCommand[],
-  query: string,
-): SlashCommand[] {
-  if (query === "") return commands;
-  const q = query.toLowerCase();
-  return commands.filter((command) =>
-    command.id.toLowerCase().includes(q) ||
-    command.label.toLowerCase().includes(q)
-  );
-}
-
-/** Narrowing helper: entries of the first level are commands. */
-function isSlashCommand(
-  entry: SlashCommand | SlashCommandItem,
-): entry is SlashCommand {
-  return "items" in entry;
-}
-
-/** Pixel position of the caret within the textarea (mirror-div technique:
- * clone the textarea's metrics, render the text up to the caret, and read
- * where a marker span lands). The marker's rect is offset by the mirror's
- * own rect, so the result is relative to the mirror — and, because the
- * textarea and its wrapper share a top-left origin, to the popover's
- * containing block — regardless of any transform on an ancestor. */
-function measureCaret(
-  textarea: HTMLTextAreaElement,
-): { x: number; y: number } {
-  const pos = textarea.selectionStart;
-  const style = getComputedStyle(textarea);
-  const mirror = document.createElement("div");
-  const props = [
-    "borderTopWidth",
-    "borderRightWidth",
-    "borderBottomWidth",
-    "borderLeftWidth",
-    "paddingTop",
-    "paddingRight",
-    "paddingBottom",
-    "paddingLeft",
-    "fontFamily",
-    "fontSize",
-    "fontWeight",
-    "lineHeight",
-    "letterSpacing",
-    "wordSpacing",
-    "textIndent",
-    "textTransform",
-  ] as const;
-  for (const prop of props) {
-    mirror.style.setProperty(prop, style.getPropertyValue(prop));
-  }
-  mirror.style.position = "fixed";
-  mirror.style.visibility = "hidden";
-  mirror.style.left = "0";
-  mirror.style.top = "0";
-  mirror.style.whiteSpace = "pre-wrap";
-  mirror.style.wordBreak = "break-word";
-  const before = textarea.value.slice(0, pos);
-  mirror.textContent = before;
-  if (before.endsWith("\n")) mirror.appendChild(document.createElement("br"));
-  const marker = document.createElement("span");
-  marker.textContent = textarea.value.slice(pos) || " ";
-  mirror.appendChild(marker);
-  document.body.appendChild(mirror);
-  const mirrorRect = mirror.getBoundingClientRect();
-  const markerRect = marker.getBoundingClientRect();
-  document.body.removeChild(mirror);
-  return {
-    x: markerRect.left - mirrorRect.left,
-    y: markerRect.top - mirrorRect.top,
-  };
-}
-
 /** Shared chat input: textarea + model picker + submit, in one rounded box.
  * Enter/Shift+Enter insert a newline; Ctrl+Enter submits. */
 export function Composer({
@@ -268,26 +125,76 @@ export function Composer({
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showThinkingPicker, setShowThinkingPicker] = useState(false);
-  const [mention, setMention] = useState<MentionState | null>(null);
-  const [slash, setSlash] = useState<SlashState | null>(null);
-  const [caretPos, setCaretPos] = useState<{ x: number; y: number } | null>(
-    null,
-  );
   const [dragging, setDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Bumped per fetch so a stale response can never overwrite a newer one.
-  const fetchSeq = useRef(0);
   // Latest images, read inside the async FileReader callback so a burst of
-  // drops/pastes never appends from a stale closure.
+  // drops/pastes never appends from a stale closure. The ref is kept in an
+  // effect: writing it during render breaks under concurrent rendering.
   const imagesRef = useRef(images);
-  imagesRef.current = images;
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+  // The pickers close on outside click and Escape, like every other
+  // dropdown (the refs wrap the trigger button + popover, so toggling the
+  // trigger keeps working).
+  const modelPickerRef = useRef<HTMLDivElement>(null);
+  const thinkingPickerRef = useRef<HTMLDivElement>(null);
+  useClickOutside(
+    modelPickerRef,
+    () => setShowModelPicker(false),
+    showModelPicker,
+  );
+  useClickOutside(
+    thinkingPickerRef,
+    () => setShowThinkingPicker(false),
+    showThinkingPicker,
+  );
 
-  const mentionEnabled = mentionWorkspaceId !== undefined;
   const slashEnabled = slashCommands !== undefined;
+
+  const { caretPos, setCaretPos, measure: measureCaret } = useCaretPosition(
+    textareaRef,
+  );
+  const clearCaret = useCallback(() => setCaretPos(null), [setCaretPos]);
+  const {
+    mention,
+    setMention,
+    updateMention,
+    selectMention,
+    closeMention,
+    handleKeyDown: handleMentionKeyDown,
+  } = useMention({
+    textareaRef,
+    workspaceId: mentionWorkspaceId,
+    peerId: mentionPeerId,
+    value,
+    onChange,
+    clearCaret,
+  });
+  const {
+    slash,
+    setSlash,
+    slashEntries,
+    updateSlash,
+    resetSlash,
+    selectSlash,
+    handleKeyDown: handleSlashKeyDown,
+  } = useSlashMenu({
+    enabled: slashEnabled,
+    commands: slashCommands ?? [],
+    onSelect: onSlashCommand,
+  });
+
+  // Switching sessions (different workspace) must not leak a stale mention
+  // or slash command.
+  useEffect(() => {
+    closeMention();
+    resetSlash();
+  }, [mentionWorkspaceId, mentionPeerId, closeMention, resetSlash]);
 
   /** Add a pasted/dropped image file to the attachments. */
   const addImage = (file: File) => {
-    if (imagesRef.current.length >= MAX_IMAGES) return;
+    if (imagesRef.current.length >= MAX_PROMPT_IMAGES) return;
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== "string") return;
@@ -340,130 +247,15 @@ export function Composer({
    * typing or caret moves. They are mutually exclusive: a matching `/`
    * takes over the input, so the two popovers never overlap. */
   const updateSuggestions = (nextValue: string, caret: number) => {
-    const slashDet = slashEnabled ? detectSlash(nextValue, caret) : null;
-    if (slashDet) {
-      setMention(null);
-      setCaretPos(null);
-      setSlash((prev) =>
-        prev && prev.start === slashDet.start && prev.query === slashDet.query
-          ? prev
-          : {
-            start: slashDet.start,
-            query: slashDet.query,
-            active: 0,
-            submenu: null,
-          }
-      );
+    if (updateSlash(nextValue, caret)) {
+      closeMention();
       return;
     }
-    setSlash(null);
-    const det = mentionEnabled ? detectMention(nextValue, caret) : null;
-    if (!det) {
-      if (mention !== null) {
-        setMention(null);
-        setCaretPos(null);
-      }
-      return;
-    }
-    setMention((prev) =>
-      prev && prev.start === det.start
-        ? { ...prev, query: det.query, loading: true }
-        : {
-          start: det.start,
-          query: det.query,
-          items: [],
-          active: 0,
-          loading: true,
-        }
-    );
-    const ta = textareaRef.current;
-    if (ta) setCaretPos(measureCaret(ta));
-  };
-
-  // Debounced fetch of suggestions whenever the mention query changes.
-  useEffect(() => {
-    if (!mention || !mention.loading || !mentionWorkspaceId) return;
-    const seq = ++fetchSeq.current;
-    const timer = setTimeout(async () => {
-      try {
-        const result = mentionPeerId === ""
-          ? await api.workspaceFiles(mentionWorkspaceId, mention.query)
-          : await fed.workspaceFiles(
-            mentionPeerId,
-            mentionWorkspaceId,
-            mention.query,
-          );
-        if (fetchSeq.current !== seq || !mention) return;
-        setMention((prev) =>
-          prev ? { ...prev, items: result.entries, loading: false } : prev
-        );
-      } catch {
-        if (fetchSeq.current !== seq || !mention) return;
-        setMention((prev) =>
-          prev ? { ...prev, items: [], loading: false } : prev
-        );
-      }
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [mention, mentionWorkspaceId, mentionPeerId]);
-
-  // Switching sessions (different workspace) must not leak a stale mention
-  // or slash command.
-  useEffect(() => {
-    setMention(null);
-    setCaretPos(null);
-    setSlash(null);
-  }, [mentionWorkspaceId, mentionPeerId]);
-
-  /** Replace `@query` with the picked path (plus a trailing space). */
-  const selectMention = (index: number) => {
-    const current = mention;
-    const ta = textareaRef.current;
-    if (!current || !ta) return;
-    const item = current.items[index];
-    if (!item) return;
-    const caret = ta.selectionStart;
-    const inserted = item.path;
-    const next = value.slice(0, current.start) + inserted + " " +
-      value.slice(caret);
-    onChange(next);
-    setMention(null);
-    setCaretPos(null);
-    fetchSeq.current++;
-    const caretAfter = current.start + inserted.length + 1;
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(caretAfter, caretAfter);
-    });
-  };
-
-  /** Entries shown in the slash menu right now: query-filtered commands at
-   * the first level, the subcommand list inside a submenu. */
-  const slashEntries = slash !== null
-    ? slash.submenu !== null
-      ? slash.submenu.items ?? []
-      : filterSlashCommands(slashCommands ?? [], slash.query)
-    : [];
-
-  /** Execute the entry at `index` of the current level, or descend into it
-   * when it is a command with subcommands. Execution hands the selection to
-   * the parent (onSlashCommand), which builds the prompt and submits it. */
-  const selectSlash = (index: number) => {
-    const current = slash;
-    const entry = slashEntries[index];
-    if (!current || !entry) return;
-    if (
-      current.submenu === null && isSlashCommand(entry) &&
-      (entry.items?.length ?? 0) > 0
-    ) {
-      setSlash({ ...current, submenu: entry, active: 0 });
-      return;
-    }
-    setSlash(null);
-    if (current.submenu === null) {
-      onSlashCommand?.(entry as SlashCommand);
-    } else {
-      onSlashCommand?.(current.submenu, entry);
+    resetSlash();
+    if (updateMention(nextValue, caret)) {
+      measureCaret();
+    } else if (mention !== null) {
+      clearCaret();
     }
   };
 
@@ -473,84 +265,8 @@ export function Composer({
       onSubmit();
       return;
     }
-    if (slash) {
-      if (e.key === "ArrowDown" && slashEntries.length > 0) {
-        e.preventDefault();
-        setSlash({
-          ...slash,
-          active: (slash.active + 1) % slashEntries.length,
-        });
-        return;
-      }
-      if (e.key === "ArrowUp" && slashEntries.length > 0) {
-        e.preventDefault();
-        setSlash({
-          ...slash,
-          active: (slash.active - 1 + slashEntries.length) %
-            slashEntries.length,
-        });
-        return;
-      }
-      // → opens the submenu of the active command; ← returns from a
-      // submenu to the first level.
-      if (e.key === "ArrowRight" && slash.submenu === null) {
-        const entry = slashEntries[slash.active];
-        if (entry && isSlashCommand(entry) && (entry.items?.length ?? 0) > 0) {
-          e.preventDefault();
-          setSlash({ ...slash, submenu: entry, active: 0 });
-          return;
-        }
-      }
-      if (e.key === "ArrowLeft" && slash.submenu !== null) {
-        e.preventDefault();
-        setSlash({ ...slash, submenu: null, active: 0 });
-        return;
-      }
-      if ((e.key === "Enter" || e.key === "Tab") && slashEntries.length > 0) {
-        e.preventDefault();
-        selectSlash(slash.active);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (slash.submenu !== null) {
-          setSlash({ ...slash, submenu: null, active: 0 });
-        } else {
-          setSlash(null);
-        }
-        return;
-      }
-    }
-    if (mention && mention.items.length > 0) {
-      const count = mention.items.length;
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setMention({
-          ...mention,
-          active: (mention.active + 1) % count,
-        });
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setMention({
-          ...mention,
-          active: (mention.active - 1 + count) % count,
-        });
-        return;
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        selectMention(mention.active);
-        return;
-      }
-    }
-    if (mention && e.key === "Escape") {
-      e.preventDefault();
-      setMention(null);
-      setCaretPos(null);
-      return;
-    }
+    if (handleSlashKeyDown(e)) return;
+    if (handleMentionKeyDown(e)) return;
     onKeyDown?.(e);
   };
 
@@ -722,7 +438,7 @@ export function Composer({
             </span>
           )
           : (
-            <div className="model-switch-bar">
+            <div className="model-switch-bar" ref={modelPickerRef}>
               <button
                 type="button"
                 className="model-switch"
@@ -750,12 +466,14 @@ export function Composer({
                 </span>
               </button>
               {canThink && onThinkingLevelChange && (
-                <div className="thinking-control">
+                <div className="thinking-control" ref={thinkingPickerRef}>
                   <button
                     type="button"
                     className="thinking-switch"
                     onClick={() => {
-                      setShowThinkingPicker((o) => !o);
+                      setShowThinkingPicker((o) =>
+                        !o
+                      );
                       setShowModelPicker(false);
                     }}
                     title="思考強度"

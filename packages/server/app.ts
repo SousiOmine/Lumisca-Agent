@@ -178,6 +178,20 @@ export function validateHostConfig(
     "to the network; set LUMISCA_TOKEN or bind a loopback address";
 }
 
+/** Validate the Host header for embedding into the page (the CSP names
+ * the WebSocket endpoint). The host guard already rejected non-loopback /
+ * disallowed hostnames; this re-parses so only a clean hostname:port is
+ * ever embedded — a raw header containing userinfo or quotes could
+ * otherwise inject into the CSP meta tag. Returns "" when unparseable. */
+function safePageHost(hostHeader: string | undefined): string {
+  if (!hostHeader) return "";
+  try {
+    return new URL(`http://${hostHeader}`).host;
+  } catch {
+    return "";
+  }
+}
+
 function hostnameOf(host: string | undefined): string {
   if (!host) return "";
   try {
@@ -223,24 +237,14 @@ function disposeApp(app: Hono): void {
   appDisposers.get(app)?.();
 }
 
-/** Create the HTTP + WebSocket application. */
-export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
-  const app = new Hono();
-  const repoRoot = options.repoRoot ?? Deno.cwd();
-  const assets = new Assets(repoRoot, join(repoRoot, ".lumisca-cache"));
-
-  // Federated peers (the server-side connection registry): the hub proxies
-  // their workspaces/sessions and relays their events, tagged with the
-  // peer id so the UI can route them to the right tabs. startServer injects
-  // its own client (started once the real origin is known); direct
-  // createApp usage gets a client with no self-guard.
-  const fed = options.fed ??
-    new FederationClient(
-      () => core.getConnections(),
-      () => options.selfOrigin?.current ?? "",
-    );
-  if (!options.fed) fed.start();
-
+/** The security middleware chain: Host guard (DNS-rebinding protection),
+ * optional bearer token, CORS (same-origin + Tauri WebView), and the
+ * WebSocket Origin check (CORS does not apply to WS handshakes). Extracted
+ * so createApp stays a composition root over routes. */
+function installSecurityMiddleware(
+  app: Hono,
+  options: AppOptions,
+): void {
   // The server is local-only by default: refuse requests that do not target
   // a loopback host (blocks DNS rebinding and cross-origin browser access).
   // Remote hosting opens additional hostnames via allowedHosts; the Host
@@ -285,23 +289,6 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     });
   }
 
-  // Route handlers throw instead of catching: unify error responses here.
-  app.onError((error, c) => {
-    return jsonError(c, error);
-  });
-
-  // Unknown API paths answer JSON like every other error, not an empty body.
-  app.notFound((c) => {
-    if (c.req.path.startsWith("/api") || c.req.path === "/ws") {
-      return c.json({ error: "Not found" }, 404);
-    }
-    return c.text("Not found", 404);
-  });
-
-  appDisposers.set(app, () => {
-    fed.close();
-  });
-
   // The desktop shell (Tauri WebView) calls the API from another origin.
   // Only same-origin and the Tauri WebView origins may read responses.
   const corsHandler = cors({
@@ -324,6 +311,46 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       return c.text("Forbidden: cross-origin WebSocket", 403);
     }
     await next();
+  });
+}
+
+/** Create the HTTP + WebSocket application. */
+export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
+  const app = new Hono();
+  const repoRoot = options.repoRoot ?? Deno.cwd();
+  const assets = new Assets(repoRoot, join(repoRoot, ".lumisca-cache"));
+
+  // Federated peers (the server-side connection registry): the hub proxies
+  // their workspaces/sessions and relays their events, tagged with the
+  // peer id so the UI can route them to the right tabs. startServer injects
+  // its own client (started once the real origin is known); direct
+  // createApp usage gets a client with no self-guard.
+  const fed = options.fed ??
+    new FederationClient(
+      () => core.getConnections(),
+      () => options.selfOrigin?.current ?? "",
+    );
+  if (!options.fed) fed.start();
+
+  // Host guard, token, CORS, and the WS Origin check (see
+  // installSecurityMiddleware).
+  installSecurityMiddleware(app, options);
+
+  // Route handlers throw instead of catching: unify error responses here.
+  app.onError((error, c) => {
+    return jsonError(c, error);
+  });
+
+  // Unknown API paths answer JSON like every other error, not an empty body.
+  app.notFound((c) => {
+    if (c.req.path.startsWith("/api") || c.req.path === "/ws") {
+      return c.json({ error: "Not found" }, 404);
+    }
+    return c.text("Not found", 404);
+  });
+
+  appDisposers.set(app, () => {
+    fed.close();
   });
 
   app.get("/api/health", (c) => c.json({ ok: true }));
@@ -361,7 +388,9 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       renderHtmlDocument(css, resolvedTheme(), {
         // The page's own host, so the CSP can name the WebSocket endpoint
         // (the UI's event stream) even when the page is served remotely.
-        pageHost: c.req.header("host"),
+        // Re-parsed (not the raw header) so userinfo/quotes can never
+        // reach the CSP attribute.
+        pageHost: safePageHost(c.req.header("host")),
         token: options.token,
       }),
       { headers: { "content-type": "text/html; charset=utf-8" } },
@@ -380,6 +409,11 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       "content-type": "application/javascript; charset=utf-8",
     });
   });
+
+  // --- static assets ------------------------------------------------------
+  // Error policy: API routes answer JSON ({ error }); static assets answer
+  // plain text (browsers show the message directly — a JSON body would be
+  // displayed as a blob).
 
   app.get("/assets/app.js", async (c) => {
     try {
@@ -415,20 +449,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     }
   });
 
-  // SPA fallback: any other page renders the app shell.
-  app.get("*", (c, next) => {
-    if (c.req.path.startsWith("/api") || c.req.path === "/ws") {
-      return next();
-    }
-    // Unknown static assets (e.g. /favicon.ico) get a real 404 instead of
-    // the HTML shell, so browsers and CDNs do not cache a wrong document.
-    if (/\.\w+$/.test(c.req.path)) {
-      return c.text("Not found", 404);
-    }
-    return renderPage(c);
-  });
-
-  // --- API routes (mounted after the SPA fallback so /api passes through) ----
+  // --- API routes (before the SPA fallback; unmatched /api paths fall
+  // through to notFound, which answers JSON like every other error) --------
 
   app.route("/api", fsRoutes());
   app.route("/api", workspaceRoutes(core));
@@ -444,19 +466,29 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const ws = upgradeWebSocket(() => {
     let unsubscribe: (() => void) | undefined;
     let unsubscribeFed: (() => void) | undefined;
+    const send = (ws: { send(data: string): void }, payload: unknown) => {
+      // The socket may have closed between the event and the send (the
+      // unsubscribe below runs on close, but a concurrent event can race
+      // it); a throw here would kill the subscribe handler.
+      try {
+        ws.send(JSON.stringify(payload));
+      } catch {
+        // connection is gone; nothing to do
+      }
+    };
     return {
       onOpen(_evt, ws) {
         unsubscribe = core.subscribe((event) => {
           // Every event carries the peer id ("" = this server) so the UI
           // routes it to the right session tab.
-          ws.send(JSON.stringify({ peerId: "", ...event }));
+          send(ws, { peerId: "", ...event });
         });
         // Federated peers' events, tagged with their id. The peer's own
         // `peerId` marker ("" on its side) is stripped first, so the tag
         // is always the id this hub knows.
         unsubscribeFed = fed.subscribe((peerId, event) => {
           const { peerId: _stale, ...rest } = event as Record<string, unknown>;
-          ws.send(JSON.stringify({ peerId, ...rest }));
+          send(ws, { peerId, ...rest });
         });
       },
       onClose() {
@@ -467,6 +499,21 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   });
 
   app.get("/ws", ws);
+
+  // SPA fallback (registered last): any other page renders the app shell.
+  // The /api next() guard is defensive only — API routes above already
+  // matched — but keeps unknown API paths on the JSON error path.
+  app.get("*", (c, next) => {
+    if (c.req.path.startsWith("/api") || c.req.path === "/ws") {
+      return next();
+    }
+    // Unknown static assets (e.g. /favicon.ico) get a real 404 instead of
+    // the HTML shell, so browsers and CDNs do not cache a wrong document.
+    if (/\.\w+$/.test(c.req.path)) {
+      return c.text("Not found", 404);
+    }
+    return renderPage(c);
+  });
 
   return app;
 }

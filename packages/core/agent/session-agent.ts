@@ -16,6 +16,7 @@ import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
+import { applyMcpToolsToAgent } from "../mcp/tools.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
@@ -482,15 +483,10 @@ export class SessionAgent {
   }
 
   /** Add the attachment's tools to the agent and teach it about their
-   * out-of-workspace access. */
+   * out-of-workspace access (shared helper: the sub-agent hub uses the
+   * same one). */
   private addMcpTools(tools: Tool[]): void {
-    if (tools.length === 0) return;
-    this.agent.state.tools = [
-      ...this.agent.state.tools,
-      ...tools.map(toAgentTool),
-    ];
-    this.agent.state.systemPrompt +=
-      "\n\nNote: MCP tools (names starting with mcp__) can access resources outside the workspace.";
+    applyMcpToolsToAgent(this.agent, tools);
   }
 
   async waitForIdle(): Promise<void> {

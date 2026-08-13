@@ -1,33 +1,106 @@
 import type { ClientEvent, ConnectionEntry } from "@lumisca/core";
-import { errorMessage } from "@lumisca/core";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, LOOPBACK_HOSTS } from "./routes/util.ts";
-
-/** One peer's reachability, reported to the UI. */
-export interface PeerStatus {
-  id: string;
-  name: string;
-  ok: boolean;
-  error?: string;
-}
 
 /** Error thrown when a peer cannot be reached or answers with an error;
  * carries the HTTP status to return to the UI. */
 export class PeerError extends AppError {}
 
+/** Event-stream reconnect backoff: 2s → 4s → 8s … capped at 30s. */
+const RECONNECT_BASE_MS = 2000;
+const RECONNECT_MAX_MS = 30_000;
+
+/**
+ * One peer's WebSocket event stream with its own reconnect backoff.
+ * Extracted from the client so one peer's failures never delay another
+ * peer's reconnect (a single shared timer used to couple them).
+ */
+class PeerEventStream {
+  private ws: WebSocket | null = null;
+  private attempts = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(
+    private readonly peer: ConnectionEntry,
+    private readonly relay: (peerId: string, event: ClientEvent) => void,
+    private readonly isClosed: () => boolean,
+  ) {}
+
+  /** Open the stream (no-op when already connected or the client closed). */
+  connect(): void {
+    if (this.isClosed() || this.ws !== null) return;
+    // The registry stores http:// URLs; the event stream speaks ws(s)://.
+    const wsUrl = `${
+      this.peer.url.replace(/^http/, "ws").replace(/\/+$/, "")
+    }/ws?token=${encodeURIComponent(this.peer.token)}`;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      this.scheduleReconnect();
+      return;
+    }
+    this.ws = ws;
+    ws.onopen = () => {
+      this.attempts = 0;
+    };
+    ws.onmessage = (evt) => {
+      try {
+        const event = JSON.parse(String(evt.data)) as ClientEvent;
+        this.relay(this.peer.id, event);
+      } catch {
+        // ignore malformed messages
+      }
+    };
+    ws.onclose = () => {
+      this.ws = null;
+      this.scheduleReconnect();
+    };
+    ws.onerror = () => {
+      // onclose follows; closing here triggers the reconnect path early.
+      try {
+        ws.close();
+      } catch {
+        // already closed
+      }
+    };
+  }
+
+  /** Drop the connection and cancel pending reconnects. */
+  close(): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.ws?.close();
+    this.ws = null;
+  }
+
+  private scheduleReconnect(): void {
+    if (this.isClosed() || this.timer !== null) return;
+    const delay = Math.min(
+      RECONNECT_BASE_MS * 2 ** this.attempts,
+      RECONNECT_MAX_MS,
+    );
+    this.attempts++;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.connect();
+    }, delay);
+  }
+}
+
 /**
  * Hub-side client for the federated peers (the server-side connection
  * registry). Proxies HTTP requests to each peer and relays the peer's
- * WebSocket event stream to the hub's UI clients, tagged with the peer id
+ * WebSocket event streams to the hub's UI clients, tagged with the peer id
  * so the UI can route events to the right session tabs.
  */
 export class FederationClient {
-  private readonly wsByPeer = new Map<string, WebSocket>();
-  private readonly reconnectAttempts = new Map<string, number>();
+  private readonly streams = new Map<string, PeerEventStream>();
   private readonly listeners = new Set<
     (peerId: string, event: ClientEvent) => void
   >();
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
 
   constructor(
@@ -75,24 +148,28 @@ export class FederationClient {
   }
 
   /** Proxy a request to a peer (token header attached, 10s timeout).
-   * Throws PeerError: 502 when unreachable, or the peer's own status with
-   * its error message. */
+   * `rawBody` (when given) is sent verbatim; otherwise `body` is
+   * JSON-serialized. Throws PeerError: 502 when unreachable, or the
+   * peer's own status with its error message. */
   async request(
     peer: ConnectionEntry,
     method: string,
     path: string,
     body?: unknown,
+    rawBody?: string,
   ): Promise<Response> {
     const url = `${peer.url.replace(/\/+$/, "")}${path}`;
+    const hasBody = body !== undefined || rawBody !== undefined;
     let res: Response;
     try {
       res = await fetch(url, {
         method,
         headers: {
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          ...(hasBody ? { "content-type": "application/json" } : {}),
           "x-lumisca-token": peer.token,
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: rawBody ??
+          (body === undefined ? undefined : JSON.stringify(body)),
         signal: AbortSignal.timeout(10_000),
       });
     } catch {
@@ -117,26 +194,6 @@ export class FederationClient {
     return res;
   }
 
-  /** Reachability of every peer (GET /api/health with the token). */
-  async status(): Promise<PeerStatus[]> {
-    const results = await Promise.all(
-      this.peers().map(async (peer) => {
-        try {
-          await this.request(peer, "GET", "/api/health");
-          return { id: peer.id, name: peer.name, ok: true };
-        } catch (error) {
-          return {
-            id: peer.id,
-            name: peer.name,
-            ok: false,
-            error: errorMessage(error),
-          };
-        }
-      }),
-    );
-    return results;
-  }
-
   /** Receive every peer's events, tagged with the peer id. */
   subscribe(
     listener: (peerId: string, event: ClientEvent) => void,
@@ -148,84 +205,37 @@ export class FederationClient {
   /** Connect event streams to all peers (call after the registry
    * changes). */
   start(): void {
-    for (const peer of this.peers()) this.connect(peer);
+    for (const peer of this.peers()) {
+      let stream = this.streams.get(peer.id);
+      if (stream === undefined) {
+        stream = new PeerEventStream(
+          peer,
+          (peerId, event) => this.relay(peerId, event),
+          () => this.closed,
+        );
+        this.streams.set(peer.id, stream);
+      }
+      stream.connect();
+    }
   }
 
   /** Drop all peer connections and reconnect to the current registry. */
   restart(): void {
-    for (const ws of this.wsByPeer.values()) ws.close();
-    this.wsByPeer.clear();
-    this.reconnectAttempts.clear();
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    for (const stream of this.streams.values()) stream.close();
+    this.streams.clear();
     this.start();
   }
 
   /** Stop all connections; no further reconnects. */
   close(): void {
     this.closed = true;
-    for (const ws of this.wsByPeer.values()) ws.close();
-    this.wsByPeer.clear();
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    for (const stream of this.streams.values()) stream.close();
+    this.streams.clear();
   }
 
-  private connect(peer: ConnectionEntry): void {
-    if (this.closed || this.wsByPeer.has(peer.id)) return;
-    // The registry stores http:// URLs; the event stream speaks ws(s)://.
-    const wsUrl = `${
-      peer.url.replace(/^http/, "ws").replace(/\/+$/, "")
-    }/ws?token=${encodeURIComponent(peer.token)}`;
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(wsUrl);
-    } catch {
-      this.scheduleReconnect(peer);
-      return;
+  private relay(peerId: string, event: ClientEvent): void {
+    for (const listener of this.listeners) {
+      listener(peerId, event);
     }
-    this.wsByPeer.set(peer.id, ws);
-    ws.onopen = () => this.reconnectAttempts.delete(peer.id);
-    ws.onmessage = (evt) => {
-      try {
-        const event = JSON.parse(String(evt.data)) as ClientEvent;
-        for (const listener of this.listeners) {
-          listener(peer.id, event);
-        }
-      } catch {
-        // ignore malformed messages
-      }
-    };
-    ws.onclose = () => {
-      this.wsByPeer.delete(peer.id);
-      this.scheduleReconnect(peer);
-    };
-    ws.onerror = () => {
-      // onclose follows; closing here triggers the reconnect path early.
-      try {
-        ws.close();
-      } catch {
-        // already closed
-      }
-    };
-  }
-
-  private scheduleReconnect(peer: ConnectionEntry): void {
-    if (this.closed) return;
-    const attempt = this.reconnectAttempts.get(peer.id) ?? 0;
-    this.reconnectAttempts.set(peer.id, attempt + 1);
-    // Backoff 2s → 4s → 8s … capped at 30s; one shared timer for all peers.
-    const delay = Math.min(2000 * 2 ** attempt, 30_000);
-    if (this.reconnectTimer !== null) return;
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (this.closed) return;
-      for (const p of this.peers()) {
-        if (!this.wsByPeer.has(p.id)) this.connect(p);
-      }
-    }, delay);
   }
 }

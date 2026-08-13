@@ -286,6 +286,43 @@ Deno.test("grep reports invalid patterns as errors", async () => {
   }
 });
 
+Deno.test("grep and glob reject overly long patterns (ReDoS bound)", async () => {
+  const root = await fixture();
+  try {
+    const { grep, glob } = makeTools(root);
+    let grepMessage = "";
+    try {
+      await grep.execute(
+        "1",
+        { pattern: "a".repeat(300) },
+        undefined,
+      );
+    } catch (error) {
+      grepMessage = errorMessage(error);
+    }
+    assert(
+      grepMessage.includes("pattern is too long"),
+      `grep message: ${grepMessage}`,
+    );
+    let globMessage = "";
+    try {
+      await glob.execute(
+        "1",
+        { pattern: "a".repeat(2000) },
+        undefined,
+      );
+    } catch (error) {
+      globMessage = errorMessage(error);
+    }
+    assert(
+      globMessage.includes("pattern is too long"),
+      `glob message: ${globMessage}`,
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("glob finds files by pattern, searching hidden files by default", async () => {
   const root = await fixture();
   try {

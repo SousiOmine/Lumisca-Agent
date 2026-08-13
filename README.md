@@ -11,3 +11,13 @@ Webサーバー、およびデスクトップアプリとして動作します�
 画像入力に対応しているモデルに近い使い勝手が得られる
 
 しか思いつきませんでした。今後増える可能性大
+
+## デスクトップアプリは現在 Windows 専用です
+
+デスクトップアプリ (`packages/desktop`) は現在 **Windows 専用** です。非 Windows ビルドは未対応・未検証です。
+
+- **ブリッジ**: 設定 UI はサーバー(ローカルまたはリモート)から配信されるため、Tauri コマンドではなく
+  `lumisca://` カスタムプロトコル経由のブリッジでデスクトップ機能を操作します。このブリッジは **WebView2 前提** で、
+  macOS (WKWebView) / Linux (WebKitGTK) では動作しません。
+- **パッケージング**: `tauri.conf.json` の `bundle.resources` と `package.json` の `build:server` は
+  `lumisca-server.exe` 固定です(Windows 以外の実行ファイル名には対応していません)。

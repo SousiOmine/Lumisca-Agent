@@ -58,6 +58,13 @@ export type { TodoPhase, TodoStatus, TodoTask } from "./shared.ts";
 export type { SubagentStatus, SubagentType, TaskInfo } from "./shared.ts";
 export { contentText } from "./content.ts";
 export {
+  MAX_PROMPT_IMAGES,
+  serializeMcpServers,
+  stripDataUrlHeader,
+  toDataUrl,
+} from "./shared.ts";
+export type { McpServerConfigLike } from "./shared.ts";
+export {
   loadMcpConfig,
   MCP_CONFIG_FILE,
   McpConfigError,

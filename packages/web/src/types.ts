@@ -53,10 +53,6 @@ export type {
 
 export type ClientEvent = CoreClientEvent;
 
-/** Event as received over the WebSocket: every event carries the peer id
- * of the server that produced it ("" = this server). */
-export type FederatedEvent = ClientEvent & { peerId?: string };
-
 /** A workspace as shown in the federated workspace picker: which peer owns
  * it ("" = this server) and how that peer is named. */
 export interface FederatedWorkspace {

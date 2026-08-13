@@ -1,5 +1,6 @@
 import { isAbsolute, join } from "node:path";
 import { errorMessage } from "../errors.ts";
+import { serializeMcpServers } from "../shared.ts";
 import type { McpServerStatus } from "./manager.ts";
 
 /** One configured MCP server (normalized form of `.mcp.json`). */
@@ -176,26 +177,10 @@ export function loadMcpConfig(workspaceRoot: string): McpConfig {
   return parseMcpConfig(text, filePath);
 }
 
-/** Serialize a config back to `.mcp.json` format. */
+/** Serialize a config back to `.mcp.json` format (shared implementation:
+ * the web settings UI uses the same serializer, see serializeMcpServers). */
 export function serializeMcpConfig(config: McpConfig): string {
-  const mcpServers: Record<string, unknown> = {};
-  for (const server of config.servers) {
-    const entry: Record<string, unknown> = {};
-    if (server.type === "stdio") {
-      entry.command = server.command;
-      if (server.args.length > 0) entry.args = server.args;
-    } else {
-      entry.url = server.url;
-      if (Object.keys(server.headers).length > 0) {
-        entry.headers = server.headers;
-      }
-    }
-    if (Object.keys(server.env).length > 0) entry.env = server.env;
-    if (server.cwd !== undefined) entry.cwd = server.cwd;
-    if (!server.enabled) entry.enabled = false;
-    mcpServers[server.name] = entry;
-  }
-  return JSON.stringify({ mcpServers }, null, 2) + "\n";
+  return serializeMcpServers(config.servers);
 }
 
 /** Resolve a server's working directory: explicit cwd (absolute or

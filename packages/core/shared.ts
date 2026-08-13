@@ -211,6 +211,60 @@ export function contentText(
     .join("");
 }
 
+/** Images attachable to one prompt (the composer's cap and the server's
+ * validation limit — one constant so the UI can never exceed the API). */
+export const MAX_PROMPT_IMAGES = 8;
+
+/** Build a `data:<mime>;base64,<data>` URL (previews, rewind restore). */
+export function toDataUrl(mimeType: string, data: string): string {
+  return `data:${mimeType};base64,${data}`;
+}
+
+/** Strip a `data:<mime>;base64,` header from a data URL — the API payload
+ * carries the bare base64. Pass-through when there is no header. */
+export function stripDataUrlHeader(data: string): string {
+  return data.startsWith("data:") ? data.slice(data.indexOf(",") + 1) : data;
+}
+
+/** Minimal server-config shape accepted by serializeMcpServers (config
+ * fields only; the live status fields of McpServerInfo are ignored). */
+export interface McpServerConfigLike {
+  name: string;
+  type: "stdio" | "http";
+  command?: string;
+  args: string[];
+  env: Record<string, string>;
+  cwd?: string;
+  url?: string;
+  headers: Record<string, string>;
+  enabled: boolean;
+}
+
+/** Serialize a list of MCP server configs into `.mcp.json` text (the
+ * app-level config the settings UI PUTs and the workspace file format).
+ * Shared by the core (serializeMcpConfig) and the web settings UI so the
+ * format can never drift between them. */
+export function serializeMcpServers(servers: McpServerConfigLike[]): string {
+  const mcpServers: Record<string, unknown> = {};
+  for (const server of servers) {
+    const entry: Record<string, unknown> = {};
+    if (server.type === "stdio") {
+      entry.command = server.command;
+      if (server.args.length > 0) entry.args = server.args;
+    } else {
+      entry.url = server.url;
+      if (Object.keys(server.headers).length > 0) {
+        entry.headers = server.headers;
+      }
+    }
+    if (Object.keys(server.env).length > 0) entry.env = server.env;
+    if (server.cwd !== undefined) entry.cwd = server.cwd;
+    if (!server.enabled) entry.enabled = false;
+    mcpServers[server.name] = entry;
+  }
+  return JSON.stringify({ mcpServers }, null, 2) + "\n";
+}
+
 /** The image blocks of a message/tool-result content array (`data` is
  * base64, `mimeType` like `image/png`). */
 export function contentImages(

@@ -2,7 +2,7 @@ import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Workspace } from "@lumisca/core";
 import { errorMessage } from "@lumisca/core";
-import { AppError, parseBody } from "./util.ts";
+import { AppError } from "./util.ts";
 import type { FederationClient } from "../federation.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -10,23 +10,15 @@ export interface FederationApi {
   listWorkspaces(): Workspace[];
 }
 
-/** Forward a peer response to the UI, keeping status and JSON body. */
-async function forward(
-  c: Context,
-  promise: Promise<Response>,
-): Promise<Response> {
-  const res = await promise;
-  const text = await res.text();
-  return c.body(text, res.status as ContentfulStatusCode, {
-    "content-type": res.headers.get("content-type") ?? "application/json",
-  });
-}
-
 /**
  * Federated (hub-and-spoke) API. The UI is served by the hub; everything
- * below proxies to the peer that owns the resource, so the agent runs on
- * the machine that owns the workspace. All routes are hub-token-gated like
- * the rest of /api.
+ * below `/fed/:peerId/` proxies to the peer that owns the resource, so the
+ * agent runs on the machine that owns the workspace. All routes are
+ * hub-token-gated like the rest of /api.
+ *
+ * A single generic proxy route replaces one mirror endpoint per API
+ * surface: the peer's own routes are authoritative (validation included),
+ * so an endpoint added to `/api` needs no `/fed` counterpart.
  */
 export function federationRoutes(
   core: FederationApi,
@@ -92,239 +84,34 @@ export function federationRoutes(
     return c.json({ workspaces, peers });
   });
 
-  // --- filesystem browsing (workspace creation on a peer) -----------------
-
-  app.get("/fed/:peerId/fs/roots", (c) => {
+  /** Generic per-peer proxy: any method, any path below `/fed/:peerId/`.
+   * The body is passed through verbatim and the peer's response is
+   * streamed back with its status and content type. */
+  app.all("/fed/:peerId/*", async (c) => {
     const peer = requirePeer(c);
-    return forward(c, fed.request(peer, "GET", "/api/fs/roots"));
-  });
-
-  app.get("/fed/:peerId/fs/browse", (c) => {
-    const peer = requirePeer(c);
-    const path = c.req.query("path") ?? "";
-    if (path === "") throw new AppError("path is required", 400);
-    return forward(
-      c,
-      fed.request(
-        peer,
-        "GET",
-        `/api/fs/browse?path=${encodeURIComponent(path)}`,
-      ),
+    // Hono 4.x does not expose the splat via param("*") (matches but
+    // stays empty), so the remainder is sliced from the full path.
+    const prefix = `/api/fed/${peer.id}/`;
+    const rest = c.req.path.startsWith(prefix)
+      ? c.req.path.slice(prefix.length)
+      : "";
+    const search = new URL(c.req.url).search;
+    const raw = await c.req.text();
+    const res = await fed.request(
+      peer,
+      c.req.method,
+      `/api/${rest}${search}`,
+      undefined,
+      raw.length > 0 ? raw : undefined,
     );
+    const headers = {
+      "content-type": res.headers.get("content-type") ?? "application/json",
+    };
+    const status = res.status as ContentfulStatusCode;
+    return res.body === null
+      ? c.body(null, status, headers)
+      : c.body(res.body, status, headers);
   });
-
-  // --- workspaces on a peer ------------------------------------------------
-
-  app.post("/fed/:peerId/workspaces", async (c) => {
-    const peer = requirePeer(c);
-    const body = await parseBody<{ name?: unknown; folders?: unknown }>(c);
-    return forward(c, fed.request(peer, "POST", "/api/workspaces", body));
-  });
-
-  /** @-mention file suggestions for a workspace owned by a peer. */
-  app.get("/fed/:peerId/workspaces/:wid/files", (c) => {
-    const peer = requirePeer(c);
-    const query = c.req.query("query") ?? "";
-    return forward(
-      c,
-      fed.request(
-        peer,
-        "GET",
-        `/api/workspaces/${
-          encodeURIComponent(c.req.param("wid"))
-        }/files?query=${encodeURIComponent(query)}`,
-      ),
-    );
-  });
-
-  app.patch("/fed/:peerId/workspaces/:wid", async (c) => {
-    const peer = requirePeer(c);
-    const body = await parseBody<{ name?: unknown; folders?: unknown }>(c);
-    return forward(
-      c,
-      fed.request(peer, "PATCH", `/api/workspaces/${c.req.param("wid")}`, body),
-    );
-  });
-
-  app.delete("/fed/:peerId/workspaces/:wid", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "DELETE", `/api/workspaces/${c.req.param("wid")}`),
-    );
-  });
-
-  // --- sessions on a peer --------------------------------------------------
-
-  app.post("/fed/:peerId/sessions", async (c) => {
-    const peer = requirePeer(c);
-    const body = await parseBody<Record<string, unknown>>(c);
-    return forward(c, fed.request(peer, "POST", "/api/sessions", body));
-  });
-
-  app.get("/fed/:peerId/sessions/:sid", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "GET", `/api/sessions/${c.req.param("sid")}`),
-    );
-  });
-
-  app.get("/fed/:peerId/sessions/:sid/messages", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "GET", `/api/sessions/${c.req.param("sid")}/messages`),
-    );
-  });
-
-  app.get("/fed/:peerId/sessions/:sid/todo", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "GET", `/api/sessions/${c.req.param("sid")}/todo`),
-    );
-  });
-
-  app.get("/fed/:peerId/sessions/:sid/tasks", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "GET", `/api/sessions/${c.req.param("sid")}/tasks`),
-    );
-  });
-
-  app.post("/fed/:peerId/sessions/:sid/open", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "POST", `/api/sessions/${c.req.param("sid")}/open`),
-    );
-  });
-
-  app.post("/fed/:peerId/sessions/:sid/close", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "POST", `/api/sessions/${c.req.param("sid")}/close`),
-    );
-  });
-
-  app.delete("/fed/:peerId/sessions/:sid", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "DELETE", `/api/sessions/${c.req.param("sid")}`),
-    );
-  });
-
-  app.post("/fed/:peerId/sessions/:sid/prompt", async (c) => {
-    const peer = requirePeer(c);
-    // The body is forwarded verbatim (text + optional images); the target
-    // server validates it.
-    const body = await parseBody<{ text?: unknown; images?: unknown }>(c);
-    return forward(
-      c,
-      fed.request(
-        peer,
-        "POST",
-        `/api/sessions/${c.req.param("sid")}/prompt`,
-        body,
-      ),
-    );
-  });
-
-  app.post("/fed/:peerId/sessions/:sid/abort", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(peer, "POST", `/api/sessions/${c.req.param("sid")}/abort`),
-    );
-  });
-
-  app.post("/fed/:peerId/sessions/:sid/answer", async (c) => {
-    const peer = requirePeer(c);
-    // The body is forwarded verbatim (the target server validates the
-    // tool call id and answers against its pending question).
-    const body = await parseBody<Record<string, unknown>>(c);
-    return forward(
-      c,
-      fed.request(
-        peer,
-        "POST",
-        `/api/sessions/${c.req.param("sid")}/answer`,
-        body,
-      ),
-    );
-  });
-
-  app.post("/fed/:peerId/sessions/:sid/rewind", async (c) => {
-    const peer = requirePeer(c);
-    // The body is forwarded verbatim (the target server validates the
-    // timestamp).
-    const body = await parseBody<{ timestamp?: unknown }>(c);
-    return forward(
-      c,
-      fed.request(
-        peer,
-        "POST",
-        `/api/sessions/${c.req.param("sid")}/rewind`,
-        body,
-      ),
-    );
-  });
-
-  app.post("/fed/:peerId/sessions/:sid/model", async (c) => {
-    const peer = requirePeer(c);
-    const body = await parseBody<{ provider?: unknown; modelId?: unknown }>(c);
-    return forward(
-      c,
-      fed.request(
-        peer,
-        "POST",
-        `/api/sessions/${c.req.param("sid")}/model`,
-        body,
-      ),
-    );
-  });
-
-  // --- model picker data for remote sessions -------------------------------
-
-  app.get("/fed/:peerId/providers", (c) => {
-    const peer = requirePeer(c);
-    return forward(c, fed.request(peer, "GET", "/api/providers"));
-  });
-
-  app.get("/fed/:peerId/providers/:pid/models", (c) => {
-    const peer = requirePeer(c);
-    return forward(
-      c,
-      fed.request(
-        peer,
-        "GET",
-        `/api/providers/${encodeURIComponent(c.req.param("pid"))}/models`,
-      ),
-    );
-  });
-
-  app.put(
-    "/fed/:peerId/providers/:pid/models/:mid/thinking-level",
-    async (c) => {
-      const peer = requirePeer(c);
-      const body = await parseBody<{ level?: unknown }>(c);
-      return forward(
-        c,
-        fed.request(
-          peer,
-          "PUT",
-          `/api/providers/${encodeURIComponent(c.req.param("pid"))}/models/${
-            encodeURIComponent(c.req.param("mid"))
-          }/thinking-level`,
-          body,
-        ),
-      );
-    },
-  );
 
   return app;
 }

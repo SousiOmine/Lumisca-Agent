@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { IconChevronRight, IconPlugConnected } from "@tabler/icons-react";
 import { api } from "../../api.ts";
-import { errorText, filterByQuery, useProviders } from "../../providers.ts";
+import { filterByQuery, useProviderModels } from "../../providers.ts";
 import type { ModelInfo } from "../../types.ts";
 
 interface ProviderModels {
@@ -12,93 +12,55 @@ interface ProviderModels {
 
 /** Settings → models: all models grouped by provider with toggle switches. */
 export function ModelList() {
-  const { providers } = useProviders();
+  const { providers, modelsByProvider, loading, error } = useProviderModels();
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [providerModels, setProviderModels] = useState<ProviderModels[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | undefined>();
+  // Optimistic toggle overlay, keyed by "providerId/modelId": the checked
+  // value while a toggle is in flight, reverted on failure.
+  const [pendingToggles, setPendingToggles] = useState<
+    Record<string, boolean>
+  >({});
 
-  // Load models for all configured providers
-  useEffect(() => {
-    let stale = false;
-    const loadAll = async () => {
-      setLoading(true);
-      setError(undefined);
-      const configured = providers.filter((p) => p.configured !== false);
-      if (configured.length === 0) {
-        if (!stale) {
-          setProviderModels([]);
-          setLoading(false);
-        }
-        return;
-      }
-      try {
-        const results = await Promise.all(
-          configured.map(async (p) => {
-            const models = await api.listModels(p.id);
-            return {
-              providerId: p.id,
-              providerName: p.name,
-              models,
-            };
-          }),
-        );
-        if (!stale) {
-          setProviderModels(results);
-          setLoading(false);
-        }
-      } catch (e) {
-        if (!stale) {
-          setError(errorText(e));
-          setLoading(false);
-        }
-      }
-    };
-    loadAll();
-    return () => {
-      stale = true;
-    };
-  }, [providers]);
-
-  const toggleExpand = (providerId: string) => {
-    setExpanded((prev) => ({ ...prev, [providerId]: !prev[providerId] }));
-  };
+  const configured = useMemo(
+    () => providers.filter((p) => p.configured !== false),
+    [providers],
+  );
+  // Groups only for providers whose models have actually loaded: a failed
+  // fetch (modelsByProvider empty) must not render empty groups.
+  const providerModels: ProviderModels[] = useMemo(
+    () =>
+      configured
+        .filter((p) => modelsByProvider.has(p.id))
+        .map((p) => ({
+          providerId: p.id,
+          providerName: p.name,
+          models: modelsByProvider.get(p.id) ?? [],
+        })),
+    [configured, modelsByProvider],
+  );
 
   const toggleModel = async (
     providerId: string,
     modelId: string,
     enabled: boolean,
   ) => {
-    setProviderModels((prev) =>
-      prev.map((pm) =>
-        pm.providerId === providerId
-          ? {
-            ...pm,
-            models: pm.models.map((m) =>
-              m.id === modelId ? { ...m, enabled } : m
-            ),
-          }
-          : pm
-      )
-    );
+    const key = `${providerId}/${modelId}`;
+    setPendingToggles((prev) => ({ ...prev, [key]: enabled }));
     try {
       await api.setModelEnabled(providerId, modelId, enabled);
     } catch {
       // Revert on error
-      setProviderModels((prev) =>
-        prev.map((pm) =>
-          pm.providerId === providerId
-            ? {
-              ...pm,
-              models: pm.models.map((m) =>
-                m.id === modelId ? { ...m, enabled: !enabled } : m
-              ),
-            }
-            : pm
-        )
-      );
+      setPendingToggles((prev) => ({ ...prev, [key]: !enabled }));
     }
+  };
+
+  /** Effective enabled state: the pending toggle while one is in flight
+   * (reverted on failure), otherwise the fetched value. */
+  const isEnabled = (pm: ProviderModels, m: ModelInfo): boolean =>
+    pendingToggles[`${pm.providerId}/${m.id}`] ?? m.enabled !== false;
+
+  const toggleExpand = (providerId: string) => {
+    setExpanded((prev) => ({ ...prev, [providerId]: !prev[providerId] }));
   };
 
   // Filter by search query
@@ -129,7 +91,7 @@ export function ModelList() {
 
       {!loading && filtered.length === 0 && (
         <div className="faint-box">
-          {providers.filter((p) => p.configured !== false).length === 0
+          {configured.length === 0
             ? "設定済みプロバイダーがありません。プロバイダー設定からAPIキーを設定してください。"
             : "該当するモデルがありません"}
         </div>
@@ -138,9 +100,8 @@ export function ModelList() {
       <div className="model-groups">
         {filtered.map((pm) => {
           const isExpanded = expanded[pm.providerId] ?? false;
-          const enabledCount = pm.models.filter(
-            (m) => m.enabled !== false,
-          ).length;
+          const enabledCount = pm.models.filter((m) => isEnabled(pm, m))
+            .length;
 
           return (
             <div key={pm.providerId} className="model-group">
@@ -171,9 +132,13 @@ export function ModelList() {
                       <label className="toggle-switch">
                         <input
                           type="checkbox"
-                          checked={m.enabled !== false}
+                          checked={isEnabled(pm, m)}
                           onChange={(e) =>
-                            toggleModel(pm.providerId, m.id, e.target.checked)}
+                            toggleModel(
+                              pm.providerId,
+                              m.id,
+                              e.target.checked,
+                            )}
                         />
                         <span className="toggle-slider" />
                       </label>
@@ -186,7 +151,7 @@ export function ModelList() {
         })}
       </div>
 
-      {error && <div className="error-text">{error}</div>}
+      {error && <div className="error-text">{error.message}</div>}
     </>
   );
 }

@@ -20,8 +20,13 @@ import type {
 } from "../types/notification.ts";
 
 /** Concurrent background commands per session. Bounds resource usage; the
- * agent is told to wait or kill when the limit is reached. */
+ * agent is told to wait or kill when the limit is reached. Only running
+ * commands occupy a slot — finished ones move to the completed history and
+ * free theirs. */
 export const MAX_BACKGROUND_COMMANDS = 8;
+/** How many completed commands stay queryable (status/list/tail) per
+ * session; older entries are dropped. */
+const MAX_COMPLETED_COMMANDS = 50;
 /** Raw output retained per command (bytes). */
 const MAX_OUTPUT_BUFFER = MAX_TOOL_OUTPUT;
 /** Decoded output shown by status and completion notifications. */
@@ -173,7 +178,13 @@ export interface BackgroundProcessManagerOptions {
  * do.
  */
 export class BackgroundProcessManager {
+  /** Running commands only (each occupies one of MAX_BACKGROUND_COMMANDS
+   * slots; finished commands move to `completed` and free their slot). */
   private readonly records = new Map<string, RunningRecord>();
+  /** Completed commands, newest first, bounded at MAX_COMPLETED_COMMANDS.
+   * Kept so status/list/tail still answer for finished commands; the
+   * heavy output buffer is dropped with the record itself. */
+  private readonly completed: BackgroundCommandInfo[] = [];
   private readonly listeners = new Set<
     (done: BackgroundCommandDone) => void
   >();
@@ -270,22 +281,24 @@ export class BackgroundProcessManager {
     return { commandId, pid: child.pid };
   }
 
-  /** All commands, newest first. */
+  /** All commands, newest first (completed history first, then running). */
   list(): BackgroundCommandInfo[] {
-    return [...this.records.values()].map((r) => r.info);
+    const running = [...this.records.values()].map((r) => r.info).reverse();
+    return [...this.completed, ...running];
   }
 
   /** One command's info, or undefined when the id is unknown. */
   get(commandId: string): BackgroundCommandInfo | undefined {
-    return this.records.get(commandId)?.info;
+    return this.records.get(commandId)?.info ??
+      this.completed.find((c) => c.commandId === commandId);
   }
 
   /** Decode the current output tail of a command (undefined when unknown).
    * Decoding is deferred to call time so status checks see fresh output. */
   async tail(commandId: string): Promise<string | undefined> {
     const record = this.records.get(commandId);
-    if (!record) return undefined;
-    return await this.decodeTail(record);
+    if (record) return await this.decodeTail(record);
+    return this.completed.find((c) => c.commandId === commandId)?.tail;
   }
 
   /** Stop a command (whole process tree) and wait — bounded — for it to
@@ -297,6 +310,9 @@ export class BackgroundProcessManager {
   ): Promise<{ ok: true; alreadyExited: boolean; timedOut: boolean }> {
     const record = this.records.get(commandId);
     if (!record) {
+      if (this.completed.some((c) => c.commandId === commandId)) {
+        return { ok: true, alreadyExited: true, timedOut: false };
+      }
       throw new Error(`Unknown background command: ${commandId}`);
     }
     if (record.finalized || record.info.state !== "running") {
@@ -353,6 +369,14 @@ export class BackgroundProcessManager {
     record.info.state = reason === "exited" ? "finished" : "killed";
     record.info.finishedAt = Date.now();
     record.info.exitCode = status.code ?? undefined;
+    // The command no longer occupies a concurrency slot; keep only a
+    // bounded summary for status/list/tail queries. The output tail is
+    // decoded below and stored on the summary.
+    this.records.delete(record.info.commandId);
+    this.completed.unshift(record.info);
+    if (this.completed.length > MAX_COMPLETED_COMMANDS) {
+      this.completed.length = MAX_COMPLETED_COMMANDS;
+    }
     void this.decodeTail(record).then((tail) => {
       record.info.tail = tail;
       const done: BackgroundCommandDone = {

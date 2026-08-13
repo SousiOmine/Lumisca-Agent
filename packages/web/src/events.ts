@@ -171,7 +171,14 @@ export function applyEvent(
       return { ...view, messages: upsertMessage(view.messages, event.message) };
     }
     case "message_delta":
-      return { ...view, streamingText: view.streamingText + event.delta };
+      // Bound the streaming buffer like task_delta: the server keeps only
+      // the tail anyway, and message_end replaces the stream with the
+      // complete message, so truncating the tail is never visible in the
+      // final render.
+      return {
+        ...view,
+        streamingText: (view.streamingText + event.delta).slice(-64 * 1024),
+      };
     case "message_end": {
       // The user message was already added on message_start; replace it
       // with the final copy (append when the start event was missed).

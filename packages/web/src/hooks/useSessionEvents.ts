@@ -18,13 +18,16 @@ import type {
   TodoPhase,
 } from "../types.ts";
 
-/** Period between opportunistic state re-syncs (see syncState). */
-const SYNC_INTERVAL_MS = 20_000;
+/** Period between opportunistic state re-syncs while the WebSocket is
+ * disconnected (see syncState). While the socket is up the events are the
+ * live source; a tab returning to the foreground is the only other moment
+ * a re-sync runs. */
+const DISCONNECTED_SYNC_INTERVAL_MS = 10_000;
 
 /** Session views plus the WebSocket event stream that feeds them:
- * reconnect with resync on drop, periodic state sync, and per-view error
- * recording. The returned setViews is shared with the tab and session
- * action logic. */
+ * reconnect with resync on drop, state sync while disconnected and on
+ * tab-return, and per-view error recording. The returned setViews is
+ * shared with the tab and session action logic. */
 export function useSessionEvents() {
   const [views, setViews] = useState<Map<string, SessionView>>(new Map());
   const viewsRef = useRef(views);
@@ -37,12 +40,13 @@ export function useSessionEvents() {
 
   /** Re-fetch persisted messages, the todo plan, and the task snapshots for
    * every open tab and merge them in without duplicating what is already
-   * shown. Runs on reconnect and on an interval so a run that completes
-   * while the socket was down — and todo/task mutations whose snapshot
-   * events were lost — are not missed until the next WS drop. The todo
-   * plan is a snapshot fetch (the events only fire on mutations), so the
-   * fetched state replaces the view's plan wholesale; tasks merge per
-   * agent id so live deltas are preserved. */
+   * shown. Runs on reconnect, on a short interval while the socket is
+   * down, and when a connected tab returns to the foreground, so a run
+   * that completes while the socket was down — and todo/task mutations
+   * whose snapshot events were lost — are not missed until the next WS
+   * drop. The todo plan is a snapshot fetch (the events only fire on
+   * mutations), so the fetched state replaces the view's plan wholesale;
+   * tasks merge per agent id so live deltas are preserved. */
   const syncState = useCallback(async () => {
     const ids = [...viewsRef.current.keys()];
     const messages = new Map<string, AgentMessage[]>();
@@ -169,7 +173,39 @@ export function useSessionEvents() {
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let syncTimer: ReturnType<typeof setInterval> | undefined;
     let disconnect: (() => void) | undefined;
+    // Whether the event stream is currently connected. While it is up the
+    // events are the live source; while it is down a short-interval sync
+    // covers everything (see syncState). The flags live in this effect's
+    // closure — it runs once (all callbacks are stable) — and are updated
+    // from the connectEvents onOpen/onClose callbacks.
+    let connected = false;
+
+    const stopSyncTimer = () => {
+      if (syncTimer !== undefined) {
+        clearInterval(syncTimer);
+        syncTimer = undefined;
+      }
+    };
+    const startSyncTimer = () => {
+      if (syncTimer !== undefined) return;
+      syncTimer = setInterval(() => {
+        syncState();
+      }, DISCONNECTED_SYNC_INTERVAL_MS);
+    };
+
+    // Opportunistic sync: a run that finishes entirely inside a disconnect
+    // window — or a todo mutation whose snapshot event was lost — would
+    // otherwise only appear at the next reconnect. While connected the WS
+    // delivers the events, so a tab returning to the foreground is the
+    // only moment a missed state gets re-synced (the interval covers the
+    // disconnected case).
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (connected) syncState();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     const connect = () => {
       disconnect = connectEvents(
@@ -177,25 +213,28 @@ export function useSessionEvents() {
         () => {
           // On close: clear stuck state and re-sync, then reconnect.
           if (disposed) return;
+          connected = false;
+          startSyncTimer();
           resync();
           timer = setTimeout(connect, 1500);
         },
-        resync,
+        () => {
+          // On (re)open: re-sync state (events emitted while the socket
+          // was down are merged in) and stop the fallback interval — the
+          // stream is the live source again.
+          connected = true;
+          stopSyncTimer();
+          resync();
+        },
       );
     };
     connect();
 
-    // Opportunistic sync: a run that finishes entirely inside a disconnect
-    // window — or a todo mutation whose snapshot event was lost — would
-    // otherwise only appear at the next WS drop.
-    const syncTimer = setInterval(() => {
-      syncState();
-    }, SYNC_INTERVAL_MS);
-
     return () => {
       disposed = true;
       if (timer) clearTimeout(timer);
-      clearInterval(syncTimer);
+      stopSyncTimer();
+      document.removeEventListener("visibilitychange", onVisibility);
       disconnect?.();
     };
   }, [handleEvent, resync, syncState]);

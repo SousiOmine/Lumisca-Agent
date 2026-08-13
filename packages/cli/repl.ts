@@ -1,6 +1,5 @@
 import {
   type ClientEvent,
-  contentText,
   getSupportedThinkingLevels,
   type LumiscaCore,
   THINKING_LEVEL_LABELS,
@@ -8,12 +7,21 @@ import {
 import {
   color,
   error,
+  errorText,
   getPromptFn,
   header,
   info,
   success,
   userLine,
 } from "./ui.ts";
+import {
+  answerQuestions,
+  printTaskEnd,
+  printTaskStart,
+  printToolEnd,
+  printToolStart,
+  StreamPrinter,
+} from "./render.ts";
 import {
   pickModel,
   pickWorkspace,
@@ -22,51 +30,67 @@ import {
 } from "./select.ts";
 import { createSession } from "./session.ts";
 
-function summarize(text: string, max = 300): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  if (flat.length <= max) return flat;
-  return `${flat.slice(0, max)}…`;
-}
-
-function printToolStart(toolName: string, args: unknown): void {
-  const argsText = summarize(JSON.stringify(args ?? {}), 120);
-  console.log(color.cyan(`  ⚙ ${toolName} ${color.faint(argsText)}`));
-}
-
-function printTaskStart(
-  agentId: string,
-  subagentType: string,
-  description: string,
-): void {
-  console.log(
-    color.blue(
-      `  ◉ task ${agentId} (${subagentType}) ${color.faint(description)}`,
-    ),
-  );
-}
-
-function printTaskEnd(agentId: string, status: string): void {
-  const mark = status === "finished" ? color.green("✓") : color.red("✗");
-  console.log(color.blue(`  ${mark} task ${agentId} ${status}`));
-}
-
-function printToolEnd(
-  toolName: string,
-  result: unknown,
-  isError: boolean,
-): void {
-  const r = result as
-    | { content?: Array<{ type: string; text?: string }> }
-    | null;
-  const text = r?.content
-    ? contentText(r.content as Array<{ type: string; text?: string }>)
-    : "";
-  const summary = summarize(text, 200);
-  if (isError) {
-    console.log(color.red(`  ✗ ${toolName} → ${summary}`));
-  } else {
-    console.log(color.dim(`  ✓ ${toolName} → ${summary}`));
-  }
+/** Subscribe to the events of one session and render them to the terminal.
+ * Returns an unsubscribe function; call it before switching to another
+ * session scope. The printer's streaming state survives switches (one
+ * stream at a time per REPL). */
+function subscribeToSession(
+  core: LumiscaCore,
+  targetId: string,
+  printer: StreamPrinter,
+): () => void {
+  return core.subscribe((event: ClientEvent) => {
+    if (event.type === "session_created") return;
+    if (event.sessionId !== targetId) return;
+    switch (event.type) {
+      case "message_delta":
+        printer.write(event.delta);
+        break;
+      case "message_end":
+        printer.end(event.message.role);
+        break;
+      case "tool_start":
+        printToolStart(event.toolName, event.args);
+        break;
+      case "tool_end":
+        printToolEnd(event.toolName, event.result, event.isError);
+        break;
+      case "task_start":
+        printTaskStart(
+          event.agentId,
+          event.subagentType,
+          event.description,
+        );
+        break;
+      case "task_end":
+        printTaskEnd(event.agentId, event.status);
+        break;
+      case "session_error":
+        printer.end();
+        error(`エラー: ${event.message}`);
+        break;
+      case "agent_end":
+        printer.end();
+        break;
+      case "question":
+        // The run is blocked waiting for answers; answer inline (the
+        // REPL loop itself waits for the run to idle, so this is the
+        // only place input can be read while the ask is pending).
+        printer.end();
+        void answerQuestions(
+          core,
+          targetId,
+          event.toolCallId,
+          event.questions,
+        );
+        break;
+      case "session_renamed":
+        info(`セッション名が変更されました: ${event.name}`);
+        break;
+      default:
+        break;
+    }
+  });
 }
 
 /** Interactive single-session REPL. */
@@ -81,56 +105,8 @@ export async function runRepl(
     agent = core.getAgent(currentId)!;
   }
 
-  let streaming = false;
-
-  /** Subscribe to the events of one session. Returns an unsubscribe
-   * function; call it before switching to another session scope. */
-  const subscribeTo = (targetId: string): () => void => {
-    return core.subscribe((event: ClientEvent) => {
-      if (event.type === "session_created") return;
-      if (event.sessionId !== targetId) return;
-      switch (event.type) {
-        case "message_delta":
-          process.stdout.write(event.delta);
-          streaming = true;
-          break;
-        case "message_end":
-          if (event.message.role === "assistant" && streaming) {
-            process.stdout.write("\n");
-          }
-          streaming = false;
-          break;
-        case "tool_start":
-          printToolStart(event.toolName, event.args);
-          break;
-        case "tool_end":
-          printToolEnd(event.toolName, event.result, event.isError);
-          break;
-        case "task_start":
-          printTaskStart(
-            event.agentId,
-            event.subagentType,
-            event.description,
-          );
-          break;
-        case "task_end":
-          printTaskEnd(event.agentId, event.status);
-          break;
-        case "session_error":
-          if (streaming) process.stdout.write("\n");
-          streaming = false;
-          error(`エラー: ${event.message}`);
-          break;
-        case "agent_end":
-          streaming = false;
-          break;
-        default:
-          break;
-      }
-    });
-  };
-
-  let unsubscribe = subscribeTo(currentId);
+  const printer = new StreamPrinter();
+  let unsubscribe = subscribeToSession(core, currentId, printer);
 
   header(`Lumisca CLI — ${sessionName(core, currentId)}`);
   info("/help でコマンド一覧");
@@ -156,7 +132,7 @@ export async function runRepl(
         currentId = next;
         agent = core.getAgent(currentId)!;
         unsubscribe(); // drop the old subscription...
-        unsubscribe = subscribeTo(currentId); // ...and re-subscribe to the new session
+        unsubscribe = subscribeToSession(core, currentId, printer); // ...and re-subscribe to the new session
         header(`Lumisca CLI — ${sessionName(core, currentId)}`);
       }
       continue;
@@ -169,7 +145,7 @@ export async function runRepl(
       // those instead of crashing the REPL with an unhandled rejection.
       await core.prompt(currentId, trimmed);
     } catch (e) {
-      error(e instanceof Error ? e.message : String(e));
+      error(errorText(e));
     }
   }
 

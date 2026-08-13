@@ -9,7 +9,11 @@ import {
 import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
 import { useClickOutside } from "../../hooks/useClickOutside.ts";
-import { errorText } from "../../providers.ts";
+import {
+  errorText,
+  setModelThinkingLevel,
+  useProviderModels,
+} from "../../providers.ts";
 import { ModelPicker } from "../ModelPicker.tsx";
 
 interface ModelPrefRow {
@@ -65,28 +69,20 @@ export function ModelPreferencePanel() {
   const [savingLevel, setSavingLevel] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const anchors = useRef<Record<string, HTMLButtonElement | null>>({});
+  // Model catalog of this server (settings are always local); the fast
+  // model's thinking level is derived from it below.
+  const { modelsByProvider, reload: reloadModels } = useProviderModels();
 
-  /** Load the stored preferences once, plus the fast model's thinking
-   * level (sub-agents use it). */
+  /** Load the stored preferences once. */
   useEffect(() => {
     let stale = false;
     api.getSettings()
-      .then(async (settings) => {
+      .then((settings) => {
         if (stale) return;
         setValues({
           [FAST_MODEL_KEY]: parseModelPreference(settings[FAST_MODEL_KEY]),
           [IMAGE_MODEL_KEY]: parseModelPreference(settings[IMAGE_MODEL_KEY]),
         });
-        const fast = parseModelPreference(settings[FAST_MODEL_KEY]);
-        if (fast !== undefined) {
-          try {
-            const fetched = await fetchLevels(fast);
-            if (stale) return;
-            setLevels(fetched);
-          } catch {
-            // The catalog is unreachable; the control simply stays hidden.
-          }
-        }
         setLoaded(true);
       })
       .catch((e) => {
@@ -97,21 +93,29 @@ export function ModelPreferencePanel() {
     };
   }, []);
 
-  /** The stored + supported thinking levels of one model, for the level
-   * control (undefined when the model is gone or has no levels). */
-  const fetchLevels = async (
-    pref: ModelPreference,
-  ): Promise<
-    { current: ThinkingLevel; supported: ThinkingLevel[] } | undefined
-  > => {
-    const models = await api.listModels(pref.provider);
-    const model = models.find((m) => m.id === pref.modelId);
-    if (model === undefined) return undefined;
+  /** The stored + supported thinking levels of the fast model, derived
+   * from the model catalog once its provider's models arrive (undefined
+   * when the model is unset, gone, or has no levels). */
+  const fastPref = values[FAST_MODEL_KEY];
+  useEffect(() => {
+    if (fastPref === undefined) {
+      setLevels(undefined);
+      return;
+    }
+    const models = modelsByProvider.get(fastPref.provider);
+    if (models === undefined) return; // provider's models not loaded yet
+    const model = models.find((m) => m.id === fastPref.modelId);
+    if (model === undefined) {
+      setLevels(undefined);
+      return;
+    }
     const supported = model.thinkingLevels ?? [];
-    return supported.length <= 1
-      ? undefined
-      : { current: model.thinkingLevel ?? "off", supported };
-  };
+    setLevels(
+      supported.length <= 1
+        ? undefined
+        : { current: model.thinkingLevel ?? "off", supported },
+    );
+  }, [modelsByProvider, fastPref]);
 
   // Close on outside click, Escape, scroll and window blur (the settings
   // content scrolls independently of the fixed-position popover).
@@ -151,10 +155,11 @@ export function ModelPreferencePanel() {
       await api.setSetting(rowKey, pref ? serializeModelPreference(pref) : "");
       setValues((prev) => ({ ...prev, [rowKey]: pref }));
       setOpenRow(null);
-      // The fast model's thinking level follows the model: refresh it (and
-      // clear it when the model is unset).
+      // The fast model's thinking level follows the model: refresh the
+      // catalog (the level effect above re-derives it; a fresh fetch also
+      // covers a provider configured during this session).
       if (rowKey === FAST_MODEL_KEY) {
-        setLevels(pref !== undefined ? await fetchLevels(pref) : undefined);
+        reloadModels();
       }
     } catch (e) {
       setSaveError(errorText(e));
@@ -198,12 +203,12 @@ export function ModelPreferencePanel() {
                             const level = e.target.value as ThinkingLevel;
                             setSavingLevel(true);
                             try {
-                              const { thinkingLevel } = await api
-                                .setModelThinkingLevel(
-                                  value.provider,
-                                  value.modelId,
-                                  level,
-                                );
+                              const thinkingLevel = await setModelThinkingLevel(
+                                "",
+                                value.provider,
+                                value.modelId,
+                                level,
+                              );
                               setLevels((prev) =>
                                 prev === undefined
                                   ? prev

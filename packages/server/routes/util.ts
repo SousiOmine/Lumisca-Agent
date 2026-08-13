@@ -51,10 +51,56 @@ export function jsonError(
   );
 }
 
-/** Parse a JSON request body; undefined when the body is missing or malformed. */
+/** Parse a JSON request body. Throws 400 on malformed JSON — a syntax
+ * error must not masquerade as "field X is required" — and returns
+ * undefined only when the body is empty. */
 export async function parseBody<T = unknown>(
   c: Context,
 ): Promise<T | undefined> {
-  const body = await c.req.json().catch(() => undefined);
-  return body as T | undefined;
+  const text = await c.req.text();
+  if (text.length === 0) return undefined;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new AppError("Invalid JSON body", 400);
+  }
+}
+
+/** A small TTL cache: entries expire `ttlMs` after being set; with `max`
+ * set, the oldest entry is evicted on overflow. Shared by the workspace
+ * file cache and the provider auth cache so the pattern lives once. */
+export function ttlCache<K, V>(ttlMs: number, max?: number): {
+  get(key: K): V | undefined;
+  set(key: K, value: V): void;
+  delete(key: K): void;
+} {
+  const entries = new Map<K, { at: number; value: V }>();
+  return {
+    get(key) {
+      const entry = entries.get(key);
+      if (entry === undefined) return undefined;
+      if (Date.now() - entry.at >= ttlMs) {
+        entries.delete(key);
+        return undefined;
+      }
+      return entry.value;
+    },
+    set(key, value) {
+      entries.set(key, { at: Date.now(), value });
+      if (max !== undefined && entries.size > max) {
+        let oldest: K | undefined;
+        let oldestAt = Number.POSITIVE_INFINITY;
+        for (const [k, entry] of entries) {
+          if (entry.at < oldestAt) {
+            oldestAt = entry.at;
+            oldest = k;
+          }
+        }
+        if (oldest !== undefined) entries.delete(oldest);
+      }
+    },
+    delete(key) {
+      entries.delete(key);
+    },
+  };
 }

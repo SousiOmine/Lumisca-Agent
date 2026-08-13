@@ -1,18 +1,10 @@
 import { Agent } from "@earendil-works/pi-agent-core";
-import type {
-  AgentEvent,
-  AgentMessage,
-  StreamFn,
-} from "@earendil-works/pi-agent-core";
+import type { AgentEvent, StreamFn } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { contentText } from "../content.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import { discoverPlugins } from "../plugins/discover.ts";
-import type {
-  NotificationMessage,
-  NotificationPayload,
-} from "../types/notification.ts";
+import { applyMcpToolsToAgent, MCP_TOOLS_PROMPT_NOTE } from "../mcp/tools.ts";
+import type { NotificationPayload } from "../types/notification.ts";
 import { toLlmMessages } from "../types/notification.ts";
 import {
   type SubagentStatus,
@@ -23,19 +15,11 @@ import {
   TOOL_TASK,
   TOOL_TASK_OUTPUT,
 } from "../shared.ts";
-import { discoverSkills, type SkillDef } from "../skills/discover.ts";
-import { createSkillTool } from "../skills/tool.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
-import {
-  createEditFileTool,
-  createListDirTool,
-  createReadFileTool,
-  createWriteFileTool,
-} from "./filesystem.ts";
 import { toAgentTool } from "./pi-adapter.ts";
 import {
   boolean,
@@ -46,8 +30,19 @@ import {
   type Tool,
   type ToolResult,
 } from "./schema.ts";
-import { createGlobTool, createGrepTool } from "./search.ts";
-import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
+import {
+  readOnlyInvestigationTools,
+  sandboxFileTools,
+  sessionSkills,
+} from "./mod.ts";
+import { createSkillTool } from "../skills/tool.ts";
+import {
+  formatTaskCompletion,
+  formatTaskOutput,
+  lastAssistantText,
+  notificationMessage,
+  subagentSystemPrompt,
+} from "./subagent-format.ts";
 
 /** Concurrent sub-agents per session. Bounds LLM parallelism and memory;
  * the task tool reports the limit so the agent can wait for a slot. */
@@ -57,27 +52,18 @@ export const MAX_SUBAGENTS = 8;
 export const MAX_SUBAGENT_DEPTH = 2;
 /** Live-response tail reported while a sub-agent runs. */
 const TASK_TAIL_LIMIT = 8 * 1024;
+/** Settled sub-agents kept queryable (task_output / resync) per session;
+ * older entries are dropped so a long session's metadata stays bounded. */
+const MAX_FINISHED_SUBAGENTS = 100;
 /** `to` values of send_message that resolve to the caller's parent agent. */
 const PARENT_ALIASES = ["parent", "main"] as const;
-
-/** Skills for a sub-agent, in the same precedence order as the session's:
- * workspace `.agents/skills`, then agent plugin skills, then global. */
-function subagentSkills(folders: string[]): SkillDef[] {
-  const plugins = discoverPlugins(folders);
-  return discoverSkills(folders, {
-    pluginSkills: plugins.flatMap((p) => p.skills),
-  });
-}
 
 /** Read-only investigation tools of the `explore` sub-agent. */
 function exploreTools(workspace: Workspace): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
-    createReadFileTool({ sandbox }),
-    createListDirTool({ sandbox }),
-    createGrepTool({ sandbox }),
-    createGlobTool({ sandbox }),
-    createSkillTool({ skills: subagentSkills(workspace.folders) }),
+    ...readOnlyInvestigationTools(sandbox),
+    createSkillTool({ skills: sessionSkills(workspace.folders) }),
   ];
 }
 
@@ -88,122 +74,17 @@ function exploreTools(workspace: Workspace): Tool[] {
 function generalTools(workspace: Workspace): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
-    createReadFileTool({ sandbox }),
-    createWriteFileTool({ sandbox }),
-    createEditFileTool({ sandbox }),
-    createListDirTool({ sandbox }),
-    createGrepTool({ sandbox }),
-    createGlobTool({ sandbox }),
+    ...sandboxFileTools(sandbox),
     createBashTool({ sandbox }),
     createEvalTool(),
-    createSkillTool({ skills: subagentSkills(workspace.folders) }),
+    createSkillTool({ skills: sessionSkills(workspace.folders) }),
   ];
 }
 
-/** The system prompt of one sub-agent. Teaches the notification prefixes so
- * injected messages are never mistaken for user input, and the agent ids so
- * send_message can address the right agent. */
-function subagentSystemPrompt(
-  agentId: string,
-  parentId: string,
-  type: SubagentType,
-  canDelegate: boolean,
-): string {
-  const role = type === "explore" ? "research" : "coding";
-  const lines = [
-    `You are a ${role} sub-agent of Lumisca, started by agent ${parentId} ` +
-    `to handle one piece of work. Your own id is ${agentId}.`,
-    `Work on the assigned task and answer with a complete final report as ` +
-    `your last message.`,
-    `- A message starting with "[Message from ...]" is a message from ` +
-    `another agent, not from the user: answer it with send_message or ` +
-    `fold it into your work.`,
-    `- If you need input mid-task, send a message to ${parentId} with ` +
-    `send_message. You cannot ask the user directly.`,
-  ];
-  if (type === "explore") {
-    lines.push(
-      `- You are read-only: investigate with read/grep/glob/list_dir/skill ` +
-        `and report findings with file references (path:line). Never modify ` +
-        `files or run commands.`,
-      `- Be thorough before concluding: the parent agent relies on your ` +
-        `report.`,
-    );
-  } else {
-    if (canDelegate) {
-      lines.push(
-        `- You can delegate independent work to further sub-agents with the ` +
-          `task tool: they start in the background, so keep working while ` +
-          `they run. Their completion arrives as a "[Task ...]" ` +
-          `notification, or use task_output (wait: true) when your next ` +
-          `step depends on the result.`,
-      );
-    }
-    lines.push(
-      `- Make the final report self-contained: what you did, what you ` +
-        `found, and what remains open.`,
-    );
-  }
-  return lines.join("\n");
-}
-
-/** The text of the final assistant message of a finished sub-agent run. */
-function lastAssistantText(messages: AgentMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i]!;
-    if (message.role === "assistant") return contentText(message.content);
-  }
-  return "";
-}
-
-function notificationMessage(
-  payload: NotificationPayload,
-): NotificationMessage {
-  return {
-    role: "notification",
-    ...payload,
-    timestamp: Date.now(),
-  };
-}
-
-/** The notification injected into the spawning agent's loop when a
- * sub-agent completes. The title starts with "[Task ...]" so system prompts
- * can teach agents to recognize it as a system notification. */
-function formatTaskCompletion(
-  sub: Subagent,
-  failure?: string,
-): NotificationPayload {
-  if (sub.status === "finished") {
-    const result = truncate(sub.resultText, MAX_TOOL_OUTPUT);
-    return {
-      kind: "task",
-      title: `[Task ${sub.id} (${sub.description}) finished]`,
-      body: result.text +
-        (result.truncated ? truncatedNote("task result") : ""),
-      status: "success",
-    };
-  }
-  const verb = sub.status === "aborted" ? "was aborted" : "failed";
-  return {
-    kind: "task",
-    title: `[Task ${sub.id} (${sub.description}) ${verb}]`,
-    body: failure ?? "",
-    status: "error",
-  };
-}
-
-/** The text shown by task_output for one task. */
-function formatTaskOutput(info: TaskInfo): string {
-  const head =
-    `Agent ${info.agentId} (${info.subagentType}, ${info.description}): ${info.status}`;
-  const text = info.text.trim();
-  if (info.status === "running") {
-    return text.length > 0 ? `${head}\nLive output (tail):\n${text}` : head;
-  }
-  return text.length > 0 ? `${head}\n${text}` : head;
-}
-
-/** One live sub-agent and its runtime state. */
+/** One live sub-agent and its runtime state. `agent` is released (set to
+ * null) once the run settles — only the lightweight snapshot fields stay
+ * queryable — so finished sub-agents cannot pin their message history in
+ * memory for the rest of the session. */
 interface Subagent {
   id: string;
   parentId: string;
@@ -211,7 +92,7 @@ interface Subagent {
   depth: number;
   description: string;
   status: SubagentStatus;
-  agent: Agent;
+  agent: Agent | null;
   startedAt: number;
   finishedAt?: number;
   /** Tail of the current response (bounded; reported while running). */
@@ -320,19 +201,7 @@ export class TaskHub {
   }
 
   private attachMcpTools(sub: Subagent, tools: Tool[]): void {
-    sub.agent.state.tools = [
-      ...sub.agent.state.tools.filter((t) => !t.name.startsWith("mcp__")),
-      ...tools.map(toAgentTool),
-    ];
-    if (
-      tools.length > 0 &&
-      !sub.agent.state.systemPrompt.includes(
-        "MCP tools (names starting with mcp__)",
-      )
-    ) {
-      sub.agent.state.systemPrompt +=
-        "\n\nNote: MCP tools (names starting with mcp__) can access resources outside the workspace.";
-    }
+    if (sub.agent !== null) applyMcpToolsToAgent(sub.agent, tools);
   }
 
   /** Hook the parent (main) session agent into the hub: it receives task
@@ -408,9 +277,7 @@ export class TaskHub {
       parentId,
       type,
       canDelegate,
-    ) + (mcpTools.length > 0
-      ? "\n\nNote: MCP tools (names starting with mcp__) can access resources outside the workspace."
-      : "");
+    ) + (mcpTools.length > 0 ? MCP_TOOLS_PROMPT_NOTE : "");
     const agent = new Agent({
       initialState: {
         systemPrompt,
@@ -451,8 +318,9 @@ export class TaskHub {
       () =>
         this.finalize(
           sub,
-          sub.agent.state.errorMessage !== undefined ? "failed" : "finished",
-          sub.agent.state.errorMessage,
+          // Still running here (finalize settles it), so the agent is live.
+          sub.agent!.state.errorMessage !== undefined ? "failed" : "finished",
+          sub.agent!.state.errorMessage,
         ),
       (error) => this.finalize(sub, "failed", errorMessage(error)),
     );
@@ -621,7 +489,8 @@ export class TaskHub {
         "unavailable",
       );
     }
-    sub.agent.steer(notificationMessage(payload));
+    // Running agents always have a live Agent (finalize releases it).
+    sub.agent!.steer(notificationMessage(payload));
   }
 
   /** Best-effort notification to the agent that spawned a task: the parent
@@ -637,7 +506,8 @@ export class TaskHub {
     }
     const sub = this.subs.get(parentId);
     if (sub !== undefined && sub.status === "running") {
-      sub.agent.steer(notificationMessage(payload));
+      // Running agents always have a live Agent (finalize releases it).
+      sub.agent!.steer(notificationMessage(payload));
     }
   }
 
@@ -666,8 +536,12 @@ export class TaskHub {
     if (sub.status !== "running") return;
     sub.status = status;
     sub.finishedAt = Date.now();
-    sub.resultText = lastAssistantText(sub.agent.state.messages);
+    sub.resultText = lastAssistantText(sub.agent!.state.messages);
     sub.unsubscribe();
+    // The agent's message history is no longer needed: release it so a
+    // long session's finished tasks cannot pin unbounded memory. Only the
+    // snapshot fields (kept below) stay queryable.
+    sub.agent = null;
     const parentWaiting = [...sub.waiters].some(
       (waiter) => waiter.callerId === sub.parentId,
     );
@@ -681,7 +555,19 @@ export class TaskHub {
       status,
     });
     if (!parentWaiting && !this.closed) {
-      this.notify(sub.parentId, formatTaskCompletion(sub, failure));
+      this.notify(sub.parentId, formatTaskCompletion(snapshot, failure));
+    }
+    this.evictFinished();
+  }
+
+  /** Drop the oldest settled sub-agents beyond MAX_FINISHED_SUBAGENTS, so
+   * the metadata kept for task_output / resync stays bounded. */
+  private evictFinished(): void {
+    if (this.subs.size <= MAX_FINISHED_SUBAGENTS) return;
+    for (const [id, sub] of this.subs) {
+      if (sub.status === "running") continue;
+      this.subs.delete(id);
+      if (this.subs.size <= MAX_FINISHED_SUBAGENTS) return;
     }
   }
 
@@ -692,7 +578,8 @@ export class TaskHub {
     this.parentDelivery = null;
     for (const sub of [...this.subs.values()]) {
       if (sub.status !== "running") continue;
-      sub.agent.abort();
+      // Running agents always have a live Agent (finalize releases it).
+      sub.agent!.abort();
       this.finalize(sub, "aborted");
     }
   }

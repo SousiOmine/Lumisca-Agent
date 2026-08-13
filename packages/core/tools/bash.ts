@@ -99,6 +99,12 @@ export function createBashTool(
           content: [{ type: "text", text: body }],
           details: { exitCode: code, cwd: resolved.path },
         };
+      } catch (error) {
+        // output() failed (pipe error, spawn-time failure): make sure the
+        // child is dead before surfacing the failure — a stray process
+        // would keep running (and hold the pipes) otherwise.
+        kill();
+        throw error;
       } finally {
         clearTimeout(timer);
         signal?.removeEventListener("abort", onAbort);

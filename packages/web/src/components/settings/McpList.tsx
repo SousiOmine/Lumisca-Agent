@@ -7,34 +7,11 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
+import { serializeMcpServers } from "@lumisca/core/shared";
 import type { McpInfo, McpServerInfo } from "../../types.ts";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import { McpDetail } from "./McpDetail.tsx";
-
-/** Build the `.mcp.json` text for a server list (UI → PUT body). */
-export function serversToJson(servers: McpServerInfo[]): string {
-  const mcpServers: Record<string, unknown> = {};
-  for (const server of servers) {
-    const entry: Record<string, unknown> = {};
-    if (server.type === "stdio") {
-      entry.command = server.command ?? "";
-      if (server.args.length > 0) entry.args = server.args;
-    } else {
-      entry.url = server.url ?? "";
-      if (Object.keys(server.headers).length > 0) {
-        entry.headers = server.headers;
-      }
-    }
-    if (Object.keys(server.env).length > 0) entry.env = server.env;
-    if (server.cwd !== undefined && server.cwd.length > 0) {
-      entry.cwd = server.cwd;
-    }
-    if (!server.enabled) entry.enabled = false;
-    mcpServers[server.name] = entry;
-  }
-  return JSON.stringify({ mcpServers }, null, 2);
-}
 
 /** Config-relevant fields only; ignores live status/toolCount so the
  * stale-edit comparison stays stable. */
@@ -100,7 +77,7 @@ export function McpList() {
           }
         }
       }
-      const info = await api.putMcpConfig(serversToJson(servers));
+      const info = await api.putMcpConfig(serializeMcpServers(servers));
       setConfig(info);
       setBaseline(info);
       return true;

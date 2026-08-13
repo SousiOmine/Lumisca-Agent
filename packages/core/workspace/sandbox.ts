@@ -8,25 +8,11 @@ import {
   sep,
 } from "node:path";
 import { realpathSync } from "node:fs";
+import { isWithin, normalizeCase, toPosix } from "./path-util.ts";
 
 export type ResolvedPath =
   | { ok: true; path: string }
   | { ok: false; reason: string };
-
-function normalizeCase(p: string): string {
-  return Deno.build.os === "windows" ? p.toLowerCase() : p;
-}
-
-function toPosix(p: string): string {
-  return p.replace(/\\/g, "/");
-}
-
-function isWithin(root: string, candidate: string): boolean {
-  const r = normalizeCase(toPosix(root));
-  const c = normalizeCase(toPosix(candidate));
-  if (c === r) return true;
-  return c.startsWith(r.endsWith("/") ? r : `${r}/`);
-}
 
 /**
  * Restricts file access to a set of workspace folders.

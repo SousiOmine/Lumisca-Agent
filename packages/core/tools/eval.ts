@@ -11,11 +11,15 @@ import {
   type Tool,
   type ToolResult,
 } from "./schema.ts";
-import { truncate, truncatedNote } from "./truncate.ts";
+import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
 const DEFAULT_TIMEOUT_MS = 5000;
 /** inspect depth for the completion value (arrays of objects stay readable). */
 const RESULT_DEPTH = 4;
+/** inspect bounds: huge arrays/strings would otherwise materialize a giant
+ * result string before truncation even runs. */
+const RESULT_MAX_ARRAY = 200;
+const RESULT_MAX_STRING = 8192;
 
 /** Type stripper, loaded lazily on the first eval so the server startup
  * does not pay for parsing it. Sucrase is a pure-JS transpiler with a
@@ -84,6 +88,11 @@ class EvalSession {
   private sandbox: Record<string, unknown>;
   private context: Context;
   private output: string[] = [];
+  /** Cumulative console bytes; once the budget is exceeded further lines
+   * are dropped (a note is appended to the result) so a huge console.log
+   * loop can never accumulate unbounded output in memory. */
+  private outputBytes = 0;
+  private outputTruncated = false;
 
   constructor() {
     this.sandbox = this.newSandbox();
@@ -92,7 +101,14 @@ class EvalSession {
 
   private newSandbox(): Record<string, unknown> {
     const emit = (...args: unknown[]) => {
-      this.output.push(args.map(formatConsoleArg).join(" "));
+      if (this.outputTruncated) return;
+      const line = args.map(formatConsoleArg).join(" ");
+      this.outputBytes += line.length + 1;
+      if (this.outputBytes > MAX_TOOL_OUTPUT) {
+        this.outputTruncated = true;
+        return;
+      }
+      this.output.push(line);
     };
     return {
       // Same trust level as bash: full host access. Web globals for
@@ -127,6 +143,8 @@ class EvalSession {
     timeoutMs: number,
   ): Promise<{ value: unknown; output: string }> {
     this.output.length = 0;
+    this.outputBytes = 0;
+    this.outputTruncated = false;
     let value: unknown;
     try {
       value = runInContext(code, this.context, { timeout: timeoutMs });
@@ -145,7 +163,9 @@ class EvalSession {
     if (isThenable(value)) {
       value = await awaitWithTimeout(value, timeoutMs);
     }
-    return { value, output: this.output.join("\n") };
+    const output = this.output.join("\n") +
+      (this.outputTruncated ? truncatedNote("console output") : "");
+    return { value, output };
   }
 }
 
@@ -157,7 +177,13 @@ function composeResult(output: string, value: unknown): string {
   const parts: string[] = [];
   if (output.length > 0) parts.push(`[output]\n${output}`);
   if (value !== undefined) {
-    parts.push(`[result]\n${inspect(value, { depth: RESULT_DEPTH })}`);
+    parts.push(`[result]\n${
+      inspect(value, {
+        depth: RESULT_DEPTH,
+        maxArrayLength: RESULT_MAX_ARRAY,
+        maxStringLength: RESULT_MAX_STRING,
+      })
+    }`);
   }
   if (parts.length === 0) return "(no output)";
   const joined = parts.join("\n\n");

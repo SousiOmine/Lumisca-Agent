@@ -1,5 +1,6 @@
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import type { Workspace } from "../types/workspace.ts";
+import { walkEntries } from "./walk.ts";
 
 /** One entry in a workspace file listing, for @-mention suggestions.
  * `path` is workspace-relative in the `FolderName/rel/path` form the
@@ -30,18 +31,13 @@ const EXCLUDED_DIRS = new Set([
 
 const MAX_DEPTH = 12;
 
-function toPosix(p: string): string {
-  return p.replace(/\\/g, "/");
-}
-
 /**
  * Recursively list the files and folders inside a workspace, each with the
  * workspace-relative path (`FolderName/rel/path`). Hidden entries and
  * EXCLUDED_DIRS are skipped; symlinks are never followed; the walk stops at
  * MAX_DEPTH and `max` entries. Within a directory, files are emitted before
  * subdirectories, so the entry cap can never be consumed by one alphabetical
- * subtree before its later siblings are seen (e.g. a README.md that sorts
- * after a deep build-output tree).
+ * subtree before its later siblings are seen (see walkEntries).
  */
 export async function listWorkspaceFiles(
   workspace: Workspace,
@@ -49,51 +45,28 @@ export async function listWorkspaceFiles(
 ): Promise<WorkspaceFileEntry[]> {
   const entries: WorkspaceFileEntry[] = [];
 
-  async function walk(
-    dir: string,
-    relPrefix: string,
-    depth: number,
-  ): Promise<void> {
-    if (depth > MAX_DEPTH || entries.length >= max) return;
-    let list: Deno.DirEntry[];
-    try {
-      list = [...Deno.readDirSync(dir)];
-    } catch {
-      return; // unreadable directory (permissions, race) — skip
-    }
-    list.sort((a, b) => a.name.localeCompare(b.name));
-    const subdirs: Deno.DirEntry[] = [];
-    for (const entry of list) {
-      if (entry.isSymlink) continue;
-      if (entry.isDirectory) {
-        if (entry.name.startsWith(".") || EXCLUDED_DIRS.has(entry.name)) {
-          continue;
-        }
-        subdirs.push(entry);
-        continue;
-      }
-      if (!entry.isFile || entry.name.startsWith(".")) continue;
-      if (entries.length >= max) return;
-      entries.push({
-        path: toPosix(`${relPrefix}/${entry.name}`),
-        name: entry.name,
-        isDir: false,
-      });
-    }
-    for (const entry of subdirs) {
-      if (entries.length >= max) return;
-      const rel = `${relPrefix}/${entry.name}`;
-      entries.push({ path: toPosix(rel), name: entry.name, isDir: true });
-      await walk(join(dir, entry.name), rel, depth + 1);
-    }
-  }
-
   for (const folder of workspace.folders) {
     const stat = await Deno.stat(folder).catch(() => null);
     if (!stat || !stat.isDirectory) continue;
     const folderName = basename(folder);
     entries.push({ path: folderName, name: folderName, isDir: true });
-    await walk(folder, folderName, 1);
+    for await (
+      const item of walkEntries(folder, {
+        skipHidden: true,
+        excludedDirs: EXCLUDED_DIRS,
+        maxDepth: MAX_DEPTH,
+        maxEntries: max,
+        filesFirst: true,
+      })
+    ) {
+      if (entries.length >= max) break;
+      const rel = item.rel.replace(/\\/g, "/");
+      entries.push({
+        path: `${folderName}/${rel}`,
+        name: rel.slice(rel.lastIndexOf("/") + 1),
+        isDir: item.isDir,
+      });
+    }
     if (entries.length >= max) break;
   }
   return entries;

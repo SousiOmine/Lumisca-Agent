@@ -1,5 +1,13 @@
 import { formatModelMeta, type LumiscaCore } from "@lumisca/core";
-import { color, error, getPromptFn, header, info, success } from "./ui.ts";
+import {
+  color,
+  error,
+  errorText,
+  getPromptFn,
+  header,
+  info,
+  success,
+} from "./ui.ts";
 
 export interface Choice<T> {
   label: string;
@@ -96,7 +104,7 @@ async function createWorkspaceFlow(core: LumiscaCore): Promise<string | null> {
     success(`ワークスペース作成: ${ws.name} (${ws.folders.length} フォルダ)`);
     return ws.id;
   } catch (e) {
-    error(e instanceof Error ? e.message : String(e));
+    error(errorText(e));
     return null;
   }
 }
