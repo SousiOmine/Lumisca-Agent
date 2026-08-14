@@ -3,7 +3,10 @@ import type { AgentEvent, StreamFn } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { CoreError, errorMessage } from "../errors.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import { applyMcpToolsToAgent, MCP_TOOLS_PROMPT_NOTE } from "../mcp/tools.ts";
+import { addToolsToAgent, MCP_TOOLS_PROMPT_NOTE } from "../mcp/tools.ts";
+import type { ToolRegistry } from "./registry.ts";
+import { createToolSearchTool } from "./search-tool.ts";
+import { createToolCallTool } from "./call-tool.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import { toLlmMessages } from "../types/notification.ts";
 import {
@@ -161,9 +164,17 @@ export class TaskHub {
   private resolveRuntime: () => SubagentRuntime;
   private readonly streamFn: StreamFn;
   private readonly emit: (event: ClientEvent) => void;
-  /** The session's shared MCP attachment (set by the pool on every open):
-   * general sub-agents get its tools. */
-  private mcp: McpAttachment | null = null;
+  /** The session's tool registry (set by the pool on every open): holds
+   * every discoverable tool (MCP tools, future extensions) whose
+   * definitions stay out of the LLM context. General sub-agents get the
+   * tool_search / tool_call pair over it. */
+  private registry: ToolRegistry | null = null;
+  /** The attachment whose discovery has been (or will be) applied to the
+   * registry and the running sub-agents. Guards against stale callbacks: a
+   * config change replaces the attachment mid-discovery, and the old
+   * attachment's ready must not overwrite the current registry or attach
+   * its tools. */
+  private handledAttachment: McpAttachment | null = null;
 
   constructor(options: TaskHubOptions) {
     this.sessionId = options.sessionId;
@@ -178,30 +189,56 @@ export class TaskHub {
     this.resolveRuntime = resolver;
   }
 
-  /** Attach the session's shared MCP attachment: general sub-agents get
-   * its tools — spawned ones read them at spawn, agents still running
-   * while discovery was in flight receive them when it finishes. The
-   * replacement is wholesale (all `mcp__` tools are swapped), so a config
-   * change or a rebuild can never leave stale tools behind. */
-  setMcp(attachment: McpAttachment | null): void {
-    this.mcp = attachment;
-    if (attachment !== null) {
-      attachment.whenReady((tools) => this.attachMcpToRunning(tools));
+  /** Attach the session's shared MCP attachment and tool registry: general
+   * sub-agents get the tool_search / tool_call pair over the registry —
+   * spawned ones read it at spawn, agents still running while discovery was
+   * in flight receive the pair when it finishes. Only the current
+   * attachment is registered for: an attachment replaced by a config
+   * change must never apply its (stale or empty) tools. */
+  setMcp(
+    attachment: McpAttachment | null,
+    registry: ToolRegistry | null,
+  ): void {
+    this.registry = registry;
+    if (attachment !== null && attachment !== this.handledAttachment) {
+      this.handledAttachment = attachment;
+      attachment.whenReady((tools) => this.attachMcpToRunning(attachment, tools));
     }
   }
 
-  /** Attach MCP tools to every running general sub-agent, replacing any
-   * older `mcp__` tools (a config change tears down the old manager's
-   * processes, so its tools must not stay behind). */
-  private attachMcpToRunning(tools: Tool[]): void {
+  /** Discovery finished for the session's current attachment: fill the
+   * session's tool registry and attach the search/call pair — plus the MCP
+   * boundary note — to every running general sub-agent that spawned before
+   * the registry held anything. Callbacks of older attachments (a config
+   * change replaced the manager mid-discovery) return here: only the
+   * current attachment may write the registry. */
+  private attachMcpToRunning(attachment: McpAttachment, tools: Tool[]): void {
+    if (attachment !== this.handledAttachment) return;
+    if (this.registry === null) return;
+    this.registry.setTools(tools);
+    if (this.registry.isEmpty) return;
+    const pair = this.searchTools();
     for (const sub of this.subs.values()) {
       if (sub.status !== "running" || sub.type !== "general") continue;
-      this.attachMcpTools(sub, tools);
+      if (sub.agent === null) continue;
+      addToolsToAgent(sub.agent, pair);
+      if (!sub.agent.state.systemPrompt.includes("tool_search")) {
+        sub.agent.state.systemPrompt += MCP_TOOLS_PROMPT_NOTE;
+      }
     }
   }
 
-  private attachMcpTools(sub: Subagent, tools: Tool[]): void {
-    if (sub.agent !== null) applyMcpToolsToAgent(sub.agent, tools);
+  /** The tool_search / tool_call pair backed by the session's registry
+   * (empty when the session has no discoverable tools). The pair resolves
+   * the registry through a provider, so a config change that swaps the
+   * registry (pool.open with a new MCP attachment) redirects pairs already
+   * attached to running sub-agents without replacing them. */
+  private searchTools(): Tool[] {
+    if (this.registry === null || this.registry.isEmpty) return [];
+    return [
+      createToolSearchTool(() => this.registry!),
+      createToolCallTool(() => this.registry!),
+    ];
   }
 
   /** Hook the parent (main) session agent into the hub: it receives task
@@ -262,14 +299,15 @@ export class TaskHub {
     const depth = parentDepth + 1;
     const canDelegate = type === "general" && depth < MAX_SUBAGENT_DEPTH;
     const runtime = this.resolveRuntime();
-    // General sub-agents share the session's MCP tools (empty while
-    // discovery is still in flight — attachMcpToRunning adds them later).
-    const mcpTools = type === "general" ? this.mcp?.getTools() ?? [] : [];
+    // General sub-agents share the session's discoverable tools through
+    // the registry (empty while discovery is still in flight — sub-agents
+    // spawned before it finished get the pair via attachMcpToRunning).
+    const searchable = type === "general" ? this.searchTools() : [];
     const tools = [
       ...(type === "general"
         ? generalTools(runtime.workspace)
         : exploreTools(runtime.workspace)),
-      ...mcpTools,
+      ...searchable,
       ...this.agentTools(id, depth, canDelegate),
     ];
     const systemPrompt = subagentSystemPrompt(
@@ -277,7 +315,7 @@ export class TaskHub {
       parentId,
       type,
       canDelegate,
-    ) + (mcpTools.length > 0 ? MCP_TOOLS_PROMPT_NOTE : "");
+    ) + (searchable.length > 0 ? MCP_TOOLS_PROMPT_NOTE : "");
     const agent = new Agent({
       initialState: {
         systemPrompt,

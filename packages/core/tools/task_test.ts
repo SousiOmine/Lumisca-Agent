@@ -13,10 +13,11 @@ import { CoreError, LumiscaCore } from "../mod.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
-import type { ThinkingLevel } from "../shared.ts";
+import { TOOL_CALL, TOOL_SEARCH, type ThinkingLevel } from "../shared.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import type { Workspace } from "../types/workspace.ts";
+import { ToolRegistry } from "./registry.ts";
 import {
   createSendMessageTool,
   createTaskOutputTool,
@@ -673,8 +674,11 @@ Deno.test("sub-agents survive a session rebuild and remain listed", async () => 
 
 /** A minimal streamable-HTTP MCP server exposing one `ping` tool (mirrors
  * mcp_test.ts): answers initialize with a session id and tools/call over
- * plain JSON. */
-function startPingMcpServer(): { port: number; shutdown: () => void } {
+ * plain JSON. `delayMs` stalls the tools/list answer — tests use it to make
+ * one attachment's discovery land deterministically after another's. */
+function startPingMcpServer(
+  delayMs = 0,
+): { port: number; shutdown: () => void } {
   let sessionId: string | null = null;
   const controller = new AbortController();
   const server = Deno.serve(
@@ -706,6 +710,9 @@ function startPingMcpServer(): { port: number; shutdown: () => void } {
         );
       }
       if (body.method === "tools/list") {
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
         return Response.json({
           jsonrpc: "2.0",
           id: body.id,
@@ -739,14 +746,19 @@ function startPingMcpServer(): { port: number; shutdown: () => void } {
   return { port: server.addr.port, shutdown: () => controller.abort() };
 }
 
-/** A session's shared MCP attachment pointed at the ping server. */
+/** A session's shared MCP attachment pointed at the ping server.
+ * `serverName` distinguishes attachments of different "configs" (each one
+ * yields a distinct tool name). */
 async function makePingAttachment(
   root: string,
+  serverName = "remote",
 ): Promise<{ attachment: McpAttachment; shutdown: () => void }> {
   const mcp = startPingMcpServer();
   const config = parseMcpConfig(
     JSON.stringify({
-      mcpServers: { remote: { url: `http://127.0.0.1:${mcp.port}/mcp` } },
+      mcpServers: {
+        [serverName]: { url: `http://127.0.0.1:${mcp.port}/mcp` },
+      },
     }),
     join(root, ".mcp.json"),
   );
@@ -755,18 +767,26 @@ async function makePingAttachment(
   return { attachment, shutdown: mcp.shutdown };
 }
 
-Deno.test("general sub-agents get the session's MCP tools", async () => {
+Deno.test("general sub-agents discover and call the session's MCP tools", async () => {
   const { faux, hub, root } = makeScriptedHub();
   const { attachment, shutdown } = await makePingAttachment(root);
-  hub.setMcp(attachment);
+  const registry = new ToolRegistry();
+  registry.setTools(attachment.getTools());
+  hub.setMcp(attachment, registry);
   try {
     // The sub-agent is the only consumer of the scripted responses, so the
-    // turn sequence is deterministic: call the MCP tool, then assert the
-    // pong reached the transcript and report.
+    // turn sequence is deterministic: search for the MCP tool, call it
+    // through tool_call, then assert the pong reached the transcript and
+    // report. The MCP definitions are never part of the tool set — only the
+    // search/call pair is.
     faux.setResponses([
       fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "ping" }),
+      ]),
+      fauxAssistantMessage([
         fauxText("Calling MCP."),
-        fauxToolCall("mcp__remote__ping", {}),
+        fauxToolCall(TOOL_CALL, { name: "mcp__remote__ping", args: {} }),
       ]),
       (context) => {
         const text = JSON.stringify(context);
@@ -782,7 +802,7 @@ Deno.test("general sub-agents get the session's MCP tools", async () => {
       0,
       "general",
       "MCP呼び出し",
-      "Call the mcp__remote__ping tool and report the result",
+      "Find and call the MCP ping tool, then report the result",
     );
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list()[0]!.text, "MCP worked.");
@@ -795,17 +815,21 @@ Deno.test("general sub-agents get the session's MCP tools", async () => {
 Deno.test("explore sub-agents have no MCP tools", async () => {
   const { faux, hub, root } = makeScriptedHub();
   const { attachment, shutdown } = await makePingAttachment(root);
-  hub.setMcp(attachment);
+  const registry = new ToolRegistry();
+  registry.setTools(attachment.getTools());
+  hub.setMcp(attachment, registry);
   try {
+    // Explore sub-agents get neither the MCP tools nor the search/call
+    // pair, so a tool_call attempt fails as an unknown tool.
     faux.setResponses([
       fauxAssistantMessage([
         fauxText("Trying MCP."),
-        fauxToolCall("mcp__remote__ping", {}),
+        fauxToolCall(TOOL_CALL, { name: "mcp__remote__ping", args: {} }),
       ]),
       (context) => {
         const text = JSON.stringify(context);
         assert(
-          text.includes("Tool mcp__remote__ping not found"),
+          text.includes("Tool tool_call not found"),
           `the call should have failed: ${text}`,
         );
         assert(
@@ -828,4 +852,100 @@ Deno.test("explore sub-agents have no MCP tools", async () => {
     hub.close();
     shutdown();
   }
+});
+
+Deno.test("a config change redirects a running general sub-agent to the new registry", async () => {
+  const { faux, hub, root } = makeScriptedHub();
+  const first = await makePingAttachment(root, "remote");
+  const firstRegistry = new ToolRegistry();
+  firstRegistry.setTools(first.attachment.getTools());
+  hub.setMcp(first.attachment, firstRegistry);
+  const second = await makePingAttachment(root, "remote2");
+  const secondRegistry = new ToolRegistry();
+  secondRegistry.setTools(second.attachment.getTools());
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "ping" }),
+      ]),
+      fauxAssistantMessage([
+        fauxText("Calling MCP."),
+        fauxToolCall(TOOL_CALL, { name: "mcp__remote2__ping", args: {} }),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("mcp__remote2__ping"),
+          `the search must see the new config's tools: ${text}`,
+        );
+        assert(
+          !text.includes("mcp__remote__ping"),
+          `the old config's tools must be gone: ${text}`,
+        );
+        assert(
+          text.includes("pong (session ok)"),
+          `MCP result missing from the sub-agent transcript: ${text}`,
+        );
+        return fauxAssistantMessage("MCP worked.");
+      },
+    ]);
+    hub.spawn(
+      "session-1",
+      0,
+      "general",
+      "MCP呼び出し",
+      "Find and call the MCP ping tool, then report the result",
+    );
+    // Config change while the sub-agent runs: the pool rebuilds the
+    // session's registry. The pair attached at spawn must redirect to the
+    // new registry without being replaced.
+    hub.setMcp(second.attachment, secondRegistry);
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "MCP worked.");
+  } finally {
+    hub.close();
+    first.shutdown();
+    second.shutdown();
+  }
+});
+
+Deno.test("a stale attachment's discovery cannot overwrite the current registry", async () => {
+  const { hub, root } = makeScriptedHub();
+  const slow = startPingMcpServer(400);
+  const fast = startPingMcpServer(0);
+  const configFor = (port: number, serverName: string) =>
+    parseMcpConfig(
+      JSON.stringify({
+        mcpServers: {
+          [serverName]: { url: `http://127.0.0.1:${port}/mcp` },
+        },
+      }),
+      join(root, ".mcp.json"),
+    );
+  // The first attachment's discovery is still in flight when a config
+  // change replaces it — the pool's open() does the same on every rebuild.
+  const first = new McpAttachment(
+    new McpManager(configFor(slow.port, "remote"), root),
+    configFor(slow.port, "remote"),
+  );
+  const firstRegistry = new ToolRegistry();
+  hub.setMcp(first, firstRegistry);
+  const second = new McpAttachment(
+    new McpManager(configFor(fast.port, "remote2"), root),
+    configFor(fast.port, "remote2"),
+  );
+  const secondRegistry = new ToolRegistry();
+  hub.setMcp(second, secondRegistry);
+
+  // The new config's discovery lands first, the stale one later — the
+  // stale callback must be ignored.
+  await second.ready;
+  await first.ready;
+  assertEquals(secondRegistry.count, 1);
+  assertEquals(secondRegistry.get("mcp__remote2__ping") !== undefined, true);
+  assertEquals(firstRegistry.count, 0, "stale tools must not be applied");
+  hub.close();
+  slow.shutdown();
+  fast.shutdown();
 });

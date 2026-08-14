@@ -17,10 +17,13 @@ import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import { applyMcpToolsToAgent } from "../mcp/tools.ts";
+import { addToolsToAgent, MCP_TOOLS_PROMPT_NOTE } from "../mcp/tools.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
+import type { ToolRegistry } from "../tools/registry.ts";
+import { createToolSearchTool } from "../tools/search-tool.ts";
+import { createToolCallTool } from "../tools/call-tool.ts";
 import type { AskHub } from "../tools/ask.ts";
 import type { AskAnswer } from "../shared.ts";
 import type {
@@ -106,6 +109,12 @@ export interface SessionAgentOptions {
   taskHub?: TaskHub;
   /** Persist a new session title (also notifies clients). */
   renameSession: (name: string) => void;
+  /** The session's tool registry (owned by the session pool). When set, its
+   * tools are never preloaded into the LLM context — MCP discovery fills it
+   * and the agent only gets the tool_search / tool_call pair, so the
+   * request's tool definitions stay small and stable. Omitted → no
+   * discoverable tools (the pair is not built). */
+  toolRegistry?: ToolRegistry;
 }
 
 /**
@@ -119,9 +128,13 @@ export class SessionAgent {
   private readonly onEvent: (event: ClientEvent) => void;
   private savedCount: number;
   /** The session's shared MCP attachment (owned by the session pool); its
-   * tools are added to this agent once discovery finished. */
+   * tools land in the session's tool registry once discovery finished. */
   private mcpAttachment: McpAttachment | null = null;
   private mcpAttached = false;
+  /** The session's tool registry (owned by the session pool): holds every
+   * discoverable tool (MCP tools, future extensions) whose definitions stay
+   * out of the LLM context. Null when the session has none. */
+  private readonly toolRegistry: ToolRegistry | null;
   /** Resolves once MCP tools are attached (or skipped/failed). Prompts
    * await it so the first turn always sees the MCP tools — without the
    * gate, a prompt sent right after session creation would start before
@@ -164,6 +177,7 @@ export class SessionAgent {
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
     this.messageRepo = options.messageRepo;
+    this.toolRegistry = options.toolRegistry ?? null;
     this.onEvent = options.onEvent;
     this.renameSession = options.renameSession;
     this.askHub = options.askHub;
@@ -536,11 +550,27 @@ export class SessionAgent {
     return this.mcpReady;
   }
 
-  /** Add the attachment's tools to the agent and teach it about their
-   * out-of-workspace access (shared helper: the sub-agent hub uses the
-   * same one). */
+  /** MCP discovery finished: fill the session's tool registry and, when it
+   * holds tools, add the tool_search / tool_call pair — the only MCP
+   * surface the LLM ever sees. The pair is added once and never changes
+   * afterwards, so the request's tool definitions (and their prefix-cache
+   * block) stay stable for the whole session; individual MCP definitions
+   * are only ever loaded into the transcript through a search result. */
   private addMcpTools(tools: Tool[]): void {
-    applyMcpToolsToAgent(this.agent, tools);
+    if (this.toolRegistry === null) return;
+    this.toolRegistry.setTools(tools);
+    if (this.toolRegistry.isEmpty) return;
+    // The pair resolves the registry through a provider (uniform with the
+    // sub-agent hub), so a config change that swaps the registry would
+    // redirect it — though the main agent is rebuilt on config changes
+    // anyway.
+    addToolsToAgent(this.agent, [
+      createToolSearchTool(() => this.toolRegistry!),
+      createToolCallTool(() => this.toolRegistry!),
+    ]);
+    if (!this.agent.state.systemPrompt.includes("tool_search")) {
+      this.agent.state.systemPrompt += MCP_TOOLS_PROMPT_NOTE;
+    }
   }
 
   async waitForIdle(): Promise<void> {

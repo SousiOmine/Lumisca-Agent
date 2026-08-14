@@ -15,6 +15,7 @@ import type { TaskInfo } from "../shared.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
+import { ToolRegistry } from "../tools/registry.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { MessageRepo } from "../session/messages.ts";
@@ -98,6 +99,12 @@ export class SessionPool {
    * the merged config is unchanged. Closed when the session closes
    * (close/delete/closeAll). */
   private readonly mcp = new Map<string, McpAttachment>();
+  /** Tool registries, one per open session, with the same lifecycle as the
+   * MCP attachment: rebuilt together with it on config changes, discarded
+   * on close. Holds every tool that is discoverable through tool_search
+   * instead of being preloaded into the LLM context (MCP tools today,
+   * future extension tools via addTools). */
+  private readonly registries = new Map<string, ToolRegistry>();
   private readonly lastErrors = new Map<string, string>();
   /** Sessions currently open with `headless: true` (the CLI `run` path).
    * The flag is not persisted, but it must survive agent rebuilds (model
@@ -197,6 +204,10 @@ export class SessionPool {
         mergedMcp.config,
       );
       this.mcp.set(session.id, mcp);
+      // A config change builds fresh tools, so the registry is rebuilt
+      // with the attachment — stale tools must not survive it. A rebuild
+      // with an unchanged config reuses both.
+      this.registries.set(session.id, new ToolRegistry());
       if (previous !== undefined) void previous.manager.close();
       const emitError = (message: string) => {
         this.lastErrors.set(session.id, message);
@@ -221,6 +232,11 @@ export class SessionPool {
         }
       });
     }
+    // One tool registry per session, created with the attachment above and
+    // reused across agent rebuilds so the session's discoverable tools
+    // survive them. The main agent's attachMcp fills it once discovery
+    // finishes; every agent of the session searches it.
+    const registry = this.registries.get(session.id)!;
     // Reuse the session's manager when one exists (agent rebuild); create
     // it on first open. Shared by the async_bash tools and the session
     // agent: the tools start/check/kill commands, the agent turns
@@ -290,8 +306,8 @@ export class SessionPool {
       tasks.setRuntimeResolver(runtimeResolver);
     }
     // The sub-agents share the session's MCP attachment (general
-    // sub-agents get its tools).
-    tasks.setMcp(mcp);
+    // sub-agents get the search/call tools over its registry).
+    tasks.setMcp(mcp, registry);
     const tools = createCodingTools(workspace, {
       background,
       ask: askHub,
@@ -326,6 +342,7 @@ export class SessionPool {
       backgroundManager: background,
       askHub,
       taskHub: tasks,
+      toolRegistry: registry,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
       disableTitleGeneration: options.headless ?? false,
@@ -361,6 +378,7 @@ export class SessionPool {
     this.headlessSessions.delete(id);
     void this.mcp.get(id)?.manager.close();
     this.mcp.delete(id);
+    this.registries.delete(id);
   }
 
   /** Close and forget a session entirely (persisted rows are deleted by
@@ -390,6 +408,7 @@ export class SessionPool {
     this.todos.clear();
     this.tasks.clear();
     this.mcp.clear();
+    this.registries.clear();
     this.headlessSessions.clear();
     this.lastErrors.clear();
   }

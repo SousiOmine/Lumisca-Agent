@@ -76,6 +76,12 @@ export const TOOL_TODO = "todo";
 export const TOOL_TASK = "task";
 export const TOOL_TASK_OUTPUT = "task_output";
 export const TOOL_SEND_MESSAGE = "send_message";
+/** Discover tools held in the session's tool registry (not preloaded into
+ * the LLM context): search returns their names and argument summaries. */
+export const TOOL_SEARCH = "tool_search";
+/** Execute a tool found through tool_search by name — the single dispatch
+ * point for tools whose definitions stay out of the LLM context. */
+export const TOOL_CALL = "tool_call";
 
 /** One option of an ask question, shown as a selectable chip in the UI. */
 export interface AskOption {

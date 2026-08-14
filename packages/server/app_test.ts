@@ -1390,19 +1390,26 @@ Deno.test("MCP config API: get, put, validate and rebuild sessions", async () =>
     const againInfo = await again.json();
     assertEquals(againInfo.servers.length, 2);
 
-    // The rebuilt session attaches the MCP tools asynchronously.
+    // The rebuilt session attaches the search/call pair asynchronously —
+    // the MCP definitions themselves stay out of the agent tool set.
     const agent = core.getAgent(session.id)!;
     const started = Date.now();
     while (
-      !agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo") &&
+      !agent.agent.state.tools.some((t) => t.name === "tool_search") &&
       Date.now() - started < 10000
     ) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     assertEquals(
-      agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo"),
+      agent.agent.state.tools.some((t) => t.name === "tool_search") &&
+        agent.agent.state.tools.some((t) => t.name === "tool_call"),
       true,
-      "session must attach MCP tools after PUT",
+      "session must attach the search/call pair after PUT",
+    );
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name.startsWith("mcp__")),
+      false,
+      "MCP definitions must stay out of the agent tool set",
     );
     // The disabled server contributes no tools.
     assertEquals(
@@ -1492,7 +1499,8 @@ Deno.test("app-level MCP config API applies to every workspace", async () => {
     });
     assertEquals(invalid.status, 400);
 
-    // A session in any workspace picks up the app-level tools.
+    // A session in any workspace picks up the app-level tools (as the
+    // search/call pair over the registry).
     root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
     const create = await json(base, "/api/workspaces", {
       method: "POST",
@@ -1508,15 +1516,21 @@ Deno.test("app-level MCP config API applies to every workspace", async () => {
     const agent = core.getAgent(session.id)!;
     const started = Date.now();
     while (
-      !agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo") &&
+      !agent.agent.state.tools.some((t) => t.name === "tool_search") &&
       Date.now() - started < 10000
     ) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     assertEquals(
-      agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo"),
+      agent.agent.state.tools.some((t) => t.name === "tool_search") &&
+        agent.agent.state.tools.some((t) => t.name === "tool_call"),
       true,
-      "session must attach app-level MCP tools",
+      "session must attach the search/call pair for app-level MCP tools",
+    );
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name.startsWith("mcp__")),
+      false,
+      "MCP definitions must stay out of the agent tool set",
     );
   } finally {
     server.shutdown();

@@ -16,6 +16,8 @@ import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   serializeModelPreference,
+  TOOL_CALL,
+  TOOL_SEARCH,
 } from "./shared.ts";
 
 function setup() {
@@ -1059,31 +1061,40 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
   });
 
   try {
-    // MCP tools attach asynchronously; wait for the spawn + handshake.
+    // MCP discovery is async; wait for the search/call pair. The MCP
+    // definitions themselves never enter the agent's tool set — they stay
+    // in the registry, discoverable through tool_search.
     const agent = core.getAgent(session.id)!;
-    const started = Date.now();
-    while (
-      !agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo") &&
-      Date.now() - started < 10000
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    await waitForSearchTools(agent);
     assertEquals(
-      agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo"),
+      agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH) &&
+        agent.agent.state.tools.some((t) => t.name === TOOL_CALL),
       true,
-      "MCP tool never attached",
+      "search/call tools never attached",
     );
     assertEquals(
-      agent.agent.state.systemPrompt.includes("mcp__"),
+      agent.agent.state.tools.some((t) => t.name.startsWith("mcp__")),
+      false,
+      "MCP definitions must stay out of the agent tool set",
+    );
+    assertEquals(
+      agent.agent.state.systemPrompt.includes("tool_search"),
       true,
-      "system prompt must mention MCP boundary",
+      "system prompt must teach on-demand tool loading",
     );
 
-    // The model calls the MCP tool and gets the server's answer.
+    // The model searches for the tool, then calls it through tool_call.
     faux.setResponses([
       fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "echo" }),
+      ]),
+      fauxAssistantMessage([
         fauxText("Echoing."),
-        fauxToolCall("mcp__fake__echo", { text: "hi" }),
+        fauxToolCall(TOOL_CALL, {
+          name: "mcp__fake__echo",
+          args: { text: "hi" },
+        }),
       ]),
       fauxAssistantMessage("Done."),
     ]);
@@ -1091,11 +1102,11 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
 
     const messages = core.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
-    assertEquals(toolResults.length, 1);
-    const tr = toolResults[0] as {
+    assertEquals(toolResults.length, 2);
+    const tr = toolResults[1] as {
       content: Array<{ type: string; text: string }>;
     };
-    assertEquals(tr.content[0]!.text, "echo:hi");
+    assertEquals(tr.content[0]!.text, "[mcp__fake__echo]\necho:hi");
   } finally {
     core.close();
     // The MCP server process may hold the directory briefly on Windows.
@@ -1110,13 +1121,12 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
   }
 });
 
-async function waitForMcpTools(
+async function waitForSearchTools(
   agent: NonNullable<ReturnType<LumiscaCore["getAgent"]>>,
-  toolName: string,
 ): Promise<void> {
   const started = Date.now();
   while (
-    !agent.agent.state.tools.some((t) => t.name === toolName) &&
+    !agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH) &&
     Date.now() - started < 10000
   ) {
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1154,22 +1164,28 @@ Deno.test("app-level MCP config persists and applies to sessions", async () => {
     assertEquals(info.exists, true);
     assertEquals(core.getAppMcpInfo().servers[0]!.name, "fake");
 
-    // Sessions get the app-level tools.
+    // Sessions get the app-level tools (as the search/call pair over the
+    // registry, not the MCP definitions themselves).
     const session = core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
     const agent = core.getAgent(session.id)!;
-    await waitForMcpTools(agent, "mcp__fake__echo");
+    await waitForSearchTools(agent);
     assertEquals(
-      agent.agent.state.tools.some((t) => t.name === "mcp__fake__echo"),
+      agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
       true,
     );
     assertEquals(
-      agent.agent.state.systemPrompt.includes("mcp__"),
+      agent.agent.state.tools.some((t) => t.name.startsWith("mcp__")),
+      false,
+      "MCP definitions must stay out of the agent tool set",
+    );
+    assertEquals(
+      agent.agent.state.systemPrompt.includes("tool_search"),
       true,
-      "system prompt must mention MCP boundary",
+      "system prompt must teach on-demand tool loading",
     );
 
     // The generic settings surface refuses the MCP key (secrets may live
@@ -1194,7 +1210,7 @@ Deno.test("app-level MCP config persists and applies to sessions", async () => {
 });
 
 Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
-  const { core, faux: _faux, providerId, modelId } = setup();
+  const { core, faux, providerId, modelId } = setup();
   const root = realpathSync(
     await Deno.makeTempDir({ prefix: "lumisca-core-" }),
   );
@@ -1231,18 +1247,28 @@ Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
       modelId,
     });
     const agent = core.getAgent(session.id)!;
-    // The workspace override wins: the fake server's tools appear even
-    // though the app-level "fake" would fail to start.
-    await waitForMcpTools(agent, "mcp__fake__echo");
-    assertEquals(
-      agent.agent.state.tools.some((t) => t.name === "mcp__app-only__echo"),
-      true,
+    // The workspace override wins: browsing the registry must list the
+    // working fake server's tools — they would be missing if the app-level
+    // "fake" (a binary that cannot start) had won the merge.
+    await waitForSearchTools(agent);
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Browsing."),
+        fauxToolCall(TOOL_SEARCH, {}),
+      ]),
+      fauxAssistantMessage("Done."),
+    ]);
+    await core.prompt(session.id, "List the available tools");
+    const browse = core.getAgent(session.id)!.messages
+      .filter((m) => m.role === "toolResult")
+      .at(-1) as { content: Array<{ type: string; text: string }> };
+    const text = browse.content[0]!.text;
+    assert(text.includes("mcp__fake__echo"), "workspace override must win");
+    assert(
+      text.includes("mcp__app-only__echo"),
       "app-only server must still be merged in",
     );
-    assertEquals(
-      agent.agent.state.tools.some((t) => t.name === "mcp__fake__crash"),
-      true,
-    );
+    assert(text.includes("mcp__fake__crash"));
   } finally {
     core.close();
     for (let i = 0; i < 20; i++) {
@@ -1280,8 +1306,8 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
   try {
     // Prompt immediately — no waiting for the async attach: the session
     // must gate the run on MCP readiness so the FIRST turn already sees
-    // the MCP tools (previously the run started before the servers had
-    // spawned and the tools were missing from the first request).
+    // the search/call pair (previously the run started before the servers
+    // had spawned and the tools were missing from the first request).
     const session = core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
@@ -1289,8 +1315,15 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
     });
     faux.setResponses([
       fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "echo" }),
+      ]),
+      fauxAssistantMessage([
         fauxText("Echoing."),
-        fauxToolCall("mcp__fake__echo", { text: "first" }),
+        fauxToolCall(TOOL_CALL, {
+          name: "mcp__fake__echo",
+          args: { text: "first" },
+        }),
       ]),
       fauxAssistantMessage("Done."),
     ]);
@@ -1298,13 +1331,13 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
 
     const messages = core.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
-    assertEquals(toolResults.length, 1);
-    const tr = toolResults[0] as {
+    assertEquals(toolResults.length, 2);
+    const tr = toolResults[1] as {
       isError: boolean;
       content: Array<{ type: string; text: string }>;
     };
     assertEquals(tr.isError, false, `tool call failed: ${tr.content[0]?.text}`);
-    assertEquals(tr.content[0]!.text, "echo:first");
+    assertEquals(tr.content[0]!.text, "[mcp__fake__echo]\necho:first");
   } finally {
     core.close();
     for (let i = 0; i < 20; i++) {
