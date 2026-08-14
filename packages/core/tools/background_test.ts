@@ -19,16 +19,16 @@ import type { ClientEvent } from "../types/event.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { LumiscaCore } from "../mod.ts";
 
-/** Cross-platform commands. cmd.exe has no sleep; ping is the classic
- * stand-in. */
+/** Cross-platform commands. The Windows shell has no sleep; ping is the
+ * classic stand-in. */
 const longCommand = Deno.build.os === "windows"
-  ? "ping -n 60 127.0.0.1 >nul"
+  ? "ping -n 60 127.0.0.1 > $null"
   : "sleep 60";
 const briefCommand = Deno.build.os === "windows"
-  ? "ping -n 2 127.0.0.1 >nul & echo done"
+  ? "ping -n 2 127.0.0.1 > $null; echo done"
   : "sleep 1; echo done";
 const linesCommand = Deno.build.os === "windows"
-  ? "echo start & echo line1 & echo line2"
+  ? "echo start; echo line1; echo line2"
   : "echo start; echo line1; echo line2";
 
 /** Resolve when the next command completes (bounded so a hang fails the
@@ -209,7 +209,7 @@ Deno.test("per-command env vars are passed and override the manager-level env", 
   });
   const exitPromise = waitForExit(manager);
   const echo = Deno.build.os === "windows"
-    ? "echo %LUMISCA_TEST_ENV%"
+    ? "echo $env:LUMISCA_TEST_ENV"
     : "echo $LUMISCA_TEST_ENV";
   const { commandId } = await manager.start({
     cwd: Deno.cwd(),
@@ -232,7 +232,7 @@ Deno.test("async_bash start tool forwards env vars", async () => {
     const [start] = createAsyncBashTools({ manager, sandbox });
     if (start === undefined) throw new Error("start tool missing");
     const echo = Deno.build.os === "windows"
-      ? "echo %LUMISCA_TEST_ENV%"
+      ? "echo $env:LUMISCA_TEST_ENV"
       : "echo $LUMISCA_TEST_ENV";
     const result = await start.execute(
       "1",
@@ -347,7 +347,7 @@ Deno.test("output tail is capped and keeps the last bytes", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const spam = Deno.build.os === "windows"
-    ? "for /L %i in (1,1,4000) do echo 12345678901234567890"
+    ? "for ($i = 0; $i -lt 4000; $i++) { echo 12345678901234567890 }"
     : "for i in $(seq 1 4000); do echo 12345678901234567890; done";
   await manager.start({ cwd: Deno.cwd(), command: spam });
   const done = await exitPromise;

@@ -13,6 +13,7 @@ import {
 } from "../shared.ts";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
+import { getShell } from "./shell.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
 import type {
   NotificationPayload,
@@ -80,7 +81,7 @@ interface RunningRecord {
 }
 
 /** Kill a spawned process and its whole tree. Windows: taskkill /T /F
- * (killing cmd.exe alone would orphan everything it spawned); POSIX:
+ * (killing the shell alone would orphan everything it spawned); POSIX:
  * SIGKILL (without a process group the shell's children may survive on
  * POSIX — best available without setsid). */
 export function killProcessTree(
@@ -222,13 +223,11 @@ export class BackgroundProcessManager {
       );
     }
     const commandId = String(this.nextId++);
-    const shell = Deno.build.os === "windows"
-      ? { file: "cmd.exe", args: ["/d", "/s", "/c"] }
-      : { file: "/bin/sh", args: ["-c"] };
+    const shell = getShell();
     const child = new Deno.Command(shell.file, {
       args: [...shell.args, input.command],
       cwd: input.cwd,
-      env: { ...this.options.env, ...input.env },
+      env: { ...this.options.env, ...shell.env, ...input.env },
       stdout: "piped",
       stderr: "piped",
     }).spawn();
@@ -549,7 +548,13 @@ export function createAsyncBashTools(
       "async_bash_status, stop the command with async_bash_kill. You are " +
       "notified when it finishes (a user message starting with " +
       '"[Background command ...]"). Aborting this run does NOT stop the ' +
-      "command.",
+      "command. On Windows, commands run in PowerShell (PowerShell 7 if " +
+      "installed, else Windows PowerShell; systems without PowerShell fall " +
+      "back to Git Bash or cmd.exe): use `$env:VAR` for environment " +
+      "variables, `;` to separate commands, `2>&1` to merge stderr into " +
+      "stdout; `&&` is only available with PowerShell 7. cmd-style aliases " +
+      "(`cd`, `dir`, `type`, `copy`) work. On macOS/Linux, commands run in " +
+      "/bin/sh.",
     parameters: startSchema,
     execute: async (_id, params) => {
       const resolved = await sandbox.resolve(params.cwd);

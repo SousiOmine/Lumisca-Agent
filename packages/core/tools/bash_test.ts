@@ -36,7 +36,7 @@ Deno.test("bash tool merges stdout and stderr", async () => {
   const { tool, root } = makeTool();
   try {
     const command = Deno.build.os === "windows"
-      ? "echo hello & echo boom 1>&2"
+      ? "echo hello; [Console]::Error.WriteLine('boom')"
       : "echo hello; echo boom 1>&2";
     const result = await tool.execute(
       "1",
@@ -54,10 +54,11 @@ Deno.test("bash tool merges stdout and stderr", async () => {
 Deno.test("bash tool resolves cwd by workspace folder name", async () => {
   const { tool, root } = makeTool();
   try {
-    const probe = Deno.build.os === "windows" ? "cd" : "pwd";
+    // `pwd` prints the working directory on POSIX and in PowerShell (alias
+    // for Get-Location); cmd's `cd` prints nothing when output is piped.
     const result = await tool.execute(
       "1",
-      { cwd: basename(root), command: probe },
+      { cwd: basename(root), command: "pwd" },
       undefined,
     );
     const text = toolText(result);
@@ -116,6 +117,32 @@ Deno.test({
   },
 });
 
+// Regression test for Windows quote mangling: cmd.exe /s /c turned a
+// `"quoted path"` argument into a token with literal quote characters, so
+// the child program could not find the file. PowerShell delivers quoted
+// args intact, so Test-Path must see the clean path.
+Deno.test({
+  name: "bash tool passes quoted path arguments intact (Windows)",
+  ignore: Deno.build.os !== "windows",
+  fn: async () => {
+    const { tool, root } = makeTool();
+    try {
+      const file = `${root}\\my file.txt`;
+      await Deno.writeTextFile(file, "x");
+      const result = await tool.execute(
+        "1",
+        { cwd: root, command: `Test-Path "${file}"` },
+        undefined,
+      );
+      const text = toolText(result);
+      assertEquals(text.includes("True"), true, `output: ${text}`);
+      assertEquals(text.includes("False"), false, `output: ${text}`);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  },
+});
+
 Deno.test("decodeOutput is stable against the real cmd.exe output", async () => {
   if (Deno.build.os !== "windows") return;
   const { stdout } = await new Deno.Command("cmd.exe", {
@@ -133,7 +160,7 @@ Deno.test("bash tool passes env vars to the command", async () => {
   const { tool, root } = makeTool();
   try {
     const echo = Deno.build.os === "windows"
-      ? "echo %LUMISCA_TEST_VAR%"
+      ? "echo $env:LUMISCA_TEST_VAR"
       : "echo $LUMISCA_TEST_VAR";
     const result = await tool.execute(
       "1",
@@ -155,7 +182,7 @@ Deno.test("bash tool per-call env overrides the tool-level env", async () => {
   });
   try {
     const echo = Deno.build.os === "windows"
-      ? "echo %LUMISCA_TEST_VAR%"
+      ? "echo $env:LUMISCA_TEST_VAR"
       : "echo $LUMISCA_TEST_VAR";
     const result = await tool.execute(
       "1",
