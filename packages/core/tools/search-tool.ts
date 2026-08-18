@@ -34,7 +34,7 @@ export function createToolSearchTool(
       "descriptions and argument names — then execute one with tool_call. " +
       "Omit the query to list every available tool (names only).",
     parameters: toolSearchSchema,
-    execute: async (
+    execute: (
       _toolCallId,
       params,
     ): Promise<
@@ -50,20 +50,20 @@ export function createToolSearchTool(
         MAX_SEARCH_LIMIT,
       );
       if (query === "") {
-        return {
+        return Promise.resolve({
           content: [{ type: "text", text: registry.browse() }],
           details: { query: "", limit },
-        };
+        });
       }
       const matches = registry.search(query, limit);
       if (matches.length === 0) {
-        return {
+        return Promise.resolve({
           content: [{
             type: "text",
             text: `No tools match "${query}".\n\n${registry.browse()}`,
           }],
           details: { query, limit, matches: 0 },
-        };
+        });
       }
       const lines = matches.map((match) => {
         let text = `- ${match.name} (${match.label})`;
@@ -73,7 +73,7 @@ export function createToolSearchTool(
         }
         return text;
       });
-      return {
+      return Promise.resolve({
         content: [{
           type: "text",
           text: `Found ${matches.length} tool(s) matching "${query}".\n` +
@@ -81,7 +81,7 @@ export function createToolSearchTool(
             "Call one with tool_call(name, args).",
         }],
         details: { query, limit, matches: matches.length },
-      };
+      });
     },
   };
 }

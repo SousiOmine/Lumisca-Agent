@@ -21,13 +21,15 @@ function fakeTool(
     label: options.label ?? `server: ${name}`,
     description: options.description ?? `Does ${name}`,
     parameters: object(properties, {}),
-    execute: async (_id, params) => ({
-      content: [{
-        type: "text",
-        text: options.result ?? `result of ${name}: ${JSON.stringify(params)}`,
-      }],
-      details: {},
-    }),
+    execute: (_id, params) =>
+      Promise.resolve({
+        content: [{
+          type: "text",
+          text: options.result ??
+            `result of ${name}: ${JSON.stringify(params)}`,
+        }],
+        details: {},
+      }),
   };
 }
 
@@ -118,10 +120,11 @@ Deno.test("describe reports no argument names for permissive schemas", () => {
       label: "server: permissive",
       description: "arbitrary args",
       parameters: object({}, { additionalProperties: true }),
-      execute: async () => ({
-        content: [{ type: "text", text: "ok" }],
-        details: {},
-      }),
+      execute: () =>
+        Promise.resolve({
+          content: [{ type: "text", text: "ok" }],
+          details: {},
+        }),
     },
   ]);
   assertEquals(registry.search("permissive", 1)[0]!.argNames, []);
@@ -178,12 +181,12 @@ Deno.test("call dispatches to the tool's execute with prepared arguments", async
       a: String((args as { a: unknown }).a),
       b: String((args as { b: unknown }).b),
     }),
-    execute: async (_id, params) => {
+    execute: (_id, params) => {
       calls.push(params);
-      return {
+      return Promise.resolve({
         content: [{ type: "text", text: `sum=${params.a}+${params.b}` }],
         details: {},
-      };
+      });
     },
   };
   registry.setTools([sumTool]);

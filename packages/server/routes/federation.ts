@@ -27,9 +27,13 @@ export function federationRoutes(
   const app = new Hono();
 
   const requirePeer = (c: Context) => {
-    const peer = fed.find(c.req.param("peerId"));
+    const peerId = c.req.param("peerId");
+    if (!peerId) {
+      throw new AppError("Peer ID missing in path", 400);
+    }
+    const peer = fed.find(peerId);
     if (!peer) {
-      throw new AppError(`Peer not found: ${c.req.param("peerId")}`, 404);
+      throw new AppError(`Peer not found: ${peerId}`, 404);
     }
     return peer;
   };
