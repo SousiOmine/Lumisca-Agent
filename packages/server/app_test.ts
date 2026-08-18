@@ -7,6 +7,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore, type TodoPhase } from "@lumisca/core";
+import { COMMAND_SAFETY_APPROVALS_KEY } from "@lumisca/core/shared";
 import {
   createApp,
   disposeServer,
@@ -635,6 +636,90 @@ Deno.test("settings API refuses to write credentials", async () => {
     const list = await fetch(`${base}/api/settings`);
     const settings = await list.json() as Record<string, string>;
     assertEquals("api_key:anthropic" in settings, false);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("command safety approvals API lists, deletes and clears", async () => {
+  const { core, server, base } = await setup();
+  try {
+    // The approvals record is a structured setting (hash + redacted display,
+    // never the plaintext command); seed it like the check would write it.
+    core.setSetting(
+      COMMAND_SAFETY_APPROVALS_KEY,
+      JSON.stringify([
+        { hash: "h-npm-test", kind: "bash", cwd: "/ws/a", command: "npm test" },
+        {
+          hash: "h-git-status",
+          kind: "bash",
+          cwd: "/ws/a",
+          command: "git status",
+        },
+      ]),
+    );
+
+    const list = await fetch(`${base}/api/settings/command-safety`);
+    assertEquals(await list.json(), {
+      approvals: [
+        { hash: "h-npm-test", kind: "bash", cwd: "/ws/a", command: "npm test" },
+        {
+          hash: "h-git-status",
+          kind: "bash",
+          cwd: "/ws/a",
+          command: "git status",
+        },
+      ],
+    });
+
+    // The generic settings surface never exposes the approvals record.
+    const generic = await fetch(`${base}/api/settings`);
+    const settings = await generic.json();
+    assertEquals(settings[COMMAND_SAFETY_APPROVALS_KEY], undefined);
+
+    const del = await json(base, "/api/settings/command-safety/approvals", {
+      method: "DELETE",
+      body: JSON.stringify({ hash: "h-npm-test" }),
+    });
+    assertEquals(del.status, 200);
+    const after = await fetch(`${base}/api/settings/command-safety`);
+    assertEquals(await after.json(), {
+      approvals: [
+        {
+          hash: "h-git-status",
+          kind: "bash",
+          cwd: "/ws/a",
+          command: "git status",
+        },
+      ],
+    });
+
+    // A malformed body is refused (400), and the record is untouched.
+    const bad = await json(base, "/api/settings/command-safety/approvals", {
+      method: "DELETE",
+      body: JSON.stringify({}),
+    });
+    assertEquals(bad.status, 400);
+    const untouched = await fetch(`${base}/api/settings/command-safety`);
+    assertEquals(await untouched.json(), {
+      approvals: [
+        {
+          hash: "h-git-status",
+          kind: "bash",
+          cwd: "/ws/a",
+          command: "git status",
+        },
+      ],
+    });
+
+    const clear = await fetch(
+      `${base}/api/settings/command-safety/approvals/all`,
+      { method: "DELETE" },
+    );
+    assertEquals(clear.status, 200);
+    const cleared = await fetch(`${base}/api/settings/command-safety`);
+    assertEquals(await cleared.json(), { approvals: [] });
   } finally {
     server.shutdown();
     core.close();

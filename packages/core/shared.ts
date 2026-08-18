@@ -19,6 +19,34 @@ export const FAST_MODEL_KEY = "model_fast";
  * section; the value is the JSON of a {@link ModelPreference}. */
 export const IMAGE_MODEL_KEY = "model_image";
 
+/** Settings-table key for the command safety check: before bash / eval /
+ * async_bash run, the fast model judges whether the command is safe.
+ * "1" enables the check; unset (or any other value) = disabled. */
+export const COMMAND_SAFETY_ENABLED_KEY = "command_safety_enabled";
+
+/** Settings-table key for the approved-commands record: a JSON array of
+ * approval entries that were judged safe once and now skip the check. */
+export const COMMAND_SAFETY_APPROVALS_KEY = "command_safety_approvals";
+
+/** What kind of payload the safety check judges; the record is keyed by
+ * this plus the resolved cwd, so approvals never cross kinds or
+ * directories. */
+export type CommandSafetyKind = "bash" | "eval";
+
+/** One recorded approval of the command safety check. `hash` (SHA-256 of
+ * kind + resolved cwd + the exact command) is what later checks match
+ * against; the raw command is never persisted — only this redacted display
+ * form, so secrets inside commands (API keys, Authorization headers, ...)
+ * stay out of the settings file and the settings UI. */
+export interface CommandApproval {
+  hash: string;
+  kind: CommandSafetyKind;
+  /** The resolved absolute working directory the command was approved in. */
+  cwd: string;
+  /** The command with secret values redacted, for display only. */
+  command: string;
+}
+
 /** A global model preference (fast model / image analysis model): the
  * provider + model id pair stored as JSON under the keys above. */
 export interface ModelPreference {

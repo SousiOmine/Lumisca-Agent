@@ -34,10 +34,21 @@ export function createToolSearchTool(
       "descriptions and argument names — then execute one with tool_call. " +
       "Omit the query to list every available tool (names only).",
     parameters: toolSearchSchema,
-    execute: async (_toolCallId, params): Promise<{ content: [{ type: "text"; text: string }]; details: Record<string, unknown> }> => {
+    execute: async (
+      _toolCallId,
+      params,
+    ): Promise<
+      {
+        content: [{ type: "text"; text: string }];
+        details: Record<string, unknown>;
+      }
+    > => {
       const registry = getRegistry();
       const query = (params.query ?? "").trim();
-      const limit = Math.min(Math.max(params.limit ?? DEFAULT_SEARCH_LIMIT, 1), MAX_SEARCH_LIMIT);
+      const limit = Math.min(
+        Math.max(params.limit ?? DEFAULT_SEARCH_LIMIT, 1),
+        MAX_SEARCH_LIMIT,
+      );
       if (query === "") {
         return {
           content: [{ type: "text", text: registry.browse() }],
@@ -65,8 +76,7 @@ export function createToolSearchTool(
       return {
         content: [{
           type: "text",
-          text:
-            `Found ${matches.length} tool(s) matching "${query}".\n` +
+          text: `Found ${matches.length} tool(s) matching "${query}".\n` +
             `${lines.join("\n")}\n` +
             "Call one with tool_call(name, args).",
         }],

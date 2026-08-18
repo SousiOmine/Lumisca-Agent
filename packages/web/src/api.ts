@@ -18,6 +18,7 @@ import type {
   WorkspaceFileEntry,
 } from "./types.ts";
 import { stripDataUrlHeader } from "@lumisca/core/shared";
+import type { CommandApproval } from "@lumisca/core/shared";
 import { splitTabKey } from "./tabs.ts";
 
 /** The server serves both the UI and the API on the same origin. */
@@ -209,6 +210,23 @@ export const api = {
     request<{ ok: boolean }>(`/api/settings/${key}`, {
       method: "PUT",
       body: JSON.stringify({ value }),
+    }),
+
+  /** The approvals record of the command safety check (bash/eval judged by
+   * the fast model). The enable toggle is a plain setting
+   * (`command_safety_enabled`) read through getSettings. */
+  getCommandSafety: () =>
+    request<{ approvals: CommandApproval[] }>(
+      "/api/settings/command-safety",
+    ),
+  deleteCommandApproval: (hash: string) =>
+    request<{ ok: boolean }>("/api/settings/command-safety/approvals", {
+      method: "DELETE",
+      body: JSON.stringify({ hash }),
+    }),
+  clearCommandApprovals: () =>
+    request<{ ok: boolean }>("/api/settings/command-safety/approvals/all", {
+      method: "DELETE",
     }),
 
   /** Machine-level personalization: AGENTS.md next to the settings file. */

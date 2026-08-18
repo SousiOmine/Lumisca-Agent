@@ -27,6 +27,7 @@ import { discoverPlugins } from "../plugins/discover.ts";
 import { type AskHub, createAskTool } from "./ask.ts";
 import { createTodoTool, type TodoHub } from "./todo.ts";
 import type { TaskHub } from "./task.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
@@ -84,6 +85,9 @@ export interface ToolFactoryOptions {
    * (delegation and agent-to-agent messaging). Omitted → the tools are not
    * built. */
   task?: TaskHub;
+  /** Command safety check (the fast model judges bash / eval / async_bash
+   * commands before they run). Omitted → the command tools run unchecked. */
+  safety?: CommandSafety;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -95,11 +99,15 @@ export function createCodingTools(
 
   return [
     ...sandboxFileTools(sandbox),
-    createBashTool({ sandbox, env: options.env }),
+    createBashTool({ sandbox, env: options.env, safety: options.safety }),
     ...(options.background !== undefined
-      ? createAsyncBashTools({ manager: options.background, sandbox })
+      ? createAsyncBashTools({
+        manager: options.background,
+        sandbox,
+        safety: options.safety,
+      })
       : []),
-    createEvalTool(),
+    createEvalTool({ safety: options.safety }),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),

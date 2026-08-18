@@ -119,9 +119,11 @@ export class ToolRegistry {
   browse(groupLimit = 50): string {
     const groups = new Map<string, string[]>();
     const overflow = new Map<string, number>();
-    for (const tool of [...this.tools.values()].sort((a, b) =>
-      a.name.localeCompare(b.name)
-    )) {
+    for (
+      const tool of [...this.tools.values()].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      )
+    ) {
       const group = labelPrefix(tool.label);
       const names = groups.get(group) ?? [];
       if (names.length < groupLimit) {
@@ -133,7 +135,7 @@ export class ToolRegistry {
     }
     const lines = [
       `${this.tools.size} tools available across ${groups.size} groups; ` +
-        "search for a specific tool with tool_search.",
+      "search for a specific tool with tool_search.",
     ];
     for (const [group, names] of groups) {
       const hidden = overflow.get(group) ?? 0;

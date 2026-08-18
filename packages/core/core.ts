@@ -34,8 +34,10 @@ import {
 import type { ThinkingLevel } from "./shared.ts";
 import type { AskAnswer } from "./shared.ts";
 import type { TaskInfo, TodoPhase } from "./shared.ts";
+import type { CommandApproval } from "./shared.ts";
 import type { BackgroundCommandInfo } from "./tools/background.ts";
 import {
+  COMMAND_SAFETY_APPROVALS_KEY,
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   parseModelPreference,
@@ -51,6 +53,7 @@ import { CoreError } from "./errors.ts";
 import { APP_MCP_SETTINGS_KEY } from "./mcp/config.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
+import { CommandSafety } from "./safety/command-safety.ts";
 
 export interface CreateSessionInput {
   workspaceId: string;
@@ -80,6 +83,7 @@ export class LumiscaCore {
   private readonly messages: MessageRepo;
   private readonly pool: SessionPool;
   private readonly mcp: McpService;
+  private readonly commandSafety: CommandSafety;
   private readonly listeners = new Set<(event: ClientEvent) => void>();
 
   private constructor(db: LumiscaDb, settings: SettingsRepo) {
@@ -95,6 +99,13 @@ export class LumiscaCore {
     this.workspaces = createWorkspaceRepo(db);
     this.sessions = createSessionRepo(db);
     this.messages = createMessageRepo(db);
+    const streamFn = this.models.models.streamSimple.bind(this.models.models);
+    this.commandSafety = new CommandSafety({
+      getSetting: (key) => this.settings.get(key),
+      setSetting: (key, value) => this.settings.set(key, value),
+      getFastModel: () => this.getFastModel(),
+      streamFn,
+    });
     this.pool = new SessionPool({
       getModel: (provider, modelId) => this.models.getModel(provider, modelId),
       getImageAnalysisModel: () => this.getImageAnalysisModel(),
@@ -107,8 +118,9 @@ export class LumiscaCore {
         this.buildGeneratedPrompt(workspace, model),
       updateSystemPrompt: (id, systemPrompt) =>
         this.sessions.updateSystemPrompt(id, systemPrompt),
-      streamFn: this.models.models.streamSimple.bind(this.models.models),
+      streamFn,
       messageRepo: this.messages,
+      commandSafety: this.commandSafety,
       // Resolved lazily (open) so the circular wiring stays one-way:
       // the pool references the service, the service references the pool
       // via the injected applySessionChange / agentMcpStatus below.
@@ -199,6 +211,27 @@ export class LumiscaCore {
     this.settings.delete(key);
   }
 
+  // --- command safety (fast-model judgement of bash/eval) -------------------
+  // The enable toggle itself is a plain setting (`command_safety_enabled`);
+  // only the approvals record needs dedicated accessors.
+
+  /** The recorded approvals of the safety check, in insertion order. Each
+   * entry carries a redacted command for display (never the raw command),
+   * so it is safe to surface to the UI. */
+  getCommandApprovals(): CommandApproval[] {
+    return this.commandSafety.approvals();
+  }
+
+  /** Forget one approval by its hash (it is judged again next time). */
+  deleteCommandApproval(hash: string): void {
+    this.commandSafety.deleteApproval(hash);
+  }
+
+  /** Forget every approved command. */
+  clearCommandApprovals(): void {
+    this.commandSafety.clearApprovals();
+  }
+
   // --- server connection registry (web clients) ---------------------------
   // The desktop app keeps its own per-PC copy (servers.json); web clients
   // share this server-side list so they can switch servers too.
@@ -240,12 +273,14 @@ export class LumiscaCore {
     }
   }
 
-  /** Non-protected settings only; credentials and MCP config are never
-   * exposed through the generic settings surface. */
+  /** Non-protected settings only; credentials, MCP config, connection
+   * registry and the command-safety approvals record are never exposed
+   * through the generic settings surface (each has its own API). */
   listSettings(): Map<string, string> {
     const safe = new Map<string, string>();
     for (const [key, value] of this.settings.list()) {
       if (this.protectedKeyReason(key) !== undefined) continue;
+      if (key === COMMAND_SAFETY_APPROVALS_KEY) continue;
       safe.set(key, value);
     }
     return safe;

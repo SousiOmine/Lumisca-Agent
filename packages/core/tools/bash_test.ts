@@ -196,3 +196,46 @@ Deno.test("bash tool per-call env overrides the tool-level env", async () => {
     await Deno.remove(root, { recursive: true });
   }
 });
+
+Deno.test("bash tool returns the safety reason when the check blocks", async () => {
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
+  const sandbox = new Sandbox([root]);
+  const safety = {
+    check: () => ({ ok: false, reason: "rm -rf / destroys the host" }),
+  } as unknown as Parameters<typeof createBashTool>[0]["safety"];
+  const tool = createBashTool({ sandbox, safety });
+  try {
+    const result = await tool.execute(
+      "1",
+      { cwd: root, command: "rm -rf /" },
+      undefined,
+    );
+    const text = toolText(result);
+    assertEquals(result.details?.blocked, true);
+    assertEquals(result.details?.reason, "rm -rf / destroys the host");
+    assertEquals(text.includes("[blocked by safety check]"), true);
+    assertEquals(text.includes("rm -rf / destroys the host"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("bash tool runs normally when the check approves", async () => {
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
+  const sandbox = new Sandbox([root]);
+  const safety = {
+    check: () => ({ ok: true }),
+  } as unknown as Parameters<typeof createBashTool>[0]["safety"];
+  const tool = createBashTool({ sandbox, safety });
+  try {
+    const result = await tool.execute(
+      "1",
+      { cwd: root, command: "echo approved" },
+      undefined,
+    );
+    assertEquals(result.details?.blocked, undefined);
+    assertEquals(toolText(result).includes("approved"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});

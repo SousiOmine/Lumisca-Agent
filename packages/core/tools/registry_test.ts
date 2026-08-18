@@ -1,17 +1,9 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { TOOL_CALL, TOOL_SEARCH } from "../shared.ts";
 import { createToolCallTool } from "./call-tool.ts";
-import {
-  MAX_SEARCH_DESCRIPTION_CHARS,
-  ToolRegistry,
-} from "./registry.ts";
+import { MAX_SEARCH_DESCRIPTION_CHARS, ToolRegistry } from "./registry.ts";
 import { createToolSearchTool } from "./search-tool.ts";
-import {
-  object,
-  string,
-  type Tool,
-  type ToolContentBlock,
-} from "./schema.ts";
+import { object, string, type Tool, type ToolContentBlock } from "./schema.ts";
 
 function fakeTool(
   name: string,
@@ -223,7 +215,7 @@ Deno.test("tool_search returns matches with usage instructions", async () => {
   const tool = createToolSearchTool(() => registry);
   const result = await tool.execute("call-1", { query: "sql" });
   const text = textOf(result);
-  assert(text.includes("Found 1 tool(s) matching \"sql\""));
+  assert(text.includes('Found 1 tool(s) matching "sql"'));
   assert(text.includes("mcp__db__query"));
   assert(text.includes("Arguments: sql"));
   assert(text.includes("Call one with tool_call(name, args)."));
@@ -245,7 +237,7 @@ Deno.test("tool_search reports no matches with the browse listing", async () => 
   registry.setTools([fakeTool("mcp__db__query", { label: "db: query" })]);
   const tool = createToolSearchTool(() => registry);
   const result = await tool.execute("call-1", { query: "zzz" });
-  assert(textOf(result).includes("No tools match \"zzz\""));
+  assert(textOf(result).includes('No tools match "zzz"'));
   assert(textOf(result).includes("mcp__db__query"));
 });
 
@@ -303,6 +295,9 @@ Deno.test("the search/call pair resolves the registry through the provider", asy
 });
 
 Deno.test("tool names are the shared constants", () => {
-  assertEquals(createToolSearchTool(() => new ToolRegistry()).name, TOOL_SEARCH);
+  assertEquals(
+    createToolSearchTool(() => new ToolRegistry()).name,
+    TOOL_SEARCH,
+  );
   assertEquals(createToolCallTool(() => new ToolRegistry()).name, TOOL_CALL);
 });

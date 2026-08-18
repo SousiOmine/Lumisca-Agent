@@ -23,6 +23,7 @@ import type { Workspace } from "../types/workspace.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 import { toAgentTool } from "./pi-adapter.ts";
 import {
   boolean,
@@ -73,13 +74,14 @@ function exploreTools(workspace: Workspace): Tool[] {
 /** Full coding tool set of the `general` sub-agent: the session's tools
  * without ask/todo/async_bash. Sub-agents have no UI round trip (ask), no
  * plan panel of their own (todo), and no background commands that would
- * outlive them (async_bash). */
-function generalTools(workspace: Workspace): Tool[] {
+ * outlive them (async_bash). `safety` (when present) gates their bash/eval
+ * tools like the main agent's. */
+function generalTools(workspace: Workspace, safety?: CommandSafety): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
     ...sandboxFileTools(sandbox),
-    createBashTool({ sandbox }),
-    createEvalTool(),
+    createBashTool({ sandbox, safety }),
+    createEvalTool({ safety }),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
   ];
 }
@@ -140,6 +142,10 @@ export interface TaskHubOptions {
    * to new sub-agents without waiting for a session rebuild. */
   resolveRuntime(): SubagentRuntime;
   streamFn: StreamFn;
+  /** Command safety check for the general sub-agent's bash/eval tools (the
+   * fast model judges commands before they run). Omitted → the sub-agent's
+   * command tools run unchecked. */
+  safety?: CommandSafety;
   emit: (event: ClientEvent) => void;
 }
 
@@ -163,6 +169,7 @@ export class TaskHub {
   private readonly sessionId: string;
   private resolveRuntime: () => SubagentRuntime;
   private readonly streamFn: StreamFn;
+  private readonly safety: CommandSafety | undefined;
   private readonly emit: (event: ClientEvent) => void;
   /** The session's tool registry (set by the pool on every open): holds
    * every discoverable tool (MCP tools, future extensions) whose
@@ -180,6 +187,7 @@ export class TaskHub {
     this.sessionId = options.sessionId;
     this.resolveRuntime = options.resolveRuntime;
     this.streamFn = options.streamFn;
+    this.safety = options.safety;
     this.emit = options.emit;
   }
 
@@ -202,7 +210,9 @@ export class TaskHub {
     this.registry = registry;
     if (attachment !== null && attachment !== this.handledAttachment) {
       this.handledAttachment = attachment;
-      attachment.whenReady((tools) => this.attachMcpToRunning(attachment, tools));
+      attachment.whenReady((tools) =>
+        this.attachMcpToRunning(attachment, tools)
+      );
     }
   }
 
@@ -305,7 +315,7 @@ export class TaskHub {
     const searchable = type === "general" ? this.searchTools() : [];
     const tools = [
       ...(type === "general"
-        ? generalTools(runtime.workspace)
+        ? generalTools(runtime.workspace, this.safety)
         : exploreTools(runtime.workspace)),
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),

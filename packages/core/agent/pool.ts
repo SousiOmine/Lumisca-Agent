@@ -16,6 +16,7 @@ import type { McpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { ToolRegistry } from "../tools/registry.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { MessageRepo } from "../session/messages.ts";
@@ -52,6 +53,10 @@ export interface SessionPoolDeps {
   updateSystemPrompt(id: string, systemPrompt: string): void;
   streamFn: StreamFn;
   messageRepo: MessageRepo;
+  /** Command safety check for the session's bash/eval/async_bash tools
+   * (the fast model judges commands before they run). Always present; the
+   * check itself is a no-op while the feature is disabled. */
+  commandSafety: CommandSafety;
   /** Merged MCP config (app-level + workspace .mcp.json + plugins) for a
    * workspace, with collected config errors. */
   loadMergedMcp(workspace: Workspace): { config: McpConfig; errors: string[] };
@@ -299,6 +304,7 @@ export class SessionPool {
         sessionId: session.id,
         resolveRuntime: runtimeResolver,
         streamFn: this.deps.streamFn,
+        safety: this.deps.commandSafety,
         emit: (event: ClientEvent) => this.deps.emit(event),
       });
       this.tasks.set(session.id, tasks);
@@ -313,6 +319,7 @@ export class SessionPool {
       ask: askHub,
       todo,
       task: tasks,
+      safety: this.deps.commandSafety,
     });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a

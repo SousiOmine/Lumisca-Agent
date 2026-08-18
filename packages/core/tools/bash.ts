@@ -8,6 +8,7 @@ import {
 } from "./schema.ts";
 import { TOOL_BASH } from "../shared.ts";
 import type { Sandbox } from "../workspace/sandbox.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { killProcessTree } from "./background.ts";
 import { getShell } from "./shell.ts";
@@ -29,6 +30,10 @@ export interface BashToolOptions {
   env?: Record<string, string>;
   /** Default timeout in seconds. */
   defaultTimeoutSec?: number;
+  /** Command safety check (the fast model judges the command before it
+   * runs; a blocked command returns the reason as the tool result).
+   * Omitted → the command runs unchecked. */
+  safety?: CommandSafety;
 }
 
 /**
@@ -57,8 +62,29 @@ export function createBashTool(
       "`type`, `copy`) work. On macOS/Linux, commands run in /bin/sh.",
     parameters: bashSchema,
     execute: async (_id, params, signal) => {
+      // Resolve the working directory before the safety check so the check
+      // judges the exact context the command would run in.
       const resolved = await options.sandbox.resolve(params.cwd);
       if (!resolved.ok) throw new Error(resolved.reason);
+      if (options.safety !== undefined) {
+        const verdict = await options.safety.check(
+          "bash",
+          params.command,
+          resolved.path,
+        );
+        if (!verdict.ok) {
+          // The fast model judged the command unsafe: report its reason as
+          // the tool result (the command is never spawned).
+          return {
+            content: [{
+              type: "text",
+              text: "[blocked by safety check]\n" +
+                (verdict.reason ?? "The command was judged unsafe."),
+            }],
+            details: { blocked: true, reason: verdict.reason ?? "" },
+          };
+        }
+      }
       const timeoutSec = params.timeout ?? defaultTimeoutSec;
       const shell = getShell();
 

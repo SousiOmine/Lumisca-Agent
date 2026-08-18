@@ -13,7 +13,7 @@ import { CoreError, LumiscaCore } from "../mod.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
-import { TOOL_CALL, TOOL_SEARCH, type ThinkingLevel } from "../shared.ts";
+import { type ThinkingLevel, TOOL_CALL, TOOL_SEARCH } from "../shared.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import type { Workspace } from "../types/workspace.ts";

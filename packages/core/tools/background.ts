@@ -12,6 +12,7 @@ import {
   TOOL_ASYNC_BASH_STATUS,
 } from "../shared.ts";
 import type { Sandbox } from "../workspace/sandbox.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { getShell } from "./shell.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
@@ -476,6 +477,10 @@ export class BackgroundProcessManager {
 export interface AsyncBashToolOptions {
   manager: BackgroundProcessManager;
   sandbox: Sandbox;
+  /** Command safety check for the start tool (the fast model judges the
+   * command before it runs; a blocked command returns the reason as the
+   * tool result). Omitted → the command runs unchecked. */
+  safety?: CommandSafety;
 }
 
 const startSchema = object({
@@ -535,7 +540,7 @@ function formatListLine(info: BackgroundCommandInfo): string {
 export function createAsyncBashTools(
   options: AsyncBashToolOptions,
 ): Tool[] {
-  const { manager, sandbox } = options;
+  const { manager, sandbox, safety } = options;
 
   const startTool: Tool<typeof startSchema> = {
     name: TOOL_ASYNC_BASH,
@@ -559,6 +564,23 @@ export function createAsyncBashTools(
     execute: async (_id, params) => {
       const resolved = await sandbox.resolve(params.cwd);
       if (!resolved.ok) throw new Error(resolved.reason);
+      if (safety !== undefined) {
+        const verdict = await safety.check(
+          "bash",
+          params.command,
+          resolved.path,
+        );
+        if (!verdict.ok) {
+          return {
+            content: [{
+              type: "text",
+              text: "[blocked by safety check]\n" +
+                (verdict.reason ?? "The command was judged unsafe."),
+            }],
+            details: { blocked: true, reason: verdict.reason ?? "" },
+          };
+        }
+      }
       const { commandId, pid } = await manager.start({
         cwd: resolved.path,
         command: params.command,

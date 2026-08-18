@@ -6,6 +6,7 @@ import {
   IconPlugConnected,
   IconServer,
   IconSettings,
+  IconShield,
   IconUser,
   IconWorld,
   IconX,
@@ -20,6 +21,7 @@ import { McpList } from "./settings/McpList.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { AppearancePanel } from "./settings/AppearancePanel.tsx";
+import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
 import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import type { ThemeSetting } from "../types.ts";
@@ -38,7 +40,8 @@ type Category =
   | "mcp"
   | "servers"
   | "personalize"
-  | "appearance";
+  | "appearance"
+  | "security";
 
 type ProvidersView =
   | { kind: "list" }
@@ -77,6 +80,11 @@ const CATEGORIES: {
     icon: <IconBrain size={18} />,
   },
   { id: "mcp", label: "MCP サーバー", icon: <IconServer size={18} /> },
+  {
+    id: "security",
+    label: "セキュリティ",
+    icon: <IconShield size={18} />,
+  },
 ];
 
 export function SettingsModal({
@@ -168,6 +176,7 @@ export function SettingsModal({
             </>
           )}
           {category === "mcp" && <McpList />}
+          {category === "security" && <CommandSafetyPanel />}
           {category === "servers" && <ConnectionList />}
           {category === "personalize" && <PersonalizePanel />}
           {category === "appearance" && (

@@ -1,6 +1,7 @@
 import { inspect } from "node:util";
 import { type Context, createContext, runInContext } from "node:vm";
 import { TOOL_EVAL } from "../shared.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 import { errorMessage } from "../errors.ts";
 import {
   boolean,
@@ -199,7 +200,16 @@ const evalSchema = object({
   )),
 });
 
-export function createEvalTool(): Tool<typeof evalSchema> {
+/** Options for the eval tool. `safety` (when present) makes the fast model
+ * judge the snippet before it runs; a blocked snippet returns the reason
+ * as the tool result. */
+export interface EvalToolOptions {
+  safety?: CommandSafety;
+}
+
+export function createEvalTool(
+  options: EvalToolOptions = {},
+): Tool<typeof evalSchema> {
   const session = new EvalSession();
   // Parallel tool calls share the session; serialize them so state and
   // console output cannot interleave.
@@ -227,6 +237,31 @@ export function createEvalTool(): Tool<typeof evalSchema> {
     parameters: evalSchema,
     execute: async (_id, params): Promise<ToolResult> => {
       const run = async (): Promise<ToolResult> => {
+        if (options.safety !== undefined) {
+          // Eval runs in the server process, so its working-directory
+          // context is the process cwd (part of the approval key).
+          const verdict = await options.safety.check(
+            "eval",
+            params.code,
+            Deno.cwd(),
+          );
+          if (!verdict.ok) {
+            // A blocked snippet is reported like a user-code failure: a
+            // result, not a tool failure, so the agent sees the reason.
+            return {
+              content: [{
+                type: "text",
+                text: "[error]\n[blocked by safety check]\n" +
+                  (verdict.reason ?? "The snippet was judged unsafe."),
+              }],
+              details: {
+                reset: params.reset === true,
+                blocked: true,
+                reason: verdict.reason ?? "",
+              },
+            };
+          }
+        }
         if (params.reset === true) session.reset();
         const timeoutMs = Math.max(1, params.timeout ?? DEFAULT_TIMEOUT_MS);
         try {
