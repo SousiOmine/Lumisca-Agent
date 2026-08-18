@@ -43,7 +43,7 @@ export function ProviderList({
           >
             <span style={{ flex: 1 }}>{p.name}</span>
             <span className="provider-state configured">
-              {p.source ?? "APIキー"}
+              {p.authType === "oauth" ? "OAuth" : (p.source ?? "APIキー")}
             </span>
           </button>
         ))}

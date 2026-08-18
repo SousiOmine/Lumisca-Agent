@@ -43,10 +43,12 @@ type Category =
   | "appearance"
   | "security";
 
+/** Provider category navigation. `detail` records which screen it was
+ * opened from so "戻る" returns there instead of always to the list. */
 type ProvidersView =
   | { kind: "list" }
   | { kind: "add" }
-  | { kind: "detail"; providerId: string };
+  | { kind: "detail"; providerId: string; from: "list" | "add" };
 
 const CATEGORIES: {
   id: Category;
@@ -153,20 +155,29 @@ export function SettingsModal({
             <ProviderList
               onAdd={() => setProvidersView({ kind: "add" })}
               onOpen={(id) =>
-                setProvidersView({ kind: "detail", providerId: id })}
+                setProvidersView({
+                  kind: "detail",
+                  providerId: id,
+                  from: "list",
+                })}
             />
           )}
           {category === "providers" && providersView.kind === "add" && (
             <AddProviderFlow
               onSelect={(id) =>
-                setProvidersView({ kind: "detail", providerId: id })}
+                setProvidersView({
+                  kind: "detail",
+                  providerId: id,
+                  from: "add",
+                })}
               onBack={() => setProvidersView({ kind: "list" })}
             />
           )}
           {category === "providers" && providersView.kind === "detail" && (
             <ProviderDetail
               providerId={providersView.providerId}
-              onBack={() => setProvidersView({ kind: "list" })}
+              onBack={() => setProvidersView({ kind: providersView.from })}
+              onDone={() => setProvidersView({ kind: "list" })}
             />
           )}
           {category === "models" && (

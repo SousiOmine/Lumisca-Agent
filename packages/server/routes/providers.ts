@@ -1,8 +1,17 @@
 import { Hono } from "hono";
-import type { AuthCheck, ModelInfo, Provider } from "@lumisca/core";
+import type {
+  AuthCheck,
+  AuthInteraction,
+  AuthType,
+  ModelInfo,
+  Provider,
+  ProviderAuthType,
+} from "@lumisca/core";
 import { AppError, parseBody, ttlCache } from "./util.ts";
+import { LoginSessions } from "../login.ts";
 
-/** Auth checks are cached briefly; invalidated when an API key changes. */
+/** Auth checks are cached briefly; invalidated when a key or credential
+ * (login/logout) changes. */
 const AUTH_CACHE_TTL = 30_000;
 
 /** The slice of the core these routes need (interface segregation). */
@@ -17,28 +26,45 @@ export interface ProviderApi {
   ): string;
   checkAuth(providerId: string): Promise<AuthCheck | undefined>;
   setProviderApiKey(providerId: string, key: string): Promise<void>;
+  getProviderAuthType(
+    providerId: string,
+  ): ProviderAuthType | undefined;
+  /** Run a provider-owned login flow (OAuth) with the given interaction. */
+  loginProvider(
+    providerId: string,
+    type: AuthType,
+    interaction: AuthInteraction,
+  ): Promise<void>;
+  logoutProvider(providerId: string): Promise<void>;
 }
 
 export function providerRoutes(core: ProviderApi): Hono {
   const app = new Hono();
 
-  const authCache = ttlCache<string, { configured: boolean; source?: string }>(
+  const authCache = ttlCache<
+    string,
+    { configured: boolean; source?: string; authType?: ProviderAuthType }
+  >(
     AUTH_CACHE_TTL,
   );
   const cachedAuth = async (providerId: string) => {
     const cached = authCache.get(providerId);
     if (cached) return cached;
+    const authType = core.getProviderAuthType(providerId);
     let check: AuthCheck | undefined;
     try {
       check = await core.checkAuth(providerId);
     } catch {
       // A transient checkAuth failure (network) must not be cached as
       // "not configured" — that would lie to the settings UI.
-      return { configured: false };
+      return { configured: false, authType };
     }
     const entry = {
       configured: check !== undefined,
       source: check?.source,
+      // check.type (e.g. a stored OAuth credential) wins over the static
+      // capability so the settings UI picks the right control either way.
+      authType: check?.type ?? authType,
     };
     authCache.set(providerId, entry);
     return entry;
@@ -106,6 +132,79 @@ export function providerRoutes(core: ProviderApi): Hono {
     }
     await core.setProviderApiKey(c.req.param("id"), body.key);
     invalidateAuth(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+
+  // OAuth login sessions (ChatGPT Plus/Pro and other subscription
+  // providers). The flow runs server-side; the client polls the session
+  // until it settles and answers any prompt the flow forwards. On Deno only
+  // the device-code method works, which the bridge auto-selects.
+  const loginSessions = new LoginSessions();
+
+  app.post("/providers/:id/login", (c) => {
+    const id = c.req.param("id");
+    if (!core.listProviders().some((p) => p.id === id)) {
+      throw new AppError(`Provider not found: ${id}`, 404);
+    }
+    if (core.getProviderAuthType(id) !== "oauth") {
+      throw new AppError(`${id} does not support OAuth login`, 400);
+    }
+    // Reuse an already-running flow so repeated clicks cannot stack
+    // concurrent polls (which OpenAI rate-limits with 429 errors).
+    const active = loginSessions.getActive(id);
+    if (active) return c.json({ sessionId: active.sessionId });
+    const session = loginSessions.create(
+      id,
+      (interaction) => core.loginProvider(id, "oauth", interaction),
+    );
+    return c.json({ sessionId: session.sessionId });
+  });
+
+  app.get("/providers/:id/login/:sessionId", (c) => {
+    const id = c.req.param("id");
+    const session = loginSessions.get(c.req.param("sessionId"));
+    if (!session || session.providerId !== id) {
+      throw new AppError("Login session not found", 404);
+    }
+    // Once the flow has persisted a credential, drop the stale auth cache
+    // so the model picker sees the provider as configured.
+    if (session.consumeDone()) invalidateAuth(id);
+    return c.json(session.snapshot());
+  });
+
+  app.post("/providers/:id/login/:sessionId/respond", async (c) => {
+    const id = c.req.param("id");
+    const session = loginSessions.get(c.req.param("sessionId"));
+    if (!session || session.providerId !== id) {
+      throw new AppError("Login session not found", 404);
+    }
+    const body = await parseBody<{ promptId?: unknown; value?: unknown }>(c);
+    if (
+      !body || typeof body.promptId !== "string" ||
+      typeof body.value !== "string"
+    ) {
+      throw new AppError("promptId and value (strings) are required", 400);
+    }
+    if (!session.respond(body.promptId, body.value)) {
+      throw new AppError("Prompt not found", 404);
+    }
+    return c.json({ ok: true });
+  });
+
+  app.post("/providers/:id/login/:sessionId/cancel", (c) => {
+    const id = c.req.param("id");
+    const session = loginSessions.get(c.req.param("sessionId"));
+    if (!session || session.providerId !== id) {
+      throw new AppError("Login session not found", 404);
+    }
+    session.cancel();
+    return c.json({ ok: true });
+  });
+
+  app.post("/providers/:id/logout", async (c) => {
+    const id = c.req.param("id");
+    await core.logoutProvider(id);
+    invalidateAuth(id);
     return c.json({ ok: true });
   });
 

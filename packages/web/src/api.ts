@@ -9,7 +9,9 @@ import type {
   ModelInfo,
   PeerStatus,
   PendingImage,
+  ProviderAuthType,
   ProviderInfo,
+  ProviderLoginSnapshot,
   SessionInfo,
   TaskInfo,
   ThinkingLevel,
@@ -162,13 +164,51 @@ export const api = {
       { method: "PUT", body: JSON.stringify({ enabled }) },
     ),
   providerAuth: (providerId: string) =>
-    request<{ providerId: string; configured: boolean; source?: string }>(
+    request<
+      {
+        providerId: string;
+        configured: boolean;
+        source?: string;
+        authType?: ProviderAuthType;
+      }
+    >(
       `/api/providers/${providerId}/auth`,
     ),
   setApiKey: (providerId: string, key: string) =>
     request<{ ok: boolean }>(`/api/providers/${providerId}/api-key`, {
       method: "POST",
       body: JSON.stringify({ key }),
+    }),
+  /** Start an OAuth login flow for a provider; returns a session id to
+   * poll with providerLoginPoll. */
+  providerLogin: (providerId: string) =>
+    request<{ sessionId: string }>(
+      `/api/providers/${providerId}/login`,
+      { method: "POST" },
+    ),
+  providerLoginPoll: (providerId: string, sessionId: string) =>
+    request<ProviderLoginSnapshot>(
+      `/api/providers/${providerId}/login/${sessionId}`,
+    ),
+  /** Answer a prompt the flow forwarded (post back the prompt id + value). */
+  providerLoginRespond: (
+    providerId: string,
+    sessionId: string,
+    promptId: string,
+    value: string,
+  ) =>
+    request<{ ok: boolean }>(
+      `/api/providers/${providerId}/login/${sessionId}/respond`,
+      { method: "POST", body: JSON.stringify({ promptId, value }) },
+    ),
+  providerLoginCancel: (providerId: string, sessionId: string) =>
+    request<{ ok: boolean }>(
+      `/api/providers/${providerId}/login/${sessionId}/cancel`,
+      { method: "POST" },
+    ),
+  providerLogout: (providerId: string) =>
+    request<{ ok: boolean }>(`/api/providers/${providerId}/logout`, {
+      method: "POST",
     }),
   updateSessionModel: (sessionId: string, provider: string, modelId: string) =>
     request<SessionInfo>(`/api/sessions/${sessionId}/model`, {

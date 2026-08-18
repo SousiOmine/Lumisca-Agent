@@ -116,6 +116,20 @@ export {
 export type { ThinkingLevel } from "./shared.ts";
 export { THINKING_LEVEL_LABELS } from "./shared.ts";
 export type { ModelInfo, ProviderInfo } from "./shared.ts";
+export type {
+  ProviderAuthType,
+  ProviderLoginEvent,
+  ProviderLoginPrompt,
+  ProviderLoginSnapshot,
+} from "./shared.ts";
+export { autoAnswerSelect } from "./models/interaction.ts";
 export type { SettingsRepo } from "./settings/repo.ts";
 export type { ModelManager } from "./models/mod.ts";
-export type { Api, AuthCheck, Model, Provider } from "@earendil-works/pi-ai";
+export type {
+  Api,
+  AuthCheck,
+  AuthInteraction,
+  AuthType,
+  Model,
+  Provider,
+} from "@earendil-works/pi-ai";

@@ -1,9 +1,11 @@
 import {
+  autoAnswerSelect,
   type ClientEvent,
   getSupportedThinkingLevels,
   type LumiscaCore,
   THINKING_LEVEL_LABELS,
 } from "@lumisca/core";
+import type { AuthInteraction } from "@earendil-works/pi-ai";
 import {
   color,
   error,
@@ -156,6 +158,49 @@ function sessionName(core: LumiscaCore, id: string): string {
   return core.getSession(id)?.name ?? id;
 }
 
+/** Drive a provider OAuth login from the terminal: print the device code
+ * / auth URL the flow emits and answer its prompts. The Deno-compatible
+ * device-code method is auto-selected when offered. */
+async function runOAuthLogin(
+  core: LumiscaCore,
+  providerId: string,
+): Promise<void> {
+  const interaction: AuthInteraction = {
+    prompt: async (prompt) => {
+      if (prompt.type === "select") {
+        const auto = autoAnswerSelect(prompt.options);
+        if (auto !== undefined) return auto;
+        const chosen = await selectFromList(
+          prompt.message,
+          prompt.options.map((o) => ({ label: o.label, value: o.id })),
+        );
+        if (chosen === null) throw new Error("ログインをキャンセルしました");
+        return chosen;
+      }
+      const placeholder = prompt.placeholder ? ` (${prompt.placeholder})` : "";
+      const value = await getPromptFn()(` ${prompt.message}${placeholder}:`);
+      if (value === null) throw new Error("ログインをキャンセルしました");
+      return value.trim();
+    },
+    notify: (event) => {
+      if (event.type === "device_code") {
+        header("デバイスコード");
+        console.log(`  ${color.cyan(event.userCode)}`);
+        info(`以下のURLを開いてコードを入力・承認してください:`);
+        console.log(`  ${event.verificationUri}`);
+      } else if (event.type === "auth_url") {
+        info("以下のURLをブラウザで開いてログインしてください:");
+        console.log(`  ${event.url}`);
+        if (event.instructions) console.log(`  ${event.instructions}`);
+      } else {
+        info(event.message);
+      }
+    },
+  };
+  await core.loginProvider(providerId, "oauth", interaction);
+  success("ログインしました");
+}
+
 type CommandResult = "exit" | string | undefined;
 
 export async function handleCommand(
@@ -177,6 +222,8 @@ export async function handleCommand(
           ["/thinking", "思考強度を変更"],
           ["/workspace", "ワークスペースを切り替え"],
           ["/keys", "APIキーを設定"],
+          ["/login", "ChatGPT等をOAuthでログイン"],
+          ["/logout", "OAuthログインを解除"],
           ["/sessions", "セッション一覧"],
           ["/name", "セッション名を変更"],
           ["/exit", "終了"],
@@ -261,6 +308,45 @@ export async function handleCommand(
       if (!key || key.trim() === "") return undefined;
       await core.setProviderApiKey(providerId.trim(), key.trim());
       success("APIキーを保存しました");
+      return undefined;
+    }
+
+    case "login": {
+      let providerId = arg;
+      if (!providerId) {
+        const providers = core.listProviders().filter((p) =>
+          core.getProviderAuthType(p.id) === "oauth"
+        );
+        if (providers.length === 0) {
+          error("OAuth対応のプロバイダーが見つかりません");
+          return undefined;
+        }
+        const chosen = await selectFromList(
+          "OAuth対応プロバイダー",
+          providers.map((p) => ({ label: p.name, value: p.id })),
+        );
+        if (chosen === null) return undefined;
+        providerId = chosen;
+      }
+      if (core.getProviderAuthType(providerId) !== "oauth") {
+        error(`${providerId} はOAuthログインに対応していません`);
+        return undefined;
+      }
+      try {
+        await runOAuthLogin(core, providerId.trim());
+      } catch (e) {
+        error(errorText(e));
+      }
+      return undefined;
+    }
+
+    case "logout": {
+      if (!arg) {
+        error("/logout <プロバイダーID>");
+        return undefined;
+      }
+      await core.logoutProvider(arg.trim());
+      success("ログアウトしました");
       return undefined;
     }
 

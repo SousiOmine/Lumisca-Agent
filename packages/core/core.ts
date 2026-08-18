@@ -23,6 +23,8 @@ import type { CredentialStore, Provider } from "@earendil-works/pi-ai";
 import type {
   Api,
   AuthCheck,
+  AuthInteraction,
+  AuthType,
   ImageContent,
   Model,
 } from "@earendil-works/pi-ai";
@@ -288,6 +290,23 @@ export class LumiscaCore {
 
   async setProviderApiKey(providerId: string, key: string): Promise<void> {
     await setApiKey(this.credentials, providerId, key);
+  }
+
+  /** Run a provider-owned login flow (OAuth) and persist the returned
+   * credential. The interaction bridges the flow's prompts/notifications
+   * to the UI. Only "oauth" is supported: API keys have their own surface
+   * (setProviderApiKey). */
+  async loginProvider(
+    providerId: string,
+    type: AuthType,
+    interaction: AuthInteraction,
+  ): Promise<void> {
+    await this.models.login(providerId, type, interaction);
+  }
+
+  /** Remove the stored credential for a provider. */
+  async logoutProvider(providerId: string): Promise<void> {
+    await this.models.logout(providerId);
   }
 
   // --- personalization (machine-level AGENTS.md) --------------------------
@@ -692,6 +711,20 @@ export class LumiscaCore {
   /** Whether a provider's credentials are complete. */
   async checkAuth(providerId: string): Promise<AuthCheck | undefined> {
     return await this.models.checkAuth(providerId);
+  }
+
+  /** Which credential method a provider accepts ("oauth", "api_key"), or
+   * undefined for providers with only ambient auth (env vars etc.).
+   * Static provider metadata — no credential required — so the settings UI
+   * can offer a login button even before anything is configured. */
+  getProviderAuthType(
+    providerId: string,
+  ): "oauth" | "api_key" | undefined {
+    const provider = this.models.getProvider(providerId);
+    if (!provider) return undefined;
+    if (provider.auth.oauth) return "oauth";
+    if (provider.auth.apiKey) return "api_key";
+    return undefined;
   }
 
   /** Local (network-free) auth check: env var or stored key resolves.

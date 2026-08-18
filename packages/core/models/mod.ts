@@ -2,6 +2,9 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type {
   Api,
   AuthCheck,
+  AuthInteraction,
+  AuthType,
+  Credential,
   CredentialStore,
   Model,
   ModelsStore,
@@ -75,6 +78,26 @@ export class ModelManager {
 
   getModel(providerId: string, modelId: string): Model<Api> | undefined {
     return this.models.getModel(providerId, modelId);
+  }
+
+  getProvider(providerId: string): Provider | undefined {
+    return this.models.getProvider(providerId);
+  }
+
+  /** Run a provider-owned login flow (e.g. OAuth) and persist the returned
+   * credential. The interaction bridges the flow's prompts and
+   * notifications to whoever drives the UI. */
+  login(
+    providerId: string,
+    type: AuthType,
+    interaction: AuthInteraction,
+  ): Promise<Credential> {
+    return this.models.login(providerId, type, interaction);
+  }
+
+  /** Remove the stored credential for a provider. */
+  logout(providerId: string): Promise<void> {
+    return this.models.logout(providerId);
   }
 
   async checkAuth(
