@@ -18,8 +18,14 @@ import {
   type SlashCommandItem,
 } from "./Composer.tsx";
 import { PeerPicker } from "./PeerPicker.tsx";
+import { RecentSessionsList } from "./RecentSessionsList.tsx";
+import { useRecentSessions } from "../hooks/useRecentSessions.ts";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
 import { WorkspacePicker } from "./WorkspacePicker.tsx";
+
+/** The draft screen never has a session tab open, so every session in the
+ * recent list is reopenable as-is. */
+const NO_OPEN_SESSIONS: ReadonlySet<string> = new Set();
 
 /** The model plus the thinking levels it supports, so the draft tab's
  * thinking control can render without an extra fetch. */
@@ -41,6 +47,8 @@ interface NewSessionViewProps {
   onWorkspaceChanged: (fws: FederatedWorkspace) => void;
   /** The single delete flow owned by the App (confirm + API + state). */
   onDeleteWorkspace: (fws: FederatedWorkspace) => Promise<void>;
+  /** Reopen a closed session in a tab (recent sessions list). */
+  onReopenSession: (key: string) => void;
   onOpenSettings?: () => void;
 }
 
@@ -66,6 +74,7 @@ export function NewSessionView(
     onStart,
     onWorkspaceChanged,
     onDeleteWorkspace,
+    onReopenSession,
     onOpenSettings,
   }: NewSessionViewProps,
 ) {
@@ -89,6 +98,7 @@ export function NewSessionView(
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const modelTouched = useRef(false);
+  const recent = useRecentSessions();
 
   // Show the last used model (the one a session without an explicit model
   // would get) right away instead of leaving the picker to choose on click.
@@ -324,6 +334,21 @@ export function NewSessionView(
               onImagesChange={setImages}
             />
             {error && <div className="error-text">{error}</div>}
+            <div className="new-session-recent">
+              <div className="new-session-recent-header">
+                <h3>最近のセッション</h3>
+              </div>
+              <RecentSessionsList
+                items={recent.items}
+                loading={recent.loading}
+                error={recent.error}
+                openKeys={NO_OPEN_SESSIONS}
+                limit={8}
+                bare
+                onSelect={onReopenSession}
+                onReload={recent.reload}
+              />
+            </div>
           </div>
         </div>
       </div>

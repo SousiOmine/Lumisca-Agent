@@ -162,6 +162,34 @@ export function useTabs(
     closeTabs(tabs.filter((id) => id !== sessionId));
   }, [tabs, closeTabs]);
 
+  /** Reopen a previously closed session in a tab: load its info, transcript
+   * and todo plan (the same data the restart restore fetches) and open the
+   * tab; an already-open session is just focused. */
+  const reopenSession = useCallback(async (key: string) => {
+    if (tabs.includes(key)) {
+      setActiveTab(key);
+      return;
+    }
+    try {
+      const [info, messages, todo] = await Promise.all([
+        sessionApi(key).getSession(),
+        sessionApi(key).getMessages(),
+        sessionApi(key).getTodo(),
+      ]);
+      setTabs((prev) => (prev.includes(key) ? prev : [...prev, key]));
+      setViews((prev) => {
+        const next = new Map(prev);
+        next.set(key, restoreView(info, messages, todo.todos));
+        return next;
+      });
+      setActiveTab(key);
+    } catch (error) {
+      // The session was deleted (or the owning peer is unreachable) since
+      // the list was built; never crash over a stale entry.
+      console.error(error);
+    }
+  }, [tabs, setTabs, setViews, setActiveTab]);
+
   return {
     tabs,
     setTabs,
@@ -172,5 +200,6 @@ export function useTabs(
     closeTabsToRight,
     closeTabsToLeft,
     closeOtherTabs,
+    reopenSession,
   };
 }

@@ -14,6 +14,8 @@ interface TabBarProps {
   onCloseToLeft: (id: string) => void;
   onCloseOthers: (id: string) => void;
   onNew: () => void;
+  /** Open the recent (closed) sessions modal. */
+  onOpenRecent: () => void;
   onOpenSettings: () => void;
   isDesktop: boolean;
   onQuit: () => void;
@@ -38,6 +40,7 @@ export function TabBar({
   onCloseToLeft,
   onCloseOthers,
   onNew,
+  onOpenRecent,
   onOpenSettings,
   isDesktop,
   onQuit,
@@ -154,6 +157,7 @@ export function TabBar({
         <div className="tabbar-actions">
           <AppMenu
             onNew={onNew}
+            onOpenRecent={onOpenRecent}
             onOpenSettings={onOpenSettings}
             onQuit={onQuit}
             isDesktop={false}

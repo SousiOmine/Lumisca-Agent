@@ -15,6 +15,8 @@ interface TitleBarProps {
    * plain browser (where the strip is not rendered). */
   children: ReactNode;
   onNew: () => void;
+  /** Open the recent (closed) sessions modal. */
+  onOpenRecent: () => void;
   onOpenSettings: () => void;
   onQuit: () => void;
 }
@@ -31,6 +33,7 @@ interface TitleBarProps {
 export function TitleBar({
   children,
   onNew,
+  onOpenRecent,
   onOpenSettings,
   onQuit,
 }: TitleBarProps) {
@@ -90,6 +93,7 @@ export function TitleBar({
       <div className="titlebar-controls">
         <AppMenu
           onNew={onNew}
+          onOpenRecent={onOpenRecent}
           onOpenSettings={onOpenSettings}
           onQuit={onQuit}
           isDesktop

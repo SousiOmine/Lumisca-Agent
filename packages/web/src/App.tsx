@@ -13,6 +13,7 @@ import { TabBar } from "./components/TabBar.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
+import { RecentSessionsModal } from "./components/RecentSessionsModal.tsx";
 import { SettingsModal } from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 
@@ -41,8 +42,10 @@ export function App({ initialData }: AppProps): ReactElement {
     closeTabsToRight,
     closeTabsToLeft,
     closeOtherTabs,
+    reopenSession,
   } = useTabs(setViews);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRecent, setShowRecent] = useState(false);
   // Auto-update state (desktop only); polled here and shared with the
   // settings panel and the update banner below.
   const update = useUpdateStatus(true);
@@ -75,6 +78,7 @@ export function App({ initialData }: AppProps): ReactElement {
       }
       <TitleBar
         onNew={openDraftTab}
+        onOpenRecent={() => setShowRecent(true)}
         onOpenSettings={() => setShowSettings(true)}
         onQuit={quit}
       >
@@ -88,6 +92,7 @@ export function App({ initialData }: AppProps): ReactElement {
           onCloseToLeft={closeTabsToLeft}
           onCloseOthers={closeOtherTabs}
           onNew={openDraftTab}
+          onOpenRecent={() => setShowRecent(true)}
           onOpenSettings={() => setShowSettings(true)}
           isDesktop={update.status !== null}
           onQuit={quit}
@@ -136,6 +141,7 @@ export function App({ initialData }: AppProps): ReactElement {
             onStart={startSession}
             onWorkspaceChanged={handleWorkspaceChanged}
             onDeleteWorkspace={deleteWorkspace}
+            onReopenSession={reopenSession}
             onOpenSettings={() => setShowSettings(true)}
           />
         )}
@@ -145,6 +151,13 @@ export function App({ initialData }: AppProps): ReactElement {
           onThemeChange={setTheme}
           update={update}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+      {showRecent && (
+        <RecentSessionsModal
+          openKeys={new Set(tabs)}
+          onOpen={(key) => void reopenSession(key)}
+          onClose={() => setShowRecent(false)}
         />
       )}
     </div>

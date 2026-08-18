@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import {
+  IconHistory,
   IconMenu2,
   IconPlus,
   IconPower,
@@ -9,6 +10,8 @@ import { useClickOutside } from "../hooks/useClickOutside.ts";
 
 interface AppMenuProps {
   onNew: () => void;
+  /** Open the recent (closed) sessions modal. */
+  onOpenRecent: () => void;
   onOpenSettings: () => void;
   /** Quit the desktop app (shown only when running in the shell). */
   onQuit: () => void;
@@ -18,11 +21,12 @@ interface AppMenuProps {
   buttonClass?: string;
 }
 
-/** Hamburger app menu (新しいタブ / 設定 / 終了). Shown in the desktop
- * title bar next to the window controls, and at the right end of the tab
- * bar in a plain browser. */
+/** Hamburger app menu (新しいタブ / 過去のセッション / 設定 / 終了). Shown
+ * in the desktop title bar next to the window controls, and at the right
+ * end of the tab bar in a plain browser. */
 export function AppMenu({
   onNew,
+  onOpenRecent,
   onOpenSettings,
   onQuit,
   isDesktop,
@@ -77,6 +81,18 @@ export function AppMenu({
             <IconPlus size={14} />
             <span>新しいタブ</span>
             <span className="app-menu-shortcut">Ctrl+T</span>
+          </button>
+          <button
+            type="button"
+            className="app-menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenRecent();
+            }}
+          >
+            <IconHistory size={14} />
+            <span>過去のセッション</span>
           </button>
           <div className="app-menu-sep" role="separator" />
           <button

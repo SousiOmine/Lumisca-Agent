@@ -138,6 +138,9 @@ export const api = {
       body: JSON.stringify(input),
     }),
   getSession: (id: string) => request<SessionInfoDto>(`/api/sessions/${id}`),
+  /** All sessions of this server, newest first (the source of the recent
+   * sessions list). */
+  listSessions: () => request<SessionInfo[]>("/api/sessions"),
   closeSession: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/close`, { method: "POST" }),
   getMessages: (id: string) =>
@@ -378,6 +381,9 @@ export const fed = {
       peerId,
       `/sessions/${encodeURIComponent(sessionId)}/messages`,
     ),
+  /** All sessions of a peer, newest first (for the recent sessions list). */
+  listSessions: (peerId: string) =>
+    fedRequest<SessionInfo[]>(peerId, "/sessions"),
   getTodo: (peerId: string, sessionId: string) =>
     fedRequest<{ todos: TodoPhase[] }>(
       peerId,
