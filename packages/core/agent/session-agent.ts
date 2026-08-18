@@ -17,13 +17,15 @@ import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import { addToolsToAgent, MCP_TOOLS_PROMPT_NOTE } from "../mcp/tools.ts";
+import {
+  addToolsToAgent,
+  appendMcpToolsNote,
+  mcpToolPair,
+} from "../mcp/tools.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
-import { createToolSearchTool } from "../tools/search-tool.ts";
-import { createToolCallTool } from "../tools/call-tool.ts";
 import type { AskHub } from "../tools/ask.ts";
 import type { AskAnswer } from "../shared.ts";
 import type {
@@ -31,6 +33,7 @@ import type {
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { formatBackgroundNotification } from "../tools/background.ts";
+import { notificationMessage } from "../tools/subagent-format.ts";
 import type { TaskHub } from "../tools/task.ts";
 import type {
   NotificationMessage,
@@ -64,15 +67,13 @@ export function isVacantResponse(message: AssistantMessage): boolean {
  * self-contained (no system-prompt prefix contract): the model reads it as
  * a user message telling it its previous response was empty. */
 export function buildRetryNotification(attempt: number): NotificationMessage {
-  return {
-    role: "notification",
+  return notificationMessage({
     kind: "retry",
     title: `Previous response was empty (retry ${attempt})`,
     body:
       "You produced neither text nor a tool call. Continue: respond with text or call a tool.",
     status: "neutral",
-    timestamp: Date.now(),
-  };
+  });
 }
 
 export interface SessionAgentOptions {
@@ -294,14 +295,15 @@ export class SessionAgent {
       this.agent.steer(message);
       return;
     }
-    void this.startSteeredRun(message);
+    void this.startRun(message);
   }
 
-  /** Start a run that carries a steered user message. Mirrors
-   * startBackgroundRun: MCP attachment may still be in flight (a prompt
-   * sent right after session creation), so wait for it; if a run started
-   * concurrently the prompt fails and the message is steered instead. */
-  private async startSteeredRun(message: AgentMessage): Promise<void> {
+  /** Start a run that carries a pre-built message (a user prompt or a
+   * notification). MCP attachment may still be in flight (a prompt sent
+   * right after session creation), so wait for it; if a run started
+   * concurrently, the prompt fails and the message is steered into that run
+   * instead (it is then processed at that run's next turn boundary). */
+  private async startRun(message: AgentMessage): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
     try {
       await this.agent.prompt(message);
@@ -344,11 +346,7 @@ export class SessionAgent {
    * "[Message from ...]") mark system notifications, not user input. */
   private injectNotification(payload: NotificationPayload): void {
     if (this.closed) return;
-    const message: NotificationMessage = {
-      role: "notification",
-      ...payload,
-      timestamp: Date.now(),
-    };
+    const message = notificationMessage(payload);
     if (this.isStreaming) {
       this.agent.steer(message);
       return;
@@ -356,21 +354,10 @@ export class SessionAgent {
     if (!this.mcpReadyDone) {
       // MCP attachment may still be in flight (a very fast command); wait
       // for it, then re-check — a user prompt may have started meanwhile.
-      void this.mcpReady.then(() => this.startBackgroundRun(message));
+      void this.mcpReady.then(() => this.startRun(message));
       return;
     }
-    this.startBackgroundRun(message);
-  }
-
-  /** Start a run that carries a background-completion notification. If a
-   * run started concurrently (e.g. a user prompt), queue instead — the
-   * message is processed at that run's next turn boundary. */
-  private async startBackgroundRun(message: AgentMessage): Promise<void> {
-    try {
-      await this.agent.prompt(message);
-    } catch {
-      this.agent.steer(message);
-    }
+    void this.startRun(message);
   }
 
   /** Convert the transcript for the LLM: notification messages become
@@ -460,13 +447,18 @@ export class SessionAgent {
       (m) => m.role === "user" && m.timestamp === timestamp,
     );
     let removed: Array<{ role: string; timestamp: number }> = [];
-    if (index !== -1) {
-      removed = messages.splice(index).map(({ role, timestamp: ts }) => ({
+    /** Drop everything at `cut` onward from memory and the database,
+     * recording what was removed for the clients. */
+    const truncateFrom = (cut: number) => {
+      removed = messages.splice(cut).map(({ role, timestamp: ts }) => ({
         role,
         timestamp: ts,
       }));
       this.savedCount = messages.length;
-      this.messageRepo.deleteFrom(this.sessionId, index);
+      this.messageRepo.deleteFrom(this.sessionId, cut);
+    };
+    if (index !== -1) {
+      truncateFrom(index);
     } else if (
       messages.every((m) => m.role !== "user" || m.timestamp < timestamp)
     ) {
@@ -474,14 +466,7 @@ export class SessionAgent {
       // yet. It is the newest message, so only messages newer than it
       // (the aborted run's artifacts) follow it in the transcript.
       const cut = messages.findIndex((m) => m.timestamp > timestamp);
-      if (cut !== -1) {
-        removed = messages.splice(cut).map(({ role, timestamp: ts }) => ({
-          role,
-          timestamp: ts,
-        }));
-        this.savedCount = messages.length;
-        this.messageRepo.deleteFrom(this.sessionId, cut);
-      }
+      if (cut !== -1) truncateFrom(cut);
       // The steer itself has no transcript row, but clients were already
       // told about it (synthetic message events) — include it in the
       // deletion notice so they drop it from the view too.
@@ -564,13 +549,10 @@ export class SessionAgent {
     // sub-agent hub), so a config change that swaps the registry would
     // redirect it — though the main agent is rebuilt on config changes
     // anyway.
-    addToolsToAgent(this.agent, [
-      createToolSearchTool(() => this.toolRegistry!),
-      createToolCallTool(() => this.toolRegistry!),
-    ]);
-    if (!this.agent.state.systemPrompt.includes("tool_search")) {
-      this.agent.state.systemPrompt += MCP_TOOLS_PROMPT_NOTE;
-    }
+    addToolsToAgent(this.agent, mcpToolPair(() => this.toolRegistry!));
+    this.agent.state.systemPrompt = appendMcpToolsNote(
+      this.agent.state.systemPrompt,
+    );
   }
 
   async waitForIdle(): Promise<void> {

@@ -5,6 +5,7 @@ import {
   contentText,
   type LumiscaCore,
 } from "@lumisca/core";
+import { parseFlags } from "./flags.ts";
 
 /** Options of the `lumisca run` command (one-shot headless execution). */
 export interface RunOptions {
@@ -37,72 +38,36 @@ const RUN_SESSION_PREFIX = "Run ";
 /** Parse `lumisca run` flags. Throws with a usage message on invalid
  * input. */
 export function parseRunArgs(args: string[]): RunOptions {
+  const { values, switches } = parseFlags(
+    args,
+    [
+      { name: "db", hasValue: true },
+      { name: "workspace", hasValue: true },
+      { name: "prompt", hasValue: true },
+      { name: "model", hasValue: true },
+      { name: "json" },
+      { name: "help", alias: "-h" },
+    ],
+    () => {
+      throw new HelpRequested();
+    },
+  );
   const opts: RunOptions = {
-    dbPath: Deno.env.get("LUMISCA_DB") ?? `${Deno.cwd()}/lumisca.db`,
-    workspacePath: Deno.cwd(),
+    dbPath: values.db ??
+      Deno.env.get("LUMISCA_DB") ?? `${Deno.cwd()}/lumisca.db`,
+    workspacePath: values.workspace ?? Deno.cwd(),
     prompt: "",
-    json: false,
+    json: switches.has("json"),
   };
-  let promptArg: string | undefined;
-
-  // Flag names this parser knows. flagValue treats a following known flag
-  // as a missing value, but accepts other "--"-prefixed text as a value
-  // (e.g. --prompt "--foo").
-  const KNOWN_FLAGS = new Set([
-    "--db",
-    "--workspace",
-    "--prompt",
-    "--model",
-    "--json",
-    "--help",
-    "-h",
-  ]);
-
-  const flagValue = (flag: string, i: number): string => {
-    const value = args[i + 1];
-    if (value === undefined || KNOWN_FLAGS.has(value)) {
-      throw new Error(`--${flag} には値が必要です`);
+  if (values.model !== undefined) {
+    if (!values.model.includes("/")) {
+      throw new Error(
+        `--model は "プロバイダ/モデルID" の形式で指定してください (例: custom/deepseek-chat)`,
+      );
     }
-    return value;
-  };
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
-    // `deno task cli run -- <flags>` inserts a "--" separator; skip it.
-    // This command has no positional arguments, so "--" carries no
-    // further meaning — flags after it are parsed normally.
-    if (arg === "--") continue;
-    switch (arg) {
-      case "--db":
-        opts.dbPath = flagValue("db", i++);
-        break;
-      case "--workspace":
-        opts.workspacePath = flagValue("workspace", i++);
-        break;
-      case "--prompt":
-        promptArg = flagValue("prompt", i++);
-        break;
-      case "--model": {
-        const value = flagValue("model", i++);
-        if (!value.includes("/")) {
-          throw new Error(
-            `--model は "プロバイダ/モデルID" の形式で指定してください (例: custom/deepseek-chat)`,
-          );
-        }
-        opts.model = value;
-        break;
-      }
-      case "--json":
-        opts.json = true;
-        break;
-      case "--help":
-      case "-h":
-        throw new HelpRequested();
-      default:
-        throw new Error(`不明な引数: ${arg}`);
-    }
+    opts.model = values.model;
   }
-
+  const promptArg = values.prompt;
   if (promptArg !== undefined) {
     opts.prompt = promptArg;
   } else if (Deno.stdin.isTerminal()) {

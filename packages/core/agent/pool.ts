@@ -65,12 +65,66 @@ export interface SessionPoolDeps {
   emit(event: ClientEvent): void;
 }
 
-/** True when two merged configs describe the same servers (the merge keeps
- * a stable insertion order). A rebuild with an unchanged config reuses the
- * session's MCP attachment — and its server processes — instead of
- * respawning them. */
+/** True when two merged configs describe the same servers, comparing their
+ * canonical (key-sorted) JSON so a settings round-trip that reorders fields
+ * does not spuriously tear down and respawn MCP server processes. */
 function sameMcpConfig(a: McpConfig, b: McpConfig): boolean {
-  return JSON.stringify(a.servers) === JSON.stringify(b.servers);
+  return stableJson(a.servers) === stableJson(b.servers);
+}
+
+/** Key-sorted JSON (recursively), so equality is independent of object key
+ * order. Used by sameMcpConfig for small configs only. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map((key) =>
+        `${JSON.stringify(key)}:${
+          stableJson(
+            (value as Record<string, unknown>)[key],
+          )
+        }`
+      );
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Everything one open session owns, keyed by session id. Consolidating the
+ * per-session runtime state into one struct means a future resource is one
+ * field here (and one clear in close/closeAll) instead of another parallel
+ * map that must be kept in lockstep. */
+interface SessionResources {
+  /** The live agent (replaced on rebuild; absent when closed). */
+  agent?: SessionAgent;
+  /** Background-command manager. Owned by the pool (not the agent) so
+   * background commands survive agent rebuilds — model and workspace
+   * changes rebuild the agent while the session stays open, and the
+   * commands must keep running. Stopped when the session closes. */
+  background?: BackgroundProcessManager;
+  /** Todo hub, with the same rebuild-survival reason as `background`. */
+  todos?: TodoHub;
+  /** Task hub, with the same rebuild-survival reason as `background`
+   * (sub-agents run independently of the agent run). Aborted on close. */
+  tasks?: TaskHub;
+  /** Shared MCP attachment: its server processes serve every agent of the
+   * session — the main agent and the sub-agents — and survive agent
+   * rebuilds while the merged config is unchanged. Closed on close. */
+  mcp?: McpAttachment;
+  /** Tool registry (MCP tools discoverable via tool_search/call), rebuilt
+   * together with the attachment when the config changes. */
+  registry?: ToolRegistry;
+  /** The last failure of the session, if any (cleared when a new run
+   * starts). Lets non-WebSocket clients learn about failures of
+   * fire-and-forget prompts. */
+  lastError?: string;
+  /** Whether the session is open with `headless: true` (the CLI `run` path).
+   * Not persisted, but must survive agent rebuilds. Set on every open()
+   * (a plain reopen clears it). */
+  headless: boolean;
 }
 
 /**
@@ -79,53 +133,16 @@ function sameMcpConfig(a: McpConfig, b: McpConfig): boolean {
  * of LumiscaCore so the core stays a thin facade over the repositories.
  */
 export class SessionPool {
-  private readonly agents = new Map<
-    string,
-    SessionAgent
-  >(); /** Background-command managers, one per open session. Owned by the pool
-   * (not the agent) so background commands survive agent rebuilds — model
-   * and workspace changes rebuild the agent while the session stays open,
-   * and the commands must keep running. They are stopped when the session
-   * closes (close/delete/closeAll). */
-
-  private readonly background = new Map<string, BackgroundProcessManager>();
-  /** Todo hubs, one per open session. Owned by the pool (not the agent) so
-   * the plan survives agent rebuilds — the same reason as `background`.
-   * Discarded when the session closes (close/delete/closeAll). */
-  private readonly todos = new Map<string, TodoHub>();
-  /** Task hubs, one per open session. Owned by the pool (not the agent) so
-   * sub-agents survive agent rebuilds — they run independently of the agent
-   * run, like background commands. All sub-agents are aborted when the
-   * session closes (close/delete/closeAll). */
-  private readonly tasks = new Map<string, TaskHub>();
-  /** Shared MCP attachments, one per open session. Owned by the pool (not
-   * the agent) so the server processes serve every agent of the session —
-   * the main agent and the sub-agents — and survive agent rebuilds while
-   * the merged config is unchanged. Closed when the session closes
-   * (close/delete/closeAll). */
-  private readonly mcp = new Map<string, McpAttachment>();
-  /** Tool registries, one per open session, with the same lifecycle as the
-   * MCP attachment: rebuilt together with it on config changes, discarded
-   * on close. Holds every tool that is discoverable through tool_search
-   * instead of being preloaded into the LLM context (MCP tools today,
-   * future extension tools via addTools). */
-  private readonly registries = new Map<string, ToolRegistry>();
-  private readonly lastErrors = new Map<string, string>();
-  /** Sessions currently open with `headless: true` (the CLI `run` path).
-   * The flag is not persisted, but it must survive agent rebuilds (model
-   * / thinking-level / MCP / workspace changes) — a rebuild re-opens the
-   * agent and would otherwise lose the auto-answer behavior. Updated on
-   * every open() call (a normal reopen clears it) and on close. */
-  private readonly headlessSessions = new Set<string>();
+  private readonly sessions = new Map<string, SessionResources>();
 
   constructor(private readonly deps: SessionPoolDeps) {}
 
   get(id: string): SessionAgent | undefined {
-    return this.agents.get(id);
+    return this.sessions.get(id)?.agent;
   }
 
   require(id: string): SessionAgent {
-    const agent = this.agents.get(id);
+    const agent = this.sessions.get(id)?.agent;
     if (!agent) {
       throw new CoreError(`Session is not open: ${id}`, "not_found");
     }
@@ -136,7 +153,7 @@ export class SessionPool {
    * Lets non-WebSocket clients (curl, the desktop shell) learn about
    * failures of fire-and-forget prompts instead of losing them. */
   lastError(id: string): string | undefined {
-    return this.lastErrors.get(id);
+    return this.sessions.get(id)?.lastError;
   }
 
   /** The session's current todo plan (the todo tool); empty when the
@@ -144,14 +161,14 @@ export class SessionPool {
    * progress panel after a WS drop or page reload — todo events are
    * snapshots, but only mutations emit them, so they are not replayed. */
   getTodo(id: string): TodoPhase[] {
-    return this.todos.get(id)?.getPlan() ?? [];
+    return this.sessions.get(id)?.todos?.getPlan() ?? [];
   }
 
   /** Snapshots of the session's sub-agent tasks (the task tool); empty
    * when the session is not open or has no tasks yet. Restores the tasks
    * panel after a WS drop or page reload (task events are not replayed). */
   getTasks(id: string): TaskInfo[] {
-    return this.tasks.get(id)?.list() ?? [];
+    return this.sessions.get(id)?.tasks?.list() ?? [];
   }
 
   /** Snapshots of the session's background commands (the async_bash tool);
@@ -159,7 +176,7 @@ export class SessionPool {
    * the background panel after a WS drop or page reload (background events
    * are not replayed). */
   getBackground(id: string): BackgroundCommandInfo[] {
-    return this.background.get(id)?.list() ?? [];
+    return this.sessions.get(id)?.background?.list() ?? [];
   }
 
   /** Build the agent of a session (replacing any existing one) and keep it
@@ -179,14 +196,6 @@ export class SessionPool {
     messages: AgentMessage[],
     options: { headless?: boolean } = {},
   ): SessionAgent {
-    // Track the headless flag per session (see headlessSessions): it is a
-    // runtime property of the open agent, so an explicit headless open
-    // records it and a plain reopen (openSession) clears it.
-    if (options.headless) {
-      this.headlessSessions.add(session.id);
-    } else {
-      this.headlessSessions.delete(session.id);
-    }
     const model = this.deps.getModel(session.modelProvider, session.modelId);
     if (!model) {
       throw new CoreError(
@@ -194,6 +203,14 @@ export class SessionPool {
         "not_found",
       );
     }
+    const resources: SessionResources = this.sessions.get(session.id) ?? {
+      headless: false,
+    };
+    // A new open records the current headless flag (an explicit headless
+    // open sets it, a plain reopen clears it). Recorded only after the
+    // model check above so a failed open leaves no stale state behind.
+    resources.headless = options.headless ?? false;
+
     // One shared MCP attachment per session: its server processes serve
     // every agent of the session (the main agent and the sub-agents) and
     // survive agent rebuilds while the merged config is unchanged. A
@@ -201,21 +218,21 @@ export class SessionPool {
     // processes. Config errors and failed servers are reported once per
     // attachment, so a rebuild must not re-report them.
     const mergedMcp = this.deps.loadMergedMcp(workspace);
-    let mcp = this.mcp.get(session.id);
+    let mcp = resources.mcp;
     if (mcp === undefined || !sameMcpConfig(mcp.config, mergedMcp.config)) {
       const previous = mcp;
       mcp = new McpAttachment(
         new McpManager(mergedMcp.config, workspace.folders[0] ?? Deno.cwd()),
         mergedMcp.config,
       );
-      this.mcp.set(session.id, mcp);
+      resources.mcp = mcp;
       // A config change builds fresh tools, so the registry is rebuilt
       // with the attachment — stale tools must not survive it. A rebuild
       // with an unchanged config reuses both.
-      this.registries.set(session.id, new ToolRegistry());
+      resources.registry = new ToolRegistry();
       if (previous !== undefined) void previous.manager.close();
       const emitError = (message: string) => {
-        this.lastErrors.set(session.id, message);
+        resources.lastError = message;
         this.deps.emit({
           type: "session_error",
           sessionId: session.id,
@@ -225,6 +242,10 @@ export class SessionPool {
       for (const message of mergedMcp.errors) emitError(message);
       const attachment = mcp;
       void attachment.ready.then(() => {
+        // The session may have been closed or rebuilt (with a new
+        // attachment) while discovery ran; only report for the attachment
+        // the session still holds.
+        if (this.sessions.get(session.id)?.mcp !== attachment) return;
         const failed = attachment.manager
           .getStatus()
           .filter((s) => s.status === "error");
@@ -241,19 +262,19 @@ export class SessionPool {
     // reused across agent rebuilds so the session's discoverable tools
     // survive them. The main agent's attachMcp fills it once discovery
     // finishes; every agent of the session searches it.
-    const registry = this.registries.get(session.id)!;
+    const registry = resources.registry!;
     // Reuse the session's manager when one exists (agent rebuild); create
     // it on first open. Shared by the async_bash tools and the session
     // agent: the tools start/check/kill commands, the agent turns
     // completions into notifications. Commands die with the session (pool
     // close/delete/closeAll → killAll), not with the agent.
-    let background = this.background.get(session.id);
-    if (!background) {
+    let background = resources.background;
+    if (background === undefined) {
       background = new BackgroundProcessManager({
         sessionId: session.id,
         emit: (event) => this.deps.emit(event),
       });
-      this.background.set(session.id, background);
+      resources.background = background;
     }
     // One hub per open agent: it holds the questions of the live run, so a
     // rebuild (which closes the old agent first) starts with a clean slate.
@@ -264,10 +285,10 @@ export class SessionPool {
     // Reuse the session's todo hub when one exists (agent rebuild): the
     // plan is the session's progress, not the agent's, so it must survive.
     // Created on first open; discarded when the session closes.
-    let todo = this.todos.get(session.id);
-    if (!todo) {
+    let todo = resources.todos;
+    if (todo === undefined) {
       todo = new TodoHub(session.id, (event) => this.deps.emit(event));
-      this.todos.set(session.id, todo);
+      resources.todos = todo;
     }
     // Sub-agents run on the fast model when configured, otherwise on the
     // session model; the thinking level follows the chosen model's stored
@@ -298,8 +319,8 @@ export class SessionPool {
         ),
       };
     };
-    let tasks = this.tasks.get(session.id);
-    if (!tasks) {
+    let tasks = resources.tasks;
+    if (tasks === undefined) {
       tasks = new TaskHub({
         sessionId: session.id,
         resolveRuntime: runtimeResolver,
@@ -307,7 +328,7 @@ export class SessionPool {
         safety: this.deps.commandSafety,
         emit: (event: ClientEvent) => this.deps.emit(event),
       });
-      this.tasks.set(session.id, tasks);
+      resources.tasks = tasks;
     } else {
       tasks.setRuntimeResolver(runtimeResolver);
     }
@@ -358,15 +379,16 @@ export class SessionPool {
         // Remember failures for clients that do not see the WS stream;
         // a new run clears the stale error.
         if (event.type === "session_error") {
-          this.lastErrors.set(event.sessionId, event.message);
+          resources.lastError = event.message;
         } else if (event.type === "agent_start") {
-          this.lastErrors.delete(event.sessionId);
+          resources.lastError = undefined;
         }
         this.deps.emit(event);
       },
     });
     agent.attachMcp(mcp);
-    this.agents.set(session.id, agent);
+    resources.agent = agent;
+    this.sessions.set(session.id, resources);
     return agent;
   }
 
@@ -375,85 +397,63 @@ export class SessionPool {
    * server processes, and discard its todo plan. The persisted session
    * stays; openSession rebuilds it with fresh managers and an empty plan. */
   close(id: string): void {
-    this.agents.get(id)?.close();
-    this.agents.delete(id);
-    this.background.get(id)?.killAll();
-    this.background.delete(id);
-    this.todos.delete(id);
-    this.tasks.get(id)?.close();
-    this.tasks.delete(id);
-    this.headlessSessions.delete(id);
-    void this.mcp.get(id)?.manager.close();
-    this.mcp.delete(id);
-    this.registries.delete(id);
+    const resources = this.sessions.get(id);
+    if (!resources) return;
+    resources.agent?.close();
+    resources.background?.killAll();
+    resources.tasks?.close();
+    void resources.mcp?.manager.close();
+    this.sessions.delete(id);
   }
 
   /** Close and forget a session entirely (persisted rows are deleted by
    * the caller). */
   delete(id: string): void {
     this.close(id);
-    this.lastErrors.delete(id);
   }
 
   /** Close every agent, stop every background command, abort every
    * sub-agent, and tear down every MCP attachment (core shutdown). */
   closeAll(): void {
-    for (const agent of this.agents.values()) {
-      agent.close();
+    for (const resources of this.sessions.values()) {
+      resources.agent?.close();
+      resources.background?.killAll();
+      resources.tasks?.close();
+      void resources.mcp?.manager.close();
     }
-    for (const manager of this.background.values()) {
-      manager.killAll();
+    this.sessions.clear();
+  }
+
+  /** The shared "session is streaming" guard behind every configuration
+   * change that rebuilds agents. */
+  private assertNotStreaming(id: string): void {
+    if (this.sessions.get(id)?.agent?.isStreaming) {
+      throw new CoreError(`Session is already running: ${id}`, "conflict");
     }
-    for (const tasks of this.tasks.values()) {
-      tasks.close();
-    }
-    for (const mcp of this.mcp.values()) {
-      void mcp.manager.close();
-    }
-    this.agents.clear();
-    this.background.clear();
-    this.todos.clear();
-    this.tasks.clear();
-    this.mcp.clear();
-    this.registries.clear();
-    this.headlessSessions.clear();
-    this.lastErrors.clear();
   }
 
   /** Rebuild the agent of an open session. The old agent is never replaced
    * while streaming: the running loop would keep executing against the
    * same message array and duplicate DB rows. */
   rebuild(session: SessionInfo): void {
+    const resources = this.sessions.get(session.id);
+    if (resources?.agent === undefined) return;
+    this.assertNotStreaming(session.id);
+    const current = resources.agent;
     const workspace = this.deps.requireWorkspace(session.workspaceId);
-    const current = this.agents.get(session.id);
-    if (current) {
-      if (current.isStreaming) {
-        throw new CoreError(
-          `Session is already running: ${session.id}`,
-          "conflict",
-        );
-      }
-      const messages = current.messages;
-      const headless = this.headlessSessions.has(session.id);
-      current.close(); // also releases the old agent's MCP servers
-      this.agents.delete(session.id);
-      this.agents.set(
-        session.id,
-        this.open(session, workspace, messages, { headless }),
-      );
-    }
+    const messages = current.messages;
+    const headless = resources.headless;
+    current.close(); // also releases the old agent's MCP servers
+    this.open(session, workspace, messages, { headless });
   }
 
   /** Refuse configuration changes while any listed session is streaming,
-   * apply the mutation, then rebuild every affected agent. */
+   * apply the mutation, then rebuild every affected agent. The streaming
+   * checks and the mutation run in the same synchronous turn (no awaits in
+   * between), so a prompt cannot start mid-apply. */
   applyChange(sessions: SessionInfo[], mutate: () => void): void {
     for (const session of sessions) {
-      if (this.agents.get(session.id)?.isStreaming) {
-        throw new CoreError(
-          `Session is already running: ${session.id}`,
-          "conflict",
-        );
-      }
+      this.assertNotStreaming(session.id);
     }
     mutate();
     for (const session of sessions) {

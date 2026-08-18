@@ -15,7 +15,10 @@ import type { Sandbox } from "../workspace/sandbox.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { getShell } from "./shell.ts";
+import { requireResolved } from "./resolve.ts";
+import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
+import { CoreError } from "../errors.ts";
 import type {
   NotificationPayload,
   NotificationStatus,
@@ -219,8 +222,9 @@ export class BackgroundProcessManager {
     env?: Record<string, string>;
   }): { commandId: string; pid: number } {
     if (this.records.size >= MAX_BACKGROUND_COMMANDS) {
-      throw new Error(
+      throw new CoreError(
         `Too many background commands (max ${MAX_BACKGROUND_COMMANDS}): wait for one to finish or kill it first`,
+        "unavailable",
       );
     }
     const commandId = String(this.nextId++);
@@ -322,7 +326,10 @@ export class BackgroundProcessManager {
       if (this.completed.some((c) => c.commandId === commandId)) {
         return { ok: true, alreadyExited: true, timedOut: false };
       }
-      throw new Error(`Unknown background command: ${commandId}`);
+      throw new CoreError(
+        `Unknown background command: ${commandId}`,
+        "not_found",
+      );
     }
     if (record.finalized || record.info.state !== "running") {
       return { ok: true, alreadyExited: true, timedOut: false };
@@ -562,27 +569,16 @@ export function createAsyncBashTools(
       "/bin/sh.",
     parameters: startSchema,
     execute: async (_id, params) => {
-      const resolved = await sandbox.resolve(params.cwd);
-      if (!resolved.ok) throw new Error(resolved.reason);
-      if (safety !== undefined) {
-        const verdict = await safety.check(
-          "bash",
-          params.command,
-          resolved.path,
-        );
-        if (!verdict.ok) {
-          return {
-            content: [{
-              type: "text",
-              text: "[blocked by safety check]\n" +
-                (verdict.reason ?? "The command was judged unsafe."),
-            }],
-            details: { blocked: true, reason: verdict.reason ?? "" },
-          };
-        }
-      }
+      const cwd = await requireResolved(sandbox, params.cwd);
+      const blocked = await safetyBlockResult(
+        safety,
+        "bash",
+        params.command,
+        cwd,
+      );
+      if (blocked !== undefined) return blocked;
       const { commandId, pid } = await manager.start({
-        cwd: resolved.path,
+        cwd,
         command: params.command,
         timeoutSec: params.timeout,
         env: params.env,
@@ -591,11 +587,11 @@ export function createAsyncBashTools(
         content: [{
           type: "text",
           text: `Started background command #${commandId} (pid ${pid}) in ` +
-            `${resolved.path}: ${params.command}\nIt keeps running after ` +
+            `${cwd}: ${params.command}\nIt keeps running after ` +
             "this run; check it with async_bash_status, stop it with " +
             "async_bash_kill.",
         }],
-        details: { commandId, pid, cwd: resolved.path },
+        details: { commandId, pid, cwd },
       };
     },
   };
@@ -629,7 +625,12 @@ export function createAsyncBashTools(
         };
       }
       const info = manager.get(params.id);
-      if (!info) throw new Error(`Unknown background command: ${params.id}`);
+      if (!info) {
+        throw new CoreError(
+          `Unknown background command: ${params.id}`,
+          "not_found",
+        );
+      }
       const tail = (await manager.tail(params.id)) ?? "";
       return {
         content: [{ type: "text", text: formatStatusText(info, tail) }],

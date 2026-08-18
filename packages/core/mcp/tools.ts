@@ -2,6 +2,9 @@ import type { Agent } from "@earendil-works/pi-agent-core";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { Tool } from "../tools/schema.ts";
 import type { McpManager, McpToolDef } from "./manager.ts";
+import type { ToolRegistry } from "../tools/registry.ts";
+import { createToolSearchTool } from "../tools/search-tool.ts";
+import { createToolCallTool } from "../tools/call-tool.ts";
 import { object } from "../tools/schema.ts";
 
 /** Argument schemas larger than this are omitted from the description. */
@@ -46,6 +49,24 @@ export function addToolsToAgent(agent: Agent, tools: Tool[]): void {
   const added = tools.filter((tool) => !existing.has(tool.name));
   if (added.length === 0) return;
   agent.state.tools.push(...added.map(toAgentTool));
+}
+
+/** The tool_search / tool_call pair over a registry provider: the only MCP
+ * surface the LLM ever sees. Shared by the session agent and the sub-agent
+ * hub so the pair cannot drift. */
+export function mcpToolPair(getRegistry: () => ToolRegistry): Tool[] {
+  return [
+    createToolSearchTool(getRegistry),
+    createToolCallTool(getRegistry),
+  ];
+}
+
+/** Append the MCP tools note to a system prompt unless already present
+ * (appending only once keeps the prompt's prefix-cache block stable). */
+export function appendMcpToolsNote(systemPrompt: string): string {
+  return systemPrompt.includes("tool_search")
+    ? systemPrompt
+    : systemPrompt + MCP_TOOLS_PROMPT_NOTE;
 }
 
 function createMcpTool(manager: McpManager, def: McpToolDef): Tool {

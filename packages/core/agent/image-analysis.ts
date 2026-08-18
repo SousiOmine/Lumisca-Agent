@@ -5,6 +5,7 @@ import type {
   TextContent,
 } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
+import { streamText } from "./stream-text.ts";
 
 /** System prompt for the image analysis model: it must produce a
  * description complete enough for a text-only model to work from. */
@@ -86,26 +87,22 @@ export class ImageAnalyzer {
   private async analyze(image: ImageContent): Promise<string> {
     // No reasoning option: the agent loop maps "off" to undefined the same
     // way, so this matches how the session's thinking level is passed.
-    const stream = await this.streamFn(this.model, {
-      systemPrompt: ANALYSIS_SYSTEM_PROMPT,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "text", text: "Describe this image in detail." },
-          { type: "image", data: image.data, mimeType: image.mimeType },
-        ],
-        timestamp: Date.now(),
-      }],
-    });
-
-    let text = "";
-    for await (const event of stream) {
-      if (event.type === "text_delta") {
-        text += event.delta;
-      } else if (event.type === "error") {
-        throw new Error(event.error.errorMessage ?? "image analysis failed");
-      }
-    }
+    const text = await streamText(
+      this.streamFn,
+      this.model,
+      {
+        systemPrompt: ANALYSIS_SYSTEM_PROMPT,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Describe this image in detail." },
+            { type: "image", data: image.data, mimeType: image.mimeType },
+          ],
+          timestamp: Date.now(),
+        }],
+      },
+      "image analysis failed",
+    );
     const trimmed = text.trim();
     if (!trimmed) throw new Error("image analysis returned no text");
     return trimmed;

@@ -51,6 +51,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Federated request: `/api/fed/:peerId*` is one generic proxy of the local
+ * API surface (see server/routes/federation.ts), so any local path
+ * (e.g. "/workspaces") can be addressed on a peer by adding its id. */
+function fedRequest<T>(
+  peerId: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  return request<T>(`/api/fed/${encodeURIComponent(peerId)}${path}`, init);
+}
+
+/** Bind one API call to a peer or this server: `local` runs against this
+ * server (peerId === ""), `remote` against the peer. Used by the per-session
+ * / workspace / model dispatchers so each method is a one-liner instead of
+ * an if/else mirror. */
+function peerRouted<T, A extends unknown[]>(
+  peerId: string,
+  local: (...args: A) => Promise<T>,
+  remote: (peerId: string, ...args: A) => Promise<T>,
+): (...args: A) => Promise<T> {
+  return (...args) => peerId === "" ? local(...args) : remote(peerId, ...args);
+}
+
 /** Session info as served by the API: includes the last run error, if any. */
 export type SessionInfoDto = SessionInfo & { lastError?: string };
 
@@ -289,7 +312,9 @@ export const api = {
 };
 
 /** Federated (hub-and-spoke) API: resources owned by a peer server. The
- * agent runs on the peer; the hub only proxies. */
+ * agent runs on the peer; the hub only proxies. Every method here mirrors a
+ * local `api.*` method through the single `/api/fed/:peerId` proxy (paths
+ * are the "/api"-relative form with the peer id added by fedRequest). */
 export const fed = {
   /** Merged workspace list (hub + peers) with peer reachability. */
   workspaces: () =>
@@ -297,7 +322,7 @@ export const fed = {
       "/api/fed/workspaces",
     ),
   createWorkspace: (peerId: string, name: string, folders: string[]) =>
-    request<Workspace>(`/api/fed/${peerId}/workspaces`, {
+    fedRequest<Workspace>(peerId, "/workspaces", {
       method: "POST",
       body: JSON.stringify({ name, folders }),
     }),
@@ -306,81 +331,95 @@ export const fed = {
     id: string,
     input: { name?: string; folders?: string[] },
   ) =>
-    request<Workspace>(`/api/fed/${peerId}/workspaces/${id}`, {
+    fedRequest<Workspace>(peerId, `/workspaces/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
   deleteWorkspace: (peerId: string, id: string) =>
-    request<{ ok: boolean }>(`/api/fed/${peerId}/workspaces/${id}`, {
-      method: "DELETE",
-    }),
-  fsRoots: (peerId: string) => request<string[]>(`/api/fed/${peerId}/fs/roots`),
+    fedRequest<{ ok: boolean }>(
+      peerId,
+      `/workspaces/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+  fsRoots: (peerId: string) => fedRequest<string[]>(peerId, "/fs/roots"),
   fsBrowse: (peerId: string, path: string) =>
-    request<
+    fedRequest<
       {
         path: string;
         parent: string | null;
         entries: Array<{ name: string; path: string }>;
       }
     >(
-      `/api/fed/${peerId}/fs/browse?path=${encodeURIComponent(path)}`,
+      peerId,
+      `/fs/browse?path=${encodeURIComponent(path)}`,
     ),
   workspaceFiles: (peerId: string, workspaceId: string, query: string) =>
-    request<{ entries: WorkspaceFileEntry[] }>(
-      `/api/fed/${peerId}/workspaces/${
-        encodeURIComponent(workspaceId)
-      }/files?query=${encodeURIComponent(query)}`,
+    fedRequest<{ entries: WorkspaceFileEntry[] }>(
+      peerId,
+      `/workspaces/${encodeURIComponent(workspaceId)}/files?query=${
+        encodeURIComponent(query)
+      }`,
     ),
   createSession: (peerId: string, input: {
     workspaceId: string;
     name?: string;
   }) =>
-    request<SessionInfo>(`/api/fed/${peerId}/sessions`, {
+    fedRequest<SessionInfo>(peerId, "/sessions", {
       method: "POST",
       body: JSON.stringify(input),
     }),
   getSession: (peerId: string, sessionId: string) =>
-    request<SessionInfoDto>(`/api/fed/${peerId}/sessions/${sessionId}`),
+    fedRequest<SessionInfoDto>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}`,
+    ),
   getMessages: (peerId: string, sessionId: string) =>
-    request<AgentMessage[]>(
-      `/api/fed/${peerId}/sessions/${sessionId}/messages`,
+    fedRequest<AgentMessage[]>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/messages`,
     ),
   getTodo: (peerId: string, sessionId: string) =>
-    request<{ todos: TodoPhase[] }>(
-      `/api/fed/${peerId}/sessions/${sessionId}/todo`,
+    fedRequest<{ todos: TodoPhase[] }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/todo`,
     ),
   getTasks: (peerId: string, sessionId: string) =>
-    request<{ tasks: TaskInfo[] }>(
-      `/api/fed/${peerId}/sessions/${sessionId}/tasks`,
+    fedRequest<{ tasks: TaskInfo[] }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/tasks`,
     ),
   getBackground: (peerId: string, sessionId: string) =>
-    request<{ backgrounds: BackgroundCommandInfo[] }>(
-      `/api/fed/${peerId}/sessions/${sessionId}/background`,
+    fedRequest<{ backgrounds: BackgroundCommandInfo[] }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/background`,
     ),
   closeSession: (peerId: string, sessionId: string) =>
-    request<{ ok: boolean }>(`/api/fed/${peerId}/sessions/${sessionId}/close`, {
-      method: "POST",
-    }),
+    fedRequest<{ ok: boolean }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/close`,
+      { method: "POST" },
+    ),
   prompt: (
     peerId: string,
     sessionId: string,
     text: string,
     images?: PendingImage[],
   ) =>
-    request<{ ok: boolean }>(
-      `/api/fed/${peerId}/sessions/${sessionId}/prompt`,
-      {
-        method: "POST",
-        body: JSON.stringify(promptBody(text, images)),
-      },
+    fedRequest<{ ok: boolean }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/prompt`,
+      { method: "POST", body: JSON.stringify(promptBody(text, images)) },
     ),
   abort: (peerId: string, sessionId: string) =>
-    request<{ ok: boolean }>(`/api/fed/${peerId}/sessions/${sessionId}/abort`, {
-      method: "POST",
-    }),
+    fedRequest<{ ok: boolean }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/abort`,
+      { method: "POST" },
+    ),
   rewind: (peerId: string, sessionId: string, timestamp: number) =>
-    request<{ ok: boolean }>(
-      `/api/fed/${peerId}/sessions/${sessionId}/rewind`,
+    fedRequest<{ ok: boolean }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/rewind`,
       { method: "POST", body: JSON.stringify({ timestamp }) },
     ),
   /** Answer a pending ask of a remote session (the agent runs on the peer;
@@ -391,8 +430,9 @@ export const fed = {
     toolCallId: string,
     answers: AskAnswer[],
   ) =>
-    request<{ ok: boolean }>(
-      `/api/fed/${peerId}/sessions/${sessionId}/answer`,
+    fedRequest<{ ok: boolean }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/answer`,
       { method: "POST", body: JSON.stringify({ toolCallId, answers }) },
     ),
   updateSessionModel: (
@@ -401,16 +441,18 @@ export const fed = {
     provider: string,
     modelId: string,
   ) =>
-    request<SessionInfo>(`/api/fed/${peerId}/sessions/${sessionId}/model`, {
-      method: "POST",
-      body: JSON.stringify({ provider, modelId }),
-    }),
+    fedRequest<SessionInfo>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/model`,
+      { method: "POST", body: JSON.stringify({ provider, modelId }) },
+    ),
   /** The peer's providers/models (model picker data for remote sessions). */
   listProviders: (peerId: string) =>
-    request<ProviderInfo[]>(`/api/fed/${peerId}/providers`),
+    fedRequest<ProviderInfo[]>(peerId, "/providers"),
   listModels: (peerId: string, providerId: string) =>
-    request<ModelInfo[]>(
-      `/api/fed/${peerId}/providers/${encodeURIComponent(providerId)}/models`,
+    fedRequest<ModelInfo[]>(
+      peerId,
+      `/providers/${encodeURIComponent(providerId)}/models`,
     ),
   setModelThinkingLevel: (
     peerId: string,
@@ -418,8 +460,9 @@ export const fed = {
     modelId: string,
     level: ThinkingLevel,
   ) =>
-    request<{ ok: boolean; thinkingLevel: ThinkingLevel }>(
-      `/api/fed/${peerId}/providers/${encodeURIComponent(providerId)}/models/${
+    fedRequest<{ ok: boolean; thinkingLevel: ThinkingLevel }>(
+      peerId,
+      `/providers/${encodeURIComponent(providerId)}/models/${
         encodeURIComponent(modelId)
       }/thinking-level`,
       { method: "PUT", body: JSON.stringify({ level }) },
@@ -430,93 +473,129 @@ export const fed = {
  * server). Every call targets the machine running the agent. */
 export function sessionApi(key: string) {
   const { peerId, sessionId } = splitTabKey(key);
-  if (peerId === "") {
-    return {
-      peerId,
-      sessionId,
-      getSession: () => api.getSession(sessionId),
-      getMessages: () => api.getMessages(sessionId),
-      getTodo: () => api.getTodo(sessionId),
-      getTasks: () => api.getTasks(sessionId),
-      getBackground: () => api.getBackground(sessionId),
-      close: () => api.closeSession(sessionId),
-      prompt: (text: string, images?: PendingImage[]) =>
-        api.prompt(sessionId, text, images),
-      abort: () => api.abort(sessionId),
-      rewind: (timestamp: number) => api.rewind(sessionId, timestamp),
-      answer: (toolCallId: string, answers: AskAnswer[]) =>
-        api.answer(sessionId, toolCallId, answers),
-      updateModel: (provider: string, modelId: string) =>
-        api.updateSessionModel(sessionId, provider, modelId),
-    };
-  }
   return {
     peerId,
     sessionId,
-    getSession: () => fed.getSession(peerId, sessionId),
-    getMessages: () => fed.getMessages(peerId, sessionId),
-    getTodo: () => fed.getTodo(peerId, sessionId),
-    getTasks: () => fed.getTasks(peerId, sessionId),
-    getBackground: () => fed.getBackground(peerId, sessionId),
-    close: () => fed.closeSession(peerId, sessionId),
-    prompt: (text: string, images?: PendingImage[]) =>
-      fed.prompt(peerId, sessionId, text, images),
-    abort: () => fed.abort(peerId, sessionId),
-    rewind: (timestamp: number) => fed.rewind(peerId, sessionId, timestamp),
-    answer: (toolCallId: string, answers: AskAnswer[]) =>
-      fed.answer(peerId, sessionId, toolCallId, answers),
-    updateModel: (provider: string, modelId: string) =>
-      fed.updateSessionModel(peerId, sessionId, provider, modelId),
+    getSession: peerRouted(
+      peerId,
+      () => api.getSession(sessionId),
+      (p) => fed.getSession(p, sessionId),
+    ),
+    getMessages: peerRouted(
+      peerId,
+      () => api.getMessages(sessionId),
+      (p) => fed.getMessages(p, sessionId),
+    ),
+    getTodo: peerRouted(
+      peerId,
+      () => api.getTodo(sessionId),
+      (p) => fed.getTodo(p, sessionId),
+    ),
+    getTasks: peerRouted(
+      peerId,
+      () => api.getTasks(sessionId),
+      (p) => fed.getTasks(p, sessionId),
+    ),
+    getBackground: peerRouted(
+      peerId,
+      () => api.getBackground(sessionId),
+      (p) => fed.getBackground(p, sessionId),
+    ),
+    close: peerRouted(
+      peerId,
+      () => api.closeSession(sessionId),
+      (p) => fed.closeSession(p, sessionId),
+    ),
+    prompt: peerRouted(
+      peerId,
+      (text: string, images?: PendingImage[]) =>
+        api.prompt(sessionId, text, images),
+      (p, text: string, images?: PendingImage[]) =>
+        fed.prompt(p, sessionId, text, images),
+    ),
+    abort: peerRouted(
+      peerId,
+      () => api.abort(sessionId),
+      (p) => fed.abort(p, sessionId),
+    ),
+    rewind: peerRouted(
+      peerId,
+      (timestamp: number) => api.rewind(sessionId, timestamp),
+      (p, timestamp: number) => fed.rewind(p, sessionId, timestamp),
+    ),
+    answer: peerRouted(
+      peerId,
+      (toolCallId: string, answers: AskAnswer[]) =>
+        api.answer(sessionId, toolCallId, answers),
+      (p, toolCallId: string, answers: AskAnswer[]) =>
+        fed.answer(p, sessionId, toolCallId, answers),
+    ),
+    updateModel: peerRouted(
+      peerId,
+      (provider: string, modelId: string) =>
+        api.updateSessionModel(sessionId, provider, modelId),
+      (p, provider: string, modelId: string) =>
+        fed.updateSessionModel(p, sessionId, provider, modelId),
+    ),
   };
 }
 
 /** Workspace CRUD + filesystem browsing routed to the peer that owns the
  * workspace ("" = this server). */
 export function workspaceApi(peerId: string) {
-  if (peerId === "") {
-    return {
-      create: (name: string, folders: string[]) =>
-        api.createWorkspace(name, folders),
-      update: (id: string, input: { name?: string; folders?: string[] }) =>
-        api.updateWorkspace(id, input),
-      delete: (id: string) => api.deleteWorkspace(id),
-      fsRoots: () => api.fsRoots(),
-      fsBrowse: (path: string) => api.fsBrowse(path),
-    };
-  }
   return {
-    create: (name: string, folders: string[]) =>
-      fed.createWorkspace(peerId, name, folders),
-    update: (id: string, input: { name?: string; folders?: string[] }) =>
-      fed.updateWorkspace(peerId, id, input),
-    delete: (id: string) => fed.deleteWorkspace(peerId, id),
-    fsRoots: () => fed.fsRoots(peerId),
-    fsBrowse: (path: string) => fed.fsBrowse(peerId, path),
+    create: peerRouted(
+      peerId,
+      (name: string, folders: string[]) => api.createWorkspace(name, folders),
+      (p, name: string, folders: string[]) =>
+        fed.createWorkspace(p, name, folders),
+    ),
+    update: peerRouted(
+      peerId,
+      (id: string, input: { name?: string; folders?: string[] }) =>
+        api.updateWorkspace(id, input),
+      (p, id: string, input: { name?: string; folders?: string[] }) =>
+        fed.updateWorkspace(p, id, input),
+    ),
+    delete: peerRouted(
+      peerId,
+      (id: string) => api.deleteWorkspace(id),
+      (p, id: string) => fed.deleteWorkspace(p, id),
+    ),
+    fsRoots: peerRouted(
+      peerId,
+      () => api.fsRoots(),
+      (p) => fed.fsRoots(p),
+    ),
+    fsBrowse: peerRouted(
+      peerId,
+      (path: string) => api.fsBrowse(path),
+      (p, path: string) => fed.fsBrowse(p, path),
+    ),
   };
 }
 
 /** Model-picker data of the peer that owns a session ("" = this server):
  * remote sessions switch models against the machine running the agent. */
 export function modelApi(peerId: string) {
-  if (peerId === "") {
-    return {
-      listProviders: () => api.listProviders(),
-      listModels: (providerId: string) => api.listModels(providerId),
-      setThinkingLevel: (
-        providerId: string,
-        modelId: string,
-        level: ThinkingLevel,
-      ) => api.setModelThinkingLevel(providerId, modelId, level),
-    };
-  }
   return {
-    listProviders: () => fed.listProviders(peerId),
-    listModels: (providerId: string) => fed.listModels(peerId, providerId),
-    setThinkingLevel: (
-      providerId: string,
-      modelId: string,
-      level: ThinkingLevel,
-    ) => fed.setModelThinkingLevel(peerId, providerId, modelId, level),
+    listProviders: peerRouted(
+      peerId,
+      () => api.listProviders(),
+      (p) => fed.listProviders(p),
+    ),
+    listModels: peerRouted(
+      peerId,
+      (providerId: string) => api.listModels(providerId),
+      (p, providerId: string) => fed.listModels(p, providerId),
+    ),
+    setThinkingLevel: peerRouted(
+      peerId,
+      (providerId: string, modelId: string, level: ThinkingLevel) =>
+        api.setModelThinkingLevel(providerId, modelId, level),
+      (p, providerId: string, modelId: string, level: ThinkingLevel) =>
+        fed.setModelThinkingLevel(p, providerId, modelId, level),
+    ),
   };
 }
 

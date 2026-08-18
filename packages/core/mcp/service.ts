@@ -48,22 +48,15 @@ export class McpService {
       exists,
       servers: config.servers.map((server) => {
         const status = statusMap.get(server.name);
-        const base: McpInfo["servers"][number] = {
-          name: server.name,
-          type: server.type,
-          enabled: server.enabled,
-          command: server.command,
-          args: server.args,
-          env: server.env,
-          cwd: server.cwd,
-          url: server.url,
-          headers: server.headers,
+        return {
+          // The server's config fields come from the source of truth
+          // (McpServerConfig) instead of being re-listed, so adding a field
+          // there needs no change here.
+          ...server,
           toolCount: status?.toolCount ?? 0,
           status: status?.status ?? "not_started",
+          ...(status?.error !== undefined ? { error: status.error } : {}),
         };
-        return status?.error !== undefined
-          ? { ...base, error: status.error }
-          : base;
       }),
     };
   }

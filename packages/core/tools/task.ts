@@ -3,10 +3,12 @@ import type { AgentEvent, StreamFn } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { CoreError, errorMessage } from "../errors.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import { addToolsToAgent, MCP_TOOLS_PROMPT_NOTE } from "../mcp/tools.ts";
+import {
+  addToolsToAgent,
+  appendMcpToolsNote,
+  mcpToolPair,
+} from "../mcp/tools.ts";
 import type { ToolRegistry } from "./registry.ts";
-import { createToolSearchTool } from "./search-tool.ts";
-import { createToolCallTool } from "./call-tool.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import { toLlmMessages } from "../types/notification.ts";
 import {
@@ -232,9 +234,9 @@ export class TaskHub {
       if (sub.status !== "running" || sub.type !== "general") continue;
       if (sub.agent === null) continue;
       addToolsToAgent(sub.agent, pair);
-      if (!sub.agent.state.systemPrompt.includes("tool_search")) {
-        sub.agent.state.systemPrompt += MCP_TOOLS_PROMPT_NOTE;
-      }
+      sub.agent.state.systemPrompt = appendMcpToolsNote(
+        sub.agent.state.systemPrompt,
+      );
     }
   }
 
@@ -245,10 +247,7 @@ export class TaskHub {
    * attached to running sub-agents without replacing them. */
   private searchTools(): Tool[] {
     if (this.registry === null || this.registry.isEmpty) return [];
-    return [
-      createToolSearchTool(() => this.registry!),
-      createToolCallTool(() => this.registry!),
-    ];
+    return mcpToolPair(() => this.registry!);
   }
 
   /** Hook the parent (main) session agent into the hub: it receives task
@@ -320,12 +319,15 @@ export class TaskHub {
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),
     ];
-    const systemPrompt = subagentSystemPrompt(
+    const basePrompt = subagentSystemPrompt(
       id,
       parentId,
       type,
       canDelegate,
-    ) + (searchable.length > 0 ? MCP_TOOLS_PROMPT_NOTE : "");
+    );
+    const systemPrompt = searchable.length > 0
+      ? appendMcpToolsNote(basePrompt)
+      : basePrompt;
     const agent = new Agent({
       initialState: {
         systemPrompt,

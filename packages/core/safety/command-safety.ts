@@ -1,5 +1,6 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
+import { streamText } from "../agent/stream-text.ts";
 import type { CommandApproval, CommandSafetyKind } from "../shared.ts";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,
@@ -192,24 +193,20 @@ export class CommandSafety {
       ? `The agent wants to run this shell command in the directory ${cwd}:\n${command}`
       : `The agent wants to evaluate this JavaScript/TypeScript snippet (working directory ${cwd}):\n${command}`;
     const collect = async () => {
-      const stream = await this.deps.streamFn(model, {
-        systemPrompt: SAFETY_SYSTEM_PROMPT,
-        messages: [{
-          role: "user",
-          content: [{ type: "text", text: describe }],
-          timestamp: Date.now(),
-        }],
-      }, { signal: controller.signal });
-      let text = "";
-      for await (const event of stream) {
-        if (event.type === "text_delta") {
-          text += event.delta;
-        } else if (event.type === "error") {
-          throw new Error(
-            event.error.errorMessage ?? "safety check request failed",
-          );
-        }
-      }
+      const text = await streamText(
+        this.deps.streamFn,
+        model,
+        {
+          systemPrompt: SAFETY_SYSTEM_PROMPT,
+          messages: [{
+            role: "user",
+            content: [{ type: "text", text: describe }],
+            timestamp: Date.now(),
+          }],
+        },
+        "safety check request failed",
+        { signal: controller.signal },
+      );
       return parseVerdict(text);
     };
     // Race the reply against the timeout: aborting the controller closes

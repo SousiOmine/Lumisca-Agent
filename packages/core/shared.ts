@@ -6,6 +6,12 @@
  * `@lumisca/core/shared`.
  */
 
+/** Human-readable message of any thrown value. Shared by the core, the
+ * server layer, the CLI, and the web UI so the pattern never varies. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Settings-table key for the UI theme. */
 export const THEME_KEY = "theme";
 

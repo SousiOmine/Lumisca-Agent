@@ -20,8 +20,6 @@
 export interface ShellState {
   mode: "local" | "remote";
   url: string | null;
-  name: string | null;
-  id: string | null;
   /** Whether the main window is maximized (custom title bar icon). */
   maximized: boolean;
 }

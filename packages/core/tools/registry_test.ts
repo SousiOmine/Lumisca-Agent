@@ -10,17 +10,14 @@ function fakeTool(
   options: {
     label?: string;
     description?: string;
-    argNames?: string[];
     result?: string;
   } = {},
 ): Tool {
-  const properties: Record<string, ReturnType<typeof string>> = {};
-  for (const key of options.argNames ?? []) properties[key] = string();
   return {
     name,
     label: options.label ?? `server: ${name}`,
     description: options.description ?? `Does ${name}`,
-    parameters: object(properties, {}),
+    parameters: object({}, {}),
     execute: (_id, params) =>
       Promise.resolve({
         content: [{
@@ -91,43 +88,23 @@ Deno.test("search respects the limit", () => {
 
 // --- describe ---------------------------------------------------------------
 
-Deno.test("describe reports name, label, truncated description and argument names", () => {
+Deno.test("describe reports name, label and a truncated description", () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("echo", {
       label: "fake: echo",
       description: `d`.repeat(MAX_SEARCH_DESCRIPTION_CHARS + 500),
-      argNames: ["text"],
     }),
   ]);
   const entry = registry.search("echo", 1)[0]!;
   assertEquals(entry.name, "echo");
   assertEquals(entry.label, "fake: echo");
-  assertEquals(entry.argNames, ["text"]);
   assert(
     entry.description.length < `d`.repeat(MAX_SEARCH_DESCRIPTION_CHARS + 500)
       .length,
     "description must be truncated",
   );
   assert(entry.description.endsWith("(truncated)"));
-});
-
-Deno.test("describe reports no argument names for permissive schemas", () => {
-  const registry = new ToolRegistry();
-  registry.setTools([
-    {
-      name: "permissive",
-      label: "server: permissive",
-      description: "arbitrary args",
-      parameters: object({}, { additionalProperties: true }),
-      execute: () =>
-        Promise.resolve({
-          content: [{ type: "text", text: "ok" }],
-          details: {},
-        }),
-    },
-  ]);
-  assertEquals(registry.search("permissive", 1)[0]!.argNames, []);
 });
 
 // --- browse -----------------------------------------------------------------
@@ -212,7 +189,6 @@ Deno.test("tool_search returns matches with usage instructions", async () => {
     fakeTool("mcp__db__query", {
       label: "db: query",
       description: "Runs SQL",
-      argNames: ["sql"],
     }),
   ]);
   const tool = createToolSearchTool(() => registry);
@@ -220,7 +196,7 @@ Deno.test("tool_search returns matches with usage instructions", async () => {
   const text = textOf(result);
   assert(text.includes('Found 1 tool(s) matching "sql"'));
   assert(text.includes("mcp__db__query"));
-  assert(text.includes("Arguments: sql"));
+  assert(text.includes("Runs SQL"));
   assert(text.includes("Call one with tool_call(name, args)."));
 });
 

@@ -1,13 +1,17 @@
 import type { McpConfig, McpServerConfig } from "./config.ts";
 import { errorMessage } from "../errors.ts";
-import { formatContent, McpServerClient, McpToolError } from "./client.ts";
+import {
+  formatContent,
+  McpServerClient,
+  McpToolError,
+  type McpToolInfo,
+} from "./client.ts";
 
-/** A tool exposed by an MCP server, ready to be wrapped as an AgentTool. */
-export interface McpToolDef {
+/** A tool exposed by an MCP server, ready to be wrapped as an AgentTool:
+ * the shape reported by {@link McpServerClient.listTools} plus the owning
+ * server's name. */
+export interface McpToolDef extends McpToolInfo {
   server: string;
-  name: string;
-  description?: string;
-  inputSchema?: unknown;
 }
 
 /** Status snapshot of one server, for the settings UI. `status` is
@@ -80,12 +84,7 @@ export class McpManager {
         const client = await this.getClient(server);
         const infos = await client.listTools();
         for (const info of infos) {
-          tools.push({
-            server: server.name,
-            name: info.name,
-            description: info.description,
-            inputSchema: info.inputSchema,
-          });
+          tools.push({ server: server.name, ...info });
         }
       } catch (error) {
         this.errors.set(

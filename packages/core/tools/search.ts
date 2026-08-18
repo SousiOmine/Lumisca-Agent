@@ -13,6 +13,7 @@ import {
   type Tool,
 } from "./schema.ts";
 import { truncate, truncatedNote } from "./truncate.ts";
+import { requireResolved } from "./resolve.ts";
 
 /** Re-exported so existing importers (tests) keep importing from here. */
 export { globToRegExp };
@@ -166,11 +167,10 @@ async function resolveSearchRoot(
   ctx: FsToolContext,
   requested: string,
 ): Promise<string> {
-  const resolved = await ctx.sandbox.resolve(requested);
-  if (!resolved.ok) throw new Error(resolved.reason);
-  const stat = await Deno.stat(resolved.path).catch(() => null);
+  const path = await requireResolved(ctx.sandbox, requested);
+  const stat = await Deno.stat(path).catch(() => null);
   if (stat === null) throw new Error(`Path does not exist: ${requested}`);
-  return resolved.path;
+  return path;
 }
 
 /** Grep every file under a directory, honoring gitignore filtering (hidden

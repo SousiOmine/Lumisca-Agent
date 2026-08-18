@@ -1,5 +1,6 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
+import { streamText } from "./stream-text.ts";
 
 /** System prompt for the title model: a short, plain session title based
  * on the user's first message. */
@@ -40,23 +41,19 @@ export class TitleGenerator {
   /** Ask the fast model for a title. Throws on stream errors or empty
    * output. */
   async generateTitle(firstMessage: string): Promise<string> {
-    const stream = await this.streamFn(this.model, {
-      systemPrompt: TITLE_SYSTEM_PROMPT,
-      messages: [{
-        role: "user",
-        content: [{ type: "text", text: firstMessage }],
-        timestamp: Date.now(),
-      }],
-    });
-
-    let text = "";
-    for await (const event of stream) {
-      if (event.type === "text_delta") {
-        text += event.delta;
-      } else if (event.type === "error") {
-        throw new Error(event.error.errorMessage ?? "title generation failed");
-      }
-    }
+    const text = await streamText(
+      this.streamFn,
+      this.model,
+      {
+        systemPrompt: TITLE_SYSTEM_PROMPT,
+        messages: [{
+          role: "user",
+          content: [{ type: "text", text: firstMessage }],
+          timestamp: Date.now(),
+        }],
+      },
+      "title generation failed",
+    );
     const title = cleanTitle(text);
     if (!title) throw new Error("title generation returned no text");
     return title;

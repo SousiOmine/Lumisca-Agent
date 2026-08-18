@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { errorMessage as errorText } from "@lumisca/core/shared";
 import { api, modelApi } from "./api.ts";
 import { splitTabKey } from "./tabs.ts";
 import type {
@@ -165,7 +166,6 @@ export function filterByQuery<T extends { id: string; name?: string }>(
   );
 }
 
-/** Human-readable error string, used across every async UI surface. */
-export function errorText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+/** Human-readable error string, used across every async UI surface (the
+ * canonical helper lives in the core, shared with the CLI). */
+export { errorText };

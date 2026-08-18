@@ -12,6 +12,8 @@ import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { killProcessTree } from "./background.ts";
 import { getShell } from "./shell.ts";
+import { requireResolved } from "./resolve.ts";
+import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
 const bashSchema = object({
@@ -64,33 +66,20 @@ export function createBashTool(
     execute: async (_id, params, signal) => {
       // Resolve the working directory before the safety check so the check
       // judges the exact context the command would run in.
-      const resolved = await options.sandbox.resolve(params.cwd);
-      if (!resolved.ok) throw new Error(resolved.reason);
-      if (options.safety !== undefined) {
-        const verdict = await options.safety.check(
-          "bash",
-          params.command,
-          resolved.path,
-        );
-        if (!verdict.ok) {
-          // The fast model judged the command unsafe: report its reason as
-          // the tool result (the command is never spawned).
-          return {
-            content: [{
-              type: "text",
-              text: "[blocked by safety check]\n" +
-                (verdict.reason ?? "The command was judged unsafe."),
-            }],
-            details: { blocked: true, reason: verdict.reason ?? "" },
-          };
-        }
-      }
+      const cwd = await requireResolved(options.sandbox, params.cwd);
+      const blocked = await safetyBlockResult(
+        options.safety,
+        "bash",
+        params.command,
+        cwd,
+      );
+      if (blocked !== undefined) return blocked;
       const timeoutSec = params.timeout ?? defaultTimeoutSec;
       const shell = getShell();
 
       const command = new Deno.Command(shell.file, {
         args: [...shell.args, params.command],
-        cwd: resolved.path,
+        cwd,
         // Per-call env vars override the tool-level env and the shell env.
         env: { ...options.env, ...shell.env, ...params.env },
         stdout: "piped",
@@ -128,7 +117,7 @@ export function createBashTool(
         body += `\n[exit code: ${code}]`;
         return {
           content: [{ type: "text", text: body }],
-          details: { exitCode: code, cwd: resolved.path },
+          details: { exitCode: code, cwd },
         };
       } catch (error) {
         // output() failed (pipe error, spawn-time failure): make sure the

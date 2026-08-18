@@ -235,8 +235,7 @@ export class LumiscaCore {
   }
 
   // --- server connection registry (web clients) ---------------------------
-  // The desktop app keeps its own per-PC copy (servers.json); web clients
-  // share this server-side list so they can switch servers too.
+  // Shared by web clients so they can switch servers from the settings UI.
 
   getConnections(): ConnectionEntry[] {
     return parseConnections(this.settings.get(CONNECTIONS_KEY));
@@ -834,10 +833,6 @@ export class LumiscaCore {
     const fallback = this.models.getFallbackModel();
     if (fallback) return fallback;
     throw new CoreError("No models available", "unavailable");
-  }
-
-  private requireAgent(id: string): SessionAgent {
-    return this.pool.require(id);
   }
 
   /** Attach the session's model thinking level so the UI can render the

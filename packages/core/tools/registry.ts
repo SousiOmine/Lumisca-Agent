@@ -29,9 +29,6 @@ export interface ToolSearchEntry {
   label: string;
   /** Description truncated to MAX_SEARCH_DESCRIPTION_CHARS. */
   description: string;
-  /** Top-level argument names of the parameter schema (empty when the
-   * schema is permissive — e.g. MCP — or has no declared properties). */
-  argNames: string[];
 }
 
 /** A group of the browse listing: tools sharing a label prefix (MCP labels
@@ -158,7 +155,6 @@ export class ToolRegistry {
       name: tool.name,
       label: tool.label,
       description: truncate(tool.description, MAX_SEARCH_DESCRIPTION_CHARS),
-      argNames: argumentNames(tool),
     };
   }
 
@@ -196,17 +192,4 @@ export class ToolRegistry {
 function labelPrefix(label: string): string {
   const colon = label.indexOf(": ");
   return colon > 0 ? label.slice(0, colon) : label;
-}
-
-/** Top-level argument names of a tool's parameter schema; empty for
- * permissive schemas (MCP delegates validation to its server). */
-function argumentNames(tool: Tool): string[] {
-  const parameters = tool.parameters;
-  if (
-    typeof parameters === "object" && parameters !== null &&
-    "properties" in parameters && parameters.properties !== undefined
-  ) {
-    return Object.keys(parameters.properties);
-  }
-  return [];
 }

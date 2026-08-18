@@ -8,6 +8,7 @@ import {
   truncate,
   truncatedNote,
 } from "./truncate.ts";
+import { requireResolved } from "./resolve.ts";
 
 interface FsToolContext {
   sandbox: Sandbox;
@@ -233,14 +234,13 @@ export function createReadFileTool(
     parameters: readSchema,
     execute: async (_id, params, _signal) => {
       const { path, spec, ranges } = splitRangeSuffix(params.path);
-      const resolved = await ctx.sandbox.resolve(path);
-      if (!resolved.ok) throw new Error(resolved.reason);
-      const stat = await Deno.stat(resolved.path);
+      const filePath = await requireResolved(ctx.sandbox, path);
+      const stat = await Deno.stat(filePath);
       if (stat.isDirectory) throw new Error(`Is a directory: ${params.path}`);
 
       if (ranges !== undefined) {
         const { lines, endOfFile, lastLine } = await readLineRanges(
-          resolved.path,
+          filePath,
           ranges,
         );
         const { text, truncated } = truncate(lines.join("\n"));
@@ -249,14 +249,14 @@ export function createReadFileTool(
         if (endOfFile) output += `\n[end of file: ${lastLine} lines]`;
         return {
           content: [{ type: "text", text: output }],
-          details: { path: resolved.path, size: stat.size },
+          details: { path: filePath, size: stat.size },
         };
       }
 
       // Whole-file read: image blocks for raster images, else text.
-      const mimeType = IMAGE_MIME_BY_EXT[extname(resolved.path).toLowerCase()];
+      const mimeType = IMAGE_MIME_BY_EXT[extname(filePath).toLowerCase()];
       if (mimeType !== undefined && stat.size <= MAX_IMAGE_BYTES) {
-        const file = await Deno.open(resolved.path, { read: true });
+        const file = await Deno.open(filePath, { read: true });
         try {
           const buffer = new Uint8Array(stat.size);
           let read = 0;
@@ -265,7 +265,7 @@ export function createReadFileTool(
             if (n === null) break;
             read += n;
           }
-          const name = resolved.path.split(/[\\/]/).pop() ?? resolved.path;
+          const name = filePath.split(/[\\/]/).pop() ?? filePath;
           return {
             content: [
               { type: "text", text: `[image: ${name} (${read} bytes)]` },
@@ -275,14 +275,14 @@ export function createReadFileTool(
                 mimeType,
               },
             ],
-            details: { path: resolved.path, size: stat.size },
+            details: { path: filePath, size: stat.size },
           };
         } finally {
           file.close();
         }
       }
 
-      const file = await Deno.open(resolved.path, { read: true });
+      const file = await Deno.open(filePath, { read: true });
       try {
         const buffer = new Uint8Array(DEFAULT_READ_LIMIT);
         const read = await file.read(buffer);
@@ -306,7 +306,7 @@ export function createReadFileTool(
         }
         return {
           content: [{ type: "text", text: trimmed + note }],
-          details: { path: resolved.path, size: stat.size },
+          details: { path: filePath, size: stat.size },
         };
       } finally {
         file.close();
@@ -330,28 +330,25 @@ export function createWriteFileTool(
       "Create or overwrite a file with the given text content. Parent directories are created automatically.",
     parameters: writeSchema,
     execute: async (_id, params) => {
-      const resolved = await ctx.sandbox.resolve(params.path);
-      if (!resolved.ok) throw new Error(resolved.reason);
-      const parent = join(resolved.path, "..");
-      const parentResolved = await ctx.sandbox.resolve(parent);
-      if (!parentResolved.ok) throw new Error(parentResolved.reason);
-      await Deno.mkdir(parentResolved.path, { recursive: true });
+      const filePath = await requireResolved(ctx.sandbox, params.path);
+      const parent = await requireResolved(ctx.sandbox, join(filePath, ".."));
+      await Deno.mkdir(parent, { recursive: true });
       // Keep an existing file's CRLF style when overwriting it, so a full
       // rewrite never flips the whole file to LF (new files stay as sent,
       // normally LF).
       let content = params.content;
       try {
-        const existing = await Deno.readTextFile(resolved.path);
+        const existing = await Deno.readTextFile(filePath);
         if (existing.includes("\r\n")) {
           content = content.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
         }
       } catch {
         // File does not exist yet: write the content as-is.
       }
-      await Deno.writeTextFile(resolved.path, content);
+      await Deno.writeTextFile(filePath, content);
       return {
-        content: [{ type: "text", text: `Wrote ${resolved.path}` }],
-        details: { path: resolved.path, bytes: content.length },
+        content: [{ type: "text", text: `Wrote ${filePath}` }],
+        details: { path: filePath, bytes: content.length },
       };
     },
   };
@@ -400,9 +397,8 @@ export function createEditFileTool(
       "line-ending style.",
     parameters: editSchema,
     execute: async (_id, params) => {
-      const resolved = await ctx.sandbox.resolve(params.path);
-      if (!resolved.ok) throw new Error(resolved.reason);
-      const content = await Deno.readTextFile(resolved.path);
+      const filePath = await requireResolved(ctx.sandbox, params.path);
+      const content = await Deno.readTextFile(filePath);
       // Match leniently: models usually reproduce `old_string` with LF even
       // when the file is CRLF, so compare both sides normalized to LF and
       // map the match position back into the original bytes.
@@ -418,16 +414,16 @@ export function createEditFileTool(
       const updated = content.slice(0, origIndex) +
         toFileNewlines(params.new_string, content) +
         content.slice(origEnd);
-      await Deno.writeTextFile(resolved.path, updated);
+      await Deno.writeTextFile(filePath, updated);
       const note = occurrences > 1
         ? `\n[warning: old_string appeared ${occurrences} times; only the first was replaced]`
         : "";
       return {
         content: [{
           type: "text",
-          text: `Edited ${resolved.path}${note}`,
+          text: `Edited ${filePath}${note}`,
         }],
-        details: { path: resolved.path, replacements: 1, occurrences },
+        details: { path: filePath, replacements: 1, occurrences },
       };
     },
   };
@@ -446,10 +442,9 @@ export function createListDirTool(
     description: "List the contents of a directory within the workspace.",
     parameters: listDirSchema,
     execute: async (_id, params) => {
-      const resolved = await ctx.sandbox.resolve(params.path);
-      if (!resolved.ok) throw new Error(resolved.reason);
+      const dirPath = await requireResolved(ctx.sandbox, params.path);
       const entries: Deno.DirEntry[] = [];
-      for await (const entry of Deno.readDir(resolved.path)) {
+      for await (const entry of Deno.readDir(dirPath)) {
         entries.push(entry);
       }
       entries.sort((a, b) => a.name.localeCompare(b.name));
@@ -457,8 +452,8 @@ export function createListDirTool(
       const { text, truncated } = truncate(lines.join("\n") || "(empty)");
       const note = truncated ? truncatedNote("listing") : "";
       return {
-        content: [{ type: "text", text: `${resolved.path}:\n${text}${note}` }],
-        details: { path: resolved.path, count: entries.length },
+        content: [{ type: "text", text: `${dirPath}:\n${text}${note}` }],
+        details: { path: dirPath, count: entries.length },
       };
     },
   };

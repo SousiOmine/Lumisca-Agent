@@ -13,6 +13,7 @@ import {
   type ToolResult,
 } from "./schema.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
+import { safetyBlockResult } from "./safety.ts";
 
 const DEFAULT_TIMEOUT_MS = 5000;
 /** inspect depth for the completion value (arrays of objects stay readable). */
@@ -237,31 +238,22 @@ export function createEvalTool(
     parameters: evalSchema,
     execute: async (_id, params): Promise<ToolResult> => {
       const run = async (): Promise<ToolResult> => {
-        if (options.safety !== undefined) {
-          // Eval runs in the server process, so its working-directory
-          // context is the process cwd (part of the approval key).
-          const verdict = await options.safety.check(
-            "eval",
-            params.code,
-            Deno.cwd(),
-          );
-          if (!verdict.ok) {
-            // A blocked snippet is reported like a user-code failure: a
-            // result, not a tool failure, so the agent sees the reason.
-            return {
-              content: [{
-                type: "text",
-                text: "[error]\n[blocked by safety check]\n" +
-                  (verdict.reason ?? "The snippet was judged unsafe."),
-              }],
-              details: {
-                reset: params.reset === true,
-                blocked: true,
-                reason: verdict.reason ?? "",
-              },
-            };
-          }
-        }
+        // Eval runs in the server process, so its working-directory context
+        // is the process cwd (part of the approval key). A blocked snippet
+        // is reported like a user-code failure: a result, not a tool
+        // failure, so the agent sees the reason.
+        const blocked = await safetyBlockResult(
+          options.safety,
+          "eval",
+          params.code,
+          Deno.cwd(),
+          {
+            prefix: "[error]\n",
+            fallbackReason: "The snippet was judged unsafe.",
+            details: { reset: params.reset === true },
+          },
+        );
+        if (blocked !== undefined) return blocked;
         if (params.reset === true) session.reset();
         const timeoutMs = Math.max(1, params.timeout ?? DEFAULT_TIMEOUT_MS);
         try {

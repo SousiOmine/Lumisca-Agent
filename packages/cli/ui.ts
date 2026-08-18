@@ -1,5 +1,8 @@
 /** ANSI helpers for the terminal UI. */
 
+/** Human-readable message of any thrown value; shared with the web UI. */
+export { errorMessage as errorText } from "@lumisca/core/shared";
+
 const ENABLE_COLOR = Deno.stdout.isTerminal();
 
 export type PromptFn = (message?: string) => string | null;
@@ -30,12 +33,6 @@ export async function withPromptFn<T>(
   } finally {
     promptFn = previous;
   }
-}
-
-/** Human-readable message of any thrown value (shared pattern; the web UI
- * has the same helper). */
-export function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function wrap(code: string, text: string): string {

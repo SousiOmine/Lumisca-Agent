@@ -17,8 +17,6 @@ export class CoreError extends Error {
   }
 }
 
-/** Human-readable message of any thrown value. Shared by the core, the
- * server layer, and the web UI so the pattern never varies. */
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+/** Human-readable message of any thrown value (defined in shared.ts so the
+ * CLI and web UI reuse the same helper). */
+export { errorMessage } from "./shared.ts";

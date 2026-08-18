@@ -1,6 +1,6 @@
 /** A server connection entry — a client-side registry that lets the user
- * switch between servers from the settings UI. The desktop app keeps its
- * own copy (per PC); web clients share this server-side copy (per host). */
+ * switch between servers from the settings UI. Shared by web clients
+ * (server-side copy); stored in the settings file. */
 export interface ConnectionEntry {
   id: string;
   name: string;

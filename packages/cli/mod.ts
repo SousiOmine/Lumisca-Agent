@@ -2,6 +2,7 @@ import { LumiscaCore } from "@lumisca/core";
 import { runRepl } from "./repl.ts";
 import { pickWorkspace, selectFromList, sessionLabel } from "./select.ts";
 import { createSession } from "./session.ts";
+import { parseFlags } from "./flags.ts";
 import { error, errorText, info } from "./ui.ts";
 import {
   HelpRequested,
@@ -35,61 +36,32 @@ interface CliOptions {
 }
 
 function parseArgs(args: string[]): CliOptions {
-  const opts: CliOptions = {
-    dbPath: Deno.env.get("LUMISCA_DB") ?? `${Deno.cwd()}/lumisca.db`,
-    resume: false,
-  };
-
-  // Flag names this parser knows. flagValue treats a following known flag
-  // as a missing value, but accepts other "--"-prefixed text as a value.
-  const KNOWN_FLAGS = new Set([
-    "--db",
-    "--workspace",
-    "--resume",
-    "--session",
-    "--help",
-    "-h",
-  ]);
-
-  /** Read the value of a flag that takes an argument; exits on missing value. */
-  const flagValue = (flag: string, i: number): string => {
-    const value = args[i + 1];
-    if (value === undefined || KNOWN_FLAGS.has(value)) {
-      error(`--${flag} には値が必要です`);
-      Deno.exit(1);
-    }
-    return value;
-  };
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
-    // `deno task cli -- <flags>` inserts a "--" separator; skip it (there
-    // are no positional args, so flags after it are parsed normally).
-    if (arg === "--") continue;
-    if (arg === "--help" || arg === "-h") {
+  const { values, switches } = parseFlags(
+    args,
+    [
+      { name: "db", hasValue: true },
+      { name: "workspace", hasValue: true },
+      { name: "resume" },
+      { name: "session", hasValue: true },
+      { name: "help", alias: "-h" },
+    ],
+    () => {
       console.log(USAGE);
       Deno.exit(0);
-    }
-    switch (arg) {
-      case "--db":
-        opts.dbPath = flagValue("db", i++);
-        break;
-      case "--workspace":
-        opts.workspaceName = flagValue("workspace", i++);
-        break;
-      case "--resume":
-        opts.resume = true;
-        break;
-      case "--session":
-        opts.sessionId = flagValue("session", i++);
-        break;
-      default:
-        error(`不明な引数: ${arg}`);
-        console.log(USAGE);
-        Deno.exit(1);
-    }
-  }
-  return opts;
+    },
+    (message) => {
+      error(message);
+      console.log(USAGE);
+      Deno.exit(1);
+    },
+  );
+  return {
+    dbPath: values.db ??
+      Deno.env.get("LUMISCA_DB") ?? `${Deno.cwd()}/lumisca.db`,
+    workspaceName: values.workspace,
+    resume: switches.has("resume"),
+    sessionId: values.session,
+  };
 }
 
 /** The one-shot `lumisca run` path: parse args, execute the run, print
