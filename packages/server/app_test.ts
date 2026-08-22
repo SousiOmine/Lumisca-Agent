@@ -1209,7 +1209,10 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
       };
       await new Promise<void>((resolve) => (hubWs.onopen = () => resolve()));
 
-      // Session + prompt roundtrip on the peer through the hub.
+      // Session + prompt roundtrip on the peer through the hub. The model
+      // is explicit: the default-model fallback would resolve to the
+      // first builtin provider (unconfigured on CI), which used to pass
+      // here only because the assertions never looked at the content.
       const peerWorkspaceId = peerEntry?.workspace.id;
       assertEquals(typeof peerWorkspaceId, "string");
       peerFaux.setResponses([fauxAssistantMessage("Hi from peer!")]);
@@ -1218,6 +1221,8 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
         body: JSON.stringify({
           workspaceId: peerWorkspaceId,
           name: "fed",
+          modelProvider: peerFaux.provider.id,
+          modelId: peerFaux.getModel().id,
         }),
         headers: auth,
       });
@@ -1258,6 +1263,11 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
       const msgs = await messages.json();
       assertEquals(msgs.length, 2);
       assertEquals(msgs[1].role, "assistant");
+      assertEquals(
+        msgs[1].content[0].text,
+        "Hi from peer!",
+        "the peer's prompt roundtrip must produce the real answer",
+      );
 
       // Unknown peer → 404.
       const unknown = await json(hubBase, "/api/fed/nope/workspaces", {

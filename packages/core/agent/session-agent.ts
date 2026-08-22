@@ -44,23 +44,54 @@ import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 
 /** Maximum consecutive vacant responses (no text, no tool call) to retry
- * before giving up and ending the run normally. */
+ * before giving up and ending the run normally. Shared by both retry
+ * mechanisms — in-run vacant retries and silent-error restarts — so a
+ * model that keeps failing can never loop forever. */
 export const MAX_EMPTY_RESPONSE_RETRIES = 3;
 
-/** True when the assistant response produced neither text nor a tool call:
- * the model ended its turn without any output. Thinking blocks alone don't
- * count as output (the user never sees them), and error/aborted stops are
- * handled by the loop itself — they terminate the run, so a retry message
- * must never be queued behind them (it would leak into the next run). */
-export function isVacantResponse(message: AssistantMessage): boolean {
-  if (message.stopReason === "error" || message.stopReason === "aborted") {
-    return false;
-  }
+/** True when the response produced nothing the user can see: no text and
+ * no tool call. Thinking blocks alone don't count as output (the user
+ * never sees them). */
+function hasNoVisibleOutput(message: AssistantMessage): boolean {
   return message.content.every(
     (block) =>
       block.type !== "toolCall" &&
       (block.type !== "text" || block.text.trim().length === 0),
   );
+}
+
+/** True when the assistant response produced neither text nor a tool call:
+ * the model ended its turn without any output. Error/aborted stops are
+ * handled separately (see isSilentErrorResponse and handleTurnEnd) — they
+ * terminate the run instead of continuing the loop. */
+export function isVacantResponse(message: AssistantMessage): boolean {
+  if (message.stopReason === "error" || message.stopReason === "aborted") {
+    return false;
+  }
+  return hasNoVisibleOutput(message);
+}
+
+/** Error-message signatures of transient transport failures: streams cut
+ * off mid-flight (the observed "Stream ended without finish_reason"),
+ * connection resets, provider-side blips. Only these qualify for
+ * automatic restarts — a silent PERMANENT failure (unconfigured or
+ * unauthorized provider, content filter, context overflow) has no chance
+ * of recovering, so it must surface immediately instead of burning
+ * through the retry limit. */
+const TRANSIENT_STREAM_ERROR_PATTERN =
+  /without finish_reason|finish_reason: network_error|fetch failed|network|socket hang up|connection|terminated|premature close|timed out|\b(?:500|502|503|504|529)\b|overloaded/i;
+
+/** True when the stream died before the model produced anything: an
+ * error-stopped response with zero output (thinking alone doesn't count —
+ * the user never sees it) whose cause looks transient. The agent loop
+ * exits immediately on these turns without draining the follow-up queue,
+ * so the in-run vacant-retry cannot fire; SessionAgent restarts the run
+ * itself once it settles (see handleTurnEnd / resumeAfterErrorRun). An
+ * unknown error message is conservatively treated as permanent. */
+export function isSilentErrorResponse(message: AssistantMessage): boolean {
+  if (message.stopReason !== "error") return false;
+  if (!hasNoVisibleOutput(message)) return false;
+  return TRANSIENT_STREAM_ERROR_PATTERN.test(message.errorMessage ?? "");
 }
 
 /** The notification queued to retry a vacant response. The text is
@@ -167,9 +198,22 @@ export class SessionAgent {
    * commands must not reach the discarded agent. */
   private closed = false;
   /** Consecutive vacant responses (no text, no tool call) in the current
-   * run. Each one is retried via followUp (see handleTurnEnd) up to
-   * MAX_EMPTY_RESPONSE_RETRIES; a response with output resets the count. */
+   * exchange. Each one is retried up to MAX_EMPTY_RESPONSE_RETRIES — a
+   * mid-run vacancy via followUp (see handleTurnEnd), a silent error by
+   * restarting the run (see resumeAfterErrorRun); a response with output
+   * resets the count. Runs started from outside (a user prompt, an
+   * injected notification) reset it at their entry points. */
   private emptyResponseRetries = 0;
+  /** The retry notification parked to restart a run after a silent-error
+   * turn killed it. Set by handleTurnEnd; consumed by resumeAfterErrorRun
+   * once the dead run has fully settled. Null when there is nothing to
+   * resume. */
+  private pendingErrorRetry: NotificationMessage | null = null;
+  /** Bumped on every abort(); background work that spans multiple runs
+   * (the silent-error restart loop) compares epochs so a stop pressed
+   * between two attempts stands the restart down instead of firing one
+   * more request against the user's intent. */
+  private abortEpoch = 0;
   /** Title generation runs once per session, concurrently with the first
    * run; this guards against re-triggering (e.g. after a failed first run
    * that left savedCount at 0). */
@@ -238,6 +282,9 @@ export class SessionAgent {
    * means "the run finished". */
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
+    // A user prompt starts a fresh exchange: it does not inherit the
+    // previous run's vacant-response history.
+    this.emptyResponseRetries = 0;
     this.maybeGenerateTitle(text);
     try {
       await this.agent.prompt(text, images);
@@ -248,6 +295,7 @@ export class SessionAgent {
         message: errorMessage(error),
       });
     }
+    await this.resumeAfterErrorRun();
   }
 
   /** Kick off title generation on the first prompt of a fresh session (no
@@ -295,14 +343,19 @@ export class SessionAgent {
       this.agent.steer(message);
       return;
     }
+    // Starting a run from user input resets the vacant-response history
+    // (same contract as prompt()); a steer joins the current run and
+    // leaves the counter alone.
+    this.emptyResponseRetries = 0;
     void this.startRun(message);
   }
 
   /** Start a run that carries a pre-built message (a user prompt or a
    * notification). MCP attachment may still be in flight (a prompt sent
    * right after session creation), so wait for it; if a run started
-   * concurrently, the prompt fails and the message is steered into that run
-   * instead (it is then processed at that run's next turn boundary). */
+   * concurrently, the prompt fails and the message is steered into that
+   * run instead (it is then processed at that run's next turn boundary).
+   * A silent-error restart parked during the run is resumed afterwards. */
   private async startRun(message: AgentMessage): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
     try {
@@ -310,6 +363,7 @@ export class SessionAgent {
     } catch {
       this.agent.steer(message);
     }
+    await this.resumeAfterErrorRun();
   }
 
   /** Best-effort title generation from the first user message. Failures
@@ -351,10 +405,16 @@ export class SessionAgent {
       this.agent.steer(message);
       return;
     }
+    // A notification that starts its own run begins a fresh exchange:
+    // reset the vacant-response history (same contract as prompt()).
+    this.emptyResponseRetries = 0;
     if (!this.mcpReadyDone) {
       // MCP attachment may still be in flight (a very fast command); wait
       // for it, then re-check — a user prompt may have started meanwhile.
-      void this.mcpReady.then(() => this.startRun(message));
+      void this.mcpReady.then(() => {
+        this.emptyResponseRetries = 0;
+        void this.startRun(message);
+      });
       return;
     }
     void this.startRun(message);
@@ -398,6 +458,7 @@ export class SessionAgent {
 
   abort(): void {
     this.rejectPendingAsks();
+    this.abortEpoch++;
     this.agent.abort();
   }
 
@@ -478,6 +539,10 @@ export class SessionAgent {
       );
     }
     this.agent.clearAllQueues();
+    // A parked silent-error restart was never announced (no message
+    // events, no transcript row) — dropping it here leaves no trace,
+    // exactly like clearing the queues.
+    this.pendingErrorRetry = null;
     this.emit({
       type: "messages_truncated",
       sessionId: this.sessionId,
@@ -570,9 +635,10 @@ export class SessionAgent {
   private handleEvent(event: AgentEvent): void {
     switch (event.type) {
       case "agent_start":
-        // A new run does not inherit the previous run's vacant-response
-        // history (a user prompt after a silent run starts fresh).
-        this.emptyResponseRetries = 0;
+        // The vacant-response counter is reset where runs start from
+        // outside (prompt / promptWhileRunning / injectNotification), not
+        // here: a silent-error restart is a new run but the SAME
+        // exchange, and its retries must keep counting toward the limit.
         this.emit({ type: "agent_start", sessionId: this.sessionId });
         break;
       case "message_start":
@@ -636,25 +702,68 @@ export class SessionAgent {
 
   /** Retry a vacant assistant response (no text, no tool call): the model
    * ended its turn without producing anything, leaving the user with a
-   * silent run. A retry notification is queued via followUp — the loop
-   * picks it up right where it was about to stop, so the retry happens
-   * within the same run and the UI keeps the turn expanded until it
-   * completes. A response with output resets the consecutive-retry count;
-   * once the limit is hit the run ends normally. */
+   * silent run. Mid-run vacancies get their retry notification queued via
+   * followUp — the loop picks it up right where it was about to stop, so
+   * the retry happens within the same run and the UI keeps the turn
+   * expanded until it completes. Transient stream errors (stopReason
+   * "error", zero output) terminate the loop before it drains any queue,
+   * so their retry notification is parked in pendingErrorRetry instead
+   * and the run is restarted once it settles (see resumeAfterErrorRun);
+   * permanent failures are left alone entirely — they can never recover,
+   * and a followUp queued behind an errored run would leak into the next.
+   * User-initiated stops (aborted) are never resurrected. A response with
+   * output resets the consecutive-retry count; once the limit is hit the
+   * run ends normally. */
   private handleTurnEnd(message: AgentMessage): void {
     if (message.role !== "assistant") return;
     const assistant = message as AssistantMessage;
-    if (!isVacantResponse(assistant)) {
+    if (!hasNoVisibleOutput(assistant)) {
       this.emptyResponseRetries = 0;
       return;
     }
+    if (assistant.stopReason === "aborted") return;
+    const transientStreamError = isSilentErrorResponse(assistant);
+    if (!transientStreamError && assistant.stopReason === "error") return;
     if (
       this.closed || this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES
     ) {
       return;
     }
     this.emptyResponseRetries++;
-    this.agent.followUp(buildRetryNotification(this.emptyResponseRetries));
+    const notification = buildRetryNotification(this.emptyResponseRetries);
+    if (transientStreamError) {
+      this.pendingErrorRetry = notification;
+      return;
+    }
+    this.agent.followUp(notification);
+  }
+
+  /** Restart a run that a silent-error turn killed (see handleTurnEnd):
+   * the parked retry notification becomes the next prompt once the dead
+   * run has fully settled, so both run callers — prompt() (CLI) and
+   * startRun() (web / injected notifications) — hold off reporting
+   * completion until the restart chain has finished. Each restarted run
+   * goes through the same handling, so repeated failures keep retrying up
+   * to the limit. When a stop lands between two attempts or another run
+   * takes over first (a user prompt racing the restart), the restart
+   * stands down: the failed turn's own error stays what the user sees. */
+  private async resumeAfterErrorRun(): Promise<void> {
+    const epoch = this.abortEpoch;
+    while (
+      !this.closed && this.abortEpoch === epoch &&
+      this.pendingErrorRetry !== null
+    ) {
+      const message = this.pendingErrorRetry;
+      this.pendingErrorRetry = null;
+      try {
+        await this.agent.prompt(message);
+      } catch {
+        // The restart lost a race with another run (or the agent hit an
+        // unexpected state): drop the retry rather than fight the live
+        // run — the failed turn's error was already surfaced.
+        return;
+      }
+    }
   }
 
   /** Append only the messages added since the last save. */
