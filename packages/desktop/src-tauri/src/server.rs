@@ -89,39 +89,57 @@ enum ServerCommand {
 }
 
 /// Locate the server runtime:
-/// 1. packaged: server/lumisca-server(.exe) in Tauri's resource directory
-/// 2. repository layout during development (cwd is packages/desktop/src-tauri)
+/// 1. development: repository layout (cwd is packages/desktop/src-tauri) —
+///    the server runs from current source via `deno run`, so code changes
+///    take effect on the next dev launch
+/// 2. packaged: server/lumisca-server(.exe) in Tauri's resource directory
+///
+/// Dev builds must NOT prefer the bundled binary: `tauri dev` copies every
+/// bundle resource into target/debug, including any real
+/// lumisca-server(.exe) left in resources/ by an earlier release build
+/// (`npm run build:server` runs during `tauri build`). That silently boots
+/// a stale compiled server (an old feature set, old MCP handling) while the
+/// shell itself is freshly built — exactly the trap where the agent's tools
+/// do not match the repository. Debug builds therefore start from the
+/// repository entry point whenever one is reachable, and only fall back to
+/// the bundled binary when no source tree exists (a dev build installed as
+/// a standalone package).
 fn find_server_command(app: &AppHandle) -> Option<ServerCommand> {
-    // `tauri.conf.json` maps the bundled files to `server/*` relative to
-    // Tauri's platform-specific resource directory.
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        let bundled = resource_dir.join("server").join(if cfg!(windows) {
+    let bundled = app.path().resource_dir().ok().map(|resource_dir| {
+        // `tauri.conf.json` maps the bundled files to `server/*` relative
+        // to Tauri's platform-specific resource directory.
+        resource_dir.join("server").join(if cfg!(windows) {
             "lumisca-server.exe"
         } else {
             "lumisca-server"
-        });
-        // In dev (`tauri dev`), the build pipeline only ever copies the
-        // zero-byte placeholder produced by build:server:dev into the
-        // resource directory — the real binary is compiled by
-        // `npm run build:server` during `tauri build`. An empty file is
-        // never a runnable server, so ignore it and fall back to the
-        // repository layout below.
+        })
+    });
+    let repo_entry = [
+        "../../../packages/server/mod.ts",
+        "../../server/mod.ts",
+        "../server/mod.ts",
+    ]
+        .into_iter()
+        .map(PathBuf::from)
+        .find(|p| p.is_file());
+    if let Some(entry) = repo_entry.as_ref() {
+        // Development always runs the repository source when it is
+        // reachable; the bundled binary is for packaged (release) builds.
+        if cfg!(debug_assertions) {
+            return Some(ServerCommand::Deno(entry.clone()));
+        }
+    }
+    if let Some(bundled) = bundled {
+        // In dev, the build pipeline copies the zero-byte placeholder
+        // produced by build:server:dev into the resource directory — an
+        // empty file is never a runnable server, so ignore it. A real
+        // binary (length > 0) is what packaged builds run.
         let real_binary = bundled.metadata().map(|m| m.len() > 0).unwrap_or(false);
         if real_binary {
             return Some(ServerCommand::Compiled(bundled));
         }
     }
-    for c in [
-        "../../../packages/server/mod.ts",
-        "../../server/mod.ts",
-        "../server/mod.ts",
-    ] {
-        let p = Path::new(c);
-        if p.is_file() {
-            return Some(ServerCommand::Deno(p.to_path_buf()));
-        }
-    }
-    None
+    repo_entry.map(ServerCommand::Deno)
 }
 
 /// Desktop data directory (server database, desktop settings).

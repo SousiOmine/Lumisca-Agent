@@ -3,7 +3,8 @@
     "packages/core",
     "packages/server",
     "packages/cli",
-    "packages/web"
+    "packages/web",
+    "packages/desktop"
   ],
   "nodeModulesDir": "auto",
   "compilerOptions": {
@@ -58,6 +59,7 @@
     "dev": {
       "dependencies": ["dev:server", "dev:web"]
     },
+    "dev:desktop": "deno task --filter @lumisca/desktop dev",
     "dev:server": "deno task server",
     "dev:web": "deno task --filter @lumisca/web dev",
     "server": "deno run --allow-net --allow-read --allow-write --allow-env --allow-run --allow-sys --allow-ffi packages/server/mod.ts",

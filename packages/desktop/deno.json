@@ -1,0 +1,16 @@
+{
+  "name": "@lumisca/desktop",
+  "version": "0.4.1",
+  "exports": {},
+  "tasks": {
+    "dev": "npm run tauri dev",
+    "build": "npm run tauri build",
+    "build:server": "npm run build:server"
+  },
+  "fmt": {
+    "exclude": ["src-tauri/frontend"]
+  },
+  "lint": {
+    "exclude": ["src-tauri/frontend"]
+  }
+}
