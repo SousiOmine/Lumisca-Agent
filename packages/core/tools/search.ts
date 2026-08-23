@@ -1,6 +1,6 @@
 import { relative } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
-import { walkEntries } from "../workspace/walk.ts";
+import { BUILD_ARTIFACT_DIRS, walkEntries } from "../workspace/walk.ts";
 import { errorMessage } from "../errors.ts";
 import { TOOL_GLOB, TOOL_GREP } from "../shared.ts";
 import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
@@ -25,8 +25,9 @@ interface FsToolContext {
 /** Files larger than this are skipped by grep (avoid loading huge files). */
 const MAX_GREP_FILE_SIZE = 8 * 1024 * 1024;
 
-/** Binary detection probes the first 8 KiB for a NUL byte. */
-const BINARY_PROBE_BYTES = 8192;
+/** Files are read in batches of this many, overlapping I/O without
+ * unbounded memory use. */
+const GREP_CONCURRENCY = 16;
 
 /** One matched line, trimmed for display. */
 function linePreview(line: string, max = 200): string {
@@ -52,21 +53,13 @@ async function* walkFiles(
       skipHidden: options.skipHidden,
       gitignore: options.gitignore,
       maxDepth: options.maxDepth,
+      // VCS metadata and build-output trees (e.g. .git, dist, target) are
+      // never worth searching; pruning them before reading saves a lot of
+      // file opens on real repositories.
+      excludedDirs: BUILD_ARTIFACT_DIRS,
     })
   ) {
     if (!entry.isDir) yield entry.path;
-  }
-}
-
-async function looksBinary(path: string): Promise<boolean> {
-  const file = await Deno.open(path, { read: true });
-  try {
-    const buffer = new Uint8Array(BINARY_PROBE_BYTES);
-    const read = await file.read(buffer);
-    if (read === null) return false;
-    return buffer.subarray(0, read).includes(0);
-  } finally {
-    file.close();
   }
 }
 
@@ -102,7 +95,8 @@ export function createGrepTool(
       "Search file contents within the workspace using a regular expression. " +
       "Files matched by .gitignore are skipped; set `gitignore` to false to " +
       "search them too. Matches are returned as path:line: text. Binary " +
-      "files and files larger than 8MB are skipped.",
+      "files, files larger than 8MB, and build-artifact/VCS directories " +
+      "(.git, dist, build, target, ...) are skipped.",
     parameters: grepSchema,
     execute: async (_id, params) => {
       if (params.pattern.length > MAX_GREP_PATTERN_CHARS) {
@@ -131,7 +125,9 @@ export function createGrepTool(
         const stat = await Deno.stat(resolved);
         if (stat.isFile) {
           // Explicitly targeted files bypass gitignore filtering.
-          if (await grepFile(resolved, re, lines, maxResults)) files++;
+          const hits = await grepFileLines(resolved, re, maxResults);
+          if (hits.length > 0) files++;
+          appendLines(lines, hits, maxResults);
         } else {
           files += await grepTree(resolved, re, gitignore, lines, maxResults);
         }
@@ -140,7 +136,9 @@ export function createGrepTool(
           const stat = await Deno.stat(root).catch(() => null);
           if (stat === null) continue;
           if (stat.isFile) {
-            if (await grepFile(root, re, lines, maxResults)) files++;
+            const hits = await grepFileLines(root, re, maxResults);
+            if (hits.length > 0) files++;
+            appendLines(lines, hits, maxResults);
           } else {
             files += await grepTree(root, re, gitignore, lines, maxResults);
           }
@@ -174,7 +172,9 @@ async function resolveSearchRoot(
 }
 
 /** Grep every file under a directory, honoring gitignore filtering (hidden
- * files and node_modules are searched too). */
+ * files and node_modules are searched too). Files are read in concurrent
+ * batches; matches are appended in walk order so the output stays
+ * deterministic. Returns the number of files with at least one match. */
 async function grepTree(
   root: string,
   re: RegExp,
@@ -183,39 +183,80 @@ async function grepTree(
   maxResults: number,
 ): Promise<number> {
   let files = 0;
+  let batch: string[] = [];
   for await (const file of walkFiles(root, { skipHidden: false, gitignore })) {
-    if (await grepFile(file, re, out, maxResults)) files++;
+    batch.push(file);
+    if (batch.length >= GREP_CONCURRENCY) {
+      files += await grepBatch(batch, re, out, maxResults);
+      batch = [];
+      if (out.length >= maxResults) break;
+    }
+  }
+  if (batch.length > 0 && out.length < maxResults) {
+    files += await grepBatch(batch, re, out, maxResults);
+  }
+  return files;
+}
+
+/** Grep a batch of files concurrently and append their matches to `out`
+ * in the given (walk) order. Returns the number of files with matches. */
+async function grepBatch(
+  batch: string[],
+  re: RegExp,
+  out: string[],
+  maxResults: number,
+): Promise<number> {
+  const results = await Promise.all(
+    batch.map((path) => grepFileLines(path, re, maxResults)),
+  );
+  let files = 0;
+  for (const hits of results) {
+    if (!hits.length) continue;
+    files++;
+    appendLines(out, hits, maxResults);
     if (out.length >= maxResults) break;
   }
   return files;
 }
 
-async function grepFile(
+/** Append `hits` to `out`, never exceeding `maxResults`. */
+function appendLines(out: string[], hits: string[], maxResults: number) {
+  for (const line of hits) {
+    if (out.length >= maxResults) break;
+    out.push(line);
+  }
+}
+
+/** Grep a single file; returns its matching lines (`path:line: text`).
+ * Returns an empty array when the file is skipped: missing, not a regular
+ * file, larger than MAX_GREP_FILE_SIZE, binary (NUL byte anywhere in its
+ * decoded content) or unreadable. */
+async function grepFileLines(
   path: string,
   re: RegExp,
-  out: string[],
   maxResults: number,
-): Promise<boolean> {
+): Promise<string[]> {
   const stat = await Deno.stat(path).catch(() => null);
   if (stat === null || !stat.isFile || stat.size > MAX_GREP_FILE_SIZE) {
-    return false;
+    return [];
   }
-  if (await looksBinary(path)) return false;
-
   let text: string;
   try {
     text = await Deno.readTextFile(path);
   } catch {
-    return false;
+    return [];
   }
-  const start = out.length;
+  // Reading the file once also serves binary detection: NUL bytes survive
+  // the UTF-8 decode, so no separate probe open is needed.
+  if (text.includes("\u0000")) return [];
+  const hits: string[] = [];
   const split = text.split("\n");
-  for (let i = 0; i < split.length && out.length < maxResults; i++) {
+  for (let i = 0; i < split.length && hits.length < maxResults; i++) {
     if (re.test(split[i]!)) {
-      out.push(`${path}:${i + 1}: ${linePreview(split[i]!)}`);
+      hits.push(`${path}:${i + 1}: ${linePreview(split[i]!)}`);
     }
   }
-  return out.length > start;
+  return hits;
 }
 
 const globSchema = object({
@@ -244,7 +285,8 @@ export function createGlobTool(
       "Find files by path pattern within the workspace. Supports `**`, `*`, `?` and `{a,b}`. " +
       "Files matched by .gitignore are skipped; set `gitignore` to false to " +
       "search them too. Hidden files are searched; set `hidden` to false to " +
-      "skip them.",
+      "skip them. Build-artifact/VCS directories (.git, dist, build, " +
+      "target, ...) are always skipped.",
     parameters: globSchema,
     execute: async (_id, params) => {
       if (params.pattern.length > MAX_GLOB_PATTERN_CHARS) {

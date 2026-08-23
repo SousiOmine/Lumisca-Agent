@@ -420,6 +420,51 @@ Deno.test("glob supports brace alternation and scoped roots", async () => {
   }
 });
 
+Deno.test("grep and glob always skip build-artifact and VCS directories", async () => {
+  const root = await fixture();
+  try {
+    await Deno.mkdir(join(root, "dist", "assets"), { recursive: true });
+    await Deno.writeTextFile(
+      join(root, "dist", "assets", "bundle.js"),
+      "const foo = 7;\n",
+    );
+    await Deno.mkdir(join(root, "target", "debug"), { recursive: true });
+    await Deno.writeTextFile(
+      join(root, "target", "debug", "main.rs"),
+      "const foo = 8;\n",
+    );
+    await Deno.mkdir(join(root, ".git", "refs"), { recursive: true });
+    await Deno.writeTextFile(join(root, ".git", "refs", "head"), "foo\n");
+
+    const { grep, glob } = makeTools(root);
+    // gitignore:false + hidden search でも常に除外される
+    const grepResult = await grep.execute(
+      "1",
+      { pattern: "foo", gitignore: false },
+      undefined,
+    );
+    const grepText = toolText(grepResult);
+    assertEquals(grepText.includes("dist"), false);
+    assertEquals(grepText.includes("target"), false);
+    assertEquals(grepText.includes(".git"), false);
+    // a.ts, sub/c.ts, node_modules/pkg/d.ts, .hidden/e.ts
+    assertEquals(grepResult.details?.matches, 4);
+
+    const globResult = await glob.execute(
+      "1",
+      { pattern: "**/*", gitignore: false },
+      undefined,
+    );
+    const globText = toolText(globResult);
+    assertEquals(globText.includes("dist"), false);
+    assertEquals(globText.includes("target"), false);
+    assertEquals(globText.includes(".git"), false);
+    assertEquals(globResult.details?.count, 6); // a.ts, b.js, sub/c.ts, node_modules/pkg/d.ts, .hidden/e.ts, bin.dat
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("grep and glob search every workspace folder when path is omitted", async () => {
   const first = await fixture();
   const second = await fixture();

@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import type { Workspace } from "../types/workspace.ts";
-import { walkEntries } from "./walk.ts";
+import { BUILD_ARTIFACT_DIRS, walkEntries } from "./walk.ts";
 
 /** One entry in a workspace file listing, for @-mention suggestions.
  * `path` is workspace-relative in the `FolderName/rel/path` form the
@@ -12,22 +12,11 @@ export interface WorkspaceFileEntry {
   isDir: boolean;
 }
 
-/** Directories skipped while walking (on top of hidden `.`-prefixed ones),
- * matching the grep/glob tools' behavior plus common build caches (web,
- * Rust, .NET). Without these, a single build-output tree can consume the
- * whole entry budget before deeper siblings are reached. */
-const EXCLUDED_DIRS = new Set([
-  "node_modules",
-  ".git",
-  ".lumisca-cache",
-  ".next",
-  ".nuxt",
-  "dist",
-  "build",
-  "target",
-  "bin",
-  "obj",
-]);
+/** Directories skipped while walking (on top of hidden `.`-prefixed ones):
+ * the tools' shared build-artifact/VCS set plus dependency trees. Without
+ * these, a single build-output tree can consume the whole entry budget
+ * before deeper siblings are reached. */
+const EXCLUDED_DIRS = new Set([...BUILD_ARTIFACT_DIRS, "node_modules"]);
 
 const MAX_DEPTH = 12;
 

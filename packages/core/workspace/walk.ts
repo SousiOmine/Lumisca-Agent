@@ -1,6 +1,22 @@
 import { join, relative } from "node:path";
 import type { GitignoreMatcher } from "../tools/gitignore.ts";
 
+/** VCS metadata and build-output directories always pruned by the tools'
+ * walks (shared by grep/glob and the workspace file listing), at any depth.
+ * `node_modules` is deliberately absent: grep/glob keep searching it unless
+ * .gitignore says otherwise, and only the workspace listing excludes it. */
+export const BUILD_ARTIFACT_DIRS: ReadonlySet<string> = new Set([
+  ".git",
+  ".lumisca-cache",
+  ".next",
+  ".nuxt",
+  "dist",
+  "build",
+  "target",
+  "bin",
+  "obj",
+]);
+
 /** One visited entry of a walk. `rel` is the path relative to the walk
  * root (posix separators). */
 export interface WalkEntry {
