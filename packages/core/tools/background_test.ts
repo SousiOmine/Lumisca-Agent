@@ -83,6 +83,23 @@ function waitForEndEvent(
   });
 }
 
+/** Remove a test directory, retrying briefly while a killed process still
+ * holds it. On Windows a force-killed descendant keeps its working-
+ * directory handle for a beat after the kill, so an immediate recursive
+ * delete can fail with EBUSY even though every process is already dead. */
+async function removeTreeRetry(root: string): Promise<void> {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    try {
+      await Deno.remove(root, { recursive: true });
+      return;
+    } catch (error) {
+      if (Date.now() >= deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 function toolText(
   result: { content: { type: "text" | "image"; text?: string }[] },
 ): string {
@@ -688,6 +705,6 @@ Deno.test("background commands survive a session rebuild", async () => {
     );
   } finally {
     core.close();
-    await Deno.remove(root, { recursive: true });
+    await removeTreeRetry(root);
   }
 });

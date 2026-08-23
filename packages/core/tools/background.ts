@@ -84,20 +84,23 @@ interface RunningRecord {
   timer?: ReturnType<typeof setTimeout>;
 }
 
-/** Kill a spawned process and its whole tree. Windows: taskkill /T /F
- * (killing the shell alone would orphan everything it spawned); POSIX:
+/** Kill a spawned process and its whole tree, and wait for the kill to be
+ * issued. Windows: taskkill /T /F awaited — killing the shell alone would
+ * orphan everything it spawned, and the kill must have reached the whole
+ * tree before the caller treats the command as dead (a descendant still
+ * holding its working directory would otherwise block cleanup). POSIX:
  * SIGKILL (without a process group the shell's children may survive on
  * POSIX — best available without setsid). */
-export function killProcessTree(
+export async function killProcessTree(
   child: { pid: number; kill(signal: "SIGKILL"): void },
-): void {
+): Promise<void> {
   try {
     if (Deno.build.os === "windows") {
-      new Deno.Command("taskkill", {
+      await new Deno.Command("taskkill", {
         args: ["/PID", String(child.pid), "/T", "/F"],
         stdout: "null",
         stderr: "null",
-      }).output().catch(() => {});
+      }).output();
     } else {
       child.kill("SIGKILL");
     }
@@ -258,7 +261,7 @@ export class BackgroundProcessManager {
     if (input.timeoutSec !== undefined && input.timeoutSec > 0) {
       record.timer = setTimeout(() => {
         record.killedByTimeout = true;
-        killProcessTree(child);
+        void killProcessTree(child);
       }, input.timeoutSec * 1000);
     }
     this.records.set(commandId, record);
@@ -317,7 +320,9 @@ export class BackgroundProcessManager {
   /** Stop a command (whole process tree) and wait — bounded — for it to
    * actually die, so the caller's result reflects reality (a status check
    * right after a successful kill must not see a still-running process).
-   * Unknown ids throw; killing an already-finished command is a no-op. */
+   * On Windows the taskkill is awaited first, so the kill has reached the
+   * whole tree before the shell's own exit is awaited. Unknown ids throw;
+   * killing an already-finished command is a no-op. */
   async kill(
     commandId: string,
   ): Promise<{ ok: true; alreadyExited: boolean; timedOut: boolean }> {
@@ -339,7 +344,7 @@ export class BackgroundProcessManager {
       clearTimeout(record.timer);
       record.timer = undefined;
     }
-    killProcessTree(record.child);
+    await killProcessTree(record.child);
     const timedOut = await Promise.race([
       record.exit.then(() => false, () => false),
       new Promise<boolean>((resolve) =>
@@ -349,7 +354,9 @@ export class BackgroundProcessManager {
     return { ok: true, alreadyExited: false, timedOut };
   }
 
-  /** Stop every running command (session close / app shutdown). */
+  /** Stop every running command (session close / app shutdown).
+   * Best-effort: the kills are issued but not awaited, so shutdown never
+   * blocks on a stuck process. */
   killAll(): void {
     for (const record of this.records.values()) {
       if (record.info.state !== "running") continue;
@@ -358,7 +365,7 @@ export class BackgroundProcessManager {
         clearTimeout(record.timer);
         record.timer = undefined;
       }
-      killProcessTree(record.child);
+      void killProcessTree(record.child);
     }
   }
 

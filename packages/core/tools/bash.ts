@@ -87,7 +87,9 @@ export function createBashTool(
       });
 
       const child = command.spawn();
-      const kill = () => killProcessTree(child);
+      // Fire-and-forget: the timeout/abort path must not await the kill
+      // (bash itself already waits for the child's exit below).
+      const kill = () => void killProcessTree(child);
       const onAbort = () => kill();
       signal?.addEventListener("abort", onAbort, { once: true });
       const timer = setTimeout(kill, timeoutSec * 1000);
