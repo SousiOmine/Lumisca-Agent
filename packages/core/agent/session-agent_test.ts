@@ -51,7 +51,11 @@ function streamSequence(responses: AssistantMessage[]): StreamFn {
   };
 }
 
-function makeAgent(streamFn: StreamFn, tools: Tool[] = []): SessionAgent {
+function makeAgent(
+  streamFn: StreamFn,
+  tools: Tool[] = [],
+  onEvent: (event: ClientEvent) => void = () => {},
+): SessionAgent {
   return new SessionAgent({
     sessionId: "s1",
     systemPrompt: "You are a test agent.",
@@ -71,7 +75,7 @@ function makeAgent(streamFn: StreamFn, tools: Tool[] = []): SessionAgent {
       deleteFrom: () => {},
       deleteBySession: () => {},
     },
-    onEvent: (_event: ClientEvent) => {},
+    onEvent,
     askHub: new AskHub("s1", () => {}),
     renameSession: () => {},
   });
@@ -380,4 +384,73 @@ Deno.test("a permanent silent error is not restarted", async () => {
   // retry notifications.
   assertEquals(retryNotifications(agent.messages).length, 0);
   assertEquals(agent.messages.length, 2);
+});
+
+/** Collect the session_error events a run emits. */
+function collectSessionErrors(): {
+  errors: string[];
+  onEvent: (event: ClientEvent) => void;
+} {
+  const errors: string[] = [];
+  return {
+    errors,
+    onEvent: (event: ClientEvent) => {
+      if (event.type === "session_error") errors.push(event.message);
+    },
+  };
+}
+
+Deno.test("an error-stopped turn emits session_error with the error text", async () => {
+  const { errors, onEvent } = collectSessionErrors();
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "Stream ended without finish_reason",
+      }),
+      fauxAssistantMessage("Recovered."),
+    ]),
+    [],
+    onEvent,
+  );
+  await agent.prompt("hello");
+
+  // The failed turn surfaces its error even though the run then recovers
+  // via the silent-error restart.
+  assertEquals(errors, ["Stream ended without finish_reason"]);
+});
+
+Deno.test("an error turn with partial output still surfaces session_error", async () => {
+  const { errors, onEvent } = collectSessionErrors();
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxText("partial answer")], {
+        stopReason: "error",
+        errorMessage: "connection reset",
+      }),
+    ]),
+    [],
+    onEvent,
+  );
+  await agent.prompt("hello");
+
+  assertEquals(errors, ["connection reset"]);
+});
+
+Deno.test("successful, vacant, and aborted turns emit no session_error", async () => {
+  const { errors, onEvent } = collectSessionErrors();
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage("Hello"),
+      // A vacant turn is retried in-run (followUp), not an error.
+      fauxAssistantMessage(""),
+      // A user-initiated stop is never an error.
+      fauxAssistantMessage("", { stopReason: "aborted" }),
+    ]),
+    [],
+    onEvent,
+  );
+  await agent.prompt("hello");
+
+  assertEquals(errors, []);
 });

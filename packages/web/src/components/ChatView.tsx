@@ -25,6 +25,7 @@ import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { BackgroundPanel } from "./BackgroundPanel.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
+import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
 
@@ -229,13 +230,7 @@ export function ChatView(
               </div>
             </div>
           )}
-          {view.error && (
-            <div className="msg">
-              <div className="msg-body error-text">
-                <p>{view.error}</p>
-              </div>
-            </div>
-          )}
+          {view.error && <ErrorBanner text={view.error} />}
         </div>
       </div>
       <div className="input-area">

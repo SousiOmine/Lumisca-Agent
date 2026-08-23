@@ -2706,6 +2706,36 @@ select:focus {
   font-size: 12.5px;
 }
 
+/* the session error banner: the whole row is clickable to copy the
+   error text; the copy icon sits at the row's top-right */
+.error-banner {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  user-select: text;
+}
+
+.error-banner .msg-body {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.error-copy-btn {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  margin-top: -2px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.error-banner:hover .error-copy-btn {
+  color: var(--text);
+}
+
 .faint-box {
   padding: 8px;
   font-size: 12.5px;

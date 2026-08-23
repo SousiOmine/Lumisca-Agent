@@ -665,6 +665,7 @@ export class SessionAgent {
           sessionId: this.sessionId,
           message: event.message,
         });
+        this.reportModelError(event.message);
         this.persistMessages();
         break;
       case "tool_execution_start":
@@ -698,6 +699,25 @@ export class SessionAgent {
       default:
         break;
     }
+  }
+
+  /** Surface a model-stream failure to the user. An assistant message that
+   * ended with stopReason "error" carries the provider's error text, but
+   * neither the web UI nor the CLI renders it from the message itself —
+   * the empty content leaves a silent run. The retry mechanism is
+   * unaffected: a transient failure still parks its retry (handleTurnEnd),
+   * and the error banner clears when the restarted run starts
+   * (agent_start). */
+  private reportModelError(message: AgentMessage): void {
+    if (message.role !== "assistant") return;
+    const assistant = message as AssistantMessage;
+    if (assistant.stopReason !== "error") return;
+    const text = assistant.errorMessage?.trim();
+    this.emit({
+      type: "session_error",
+      sessionId: this.sessionId,
+      message: text ? text : "The model returned an error",
+    });
   }
 
   /** Retry a vacant assistant response (no text, no tool call): the model
