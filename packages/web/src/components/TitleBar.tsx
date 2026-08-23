@@ -1,13 +1,8 @@
 import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
-import {
-  IconBrowser,
-  IconCopy,
-  IconMinus,
-  IconSquare,
-  IconX,
-} from "@tabler/icons-react";
+import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-react";
 import { shellCall, type ShellState, windowApi } from "../shell.ts";
 import { AppMenu } from "./AppMenu.tsx";
+import { paneIcon } from "./paneIcons.tsx";
 
 /** Poll interval while the shell is reachable: only the maximize/restore
  * icon depends on the window state, so a modest interval is fine. */
@@ -25,12 +20,15 @@ interface TitleBarProps {
   onOpenRecent: () => void;
   onOpenSettings: () => void;
   onQuit: () => void;
-  /** Browser lab pane state (desktop): whether the lab exists and
+  /** Docked pane state (desktop): whether the pane's surface exists and
    * whether the pane is shown. When given, a toggle button is rendered
    * next to the app menu. */
-  browserOpen?: boolean;
-  browserVisible?: boolean;
-  onToggleBrowser?: () => void;
+  paneOpen?: boolean;
+  paneVisible?: boolean;
+  /** Kind of the content currently hosted in the pane (drives the
+   * toggle's icon); null when the pane is empty. */
+  paneKind?: string | null;
+  onTogglePane?: () => void;
 }
 
 /** Window chrome for the undecorated desktop window (see
@@ -48,9 +46,10 @@ export function TitleBar({
   onOpenRecent,
   onOpenSettings,
   onQuit,
-  browserOpen = false,
-  browserVisible = false,
-  onToggleBrowser,
+  paneOpen = false,
+  paneVisible = false,
+  paneKind = null,
+  onTogglePane,
 }: TitleBarProps) {
   const [available, setAvailable] = useState(false);
   const [maximized, setMaximized] = useState(false);
@@ -106,26 +105,20 @@ export function TitleBar({
     >
       {children}
       <div className="titlebar-controls">
-        {onToggleBrowser && (
+        {onTogglePane && (
           <button
             type="button"
-            className={`titlebar-btn${browserOpen ? " active" : ""}`}
-            onClick={onToggleBrowser}
-            title={browserVisible
-              ? "ブラウザペインを隠す"
-              : "ブラウザペインを表示"}
-            aria-label={browserVisible
-              ? "ブラウザペインを隠す"
-              : "ブラウザペインを表示"}
+            className={`titlebar-btn${paneOpen ? " active" : ""}`}
+            onClick={onTogglePane}
+            title={paneVisible ? "ペインを隠す" : "ペインを表示"}
+            aria-label={paneVisible ? "ペインを隠す" : "ペインを表示"}
           >
-            <IconBrowser size={15} />
+            {paneIcon(paneKind ?? "", 15)}
             {
-              /* A hidden-but-alive lab: the agent may still be operating
-             * the browser in the background. */
+              /* A hidden-but-alive surface: the agent may still be
+             * operating it in the background. */
             }
-            {browserOpen && !browserVisible && (
-              <span className="titlebar-btn-dot" />
-            )}
+            {paneOpen && !paneVisible && <span className="titlebar-btn-dot" />}
           </button>
         )}
         <AppMenu
@@ -135,7 +128,7 @@ export function TitleBar({
           onQuit={onQuit}
           isDesktop
           buttonClass="titlebar-btn"
-          browserPaneOpen={browserOpen}
+          paneOpen={paneOpen}
         />
         <button
           type="button"

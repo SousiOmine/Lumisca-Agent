@@ -7,7 +7,7 @@ import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
-import { useBrowserPane } from "./hooks/useBrowserPane.ts";
+import { usePane } from "./hooks/usePane.ts";
 import { quit } from "./shell.ts";
 import { useTabs } from "./hooks/useTabs.ts";
 import { TabBar } from "./components/TabBar.tsx";
@@ -17,7 +17,7 @@ import { NewSessionView } from "./components/NewSessionView.tsx";
 import { RecentSessionsModal } from "./components/RecentSessionsModal.tsx";
 import { SettingsModal } from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
-import { BrowserPaneHeader } from "./components/BrowserPaneHeader.tsx";
+import { PaneHeader } from "./components/PaneHeader.tsx";
 
 export interface AppProps {
   /** Preloaded data from the bootstrap script; undefined when not served. */
@@ -70,13 +70,13 @@ export function App({ initialData }: AppProps): ReactElement {
   const activeView: SessionView | undefined = activeTab
     ? views.get(activeTab)
     : undefined;
-  // The browser lab pane (the agent's browser, docked at the right
-  // edge). Polled from the shell bridge: the agent's own tools
-  // open/close it, and the user can hide it (the lab keeps running).
-  const browserPane = useBrowserPane();
+  // The docked pane (the agent's browser WebView today, hosted at the
+  // right edge). Polled from the shell bridge: the agent's own tools
+  // open/close it, and the user can hide it (the surface keeps running).
+  const pane = usePane();
 
   return (
-    <div className={browserPane.visible ? "app browser-pane-open" : "app"}>
+    <div className={pane.visible ? "app pane-open" : "app"}>
       {
         /* The desktop window is undecorated; the title bar strip holds the
        * tab bar, the app menu and the window controls (in a plain browser
@@ -87,9 +87,10 @@ export function App({ initialData }: AppProps): ReactElement {
         onOpenRecent={() => setShowRecent(true)}
         onOpenSettings={() => setShowSettings(true)}
         onQuit={quit}
-        browserOpen={browserPane.open}
-        browserVisible={browserPane.visible}
-        onToggleBrowser={browserPane.toggle}
+        paneOpen={pane.open}
+        paneVisible={pane.visible}
+        paneKind={pane.content?.kind ?? null}
+        onTogglePane={pane.toggle}
       >
         <TabBar
           tabs={tabs}
@@ -109,8 +110,8 @@ export function App({ initialData }: AppProps): ReactElement {
       </TitleBar>
       {
         /* Everything below the title bar: shrinks by the pane width while
-       * the browser pane is visible (the pane is a native WebView that
-       * overlays the app window's right edge). */
+       * the pane is visible (the pane is a native window that overlays
+       * the app window's right edge). */
       }
       <div className="app-body">
         <UpdateBanner update={update} />
@@ -163,13 +164,13 @@ export function App({ initialData }: AppProps): ReactElement {
       </div>
       {
         /* The pane's header strip, rendered by this webview directly
-       * above the native lab WebView (which starts below it, so they
+       * above the native pane window (which starts below it, so they
        * never overlap). */
       }
-      {browserPane.visible && (
-        <BrowserPaneHeader
-          url={browserPane.url}
-          onHide={() => browserPane.setVisible(false)}
+      {pane.visible && pane.content !== null && (
+        <PaneHeader
+          content={pane.content}
+          onHide={() => pane.setVisible(false)}
         />
       )}
       {showSettings && (

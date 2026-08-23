@@ -279,25 +279,26 @@ pub(crate) fn handle_shell_request(
             install_update(app.clone());
             bridge_json(StatusCode::OK, update_status_json(app))
         }
-        // --- browser lab pane -----------------------------------------
+        // --- docked pane ------------------------------------------------
         //
-        // The agent's browser lab is overlaid as a pane on the app
-        // window's right edge (its own borderless window, glued to the
-        // main window — see browser_lab.rs). The React UI polls `state`
-        // to lay itself out around the pane (it must reserve the pane's
+        // The agent's lab is overlaid as a pane on the app window's
+        // right edge (its own borderless window, glued to the main
+        // window — see browser_lab.rs). The React UI polls `state` to
+        // lay itself out around the pane (it must reserve the pane's
         // width and shift fixed-position panels away from it) and drives
         // show/hide here. Hiding the pane is a UI choice only: the lab
-        // keeps running, and the agent's browser tools keep working while
-        // it is hidden.
-        "browser/state" => bridge_json(StatusCode::OK, browser_lab::pane_state(app)),
-        "browser/set-visible" => {
+        // keeps running, and the agent's browser tools keep working
+        // while it is hidden. The pane protocol is content-kind based,
+        // so non-browser surfaces can be hosted later.
+        "pane/state" => bridge_json(StatusCode::OK, browser_lab::pane_state(app)),
+        "pane/set-visible" => {
             let visible = match get("visible").and_then(|v| v.parse::<bool>().ok()) {
                 Some(visible) => visible,
                 None => return bridge_error(StatusCode::BAD_REQUEST, "visible required"),
             };
             bridge_json(StatusCode::OK, browser_lab::set_pane_visible(app, visible))
         }
-        "browser/toggle" => bridge_json(StatusCode::OK, browser_lab::toggle_pane(app)),
+        "pane/toggle" => bridge_json(StatusCode::OK, browser_lab::toggle_pane(app)),
         // --- custom title bar window controls ----------------------------
         //
         // The window is undecorated (tauri.conf.json), so the page draws

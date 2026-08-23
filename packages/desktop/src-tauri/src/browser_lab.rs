@@ -19,7 +19,7 @@
 //!   `eval_with_callback` — the probe runs in the page, results come back
 //!   through the eval callback. No polling, no push channel. These work
 //!   whether or not the pane is currently shown: hiding the pane is a UI
-//!   choice (bridge `browser/set-visible` / the header's hide button),
+//!   choice (bridge `pane/set-visible` / the header's hide button),
 //!   not a protocol state.
 //! - `close` destroys the window (idempotent); a window closed by the
 //!   user makes every later call fail with `not_open` (no recreation
@@ -64,14 +64,16 @@ pub const LAB_WINDOW_LABEL: &str = "browser-lab";
 const MAIN_WINDOW_LABEL: &str = "main";
 /// The lumisca:// shell bridge must never be reachable from the lab.
 const BLOCKED_SCHEMES: [&str; 1] = ["lumisca:"];
-/// Lab pane width in logical pixels. Must match `--browser-pane-width`
+/// Pane width in logical pixels. Must match `--pane-width`
 /// in packages/web/src/styles.css (the React UI reserves this space).
-const LAB_PANE_WIDTH: f64 = 460.0;
+/// The pane itself is content-agnostic: today it hosts the browser lab,
+/// later surfaces can reuse the same dock.
+const PANE_WIDTH: f64 = 460.0;
 /// Height of the pane's header strip (rendered by the React UI in the
-/// main window) in logical pixels. The lab window is positioned BELOW
+/// main window) in logical pixels. The pane window is positioned BELOW
 /// this strip so the header never overlaps it. Must match
-/// `--browser-pane-header-height` in styles.css.
-const LAB_PANE_HEADER_HEIGHT: f64 = 36.0;
+/// `--pane-header-height` in styles.css.
+const PANE_HEADER_HEIGHT: f64 = 36.0;
 /// Height of the app's title bar in logical pixels. Must match
 /// `--tab-height` in styles.css (the pane starts below it).
 const APP_TITLEBAR_HEIGHT: f64 = 40.0;
@@ -237,19 +239,19 @@ fn probe_method_of(rpc_method: &str) -> &str {
 /// Position and size the lab window so it overlays the main window's
 /// client area as the right-side pane: below the title bar and the
 /// pane's header strip (both rendered by the main window's webview),
-/// `LAB_PANE_WIDTH` wide, down to the bottom edge. Coordinates are
+/// `PANE_WIDTH` wide, down to the bottom edge. Coordinates are
 /// logical (tauri's set_position/set_size take logical values); the
 /// main window's inner position/size are physical, converted here.
 fn place_pane(pane: &WebviewWindow, main: &WebviewWindow) {
     let scale = main.scale_factor().unwrap_or(1.0);
     let inner_pos = main.inner_position().unwrap_or_default();
     let inner_size = main.inner_size().unwrap_or_default();
-    let top = APP_TITLEBAR_HEIGHT + LAB_PANE_HEADER_HEIGHT;
-    let x = (inner_pos.x as f64 + inner_size.width as f64) / scale - LAB_PANE_WIDTH;
+    let top = APP_TITLEBAR_HEIGHT + PANE_HEADER_HEIGHT;
+    let x = (inner_pos.x as f64 + inner_size.width as f64) / scale - PANE_WIDTH;
     let y = inner_pos.y as f64 / scale + top;
     let height = (inner_size.height as f64 / scale - top).max(0.0);
     let _ = pane.set_position(tauri::LogicalPosition::new(x, y));
-    let _ = pane.set_size(tauri::LogicalSize::new(LAB_PANE_WIDTH, height));
+    let _ = pane.set_size(tauri::LogicalSize::new(PANE_WIDTH, height));
 }
 
 /// The lab window's logical (CSS-pixel) size — the surface the emulated
@@ -428,19 +430,29 @@ impl LabCore {
     #[cfg(not(windows))]
     fn reapply_emulation(&self, _pane: &WebviewWindow) {}
 
-    /// Current pane state for the bridge (`browser/state` and friends):
-    /// does the lab exist, is the pane shown, and which page is loaded.
+    /// Current pane state for the bridge (`pane/state` and friends):
+    /// does the pane exist, is it shown, and which content is hosted.
+    /// The response uses the generic pane protocol shape — a `content`
+    /// object carrying a `kind` and a header `label` — so surfaces other
+    /// than the browser lab can be hosted in the same dock later. The
+    /// lab reports itself as kind "browser" with the loaded page URL as
+    /// the label.
     fn state_json(&self) -> Value {
         let open = self.window.lock().unwrap().is_some();
         let visible = *self.visible.lock().unwrap();
-        let url = self
-            .window
-            .lock()
-            .unwrap()
-            .as_ref()
-            .and_then(|w| w.url().ok())
-            .map(|u| u.to_string());
-        json!({ "open": open, "visible": visible && open, "url": url })
+        let content = if open {
+            let label = self
+                .window
+                .lock()
+                .unwrap()
+                .as_ref()
+                .and_then(|w| w.url().ok())
+                .map(|u| u.to_string());
+            Some(json!({ "kind": "browser", "label": label }))
+        } else {
+            None
+        };
+        json!({ "open": open, "visible": visible && open, "content": content })
     }
 
     /// Show or hide the pane (UI choice). The lab keeps running while
@@ -841,32 +853,33 @@ impl LabHandler {
     }
 }
 
-// --- bridge-facing pane state (browser/state, browser/set-visible, ...) ---
+// --- bridge-facing pane state (pane/state, pane/set-visible, ...) ---
 
-/// The lab pane state as JSON for the bridge: `open` = the lab window
-/// exists, `visible` = the pane is shown, `url` = the page currently
-/// loaded (or null). The React UI polls this and drives the pane layout.
+/// The pane state as JSON for the bridge: `open` = the pane window
+/// exists, `visible` = the pane is shown, `content` = the hosted
+/// surface's kind/label (the browser lab) or null. The React UI polls
+/// this and drives the pane layout.
 pub fn pane_state(app: &AppHandle) -> Value {
     match lab_of(app) {
         Some(core) => core.state_json(),
-        None => json!({ "open": false, "visible": false, "url": null }),
+        None => json!({ "open": false, "visible": false, "content": null }),
     }
 }
 
-/// Show/hide the lab pane (the agent's browser keeps running while
-/// hidden). Returns the fresh state.
+/// Show/hide the pane (the agent's browser keeps running while hidden).
+/// Returns the fresh state.
 pub fn set_pane_visible(app: &AppHandle, visible: bool) -> Value {
     match lab_of(app) {
         Some(core) => core.set_pane_visible(visible),
-        None => json!({ "open": false, "visible": false, "url": null }),
+        None => json!({ "open": false, "visible": false, "content": null }),
     }
 }
 
-/// Flip the lab pane's visibility. Returns the fresh state.
+/// Flip the pane's visibility. Returns the fresh state.
 pub fn toggle_pane(app: &AppHandle) -> Value {
     match lab_of(app) {
         Some(core) => core.toggle_pane(),
-        None => json!({ "open": false, "visible": false, "url": null }),
+        None => json!({ "open": false, "visible": false, "content": null }),
     }
 }
 

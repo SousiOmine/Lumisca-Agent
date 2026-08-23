@@ -142,29 +142,42 @@ export const updateApi = {
   install: () => shellCall<UpdateStatus>("update/install"),
 };
 
-/** Browser lab pane state reported by the shell bridge (`browser/state`).
- * The lab is the agent's browser WebView, docked as a right-side pane
- * inside the app window (never a separate OS window). */
-export interface BrowserPaneState {
-  /** Whether the lab WebView exists (the agent opened the browser). */
-  open: boolean;
-  /** Whether the pane is currently shown. Hiding it is a UI choice only:
-   * the lab keeps running and the agent's browser tools keep working
-   * while it is hidden. */
-  visible: boolean;
-  /** The page currently loaded in the lab (for the pane header). */
-  url: string | null;
+/** Docked pane content reported by the shell bridge (`pane/state`). The
+ * pane is the right-side panel hosting a native surface inside the app
+ * window; today that surface is always the agent's browser lab WebView,
+ * but the protocol is kind-based so other content can be hosted later.
+ * `kind` is the content type ("browser" today; the UI falls back to a
+ * generic display for unknown future kinds) and `label` is the text
+ * shown in the pane header (for the browser: the loaded page URL). */
+export interface PaneContent {
+  kind: string;
+  label: string | null;
 }
 
-/** Browser lab pane controls. `state` is polled by the UI — the pane also
- * opens/closes from the agent's own tools (browser_open / browser_close)
- * — and setVisible/toggle return the fresh state so the caller can update
- * immediately. Plain browsers (no shell) reject every call. */
-export const browserPaneApi = {
-  state: () => shellCall<BrowserPaneState>("browser/state"),
+/** Docked pane state reported by the shell bridge (`pane/state`). The
+ * pane can be opened/closed from the agent's side and shown/hidden by
+ * the user; it is a right-side strip inside the app window (never a
+ * separate OS window). */
+export interface PaneState {
+  /** Whether the pane's surface exists (e.g. the agent opened the
+   * browser lab). */
+  open: boolean;
+  /** Whether the pane is currently shown. Hiding it is a UI choice only:
+   * the hosted surface keeps running while it is hidden. */
+  visible: boolean;
+  /** The content currently hosted in the pane, or null while empty. */
+  content: PaneContent | null;
+}
+
+/** Docked pane controls. `state` is polled by the UI — the pane also
+ * opens/closes from the agent's own tools — and setVisible/toggle return
+ * the fresh state so the caller can update immediately. Plain browsers
+ * (no shell) reject every call. */
+export const paneApi = {
+  state: () => shellCall<PaneState>("pane/state"),
   setVisible: (visible: boolean) =>
-    shellCall<BrowserPaneState>("browser/set-visible", {
+    shellCall<PaneState>("pane/set-visible", {
       visible: String(visible),
     }),
-  toggle: () => shellCall<BrowserPaneState>("browser/toggle"),
+  toggle: () => shellCall<PaneState>("pane/toggle"),
 };
