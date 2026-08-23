@@ -116,6 +116,7 @@ Deno.test("runOnce executes a headless run and returns the transcript", async ()
       // 依存せず faux で実行する。
       model: `${faux.provider.id}/${faux.getModel().id}`,
       json: false,
+      browserPreview: "never",
     });
     assertEquals(result.error, undefined);
     assertEquals(result.messages.length, 2);
@@ -148,6 +149,7 @@ Deno.test("runOnce surfaces session errors on the result", async () => {
       prompt: "go",
       model: `${faux.provider.id}/${faux.getModel().id}`,
       json: false,
+      browserPreview: "never",
     });
     assertEquals(result.error, "boom");
   } finally {
@@ -167,6 +169,7 @@ Deno.test("runOnce reuses a workspace with the same folder", async () => {
       workspacePath: dir,
       prompt: "one",
       json: false,
+      browserPreview: "never",
     });
     faux.setResponses([fauxAssistantMessage("two")]);
     const second = await runOnce(core, {
@@ -174,6 +177,7 @@ Deno.test("runOnce reuses a workspace with the same folder", async () => {
       workspacePath: dir,
       prompt: "two",
       json: false,
+      browserPreview: "never",
     });
 
     const workspaces = core.listWorkspaces();
@@ -200,6 +204,7 @@ Deno.test("runOnce rejects a missing workspace folder", async () => {
           workspacePath: "C:/definitely/missing/folder",
           prompt: "hi",
           json: false,
+          browserPreview: "never",
         }),
       Error,
     );
@@ -235,6 +240,7 @@ Deno.test("runOnce skips a disabled last-used model (default path)", async () =>
       workspacePath: dir,
       prompt: "hi",
       json: false,
+      browserPreview: "never",
     });
     assertEquals(result.modelId !== "main", true);
     assertEquals(

@@ -56,6 +56,7 @@ import { APP_MCP_SETTINGS_KEY } from "./mcp/config.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
 import { CommandSafety } from "./safety/command-safety.ts";
+import type { BrowserBackend } from "./browser/types.ts";
 
 export interface CreateSessionInput {
   workspaceId: string;
@@ -86,6 +87,11 @@ export class LumiscaCore {
   private readonly pool: SessionPool;
   private readonly mcp: McpService;
   private readonly commandSafety: CommandSafety;
+  /** Browser-lab backend (Desktop WebView host / CLI browser host), or
+   * undefined in plain server mode — the agent then gets no browser
+   * tools. Attached by the frontends (server/mod.ts, cli/mod.ts) before
+   * sessions open. */
+  private browserBackend: BrowserBackend | undefined;
   private readonly listeners = new Set<(event: ClientEvent) => void>();
 
   private constructor(db: LumiscaDb, settings: SettingsRepo) {
@@ -129,6 +135,7 @@ export class LumiscaCore {
       loadMergedMcp: (workspace) => this.mcp.loadMergedConfig(workspace),
       requireWorkspace: (id) => this.requireWorkspace(id),
       emit: (event) => this.emit(event),
+      browser: () => this.browserBackend,
     });
     this.mcp = new McpService({
       settings: this.settings,
@@ -175,6 +182,21 @@ export class LumiscaCore {
   close(): void {
     this.pool.closeAll();
     this.db.close();
+  }
+
+  // --- browser lab --------------------------------------------------------
+
+  /** Attach (or detach, with undefined) the browser-lab backend. Affects
+   * agents opened from now on — the desktop shell passes its IPC endpoint,
+   * the CLI passes a lazy host starter, plain server mode passes nothing
+   * (no browser tools). */
+  setBrowserBackend(backend: BrowserBackend | undefined): void {
+    this.browserBackend = backend;
+  }
+
+  /** The attached browser backend, if any. */
+  getBrowserBackend(): BrowserBackend | undefined {
+    return this.browserBackend;
   }
 
   /** Subscribe to agent events. Returns an unsubscribe function. */

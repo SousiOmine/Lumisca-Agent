@@ -26,6 +26,8 @@ import { Sandbox } from "../workspace/sandbox.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
+import type { BrowserBackend } from "../browser/types.ts";
+import { createBrowserTools } from "../browser/tools.ts";
 import { toAgentTool } from "./pi-adapter.ts";
 import {
   boolean,
@@ -77,14 +79,21 @@ function exploreTools(workspace: Workspace): Tool[] {
  * without ask/todo/async_bash. Sub-agents have no UI round trip (ask), no
  * plan panel of their own (todo), and no background commands that would
  * outlive them (async_bash). `safety` (when present) gates their bash/eval
- * tools like the main agent's. */
-function generalTools(workspace: Workspace, safety?: CommandSafety): Tool[] {
+ * tools like the main agent's; `browser` (when present) gives them the
+ * same browser-lab tools as the main agent, so the tool sets never
+ * drift. */
+function generalTools(
+  workspace: Workspace,
+  safety?: CommandSafety,
+  browser?: BrowserBackend,
+): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
     ...sandboxFileTools(sandbox),
     createBashTool({ sandbox, safety }),
     createEvalTool({ safety }),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
+    ...(browser !== undefined ? createBrowserTools(browser) : []),
   ];
 }
 
@@ -148,6 +157,9 @@ export interface TaskHubOptions {
    * fast model judges commands before they run). Omitted → the sub-agent's
    * command tools run unchecked. */
   safety?: CommandSafety;
+  /** Browser-lab backend for general sub-agents (same instance the main
+   * agent's tools use). Omitted → sub-agents get no browser tools. */
+  browser?: () => BrowserBackend | undefined;
   emit: (event: ClientEvent) => void;
 }
 
@@ -172,6 +184,7 @@ export class TaskHub {
   private resolveRuntime: () => SubagentRuntime;
   private readonly streamFn: StreamFn;
   private readonly safety: CommandSafety | undefined;
+  private readonly browser: (() => BrowserBackend | undefined) | undefined;
   private readonly emit: (event: ClientEvent) => void;
   /** The session's tool registry (set by the pool on every open): holds
    * every discoverable tool (MCP tools, future extensions) whose
@@ -190,6 +203,7 @@ export class TaskHub {
     this.resolveRuntime = options.resolveRuntime;
     this.streamFn = options.streamFn;
     this.safety = options.safety;
+    this.browser = options.browser;
     this.emit = options.emit;
   }
 
@@ -312,9 +326,10 @@ export class TaskHub {
     // the registry (empty while discovery is still in flight — sub-agents
     // spawned before it finished get the pair via attachMcpToRunning).
     const searchable = type === "general" ? this.searchTools() : [];
+    const browser = this.browser !== undefined ? this.browser() : undefined;
     const tools = [
       ...(type === "general"
-        ? generalTools(runtime.workspace, this.safety)
+        ? generalTools(runtime.workspace, this.safety, browser)
         : exploreTools(runtime.workspace)),
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),

@@ -19,6 +19,8 @@ url = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 getrandom = "0.4"
+# Shared browser-lab protocol pieces (RPC server, probe, URL policy).
+lumisca-browser-rpc = { path = "../../browser-rpc" }
 
 [target.'cfg(windows)'.dependencies]
 # Same version tauri/tao already use (no duplicate in the tree). Used to
@@ -28,6 +30,9 @@ windows = { version = "0.61", features = [
   "Win32_System_Threading",
   "Win32_UI_WindowsAndMessaging",
 ] }
+# Direct WebView2 COM access for the browser lab's CDP screenshot and
+# (future) runtime/console/network events. Same version wry uses.
+webview2-com = "0.38"
 
 [target.'cfg(unix)'.dependencies]
 # kill(2) for process-group teardown of the local server (server.rs).

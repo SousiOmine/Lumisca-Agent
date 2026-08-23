@@ -1,4 +1,5 @@
 import { LumiscaCore, resolveSettingsPath } from "@lumisca/core";
+import { HttpBrowserBackend } from "@lumisca/core";
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -36,6 +37,28 @@ function resolveAllowedHosts(): string[] {
     .filter((h) => h.length > 0);
 }
 
+/**
+ * Desktop mode: the shell hands the browser-lab RPC endpoint and its
+ * per-run token to the server child through the environment. Attach the
+ * backend when both are present — the agent then gets the browser tools.
+ * A half-set pair is a shell bug: report it loudly and run WITHOUT
+ * browser tools, never with a guessed endpoint. Plain server mode has no
+ * environment → no browser surface at all.
+ */
+function attachBrowserBackend(core: LumiscaCore): void {
+  const url = Deno.env.get("LUMISCA_BROWSER_IPC_URL");
+  const token = Deno.env.get("LUMISCA_BROWSER_TOKEN");
+  if (url === undefined && token === undefined) return;
+  if (url === undefined || token === undefined) {
+    console.error(
+      "Lumisca: LUMISCA_BROWSER_IPC_URL と LUMISCA_BROWSER_TOKEN は" +
+        "ペアで設定してください (browser lab を無効化して続行します)",
+    );
+    return;
+  }
+  core.setBrowserBackend(new HttpBrowserBackend({ url, token }));
+}
+
 // Optional auth token (the desktop shell sets one): /api, /ws and — unless
 // a local dev server — the page then require it, so only clients that
 // know the token can drive the agent.
@@ -60,6 +83,7 @@ const repoRoot = resolveRepoRoot();
 const allowedHosts = resolveAllowedHosts();
 
 const core = LumiscaCore.open(dbPath, settingsPath);
+attachBrowserBackend(core);
 const server = startServer(core, port, {
   repoRoot,
   token,

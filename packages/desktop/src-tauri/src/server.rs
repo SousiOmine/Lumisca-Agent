@@ -155,8 +155,8 @@ fn resolve_port() -> u16 {
 /// CSPRNG. Beyond blocking casual local processes from driving the agent,
 /// it lets the health check tell OUR server apart from a stale instance
 /// of a previous run (which has a different token and answers 401 to
-/// ours).
-fn generate_token() -> String {
+/// ours). Also reused by the browser lab (browser_lab.rs).
+pub(crate) fn generate_token() -> String {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).expect("OS random number source must be available");
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -217,11 +217,18 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
             // Packaged build: prebuilt frontend assets sit next to the
             // binary in the resources dir.
             let assets_file = bin.parent().unwrap_or(Path::new(".")).join("assets.json");
-            background_command(&bin)
+            let mut command = background_command(&bin);
+            command
                 .env("LUMISCA_DB", &db_path)
                 .env("LUMISCA_PORT", port.to_string())
                 .env("LUMISCA_TOKEN", token)
-                .env("LUMISCA_ASSETS_FILE", assets_file)
+                .env("LUMISCA_ASSETS_FILE", assets_file);
+            if let Some((url, browser_token)) = browser_lab_env(app) {
+                command
+                    .env("LUMISCA_BROWSER_IPC_URL", url)
+                    .env("LUMISCA_BROWSER_TOKEN", browser_token);
+            }
+            command
                 .spawn()
                 .map_err(|e| format!("Failed to start Lumisca server: {e}"))?
         }
@@ -241,7 +248,8 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| PathBuf::from("."));
-            background_command(&deno)
+            let mut command = background_command(&deno);
+            command
                 .args([
                     "run",
                     "--allow-net",
@@ -255,13 +263,29 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .env("LUMISCA_DB", db_path)
                 .env("LUMISCA_PORT", port.to_string())
                 .env("LUMISCA_REPO_ROOT", repo_root)
-                .env("LUMISCA_TOKEN", token)
+                .env("LUMISCA_TOKEN", token);
+            if let Some((url, browser_token)) = browser_lab_env(app) {
+                command
+                    .env("LUMISCA_BROWSER_IPC_URL", url)
+                    .env("LUMISCA_BROWSER_TOKEN", browser_token);
+            }
+            command
                 .spawn()
                 .map_err(|e| format!("Failed to start Lumisca server: {e}"))?
         }
     };
 
     Ok(child)
+}
+
+/// The browser lab's RPC endpoint (URL + token) for the server child
+/// process, when the lab is running. Absent → the server gets no browser
+/// environment (and the agent no browser tools).
+fn browser_lab_env(app: &AppHandle) -> Option<(String, String)> {
+    let state = app.state::<AppState>();
+    let guard = state.browser_lab.lock().unwrap();
+    let lab = guard.as_ref()?;
+    Some(lab.endpoint())
 }
 
 /// Kill the server AND everything it spawned (tool children would

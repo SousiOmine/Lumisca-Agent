@@ -20,6 +20,7 @@ import type { CommandSafety } from "../safety/command-safety.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { MessageRepo } from "../session/messages.ts";
+import type { BrowserBackend } from "../browser/types.ts";
 
 /** Everything the pool needs to build and manage agents, injected by
  * LumiscaCore so the pool stays free of repository wiring. */
@@ -63,6 +64,11 @@ export interface SessionPoolDeps {
   requireWorkspace(id: string): Workspace;
   /** Forward an agent event to every frontend listener. */
   emit(event: ClientEvent): void;
+  /** The session's browser-lab backend (Desktop WebView host / CLI browser
+   * host), or undefined when no browser surface is available — the agent
+   * then gets no browser tools. A getter so a backend attached after the
+   * pool was built (CLI lazy start) still reaches new agents. */
+  browser?: () => BrowserBackend | undefined;
 }
 
 /** True when two merged configs describe the same servers, comparing their
@@ -326,6 +332,7 @@ export class SessionPool {
         resolveRuntime: runtimeResolver,
         streamFn: this.deps.streamFn,
         safety: this.deps.commandSafety,
+        browser: this.deps.browser,
         emit: (event: ClientEvent) => this.deps.emit(event),
       });
       resources.tasks = tasks;
@@ -335,12 +342,16 @@ export class SessionPool {
     // The sub-agents share the session's MCP attachment (general
     // sub-agents get the search/call tools over its registry).
     tasks.setMcp(mcp, registry);
+    const browser = this.deps.browser !== undefined
+      ? this.deps.browser()
+      : undefined;
     const tools = createCodingTools(workspace, {
       background,
       ask: askHub,
       todo,
       task: tasks,
       safety: this.deps.commandSafety,
+      browser,
     });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a

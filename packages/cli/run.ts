@@ -6,6 +6,10 @@ import {
   type LumiscaCore,
 } from "@lumisca/core";
 import { parseFlags } from "./flags.ts";
+import {
+  type BrowserPreviewMode,
+  parseBrowserPreview,
+} from "./browser-host.ts";
 
 /** Options of the `lumisca run` command (one-shot headless execution). */
 export interface RunOptions {
@@ -20,6 +24,9 @@ export interface RunOptions {
   model?: string;
   /** Print the full transcript as JSON instead of the final answer text. */
   json: boolean;
+  /** Browser-lab policy (default "never" — headless runs do not spawn a
+   * GUI host unless explicitly asked). */
+  browserPreview: BrowserPreviewMode;
 }
 
 /** The outcome of one run: the persisted session and its transcript, plus
@@ -45,6 +52,7 @@ export function parseRunArgs(args: string[]): RunOptions {
       { name: "workspace", hasValue: true },
       { name: "prompt", hasValue: true },
       { name: "model", hasValue: true },
+      { name: "browser-preview", hasValue: true },
       { name: "json" },
       { name: "help", alias: "-h" },
     ],
@@ -58,6 +66,7 @@ export function parseRunArgs(args: string[]): RunOptions {
     workspacePath: values.workspace ?? Deno.cwd(),
     prompt: "",
     json: switches.has("json"),
+    browserPreview: parseBrowserPreview(values["browser-preview"]),
   };
   if (values.model !== undefined) {
     if (!values.model.includes("/")) {
@@ -112,6 +121,7 @@ export const RUN_USAGE = `lumisca run — ワンショット実行 (ヘッドレ
 
 使用法:
   lumisca run [--workspace <dir>] [--prompt <text>] [--model <provider/modelId>] [--json] [--db <path>]
+              [--browser-preview <auto|always|never>]
 
 オプション:
   --workspace <dir>   作業フォルダ (既定: カレントディレクトリ)
@@ -119,6 +129,8 @@ export const RUN_USAGE = `lumisca run — ワンショット実行 (ヘッドレ
   --model <p/m>       モデル指定 (既定: デフォルトモデル)
   --json              全メッセージを JSON で出力 (既定: 最終回答のみ)
   --db <path>         データベースのパス (既定: $LUMISCA_DB または ./lumisca.db)
+  --browser-preview   never(既定) / auto / always — ブラウザラボの起動方針
+                      (ヘッドレス実行は既定で起動しません)
 
 終了コード:
   0  正常完了

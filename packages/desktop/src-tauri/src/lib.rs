@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, WindowEvent};
 
 pub mod bridge;
+pub mod browser_lab;
 pub mod server;
 pub mod update;
 pub mod window;
@@ -56,6 +57,11 @@ struct AppState {
     /// with the result. connect-local waits on it instead of spawning a
     /// second server while the startup is still running.
     startup_task: Mutex<Option<StartupTask>>,
+    /// The browser lab (in-shell debug WebView for the agent's browser
+    /// tools): RPC endpoint + on-demand WebviewWindow. Created in setup;
+    /// None when the lab failed to start (logged — the agent then simply
+    /// has no browser tools).
+    browser_lab: Mutex<Option<browser_lab::BrowserLab>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -66,6 +72,15 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let settings = update::load_desktop_settings(&handle);
+            // The browser lab starts before the local server: the server
+            // child receives the lab endpoint through its environment.
+            let lab = match browser_lab::BrowserLab::start(&handle) {
+                Ok(lab) => Some(lab),
+                Err(error) => {
+                    eprintln!("[lumisca] browser lab disabled: {error}");
+                    None
+                }
+            };
             app.manage(AppState {
                 local: Mutex::new(None),
                 last_remote: Mutex::new(None),
@@ -73,6 +88,7 @@ pub fn run() {
                 pending: Mutex::new(None),
                 startup: Mutex::new(StartupStatus::new("starting", None)),
                 startup_task: Mutex::new(None),
+                browser_lab: Mutex::new(lab),
             });
 
             // Register the updater's `on_before_exit` hook exactly once
@@ -115,13 +131,29 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::Destroyed = event {
-                // The only window is gone: stop the local server so no
-                // orphaned process keeps the port/db locked after exit.
-                if window.app_handle().try_state::<AppState>().is_some() {
-                    server::stop_local_server(window.app_handle());
+                // The lab window died on its own (user closed it): forget
+                // it — later RPCs answer "not_open" instead of using a
+                // dead handle.
+                if window.label() == browser_lab::LAB_WINDOW_LABEL {
+                    browser_lab::forget_window(window.app_handle());
+                }
+                // The only app window is gone: stop the local server so no
+                // orphaned process keeps the port/db locked after exit,
+                // and shut the browser lab (window + RPC listener).
+                if window.label() == "main" && window.app_handle().try_state::<AppState>().is_some()
+                {
+                    shutdown_services(window.app_handle());
                 }
             }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Stop every spawned service on app exit: the local server process and
+/// the browser lab (its WebView and RPC listener). Idempotent — called
+/// from the main window's Destroyed event and the updater's exit hook.
+pub(crate) fn shutdown_services(app: &tauri::AppHandle) {
+    server::stop_local_server(app);
+    browser_lab::shutdown(app);
 }

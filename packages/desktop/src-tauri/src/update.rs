@@ -9,7 +9,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::{Update, Updater, UpdaterExt};
 
-use crate::server::stop_local_server;
+use crate::shutdown_services;
 use crate::AppState;
 
 /// How often the periodic check runs, and the delay before the first one
@@ -99,10 +99,10 @@ fn build_updater(app: &AppHandle) -> Result<Updater, String> {
     let cleanup_app = app.clone();
     app.updater_builder()
         .on_before_exit(move || {
-            // Stop the local server only now: the updater runs this hook
-            // right before the installer launches, so an earlier failure
-            // leaves the UI alive.
-            stop_local_server(&cleanup_app);
+            // Stop the local server and the browser lab only now: the
+            // updater runs this hook right before the installer launches,
+            // so an earlier failure leaves the UI alive.
+            shutdown_services(&cleanup_app);
             cleanup_app.cleanup_before_exit();
         })
         .build()

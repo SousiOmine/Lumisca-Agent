@@ -5,6 +5,12 @@ import { createSession } from "./session.ts";
 import { parseFlags } from "./flags.ts";
 import { error, errorText, info } from "./ui.ts";
 import {
+  type BrowserPreviewMode,
+  closeBrowserBackend,
+  createCliBrowserBackend,
+  parseBrowserPreview,
+} from "./browser-host.ts";
+import {
   HelpRequested,
   parseRunArgs,
   printRunResult,
@@ -22,7 +28,10 @@ const USAGE = `Lumisca CLI
   lumisca run [options]       ワンショット実行(ヘッドレス)
 
 オプション:
-  --db <path>       データベースのパス(既定: ./lumisca.db または $LUMISCA_DB)
+  --db <path>                 データベースのパス(既定: ./lumisca.db または $LUMISCA_DB)
+  --browser-preview <mode>    auto(既定) / always / never — ブラウザラボの起動方針
+                              (auto=初回のbrowserツール使用時に起動, always=起動時に起動,
+                              never=browserツールを無効化)
 
 サブコマンド:
   run                詳細は "lumisca run --help" を参照
@@ -33,6 +42,7 @@ interface CliOptions {
   workspaceName?: string;
   resume: boolean;
   sessionId?: string;
+  browserPreview: BrowserPreviewMode;
 }
 
 function parseArgs(args: string[]): CliOptions {
@@ -43,6 +53,7 @@ function parseArgs(args: string[]): CliOptions {
       { name: "workspace", hasValue: true },
       { name: "resume" },
       { name: "session", hasValue: true },
+      { name: "browser-preview", hasValue: true },
       { name: "help", alias: "-h" },
     ],
     () => {
@@ -61,7 +72,31 @@ function parseArgs(args: string[]): CliOptions {
     workspaceName: values.workspace,
     resume: switches.has("resume"),
     sessionId: values.session,
+    browserPreview: parseBrowserPreview(values["browser-preview"]),
   };
+}
+
+/** Attach the CLI's browser backend (the on-demand host) when the mode
+ * allows it. `warm` (always mode) failures are fatal: the user asked for
+ * a browser surface and there is none — no silent absence. */
+async function attachBrowserBackend(
+  core: LumiscaCore,
+  mode: BrowserPreviewMode,
+): Promise<ReturnType<typeof createCliBrowserBackend> | undefined> {
+  if (mode === "never") return undefined;
+  const backend = createCliBrowserBackend();
+  if (mode === "always") {
+    try {
+      await backend.warm();
+    } catch (e) {
+      error(errorText(e));
+      error("browser-preview=always で起動に失敗したため終了します。");
+      core.close();
+      Deno.exit(1);
+    }
+  }
+  core.setBrowserBackend(backend);
+  return backend;
 }
 
 /** The one-shot `lumisca run` path: parse args, execute the run, print
@@ -82,7 +117,9 @@ async function runCommand(args: string[]): Promise<number> {
     return 1;
   }
   const core = LumiscaCore.open(options.dbPath);
+  let browserBackend: Awaited<ReturnType<typeof attachBrowserBackend>>;
   try {
+    browserBackend = await attachBrowserBackend(core, options.browserPreview);
     const result = await runOnce(core, options);
     printRunResult(result, options.json);
     if (result.error) {
@@ -94,6 +131,7 @@ async function runCommand(args: string[]): Promise<number> {
     error(errorText(e));
     return 1;
   } finally {
+    await closeBrowserBackend(browserBackend);
     core.close();
   }
 }
@@ -105,16 +143,21 @@ async function main(): Promise<number> {
   }
   const opts = parseArgs(args);
   const core = LumiscaCore.open(opts.dbPath);
+  let browserBackend: Awaited<ReturnType<typeof attachBrowserBackend>>;
 
   // Ctrl+C: close the database and abort live agents instead of dying
-  // mid-write (runRepl's finally would not run on SIGINT).
+  // mid-write (runRepl's finally would not run on SIGINT). The browser
+  // host dies with us anyway (it watches our stdin).
   Deno.addSignalListener("SIGINT", () => {
     console.log("\n終了します");
+    void browserBackend?.close();
     core.close();
     Deno.exit(130);
   });
 
   try {
+    browserBackend = await attachBrowserBackend(core, opts.browserPreview);
+
     // Direct session id
     if (opts.sessionId) {
       const session = core.getSession(opts.sessionId);
@@ -171,6 +214,7 @@ async function main(): Promise<number> {
     await runRepl(core, sessionId);
     return 0;
   } finally {
+    await closeBrowserBackend(browserBackend);
     core.close();
   }
 }

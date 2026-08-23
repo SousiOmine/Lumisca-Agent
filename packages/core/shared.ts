@@ -116,6 +116,14 @@ export const TOOL_SEARCH = "tool_search";
 /** Execute a tool found through tool_search by name — the single dispatch
  * point for tools whose definitions stay out of the LLM context. */
 export const TOOL_CALL = "tool_call";
+/** Browser-lab tools (the built-in WebView debugger; present only when a
+ * BrowserBackend is available — Desktop and CLI). */
+export const TOOL_BROWSER_OPEN = "browser_open";
+export const TOOL_BROWSER_OBSERVE = "browser_observe";
+export const TOOL_BROWSER_ACT = "browser_act";
+export const TOOL_BROWSER_WAIT = "browser_wait";
+export const TOOL_BROWSER_SCREENSHOT = "browser_screenshot";
+export const TOOL_BROWSER_CLOSE = "browser_close";
 
 /** One option of an ask question, shown as a selectable chip in the UI. */
 export interface AskOption {

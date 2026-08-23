@@ -53,6 +53,29 @@ export { TodoHub } from "./tools/todo.ts";
 export { TaskHub } from "./tools/task.ts";
 export type { ParentDelivery } from "./tools/task.ts";
 export { MAX_SUBAGENT_DEPTH, MAX_SUBAGENTS } from "./tools/task.ts";
+export type { BrowserBackend } from "./browser/types.ts";
+export { createBrowserTools } from "./browser/tools.ts";
+export { formatSnapshot } from "./browser/tools.ts";
+export { HttpBrowserBackend } from "./browser/client.ts";
+export { LazyBrowserBackend } from "./browser/lazy.ts";
+export { checkBrowserUrl, requireAllowedUrl } from "./browser/policy.ts";
+export { PROBE_SOURCE } from "./browser/probe.ts";
+export type {
+  ActionResult,
+  BrowserAction,
+  ConsoleEntry,
+  ElementInfo,
+  ImageResult,
+  NetworkSummary,
+  ObserveOptions,
+  OpenOptions,
+  PageErrorEntry,
+  PageInfo,
+  PageSnapshot,
+  ScreenshotOptions,
+  WaitOptions,
+  WaitResult,
+} from "./browser/types.ts";
 export type { AskAnswer, AskOption, AskQuestion } from "./shared.ts";
 export type { TodoPhase, TodoStatus, TodoTask } from "./shared.ts";
 export type { SubagentStatus, SubagentType, TaskInfo } from "./shared.ts";

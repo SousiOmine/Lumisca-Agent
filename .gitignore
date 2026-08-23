@@ -148,6 +148,8 @@ lumisca.db-*
 *.db-shm
 *.db-wal
 packages/desktop/src-tauri/target/
+packages/browser-rpc/target/
+packages/browser-host/target/
 packages/desktop/src-tauri/gen/
 packages/desktop/dist/
 .playwright-mcp/
