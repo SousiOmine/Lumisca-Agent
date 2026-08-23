@@ -146,14 +146,16 @@ const openSchema = object({
       "is rejected.",
   ),
   width: optional(
-    integer("Window width in CSS pixels (host default if omitted)"),
+    integer("Viewport width in CSS pixels (default 800). The page lays out " +
+      "at this size and is scaled to fit the pane/window — specify e.g. " +
+      "390×844 to debug a phone layout."),
   ),
   height: optional(
-    integer("Window height in CSS pixels (host default if omitted)"),
+    integer("Viewport height in CSS pixels (default 600)"),
   ),
   visible: optional(boolean(
-    "Whether the lab window is shown (default true). A hidden lab still " +
-      "renders, but screenshots may be blank on some platforms.",
+    "Whether the browser view is shown (default true). A hidden browser " +
+      "still renders, but screenshots may be blank on some platforms.",
   )),
 });
 
@@ -203,6 +205,11 @@ const screenshotSchema = object({
 
 const closeSchema = object({});
 
+const DEFAULT_VIEWPORT_WIDTH = 800;
+const DEFAULT_VIEWPORT_HEIGHT = 600;
+/** The emulation range the hosts accept (CDP's own upper bound). */
+const MAX_VIEWPORT_DIMENSION = 10_000;
+
 /** Build the six browser tools over a backend. */
 export function createBrowserTools(backend: BrowserBackend): Tool[] {
   return [
@@ -222,20 +229,35 @@ function createBrowserOpenTool(
     name: TOOL_BROWSER_OPEN,
     label: "Browser Open",
     description:
-      "Open a local web app in the built-in browser lab (an OS-standard " +
+      "Open a local web app in the built-in browser (an OS-standard " +
       "WebView inside Lumisca — never an external browser). Only " +
       "localhost / 127.0.0.1 / ::1 URLs are allowed. Use browser_observe " +
       "to see the page, browser_act to interact, browser_screenshot to " +
-      "capture it. Opening again navigates the same lab window. If the " +
-      "operation fails, the tools report it — there is no fallback.",
+      "capture it. Opening again navigates the same browser. The viewport " +
+      "defaults to 800×600 and is scaled to fit the pane/window; pass " +
+      "width/height (CSS pixels) to debug other layouts — e.g. 390×844 " +
+      "for a phone — and browser_observe reports the active viewport. If " +
+      "the operation fails, the tools report it — there is no fallback.",
     parameters: openSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const allowed = requireAllowedUrl(params.url); // throws with the policy reason
+      const width = params.width ?? DEFAULT_VIEWPORT_WIDTH;
+      const height = params.height ?? DEFAULT_VIEWPORT_HEIGHT;
+      if (
+        width < 1 || width > MAX_VIEWPORT_DIMENSION ||
+        height < 1 || height > MAX_VIEWPORT_DIMENSION
+      ) {
+        throw new CoreError(
+          `width/height は 1〜${MAX_VIEWPORT_DIMENSION} の範囲です ` +
+            `(width=${width}, height=${height})`,
+          "invalid",
+        );
+      }
       const info = await backend.open(
         {
           url: allowed.url,
-          ...(params.width !== undefined ? { width: params.width } : {}),
-          ...(params.height !== undefined ? { height: params.height } : {}),
+          width,
+          height,
           ...(params.visible !== undefined ? { visible: params.visible } : {}),
         },
         signal,
@@ -243,7 +265,7 @@ function createBrowserOpenTool(
       return {
         content: [{
           type: "text",
-          text: `Opened ${info.url} in the browser lab.` +
+          text: `Opened ${info.url} in the browser (viewport ${width}×${height}).` +
             (info.title ? ` Title: "${info.title}"` : "") +
             ` Use browser_observe to inspect it.`,
         }],
@@ -260,7 +282,7 @@ function createBrowserObserveTool(
     name: TOOL_BROWSER_OBSERVE,
     label: "Browser Observe",
     description:
-      "Take a semantic snapshot of the page in the browser lab: headings, " +
+      "Take a semantic snapshot of the page in the browser: headings, " +
       "buttons, links, form controls (with roles, accessible names, " +
       "disabled/visible state) and element refs for browser_act, plus " +
       "console entries and page errors collected since the previous " +
@@ -308,7 +330,7 @@ function createBrowserActTool(backend: BrowserBackend): Tool<typeof actSchema> {
     name: TOOL_BROWSER_ACT,
     label: "Browser Act",
     description:
-      "Interact with the page in the browser lab: click / fill / type / " +
+      "Interact with the page in the browser: click / fill / type / " +
       "press / select / check / uncheck / scroll a ref from " +
       "browser_observe, or reload the page. fill replaces the value, type " +
       "appends; both dispatch input+change so React-style apps see the " +
@@ -417,7 +439,7 @@ function createBrowserWaitTool(
     name: TOOL_BROWSER_WAIT,
     label: "Browser Wait",
     description:
-      "Wait for the page in the browser lab: until=load (readyState " +
+      "Wait for the page in the browser: until=load (readyState " +
       "complete), idle (no active fetch/XHR for idle_ms — WebSockets like " +
       "dev-server hot reload do not count), url (URL contains " +
       "url_contains), or time. Event-driven in the page; returns when the " +
@@ -512,8 +534,8 @@ function createBrowserScreenshotTool(
     name: TOOL_BROWSER_SCREENSHOT,
     label: "Browser Screenshot",
     description:
-      "Capture the browser lab window as an image (PNG or JPEG) and " +
-      "return it as an image result. On Windows this uses the WebView2 " +
+      "Capture the browser view as an image (PNG or JPEG) and return it " +
+      "as an image result. On Windows this uses the WebView2 " +
       "DevTools protocol directly; on macOS/Linux the host reports an " +
       "explicit error where capture is not implemented — never a blank " +
       "or substituted image.",
@@ -560,17 +582,17 @@ function createBrowserCloseTool(
     name: TOOL_BROWSER_CLOSE,
     label: "Browser Close",
     description:
-      "Close the browser lab: destroy the debug WebView (Desktop) or stop " +
+      "Close the browser: destroy the debug WebView (Desktop) or stop " +
       "the browser host process (CLI), releasing every subscription and " +
-      "the window. Idempotent — closing an already-closed lab is a no-op. " +
-      "browser_open starts a fresh lab afterwards.",
+      "the view. Idempotent — closing an already-closed browser is a " +
+      "no-op. browser_open starts a fresh one afterwards.",
     parameters: closeSchema,
     execute: async (_id, _params, signal): Promise<ToolResult> => {
       await backend.close(signal);
       return {
         content: [{
           type: "text",
-          text: "Browser lab closed. browser_open で新しいラボを開けます。",
+          text: "Browser closed. browser_open でもう一度開けます。",
         }],
         details: { closed: true },
       };

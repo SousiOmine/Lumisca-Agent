@@ -18,7 +18,12 @@ export interface OpenOptions {
   /** Target URL. HTTPS/HTTP on localhost / 127.0.0.1 / ::1 only (see
    * policy.ts); anything else is rejected before reaching a host. */
   url: string;
-  /** Window size hints (CSS pixels). Omitted → host default. */
+  /** Viewport size in CSS pixels (default 800×600). The page LAYS OUT at
+   * this size (media queries, innerWidth, …); hosts scale the rendering
+   * to fit their window/pane — the CLI sizes its window to the viewport,
+   * the Desktop pane emulates and scales to fit. On macOS/Linux the
+   * Desktop WebView cannot emulate (WebKit has no such API) and the pane
+   * size acts as the viewport. */
   width?: number;
   height?: number;
   /** Whether the lab window is shown. Default true. */
@@ -209,8 +214,8 @@ export interface ImageResult {
 
 /**
  * A controllable browser-ish surface backed by an OS-standard WebView.
- * Desktop: a debug WebviewWindow inside the Tauri shell. CLI: the
- * lumisca-browser-host process. Both are driven over the same local
+ * Desktop: a debug WebView docked as a pane inside the Tauri shell. CLI:
+ * the lumisca-browser-host process. Both are driven over the same local
  * authenticated RPC protocol, so one tool layer serves both.
  */
 export interface BrowserBackend {

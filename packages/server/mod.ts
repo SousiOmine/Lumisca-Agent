@@ -52,7 +52,7 @@ function attachBrowserBackend(core: LumiscaCore): void {
   if (url === undefined || token === undefined) {
     console.error(
       "Lumisca: LUMISCA_BROWSER_IPC_URL と LUMISCA_BROWSER_TOKEN は" +
-        "ペアで設定してください (browser lab を無効化して続行します)",
+        "ペアで設定してください (ブラウザを無効化して続行します)",
     );
     return;
   }

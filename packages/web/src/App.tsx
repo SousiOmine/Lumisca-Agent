@@ -7,6 +7,7 @@ import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
+import { useBrowserPane } from "./hooks/useBrowserPane.ts";
 import { quit } from "./shell.ts";
 import { useTabs } from "./hooks/useTabs.ts";
 import { TabBar } from "./components/TabBar.tsx";
@@ -16,6 +17,7 @@ import { NewSessionView } from "./components/NewSessionView.tsx";
 import { RecentSessionsModal } from "./components/RecentSessionsModal.tsx";
 import { SettingsModal } from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
+import { BrowserPaneHeader } from "./components/BrowserPaneHeader.tsx";
 
 export interface AppProps {
   /** Preloaded data from the bootstrap script; undefined when not served. */
@@ -68,9 +70,13 @@ export function App({ initialData }: AppProps): ReactElement {
   const activeView: SessionView | undefined = activeTab
     ? views.get(activeTab)
     : undefined;
+  // The browser lab pane (the agent's browser, docked at the right
+  // edge). Polled from the shell bridge: the agent's own tools
+  // open/close it, and the user can hide it (the lab keeps running).
+  const browserPane = useBrowserPane();
 
   return (
-    <div className="app">
+    <div className={browserPane.visible ? "app browser-pane-open" : "app"}>
       {
         /* The desktop window is undecorated; the title bar strip holds the
        * tab bar, the app menu and the window controls (in a plain browser
@@ -81,6 +87,9 @@ export function App({ initialData }: AppProps): ReactElement {
         onOpenRecent={() => setShowRecent(true)}
         onOpenSettings={() => setShowSettings(true)}
         onQuit={quit}
+        browserOpen={browserPane.open}
+        browserVisible={browserPane.visible}
+        onToggleBrowser={browserPane.toggle}
       >
         <TabBar
           tabs={tabs}
@@ -98,53 +107,71 @@ export function App({ initialData }: AppProps): ReactElement {
           onQuit={quit}
         />
       </TitleBar>
-      <UpdateBanner update={update} />
-      {loadError && (
-        <div className="msg">
-          <div className="msg-body error-text">
-            <p>サーバーに接続できません: {loadError}</p>
+      {
+        /* Everything below the title bar: shrinks by the pane width while
+       * the browser pane is visible (the pane is a native WebView that
+       * overlays the app window's right edge). */
+      }
+      <div className="app-body">
+        <UpdateBanner update={update} />
+        {loadError && (
+          <div className="msg">
+            <div className="msg-body error-text">
+              <p>サーバーに接続できません: {loadError}</p>
+            </div>
           </div>
-        </div>
-      )}
-      {activeView
-        ? (
-          // Key by tab so switching sessions never leaks draft text or
-          // scroll position between sessions.
-          <ChatView
-            key={activeTab ?? undefined}
-            view={activeView}
-            peerId={activeTab ? splitTabKey(activeTab).peerId : ""}
-            onPrompt={(text, images) =>
-              activeTab && prompt(activeTab, text, images)}
-            onAbort={() => activeTab && abort(activeTab)}
-            onRewind={(timestamp) =>
-              activeTab ? rewind(activeTab, timestamp) : Promise.resolve()}
-            onAnswer={(toolCallId, answers) =>
-              activeTab
-                ? answer(activeTab, toolCallId, answers)
-                : Promise.reject()}
-            onModelChange={(provider, modelId) =>
-              activeTab && changeModel(activeTab, provider, modelId)}
-            onThinkingLevelChange={(level) =>
-              changeThinkingLevel(
-                activeView.info.modelProvider,
-                activeView.info.modelId,
-                level,
-              )}
-            onOpenSettings={() => setShowSettings(true)}
-          />
-        )
-        : (
-          <NewSessionView
-            workspaces={workspaces}
-            peers={peers}
-            onStart={startSession}
-            onWorkspaceChanged={handleWorkspaceChanged}
-            onDeleteWorkspace={deleteWorkspace}
-            onReopenSession={reopenSession}
-            onOpenSettings={() => setShowSettings(true)}
-          />
         )}
+        {activeView
+          ? (
+            // Key by tab so switching sessions never leaks draft text or
+            // scroll position between sessions.
+            <ChatView
+              key={activeTab ?? undefined}
+              view={activeView}
+              peerId={activeTab ? splitTabKey(activeTab).peerId : ""}
+              onPrompt={(text, images) =>
+                activeTab && prompt(activeTab, text, images)}
+              onAbort={() => activeTab && abort(activeTab)}
+              onRewind={(timestamp) =>
+                activeTab ? rewind(activeTab, timestamp) : Promise.resolve()}
+              onAnswer={(toolCallId, answers) =>
+                activeTab
+                  ? answer(activeTab, toolCallId, answers)
+                  : Promise.reject()}
+              onModelChange={(provider, modelId) =>
+                activeTab && changeModel(activeTab, provider, modelId)}
+              onThinkingLevelChange={(level) =>
+                changeThinkingLevel(
+                  activeView.info.modelProvider,
+                  activeView.info.modelId,
+                  level,
+                )}
+              onOpenSettings={() => setShowSettings(true)}
+            />
+          )
+          : (
+            <NewSessionView
+              workspaces={workspaces}
+              peers={peers}
+              onStart={startSession}
+              onWorkspaceChanged={handleWorkspaceChanged}
+              onDeleteWorkspace={deleteWorkspace}
+              onReopenSession={reopenSession}
+              onOpenSettings={() => setShowSettings(true)}
+            />
+          )}
+      </div>
+      {
+        /* The pane's header strip, rendered by this webview directly
+       * above the native lab WebView (which starts below it, so they
+       * never overlap). */
+      }
+      {browserPane.visible && (
+        <BrowserPaneHeader
+          url={browserPane.url}
+          onHide={() => browserPane.setVisible(false)}
+        />
+      )}
       {showSettings && (
         <SettingsModal
           theme={theme}

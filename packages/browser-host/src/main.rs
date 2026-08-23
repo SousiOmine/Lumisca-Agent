@@ -16,6 +16,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
+// Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
+// `open` on every platform; only the CDP calls themselves are Windows-only.
+use lumisca_browser_rpc::emulation;
 use lumisca_browser_rpc::server::RpcHandler;
 use lumisca_browser_rpc::{error_codes, limits, methods, policy, probe, RpcError, RpcServer};
 use serde_json::{json, Value};
@@ -175,6 +178,11 @@ fn main() {
                     host.webview = None;
                     host.owning_window = None;
                 }
+                // A user resize re-scales the emulated viewport to fit
+                // the window instead of changing the page layout.
+                WindowEvent::Resized(_) => {
+                    host.reapply_emulation();
+                }
                 _ => {}
             },
             Event::LoopDestroyed => {
@@ -269,6 +277,12 @@ struct Host {
     /// The tao window the webview is attached to.
     owning_window: Option<tao::window::Window>,
     webview: Option<WebView>,
+    /// The agent-chosen viewport in CSS pixels (set by every open; the
+    /// Deno tools always send explicit values, the protocol default is
+    /// 800×600). The page lays out at this size; a user resize of the
+    /// window re-scales the rendering to fit instead of changing the
+    /// layout (Windows).
+    viewport: Option<(u32, u32)>,
 }
 
 impl Host {
@@ -291,15 +305,19 @@ impl Host {
         let width = params
             .get("width")
             .and_then(Value::as_u64)
-            .map(|w| w as u32);
+            .unwrap_or(emulation::DEFAULT_VIEWPORT_WIDTH as u64) as u32;
         let height = params
             .get("height")
             .and_then(Value::as_u64)
-            .map(|h| h as u32);
+            .unwrap_or(emulation::DEFAULT_VIEWPORT_HEIGHT as u64) as u32;
         let visible = params
             .get("visible")
             .and_then(Value::as_bool)
             .unwrap_or(true);
+        // The agent-chosen viewport: the window is sized to it, and the
+        // emulation pins the layout to it even if the user resizes the
+        // window afterwards (Windows — see reapply_emulation).
+        self.viewport = Some((width, height));
 
         match self.webview.as_ref() {
             // Reuse the lab: navigate, resize, show.
@@ -308,6 +326,10 @@ impl Host {
                     .load_url(url)
                     .map_err(|e| RpcError::internal(format!("navigate に失敗しました: {e}")))?;
                 if let Some(window) = &self.owning_window {
+                    let _ = window.set_inner_size(tao::dpi::LogicalSize::new(
+                        f64::from(width),
+                        f64::from(height),
+                    ));
                     let _ = window.set_visible(visible);
                     if visible {
                         window.set_focus();
@@ -318,10 +340,10 @@ impl Host {
             // document start of every page load.
             None => {
                 let mut builder = WindowBuilder::new()
-                    .with_title("Lumisca Browser Lab")
+                    .with_title("Lumisca Browser")
                     .with_inner_size(tao::dpi::LogicalSize::new(
-                        f64::from(width.unwrap_or(1100)),
-                        f64::from(height.unwrap_or(800)),
+                        f64::from(width),
+                        f64::from(height),
                     ))
                     .with_min_inner_size(tao::dpi::LogicalSize::new(320.0, 240.0))
                     .with_visible(visible);
@@ -331,7 +353,7 @@ impl Host {
                 let window = builder.build(target).map_err(|e| {
                     RpcError::new(
                         error_codes::INTERNAL,
-                        format!("ブラウザラボのウィンドウを作成できません: {e}"),
+                        format!("ブラウザのウィンドウを作成できません: {e}"),
                     )
                 })?;
                 let probe_source = probe::extract()
@@ -343,18 +365,46 @@ impl Host {
                     .map_err(|e| {
                         RpcError::new(
                             error_codes::INTERNAL,
-                            format!("ブラウザラボの WebView を作成できません: {e}"),
+                            format!("ブラウザの WebView を作成できません: {e}"),
                         )
                     })?;
                 self.owning_window = Some(window);
                 self.webview = Some(webview);
             }
         }
+        self.reapply_emulation();
         Ok(json!({
             "url": url,
             "title": "",
             "readyState": "",
         }))
+    }
+
+    /// (Re-)apply the emulated viewport to the WebView: the page's
+    /// layout stays at the agent-chosen size while the rendering scales
+    /// to fit the current window (Windows; on macOS/Linux the window
+    /// size is the viewport, no emulation exists). Fire-and-forget: open
+    /// and resize run on the GUI thread, which must never block on a CDP
+    /// reply (the reply needs this thread's message pump).
+    fn reapply_emulation(&mut self) {
+        #[cfg(windows)]
+        {
+            let (Some((width, height)), Some(webview), Some(window)) = (
+                self.viewport,
+                self.webview.as_ref(),
+                self.owning_window.as_ref(),
+            ) else {
+                return;
+            };
+            let factor = window.scale_factor();
+            let size = window.inner_size();
+            apply_device_metrics(
+                webview,
+                (width, height),
+                f64::from(size.width) / factor,
+                f64::from(size.height) / factor,
+            );
+        }
     }
 
     /// Run one probe method through the eval channel. The driver is the
@@ -377,7 +427,7 @@ impl Host {
         reply: Reply,
     ) -> Result<(), RpcError> {
         let webview = self.webview.as_ref().ok_or_else(|| {
-            RpcError::not_open("browser lab は開いていません (先に browser_open を呼んでください)")
+            RpcError::not_open("ブラウザは開いていません (先に browser_open を呼んでください)")
         })?;
         let probe_call = format!(
             "return p.{probe_method}({args});",
@@ -389,7 +439,7 @@ impl Host {
             .evaluate_script_with_callback(&script, move |result| {
                 let _ = reply.send(result);
             })
-            .map_err(|e| RpcError::not_open(format!("browser lab ウィンドウが利用できません: {e}")))
+            .map_err(|e| RpcError::not_open(format!("ブラウザウィンドウが利用できません: {e}")))
     }
 
     fn close(&mut self, reply: Reply) {
@@ -432,29 +482,38 @@ impl Host {
     /// Initiate the CDP capture — the completion handler fires on the
     /// GUI thread's message pump, so the main thread must NOT block
     /// waiting for it (the pump IS the main thread). The wait happens on
-    /// a helper thread.
+    /// a helper thread. When a viewport is emulated the capture covers
+    /// the FULL emulated viewport at 1:1 (clip + captureBeyondViewport),
+    /// so the agent sees the resolution it asked for instead of the
+    /// scaled window view.
     #[cfg(windows)]
     fn screenshot_init_cdp(&mut self, params: &Value, reply: Reply) -> Result<(), RpcError> {
         let webview = self.webview.as_ref().ok_or_else(|| {
-            RpcError::not_open("browser lab は開いていません (先に browser_open を呼んでください)")
+            RpcError::not_open("ブラウザは開いていません (先に browser_open を呼んでください)")
         })?;
         let format = params
             .get("format")
             .and_then(Value::as_str)
             .unwrap_or("png");
         let quality = params.get("quality").and_then(Value::as_u64);
-        let cdp_params = match format {
-            "png" => json!({ "format": "png", "fromSurface": true }),
-            "jpeg" => json!({
-                "format": "jpeg",
-                "quality": quality.unwrap_or(80).min(100).max(1),
-                "fromSurface": true,
-            }),
-            other => {
-                return Err(RpcError::invalid(format!(
-                    "不明な format: {other} (png / jpeg)"
-                )));
+        let viewport = self.viewport;
+        let cdp_params = match viewport {
+            Some((width, height)) => {
+                emulation::capture_screenshot_params(width, height, format, quality)
             }
+            None => match format {
+                "png" => json!({ "format": "png", "fromSurface": true }),
+                "jpeg" => json!({
+                    "format": "jpeg",
+                    "quality": quality.unwrap_or(80).min(100).max(1),
+                    "fromSurface": true,
+                }),
+                other => {
+                    return Err(RpcError::invalid(format!(
+                        "不明な format: {other} (png / jpeg)"
+                    )));
+                }
+            },
         };
         let format = format.to_string();
         cdp_call_async(
@@ -473,10 +532,15 @@ impl Host {
                         data.len()
                     )));
                 }
-                Ok(json!({
+                let mut result = json!({
                     "mimeType": if format == "png" { "image/png" } else { "image/jpeg" },
                     "data": data,
-                }))
+                });
+                if let Some((width, height)) = viewport {
+                    result["width"] = json!(width);
+                    result["height"] = json!(height);
+                }
+                Ok(result)
             },
         )
     }
@@ -496,7 +560,7 @@ impl Host {
     #[cfg(windows)]
     fn wait_cdp_init(&mut self, params: &Value, reply: Reply) -> Result<(), RpcError> {
         let webview = self.webview.as_ref().ok_or_else(|| {
-            RpcError::not_open("browser lab は開いていません (先に browser_open を呼んでください)")
+            RpcError::not_open("ブラウザは開いていません (先に browser_open を呼んでください)")
         })?;
         let probe_call = format!("return p.wait({args});", args = to_js_literal(params));
         let expression = driver(&probe_call);
@@ -591,6 +655,34 @@ fn send_value(reply: Reply, result: Result<Value, RpcError>) {
             let _ = reply_after_error(reply, error);
         }
     }
+}
+
+/// Apply `Emulation.setDeviceMetricsOverride` without waiting for the
+/// reply: `reapply_emulation` runs on the GUI thread, whose message pump
+/// delivers the completion — blocking here would deadlock the host. A
+/// failed send loses only the fit update; the next open or resize
+/// retries it.
+#[cfg(windows)]
+fn apply_device_metrics(
+    webview: &WebView,
+    viewport: (u32, u32),
+    area_w: f64,
+    area_h: f64,
+) {
+    use windows::core::HSTRING;
+    use wry::WebViewExtWindows;
+
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+
+    let scale = emulation::fit_scale(viewport.0, viewport.1, area_w, area_h);
+    let params = emulation::device_metrics_params(viewport.0, viewport.1, scale);
+    let core_webview = webview.webview();
+    let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
+        move |_status: windows::core::Result<()>, _result: String| Ok(()),
+    ));
+    let method = HSTRING::from("Emulation.setDeviceMetricsOverride");
+    let cdp_params = HSTRING::from(params.to_string());
+    let _ = unsafe { core_webview.CallDevToolsProtocolMethod(&method, &cdp_params, &handler) };
 }
 
 /// Initiate a WebView2 CDP call on the lab's controller and resolve the

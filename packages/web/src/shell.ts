@@ -141,3 +141,30 @@ export const updateApi = {
   download: () => shellCall<UpdateStatus>("update/download"),
   install: () => shellCall<UpdateStatus>("update/install"),
 };
+
+/** Browser lab pane state reported by the shell bridge (`browser/state`).
+ * The lab is the agent's browser WebView, docked as a right-side pane
+ * inside the app window (never a separate OS window). */
+export interface BrowserPaneState {
+  /** Whether the lab WebView exists (the agent opened the browser). */
+  open: boolean;
+  /** Whether the pane is currently shown. Hiding it is a UI choice only:
+   * the lab keeps running and the agent's browser tools keep working
+   * while it is hidden. */
+  visible: boolean;
+  /** The page currently loaded in the lab (for the pane header). */
+  url: string | null;
+}
+
+/** Browser lab pane controls. `state` is polled by the UI — the pane also
+ * opens/closes from the agent's own tools (browser_open / browser_close)
+ * — and setVisible/toggle return the fresh state so the caller can update
+ * immediately. Plain browsers (no shell) reject every call. */
+export const browserPaneApi = {
+  state: () => shellCall<BrowserPaneState>("browser/state"),
+  setVisible: (visible: boolean) =>
+    shellCall<BrowserPaneState>("browser/set-visible", {
+      visible: String(visible),
+    }),
+  toggle: () => shellCall<BrowserPaneState>("browser/toggle"),
+};

@@ -119,9 +119,9 @@ fn find_server_command(app: &AppHandle) -> Option<ServerCommand> {
         "../../server/mod.ts",
         "../server/mod.ts",
     ]
-        .into_iter()
-        .map(PathBuf::from)
-        .find(|p| p.is_file());
+    .into_iter()
+    .map(PathBuf::from)
+    .find(|p| p.is_file());
     if let Some(entry) = repo_entry.as_ref() {
         // Development always runs the repository source when it is
         // reachable; the bundled binary is for packaged (release) builds.

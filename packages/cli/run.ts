@@ -129,7 +129,7 @@ export const RUN_USAGE = `lumisca run — ワンショット実行 (ヘッドレ
   --model <p/m>       モデル指定 (既定: デフォルトモデル)
   --json              全メッセージを JSON で出力 (既定: 最終回答のみ)
   --db <path>         データベースのパス (既定: $LUMISCA_DB または ./lumisca.db)
-  --browser-preview   never(既定) / auto / always — ブラウザラボの起動方針
+  --browser-preview   never(既定) / auto / always — ブラウザの起動方針
                       (ヘッドレス実行は既定で起動しません)
 
 終了コード:

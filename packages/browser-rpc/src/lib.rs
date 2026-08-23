@@ -9,6 +9,7 @@
 //! the Deno tools enforce it first), and a minimal HTTP/1.1 server so the
 //! hosts share one implementation instead of drifting.
 
+pub mod emulation;
 pub mod policy;
 pub mod probe;
 pub mod rpc;

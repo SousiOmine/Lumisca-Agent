@@ -29,7 +29,7 @@ const USAGE = `Lumisca CLI
 
 オプション:
   --db <path>                 データベースのパス(既定: ./lumisca.db または $LUMISCA_DB)
-  --browser-preview <mode>    auto(既定) / always / never — ブラウザラボの起動方針
+  --browser-preview <mode>    auto(既定) / always / never — ブラウザの起動方針
                               (auto=初回のbrowserツール使用時に起動, always=起動時に起動,
                               never=browserツールを無効化)
 

@@ -157,10 +157,42 @@ Deno.test("browser_open validates the URL against the policy and calls the backe
     undefined,
   );
   assertEquals(backend2.calls[0]?.method, "open");
+  // The viewport defaults to 800×600 — the tool always sends explicit
+  // values so the hosts never guess.
+  assertEquals(backend2.calls[0]?.args[0], {
+    url: "http://127.0.0.1:5173/",
+    width: 800,
+    height: 600,
+  });
   assertMatch(
     result.content[0]!.type === "text" ? result.content[0]!.text : "",
-    /Opened/,
+    /Opened .* \(viewport 800×600\)/,
   );
+
+  // Agent-specified sizes pass through as-is.
+  await tools.find((t) => t.name === TOOL_BROWSER_OPEN)!.execute(
+    "3",
+    { url: "http://127.0.0.1:5173/", width: 390, height: 844 },
+    undefined,
+  );
+  assertEquals(backend2.calls[1]?.args[0], {
+    url: "http://127.0.0.1:5173/",
+    width: 390,
+    height: 844,
+  });
+
+  // Out-of-range sizes are rejected before reaching the backend.
+  await assertMatch(
+    (await expectThrow(() =>
+      tools.find((t) => t.name === TOOL_BROWSER_OPEN)!.execute(
+        "4",
+        { url: "http://127.0.0.1:5173/", width: 0, height: 600 },
+        undefined,
+      )
+    )).message,
+    /width\/height は 1〜10000 の範囲/,
+  );
+  assertEquals(backend2.calls.length, 2);
 
   await assertMatch(
     (await expectThrow(() =>

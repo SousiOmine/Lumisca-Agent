@@ -25,6 +25,12 @@
   --radius-sm: 4px;
   --radius: 8px;
   --tab-height: 40px;
+  /* the browser lab pane (the agent's browser, docked at the right edge).
+   * Must match LAB_PANE_WIDTH / LAB_PANE_HEADER_HEIGHT in
+   * packages/desktop/src-tauri/src/browser_lab.rs (the native lab WebView
+   * is positioned against these same numbers). */
+  --browser-pane-width: 460px;
+  --browser-pane-header-height: 36px;
   /* selected tab: a white card that floats above the bar */
   --tab-active-bg: #ffffff;
   --tab-active-text: #1b1b1b;
@@ -127,6 +133,85 @@ select:focus {
   height: 100%;
 }
 
+/* Everything below the title bar (update banner, chat, new-session
+ * screen). While the browser lab pane is visible this area reserves the
+ * pane's width on the right — the pane itself is a native WebView that
+ * overlays the window's right edge below the title bar. */
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app.browser-pane-open .app-body {
+  padding-right: var(--browser-pane-width);
+}
+
+/* The fixed top-right progress cards (todo / tasks / background) would
+ * sit underneath the native lab WebView: shift them left of the pane. */
+.app.browser-pane-open .chat-panels {
+  right: calc(12px + var(--browser-pane-width));
+}
+
+/* Centered modals: keep them fully visible by centering them in the area
+ * left of the pane instead of under it. */
+.app.browser-pane-open .modal-backdrop {
+  margin-right: var(--browser-pane-width);
+}
+
+/* The browser lab pane's header strip: rendered by this webview directly
+ * ABOVE the native lab WebView (which starts below this strip), so it
+ * never overlaps it and stays fully clickable. */
+.browser-pane-header {
+  position: fixed;
+  top: var(--tab-height);
+  right: 0;
+  width: var(--browser-pane-width);
+  height: var(--browser-pane-header-height);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  z-index: 20;
+}
+
+.browser-pane-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.browser-pane-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.browser-pane-hide {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  flex: none;
+}
+
+.browser-pane-hide:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
 /* ---- tab bar ------------------------------------------------------------- */
 
 /* ---- custom title bar (desktop) ----------------------------------------- */
@@ -174,11 +259,32 @@ select:focus {
   width: 46px;
   height: 100%;
   color: var(--text-dim);
+  /* hosts the browser-pane "alive but hidden" dot */
+  position: relative;
 }
 
 .titlebar-btn:hover {
   background: var(--surface-3);
   color: var(--text);
+}
+
+/* the browser lab pane toggle: lit while the lab exists */
+.titlebar-btn.active {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+/* the lab is open but the pane is hidden (the agent may still be
+ * operating the browser in the background) */
+.titlebar-btn-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
 }
 
 .titlebar-btn.close:hover {

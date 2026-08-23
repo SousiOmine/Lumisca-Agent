@@ -12,6 +12,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# The browser lab pane is a separate window overlaid on the main window
+# (browser_lab.rs), so no unstable child-WebView APIs are needed.
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2"
 tauri-plugin-dialog = "2"

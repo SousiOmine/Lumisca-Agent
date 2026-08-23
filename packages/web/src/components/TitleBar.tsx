@@ -1,5 +1,11 @@
 import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
-import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-react";
+import {
+  IconBrowser,
+  IconCopy,
+  IconMinus,
+  IconSquare,
+  IconX,
+} from "@tabler/icons-react";
 import { shellCall, type ShellState, windowApi } from "../shell.ts";
 import { AppMenu } from "./AppMenu.tsx";
 
@@ -19,6 +25,12 @@ interface TitleBarProps {
   onOpenRecent: () => void;
   onOpenSettings: () => void;
   onQuit: () => void;
+  /** Browser lab pane state (desktop): whether the lab exists and
+   * whether the pane is shown. When given, a toggle button is rendered
+   * next to the app menu. */
+  browserOpen?: boolean;
+  browserVisible?: boolean;
+  onToggleBrowser?: () => void;
 }
 
 /** Window chrome for the undecorated desktop window (see
@@ -36,6 +48,9 @@ export function TitleBar({
   onOpenRecent,
   onOpenSettings,
   onQuit,
+  browserOpen = false,
+  browserVisible = false,
+  onToggleBrowser,
 }: TitleBarProps) {
   const [available, setAvailable] = useState(false);
   const [maximized, setMaximized] = useState(false);
@@ -91,6 +106,28 @@ export function TitleBar({
     >
       {children}
       <div className="titlebar-controls">
+        {onToggleBrowser && (
+          <button
+            type="button"
+            className={`titlebar-btn${browserOpen ? " active" : ""}`}
+            onClick={onToggleBrowser}
+            title={browserVisible
+              ? "ブラウザペインを隠す"
+              : "ブラウザペインを表示"}
+            aria-label={browserVisible
+              ? "ブラウザペインを隠す"
+              : "ブラウザペインを表示"}
+          >
+            <IconBrowser size={15} />
+            {
+              /* A hidden-but-alive lab: the agent may still be operating
+             * the browser in the background. */
+            }
+            {browserOpen && !browserVisible && (
+              <span className="titlebar-btn-dot" />
+            )}
+          </button>
+        )}
         <AppMenu
           onNew={onNew}
           onOpenRecent={onOpenRecent}
@@ -98,6 +135,7 @@ export function TitleBar({
           onQuit={onQuit}
           isDesktop
           buttonClass="titlebar-btn"
+          browserPaneOpen={browserOpen}
         />
         <button
           type="button"

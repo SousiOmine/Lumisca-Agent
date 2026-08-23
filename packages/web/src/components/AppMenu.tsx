@@ -19,7 +19,14 @@ interface AppMenuProps {
   /** Extra class for the trigger button (it lives in the title bar on
    * desktop, in the tab bar in a plain browser). */
   buttonClass?: string;
+  /** The browser lab pane is open: shift the menu left by the pane
+   * width so it does not end up underneath the native lab window. */
+  browserPaneOpen?: boolean;
 }
+
+/** The pane width in CSS pixels. Must match `--browser-pane-width` in
+ * styles.css and LAB_PANE_WIDTH in browser_lab.rs. */
+const BROWSER_PANE_WIDTH = 460;
 
 /** Hamburger app menu (新しいタブ / 過去のセッション / 設定 / 終了). Shown
  * in the desktop title bar next to the window controls, and at the right
@@ -31,6 +38,7 @@ export function AppMenu({
   onQuit,
   isDesktop,
   buttonClass = "icon-btn",
+  browserPaneOpen = false,
 }: AppMenuProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -66,7 +74,8 @@ export function AppMenu({
           style={{
             position: "fixed",
             top: pos.y,
-            right: globalThis.innerWidth - pos.x,
+            right: globalThis.innerWidth - pos.x +
+              (browserPaneOpen ? BROWSER_PANE_WIDTH : 0),
           }}
         >
           <button
