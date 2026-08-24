@@ -51,7 +51,9 @@ use std::time::Duration;
 // `open` on every platform; only the CDP calls themselves are Windows-only.
 use lumisca_browser_rpc::emulation;
 use lumisca_browser_rpc::server::RpcHandler;
-use lumisca_browser_rpc::{error_codes, limits, methods, policy, probe, RpcError};
+#[cfg(windows)]
+use lumisca_browser_rpc::limits;
+use lumisca_browser_rpc::{error_codes, methods, policy, probe, RpcError};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
 
@@ -693,8 +695,10 @@ impl LabHandler {
             let _ = (window, params);
             Err(RpcError::unsupported(
                 error_codes::SCREENSHOT_UNSUPPORTED,
-                "このプラットフォームの WebView スクリーンショットは未実装です "
-                    + "(Windows の WebView2 CDP のみ対応)",
+                concat!(
+                    "このプラットフォームの WebView スクリーンショットは未実装です ",
+                    "(Windows の WebView2 CDP のみ対応)",
+                ),
             ))
         }
     }
