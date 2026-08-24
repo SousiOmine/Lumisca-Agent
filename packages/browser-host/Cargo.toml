@@ -5,13 +5,16 @@ description = "On-demand OS-standard WebView host for the Lumisca CLI's browser 
 edition = "2021"
 
 [dependencies]
-wry = "0.55"
-tao = "0.35"
+wry = "0.56"
+tao = "0.37"
 serde_json = "1"
 lumisca-browser-rpc = { path = "../browser-rpc" }
 
 [target.'cfg(windows)'.dependencies]
-# Direct WebView2 COM access for the CDP screenshot (same versions wry uses).
+# Direct WebView2 COM access for the CDP screenshot. Versions intentionally
+# TRACK wry's own pins (wry 0.56 uses webview2-com ^0.38 / windows ^0.61):
+# bumping them ahead of wry would duplicate the crates in the tree and
+# break the `CallDevToolsProtocolMethod` handler type identity.
 webview2-com = "0.38"
 windows = { version = "0.61" }
 
