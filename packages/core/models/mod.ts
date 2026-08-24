@@ -48,6 +48,11 @@ export function createDbModelsStore(settings: SettingsRepo): ModelsStore {
 export class ModelManager {
   readonly models: MutableModels;
   private readonly settings: SettingsRepo;
+  /** Ids of providers defined by Lumisca's own config (models.json,
+   * LUMISCA_* env vars). Unlike the built-ins, these are explicit app
+   * configuration — they count as "configured" even without a stored
+   * credential. */
+  private readonly customProviderIds: ReadonlySet<string>;
 
   constructor(
     credentials: CredentialStore,
@@ -63,9 +68,18 @@ export class ModelManager {
     //   endpoint) — this is the override mechanism, not an accident;
     // - the env-var provider is registered last, so it wins collisions
     //   with models.json ids.
-    for (const provider of loadCustomProviders()) {
+    const customProviders = loadCustomProviders();
+    this.customProviderIds = new Set(customProviders.map((p) => p.id));
+    for (const provider of customProviders) {
       this.models.setProvider(provider);
     }
+  }
+
+  /** Whether the provider id comes from Lumisca's own custom-provider
+   * config (models.json / LUMISCA_* env vars) rather than the SDK's
+   * built-in catalog. */
+  isCustomProvider(providerId: string): boolean {
+    return this.customProviderIds.has(providerId);
   }
 
   getProviders(): readonly Provider[] {
@@ -107,8 +121,10 @@ export class ModelManager {
   }
 
   /** Whether the provider resolves auth (env var or stored key) without a
-   * network call. The pickers use this so unconfigured providers are not
-   * offered; unlike checkAuth it never fails on a transient network error. */
+   * network call — the runtime capability check. Unlike
+   * `LumiscaCore.hasConfiguredAuth`, ambient env keys of built-in
+   * providers count, so this must not be used to decide what the UI
+   * offers. */
   async hasProviderAuth(providerId: string): Promise<boolean> {
     return (await this.models.getAuth(providerId)) !== undefined;
   }

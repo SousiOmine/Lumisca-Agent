@@ -161,6 +161,9 @@ Deno.test("runOnce surfaces session errors on the result", async () => {
 Deno.test("runOnce reuses a workspace with the same folder", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
+  // Model auto-resolution only uses providers explicitly configured in
+  // Lumisca (no ambient env reliance).
+  await core.setProviderApiKey(faux.provider.id, "test-key");
   const dir = await Deno.makeTempDir({ prefix: "lumisca-run-" });
   try {
     faux.setResponses([fauxAssistantMessage("one")]);
@@ -223,6 +226,9 @@ Deno.test("runOnce skips a disabled last-used model (default path)", async () =>
   const core = LumiscaCore.forTesting([faux.provider]);
   const dir = await Deno.makeTempDir({ prefix: "lumisca-run-" });
   try {
+    // The default path only auto-picks providers explicitly configured
+    // in Lumisca (no ambient env reliance).
+    await core.setProviderApiKey(faux.provider.id, "test-key");
     // Make "main" the last-used model (the default-model source)...
     const ws = await core.createWorkspace("ws", [dir]);
     core.createSession({

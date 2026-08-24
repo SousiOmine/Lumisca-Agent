@@ -91,10 +91,12 @@ Deno.test("pickWorkspace falls back to creation when none exist", async () => {
   await Deno.remove(root, { recursive: true });
 });
 
-Deno.test("pickModel offers only authenticated providers and enabled models", async () => {
+Deno.test("pickModel offers only providers configured in Lumisca and enabled models", async () => {
   const core = LumiscaCore.openInMemory();
   const faux = (await import("@earendil-works/pi-ai")).fauxProvider();
   core.models.models.setProvider(faux.provider);
+  // pickModel only offers providers explicitly configured in Lumisca.
+  await core.setProviderApiKey(faux.provider.id, "test-key");
 
   // Provider search input ("faux") then "1" selects it; model search
   // ("faux-1") then "1" selects it.

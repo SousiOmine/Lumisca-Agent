@@ -19,6 +19,9 @@ import { jsonError } from "./util.ts";
 class FakeProviderApi implements ProviderApi {
   oauthProviders = new Set(["openai-codex"]);
   loggedIn = new Set<string>();
+  /** Providers whose auth resolves through an ambient env var (the SDK
+   * resolves them, but they are not stored in Lumisca). */
+  envAuth = new Set<string>();
   logoutCalls: string[] = [];
   loginScript: ((interaction: AuthInteraction) => Promise<void>) | undefined;
 
@@ -35,11 +38,19 @@ class FakeProviderApi implements ProviderApi {
     return "off";
   }
   checkAuth(providerId: string): Promise<AuthCheck | undefined> {
-    return Promise.resolve(
-      this.loggedIn.has(providerId)
-        ? { type: "oauth" as const, source: "OAuth" }
-        : undefined,
-    );
+    if (this.loggedIn.has(providerId)) {
+      return Promise.resolve({ type: "oauth" as const, source: "OAuth" });
+    }
+    if (this.envAuth.has(providerId)) {
+      return Promise.resolve({
+        type: "api_key" as const,
+        source: "ANTHROPIC_API_KEY",
+      });
+    }
+    return Promise.resolve(undefined);
+  }
+  hasConfiguredAuth(providerId: string): Promise<boolean> {
+    return Promise.resolve(this.loggedIn.has(providerId));
   }
   setProviderApiKey(): Promise<void> {
     return Promise.resolve();
@@ -115,6 +126,32 @@ Deno.test("/providers exposes authType per provider", async () => {
       authType: "api_key",
     },
   ]);
+});
+
+Deno.test("ambient env auth does not mark a provider as configured", async () => {
+  const fake = new FakeProviderApi();
+  // ANTHROPIC_API_KEY is set in the environment: the SDK resolves auth,
+  // but the user never stored anything in Lumisca.
+  fake.envAuth.add("anthropic");
+  const app = makeApp(fake);
+
+  const res = await app.request("/providers");
+  assertEquals(res.status, 200);
+  const list = await res.json();
+  assertEquals(
+    list.find((p: { id: string }) => p.id === "anthropic"),
+    {
+      id: "anthropic",
+      name: "anthropic",
+      configured: false,
+      source: "ANTHROPIC_API_KEY",
+      authType: "api_key",
+    },
+  );
+  // The per-provider auth endpoint agrees.
+  const auth = await (await app.request("/providers/anthropic/auth")).json();
+  assertEquals(auth.configured, false);
+  assertEquals(auth.source, "ANTHROPIC_API_KEY");
 });
 
 Deno.test("OAuth login runs a device-code flow and marks the provider configured", async () => {

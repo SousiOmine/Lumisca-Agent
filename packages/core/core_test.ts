@@ -626,6 +626,38 @@ Deno.test("workspaces require at least one folder", async () => {
   core.close();
 });
 
+Deno.test("hasConfiguredAuth ignores ambient env keys of built-in providers", async () => {
+  const { core } = setup();
+  const saved = new Map(
+    ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_OAUTH_TOKEN"]
+      .map((k) => [k, Deno.env.get(k)] as const),
+  );
+  try {
+    for (const k of saved.keys()) Deno.env.delete(k);
+    assertEquals(await core.hasProviderAuth("anthropic"), false);
+    assertEquals(await core.hasConfiguredAuth("anthropic"), false);
+
+    // An env key set for other tools resolves for actual requests ...
+    Deno.env.set("ANTHROPIC_API_KEY", "sk-env-only");
+    assertEquals(await core.hasProviderAuth("anthropic"), true);
+    // ... but must not make the provider appear as configured in Lumisca.
+    assertEquals(await core.hasConfiguredAuth("anthropic"), false);
+
+    // Storing the key inside Lumisca marks it configured; removing the
+    // stored credential un-configures it again.
+    await core.setProviderApiKey("anthropic", "sk-stored");
+    assertEquals(await core.hasConfiguredAuth("anthropic"), true);
+    await core.logoutProvider("anthropic");
+    assertEquals(await core.hasConfiguredAuth("anthropic"), false);
+  } finally {
+    for (const [k, v] of saved) {
+      if (v === undefined) Deno.env.delete(k);
+      else Deno.env.set(k, v);
+    }
+    core.close();
+  }
+});
+
 Deno.test("credentials are guarded on every settings surface", async () => {
   // File-backed settings so "nothing was stored" can be verified at rest.
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });

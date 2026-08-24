@@ -135,9 +135,10 @@ export async function pickWorkspace(core: LumiscaCore): Promise<string | null> {
   return id;
 }
 
-/** Pick a model (provider → model). Only providers that resolve auth
- * locally (env var or stored API key) and models enabled in settings are
- * offered, mirroring the web UI. */
+/** Pick a model (provider → model). Only providers the user explicitly
+ * configured in Lumisca (stored credential / custom-provider config) and
+ * models enabled in settings are offered, mirroring the web UI. Ambient
+ * env keys of built-in providers do not count. */
 export async function pickModel(core: LumiscaCore): Promise<
   {
     providerId: string;
@@ -149,7 +150,7 @@ export async function pickModel(core: LumiscaCore): Promise<
     await Promise.all(
       providers.map(async (p) => ({
         p,
-        configured: await core.hasProviderAuth(p.id),
+        configured: await core.hasConfiguredAuth(p.id),
       })),
     )
   ).filter((entry) => entry.configured);

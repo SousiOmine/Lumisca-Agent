@@ -184,12 +184,12 @@ async function resolveRunModel(
   if (
     def !== null &&
     core.isModelEnabled(def.provider, def.modelId) &&
-    await core.hasProviderAuth(def.provider)
+    await core.hasConfiguredAuth(def.provider)
   ) {
     return { provider: def.provider, modelId: def.modelId };
   }
   for (const provider of core.listProviders()) {
-    if (!await core.hasProviderAuth(provider.id)) continue;
+    if (!await core.hasConfiguredAuth(provider.id)) continue;
     const model = core.listModels(provider.id).find((m) =>
       core.isModelEnabled(provider.id, m.id)
     );

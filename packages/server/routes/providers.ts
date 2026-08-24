@@ -24,7 +24,14 @@ export interface ProviderApi {
     modelId: string,
     level: string,
   ): string;
+  /** Resolve a provider's effective auth (env var, stored key, OAuth
+   * credential); may involve a network check. `source` distinguishes
+   * "stored credential" / "OAuth" from ambient env vars. */
   checkAuth(providerId: string): Promise<AuthCheck | undefined>;
+  /** Whether the provider is set up inside Lumisca (stored credential or
+   * custom-provider config); ambient env auth of built-in providers does
+   * not count. */
+  hasConfiguredAuth(providerId: string): Promise<boolean>;
   setProviderApiKey(providerId: string, key: string): Promise<void>;
   getProviderAuthType(
     providerId: string,
@@ -51,16 +58,24 @@ export function providerRoutes(core: ProviderApi): Hono {
     const cached = authCache.get(providerId);
     if (cached) return cached;
     const authType = core.getProviderAuthType(providerId);
+    // "Configured" means set up inside Lumisca (stored credential /
+    // custom-provider config). Ambient env vars the SDK resolves (e.g.
+    // ANTHROPIC_API_KEY set for other tools) must not surface as
+    // configured — the settings list, badges and pickers all ride on this
+    // flag. checkAuth below still resolves ambient auth, so `source`
+    // stays informative for providers that resolve that way.
+    const configured = await core.hasConfiguredAuth(providerId);
     let check: AuthCheck | undefined;
     try {
       check = await core.checkAuth(providerId);
     } catch {
-      // A transient checkAuth failure (network) must not be cached as
-      // "not configured" — that would lie to the settings UI.
-      return { configured: false, authType };
+      // A transient checkAuth failure (network) must not flip a
+      // configured provider to "not configured" — the store verdict above
+      // stands (and nothing is cached as resolved either).
+      return { configured, authType };
     }
     const entry = {
-      configured: check !== undefined,
+      configured,
       source: check?.source,
       // check.type (e.g. a stored OAuth credential) wins over the static
       // capability so the settings UI picks the right control either way.

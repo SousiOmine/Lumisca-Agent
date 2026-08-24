@@ -788,9 +788,26 @@ export class LumiscaCore {
   }
 
   /** Local (network-free) auth check: env var or stored key resolves.
-   * Used by pickers to skip unconfigured providers. */
+   * This is the runtime capability check (can requests actually be
+   * made); it deliberately includes ambient env auth, so it must not be
+   * used to decide what the UI lists as configured — see
+   * `hasConfiguredAuth`. */
   async hasProviderAuth(providerId: string): Promise<boolean> {
     return await this.models.hasProviderAuth(providerId);
+  }
+
+  /** Whether the provider is set up inside Lumisca itself: an API key or
+   * OAuth credential stored here, or a custom provider from Lumisca's own
+   * config (models.json / LUMISCA_* env vars) whose auth resolves.
+   * Ambient machine auth that the SDK happens to find — e.g.
+   * ANTHROPIC_API_KEY or HF_TOKEN set for other tools — does NOT count:
+   * providers must not appear as "added" just because an env var exists. */
+  async hasConfiguredAuth(providerId: string): Promise<boolean> {
+    if ((await this.credentials.read(providerId)) !== undefined) {
+      return true;
+    }
+    return this.models.isCustomProvider(providerId) &&
+      await this.models.hasProviderAuth(providerId);
   }
 
   /** Enable or disable a model for the UI. Disabled models are hidden

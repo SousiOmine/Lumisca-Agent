@@ -136,6 +136,9 @@ Deno.test("models.json apiKey ${ENV} resolves from the environment", async () =>
       const provider = core.listProviders().find((p) => p.id === "custom");
       assertEquals(provider !== undefined, true);
       assertEquals(await core.hasProviderAuth("custom"), true);
+      // models.json providers are Lumisca's own config: they count as
+      // configured even though the key comes from an env var.
+      assertEquals(await core.hasConfiguredAuth("custom"), true);
       const check = await core.checkAuth("custom");
       assertEquals(check?.source, "LUMISCA_TEST_PROXY_KEY");
     } finally {

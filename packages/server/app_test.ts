@@ -593,6 +593,9 @@ Deno.test("filesystem browse API", async () => {
 Deno.test("providers API includes auth state", async () => {
   const { core, server, faux, base } = await setup();
   try {
+    // The faux provider always resolves auth, but only an explicit
+    // credential makes it "configured".
+    await core.setProviderApiKey(faux.provider.id, "test-key");
     const res = await fetch(`${base}/api/providers`);
     assertEquals(res.status, 200);
     const providers = await res.json() as Array<
@@ -600,10 +603,51 @@ Deno.test("providers API includes auth state", async () => {
     >;
     assertEquals(providers.length > 0, true);
     assertEquals(typeof providers[0]!.configured, "boolean");
-    // The faux provider always resolves auth → configured.
     const fauxEntry = providers.find((p) => p.id === faux.provider.id);
     assertEquals(fauxEntry?.configured, true);
   } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("providers API ignores ambient env keys of built-in providers", async () => {
+  const { core, server, base } = await setup();
+  const saved = new Map(
+    ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_OAUTH_TOKEN"]
+      .map((k) => [k, Deno.env.get(k)] as const),
+  );
+  try {
+    for (const k of saved.keys()) Deno.env.delete(k);
+    Deno.env.set("ANTHROPIC_API_KEY", "sk-env-only");
+
+    // The env key resolves (source is reported) but the provider is not
+    // configured in Lumisca: it must not appear as "added".
+    const res = await fetch(`${base}/api/providers`);
+    assertEquals(res.status, 200);
+    const providers = await res.json() as Array<
+      { id: string; configured: boolean; source?: string }
+    >;
+    const anthropic = providers.find((p) => p.id === "anthropic");
+    assertEquals(anthropic?.configured, false);
+    assertEquals(anthropic?.source, "ANTHROPIC_API_KEY");
+    const huggingface = providers.find((p) => p.id === "huggingface");
+    assertEquals(huggingface?.configured, false);
+
+    // Storing the key in Lumisca flips it to configured.
+    const set = await json(base, "/api/providers/anthropic/api-key", {
+      method: "POST",
+      body: JSON.stringify({ key: "sk-stored" }),
+    });
+    assertEquals(set.status, 200);
+    const after = await (await fetch(`${base}/api/providers/anthropic/auth`))
+      .json() as { configured: boolean };
+    assertEquals(after.configured, true);
+  } finally {
+    for (const [k, v] of saved) {
+      if (v === undefined) Deno.env.delete(k);
+      else Deno.env.set(k, v);
+    }
     server.shutdown();
     core.close();
   }

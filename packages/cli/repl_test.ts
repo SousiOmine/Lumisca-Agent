@@ -67,6 +67,8 @@ Deno.test("handleCommand /exit and /quit end the repl", async () => {
 Deno.test("handleCommand /new creates a session in the current workspace", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, session } = await makeSession(core, providerId, modelId);
+  // pickModel only offers providers explicitly configured in Lumisca.
+  await core.setProviderApiKey(providerId, "test-key");
 
   // pickModel: search + select the faux provider, then its model.
   await withPrompts(
@@ -83,6 +85,7 @@ Deno.test("handleCommand /new creates a session in the current workspace", async
 Deno.test("handleCommand /model switches the session model", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { session } = await makeSession(core, providerId, modelId);
+  await core.setProviderApiKey(providerId, "test-key");
 
   await withPrompts(
     [faux.provider.id, "1", faux.getModel().id, "1"],
