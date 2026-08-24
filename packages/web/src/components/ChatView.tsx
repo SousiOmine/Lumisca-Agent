@@ -4,7 +4,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { IconSend } from "@tabler/icons-react";
 import { isViewRunning, type SessionView } from "../types.ts";
@@ -36,6 +35,12 @@ interface ChatViewProps {
   /** Peer owning the session ("" = this server); forwarded to the model
    * picker so remote sessions list the peer's models. */
   peerId?: string;
+  /** Draft (unsent) composer content, owned by the App per tab so it
+   * survives tab switches (this view remounts on every switch). */
+  input: string;
+  onInputChange: (value: string) => void;
+  images: PendingImage[];
+  onImagesChange: (images: PendingImage[]) => void;
   onPrompt: (text: string, images: PendingImage[]) => void;
   onAbort: () => void;
   /** Rewind the transcript from a user message onward (the message and
@@ -56,6 +61,10 @@ export function ChatView(
   {
     view,
     peerId,
+    input,
+    onInputChange,
+    images,
+    onImagesChange,
     onPrompt,
     onAbort,
     onRewind,
@@ -65,8 +74,6 @@ export function ChatView(
     onOpenSettings,
   }: ChatViewProps,
 ) {
-  const [input, setInput] = useState("");
-  const [images, setImages] = useState<PendingImage[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Set on submit: the sent message must become visible even if the user was
   // scrolled up reading earlier messages. The user message arrives
@@ -122,8 +129,8 @@ export function ChatView(
     // While the agent is running the prompt is steered into the running
     // loop (the server accepts it, no need to block the send button).
     onPrompt(text, images);
-    setInput("");
-    setImages([]);
+    onInputChange("");
+    onImagesChange([]);
     // Bring the scroll to the bottom right away and force it again when the
     // sent message arrives (see the effect above) so it is never left hidden
     // below the fold.
@@ -149,14 +156,22 @@ export function ChatView(
     }
   };
 
-  // The App-owned onRewind is recreated on every App render; the memoized
-  // ConversationTurn must not re-render when only streaming text changed,
-  // so the latest callback is kept in a ref and the stable wrapper below
-  // is what every turn receives.
+  // The App-owned callbacks are recreated on every App render; the
+  // memoized ConversationTurn must not re-render when only streaming text
+  // changed, so the latest callbacks are kept in refs and the stable
+  // wrappers below are what every turn receives.
   const onRewindRef = useRef(onRewind);
   useEffect(() => {
     onRewindRef.current = onRewind;
   }, [onRewind]);
+  const onInputChangeRef = useRef(onInputChange);
+  useEffect(() => {
+    onInputChangeRef.current = onInputChange;
+  }, [onInputChange]);
+  const onImagesChangeRef = useRef(onImagesChange);
+  useEffect(() => {
+    onImagesChangeRef.current = onImagesChange;
+  }, [onImagesChange]);
 
   /** Rewind the transcript from a user message onward, then restore the
    * message text and images to the composer so the user can re-send a
@@ -166,8 +181,8 @@ export function ChatView(
   const handleRewind = useCallback(
     async (timestamp: number, text: string, images: UserMessageImage[]) => {
       await onRewindRef.current(timestamp);
-      setInput(text);
-      setImages(images.map(({ data, mimeType }) => ({
+      onInputChangeRef.current(text);
+      onImagesChangeRef.current(images.map(({ data, mimeType }) => ({
         data: `data:${mimeType};base64,${data}`,
         mimeType,
       })));
@@ -246,7 +261,7 @@ export function ChatView(
         <QuestionPanel pending={view.pendingQuestions} onAnswer={onAnswer} />
         <Composer
           value={input}
-          onChange={setInput}
+          onChange={onInputChange}
           placeholder="タスクを入力..."
           onKeyDown={onKeyDown}
           model={{
@@ -272,7 +287,7 @@ export function ChatView(
           slashCommands={view.info.chat ? undefined : slashCommands}
           onSlashCommand={handleSlashCommand}
           images={images}
-          onImagesChange={setImages}
+          onImagesChange={onImagesChange}
         />
       </div>
     </div>

@@ -42,6 +42,12 @@ interface NewSessionViewProps {
   workspacesLoaded: boolean;
   /** Peers that did not answer the workspace list fetch. */
   peers: PeerStatus[];
+  /** Draft (unsent) composer content, owned by the App under the draft
+   * tab key so it survives switching away and back. */
+  input: string;
+  onInputChange: (value: string) => void;
+  images: PendingImage[];
+  onImagesChange: (images: PendingImage[]) => void;
   onStart: (
     fws: FederatedWorkspace,
     model: ComposerModel | null,
@@ -95,6 +101,10 @@ export function NewSessionView(
     workspaces,
     workspacesLoaded,
     peers,
+    input,
+    onInputChange,
+    images,
+    onImagesChange,
     onStart,
     onWorkspaceChanged,
     onDeleteWorkspace,
@@ -112,8 +122,6 @@ export function NewSessionView(
     pendingWorkspaceKey.current ?? "",
   );
   const [model, setModel] = useState<DraftModel | null>(null);
-  const [text, setText] = useState("");
-  const [images, setImages] = useState<PendingImage[]>([]);
   const [modalWorkspace, setModalWorkspace] = useState<
     FederatedWorkspace | undefined
   >(undefined);
@@ -264,9 +272,10 @@ export function NewSessionView(
   const remoteWorkspace = (selectedWorkspace?.peerId ?? "") !== "";
 
   /** Start the session with the composer text, or an explicit message (slash
-   * commands build their own prompt). */
+   * commands build their own prompt). The draft is cleared by the App once
+   * the session started; on failure it stays so the user can retry. */
   const submit = async (message?: string) => {
-    const trimmed = (message ?? text).trim();
+    const trimmed = (message ?? input).trim();
     if (
       (!trimmed && images.length === 0) ||
       !workspaceKey || !selectedWorkspace || busy
@@ -277,7 +286,6 @@ export function NewSessionView(
     setError(undefined);
     try {
       await onStart(selectedWorkspace, model, trimmed, images);
-      setImages([]);
     } catch (e) {
       setError(errorText(e));
       setBusy(false);
@@ -363,8 +371,8 @@ export function NewSessionView(
               </label>
             </div>
             <Composer
-              value={text}
-              onChange={setText}
+              value={input}
+              onChange={onInputChange}
               placeholder="タスクを入力して開始..."
               autoFocus
               large
@@ -385,7 +393,7 @@ export function NewSessionView(
               submitLabel={busy ? "作成中..." : "開始"}
               submitIcon={IconArrowUp}
               submitIconOnly
-              submitDisabled={busy || (!text.trim() && images.length === 0) ||
+              submitDisabled={busy || (!input.trim() && images.length === 0) ||
                 !workspaceKey}
               onSubmit={() => void submit()}
               onOpenSettings={onOpenSettings}
@@ -399,7 +407,7 @@ export function NewSessionView(
                 : undefined}
               onSlashCommand={handleSlashCommand}
               images={images}
-              onImagesChange={setImages}
+              onImagesChange={onImagesChange}
             />
             {error && <div className="error-text">{error}</div>}
             <div className="new-session-recent">

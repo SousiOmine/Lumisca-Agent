@@ -9,7 +9,8 @@ import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { usePane } from "./hooks/usePane.ts";
 import { quit } from "./shell.ts";
-import { useTabs } from "./hooks/useTabs.ts";
+import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
+import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
 import { TabBar } from "./components/TabBar.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
@@ -47,6 +48,10 @@ export function App({ initialData }: AppProps): ReactElement {
     closeOtherTabs,
     reopenSession,
   } = useTabs(setViews);
+  // Unsent composer content per tab: the chat view remounts on every tab
+  // switch (keyed below), so the draft lives here and is fed back into
+  // the view when its tab is shown again. Closing a tab discards it.
+  const { drafts, updateDraft, clearDraft } = useDrafts(tabs);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecent, setShowRecent] = useState(false);
   // Auto-update state (desktop only); polled here and shared with the
@@ -71,6 +76,10 @@ export function App({ initialData }: AppProps): ReactElement {
   const activeView: SessionView | undefined = activeTab
     ? views.get(activeTab)
     : undefined;
+  // The draft tab (and the equivalent draft screen shown while no tab is
+  // open) keeps its unsent input under the draft-tab key.
+  const draftKey = activeTab ?? DRAFT_TAB;
+  const draft = drafts.get(draftKey) ?? EMPTY_DRAFT;
   // The docked pane (the agent's browser WebView today, hosted at the
   // right edge). Polled from the shell bridge: the agent's own tools
   // open/close it, and the user can hide it (the surface keeps running).
@@ -125,12 +134,17 @@ export function App({ initialData }: AppProps): ReactElement {
         )}
         {activeView
           ? (
-            // Key by tab so switching sessions never leaks draft text or
-            // scroll position between sessions.
+            // Key by tab so switching sessions remounts the view without
+            // leaking scroll position (or draft text: the draft is owned
+            // by the App under the tab key and fed back in below).
             <ChatView
               key={activeTab ?? undefined}
               view={activeView}
               peerId={activeTab ? splitTabKey(activeTab).peerId : ""}
+              input={draft.input}
+              onInputChange={(input) => updateDraft(draftKey, { input })}
+              images={draft.images}
+              onImagesChange={(images) => updateDraft(draftKey, { images })}
               onPrompt={(text, images) =>
                 activeTab && prompt(activeTab, text, images)}
               onAbort={() => activeTab && abort(activeTab)}
@@ -156,7 +170,17 @@ export function App({ initialData }: AppProps): ReactElement {
               workspaces={workspaces}
               workspacesLoaded={workspacesLoaded}
               peers={peers}
-              onStart={startSession}
+              input={draft.input}
+              onInputChange={(input) => updateDraft(draftKey, { input })}
+              images={draft.images}
+              onImagesChange={(images) => updateDraft(draftKey, { images })}
+              onStart={async (fws, model, text, images) => {
+                await startSession(fws, model, text, images);
+                // The draft tab is replaced by the new session's tab; its
+                // draft was sent, so discard it (kept on failure so the
+                // user can retry).
+                clearDraft(DRAFT_TAB);
+              }}
               onWorkspaceChanged={handleWorkspaceChanged}
               onDeleteWorkspace={deleteWorkspace}
               onReopenSession={reopenSession}
