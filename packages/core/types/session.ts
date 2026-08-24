@@ -16,4 +16,8 @@ export interface SessionInfo {
   thinkingLevel?: ThinkingLevel;
   /** The thinking levels the session's model supports. */
   thinkingLevels?: ThinkingLevel[];
+  /** True for sessions of the folder-less chat workspace ("simple chat"
+   * without a workspace). Attached by the core when sessions are returned;
+   * absent on raw rows. */
+  chat?: boolean;
 }

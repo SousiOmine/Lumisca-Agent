@@ -8,7 +8,7 @@ import {
 } from "../mod.ts";
 
 function workspace(root: string): Workspace {
-  return { id: "w1", name: "ws", folders: [root], createdAt: 0 };
+  return { id: "w1", name: "ws", folders: [root], createdAt: 0, chat: false };
 }
 
 Deno.test("listWorkspaceFiles returns folder-relative posix paths", async () => {
@@ -127,7 +127,7 @@ Deno.test("listWorkspaceFiles covers every folder of a multi-folder workspace", 
     await Deno.writeTextFile(join(a, "one.txt"), "1");
     await Deno.writeTextFile(join(b, "two.txt"), "2");
     const entries = await listWorkspaceFiles(
-      { id: "w2", name: "ws2", folders: [a, b], createdAt: 0 },
+      { id: "w2", name: "ws2", folders: [a, b], createdAt: 0, chat: false },
     );
     const paths = entries.map((e) => e.path);
     assertEquals(paths.includes(basename(a)), true);

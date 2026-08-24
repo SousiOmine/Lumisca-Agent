@@ -36,6 +36,10 @@ interface DraftModel extends ComposerModel {
 
 interface NewSessionViewProps {
   workspaces: FederatedWorkspace[];
+  /** Whether the workspace list has arrived (initial data counts as
+   * loaded; a failed load counts too). While false a restored workspace
+   * key is kept as-is and re-validated once the list lands. */
+  workspacesLoaded: boolean;
   /** Peers that did not answer the workspace list fetch. */
   peers: PeerStatus[];
   onStart: (
@@ -50,6 +54,25 @@ interface NewSessionViewProps {
   /** Reopen a closed session in a tab (recent sessions list). */
   onReopenSession: (key: string) => void;
   onOpenSettings?: () => void;
+}
+
+/** Sentinel workspace id of the pinned chat entry: selecting it starts a
+ * chat session without a workspace (the server creates its own chat
+ * workspace). Never a real row; excluded from the regular picker list. */
+const CHAT_ENTRY_ID = "@chat";
+
+function chatEntry(peerId: string): FederatedWorkspace {
+  return {
+    peerId,
+    peerName: "",
+    workspace: {
+      id: CHAT_ENTRY_ID,
+      name: "チャット",
+      folders: [],
+      createdAt: 0,
+      chat: true,
+    },
+  };
 }
 
 /** localStorage key for the workspace last picked on the new session
@@ -70,6 +93,7 @@ function loadLastWorkspaceKey(): string {
 export function NewSessionView(
   {
     workspaces,
+    workspacesLoaded,
     peers,
     onStart,
     onWorkspaceChanged,
@@ -124,43 +148,74 @@ export function NewSessionView(
     };
   }, []);
 
-  // Filter workspaces by the selected peer.
+  // Filter workspaces by the selected peer. The pinned chat entry ("simple
+  // chat" without a workspace) is a synthetic selection available for every
+  // peer. The server already hides chat workspaces from the list API; the
+  // flag filter here is defensive (e.g. against an older server), since
+  // chat rows are never user-manageable.
   const filteredWorkspaces = workspaces.filter(
     (w) => w.peerId === selectedPeerId,
   );
+  const pickerWorkspaces = filteredWorkspaces.filter(
+    (w) => !w.workspace.chat,
+  );
+  // A peer is selectable when it is the local server ("") or it appears in
+  // the peer list (registered connections; unreachable but registered is
+  // still a real machine) or owns a workspace in the fetched list. A
+  // restored peer outside this set is a deleted connection: the chat entry
+  // for it is synthetic and must not make the restored key look valid.
+  const selectablePeer = (peerId: string): boolean =>
+    peerId === "" ||
+    peers.some((p) => p.id === peerId) ||
+    workspaces.some((w) => w.peerId === peerId);
+  const chatOption = selectablePeer(selectedPeerId)
+    ? chatEntry(selectedPeerId)
+    : undefined;
 
   // Keep a valid selection when the workspace list changes (e.g. after a
-  // delete); fall back to the first remaining workspace. A restored key is
-  // applied once the list arrives and validated against it.
+  // delete); fall back to the chat entry when nothing else remains. A
+  // restored key (localStorage) is applied once the list has arrived: the
+  // key is kept verbatim while the list is still loading — empty arrays
+  // and "not loaded yet" are indistinguishable by length alone, so the
+  // explicit `workspacesLoaded` flag gates the validation. After the list
+  // lands (even with zero workspaces), an invalid restored key falls back
+  // to the first selectable option (the chat entry), never leaving the
+  // draft screen stuck on an unselectable workspace.
   useEffect(() => {
+    // A restored peer that no longer exists (deleted connection) is
+    // invalid once the list arrives: revert the selection to the local
+    // server. The workspace key below then falls back with it — the
+    // synthetic chat entry would otherwise keep the restored key valid
+    // and every start would fail on the deleted peer.
+    if (workspacesLoaded && !selectablePeer(selectedPeerId)) {
+      setSelectedPeerId("");
+      return;
+    }
+    const selectable = [
+      ...(chatOption ? [chatOption] : []),
+      ...pickerWorkspaces,
+    ];
+    const fallback = selectable[0]
+      ? tabKey(selectable[0].peerId, selectable[0].workspace.id)
+      : "";
     setWorkspaceKey((current) => {
       const pending = pendingWorkspaceKey.current;
       if (pending !== null) {
         pendingWorkspaceKey.current = null;
-        const valid = filteredWorkspaces.some(
-          (w) => tabKey(w.peerId, w.workspace.id) === pending,
-        );
-        // The list is not loaded yet; keep the restored key.
-        if (filteredWorkspaces.length === 0) return pending;
-        return valid ? pending : (filteredWorkspaces[0]
-          ? tabKey(
-            filteredWorkspaces[0].peerId,
-            filteredWorkspaces[0].workspace.id,
+        if (!workspacesLoaded) return pending;
+        return selectable.some(
+            (w) => tabKey(w.peerId, w.workspace.id) === pending,
           )
-          : "");
+          ? pending
+          : fallback;
       }
-      return filteredWorkspaces.some(
+      return selectable.some(
           (w) => tabKey(w.peerId, w.workspace.id) === current,
         )
         ? current
-        : (filteredWorkspaces[0]
-          ? tabKey(
-            filteredWorkspaces[0].peerId,
-            filteredWorkspaces[0].workspace.id,
-          )
-          : "");
+        : fallback;
     });
-  }, [workspaces, selectedPeerId]);
+  }, [workspaces, workspacesLoaded, selectedPeerId, peers]);
 
   // Reset workspace selection when the peer changes. Skipped on the first
   // run so a restored peer (from the last workspace) is not overwritten.
@@ -170,11 +225,15 @@ export function NewSessionView(
       peerChanged.current = true;
       return;
     }
+    const selectable = [
+      ...(chatOption ? [chatOption] : []),
+      ...pickerWorkspaces,
+    ];
     setWorkspaceKey(
-      filteredWorkspaces[0]
+      selectable[0]
         ? tabKey(
-          filteredWorkspaces[0].peerId,
-          filteredWorkspaces[0].workspace.id,
+          selectable[0].peerId,
+          selectable[0].workspace.id,
         )
         : "",
     );
@@ -194,7 +253,10 @@ export function NewSessionView(
     }
   }, [workspaceKey]);
 
-  const selectedWorkspace = filteredWorkspaces.find(
+  const selectedWorkspace = [
+    ...(chatOption ? [chatOption] : []),
+    ...pickerWorkspaces,
+  ].find(
     (w) => tabKey(w.peerId, w.workspace.id) === workspaceKey,
   );
   // Sessions on another server are created with that server's default
@@ -273,7 +335,8 @@ export function NewSessionView(
               <label className="new-session-select">
                 <span>ワークスペース</span>
                 <WorkspacePicker
-                  workspaces={filteredWorkspaces}
+                  workspaces={pickerWorkspaces}
+                  chat={chatOption}
                   value={workspaceKey}
                   onChange={setWorkspaceKey}
                   onEdit={(fws) => {
@@ -326,9 +389,14 @@ export function NewSessionView(
                 !workspaceKey}
               onSubmit={() => void submit()}
               onOpenSettings={onOpenSettings}
-              mentionWorkspaceId={selectedWorkspace?.workspace.id}
+              mentionWorkspaceId={!selectedWorkspace?.workspace.chat
+                ? selectedWorkspace?.workspace.id
+                : undefined}
               mentionPeerId={selectedWorkspace?.peerId}
-              slashCommands={selectedWorkspace ? slashCommands : undefined}
+              slashCommands={selectedWorkspace &&
+                  !selectedWorkspace.workspace.chat
+                ? slashCommands
+                : undefined}
               onSlashCommand={handleSlashCommand}
               images={images}
               onImagesChange={setImages}

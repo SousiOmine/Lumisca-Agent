@@ -485,6 +485,7 @@ Deno.test("loadMergedConfig merges app, workspace and plugin MCP servers", async
     name: "w",
     folders: [root],
     createdAt: 0,
+    chat: false,
   };
   const service = new McpService({
     settings,

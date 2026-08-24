@@ -4,7 +4,10 @@ import { errorText } from "../providers.ts";
 import type { FederatedWorkspace, InitialData, PeerStatus } from "../types.ts";
 
 /** Workspace + peer state: the federated workspace list with peer
- * reachability, plus the shared create/update/delete flows. */
+ * reachability, plus the shared create/update/delete flows. `loaded` tells
+ * whether the workspace list has arrived (initial data counts as loaded;
+ * a failed load counts too — the list is then known to be empty/unusable,
+ * and callers must not wait for it forever). */
 export function useWorkspaces(initialData?: InitialData) {
   const [workspaces, setWorkspaces] = useState<FederatedWorkspace[]>(
     initialData?.workspaces.map((ws) => ({
@@ -15,6 +18,7 @@ export function useWorkspaces(initialData?: InitialData) {
   );
   const [peers, setPeers] = useState<PeerStatus[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(initialData !== undefined);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -26,6 +30,10 @@ export function useWorkspaces(initialData?: InitialData) {
       setPeers(result.peers);
     } catch (error) {
       setLoadError(errorText(error));
+    } finally {
+      // Loaded either way: a failure leaves an empty/unusable list, but
+      // waiting for it would block the draft screen's fallback forever.
+      setLoaded(true);
     }
   }, []);
 
@@ -77,6 +85,7 @@ export function useWorkspaces(initialData?: InitialData) {
     workspaces,
     peers,
     loadError,
+    loaded,
     handleWorkspaceChanged,
     deleteWorkspace,
   };

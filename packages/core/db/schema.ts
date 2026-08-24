@@ -51,6 +51,13 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   // Custom system prompts were removed: sessions always use the generated
   // prompt, snapshotted at creation. Drop the distinguishing flag.
   (db) => db.exec("ALTER TABLE sessions DROP COLUMN system_prompt_custom"),
+  // Chat workspaces (folder-less "simple chat" mode): a flag distinguishes
+  // them from coding workspaces so sessions created without a workspace can
+  // still satisfy the workspace_id foreign key.
+  (db) =>
+    db.exec(
+      "ALTER TABLE workspaces ADD COLUMN chat INTEGER NOT NULL DEFAULT 0",
+    ),
 ];
 
 /** Apply pending migrations, tracked via PRAGMA user_version. */

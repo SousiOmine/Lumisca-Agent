@@ -146,9 +146,11 @@ const openSchema = object({
       "is rejected.",
   ),
   width: optional(
-    integer("Viewport width in CSS pixels (default 800). The page lays out " +
-      "at this size and is scaled to fit the pane/window — specify e.g. " +
-      "390×844 to debug a phone layout."),
+    integer(
+      "Viewport width in CSS pixels (default 800). The page lays out " +
+        "at this size and is scaled to fit the pane/window — specify e.g. " +
+        "390×844 to debug a phone layout.",
+    ),
   ),
   height: optional(
     integer("Viewport height in CSS pixels (default 600)"),
@@ -265,7 +267,8 @@ function createBrowserOpenTool(
       return {
         content: [{
           type: "text",
-          text: `Opened ${info.url} in the browser (viewport ${width}×${height}).` +
+          text:
+            `Opened ${info.url} in the browser (viewport ${width}×${height}).` +
             (info.title ? ` Title: "${info.title}"` : "") +
             ` Use browser_observe to inspect it.`,
         }],
@@ -438,8 +441,7 @@ function createBrowserWaitTool(
   return {
     name: TOOL_BROWSER_WAIT,
     label: "Browser Wait",
-    description:
-      "Wait for the page in the browser: until=load (readyState " +
+    description: "Wait for the page in the browser: until=load (readyState " +
       "complete), idle (no active fetch/XHR for idle_ms — WebSockets like " +
       "dev-server hot reload do not count), url (URL contains " +
       "url_contains), or time. Event-driven in the page; returns when the " +

@@ -128,7 +128,7 @@ export const api = {
       "/api/sessions/default-model",
     ),
   createSession: (input: {
-    workspaceId: string;
+    workspaceId?: string;
     name?: string;
     modelProvider?: string;
     modelId?: string;
@@ -364,7 +364,7 @@ export const fed = {
       }`,
     ),
   createSession: (peerId: string, input: {
-    workspaceId: string;
+    workspaceId?: string;
     name?: string;
   }) =>
     fedRequest<SessionInfo>(peerId, "/sessions", {

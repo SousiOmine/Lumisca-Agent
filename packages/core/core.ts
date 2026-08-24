@@ -50,7 +50,7 @@ import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
 import { SessionPool } from "./agent/pool.ts";
-import { buildSystemPrompt } from "./tools/mod.ts";
+import { buildChatSystemPrompt, buildSystemPrompt } from "./tools/mod.ts";
 import { CoreError } from "./errors.ts";
 import { APP_MCP_SETTINGS_KEY } from "./mcp/config.ts";
 import type { McpInfo } from "./mcp/config.ts";
@@ -59,7 +59,9 @@ import { CommandSafety } from "./safety/command-safety.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 
 export interface CreateSessionInput {
-  workspaceId: string;
+  /** The session's workspace; omitted → a chat session in the folder-less
+   * chat workspace ("simple chat" without a workspace picker). */
+  workspaceId?: string;
   name?: string;
   /** Omitted → the last-used model (or the first enabled model) is used. */
   modelProvider?: string;
@@ -385,8 +387,13 @@ export class LumiscaCore {
     return this.workspaces.create(name, resolved);
   }
 
+  /** The user-facing workspace list. The folder-less chat workspace is an
+   * internal singleton (created on first chat session): it is excluded so
+   * every client — web UI, CLI, API consumers, federated peers — only sees
+   * workspaces they can actually manage. Chat sessions are started without
+   * a workspaceId instead of by picking this workspace. */
   listWorkspaces(): Workspace[] {
-    return this.workspaces.list();
+    return this.workspaces.list().filter((w) => !w.chat);
   }
 
   getWorkspace(id: string): Workspace | undefined {
@@ -401,6 +408,12 @@ export class LumiscaCore {
     input: { name?: string; folders?: string[] },
   ): Promise<Workspace> {
     const current = this.requireWorkspace(id);
+    if (current.chat) {
+      throw new CoreError(
+        "The chat workspace cannot be edited",
+        "forbidden",
+      );
+    }
     const name = input.name ?? current.name;
     const folders = input.folders !== undefined
       ? await this.resolveFolders(input.folders)
@@ -419,10 +432,29 @@ export class LumiscaCore {
   }
 
   deleteWorkspace(id: string): void {
+    const current = this.requireWorkspace(id);
+    if (current.chat) {
+      throw new CoreError(
+        "The chat workspace cannot be deleted",
+        "forbidden",
+      );
+    }
     for (const session of this.sessions.list(id)) {
       this.pool.delete(session.id);
     }
     this.workspaces.delete(id);
+  }
+
+  /** The folder-less chat workspace ("simple chat" without a workspace),
+   * created on first use. Every chat session (createSession without a
+   * workspaceId) lives here; the workspace itself is not user-manageable
+   * (update/delete are refused). */
+  private getOrCreateChatWorkspace(): Workspace {
+    const existing = this.workspaces.list().find((w) => w.chat);
+    if (existing) return existing;
+    // An internal singleton, not user-manageable: no event is emitted (the
+    // workspace list is refetched by clients anyway).
+    return this.workspaces.create("チャット", [], { chat: true });
   }
 
   // --- MCP configuration ----------------------------------------------------
@@ -513,7 +545,11 @@ export class LumiscaCore {
   }
 
   createSession(input: CreateSessionInput): SessionInfo {
-    const workspace = this.requireWorkspace(input.workspaceId);
+    // No workspaceId → a chat session in the folder-less chat workspace
+    // (created on first use).
+    const workspace = input.workspaceId !== undefined
+      ? this.requireWorkspace(input.workspaceId)
+      : this.getOrCreateChatWorkspace();
     const model = this.resolveDefaultModel(input.modelProvider, input.modelId);
     // Generated prompts are snapshotted here, at creation time (workspace
     // AGENTS.md + environment + personalization included), and stored with
@@ -534,8 +570,11 @@ export class LumiscaCore {
     this.pool.open(session, workspace, [], {
       headless: input.headless ?? false,
     });
-    this.emit({ type: "session_created", session });
-    return this.decorateSession(session);
+    // The event carries the decorated session (chat flag etc.), the same
+    // shape every other SessionInfo consumer sees — never the raw row.
+    const decorated = this.decorateSession(session);
+    this.emit({ type: "session_created", session: decorated });
+    return decorated;
   }
 
   listSessions(workspaceId?: string): SessionInfo[] {
@@ -799,8 +838,10 @@ export class LumiscaCore {
 
   /** The full generated system prompt for a workspace: base prompt +
    * environment section + project memory (workspace AGENTS.md) +
-   * personalization (machine AGENTS.md, appended last). `model` fills in
-   * the environment section's model line. `headless` selects the headless
+   * personalization (machine AGENTS.md, appended last). Chat workspaces
+   * (folder-less, "simple chat") get the chat variant instead — no
+   * workspace framing, matching their tool set. `model` fills in the
+   * environment section's model line. `headless` selects the headless
    * guidance variant (auto-answered asks). */
   private buildGeneratedPrompt(
     workspace: Workspace,
@@ -813,12 +854,11 @@ export class LumiscaCore {
         name: this.models.getModel(model.provider, model.modelId)?.name,
       }
       : undefined;
-    return buildSystemPrompt(
-      workspace,
-      this.loadPersonalInstructions(),
-      resolved,
-      headless,
-    );
+    const personal = this.loadPersonalInstructions();
+    if (workspace.chat) {
+      return buildChatSystemPrompt(personal, resolved, headless);
+    }
+    return buildSystemPrompt(workspace, personal, resolved, headless);
   }
 
   /** Resolve workspace folders to real paths; rejects missing ones. */
@@ -858,7 +898,8 @@ export class LumiscaCore {
   }
 
   /** Attach the session's model thinking level so the UI can render the
-   * thinking control without an extra fetch. */
+   * thinking control without an extra fetch, and the chat flag so the UI
+   * can render chat sessions (folder-less workspace) distinctly. */
   private decorateSession(session: SessionInfo): SessionInfo {
     const model = this.models.getModel(
       session.modelProvider,
@@ -871,6 +912,7 @@ export class LumiscaCore {
         session.modelId,
       ),
       thinkingLevels: getSupportedThinkingLevels(model),
+      chat: this.getWorkspace(session.workspaceId)?.chat ?? false,
     };
   }
 }

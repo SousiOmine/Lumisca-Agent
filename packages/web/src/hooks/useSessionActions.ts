@@ -38,7 +38,9 @@ export function useSessionActions(
 
   /** Create a session from the draft tab and send the first prompt. The
    * session runs on the peer that owns the workspace (remote workspaces
-   * use the peer's default model). */
+   * use the peer's default model). A chat entry (workspace.chat) starts a
+   * "simple chat" session: no workspaceId is sent, so the server creates
+   * it in its folder-less chat workspace. */
   const startSession = useCallback(
     async (
       fws: FederatedWorkspace,
@@ -49,12 +51,15 @@ export function useSessionActions(
       const { peerId, workspace } = fws;
       const session = peerId === ""
         ? await api.createSession({
-          workspaceId: workspace.id,
+          ...(workspace.chat ? {} : { workspaceId: workspace.id }),
           ...(model
             ? { modelProvider: model.provider, modelId: model.modelId }
             : {}),
         })
-        : await fed.createSession(peerId, { workspaceId: workspace.id });
+        : await fed.createSession(
+          peerId,
+          workspace.chat ? {} : { workspaceId: workspace.id },
+        );
       const key = tabKey(peerId, session.id);
       setTabs((prev) => {
         if (prev.includes(DRAFT_TAB)) {

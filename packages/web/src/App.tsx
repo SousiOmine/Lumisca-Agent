@@ -30,6 +30,7 @@ export function App({ initialData }: AppProps): ReactElement {
     workspaces,
     peers,
     loadError,
+    loaded: workspacesLoaded,
     handleWorkspaceChanged,
     deleteWorkspace,
   } = useWorkspaces(initialData);
@@ -153,6 +154,7 @@ export function App({ initialData }: AppProps): ReactElement {
           : (
             <NewSessionView
               workspaces={workspaces}
+              workspacesLoaded={workspacesLoaded}
               peers={peers}
               onStart={startSession}
               onWorkspaceChanged={handleWorkspaceChanged}

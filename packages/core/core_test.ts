@@ -670,7 +670,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db1.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    4,
+    5,
   );
   db1.close();
 
@@ -679,7 +679,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db2.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    4,
+    5,
   );
   db2.close();
 
@@ -693,8 +693,17 @@ Deno.test("migration drops the legacy settings table", async () => {
   // A database created before settings moved to the settings file still
   // carries the settings table; opening it must drop it. It also predates
   // the custom-system-prompt removal, so its sessions table still has the
-  // system_prompt_custom column, which the latest migration drops.
+  // system_prompt_custom column, which the latest migration drops. The
+  // workspaces table exists as in the real schema (chat workspaces were
+  // added afterwards, so only the new migration touches it).
   const legacy = new DatabaseSync(path);
+  legacy.exec(
+    `CREATE TABLE workspaces (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )`,
+  );
   legacy.exec(
     `CREATE TABLE sessions (
       id TEXT PRIMARY KEY,
@@ -728,14 +737,168 @@ Deno.test("migration drops the legacy settings table", async () => {
     .all()
     .find((c) => c.name === "system_prompt_custom");
   assertEquals(column, undefined);
+  // The chat-workspace migration ran on the legacy table too.
+  const chatColumn = db.db
+    .prepare("PRAGMA table_info(workspaces)")
+    .all()
+    .find((c) => c.name === "chat");
+  assertEquals(chatColumn !== undefined, true, "chat column must be added");
   assertEquals(
     (db.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    4,
+    5,
   );
   db.close();
 
   await Deno.remove(dir, { recursive: true });
+});
+
+// --- chat sessions (ワークスペースなしのシンプルチャット) ----------------
+
+Deno.test("chat session: created without a workspace, chat prompt, no file tools", async () => {
+  const { core, faux, providerId, modelId } = setup();
+
+  // No workspaceId → a chat session in the folder-less chat workspace.
+  const session = core.createSession({
+    name: "chat",
+    modelProvider: providerId,
+    modelId,
+  });
+  assertEquals(session.chat, true);
+
+  // The chat workspace is a singleton, created on first use and flagged,
+  // but hidden from the user-facing workspace list.
+  assertEquals(
+    core.listWorkspaces().some((w) => w.chat),
+    false,
+    "the chat workspace must not appear in the public list",
+  );
+  const chatWs = core.getWorkspace(session.workspaceId)!;
+  assertEquals(chatWs.chat, true);
+  assertEquals(chatWs.folders.length, 0);
+
+  // A second chat session reuses the same workspace.
+  const second = core.createSession({ modelProvider: providerId, modelId });
+  assertEquals(second.workspaceId, session.workspaceId);
+
+  // The system prompt is the chat variant: no workspace folder list, no
+  // "coding agent that works inside a workspace" framing.
+  const agent = core.getAgent(session.id)!;
+  const prompt = agent.agent.state.systemPrompt;
+  assert(
+    !prompt.includes(
+      "You are Lumisca, a coding agent that works inside a workspace",
+    ),
+    "chat prompt must not use the coding-agent identity",
+  );
+  assert(
+    !prompt.includes("The workspace contains these folders"),
+    "chat prompt must not list workspace folders",
+  );
+  assert(
+    prompt.includes("helpful AI assistant"),
+    "chat prompt must use the chat identity",
+  );
+  assert(
+    prompt.includes("Environment:"),
+    "chat prompt keeps the environment section",
+  );
+  assert(
+    !prompt.includes("[Background command ...]") &&
+      !prompt.includes("[Task ...]") &&
+      !prompt.includes("[Message from ...]"),
+    "chat prompt must not describe notifications of tools it does not have",
+  );
+
+  // No file/shell/sub-agent tools; ask / todo / skill stay.
+  const toolNames = agent.agent.state.tools.map((t) => t.name);
+  for (
+    const forbidden of [
+      "read",
+      "write",
+      "edit",
+      "list_dir",
+      "grep",
+      "glob",
+      "bash",
+      "async_bash",
+      "eval",
+    ]
+  ) {
+    assert(
+      !toolNames.includes(forbidden),
+      `chat session must not have the ${forbidden} tool`,
+    );
+  }
+  assert(toolNames.includes("ask"), "chat session keeps the ask tool");
+  assert(toolNames.includes("todo"), "chat session keeps the todo tool");
+
+  // The chat session runs like any other.
+  faux.setResponses([fauxAssistantMessage("hello from chat")]);
+  await core.prompt(session.id, "Hi");
+  const messages = core.getAgent(session.id)!.messages;
+  assertEquals(messages.length, 2);
+  assertEquals(
+    (messages[1] as { content: Array<{ type: string; text: string }> })
+      .content[0]!.text,
+    "hello from chat",
+  );
+
+  // Close and reopen: history and the chat prompt snapshot are restored.
+  core.closeSession(session.id);
+  const reopened = await core.openSession(session.id);
+  assertEquals(reopened.chat, true);
+  const reopenedAgent = core.getAgent(session.id)!;
+  assertEquals(reopenedAgent.agent.state.systemPrompt, prompt);
+  assertEquals(reopenedAgent.messages.length, 2);
+
+  core.close();
+});
+
+Deno.test("session_created event carries the decorated session (chat flag)", () => {
+  const { core, faux: _faux, providerId, modelId } = setup();
+  const events: ClientEvent[] = [];
+  const unsubscribe = core.subscribe((event) => events.push(event));
+  try {
+    const session = core.createSession({ modelProvider: providerId, modelId });
+    const created = events.find(
+      (e): e is Extract<ClientEvent, { type: "session_created" }> =>
+        e.type === "session_created",
+    );
+    assertEquals(created !== undefined, true);
+    // The event carries the same decorated shape as the API response —
+    // raw rows must never leak the chat flag as undefined.
+    assertEquals(created!.session.id, session.id);
+    assertEquals(created!.session.chat, true);
+  } finally {
+    unsubscribe();
+    core.close();
+  }
+});
+
+Deno.test("chat workspace cannot be updated or deleted", async () => {
+  const { core, faux: _faux, providerId, modelId } = setup();
+  const session = core.createSession({ modelProvider: providerId, modelId });
+  const chatWorkspace = core.getWorkspace(session.workspaceId)!;
+  assertEquals(chatWorkspace.chat, true);
+
+  assertThrows(
+    () => core.deleteWorkspace(chatWorkspace.id),
+    Error,
+    "cannot be deleted",
+  );
+  await assertRejects(
+    () => core.updateWorkspace(chatWorkspace.id, { name: "renamed" }),
+    Error,
+    "cannot be edited",
+  );
+
+  // Normal workspaces are unaffected.
+  const { ws } = await makeWorkspace(core);
+  const updated = await core.updateWorkspace(ws.id, { name: "renamed" });
+  assertEquals(updated.name, "renamed");
+
+  core.close();
 });
 
 // --- thinking level (モデルごとの思考強度) --------------------------------

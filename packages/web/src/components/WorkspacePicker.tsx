@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import {
   IconChevronDown,
   IconFolder,
+  IconMessage,
   IconPencil,
   IconPlus,
   IconTrash,
@@ -12,6 +13,9 @@ import { useClickOutside } from "../hooks/useClickOutside.ts";
 
 interface WorkspacePickerProps {
   workspaces: FederatedWorkspace[];
+  /** The folder-less chat workspace of the current peer ("simple chat"
+   * without a workspace), pinned as the first option when present. */
+  chat?: FederatedWorkspace;
   /** Currently selected workspace (composite key; "" when none). */
   value: string;
   onChange: (key: string) => void;
@@ -25,6 +29,7 @@ interface WorkspacePickerProps {
  * Machine selection is handled by a separate PeerPicker. */
 export function WorkspacePicker({
   workspaces,
+  chat,
   value,
   onChange,
   onEdit,
@@ -34,7 +39,8 @@ export function WorkspacePicker({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const selected = workspaces.find((w) =>
+  const selectable = [...(chat ? [chat] : []), ...workspaces];
+  const selected = selectable.find((w) =>
     tabKey(w.peerId, w.workspace.id) === value
   );
 
@@ -61,9 +67,30 @@ export function WorkspacePicker({
 
       {open && (
         <div className="workspace-popover" role="listbox">
-          {workspaces.length === 0 && (
+          {selectable.length === 0 && (
             <div className="workspace-popover-empty">
               ワークスペースがありません
+            </div>
+          )}
+          {chat && (
+            <div
+              key={tabKey(chat.peerId, chat.workspace.id)}
+              role="option"
+              aria-selected={tabKey(chat.peerId, chat.workspace.id) === value}
+              className={`workspace-option chat-workspace${
+                tabKey(chat.peerId, chat.workspace.id) === value
+                  ? " selected"
+                  : ""
+              }`}
+              onClick={() => {
+                onChange(tabKey(chat.peerId, chat.workspace.id));
+                setOpen(false);
+              }}
+            >
+              <span className="workspace-option-icon">
+                <IconMessage size={14} />
+              </span>
+              <span className="workspace-option-name">チャット</span>
             </div>
           )}
           {workspaces.map((fws) => {

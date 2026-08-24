@@ -27,7 +27,13 @@ import {
 } from "./task.ts";
 
 function makeWorkspace(root: string): Workspace {
-  return { id: "ws", name: "ws", folders: [root], createdAt: Date.now() };
+  return {
+    id: "ws",
+    name: "ws",
+    folders: [root],
+    createdAt: Date.now(),
+    chat: false,
+  };
 }
 
 /** A stream function that never settles: sub-agents stay running until the

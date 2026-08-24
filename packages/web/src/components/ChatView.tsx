@@ -202,10 +202,19 @@ export function ChatView(
           {view.messages.length === 0 && view.streamingText.length === 0 && (
             <div className="chat-empty" style={{ height: "50vh" }}>
               <div className="chat-empty-inner">
-                <p>
-                  タスクを入力してください。ファイルの読み書きとシェルコマンドを
-                  ワークスペース内で実行します。
-                </p>
+                {view.info.chat
+                  ? (
+                    <p>
+                      メッセージを入力してください。ワークスペースを使わない
+                      シンプルチャットです。
+                    </p>
+                  )
+                  : (
+                    <p>
+                      タスクを入力してください。ファイルの読み書きとシェルコマンドを
+                      ワークスペース内で実行します。
+                    </p>
+                  )}
               </div>
             </div>
           )}
@@ -256,9 +265,11 @@ export function ChatView(
           onAbort={isRunning ? onAbort : undefined}
           onSubmit={() => submit()}
           onOpenSettings={onOpenSettings}
-          mentionWorkspaceId={view.info.workspaceId}
+          mentionWorkspaceId={view.info.chat
+            ? undefined
+            : view.info.workspaceId}
           mentionPeerId={peerId}
-          slashCommands={slashCommands}
+          slashCommands={view.info.chat ? undefined : slashCommands}
           onSlashCommand={handleSlashCommand}
           images={images}
           onImagesChange={setImages}

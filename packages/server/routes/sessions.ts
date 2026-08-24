@@ -14,6 +14,7 @@ import type {
 import { AppError, parseBody } from "./util.ts";
 
 interface SessionBody {
+  /** Omitted → a chat session ("simple chat" without a workspace). */
   workspaceId?: unknown;
   name?: unknown;
   modelProvider?: unknown;
@@ -218,11 +219,20 @@ export function sessionRoutes(core: SessionApi): Hono {
 
   app.post("/sessions", async (c) => {
     const body = await parseBody<SessionBody>(c);
-    if (!body || typeof body.workspaceId !== "string") {
-      throw new AppError("workspaceId (string) is required", 400);
+    if (
+      !body ||
+      (body.workspaceId !== undefined &&
+        typeof body.workspaceId !== "string")
+    ) {
+      throw new AppError(
+        "workspaceId must be a string when given; omit it for a chat session",
+        400,
+      );
     }
     const session = core.createSession({
-      workspaceId: body.workspaceId,
+      workspaceId: typeof body.workspaceId === "string"
+        ? body.workspaceId
+        : undefined,
       name: typeof body.name === "string" ? body.name : undefined,
       modelProvider: typeof body.modelProvider === "string"
         ? body.modelProvider

@@ -5,7 +5,7 @@ import type { ThinkingLevel, TodoPhase } from "../shared.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
-import { createCodingTools } from "../tools/mod.ts";
+import { createChatTools, createCodingTools } from "../tools/mod.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
 import type { BackgroundCommandInfo } from "../tools/background.ts";
 import { AskHub } from "../tools/ask.ts";
@@ -269,13 +269,18 @@ export class SessionPool {
     // survive them. The main agent's attachMcp fills it once discovery
     // finishes; every agent of the session searches it.
     const registry = resources.registry!;
+    // Chat sessions ("simple chat" without a workspace) have no shell or
+    // sub-agent surface: the background-command manager, the task hub and
+    // the runtime resolver are skipped, and the tool set is the chat one.
+    const chat = workspace.chat;
     // Reuse the session's manager when one exists (agent rebuild); create
     // it on first open. Shared by the async_bash tools and the session
     // agent: the tools start/check/kill commands, the agent turns
     // completions into notifications. Commands die with the session (pool
-    // close/delete/closeAll → killAll), not with the agent.
+    // close/delete/closeAll → killAll), not with the agent. Chat sessions
+    // never build it (no async_bash tools).
     let background = resources.background;
-    if (background === undefined) {
+    if (!chat && background === undefined) {
       background = new BackgroundProcessManager({
         sessionId: session.id,
         emit: (event) => this.deps.emit(event),
@@ -302,57 +307,71 @@ export class SessionPool {
     // survive agent rebuilds). The runtime is resolved at spawn time, so
     // model/workspace/thinking-level changes apply to new sub-agents even
     // without a rebuild; the resolver itself is refreshed on every open
-    // (it must never hold a stale session).
-    const runtimeResolver = () => {
-      const fast = this.deps.getFastModelInfo();
-      const workspace = this.deps.requireWorkspace(session.workspaceId);
-      if (fast !== undefined) {
+    // (it must never hold a stale session). Coding sessions only — the
+    // task tools are absent from chat sessions, which run in a workspace
+    // without folders (sub-agents would get coding tools that resolve
+    // nothing).
+    let tasks = resources.tasks;
+    if (!chat) {
+      const runtimeResolver = () => {
+        const fast = this.deps.getFastModelInfo();
+        const workspace = this.deps.requireWorkspace(session.workspaceId);
+        if (fast !== undefined) {
+          return {
+            workspace,
+            model: fast.model,
+            thinkingLevel: this.deps.getThinkingLevel(
+              fast.provider,
+              fast.modelId,
+            ),
+          };
+        }
         return {
           workspace,
-          model: fast.model,
+          model,
           thinkingLevel: this.deps.getThinkingLevel(
-            fast.provider,
-            fast.modelId,
+            session.modelProvider,
+            session.modelId,
           ),
         };
-      }
-      return {
-        workspace,
-        model,
-        thinkingLevel: this.deps.getThinkingLevel(
-          session.modelProvider,
-          session.modelId,
-        ),
       };
-    };
-    let tasks = resources.tasks;
-    if (tasks === undefined) {
-      tasks = new TaskHub({
-        sessionId: session.id,
-        resolveRuntime: runtimeResolver,
-        streamFn: this.deps.streamFn,
-        safety: this.deps.commandSafety,
-        browser: this.deps.browser,
-        emit: (event: ClientEvent) => this.deps.emit(event),
-      });
-      resources.tasks = tasks;
+      if (tasks === undefined) {
+        tasks = new TaskHub({
+          sessionId: session.id,
+          resolveRuntime: runtimeResolver,
+          streamFn: this.deps.streamFn,
+          safety: this.deps.commandSafety,
+          browser: this.deps.browser,
+          emit: (event: ClientEvent) => this.deps.emit(event),
+        });
+        resources.tasks = tasks;
+      } else {
+        tasks.setRuntimeResolver(runtimeResolver);
+      }
+      // The sub-agents share the session's MCP attachment (general
+      // sub-agents get the search/call tools over its registry).
+      tasks.setMcp(mcp, registry);
     } else {
-      tasks.setRuntimeResolver(runtimeResolver);
+      tasks = undefined;
     }
-    // The sub-agents share the session's MCP attachment (general
-    // sub-agents get the search/call tools over its registry).
-    tasks.setMcp(mcp, registry);
     const browser = this.deps.browser !== undefined
       ? this.deps.browser()
       : undefined;
-    const tools = createCodingTools(workspace, {
-      background,
-      ask: askHub,
-      todo,
-      task: tasks,
-      safety: this.deps.commandSafety,
-      browser,
-    });
+    const tools = chat
+      ? createChatTools({
+        ask: askHub,
+        todo,
+        safety: this.deps.commandSafety,
+        browser,
+      })
+      : createCodingTools(workspace, {
+        background,
+        ask: askHub,
+        todo,
+        task: tasks,
+        safety: this.deps.commandSafety,
+        browser,
+      });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a
     // stored prompt (created before snapshots) rebuild once — and the

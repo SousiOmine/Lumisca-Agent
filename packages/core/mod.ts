@@ -28,7 +28,12 @@ export {
   reviewMode,
 } from "./modes/review.ts";
 export type { ReviewTarget } from "./modes/review.ts";
-export { buildSystemPrompt, createCodingTools } from "./tools/mod.ts";
+export {
+  buildChatSystemPrompt,
+  buildSystemPrompt,
+  createChatTools,
+  createCodingTools,
+} from "./tools/mod.ts";
 export type {
   Infer,
   Tool,

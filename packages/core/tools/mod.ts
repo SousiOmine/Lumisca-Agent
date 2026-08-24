@@ -123,6 +123,27 @@ export function createCodingTools(
   ];
 }
 
+/** Build the tool set of a chat session ("simple chat" without a
+ * workspace): no sandbox, no shell — file, bash, async_bash, eval and
+ * sub-agent tools are all absent. Ask (clarifying questions), todo (a
+ * lightweight plan) and global skills stay useful outside a workspace, and
+ * app-level MCP tools attach via the session's tool registry as usual
+ * (sidebar: the MCP search/call pair is added by the session agent itself,
+ * not here). */
+export function createChatTools(
+  options: Partial<ToolFactoryOptions> = {},
+): Tool[] {
+  return [
+    // Only global skills apply (no workspace folders to discover from).
+    createSkillTool({ skills: sessionSkills([]) }),
+    ...(options.browser !== undefined
+      ? createBrowserTools(options.browser)
+      : []),
+    ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
+    ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
+  ];
+}
+
 /** System prompt describing the agent and its workspace boundaries.
  * `personalInstructions` (the machine-level AGENTS.md next to the settings
  * file) is appended at the very end, after project memory. `model` (the
@@ -143,23 +164,6 @@ export function buildSystemPrompt(
     ? `\n\n# Project memory (AGENTS.md)\n${memory}`
     : "";
   const skills = sessionSkills(workspace.folders);
-  const skillsSection = skills.length > 0
-    ? `\n\n# Skills\nSkills are reusable instructions stored as SKILL.md files. ` +
-      `When a task matches one of the skills below, load it with the skill ` +
-      `tool — the tool returns the skill's full instructions (and can read ` +
-      `additional files from the skill directory via read_followup).\n` +
-      `<available_skills>\n${
-        formatAvailableSkills(skills)
-      }\n</available_skills>`
-    : "";
-  const personal = (personalInstructions ?? "").trim();
-  const personalSection = personal
-    ? `\n\n# Personal instructions (AGENTS.md)\n${
-      personal.length > MAX_PERSONALIZATION_BYTES
-        ? personal.slice(0, MAX_PERSONALIZATION_BYTES)
-        : personal
-    }`
-    : "";
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
@@ -211,6 +215,76 @@ Guidelines:
 - Do not silently narrow the requested scope.
 - Do not hand in TODOs or placeholder implementations as finished work.
 - Do not ask the user for information you can obtain from your tools.
-${memorySection}${skillsSection}${personalSection}
+${memorySection}${skillsListingSection(skills)}${
+    personalInstructionsSection(personalInstructions)
+  }
+`;
+}
+
+/** The `<available_skills>` section of a system prompt, shared by every
+ * prompt builder (coding and chat): one line per skill, capped at
+ * MAX_AVAILABLE_SKILLS_BYTES (skills past the cap stay loadable via the
+ * skill tool by name). Empty when there are no skills. */
+function skillsListingSection(skills: SkillDef[]): string {
+  if (skills.length === 0) return "";
+  return `\n\n# Skills\nSkills are reusable instructions stored as SKILL.md files. ` +
+    `When a task matches one of the skills below, load it with the skill ` +
+    `tool — the tool returns the skill's full instructions (and can read ` +
+    `additional files from the skill directory via read_followup).\n` +
+    `<available_skills>\n${formatAvailableSkills(skills)}\n</available_skills>`;
+}
+
+/** The personal-instructions (machine-level AGENTS.md) section appended at
+ * the very end of every prompt, capped at MAX_PERSONALIZATION_BYTES.
+ * Empty when no personal instructions are configured. */
+function personalInstructionsSection(
+  personalInstructions?: string,
+): string {
+  const personal = (personalInstructions ?? "").trim();
+  if (personal.length === 0) return "";
+  return `\n\n# Personal instructions (AGENTS.md)\n${
+    personal.length > MAX_PERSONALIZATION_BYTES
+      ? personal.slice(0, MAX_PERSONALIZATION_BYTES)
+      : personal
+  }`;
+}
+
+/** System prompt for a chat session ("simple chat" without a workspace):
+ * no workspace folders, no file/shell surface — the chat tool set is
+ * ask / todo / global skills / MCP. There are no background commands and
+ * no sub-agents, so the prompt never mentions their notifications.
+ * `personalInstructions` (the machine-level AGENTS.md) is appended at the
+ * very end; `model` appears in the environment section; `headless` swaps
+ * the ask-the-user guideline for the headless variant like
+ * buildSystemPrompt does. */
+export function buildChatSystemPrompt(
+  personalInstructions?: string,
+  model?: EnvironmentModel,
+  headless = false,
+): string {
+  const skills = sessionSkills([]);
+  return `You are Lumisca, a helpful AI assistant.
+
+You are running without a file workspace: the file, shell and sub-agent tools
+are unavailable, so you cannot read, write or execute anything on this
+machine. Answer questions, explain things, and help with text-based tasks.
+Images can be attached to prompts.${buildEnvironmentSection(model)}
+
+Guidelines:
+- Ask the user when a task is ambiguous.${
+    headless
+      ? " (Headless: the ask tool is auto-answered with the " +
+        "recommended/first option — prefer making the best reasonable " +
+        "assumption and stating it.)"
+      : ""
+  }
+- Prioritize correctness above all else.
+- Write answers with future readers in mind.
+- Never fabricate tool or test results.
+- Do not hand in placeholder content as finished work.
+- Do not silently narrow the requested scope.
+- Do not ask the user for information you can obtain yourself.${
+    skillsListingSection(skills)
+  }${personalInstructionsSection(personalInstructions)}
 `;
 }

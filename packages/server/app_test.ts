@@ -216,6 +216,65 @@ Deno.test("session prompt roundtrip via API", async () => {
   }
 });
 
+Deno.test("chat session API: no workspaceId creates a chat session", async () => {
+  const { core, server, faux, base } = await setup();
+  try {
+    faux.setResponses([fauxAssistantMessage("chat reply")]);
+
+    // No workspaceId → a chat session (chat flag set, folder-less).
+    const create = await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    });
+    assertEquals(create.status, 201);
+    const session = await create.json();
+    assertEquals(session.chat, true);
+
+    // The chat workspace is internal: it never appears in the workspace
+    // list API (clients see only manageable workspaces).
+    const wsList = await json(base, "/api/workspaces");
+    const workspaces = await wsList.json();
+    assertEquals(workspaces.length, 0);
+    assertEquals(
+      workspaces.some((ws: { chat: boolean }) => ws.chat),
+      false,
+    );
+    const chatWs = core.getWorkspace(session.workspaceId)!;
+    assertEquals(chatWs.chat, true);
+
+    // The chat session prompts and answers like any other.
+    const promptRes = await json(base, `/api/sessions/${session.id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "Hi" }),
+    });
+    assertEquals(promptRes.status, 200);
+    const messagesRes = await json(
+      base,
+      `/api/sessions/${session.id}/messages`,
+    );
+    const messages = await messagesRes.json();
+    assertEquals(messages.length, 2);
+    assertEquals(messages[1].content[0].text, "chat reply");
+
+    // The chat workspace refuses update/delete through the API.
+    const del = await json(base, `/api/workspaces/${chatWs.id}`, {
+      method: "DELETE",
+    });
+    assertEquals(del.status, 403);
+    const patch = await json(base, `/api/workspaces/${chatWs.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: "nope" }),
+    });
+    assertEquals(patch.status, 403);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("rewind truncates messages via the API and rejects bad bodies", async () => {
   const { core, server, faux, base } = await setup();
   try {

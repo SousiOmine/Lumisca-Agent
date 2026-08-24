@@ -399,6 +399,7 @@ Deno.test("createCodingTools includes browser tools only with a backend", async 
       name: "ws",
       folders: [root],
       createdAt: 0,
+      chat: false,
     };
     const sandbox = new Sandbox([root]);
     const without = createCodingTools(workspace, {});

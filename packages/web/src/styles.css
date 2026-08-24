@@ -2416,6 +2416,12 @@ select:focus {
   flex: none;
 }
 
+/* The pinned "chat without a workspace" entry: distinct icon color, no
+   edit/delete actions (the chat workspace is not user-manageable). */
+.workspace-option.chat-workspace .workspace-option-icon {
+  color: var(--accent);
+}
+
 .workspace-option-name {
   flex: 1;
   min-width: 0;
