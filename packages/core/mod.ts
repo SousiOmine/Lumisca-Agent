@@ -59,7 +59,11 @@ export { TaskHub } from "./tools/task.ts";
 export type { ParentDelivery } from "./tools/task.ts";
 export { MAX_SUBAGENT_DEPTH, MAX_SUBAGENTS } from "./tools/task.ts";
 export type { BrowserBackend } from "./browser/types.ts";
-export { createBrowserTools } from "./browser/tools.ts";
+export {
+  BROWSER_TOOL_NAMES,
+  createBrowserTools,
+  createBrowserToolsFrom,
+} from "./browser/tools.ts";
 export { formatSnapshot } from "./browser/tools.ts";
 export { HttpBrowserBackend } from "./browser/client.ts";
 export { LazyBrowserBackend } from "./browser/lazy.ts";

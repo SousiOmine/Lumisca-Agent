@@ -3,7 +3,13 @@ import { TOOL_CALL, TOOL_SEARCH } from "../shared.ts";
 import { createToolCallTool } from "./call-tool.ts";
 import { MAX_SEARCH_DESCRIPTION_CHARS, ToolRegistry } from "./registry.ts";
 import { createToolSearchTool } from "./search-tool.ts";
-import { object, string, type Tool, type ToolContentBlock } from "./schema.ts";
+import {
+  integer,
+  object,
+  string,
+  type Tool,
+  type ToolContentBlock,
+} from "./schema.ts";
 
 function fakeTool(
   name: string,
@@ -107,6 +113,70 @@ Deno.test("describe reports name, label and a truncated description", () => {
   assert(entry.description.endsWith("(truncated)"));
 });
 
+Deno.test("describe appends the parameter schema when it carries explicit properties", () => {
+  const registry = new ToolRegistry();
+  registry.setTools([
+    {
+      name: "browser_open",
+      label: "Browser Open",
+      description: "Opens a local page",
+      parameters: object({
+        url: string("The URL to open"),
+        width: integer("Viewport width (default 800)"),
+      }),
+      execute: () =>
+        Promise.resolve({
+          content: [{ type: "text", text: "ok" }],
+          details: {},
+        }),
+    },
+  ]);
+  // The model must see the argument names/defaults it has to pass to
+  // tool_call — the same contract MCP tools meet by embedding their
+  // schema in the description.
+  const entry = registry.search("open", 1)[0]!;
+  assert(entry.description.includes("Arguments (JSON Schema)"));
+  assert(entry.description.includes('"url"'));
+  assert(entry.description.includes("default 800"));
+
+  // Schemas without explicit properties get nothing appended: MCP's
+  // permissive schema delegates validation to its server (and embeds the
+  // schema in the description itself), and browser_close takes no
+  // arguments.
+  const registry2 = new ToolRegistry();
+  registry2.setTools([
+    {
+      name: "mcp__srv__call",
+      label: "srv: call",
+      description: "calls the server",
+      parameters: object({}, { additionalProperties: true }),
+      execute: () =>
+        Promise.resolve({
+          content: [{ type: "text", text: "ok" }],
+          details: {},
+        }),
+    },
+    {
+      name: "browser_close",
+      label: "Browser Close",
+      description: "closes the browser",
+      parameters: object({}),
+      execute: () =>
+        Promise.resolve({
+          content: [{ type: "text", text: "ok" }],
+          details: {},
+        }),
+    },
+  ]);
+  for (const query of ["call", "close"]) {
+    const result = registry2.search(query, 1)[0]!;
+    assert(
+      !result.description.includes("Arguments (JSON Schema)"),
+      `${query} must not carry a schema appendix`,
+    );
+  }
+});
+
 // --- browse -----------------------------------------------------------------
 
 Deno.test("browse groups tools by label prefix and caps the listing", () => {
@@ -135,6 +205,21 @@ Deno.test("setTools replaces and addTools merges idempotently", () => {
   assertEquals(registry.get("a"), undefined);
   assertEquals(registry.get("c")?.name, "c");
   assert(!registry.isEmpty);
+});
+
+Deno.test("removeTools deletes by name, ignores unknown names, reports the count", () => {
+  const registry = new ToolRegistry();
+  registry.setTools([fakeTool("a"), fakeTool("b"), fakeTool("c")]);
+  assertEquals(registry.removeTools(["a", "nope"]), 1);
+  assertEquals(registry.count, 2);
+  assertEquals(registry.get("a"), undefined);
+  assertEquals(registry.get("b")?.name, "b");
+  // Removing the same name again (and unknowns) is a no-op.
+  assertEquals(registry.removeTools(["a", "nope"]), 0);
+  assertEquals(registry.removeTools([]), 0);
+  registry.removeTools(["b", "c"]);
+  assertEquals(registry.count, 0);
+  assert(registry.isEmpty);
 });
 
 // --- call -------------------------------------------------------------------

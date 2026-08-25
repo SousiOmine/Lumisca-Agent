@@ -14,11 +14,11 @@ const MAX_SCHEMA_CHARS = 8192;
  * the MCP out-of-workspace boundary. Shared by every attachment site
  * (session agent, sub-agents) so the contract text stays in one place. */
 export const MCP_TOOLS_PROMPT_NOTE =
-  "\n\nNote: Additional tools (MCP servers, extensions) are not preloaded " +
-  "into the context to keep it small. Use tool_search to find them — the " +
-  "result describes each tool and its arguments — then call one with " +
-  "tool_call(name, args). MCP tools (names starting with mcp__) can access " +
-  "resources outside the workspace.";
+  "\n\nNote: Additional tools (MCP servers, extensions, the browser lab) " +
+  "are not preloaded into the context to keep it small. Use tool_search " +
+  "to find them — the result describes each tool and its arguments — " +
+  "then call one with tool_call(name, args). MCP tools (names starting " +
+  "with mcp__) can access resources outside the workspace.";
 
 /** Make server names safe for provider function-name rules
  * (`^[a-zA-Z0-9_-]{1,64}$`); tool names are already constrained by the
@@ -51,10 +51,12 @@ export function addToolsToAgent(agent: Agent, tools: Tool[]): void {
   agent.state.tools.push(...added.map(toAgentTool));
 }
 
-/** The tool_search / tool_call pair over a registry provider: the only MCP
- * surface the LLM ever sees. Shared by the session agent and the sub-agent
- * hub so the pair cannot drift. */
-export function mcpToolPair(getRegistry: () => ToolRegistry): Tool[] {
+/** The tool_search / tool_call pair over a registry provider: the only
+ * discoverable-tool surface the LLM ever sees (MCP tools, browser-lab
+ * tools, future extensions — whatever the session's registry holds).
+ * Shared by the session agent and the sub-agent hub so the pair cannot
+ * drift. */
+export function registryToolPair(getRegistry: () => ToolRegistry): Tool[] {
   return [
     createToolSearchTool(getRegistry),
     createToolCallTool(getRegistry),

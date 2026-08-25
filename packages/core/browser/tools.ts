@@ -4,9 +4,14 @@
  * behavior for Desktop and CLI — both pass a BrowserBackend; the tools
  * never know which host backs it.
  *
- * The tools exist only when a BrowserBackend is available (createBrowserTools
- * is called conditionally by createCodingTools); without one the agent has
- * no browser tools at all — no stub, no default.
+ * The tools are never preloaded into the LLM context: the session pool
+ * seeds them into the session's tool registry (discoverable via
+ * tool_search), the same contract as MCP tools. Without a BrowserBackend
+ * nothing is seeded at all — no stub, no default. The backend itself is
+ * resolved at execute time through a provider, so a backend attached,
+ * replaced or detached via setBrowserBackend after the tools were built
+ * is always the one the tools talk to; a missing backend fails with a
+ * clear error instead of a stale reference.
  */
 import {
   boolean,
@@ -212,20 +217,59 @@ const DEFAULT_VIEWPORT_HEIGHT = 600;
 /** The emulation range the hosts accept (CDP's own upper bound). */
 const MAX_VIEWPORT_DIMENSION = 10_000;
 
-/** Build the six browser tools over a backend. */
+/** The six tool names of the browser family. The session pool removes the
+ * seeded tools with this list when the backend is detached. */
+export const BROWSER_TOOL_NAMES: readonly string[] = [
+  TOOL_BROWSER_OPEN,
+  TOOL_BROWSER_OBSERVE,
+  TOOL_BROWSER_ACT,
+  TOOL_BROWSER_WAIT,
+  TOOL_BROWSER_SCREENSHOT,
+  TOOL_BROWSER_CLOSE,
+];
+
+/** Resolve the backend a browser tool executes against, failing with a
+ * clear error when the backend is gone (setBrowserBackend detached it
+ * after the tools were seeded). */
+function requireBackend(
+  resolveBackend: () => BrowserBackend | undefined,
+): BrowserBackend {
+  const backend = resolveBackend();
+  if (backend === undefined) {
+    throw new CoreError(
+      "ブラウザバックエンドが利用できません (browser tools are not " +
+        "attached to this session)",
+      "unavailable",
+    );
+  }
+  return backend;
+}
+
+/** Build the six browser tools over a fixed backend. */
 export function createBrowserTools(backend: BrowserBackend): Tool[] {
+  return createBrowserToolsFrom(() => backend);
+}
+
+/** Build the six browser tools over a backend resolver. The resolver runs
+ * at execute time, so setBrowserBackend calls after the tools were built
+ * (replacement or detach) are honored without rebuilding them; a
+ * resolution of undefined fails the call with a clear error. The session
+ * pool seeds the registry this way, keeping the seeded tools live. */
+export function createBrowserToolsFrom(
+  resolveBackend: () => BrowserBackend | undefined,
+): Tool[] {
   return [
-    createBrowserOpenTool(backend),
-    createBrowserObserveTool(backend),
-    createBrowserActTool(backend),
-    createBrowserWaitTool(backend),
-    createBrowserScreenshotTool(backend),
-    createBrowserCloseTool(backend),
+    createBrowserOpenTool(resolveBackend),
+    createBrowserObserveTool(resolveBackend),
+    createBrowserActTool(resolveBackend),
+    createBrowserWaitTool(resolveBackend),
+    createBrowserScreenshotTool(resolveBackend),
+    createBrowserCloseTool(resolveBackend),
   ];
 }
 
 function createBrowserOpenTool(
-  backend: BrowserBackend,
+  resolveBackend: () => BrowserBackend | undefined,
 ): Tool<typeof openSchema> {
   return {
     name: TOOL_BROWSER_OPEN,
@@ -255,7 +299,7 @@ function createBrowserOpenTool(
           "invalid",
         );
       }
-      const info = await backend.open(
+      const info = await requireBackend(resolveBackend).open(
         {
           url: allowed.url,
           width,
@@ -279,7 +323,7 @@ function createBrowserOpenTool(
 }
 
 function createBrowserObserveTool(
-  backend: BrowserBackend,
+  resolveBackend: () => BrowserBackend | undefined,
 ): Tool<typeof observeSchema> {
   return {
     name: TOOL_BROWSER_OBSERVE,
@@ -293,7 +337,7 @@ function createBrowserObserveTool(
       "Elements are listed in document order; never raw HTML.",
     parameters: observeSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
-      const snapshot = await backend.observe(
+      const snapshot = await requireBackend(resolveBackend).observe(
         { includeText: params.include_text ?? true },
         signal,
       );
@@ -328,7 +372,9 @@ function actResultOrThrow(
   );
 }
 
-function createBrowserActTool(backend: BrowserBackend): Tool<typeof actSchema> {
+function createBrowserActTool(
+  resolveBackend: () => BrowserBackend | undefined,
+): Tool<typeof actSchema> {
   return {
     name: TOOL_BROWSER_ACT,
     label: "Browser Act",
@@ -343,7 +389,7 @@ function createBrowserActTool(backend: BrowserBackend): Tool<typeof actSchema> {
     parameters: actSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const action = buildAction(params);
-      const result = await backend.act(action, signal);
+      const result = await requireBackend(resolveBackend).act(action, signal);
       actResultOrThrow(result);
       const lines = [`${params.action} ok`];
       if (result.url !== undefined) lines.push(`url: ${result.url}`);
@@ -436,7 +482,7 @@ function requireValue(
 }
 
 function createBrowserWaitTool(
-  backend: BrowserBackend,
+  resolveBackend: () => BrowserBackend | undefined,
 ): Tool<typeof waitSchema> {
   return {
     name: TOOL_BROWSER_WAIT,
@@ -449,7 +495,7 @@ function createBrowserWaitTool(
     parameters: waitSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const wait = buildWait(params);
-      const result = await backend.wait(wait, signal);
+      const result = await requireBackend(resolveBackend).wait(wait, signal);
       return {
         content: [{ type: "text", text: formatWaitResult(result) }],
         details: { ...result },
@@ -530,7 +576,7 @@ function formatWaitResult(result: WaitResult): string {
 }
 
 function createBrowserScreenshotTool(
-  backend: BrowserBackend,
+  resolveBackend: () => BrowserBackend | undefined,
 ): Tool<typeof screenshotSchema> {
   return {
     name: TOOL_BROWSER_SCREENSHOT,
@@ -551,7 +597,7 @@ function createBrowserScreenshotTool(
       if (quality !== undefined && (quality < 1 || quality > 100)) {
         throw new CoreError("quality は 1〜100 の範囲です", "invalid");
       }
-      const image = await backend.screenshot(
+      const image = await requireBackend(resolveBackend).screenshot(
         { format, ...(quality !== undefined ? { quality } : {}) },
         signal,
       );
@@ -578,7 +624,7 @@ function createBrowserScreenshotTool(
 }
 
 function createBrowserCloseTool(
-  backend: BrowserBackend,
+  resolveBackend: () => BrowserBackend | undefined,
 ): Tool<typeof closeSchema> {
   return {
     name: TOOL_BROWSER_CLOSE,
@@ -590,7 +636,7 @@ function createBrowserCloseTool(
       "no-op. browser_open starts a fresh one afterwards.",
     parameters: closeSchema,
     execute: async (_id, _params, signal): Promise<ToolResult> => {
-      await backend.close(signal);
+      await requireBackend(resolveBackend).close(signal);
       return {
         content: [{
           type: "text",

@@ -16,11 +16,12 @@ const DEFAULT_SEARCH_LIMIT = 5;
 const MAX_SEARCH_LIMIT = 10;
 
 /** Build the tool that discovers tools held in the registry. The result
- * (names, labels, truncated descriptions) is what the model needs to decide
- * which tool to call; the definitions themselves never enter the LLM
- * context. The registry is resolved through a provider, so a config change
- * that swaps it (the pool rebuilds the session's registry) redirects this
- * tool without replacing it on the agent. */
+ * (names, labels, truncated descriptions, argument schemas) is what the
+ * model needs to decide which tool to call; the definitions themselves
+ * never enter the LLM context. The registry is resolved through a
+ * provider, so a config change that swaps it (the pool rebuilds the
+ * session's registry) redirects this tool without replacing it on the
+ * agent. */
 export function createToolSearchTool(
   getRegistry: ToolRegistryProvider,
 ): Tool<typeof toolSearchSchema> {
@@ -29,9 +30,10 @@ export function createToolSearchTool(
     label: "Tool Search",
     description:
       "Find tools that are not preloaded into this session's context " +
-      "(MCP tools, extensions). Returns matching tools with their names " +
-      "and descriptions — then execute one with tool_call. " +
-      "Omit the query to list every available tool (names only).",
+      "(MCP tools, extensions, the browser lab). Returns matching tools " +
+      "with their names, argument schemas and descriptions — then " +
+      "execute one with tool_call. Omit the query to list every " +
+      "available tool (names only).",
     parameters: toolSearchSchema,
     execute: (
       _toolCallId,

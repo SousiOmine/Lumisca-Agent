@@ -13,7 +13,14 @@ import { CoreError, LumiscaCore } from "../mod.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
-import { type ThinkingLevel, TOOL_CALL, TOOL_SEARCH } from "../shared.ts";
+import { createBrowserTools } from "../browser/tools.ts";
+import type { BrowserBackend } from "../browser/types.ts";
+import {
+  type ThinkingLevel,
+  TOOL_BROWSER_OPEN,
+  TOOL_CALL,
+  TOOL_SEARCH,
+} from "../shared.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import type { Workspace } from "../types/workspace.ts";
@@ -88,6 +95,36 @@ function makeScriptedHub() {
     emit: (event) => events.push(event),
   });
   return { faux, core, events, root, hub };
+}
+
+/** In-memory browser backend recording opens (only open is reachable in
+ * these tests — the tools are exercised through browser_open only). */
+class FakeBrowserBackend implements BrowserBackend {
+  opens: Array<{ url: string; width?: number; height?: number }> = [];
+
+  open(options: { url: string; width?: number; height?: number }) {
+    this.opens.push(options);
+    return Promise.resolve({
+      url: options.url,
+      title: "Lab",
+      readyState: "complete",
+    });
+  }
+  observe(): Promise<never> {
+    throw new Error("unused");
+  }
+  act(): Promise<never> {
+    throw new Error("unused");
+  }
+  wait(): Promise<never> {
+    throw new Error("unused");
+  }
+  screenshot(): Promise<never> {
+    throw new Error("unused");
+  }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 /** Poll until `predicate` holds (bounded so a hang fails the test). */
@@ -815,6 +852,93 @@ Deno.test("general sub-agents discover and call the session's MCP tools", async 
   } finally {
     hub.close();
     shutdown();
+  }
+});
+
+Deno.test("general sub-agents do not preload browser tools — only the pair is attached", async () => {
+  const { faux, hub } = makeScriptedHub();
+  const registry = new ToolRegistry();
+  registry.addTools(createBrowserTools(new FakeBrowserBackend()));
+  hub.setMcp(null, registry);
+  try {
+    // The model calls browser_open directly, bypassing tool_search: like
+    // MCP definitions, the browser tools are never part of the sub-agent's
+    // tool set, so the call fails as unknown.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Trying browser."),
+        fauxToolCall(TOOL_BROWSER_OPEN, { url: "http://127.0.0.1:5173/" }),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("Tool browser_open not found"),
+          `the direct call should have failed: ${text}`,
+        );
+        assert(
+          !text.includes("Opened http://"),
+          `the browser must not have been opened: ${text}`,
+        );
+        return fauxAssistantMessage("No browser here.");
+      },
+    ]);
+    hub.spawn(
+      "session-1",
+      0,
+      "general",
+      "ブラウザ調査",
+      "Try to open the app in the browser",
+    );
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "No browser here.");
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("general sub-agents discover and call the session's browser tools", async () => {
+  const { faux, hub } = makeScriptedHub();
+  const backend = new FakeBrowserBackend();
+  const registry = new ToolRegistry();
+  registry.addTools(createBrowserTools(backend));
+  hub.setMcp(null, registry);
+  try {
+    // The browser tools are found through tool_search and executed via
+    // tool_call, exactly like MCP tools — nothing is preloaded.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "browser_open" }),
+      ]),
+      fauxAssistantMessage([
+        fauxText("Opening."),
+        fauxToolCall(TOOL_CALL, {
+          name: TOOL_BROWSER_OPEN,
+          args: { url: "http://127.0.0.1:5173/" },
+        }),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("Opened http://127.0.0.1:5173/"),
+          `open result missing from the sub-agent transcript: ${text}`,
+        );
+        return fauxAssistantMessage("Browser worked.");
+      },
+    ]);
+    hub.spawn(
+      "session-1",
+      0,
+      "general",
+      "ブラウザ操作",
+      "Find and use the browser open tool, then report the result",
+    );
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "Browser worked.");
+    assertEquals(backend.opens.length, 1);
+    assertEquals(backend.opens[0]!.url, "http://127.0.0.1:5173/");
+  } finally {
+    hub.close();
   }
 });
 

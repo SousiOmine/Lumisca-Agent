@@ -6,7 +6,7 @@ import type { McpAttachment } from "../mcp/attachment.ts";
 import {
   addToolsToAgent,
   appendMcpToolsNote,
-  mcpToolPair,
+  registryToolPair,
 } from "../mcp/tools.ts";
 import type { ToolRegistry } from "./registry.ts";
 import type { NotificationPayload } from "../types/notification.ts";
@@ -26,8 +26,6 @@ import { Sandbox } from "../workspace/sandbox.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
-import type { BrowserBackend } from "../browser/types.ts";
-import { createBrowserTools } from "../browser/tools.ts";
 import { toAgentTool } from "./pi-adapter.ts";
 import {
   boolean,
@@ -79,13 +77,12 @@ function exploreTools(workspace: Workspace): Tool[] {
  * without ask/todo/async_bash. Sub-agents have no UI round trip (ask), no
  * plan panel of their own (todo), and no background commands that would
  * outlive them (async_bash). `safety` (when present) gates their bash/eval
- * tools like the main agent's; `browser` (when present) gives them the
- * same browser-lab tools as the main agent, so the tool sets never
- * drift. */
+ * tools like the main agent's; browser-lab tools are not preloaded either
+ * — general sub-agents reach them through the session's tool registry via
+ * the search/call pair, exactly like the main agent. */
 function generalTools(
   workspace: Workspace,
   safety?: CommandSafety,
-  browser?: BrowserBackend,
 ): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
@@ -93,7 +90,6 @@ function generalTools(
     createBashTool({ sandbox, safety }),
     createEvalTool({ safety }),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
-    ...(browser !== undefined ? createBrowserTools(browser) : []),
   ];
 }
 
@@ -157,9 +153,6 @@ export interface TaskHubOptions {
    * fast model judges commands before they run). Omitted → the sub-agent's
    * command tools run unchecked. */
   safety?: CommandSafety;
-  /** Browser-lab backend for general sub-agents (same instance the main
-   * agent's tools use). Omitted → sub-agents get no browser tools. */
-  browser?: () => BrowserBackend | undefined;
   emit: (event: ClientEvent) => void;
 }
 
@@ -184,12 +177,11 @@ export class TaskHub {
   private resolveRuntime: () => SubagentRuntime;
   private readonly streamFn: StreamFn;
   private readonly safety: CommandSafety | undefined;
-  private readonly browser: (() => BrowserBackend | undefined) | undefined;
   private readonly emit: (event: ClientEvent) => void;
   /** The session's tool registry (set by the pool on every open): holds
-   * every discoverable tool (MCP tools, future extensions) whose
-   * definitions stay out of the LLM context. General sub-agents get the
-   * tool_search / tool_call pair over it. */
+   * every discoverable tool (MCP tools, browser-lab tools, future
+   * extensions) whose definitions stay out of the LLM context. General
+   * sub-agents get the tool_search / tool_call pair over it. */
   private registry: ToolRegistry | null = null;
   /** The attachment whose discovery has been (or will be) applied to the
    * registry and the running sub-agents. Guards against stale callbacks: a
@@ -203,7 +195,6 @@ export class TaskHub {
     this.resolveRuntime = options.resolveRuntime;
     this.streamFn = options.streamFn;
     this.safety = options.safety;
-    this.browser = options.browser;
     this.emit = options.emit;
   }
 
@@ -232,16 +223,18 @@ export class TaskHub {
     }
   }
 
-  /** Discovery finished for the session's current attachment: fill the
-   * session's tool registry and attach the search/call pair — plus the MCP
-   * boundary note — to every running general sub-agent that spawned before
-   * the registry held anything. Callbacks of older attachments (a config
-   * change replaced the manager mid-discovery) return here: only the
-   * current attachment may write the registry. */
+  /** Discovery finished for the session's current attachment: merge the
+   * MCP tools into the session's tool registry (which the pool may already
+   * have seeded with browser-lab tools — discovery must never wipe them)
+   * and attach the search/call pair — plus the on-demand-tools note — to
+   * every running general sub-agent that spawned before the registry held
+   * anything. Callbacks of older attachments (a config change replaced the
+   * manager mid-discovery) return here: only the current attachment may
+   * write the registry. */
   private attachMcpToRunning(attachment: McpAttachment, tools: Tool[]): void {
     if (attachment !== this.handledAttachment) return;
     if (this.registry === null) return;
-    this.registry.setTools(tools);
+    this.registry.addTools(tools);
     if (this.registry.isEmpty) return;
     const pair = this.searchTools();
     for (const sub of this.subs.values()) {
@@ -261,7 +254,7 @@ export class TaskHub {
    * attached to running sub-agents without replacing them. */
   private searchTools(): Tool[] {
     if (this.registry === null || this.registry.isEmpty) return [];
-    return mcpToolPair(() => this.registry!);
+    return registryToolPair(() => this.registry!);
   }
 
   /** Hook the parent (main) session agent into the hub: it receives task
@@ -323,13 +316,13 @@ export class TaskHub {
     const canDelegate = type === "general" && depth < MAX_SUBAGENT_DEPTH;
     const runtime = this.resolveRuntime();
     // General sub-agents share the session's discoverable tools through
-    // the registry (empty while discovery is still in flight — sub-agents
-    // spawned before it finished get the pair via attachMcpToRunning).
+    // the registry (seeded by the pool with browser-lab tools before any
+    // spawn; MCP tools merge in when discovery finishes — sub-agents
+    // spawned before that get the pair via attachMcpToRunning).
     const searchable = type === "general" ? this.searchTools() : [];
-    const browser = this.browser !== undefined ? this.browser() : undefined;
     const tools = [
       ...(type === "general"
-        ? generalTools(runtime.workspace, this.safety, browser)
+        ? generalTools(runtime.workspace, this.safety)
         : exploreTools(runtime.workspace)),
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),

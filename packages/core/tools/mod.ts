@@ -28,8 +28,6 @@ import { type AskHub, createAskTool } from "./ask.ts";
 import { createTodoTool, type TodoHub } from "./todo.ts";
 import type { TaskHub } from "./task.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
-import type { BrowserBackend } from "../browser/types.ts";
-import { createBrowserTools } from "../browser/tools.ts";
 
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
@@ -90,9 +88,6 @@ export interface ToolFactoryOptions {
   /** Command safety check (the fast model judges bash / eval / async_bash
    * commands before they run). Omitted → the command tools run unchecked. */
   safety?: CommandSafety;
-  /** Browser lab backend (Desktop WebView / CLI browser host). Omitted →
-   * no browser tools at all — the agent gets no browser surface. */
-  browser?: BrowserBackend;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -114,9 +109,6 @@ export function createCodingTools(
       : []),
     createEvalTool({ safety: options.safety }),
     createSkillTool({ skills: sessionSkills(workspace.folders) }),
-    ...(options.browser !== undefined
-      ? createBrowserTools(options.browser)
-      : []),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
     ...(options.task !== undefined ? options.task.parentTools() : []),
@@ -127,18 +119,15 @@ export function createCodingTools(
  * workspace): no sandbox, no shell — file, bash, async_bash, eval and
  * sub-agent tools are all absent. Ask (clarifying questions), todo (a
  * lightweight plan) and global skills stay useful outside a workspace, and
- * app-level MCP tools attach via the session's tool registry as usual
- * (sidebar: the MCP search/call pair is added by the session agent itself,
- * not here). */
+ * discoverable tools — MCP and browser-lab alike — attach via the session's
+ * tool registry as usual (sidebar: the tool_search / tool_call pair is
+ * added by the session agent itself, not here). */
 export function createChatTools(
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
   return [
     // Only global skills apply (no workspace folders to discover from).
     createSkillTool({ skills: sessionSkills([]) }),
-    ...(options.browser !== undefined
-      ? createBrowserTools(options.browser)
-      : []),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
   ];

@@ -21,6 +21,10 @@ import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { BrowserBackend } from "../browser/types.ts";
+import {
+  BROWSER_TOOL_NAMES,
+  createBrowserToolsFrom,
+} from "../browser/tools.ts";
 
 /** Everything the pool needs to build and manage agents, injected by
  * LumiscaCore so the pool stays free of repository wiring. */
@@ -120,8 +124,9 @@ interface SessionResources {
    * session — the main agent and the sub-agents — and survive agent
    * rebuilds while the merged config is unchanged. Closed on close. */
   mcp?: McpAttachment;
-  /** Tool registry (MCP tools discoverable via tool_search/call), rebuilt
-   * together with the attachment when the config changes. */
+  /** Tool registry (MCP + browser-lab tools discoverable via
+   * tool_search/call), rebuilt together with the attachment when the
+   * config changes. */
   registry?: ToolRegistry;
   /** The last failure of the session, if any (cleared when a new run
    * starts). Lets non-WebSocket clients learn about failures of
@@ -269,6 +274,25 @@ export class SessionPool {
     // survive them. The main agent's attachMcp fills it once discovery
     // finishes; every agent of the session searches it.
     const registry = resources.registry!;
+    // The browser-lab tools live in the session's tool registry
+    // (discoverable via tool_search), never preloaded into the LLM context
+    // — the same contract as MCP tools. Seeded at open so every agent of
+    // the session — the main agent and the sub-agents — finds them from
+    // the first prompt. The tools resolve the backend at execute time, so
+    // a later setBrowserBackend (replacement or detach) is honored even
+    // without a rebuild; when the backend is gone at open, the seeded
+    // tools are removed instead — a rebuilt session then finds no browser
+    // tools, matching the detach contract.
+    const browser = this.deps.browser !== undefined
+      ? this.deps.browser()
+      : undefined;
+    if (browser !== undefined) {
+      registry.addTools(
+        createBrowserToolsFrom(() => this.deps.browser?.()),
+      );
+    } else {
+      registry.removeTools(BROWSER_TOOL_NAMES);
+    }
     // Chat sessions ("simple chat" without a workspace) have no shell or
     // sub-agent surface: the background-command manager, the task hub and
     // the runtime resolver are skipped, and the tool set is the chat one.
@@ -341,28 +365,23 @@ export class SessionPool {
           resolveRuntime: runtimeResolver,
           streamFn: this.deps.streamFn,
           safety: this.deps.commandSafety,
-          browser: this.deps.browser,
           emit: (event: ClientEvent) => this.deps.emit(event),
         });
         resources.tasks = tasks;
       } else {
         tasks.setRuntimeResolver(runtimeResolver);
       }
-      // The sub-agents share the session's MCP attachment (general
-      // sub-agents get the search/call tools over its registry).
+      // The sub-agents share the session's MCP attachment and tool
+      // registry (general sub-agents get the search/call pair over it).
       tasks.setMcp(mcp, registry);
     } else {
       tasks = undefined;
     }
-    const browser = this.deps.browser !== undefined
-      ? this.deps.browser()
-      : undefined;
     const tools = chat
       ? createChatTools({
         ask: askHub,
         todo,
         safety: this.deps.commandSafety,
-        browser,
       })
       : createCodingTools(workspace, {
         background,
@@ -370,7 +389,6 @@ export class SessionPool {
         todo,
         task: tasks,
         safety: this.deps.commandSafety,
-        browser,
       });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a

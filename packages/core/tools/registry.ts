@@ -19,6 +19,11 @@ import type { Tool, ToolResult } from "./schema.ts";
  * argument schema as JSON, so the cap still leaves room for it. */
 export const MAX_SEARCH_DESCRIPTION_CHARS = 1500;
 
+/** Cap for one tool's serialized parameter schema before it is appended to
+ * a search result (mirrors the MCP tools' MAX_SCHEMA_CHARS; anything this
+ * big would dominate the truncated result anyway). */
+const MAX_PARAMETER_SCHEMA_CHARS = 8192;
+
 /** Cap for the browse listing (empty query), which is only an overview. */
 export const MAX_BROWSE_LISTING_CHARS = 8192;
 
@@ -81,6 +86,18 @@ export class ToolRegistry {
     for (const tool of tools) {
       if (!this.tools.has(tool.name)) this.tools.set(tool.name, tool);
     }
+  }
+
+  /** Remove tools by name (no-op for unknown names); returns how many were
+   * removed. Used when a tool family's backing resource goes away — the
+   * session pool drops the browser-lab tools when the browser backend is
+   * detached, so rebuilt agents stop seeing them. */
+  removeTools(names: Iterable<string>): number {
+    let removed = 0;
+    for (const name of names) {
+      if (this.tools.delete(name)) removed++;
+    }
+    return removed;
   }
 
   get count(): number {
@@ -149,12 +166,21 @@ export class ToolRegistry {
     return out;
   }
 
-  /** The search-result metadata of one tool. */
+  /** The search-result metadata of one tool: the description plus its
+   * parameter schema when it carries explicit properties, so the model
+   * sees the argument names/defaults it must pass to tool_call. MCP tools
+   * cover the same ground by embedding their schema in the description
+   * (their registry `parameters` stay permissive); tools with typed
+   * schemas (browser-lab, future extensions) get the schema appended here
+   * so every registry tool reports its arguments the same way. */
   describe(tool: Tool): ToolSearchEntry {
     return {
       name: tool.name,
       label: tool.label,
-      description: truncate(tool.description, MAX_SEARCH_DESCRIPTION_CHARS),
+      description: truncate(
+        tool.description + parameterSchemaText(tool.parameters),
+        MAX_SEARCH_DESCRIPTION_CHARS,
+      ),
     };
   }
 
@@ -192,4 +218,18 @@ export class ToolRegistry {
 function labelPrefix(label: string): string {
   const colon = label.indexOf(": ");
   return colon > 0 ? label.slice(0, colon) : label;
+}
+
+/** Serialize a tool's parameter schema for a search result, or "" when the
+ * schema carries no explicit properties (MCP tools delegate validation to
+ * their remote server and embed the schema in their description instead;
+ * argument-less tools like browser_close have nothing to report). */
+function parameterSchemaText(parameters: Tool["parameters"]): string {
+  if (parameters.type !== "object") return "";
+  // SchemaStringMap (env-var-style) has no explicit properties either.
+  if (!("properties" in parameters)) return "";
+  if (Object.keys(parameters.properties).length === 0) return "";
+  const schema = JSON.stringify(parameters);
+  if (schema.length > MAX_PARAMETER_SCHEMA_CHARS) return "";
+  return `\n\nArguments (JSON Schema):\n${schema}`;
 }

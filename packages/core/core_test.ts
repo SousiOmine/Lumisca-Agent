@@ -9,13 +9,14 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
-import type { AgentMessage, ClientEvent } from "./mod.ts";
+import type { AgentMessage, BrowserBackend, ClientEvent } from "./mod.ts";
 import { LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   serializeModelPreference,
+  TOOL_BROWSER_OPEN,
   TOOL_CALL,
   TOOL_SEARCH,
 } from "./shared.ts";
@@ -1543,6 +1544,168 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
+  }
+});
+
+// --- browser lab (ブラウザツール) ------------------------------------------
+
+/** In-memory browser backend recording opens (the unused methods are
+ * never reachable in this test — the tools are only exercised through
+ * browser_open). */
+class FakeBrowserBackend implements BrowserBackend {
+  opens: Array<{ url: string; width?: number; height?: number }> = [];
+
+  open(options: { url: string; width?: number; height?: number }) {
+    this.opens.push(options);
+    return Promise.resolve({
+      url: options.url,
+      title: "Lab",
+      readyState: "complete",
+    });
+  }
+  observe(): Promise<never> {
+    throw new Error("unused");
+  }
+  act(): Promise<never> {
+    throw new Error("unused");
+  }
+  wait(): Promise<never> {
+    throw new Error("unused");
+  }
+  screenshot(): Promise<never> {
+    throw new Error("unused");
+  }
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+Deno.test("browser tools are discoverable via tool_search, never preloaded", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  const backend = new FakeBrowserBackend();
+  core.setBrowserBackend(backend);
+  try {
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const agent = core.getAgent(session.id)!;
+    // The browser definitions stay in the session's registry (seeded by
+    // the pool at open): the agent's tool set must not contain them —
+    // finding them requires tool_search, exactly like MCP tools.
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name.startsWith("browser_")),
+      false,
+      "browser tools must stay out of the agent tool set",
+    );
+    // The registry is seeded synchronously at open (no MCP servers here,
+    // so discovery contributes nothing) — the search/call pair is already
+    // attached and the prompt teaches on-demand tool loading.
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH) &&
+        agent.agent.state.tools.some((t) => t.name === TOOL_CALL),
+      true,
+      "search/call pair must be attached for the browser tools",
+    );
+    assertEquals(
+      agent.agent.state.systemPrompt.includes("tool_search"),
+      true,
+      "system prompt must teach on-demand tool loading",
+    );
+
+    // The model searches for the tool, then calls it through tool_call;
+    // the call reaches the browser backend.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "browser_open" }),
+      ]),
+      fauxAssistantMessage([
+        fauxText("Opening."),
+        fauxToolCall(TOOL_CALL, {
+          name: TOOL_BROWSER_OPEN,
+          args: { url: "http://127.0.0.1:5173/" },
+        }),
+      ]),
+      fauxAssistantMessage("Done."),
+    ]);
+    await core.prompt(session.id, "Open the app in the browser");
+
+    assertEquals(backend.opens.length, 1);
+    assertEquals(backend.opens[0]!.url, "http://127.0.0.1:5173/");
+    const messages = core.getAgent(session.id)!.messages;
+    const toolResults = messages.filter((m) => m.role === "toolResult");
+    assertEquals(toolResults.length, 2);
+    const tr = toolResults[1] as {
+      isError: boolean;
+      content: Array<{ type: string; text: string }>;
+    };
+    assertEquals(tr.isError, false, `tool call failed: ${tr.content[0]?.text}`);
+    assert(
+      tr.content[0]!.text.includes("Opened http://127.0.0.1:5173/"),
+      `unexpected open result: ${tr.content[0]!.text}`,
+    );
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("detaching the browser backend removes browser tools on rebuild", async () => {
+  const { core, faux: _faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  core.setBrowserBackend(new FakeBrowserBackend());
+  try {
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const seeded = core.getAgent(session.id)!;
+    assertEquals(
+      seeded.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
+      true,
+      "seeded session must have the search/call pair",
+    );
+
+    // Detach and rebuild (a model switch rebuilds the agent of an open
+    // session): the seeded browser tools are removed from the registry,
+    // so the rebuilt agent finds no discoverable tools at all — the pair
+    // is not attached, exactly like a session that never had a backend.
+    core.setBrowserBackend(undefined);
+    core.setSessionModel(session.id, providerId, modelId);
+    const detached = core.getAgent(session.id)!;
+    assert(
+      detached !== seeded,
+      "setSessionModel must rebuild the agent",
+    );
+    assertEquals(
+      detached.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
+      false,
+      "an empty registry must not attach the search/call pair",
+    );
+    assertEquals(
+      detached.agent.state.tools.some((t) => t.name.startsWith("browser_")),
+      false,
+    );
+    assertEquals(
+      detached.agent.state.systemPrompt.includes("tool_search"),
+      false,
+      "the on-demand-tools note must be gone with the registry",
+    );
+
+    // Re-attaching restores the browser tools on the next rebuild.
+    core.setBrowserBackend(new FakeBrowserBackend());
+    core.setSessionModel(session.id, providerId, modelId);
+    const restored = core.getAgent(session.id)!;
+    assertEquals(
+      restored.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
+      true,
+      "re-attached session must have the search/call pair again",
+    );
+  } finally {
+    core.close();
   }
 });
 

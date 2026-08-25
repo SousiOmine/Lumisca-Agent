@@ -188,10 +188,13 @@ export class LumiscaCore {
 
   // --- browser lab --------------------------------------------------------
 
-  /** Attach (or detach, with undefined) the browser-lab backend. Affects
-   * agents opened from now on — the desktop shell passes its IPC endpoint,
-   * the CLI passes a lazy host starter, plain server mode passes nothing
-   * (no browser tools). */
+  /** Attach (or detach, with undefined) the browser-lab backend. The
+   * seeded browser tools resolve the backend at execute time, so a
+   * replacement applies to open sessions too; a detach fails their next
+   * browser call with a clear error and removes the tools from sessions
+   * rebuilt from now on. The desktop shell passes its IPC endpoint, the
+   * CLI passes a lazy host starter, plain server mode passes nothing (no
+   * browser tools). */
   setBrowserBackend(backend: BrowserBackend | undefined): void {
     this.browserBackend = backend;
   }

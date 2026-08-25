@@ -20,7 +20,7 @@ import type { McpAttachment } from "../mcp/attachment.ts";
 import {
   addToolsToAgent,
   appendMcpToolsNote,
-  mcpToolPair,
+  registryToolPair,
 } from "../mcp/tools.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../tools/schema.ts";
@@ -141,11 +141,12 @@ export interface SessionAgentOptions {
   taskHub?: TaskHub;
   /** Persist a new session title (also notifies clients). */
   renameSession: (name: string) => void;
-  /** The session's tool registry (owned by the session pool). When set, its
-   * tools are never preloaded into the LLM context — MCP discovery fills it
-   * and the agent only gets the tool_search / tool_call pair, so the
-   * request's tool definitions stay small and stable. Omitted → no
-   * discoverable tools (the pair is not built). */
+  /** The session's tool registry (owned by the session pool). When set,
+   * its tools are never preloaded into the LLM context — the pool seeds it
+   * with browser-lab tools, MCP discovery fills it, and the agent only
+   * gets the tool_search / tool_call pair over it, so the request's tool
+   * definitions stay small and stable. Omitted → no discoverable tools
+   * (the pair is not built). */
   toolRegistry?: ToolRegistry;
 }
 
@@ -164,8 +165,10 @@ export class SessionAgent {
   private mcpAttachment: McpAttachment | null = null;
   private mcpAttached = false;
   /** The session's tool registry (owned by the session pool): holds every
-   * discoverable tool (MCP tools, future extensions) whose definitions stay
-   * out of the LLM context. Null when the session has none. */
+   * discoverable tool (MCP tools, browser-lab tools, future extensions)
+   * whose definitions stay out of the LLM context. Null when the session
+   * has none. The pool seeds it with the browser-lab tools before building
+   * the agent; MCP discovery merges its tools in afterwards. */
   private readonly toolRegistry: ToolRegistry | null;
   /** Resolves once MCP tools are attached (or skipped/failed). Prompts
    * await it so the first turn always sees the MCP tools — without the
@@ -579,6 +582,11 @@ export class SessionAgent {
     if (this.mcpAttached) return this.mcpReady;
     this.mcpAttached = true;
     this.mcpAttachment = attachment;
+    // The pool may already have seeded the registry with browser-lab
+    // tools — attach the search/call pair on every path, not just when
+    // discovery yields MCP tools, so they are searchable from the first
+    // prompt even in a session without any MCP servers.
+    this.ensureSearchTools();
     if (attachment.done) {
       this.addMcpTools(attachment.getTools());
       return Promise.resolve();
@@ -600,21 +608,28 @@ export class SessionAgent {
     return this.mcpReady;
   }
 
-  /** MCP discovery finished: fill the session's tool registry and, when it
-   * holds tools, add the tool_search / tool_call pair — the only MCP
-   * surface the LLM ever sees. The pair is added once and never changes
-   * afterwards, so the request's tool definitions (and their prefix-cache
-   * block) stay stable for the whole session; individual MCP definitions
-   * are only ever loaded into the transcript through a search result. */
+  /** MCP discovery finished: merge its tools into the session's tool
+   * registry (the pool's browser-lab seed must survive) and make sure the
+   * tool_search / tool_call pair is attached. The pair is added once and
+   * never changes afterwards, so the request's tool definitions (and
+   * their prefix-cache block) stay stable for the whole session;
+   * individual tool definitions are only ever loaded into the transcript
+   * through a search result. */
   private addMcpTools(tools: Tool[]): void {
     if (this.toolRegistry === null) return;
-    this.toolRegistry.setTools(tools);
-    if (this.toolRegistry.isEmpty) return;
-    // The pair resolves the registry through a provider (uniform with the
-    // sub-agent hub), so a config change that swaps the registry would
-    // redirect it — though the main agent is rebuilt on config changes
-    // anyway.
-    addToolsToAgent(this.agent, mcpToolPair(() => this.toolRegistry!));
+    this.toolRegistry.addTools(tools);
+    this.ensureSearchTools();
+  }
+
+  /** When the session's registry holds tools, attach the tool_search /
+   * tool_call pair — the only discoverable-tool surface the LLM ever
+   * sees — and teach it in the system prompt. Idempotent: called at
+   * attach time (the registry may already hold browser-lab tools seeded
+   * by the pool) and from addMcpTools when discovery fills the registry
+   * later. */
+  private ensureSearchTools(): void {
+    if (this.toolRegistry === null || this.toolRegistry.isEmpty) return;
+    addToolsToAgent(this.agent, registryToolPair(() => this.toolRegistry!));
     this.agent.state.systemPrompt = appendMcpToolsNote(
       this.agent.state.systemPrompt,
     );

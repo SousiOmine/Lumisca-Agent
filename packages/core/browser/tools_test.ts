@@ -1,7 +1,11 @@
 import { assert, assertEquals, assertMatch } from "@std/assert";
-import { createBrowserTools } from "./tools.ts";
-import { createCodingTools } from "../tools/mod.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
+import {
+  BROWSER_TOOL_NAMES,
+  createBrowserTools,
+  createBrowserToolsFrom,
+} from "./tools.ts";
+import { createChatTools, createCodingTools } from "../tools/mod.ts";
+import { ToolRegistry } from "../tools/registry.ts";
 import type { Workspace } from "../types/workspace.ts";
 import type {
   ActionResult,
@@ -129,19 +133,39 @@ function snapshot(): PageSnapshot {
 
 Deno.test("createBrowserTools provides exactly the six required tools", () => {
   const { byName } = toolMap();
-  for (
-    const name of [
-      TOOL_BROWSER_OPEN,
-      TOOL_BROWSER_OBSERVE,
-      TOOL_BROWSER_ACT,
-      TOOL_BROWSER_WAIT,
-      TOOL_BROWSER_SCREENSHOT,
-      TOOL_BROWSER_CLOSE,
-    ]
-  ) {
-    assert(byName.has(name), `missing ${name}`);
-  }
   assertEquals(byName.size, 6);
+  assertEquals(new Set(byName.keys()), new Set(BROWSER_TOOL_NAMES));
+});
+
+Deno.test("browser tools resolve the backend at execute time", async () => {
+  // A backend swapped through setBrowserBackend after the tools were
+  // built must be the one the next call reaches — the tools never hold a
+  // stale reference.
+  const first = new FakeBackend({
+    open: { url: "http://127.0.0.1:5173/", readyState: "complete" },
+  });
+  const second = new FakeBackend({
+    open: { url: "http://127.0.0.1:5173/", readyState: "complete" },
+  });
+  let current: FakeBackend | undefined = first;
+  const tools = createBrowserToolsFrom(() => current);
+  const open = tools.find((t) => t.name === TOOL_BROWSER_OPEN)!;
+
+  await open.execute("1", { url: "http://127.0.0.1:5173/" }, undefined);
+  assertEquals(first.calls.length, 1);
+
+  // Replacement: the next call goes to the new backend.
+  current = second;
+  await open.execute("2", { url: "http://127.0.0.1:5173/" }, undefined);
+  assertEquals(first.calls.length, 1, "old backend must not be called");
+  assertEquals(second.calls.length, 1, "new backend must receive the call");
+
+  // Detach: a clear error instead of a stale reference.
+  current = undefined;
+  const error = await expectThrow(() =>
+    open.execute("3", { url: "http://127.0.0.1:5173/" }, undefined)
+  );
+  assertMatch(error.message, /ブラウザバックエンドが利用できません/);
 });
 
 Deno.test("browser_open validates the URL against the policy and calls the backend", async () => {
@@ -391,7 +415,7 @@ Deno.test("browser_close is forwarded and backend.close is called", async () => 
   assertEquals(backend.closeCount, 2);
 });
 
-Deno.test("createCodingTools includes browser tools only with a backend", async () => {
+Deno.test("browser tools are never preloaded — they live in the registry", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-browser-tools-" });
   try {
     const workspace: Workspace = {
@@ -401,25 +425,51 @@ Deno.test("createCodingTools includes browser tools only with a backend", async 
       createdAt: 0,
       chat: false,
     };
-    const sandbox = new Sandbox([root]);
-    const without = createCodingTools(workspace, {});
-    assertEquals(
-      without.some((t) => t.name === TOOL_BROWSER_OPEN),
-      false,
-      "no backend → no browser tools",
-    );
-    const backend = new FakeBackend({});
-    const withBackend = createCodingTools(workspace, { browser: backend });
-    assertEquals(
-      withBackend.some((t) => t.name === TOOL_BROWSER_OPEN),
-      true,
-      "backend → browser tools present",
-    );
-    assertEquals(
-      withBackend.filter((t) => t.name.startsWith("browser_")).length,
-      6,
-    );
-    assert(sandbox instanceof Sandbox);
+    // Whether or not a browser backend exists, the preloaded tool sets
+    // never carry the browser tools: they are discoverable through the
+    // session's tool registry via tool_search, exactly like MCP tools.
+    for (
+      const tools of [
+        createCodingTools(workspace, {}),
+        createCodingTools(workspace),
+        createChatTools({}),
+      ]
+    ) {
+      assertEquals(
+        tools.some((t) => t.name.startsWith("browser_")),
+        false,
+        "the preloaded tool set must not contain browser tools",
+      );
+    }
+    // In the registry they are searchable and callable like any other
+    // discoverable tool.
+    const backend = new FakeBackend({
+      open: {
+        url: "http://127.0.0.1:5173/",
+        title: "Lab",
+        readyState: "complete",
+      },
+    });
+    const registry = new ToolRegistry();
+    registry.addTools(createBrowserTools(backend));
+    const found = registry.search("browser_open", 10);
+    assertEquals(found.length >= 1, true);
+    // Exact-name match ranks first (browser_close also mentions
+    // browser_open in its description, but scores lower).
+    assertEquals(found[0]!.name, TOOL_BROWSER_OPEN);
+    // The search result carries the argument schema, so the model can
+    // build tool_call arguments (names, defaults, constraints).
+    assert(found[0]!.description.includes("Arguments (JSON Schema)"));
+    assert(found[0]!.description.includes('"url"'));
+    await registry.call("1", TOOL_BROWSER_OPEN, {
+      url: "http://127.0.0.1:5173/",
+    });
+    assertEquals(backend.calls[0]!.method, "open");
+    assertEquals(backend.calls[0]!.args[0], {
+      url: "http://127.0.0.1:5173/",
+      width: 800,
+      height: 600,
+    });
   } finally {
     await Deno.remove(root, { recursive: true });
   }
