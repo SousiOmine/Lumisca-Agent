@@ -124,8 +124,13 @@ export class LumiscaCore {
       renameSession: (id, name) => this.setSessionName(id, name),
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
-      buildGeneratedPrompt: (workspace, model) =>
-        this.buildGeneratedPrompt(workspace, model),
+      buildGeneratedPrompt: (workspace, model, browserAvailable) =>
+        this.buildGeneratedPrompt(
+          workspace,
+          model,
+          undefined,
+          browserAvailable,
+        ),
       updateSystemPrompt: (id, systemPrompt) =>
         this.sessions.updateSystemPrompt(id, systemPrompt),
       streamFn,
@@ -557,11 +562,14 @@ export class LumiscaCore {
     // Generated prompts are snapshotted here, at creation time (workspace
     // AGENTS.md + environment + personalization included), and stored with
     // the session: later edits to either AGENTS.md must not affect it.
-    // Headless sessions get the headless guidance variant.
+    // Headless sessions get the headless guidance variant. The built-in
+    // web-browser skill is included only when a browser backend is
+    // attached (browser tools are discoverable only then).
     const systemPrompt = this.buildGeneratedPrompt(
       workspace,
       model,
       input.headless ?? false,
+      this.browserBackend !== undefined,
     );
     const session = this.sessions.create({
       workspaceId: workspace.id,
@@ -862,11 +870,15 @@ export class LumiscaCore {
    * (folder-less, "simple chat") get the chat variant instead — no
    * workspace framing, matching their tool set. `model` fills in the
    * environment section's model line. `headless` selects the headless
-   * guidance variant (auto-answered asks). */
+   * guidance variant (auto-answered asks). `browserAvailable` gates the
+   * built-in web-browser skill in the prompt's <available_skills>
+   * listing: only sessions with a browser backend attached (which can
+   * actually run the browser tools) get it. */
   private buildGeneratedPrompt(
     workspace: Workspace,
     model?: { provider: string; modelId: string },
     headless = false,
+    browserAvailable = false,
   ): string {
     const resolved = model
       ? {
@@ -876,9 +888,20 @@ export class LumiscaCore {
       : undefined;
     const personal = this.loadPersonalInstructions();
     if (workspace.chat) {
-      return buildChatSystemPrompt(personal, resolved, headless);
+      return buildChatSystemPrompt(
+        personal,
+        resolved,
+        headless,
+        browserAvailable,
+      );
     }
-    return buildSystemPrompt(workspace, personal, resolved, headless);
+    return buildSystemPrompt(
+      workspace,
+      personal,
+      resolved,
+      headless,
+      browserAvailable,
+    );
   }
 
   /** Resolve workspace folders to real paths; rejects missing ones. */

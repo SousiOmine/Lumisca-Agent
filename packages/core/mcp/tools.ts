@@ -64,9 +64,13 @@ export function registryToolPair(getRegistry: () => ToolRegistry): Tool[] {
 }
 
 /** Append the MCP tools note to a system prompt unless already present
- * (appending only once keeps the prompt's prefix-cache block stable). */
+ * (appending only once keeps the prompt's prefix-cache block stable).
+ * The idempotency check keys on the note itself — never on a substring
+ * like "tool_search", which can legitimately appear in a prompt from
+ * other sources (e.g. a skill description) without the note being
+ * there. */
 export function appendMcpToolsNote(systemPrompt: string): string {
-  return systemPrompt.includes("tool_search")
+  return systemPrompt.includes(MCP_TOOLS_PROMPT_NOTE)
     ? systemPrompt
     : systemPrompt + MCP_TOOLS_PROMPT_NOTE;
 }

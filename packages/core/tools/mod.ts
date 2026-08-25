@@ -23,6 +23,7 @@ import {
   type SkillDef,
 } from "../skills/discover.ts";
 import { createSkillTool } from "../skills/tool.ts";
+import { builtinSkills } from "../skills/builtin/mod.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
 import { type AskHub, createAskTool } from "./ask.ts";
 import { createTodoTool, type TodoHub } from "./todo.ts";
@@ -34,12 +35,25 @@ const MAX_PERSONALIZATION_BYTES = 32 * 1024;
 
 /** Skills for a session, in precedence order: workspace `.agents/skills`,
  * then agent plugin skills (`skills/` of `.agents/plugins` plugins), then
- * global `~/.agents/skills`. Shared with the sub-agent tool builders
- * (tools/task.ts) so both agent kinds see the same skill set. */
-export function sessionSkills(folders: string[]): SkillDef[] {
+ * global `~/.agents/skills`, then app-embedded built-in skills — any user
+ * skill shadows a same-named built-in one. Shared with the sub-agent tool
+ * builders (tools/task.ts) so both agent kinds see the same skill set.
+ *
+ * `browserAvailable` gates the built-in web-browser skill: it is only
+ * advertised when a browser backend is attached to the session, so a
+ * session that can never run browser tools does not point the agent at
+ * them. Undefined → the browser skill is not advertised (callers that
+ * know the backend state must say so). */
+export function sessionSkills(
+  folders: string[],
+  options: { browserAvailable?: boolean } = {},
+): SkillDef[] {
   const plugins = discoverPlugins(folders);
   return discoverSkills(folders, {
     pluginSkills: plugins.flatMap((p) => p.skills),
+    builtinSkills: builtinSkills({
+      browser: options.browserAvailable === true,
+    }),
   });
 }
 
@@ -88,6 +102,11 @@ export interface ToolFactoryOptions {
   /** Command safety check (the fast model judges bash / eval / async_bash
    * commands before they run). Omitted → the command tools run unchecked. */
   safety?: CommandSafety;
+  /** Whether the session has a browser backend attached (the browser-lab
+   * tools are seeded into the session's tool registry). Gates the
+   * built-in web-browser skill: it is only advertised when true.
+   * Omitted/undefined → the skill is not advertised. */
+  browserAvailable?: boolean;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -108,7 +127,11 @@ export function createCodingTools(
       })
       : []),
     createEvalTool({ safety: options.safety }),
-    createSkillTool({ skills: sessionSkills(workspace.folders) }),
+    createSkillTool({
+      skills: sessionSkills(workspace.folders, {
+        browserAvailable: options.browserAvailable,
+      }),
+    }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
     ...(options.task !== undefined ? options.task.parentTools() : []),
@@ -127,7 +150,11 @@ export function createChatTools(
 ): Tool[] {
   return [
     // Only global skills apply (no workspace folders to discover from).
-    createSkillTool({ skills: sessionSkills([]) }),
+    createSkillTool({
+      skills: sessionSkills([], {
+        browserAvailable: options.browserAvailable,
+      }),
+    }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
   ];
@@ -140,19 +167,23 @@ export function createChatTools(
  * the workspace folders and the guidelines. `headless` swaps the
  * ask-the-user guideline for the headless variant (asks are auto-answered
  * with the recommended/first option, so the model should prefer making a
- * reasonable assumption). */
+ * reasonable assumption). `browserAvailable` (whether the session has a
+ * browser backend attached) gates the built-in web-browser skill's
+ * presence in the <available_skills> listing; callers that know the
+ * backend state must pass it, the default (false) never advertises. */
 export function buildSystemPrompt(
   workspace: Workspace,
   personalInstructions?: string,
   model?: EnvironmentModel,
   headless = false,
+  browserAvailable = false,
 ): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
   const memory = loadProjectMemory(workspace.folders);
   const memorySection = memory
     ? `\n\n# Project memory (AGENTS.md)\n${memory}`
     : "";
-  const skills = sessionSkills(workspace.folders);
+  const skills = sessionSkills(workspace.folders, { browserAvailable });
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
@@ -245,13 +276,15 @@ function personalInstructionsSection(
  * `personalInstructions` (the machine-level AGENTS.md) is appended at the
  * very end; `model` appears in the environment section; `headless` swaps
  * the ask-the-user guideline for the headless variant like
- * buildSystemPrompt does. */
+ * buildSystemPrompt does; `browserAvailable` gates the built-in
+ * web-browser skill like buildSystemPrompt does. */
 export function buildChatSystemPrompt(
   personalInstructions?: string,
   model?: EnvironmentModel,
   headless = false,
+  browserAvailable = false,
 ): string {
-  const skills = sessionSkills([]);
+  const skills = sessionSkills([], { browserAvailable });
   return `You are Lumisca, a helpful AI assistant.
 
 You are running without a file workspace: the file, shell and sub-agent tools

@@ -224,7 +224,7 @@ Deno.test("loadSkillContent reads SKILL.md and follow-up files", async () => {
     const content = loadSkillContent(alpha);
     assert(content.includes("# Alpha"));
     // Follow-up file inside the skill directory.
-    await Deno.writeTextFile(join(alpha.dir, "reference.md"), "# Reference\n");
+    await Deno.writeTextFile(join(alpha.dir!, "reference.md"), "# Reference\n");
     assertEquals(loadSkillContent(alpha, "reference.md"), "# Reference\n");
   } finally {
     await Deno.remove(root, { recursive: true });

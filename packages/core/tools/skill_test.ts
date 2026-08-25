@@ -3,6 +3,7 @@ import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createSkillTool } from "../skills/tool.ts";
 import { discoverSkills, type SkillDef } from "../skills/discover.ts";
+import { builtinSkills } from "../skills/builtin/mod.ts";
 
 function toolText(
   result: { content: { type: "text" | "image"; text?: string }[] },
@@ -97,4 +98,50 @@ Deno.test("skill tool rejects follow-up reads that escape the skill directory", 
   } finally {
     await Deno.remove(root, { recursive: true });
   }
+});
+
+// --- built-in (app-embedded) skills ------------------------------------------
+
+function makeBuiltinTool(browser: boolean) {
+  return createSkillTool({
+    skills: builtinSkills({ browser }),
+  });
+}
+
+Deno.test("skill tool loads a built-in skill without a filesystem", async () => {
+  const tool = makeBuiltinTool(true);
+  const result = await tool.execute("1", { name: "web-browser" }, undefined);
+  assert(toolText(result).includes("tool_search"));
+  assertEquals(result.details?.name, "web-browser");
+  // Embedded skills report no path/dir.
+  assertEquals(result.details?.path, undefined);
+  assertEquals(result.details?.dir, undefined);
+});
+
+Deno.test("skill tool rejects follow-up reads on a built-in skill", async () => {
+  const tool = makeBuiltinTool(true);
+  await assertRejects(
+    () =>
+      Promise.resolve().then(() =>
+        tool.execute(
+          "1",
+          { name: "web-browser", read_followup: "reference.md" },
+          undefined,
+        )
+      ),
+    Error,
+    'No such file in skill "web-browser"',
+  );
+});
+
+Deno.test("skill tool hides built-in skills when their capability is absent", async () => {
+  const tool = makeBuiltinTool(false);
+  await assertRejects(
+    () =>
+      Promise.resolve().then(() =>
+        tool.execute("1", { name: "web-browser" }, undefined)
+      ),
+    Error,
+    'Unknown skill "web-browser"',
+  );
 });

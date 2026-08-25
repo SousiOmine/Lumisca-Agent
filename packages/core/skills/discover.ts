@@ -12,16 +12,22 @@ export const MAX_AVAILABLE_SKILLS_BYTES = 16 * 1024;
 /** Cap for a single skill file (SKILL.md or a follow-up read). */
 export const MAX_SKILL_FILE_BYTES = 64 * 1024;
 
-export type SkillSource = "workspace" | "plugin" | "global";
+export type SkillSource = "workspace" | "plugin" | "global" | "builtin";
 
 export interface SkillDef {
   name: string;
   description: string;
-  /** Absolute path of the SKILL.md file. */
-  path: string;
-  /** Absolute path of the skill directory (parent of SKILL.md). */
-  dir: string;
+  /** Absolute path of the SKILL.md file. Present for file-based skills
+   * (workspace / plugin / global); absent for app-embedded ones. */
+  path?: string;
+  /** Absolute path of the skill directory (parent of SKILL.md). Present
+   * for file-based skills; absent for app-embedded ones. */
+  dir?: string;
   source: SkillSource;
+  /** Embedded content reader (built-in skills): returns SKILL.md or a
+   * follow-up file from the app's memory instead of the disk. Absent for
+   * file-based skills, which read via `path` / `dir`. */
+  read?: (relativePath?: string) => string;
 }
 
 export interface DiscoverOptions {
@@ -33,6 +39,12 @@ export interface DiscoverOptions {
    * plugin skill of the same name, and a plugin skill shadows a global
    * one. */
   pluginSkills?: SkillDef[];
+  /** App-embedded skills (see skills/builtin). Appended after global
+   * skills, so any user skill of the same name — workspace, plugin or
+   * global — shadows a built-in one. Callers decide which built-ins apply
+   * (e.g. a session without a browser backend must not advertise the
+   * web-browser skill). */
+  builtinSkills?: SkillDef[];
 }
 
 /** Discover skills for a set of workspace folders. For each folder the
@@ -41,7 +53,8 @@ export interface DiscoverOptions {
  * project memory). Plugin skills (if given) are merged next, then global
  * skills (~/.agents/skills) are appended after, so a workspace skill
  * always shadows a plugin skill, and a plugin skill shadows a global one
- * of the same name. */
+ * of the same name. Built-in skills (if given) are appended last — any
+ * user skill shadows them. */
 export function discoverSkills(
   folders: string[],
   options: DiscoverOptions = {},
@@ -65,6 +78,9 @@ export function discoverSkills(
   for (const dir of resolveGlobalDirs(options.globalDirs)) {
     scanSkillsDir(dir, "global", byName, seenPaths);
   }
+  for (const skill of options.builtinSkills ?? []) {
+    if (!byName.has(skill.name)) byName.set(skill.name, skill);
+  }
   return [...byName.values()];
 }
 
@@ -84,12 +100,31 @@ export function formatAvailableSkills(skills: SkillDef[]): string {
 
 /** Read a skill file: SKILL.md by default, or a file inside the skill
  * directory when `relativePath` is given (the skill tool's follow-up read).
- * Paths that escape the skill directory are rejected; reads are capped at
- * MAX_SKILL_FILE_BYTES. */
+ * File-based skills read from disk (paths escaping the skill directory are
+ * rejected); app-embedded skills (built-in) delegate to their `read`
+ * reader instead. Reads are capped at MAX_SKILL_FILE_BYTES. */
 export function loadSkillContent(
   skill: SkillDef,
   relativePath?: string,
 ): string {
+  const text = skill.read !== undefined
+    ? skill.read(relativePath)
+    : readSkillFile(skill, relativePath);
+  return text.length > MAX_SKILL_FILE_BYTES
+    ? `${
+      text.slice(0, MAX_SKILL_FILE_BYTES)
+    }\n\n… (file truncated at ${MAX_SKILL_FILE_BYTES} bytes)`
+    : text;
+}
+
+/** Disk-backed skill read: the SKILL.md file itself, or a file inside the
+ * skill directory (see loadSkillContent). */
+function readSkillFile(skill: SkillDef, relativePath?: string): string {
+  if (skill.path === undefined || skill.dir === undefined) {
+    throw new Error(
+      `Skill "${skill.name}" has no file to read (missing path/dir)`,
+    );
+  }
   const path = relativePath === undefined
     ? skill.path
     : resolveInside(skill.dir, relativePath);
@@ -99,11 +134,7 @@ export function loadSkillContent(
       `No such file in skill "${skill.name}": ${relativePath}`,
     );
   }
-  return text.length > MAX_SKILL_FILE_BYTES
-    ? `${
-      text.slice(0, MAX_SKILL_FILE_BYTES)
-    }\n\n… (file truncated at ${MAX_SKILL_FILE_BYTES} bytes)`
-    : text;
+  return text;
 }
 
 function scanSkillsDir(

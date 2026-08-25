@@ -65,11 +65,16 @@ const MAX_FINISHED_SUBAGENTS = 100;
 const PARENT_ALIASES = ["parent", "main"] as const;
 
 /** Read-only investigation tools of the `explore` sub-agent. */
-function exploreTools(workspace: Workspace): Tool[] {
+function exploreTools(
+  workspace: Workspace,
+  browserAvailable: boolean,
+): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
     ...readOnlyInvestigationTools(sandbox),
-    createSkillTool({ skills: sessionSkills(workspace.folders) }),
+    createSkillTool({
+      skills: sessionSkills(workspace.folders, { browserAvailable }),
+    }),
   ];
 }
 
@@ -82,14 +87,17 @@ function exploreTools(workspace: Workspace): Tool[] {
  * the search/call pair, exactly like the main agent. */
 function generalTools(
   workspace: Workspace,
-  safety?: CommandSafety,
+  safety: CommandSafety | undefined,
+  browserAvailable: boolean,
 ): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
     ...sandboxFileTools(sandbox),
     createBashTool({ sandbox, safety }),
     createEvalTool({ safety }),
-    createSkillTool({ skills: sessionSkills(workspace.folders) }),
+    createSkillTool({
+      skills: sessionSkills(workspace.folders, { browserAvailable }),
+    }),
   ];
 }
 
@@ -178,6 +186,10 @@ export class TaskHub {
   private readonly streamFn: StreamFn;
   private readonly safety: CommandSafety | undefined;
   private readonly emit: (event: ClientEvent) => void;
+  /** Whether the session has a browser backend attached (set by the pool on
+   * every open). Gates the built-in web-browser skill in the sub-agent tool
+   * sets, matching the main agent's tool set and prompt listing. */
+  private browserAvailable = false;
   /** The session's tool registry (set by the pool on every open): holds
    * every discoverable tool (MCP tools, browser-lab tools, future
    * extensions) whose definitions stay out of the LLM context. General
@@ -202,6 +214,13 @@ export class TaskHub {
    * the closure never holds a stale session or model). */
   setRuntimeResolver(resolver: () => SubagentRuntime): void {
     this.resolveRuntime = resolver;
+  }
+
+  /** Set whether the session has a browser backend attached (called on
+   * every session open/rebuild like setRuntimeResolver, so the gate never
+   * holds a stale value across attach/detach). */
+  setBrowserAvailable(browserAvailable: boolean): void {
+    this.browserAvailable = browserAvailable;
   }
 
   /** Attach the session's shared MCP attachment and tool registry: general
@@ -322,8 +341,12 @@ export class TaskHub {
     const searchable = type === "general" ? this.searchTools() : [];
     const tools = [
       ...(type === "general"
-        ? generalTools(runtime.workspace, this.safety)
-        : exploreTools(runtime.workspace)),
+        ? generalTools(
+          runtime.workspace,
+          this.safety,
+          this.browserAvailable,
+        )
+        : exploreTools(runtime.workspace, this.browserAvailable)),
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),
     ];

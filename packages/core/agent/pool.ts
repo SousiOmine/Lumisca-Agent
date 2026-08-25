@@ -49,10 +49,14 @@ export interface SessionPoolDeps {
   getThinkingLevel(provider: string, modelId: string): ThinkingLevel;
   /** Full generated system prompt for a workspace (project memory +
    * personalization included); used only for legacy sessions that predate
-   * prompt snapshots. `model` fills in the environment section. */
+   * prompt snapshots. `model` fills in the environment section.
+   * `browserAvailable` gates the built-in web-browser skill in the
+   * prompt's <available_skills> listing, like the snapshot path in
+   * LumiscaCore.createSession. */
   buildGeneratedPrompt(
     workspace: Workspace,
     model?: { provider: string; modelId: string },
+    browserAvailable?: boolean,
   ): string;
   /** Persist a rebuilt system prompt (legacy-session migration). */
   updateSystemPrompt(id: string, systemPrompt: string): void;
@@ -286,6 +290,10 @@ export class SessionPool {
     const browser = this.deps.browser !== undefined
       ? this.deps.browser()
       : undefined;
+    // Whether the session advertises the browser-lab: the tools are
+    // seeded below, and the built-in web-browser skill (main agent,
+    // sub-agents, prompt listing) is gated on the same value.
+    const browserAvailable = browser !== undefined;
     if (browser !== undefined) {
       registry.addTools(
         createBrowserToolsFrom(() => this.deps.browser?.()),
@@ -372,8 +380,11 @@ export class SessionPool {
         tasks.setRuntimeResolver(runtimeResolver);
       }
       // The sub-agents share the session's MCP attachment and tool
-      // registry (general sub-agents get the search/call pair over it).
+      // registry (general sub-agents get the search/call pair over it),
+      // and the browser availability gate (the web-browser built-in skill
+      // in their skill tool).
       tasks.setMcp(mcp, registry);
+      tasks.setBrowserAvailable(browserAvailable);
     } else {
       tasks = undefined;
     }
@@ -382,6 +393,7 @@ export class SessionPool {
         ask: askHub,
         todo,
         safety: this.deps.commandSafety,
+        browserAvailable,
       })
       : createCodingTools(workspace, {
         background,
@@ -389,6 +401,7 @@ export class SessionPool {
         todo,
         task: tasks,
         safety: this.deps.commandSafety,
+        browserAvailable,
       });
     // The system prompt is a per-session snapshot taken at creation
     // (custom prompts are stored verbatim). Only legacy sessions without a
@@ -400,7 +413,7 @@ export class SessionPool {
       systemPrompt = this.deps.buildGeneratedPrompt(workspace, {
         provider: session.modelProvider,
         modelId: session.modelId,
-      });
+      }, browserAvailable);
       this.deps.updateSystemPrompt(session.id, systemPrompt);
     }
     const agent = new SessionAgentImpl({

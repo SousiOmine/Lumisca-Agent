@@ -62,7 +62,13 @@ export function createSkillTool(
       const text = loadSkillContent(skill, params.read_followup);
       return Promise.resolve({
         content: [{ type: "text", text }],
-        details: { name: skill.name, path: skill.path, dir: skill.dir },
+        details: {
+          name: skill.name,
+          // File-based skills report where they were read from;
+          // app-embedded (built-in) skills have no path.
+          ...(skill.path !== undefined ? { path: skill.path } : {}),
+          ...(skill.dir !== undefined ? { dir: skill.dir } : {}),
+        },
       });
     },
   };

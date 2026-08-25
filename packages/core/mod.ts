@@ -53,6 +53,8 @@ export type {
 } from "./skills/discover.ts";
 export { createSkillTool } from "./skills/tool.ts";
 export { parseSkillFrontmatter } from "./skills/frontmatter.ts";
+export { builtinSkills } from "./skills/builtin/mod.ts";
+export type { BuiltinContext } from "./skills/builtin/mod.ts";
 export { AskHub } from "./tools/ask.ts";
 export { TodoHub } from "./tools/todo.ts";
 export { TaskHub } from "./tools/task.ts";

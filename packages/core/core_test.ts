@@ -20,6 +20,7 @@ import {
   TOOL_CALL,
   TOOL_SEARCH,
 } from "./shared.ts";
+import { MCP_TOOLS_PROMPT_NOTE } from "./mcp/tools.ts";
 
 function setup() {
   const faux = fauxProvider();
@@ -1614,6 +1615,13 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
       true,
       "system prompt must teach on-demand tool loading",
     );
+    // The built-in web-browser skill is advertised in the snapshot when a
+    // browser backend is attached at session creation.
+    assertEquals(
+      agent.agent.state.systemPrompt.includes("- web-browser:"),
+      true,
+      "the built-in web-browser skill must be listed with a backend attached",
+    );
 
     // The model searches for the tool, then calls it through tool_call;
     // the call reaches the browser backend.
@@ -1689,8 +1697,14 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
       detached.agent.state.tools.some((t) => t.name.startsWith("browser_")),
       false,
     );
+    // The rebuilt agent starts from the creation-time snapshot, which —
+    // created while the backend was attached — still lists the built-in
+    // web-browser skill (its description mentions tool_search). What must
+    // be gone is the runtime-appended on-demand tools note, which follows
+    // the registry: an empty registry attaches neither the search/call
+    // pair nor the note.
     assertEquals(
-      detached.agent.state.systemPrompt.includes("tool_search"),
+      detached.agent.state.systemPrompt.includes(MCP_TOOLS_PROMPT_NOTE),
       false,
       "the on-demand-tools note must be gone with the registry",
     );
