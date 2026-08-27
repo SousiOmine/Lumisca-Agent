@@ -25,4 +25,4 @@ deno task dev:desktop   # Tauri 開発ビルドで起動（npm run tauri dev 相
 - アプリ内で Ctrl+Shift+I / F12 を押すと WebView の DevTools が開きます（デバッグビルドのみ）
 - UI はローカル HTTP サーバーが配信しているので、`deno task server` でサーバーを単体起動し、ブラウザの DevTools からデバッグすることもできます
 
-注意: `LUMISCA_PORT` 環境変数が設定されている場合、デスクトップアプリはそのポートを使用します。既に別の Lumisca サーバーが起動している環境では、環境変数を解除するか本番アプリを終了してから実行してください。
+デスクトップアプリは、`LUMISCA_PORT` を明示した場合を除いて起動ごとに空きポートを選びます。内蔵サーバー用のポート・DB・認証・Browser Lab環境変数はサーバー起動時に消費され、コーディングツールの子プロセスには継承されません。そのため、リリース版Lumiscaから同じリポジトリの `deno task dev:desktop` を起動しても、親アプリの内蔵サーバーとは分離されます。

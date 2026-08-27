@@ -26,6 +26,8 @@ import type { InitialData } from "@lumisca/web/types";
 export interface AppOptions {
   /** Repository root (defaults to the current working directory). */
   repoRoot?: string;
+  /** Prebuilt frontend asset manifest used by packaged server builds. */
+  assetsFile?: string;
   /** Address to bind (defaults to 127.0.0.1 — loopback only). Remote
    * hosting sets LUMISCA_HOST. Binding a non-loopback address without a
    * token is refused at startup (see validateHostConfig). */
@@ -204,7 +206,11 @@ function installSecurityMiddleware(
 export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const app = new Hono();
   const repoRoot = options.repoRoot ?? Deno.cwd();
-  const assets = new Assets(repoRoot, join(repoRoot, ".lumisca-cache"));
+  const assets = new Assets(
+    repoRoot,
+    join(repoRoot, ".lumisca-cache"),
+    options.assetsFile,
+  );
 
   // Federated peers (the server-side connection registry): the hub proxies
   // their workspaces/sessions and relays their events, tagged with the

@@ -3,7 +3,7 @@
   "version": "0.5.2",
   "exports": {},
   "tasks": {
-    "dev": "npm run tauri dev",
+    "dev": "deno run --allow-env --allow-run scripts/dev.ts",
     "build": "npm run tauri build",
     "build:server": "npm run build:server"
   },

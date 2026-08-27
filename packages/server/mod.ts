@@ -1,15 +1,21 @@
 import { LumiscaCore, resolveSettingsPath } from "@lumisca/core";
 import { HttpBrowserBackend } from "@lumisca/core";
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
+import { consumeServerStartupEnvironment } from "./startup.ts";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8000;
 const DEFAULT_DB = "lumisca.db";
 
+// Launcher-only configuration must be consumed before LumiscaCore creates
+// tools. Every command spawned afterwards inherits the cleaned environment,
+// not this server instance's port, database, token, or browser endpoint.
+const startupEnv = consumeServerStartupEnvironment();
+
 function resolveDbPath(): string {
-  const env = Deno.env.get("LUMISCA_DB");
-  if (env) return env;
-  const home = Deno.env.get("LUMISCA_HOME");
+  const db = startupEnv.LUMISCA_DB;
+  if (db) return db;
+  const home = startupEnv.LUMISCA_HOME;
   if (home) return `${home}/lumisca.db`;
   return `${Deno.cwd()}/${DEFAULT_DB}`;
 }
@@ -20,7 +26,7 @@ function resolveDbPath(): string {
  * Normalized to an absolute path — esbuild rejects relative working
  * directories when bundling the client. */
 function resolveRepoRoot(): string {
-  const root = Deno.env.get("LUMISCA_REPO_ROOT") ?? Deno.cwd();
+  const root = startupEnv.LUMISCA_REPO_ROOT ?? Deno.cwd();
   try {
     return Deno.realPathSync(root);
   } catch {
@@ -31,7 +37,7 @@ function resolveRepoRoot(): string {
 /** Extra hostnames accepted by the Host guard (LUMISCA_ALLOWED_HOSTS,
  * comma-separated, no port). Loopback hostnames are always accepted. */
 function resolveAllowedHosts(): string[] {
-  return (Deno.env.get("LUMISCA_ALLOWED_HOSTS") ?? "")
+  return (startupEnv.LUMISCA_ALLOWED_HOSTS ?? "")
     .split(",")
     .map((h) => h.trim().toLowerCase())
     .filter((h) => h.length > 0);
@@ -46,8 +52,8 @@ function resolveAllowedHosts(): string[] {
  * environment → no browser surface at all.
  */
 function attachBrowserBackend(core: LumiscaCore): void {
-  const url = Deno.env.get("LUMISCA_BROWSER_IPC_URL");
-  const token = Deno.env.get("LUMISCA_BROWSER_TOKEN");
+  const url = startupEnv.LUMISCA_BROWSER_IPC_URL;
+  const token = startupEnv.LUMISCA_BROWSER_TOKEN;
   if (url === undefined && token === undefined) return;
   if (url === undefined || token === undefined) {
     console.error(
@@ -62,11 +68,11 @@ function attachBrowserBackend(core: LumiscaCore): void {
 // Optional auth token (the desktop shell sets one): /api, /ws and — unless
 // a local dev server — the page then require it, so only clients that
 // know the token can drive the agent.
-const token = Deno.env.get("LUMISCA_TOKEN") || undefined;
+const token = startupEnv.LUMISCA_TOKEN || undefined;
 
 // Bind address (LUMISCA_HOST). The default is loopback-only; remote
 // hosting (LAN / Tailscale) sets 0.0.0.0, a specific IP, or "::".
-const host = Deno.env.get("LUMISCA_HOST") ?? DEFAULT_HOST;
+const host = startupEnv.LUMISCA_HOST ?? DEFAULT_HOST;
 
 // Refuse to expose the agent (bash tool included) to the network without
 // authentication.
@@ -76,7 +82,7 @@ if (configError) {
   Deno.exit(1);
 }
 
-const port = Number(Deno.env.get("LUMISCA_PORT") ?? DEFAULT_PORT);
+const port = Number(startupEnv.LUMISCA_PORT ?? DEFAULT_PORT);
 const dbPath = resolveDbPath();
 const settingsPath = resolveSettingsPath();
 const repoRoot = resolveRepoRoot();
@@ -86,6 +92,7 @@ const core = LumiscaCore.open(dbPath, settingsPath);
 attachBrowserBackend(core);
 const server = startServer(core, port, {
   repoRoot,
+  assetsFile: startupEnv.LUMISCA_ASSETS_FILE || undefined,
   token,
   hostname: host,
   allowedHosts,

@@ -27,6 +27,9 @@ const longCommand = Deno.build.os === "windows"
 const briefCommand = Deno.build.os === "windows"
   ? "ping -n 2 127.0.0.1 > $null; echo done"
   : "sleep 1; echo done";
+const startContractCommand = Deno.build.os === "windows"
+  ? "ping -n 3 127.0.0.1 > $null; echo done"
+  : "sleep 2; echo done";
 const linesCommand = Deno.build.os === "windows"
   ? "echo start; echo line1; echo line2"
   : "echo start; echo line1; echo line2";
@@ -112,13 +115,12 @@ function toolText(
 Deno.test("start returns immediately and notifies on completion", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
-  const started = Date.now();
-  const { commandId } = await manager.start({
+  // Do not await: start() has a synchronous contract and must return while a
+  // command whose runtime comfortably exceeds Windows process startup is live.
+  const { commandId } = manager.start({
     cwd: Deno.cwd(),
-    command: briefCommand,
+    command: startContractCommand,
   });
-  // start() must resolve while the command is still running.
-  assert(Date.now() - started < 1000, "start() did not return immediately");
   assert(manager.get(commandId)!.state === "running");
   const done = await exitPromise;
   assertEquals(done.commandId, commandId);
