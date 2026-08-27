@@ -7,6 +7,7 @@ import type {
   ProviderInfo,
   SessionView,
   ThinkingLevel,
+  UserProviderSummary,
 } from "./types.ts";
 
 /** Load the provider list once; `reload()` re-fetches. Failures are
@@ -27,6 +28,33 @@ export function useProviders(): {
   };
   useEffect(reload, []);
   return { providers, error, reload };
+}
+
+/** User-defined OpenAI-compatible providers (the settings UI manages these).
+ * The API key is never returned — `hasApiKey` reports whether one is set. */
+export function useUserProviders(): {
+  providers: UserProviderSummary[];
+  error: string | null;
+  reload: () => void;
+  /** Set of user provider ids, for quick membership checks (e.g. showing a
+   * delete button in ProviderDetail). */
+  ids: Set<string>;
+} {
+  const [providers, setProviders] = useState<UserProviderSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(() => {
+    setError(null);
+    api.listUserProviders()
+      .then(setProviders)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, []);
+  useEffect(reload, [reload]);
+  return {
+    providers,
+    error,
+    reload,
+    ids: new Set(providers.map((p) => p.id)),
+  };
 }
 
 /** Error of a useProviderModels fetch, tagged with the phase that failed

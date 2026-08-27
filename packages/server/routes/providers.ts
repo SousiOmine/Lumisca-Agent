@@ -6,6 +6,8 @@ import type {
   ModelInfo,
   Provider,
   ProviderAuthType,
+  UserProviderInput,
+  UserProviderSummary,
 } from "@lumisca/core";
 import { AppError, parseBody, ttlCache } from "./util.ts";
 import { LoginSessions } from "../login.ts";
@@ -43,6 +45,20 @@ export interface ProviderApi {
     interaction: AuthInteraction,
   ): Promise<void>;
   logoutProvider(providerId: string): Promise<void>;
+  /** Whether the provider was added by the user (OpenAI-compatible custom
+   * provider) rather than built in or from env/models.json config. */
+  isUserProvider(providerId: string): boolean;
+  /** List user-defined OpenAI-compatible providers (no API key returned). */
+  listUserProviders(): Promise<UserProviderSummary[]>;
+  /** Create a user-defined OpenAI-compatible provider. */
+  addUserProvider(input: UserProviderInput): Promise<UserProviderSummary>;
+  /** Update a user-defined OpenAI-compatible provider (id from the path). */
+  updateUserProvider(
+    id: string,
+    input: UserProviderInput,
+  ): Promise<UserProviderSummary>;
+  /** Remove a user-defined OpenAI-compatible provider and its API key. */
+  removeUserProvider(id: string): Promise<void>;
 }
 
 export function providerRoutes(core: ProviderApi): Hono {
@@ -90,7 +106,12 @@ export function providerRoutes(core: ProviderApi): Hono {
     const providers = await Promise.all(
       core.listProviders().map(async (p) => {
         const check = await cachedAuth(p.id);
-        return { id: p.id, name: p.name, ...check };
+        return {
+          id: p.id,
+          name: p.name,
+          ...check,
+          userDefined: core.isUserProvider(p.id),
+        };
       }),
     );
     return c.json(providers);
@@ -220,6 +241,40 @@ export function providerRoutes(core: ProviderApi): Hono {
     const id = c.req.param("id");
     await core.logoutProvider(id);
     invalidateAuth(id);
+    return c.json({ ok: true });
+  });
+
+  // --- user-defined OpenAI-compatible providers ----------------------------
+
+  app.get("/providers/user", async (c) => {
+    return c.json(await core.listUserProviders());
+  });
+
+  app.post("/providers/user", async (c) => {
+    const body = await parseBody<UserProviderInput>(c);
+    if (body === undefined) {
+      throw new AppError("provider config (object) is required", 400);
+    }
+    // CoreError ("invalid") → 400, ("not_found") → 404 via the global
+    // error handler; id uniqueness is enforced by upsert (the id is the
+    // key), so no extra collision check is needed here.
+    const created = await core.addUserProvider(body);
+    return c.json(created, 201);
+  });
+
+  app.put("/providers/user/:id", async (c) => {
+    const id = c.req.param("id");
+    const body = await parseBody<UserProviderInput>(c);
+    if (body === undefined) {
+      throw new AppError("provider config (object) is required", 400);
+    }
+    const updated = await core.updateUserProvider(id, body);
+    return c.json(updated);
+  });
+
+  app.delete("/providers/user/:id", async (c) => {
+    const id = c.req.param("id");
+    await core.removeUserProvider(id);
     return c.json({ ok: true });
   });
 

@@ -1,7 +1,9 @@
 import { IconPlus } from "@tabler/icons-react";
 import { useProviders } from "../../providers.ts";
 
-/** Settings → provider list: configured first, then everything else. */
+/** Settings → provider list: configured first, then everything else.
+ * User-defined providers are shown even when not yet configured, so they
+ * stay reachable (to add a key, edit, or delete). */
 export function ProviderList({
   onAdd,
   onOpen,
@@ -11,7 +13,9 @@ export function ProviderList({
 }) {
   const { providers } = useProviders();
 
-  const configured = providers.filter((p) => p.configured !== false);
+  const configured = providers.filter(
+    (p) => p.configured !== false || p.userDefined,
+  );
 
   return (
     <>
@@ -42,9 +46,17 @@ export function ProviderList({
             onClick={() => onOpen(p.id)}
           >
             <span style={{ flex: 1 }}>{p.name}</span>
-            <span className="provider-state configured">
-              {p.authType === "oauth" ? "OAuth" : (p.source ?? "APIキー")}
-            </span>
+            {p.userDefined
+              ? (
+                <span className="provider-state">
+                  {p.configured ? "設定済み" : "未設定"}
+                </span>
+              )
+              : (
+                <span className="provider-state configured">
+                  {p.authType === "oauth" ? "OAuth" : (p.source ?? "APIキー")}
+                </span>
+              )}
           </button>
         ))}
       </div>

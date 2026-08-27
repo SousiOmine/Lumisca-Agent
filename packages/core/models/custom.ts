@@ -114,7 +114,7 @@ function modelsFileApiKey(
   return fixedKeyAuth(apiKey);
 }
 
-function buildModel(
+export function buildModel(
   providerId: string,
   definition: ModelsFileModel,
   providerCfg: {
@@ -170,8 +170,9 @@ function buildModel(
   };
 }
 
-/** Build a Provider from resolved parts (shared by both sources). */
-function buildProvider(input: {
+/** Build a Provider from resolved parts (shared by both sources and by the
+ * user-defined providers in user-providers.ts). */
+export function buildProvider(input: {
   id: string;
   name: string;
   baseUrl?: string;

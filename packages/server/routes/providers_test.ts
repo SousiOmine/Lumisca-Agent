@@ -72,6 +72,21 @@ class FakeProviderApi implements ProviderApi {
     this.loggedIn.delete(providerId);
     return Promise.resolve();
   }
+  isUserProvider(): boolean {
+    return false;
+  }
+  listUserProviders(): Promise<never[]> {
+    return Promise.resolve([]);
+  }
+  addUserProvider(): Promise<never> {
+    return Promise.reject(new Error("not implemented"));
+  }
+  updateUserProvider(): Promise<never> {
+    return Promise.reject(new Error("not implemented"));
+  }
+  removeUserProvider(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 function makeApp(fake: FakeProviderApi) {
@@ -118,12 +133,14 @@ Deno.test("/providers exposes authType per provider", async () => {
       name: "openai-codex",
       configured: false,
       authType: "oauth",
+      userDefined: false,
     },
     {
       id: "anthropic",
       name: "anthropic",
       configured: false,
       authType: "api_key",
+      userDefined: false,
     },
   ]);
 });
@@ -146,6 +163,7 @@ Deno.test("ambient env auth does not mark a provider as configured", async () =>
       configured: false,
       source: "ANTHROPIC_API_KEY",
       authType: "api_key",
+      userDefined: false,
     },
   );
   // The per-provider auth endpoint agrees.

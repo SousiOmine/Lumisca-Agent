@@ -29,6 +29,11 @@ import type {
   Model,
 } from "@earendil-works/pi-ai";
 import { createDbModelsStore, ModelManager } from "./models/mod.ts";
+import type {
+  UserProviderConfig,
+  UserProviderInput,
+  UserProviderSummary,
+} from "./models/user-providers.ts";
 import {
   getSupportedThinkingLevels,
   isThinkingLevel,
@@ -852,6 +857,47 @@ export class LumiscaCore {
       thinkingLevel: this.models.getThinkingLevel(providerId, m.id),
       thinkingLevels: getSupportedThinkingLevels(m),
     }));
+  }
+
+  // --- user-defined OpenAI-compatible providers ----------------------------
+
+  /** Every user-defined OpenAI-compatible provider (settings UI list).
+   * The API key is never included — `hasApiKey` reports whether one is set. */
+  async listUserProviders(): Promise<UserProviderSummary[]> {
+    return await this.models.listUserProviders();
+  }
+
+  /** A single user-defined provider config (prefilling the edit form), or
+   * undefined when it does not exist. */
+  getUserProvider(id: string): UserProviderConfig | undefined {
+    return this.models.getUserProvider(id);
+  }
+
+  /** Create a user-defined OpenAI-compatible provider. Validates, persists,
+   * and registers it; an `apiKey` in the input is stored in the credential
+   * store. Returns the summary. */
+  async addUserProvider(input: UserProviderInput): Promise<UserProviderSummary> {
+    return await this.models.addUserProvider(input);
+  }
+
+  /** Update a user-defined provider (id fixed by the route, matching the
+   * path). An `apiKey` of "" clears the stored key; omitted leaves it. */
+  async updateUserProvider(
+    id: string,
+    input: UserProviderInput,
+  ): Promise<UserProviderSummary> {
+    return await this.models.updateUserProvider(id, input);
+  }
+
+  /** Remove a user-defined provider and its stored API key. */
+  async removeUserProvider(id: string): Promise<void> {
+    await this.models.removeUserProvider(id);
+  }
+
+  /** Whether the provider was added by the user (the settings UI / CLI)
+   * rather than built in or from the env/models.json custom config. */
+  isUserProvider(id: string): boolean {
+    return this.models.isUserProvider(id);
   }
 
   // --- internals ----------------------------------------------------------

@@ -28,6 +28,8 @@ import type {
   TodoPhase,
   TodoStatus,
   TodoTask,
+  UserProviderInput,
+  UserProviderSummary,
   Workspace,
   WorkspaceFileEntry,
 } from "@lumisca/core";
@@ -57,6 +59,8 @@ export type {
   TodoPhase,
   TodoStatus,
   TodoTask,
+  UserProviderInput,
+  UserProviderSummary,
   Workspace,
   WorkspaceFileEntry,
 };

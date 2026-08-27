@@ -16,6 +16,8 @@ import type {
   TaskInfo,
   ThinkingLevel,
   TodoPhase,
+  UserProviderInput,
+  UserProviderSummary,
   Workspace,
   WorkspaceFileEntry,
 } from "./types.ts";
@@ -235,6 +237,29 @@ export const api = {
   providerLogout: (providerId: string) =>
     request<{ ok: boolean }>(`/api/providers/${providerId}/logout`, {
       method: "POST",
+    }),
+
+  /** User-defined OpenAI-compatible providers (settings UI). The API key is
+   * never returned — `hasApiKey` reports whether one is set. */
+  listUserProviders: () =>
+    request<UserProviderSummary[]>("/api/providers/user"),
+  /** Create a user-defined OpenAI-compatible provider. An `apiKey` in the
+   * body is stored server-side and not echoed back. */
+  createUserProvider: (input: UserProviderInput) =>
+    request<UserProviderSummary>("/api/providers/user", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  /** Update a user-defined provider; `id` matches the path. */
+  updateUserProvider: (id: string, input: UserProviderInput) =>
+    request<UserProviderSummary>(`/api/providers/user/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  /** Remove a user-defined provider (and its stored API key). */
+  deleteUserProvider: (id: string) =>
+    request<{ ok: boolean }>(`/api/providers/user/${id}`, {
+      method: "DELETE",
     }),
   updateSessionModel: (sessionId: string, provider: string, modelId: string) =>
     request<SessionInfo>(`/api/sessions/${sessionId}/model`, {

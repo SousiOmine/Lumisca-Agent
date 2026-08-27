@@ -15,6 +15,9 @@ import { Modal } from "./Modal.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
+import { AddUserProviderForm } from "./settings/AddUserProviderForm.tsx";
+import { useUserProviders } from "../providers.ts";
+import type { UserProviderSummary } from "../types.ts";
 import { ModelList } from "./settings/ModelList.tsx";
 import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
 import { McpList } from "./settings/McpList.tsx";
@@ -48,7 +51,9 @@ type Category =
 type ProvidersView =
   | { kind: "list" }
   | { kind: "add" }
-  | { kind: "detail"; providerId: string; from: "list" | "add" };
+  | { kind: "detail"; providerId: string; from: "list" | "add" }
+  | { kind: "addUser" }
+  | { kind: "editUser"; providerId: string };
 
 const CATEGORIES: {
   id: Category;
@@ -99,6 +104,10 @@ export function SettingsModal({
   const [providersView, setProvidersView] = useState<ProvidersView>({
     kind: "list",
   });
+  const userProviders = useUserProviders();
+
+  const userProviderForEdit = (id: string): UserProviderSummary | undefined =>
+    userProviders.providers.find((p) => p.id === id);
 
   const openCategory = (id: Category) => {
     setCategory(id);
@@ -154,12 +163,17 @@ export function SettingsModal({
           {category === "providers" && providersView.kind === "list" && (
             <ProviderList
               onAdd={() => setProvidersView({ kind: "add" })}
-              onOpen={(id) =>
-                setProvidersView({
-                  kind: "detail",
-                  providerId: id,
-                  from: "list",
-                })}
+              onOpen={(id) => {
+                if (userProviders.ids.has(id)) {
+                  setProvidersView({ kind: "editUser", providerId: id });
+                } else {
+                  setProvidersView({
+                    kind: "detail",
+                    providerId: id,
+                    from: "list",
+                  });
+                }
+              }}
             />
           )}
           {category === "providers" && providersView.kind === "add" && (
@@ -170,6 +184,7 @@ export function SettingsModal({
                   providerId: id,
                   from: "add",
                 })}
+              onAddUser={() => setProvidersView({ kind: "addUser" })}
               onBack={() => setProvidersView({ kind: "list" })}
             />
           )}
@@ -178,6 +193,31 @@ export function SettingsModal({
               providerId={providersView.providerId}
               onBack={() => setProvidersView({ kind: providersView.from })}
               onDone={() => setProvidersView({ kind: "list" })}
+              onEditUser={(providerId) =>
+                setProvidersView({ kind: "editUser", providerId })}
+            />
+          )}
+          {category === "providers" && providersView.kind === "addUser" && (
+            <AddUserProviderForm
+              mode="create"
+              onBack={() => setProvidersView({ kind: "list" })}
+              onDone={() => {
+                userProviders.reload();
+                setProvidersView({ kind: "list" });
+              }}
+            />
+          )}
+          {category === "providers" && providersView.kind === "editUser" && (
+            <AddUserProviderForm
+              mode="edit"
+              key={providersView.providerId}
+              initial={userProviderForEdit(providersView.providerId)}
+              onBack={() => setProvidersView({ kind: "list" })}
+              onDone={() => {
+                userProviders.reload();
+                setProvidersView({ kind: "list" });
+              }}
+              onDeleted={() => userProviders.reload()}
             />
           )}
           {category === "models" && (

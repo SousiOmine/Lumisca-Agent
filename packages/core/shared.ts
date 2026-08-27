@@ -234,6 +234,9 @@ export interface ProviderInfo {
   /** The credential method the provider accepts. "oauth" providers get a
    * login flow in the settings UI instead of an API-key field. */
   authType?: ProviderAuthType;
+  /** True when the provider was added by the user (OpenAI-compatible
+   * custom provider) rather than built in or from env/models.json config. */
+  userDefined?: boolean;
 }
 
 /** Credential method of a provider ("api_key" for API-key entry, "oauth"

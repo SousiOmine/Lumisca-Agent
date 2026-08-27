@@ -222,6 +222,8 @@ export async function handleCommand(
           ["/thinking", "思考強度を変更"],
           ["/workspace", "ワークスペースを切り替え"],
           ["/keys", "APIキーを設定"],
+          ["/addprovider", "OpenAI互換プロバイダを追加"],
+          ["/delprovider", "追加したプロバイダを削除"],
           ["/login", "ChatGPT等をOAuthでログイン"],
           ["/logout", "OAuthログインを解除"],
           ["/sessions", "セッション一覧"],
@@ -347,6 +349,62 @@ export async function handleCommand(
       }
       await core.logoutProvider(arg.trim());
       success("ログアウトしました");
+      return undefined;
+    }
+
+    case "addprovider": {
+      const name = await getPromptFn()("表示名 (例: 自宅 vLLM):");
+      if (!name || name.trim() === "") return undefined;
+      const id = await getPromptFn()("プロバイダーID (英数字・. _ -):");
+      if (!id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id.trim())) {
+        error("プロバイダーIDが不正です");
+        return undefined;
+      }
+      const baseUrl = await getPromptFn()("Base URL (https://.../v1):");
+      if (!baseUrl || baseUrl.trim() === "") return undefined;
+      const apiRaw = await getPromptFn()(
+        "API (openai-completions / openai-responses) [openai-completions]:",
+      );
+      const api = apiRaw && apiRaw.trim() !== ""
+        ? apiRaw.trim()
+        : "openai-completions";
+      const modelIds = await getPromptFn()("モデルID (カンマ区切り):");
+      if (!modelIds || modelIds.trim() === "") return undefined;
+      const models = modelIds.split(",").map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((modelId) => ({ id: modelId }));
+      if (models.length === 0) {
+        error("モデルIDを1つ以上入力してください");
+        return undefined;
+      }
+      const apiKey = await getPromptFn()("APIキー (空で省略):");
+      try {
+        const summary = await core.addUserProvider({
+          id: id.trim(),
+          name: name.trim(),
+          baseUrl: baseUrl.trim(),
+          api,
+          models,
+          ...(apiKey && apiKey.trim() !== "" ? { apiKey: apiKey.trim() } : {}),
+        });
+        success(`プロバイダーを追加しました: ${summary.id}`);
+      } catch (e) {
+        error(errorText(e));
+      }
+      return undefined;
+    }
+
+    case "delprovider": {
+      if (!arg) {
+        error("/delprovider <プロバイダーID>");
+        return undefined;
+      }
+      try {
+        await core.removeUserProvider(arg.trim());
+        success("プロバイダーを削除しました");
+      } catch (e) {
+        error(errorText(e));
+      }
       return undefined;
     }
 

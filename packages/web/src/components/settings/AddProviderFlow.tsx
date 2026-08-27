@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
-import { IconArrowLeft } from "@tabler/icons-react";
+import { IconArrowLeft, IconPlugConnected } from "@tabler/icons-react";
 import { filterByQuery, useProviders } from "../../providers.ts";
 
-/** Settings → add provider: searchable list of every known provider. */
+/** Settings → add provider: searchable list of every known provider, plus
+ * an entry to add an arbitrary OpenAI-compatible provider by hand. */
 export function AddProviderFlow({
   onSelect,
+  onAddUser,
   onBack,
 }: {
   onSelect: (providerId: string) => void;
+  onAddUser: () => void;
   onBack: () => void;
 }) {
   const { providers } = useProviders();
@@ -51,6 +54,14 @@ export function AddProviderFlow({
           </div>
         )}
       </div>
+
+      <p className="settings-note" style={{ marginTop: 12 }}>
+        一覧にないプロバイダー
+      </p>
+      <button type="button" className="btn" onClick={onAddUser}>
+        <IconPlugConnected size={14} />
+        カスタム OpenAI 互換プロバイダーを追加
+      </button>
     </>
   );
 }

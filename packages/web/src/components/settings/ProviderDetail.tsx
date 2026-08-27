@@ -4,15 +4,17 @@ import {
   IconCheck,
   IconCircleDashed,
   IconCopy,
+  IconEdit,
   IconExternalLink,
   IconLoader2,
   IconLogin2,
   IconLogout,
   IconSend,
+  IconTrash,
   IconX,
 } from "@tabler/icons-react";
 import { api } from "../../api.ts";
-import { errorText, useProviders } from "../../providers.ts";
+import { errorText, useProviders, useUserProviders } from "../../providers.ts";
 import type {
   ProviderAuthType,
   ProviderLoginEvent,
@@ -36,12 +38,18 @@ export function ProviderDetail({
   providerId,
   onBack,
   onDone,
+  onEditUser,
 }: {
   providerId: string;
   onBack: () => void;
   onDone: () => void;
+  onEditUser?: (providerId: string) => void;
 }) {
   const { providers, reload: reloadProviders } = useProviders();
+  const { ids: userProviderIds, reload: reloadUserProviders } =
+    useUserProviders();
+  const isUser = userProviderIds.has(providerId);
+  const [removing, setRemoving] = useState(false);
   const [auth, setAuth] = useState<{
     configured: boolean;
     source?: string;
@@ -206,6 +214,24 @@ export function ProviderDetail({
       setError(errorText(e));
     } finally {
       setLoginBusy(false);
+    }
+  };
+
+  /** Delete a user-defined provider and return to the list. */
+  const removeProvider = async () => {
+    if (!confirm(`プロバイダー "${provider?.name ?? providerId}" を削除しますか？`)) {
+      return;
+    }
+    setRemoving(true);
+    setError(undefined);
+    try {
+      await api.deleteUserProvider(providerId);
+      reloadUserProviders();
+      reloadProviders();
+      onDone();
+    } catch (e) {
+      setError(errorText(e));
+      setRemoving(false);
     }
   };
 
@@ -459,6 +485,27 @@ export function ProviderDetail({
       </div>
 
       <div className="modal-actions">
+        {isUser && (
+          <>
+            {onEditUser && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => onEditUser(providerId)}
+              >
+                <IconEdit size={14} /> 編集
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn danger"
+              onClick={removeProvider}
+              disabled={removing}
+            >
+              <IconTrash size={14} /> 削除
+            </button>
+          </>
+        )}
         <button type="button" className="btn primary" onClick={onDone}>
           完了
         </button>

@@ -3024,6 +3024,17 @@ select:focus {
   gap: 10px;
 }
 
+/* Card wrapping one model row in the custom-provider form. */
+.user-provider-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .personalize-textarea {
   flex: 1;
   min-height: 300px;
