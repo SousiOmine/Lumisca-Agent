@@ -48,7 +48,16 @@ export function WorkspaceModal(
   }, []);
 
   const addFolder = (path: string) => {
-    setFolders((prev) => (prev.includes(path) ? prev : [...prev, path]));
+    const added = !folders.includes(path);
+    if (added) {
+      setFolders((prev) => (prev.includes(path) ? prev : [...prev, path]));
+      // 新規作成で名前が未入力のとき、最初のフォルダ名をワークスペース名に
+      // 代入する(名前欄は後から編集可能)。
+      if (!editing && !name.trim()) {
+        const base = path.split(/[\\/]/).filter(Boolean).at(-1);
+        if (base) setName(base);
+      }
+    }
     setView({ kind: "main" });
   };
 
