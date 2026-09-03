@@ -332,24 +332,28 @@ export function createWriteFileTool(
     execute: async (_id, params) => {
       const filePath = await requireResolved(ctx.sandbox, params.path);
       const parent = await requireResolved(ctx.sandbox, join(filePath, ".."));
-      await Deno.mkdir(parent, { recursive: true });
-      // Keep an existing file's CRLF style when overwriting it, so a full
-      // rewrite never flips the whole file to LF (new files stay as sent,
-      // normally LF).
-      let content = params.content;
-      try {
-        const existing = await Deno.readTextFile(filePath);
-        if (existing.includes("\r\n")) {
-          content = content.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
+      // Two concurrent writes to the same file would race (last write
+      // wins); serialize per path like edits do.
+      return withFileLock(filePath, async () => {
+        await Deno.mkdir(parent, { recursive: true });
+        // Keep an existing file's CRLF style when overwriting it, so a
+        // full rewrite never flips the whole file to LF (new files stay
+        // as sent, normally LF).
+        let content = params.content;
+        try {
+          const existing = await Deno.readTextFile(filePath);
+          if (existing.includes("\r\n")) {
+            content = content.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
+          }
+        } catch {
+          // File does not exist yet: write the content as-is.
         }
-      } catch {
-        // File does not exist yet: write the content as-is.
-      }
-      await Deno.writeTextFile(filePath, content);
-      return {
-        content: [{ type: "text", text: `Wrote ${filePath}` }],
-        details: { path: filePath, bytes: content.length },
-      };
+        await Deno.writeTextFile(filePath, content);
+        return {
+          content: [{ type: "text", text: `Wrote ${filePath}` }],
+          details: { path: filePath, bytes: content.length },
+        };
+      });
     },
   };
 }
@@ -398,33 +402,38 @@ export function createEditFileTool(
     parameters: editSchema,
     execute: async (_id, params) => {
       const filePath = await requireResolved(ctx.sandbox, params.path);
-      const content = await Deno.readTextFile(filePath);
-      // Match leniently: models usually reproduce `old_string` with LF even
-      // when the file is CRLF, so compare both sides normalized to LF and
-      // map the match position back into the original bytes.
-      const normalized = content.replaceAll("\r\n", "\n");
-      const needle = params.old_string.replaceAll("\r\n", "\n");
-      const normIndex = normalized.indexOf(needle);
-      if (normIndex === -1) {
-        throw new Error(`old_string not found in ${params.path}`);
-      }
-      const occurrences = normalized.split(needle).length - 1;
-      const origIndex = mapOffset(content, normIndex);
-      const origEnd = mapOffset(content, normIndex + needle.length);
-      const updated = content.slice(0, origIndex) +
-        toFileNewlines(params.new_string, content) +
-        content.slice(origEnd);
-      await Deno.writeTextFile(filePath, updated);
-      const note = occurrences > 1
-        ? `\n[warning: old_string appeared ${occurrences} times; only the first was replaced]`
-        : "";
-      return {
-        content: [{
-          type: "text",
-          text: `Edited ${filePath}${note}`,
-        }],
-        details: { path: filePath, replacements: 1, occurrences },
-      };
+      // read-modify-write must be atomic per file: parallel edits to the
+      // same file would otherwise read the same pre-edit content and
+      // overwrite each other (see withFileLock).
+      return withFileLock(filePath, async () => {
+        const content = await Deno.readTextFile(filePath);
+        // Match leniently: models usually reproduce `old_string` with LF
+        // even when the file is CRLF, so compare both sides normalized to
+        // LF and map the match position back into the original bytes.
+        const normalized = content.replaceAll("\r\n", "\n");
+        const needle = params.old_string.replaceAll("\r\n", "\n");
+        const normIndex = normalized.indexOf(needle);
+        if (normIndex === -1) {
+          throw new Error(`old_string not found in ${params.path}`);
+        }
+        const occurrences = normalized.split(needle).length - 1;
+        const origIndex = mapOffset(content, normIndex);
+        const origEnd = mapOffset(content, normIndex + needle.length);
+        const updated = content.slice(0, origIndex) +
+          toFileNewlines(params.new_string, content) +
+          content.slice(origEnd);
+        await Deno.writeTextFile(filePath, updated);
+        const note = occurrences > 1
+          ? `\n[warning: old_string appeared ${occurrences} times; only the first was replaced]`
+          : "";
+        return {
+          content: [{
+            type: "text",
+            text: `Edited ${filePath}${note}`,
+          }],
+          details: { path: filePath, replacements: 1, occurrences },
+        };
+      });
     },
   };
 }
@@ -432,6 +441,44 @@ export function createEditFileTool(
 const listDirSchema = object({
   path: string("Path to the directory"),
 });
+
+// --- per-file serialization ------------------------------------------------
+
+/**
+ * pi-agent-core executes the tool calls of one assistant message in
+ * parallel (toolExecution defaults to "parallel"), so several edits to
+ * the SAME file can run concurrently. Each edit is a read-modify-write
+ * (read → replace → write) without atomicity; two concurrent edits would
+ * both read the pre-edit content and the later write would silently
+ * discard the earlier one (a lost update both report as "Edited").
+ *
+ * The lock serializes operations per resolved file path: concurrent edits
+ * to one file queue up and each sees the previous operation's result;
+ * edits to different files still run in parallel. (The eval tool solves
+ * the same problem for its shared REPL session with an internal queue;
+ * here the queue is keyed by file path.)
+ */
+const fileLocks = new Map<string, Promise<unknown>>();
+
+/** Run `fn` while holding the per-path lock of `path`; operations on the
+ * same path run one after another, other paths stay independent. The lock
+ * is implicitly released when `fn` settles, and a failed operation never
+ * blocks the next one. */
+function withFileLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
+  const previous = fileLocks.get(path) ?? Promise.resolve();
+  // `catch` keeps the chain alive after a failed operation.
+  const next = previous.catch(() => {}).then(fn);
+  fileLocks.set(path, next);
+  // Drop the entry once it is no longer the tail of the queue, so the map
+  // cannot grow with finished operations. The `catch` swallows the
+  // finally-chain's rejection (the caller already observes `next`'s own
+  // failure) so an expected tool error cannot become an unhandled
+  // rejection.
+  next.finally(() => {
+    if (fileLocks.get(path) === next) fileLocks.delete(path);
+  }).catch(() => {});
+  return next;
+}
 
 export function createListDirTool(
   ctx: FsToolContext,

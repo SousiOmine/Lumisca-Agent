@@ -503,3 +503,91 @@ Deno.test("read strips CR so CRLF files display as clean LF lines", async () => 
     await Deno.remove(root, { recursive: true });
   }
 });
+
+Deno.test(
+  "parallel edits to the same file are serialized (no lost update)",
+  async () => {
+    const { root, folder } = await fsFixture();
+    const file = join(root, "sample.txt");
+    try {
+      const edit = makeFs(root).edit;
+      // pi-agent-core executes the tool calls of one assistant message in
+      // parallel (toolExecution defaults to "parallel"). Without the
+      // per-file lock, concurrent read-modify-write edits to the same
+      // file would both read the pre-edit content and the later write
+      // would silently discard the earlier edit — while both report
+      // "Edited". Each round runs three concurrent edits; a lost update
+      // must never happen.
+      for (let round = 0; round < 10; round++) {
+        const lines = Array.from({ length: 10000 }, (_, i) => `line-${i}`);
+        await Deno.writeTextFile(file, lines.join("\n"));
+        const [r1, r2, r3] = await Promise.all([
+          edit.execute("id-1", {
+            path: `${folder}/sample.txt`,
+            old_string: "line-1000",
+            new_string: "line-1000-EDITED",
+          }),
+          edit.execute("id-2", {
+            path: `${folder}/sample.txt`,
+            old_string: "line-2000",
+            new_string: "line-2000-EDITED",
+          }),
+          edit.execute("id-3", {
+            path: `${folder}/sample.txt`,
+            old_string: "line-3000",
+            new_string: "line-3000-EDITED",
+          }),
+        ]);
+        for (const result of [r1, r2, r3]) {
+          assert(
+            toolText(result).startsWith("Edited"),
+            `round ${round}: ${toolText(result)}`,
+          );
+        }
+        const text = await Deno.readTextFile(file);
+        assert(
+          text.includes("line-1000-EDITED"),
+          `round ${round}: first edit was lost`,
+        );
+        assert(
+          text.includes("line-2000-EDITED"),
+          `round ${round}: second edit was lost`,
+        );
+        assert(
+          text.includes("line-3000-EDITED"),
+          `round ${round}: third edit was lost`,
+        );
+      }
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  },
+);
+
+Deno.test("parallel writes to the same file are serialized", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    const write = makeFs(root).write;
+    // Without the per-file lock, two concurrent writes could interleave
+    // with each other's CRLF probe read; the final content must be
+    // exactly one of the two writes, never a mix.
+    await Promise.all([
+      write.execute("id-1", {
+        path: `${folder}/sample.txt`,
+        content: "AAAA\n".repeat(5000),
+      }),
+      write.execute("id-2", {
+        path: `${folder}/sample.txt`,
+        content: "BBBB\n".repeat(5000),
+      }),
+    ]);
+    const text = await Deno.readTextFile(file);
+    const lines = text.split("\n").filter((line) => line.length > 0);
+    const onlyA = lines.every((line) => line === "AAAA");
+    const onlyB = lines.every((line) => line === "BBBB");
+    assert(onlyA || onlyB, "final content must be one write's content");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
