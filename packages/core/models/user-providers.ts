@@ -1,8 +1,4 @@
-import type {
-  ApiKeyAuth,
-  CredentialStore,
-  Provider,
-} from "@earendil-works/pi-ai";
+import type { ApiKeyAuth, Provider } from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "../settings/repo.ts";
 import { CoreError } from "../errors.ts";
 import { buildModel, buildProvider } from "./custom.ts";
@@ -245,10 +241,7 @@ export function parseUserProviderInput(
  * (the same place `setProviderApiKey` writes). Ambient env vars are not
  * consulted — a user provider is "configured" only once the user stores a
  * key here. */
-function credentialStoreApiKey(
-  providerId: string,
-  credentials: CredentialStore,
-): ApiKeyAuth {
+function credentialStoreApiKey(providerId: string): ApiKeyAuth {
   return {
     name: `API key (${providerId})`,
     login: async (interaction) => {
@@ -260,15 +253,16 @@ function credentialStoreApiKey(
       interaction.signal.throwIfAborted();
       return { type: "api_key", key };
     },
-    resolve: async ({ credential, signal }) => {
+    resolve: ({ credential, signal }) => {
       signal.throwIfAborted();
-      if (credential?.key) {
-        return {
-          auth: { apiKey: credential.key },
-          source: "stored credential",
-        };
-      }
-      return undefined;
+      return Promise.resolve(
+        credential?.key
+          ? {
+            auth: { apiKey: credential.key },
+            source: "stored credential",
+          }
+          : undefined,
+      );
     },
   };
 }
@@ -276,7 +270,6 @@ function credentialStoreApiKey(
 /** Build a runtime Provider from a stored config. */
 export function buildUserProvider(
   config: UserProviderConfig,
-  credentials: CredentialStore,
 ): Provider {
   const models = config.models.map((m) =>
     buildModel(config.id, m, {
@@ -290,7 +283,7 @@ export function buildUserProvider(
     name: config.name,
     baseUrl: config.baseUrl,
     headers: config.headers,
-    auth: credentialStoreApiKey(config.id, credentials),
+    auth: credentialStoreApiKey(config.id),
     models,
   });
 }

@@ -103,7 +103,7 @@ export class ModelManager {
     this.userStore = new UserProviderStore(settings);
     for (const config of this.userStore.list()) {
       customIds.add(config.id);
-      this.models.setProvider(buildUserProvider(config, credentials));
+      this.models.setProvider(buildUserProvider(config));
     }
     this.customProviderIds = customIds;
     this.userProviderIds = new Set(this.userStore.ids());
@@ -147,7 +147,7 @@ export class ModelManager {
   ): Promise<UserProviderSummary> {
     const parsed = parseUserProviderInput(input);
     this.userStore.upsert(parsed);
-    this.models.setProvider(buildUserProvider(parsed, this.credentials));
+    this.models.setProvider(buildUserProvider(parsed));
     this.userProviderIds.add(parsed.id);
     (this.customProviderIds as Set<string>).add(parsed.id);
     if (parsed.apiKey) {
@@ -171,7 +171,7 @@ export class ModelManager {
       requireId: true,
     });
     this.userStore.upsert(parsed);
-    this.models.setProvider(buildUserProvider(parsed, this.credentials));
+    this.models.setProvider(buildUserProvider(parsed));
     if (parsed.apiKey !== undefined) {
       if (parsed.apiKey === "") await this.credentials.delete(id);
       else await setApiKey(this.credentials, id, parsed.apiKey);
