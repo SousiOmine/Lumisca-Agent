@@ -16,13 +16,14 @@ import type { SettingsRepo } from "../settings/repo.ts";
 import type { ThinkingLevel } from "../shared.ts";
 import { CoreError } from "../errors.ts";
 import { loadCustomProviders } from "./custom.ts";
+import { extraProviders } from "./extra-providers.ts";
 import { clampThinkingLevel } from "./thinking.ts";
 import {
   buildUserProvider,
   parseUserProviderInput,
-  UserProviderStore,
   type UserProviderConfig,
   type UserProviderInput,
+  UserProviderStore,
   type UserProviderSummary,
 } from "./user-providers.ts";
 import { setApiKey } from "../settings/credentials.ts";
@@ -77,6 +78,13 @@ export class ModelManager {
     this.models = builtinModels({ credentials, modelsStore }) as MutableModels;
     this.settings = settings;
     this.credentials = credentials;
+    // Lumisca-shipped providers outside the SDK catalog (DeepInfra,
+    // ClinePass) are registered right after the builtins. setProvider
+    // upserts by id, so the custom providers below can still override
+    // them (e.g. point "deepinfra" at a compatible endpoint).
+    for (const provider of extraProviders()) {
+      this.models.setProvider(provider);
+    }
     // Custom OpenAI-compatible providers (env vars / models.json) are
     // registered after the builtins. setProvider upserts by id, so:
     // - a models.json provider may intentionally replace a builtin
@@ -134,7 +142,9 @@ export class ModelManager {
   /** Create a user-defined provider. Validates the input, persists it,
    * registers it with the SDK, and — when an `apiKey` was supplied —
    * stores it in the credential store. Returns the summary. */
-  async addUserProvider(input: UserProviderInput): Promise<UserProviderSummary> {
+  async addUserProvider(
+    input: UserProviderInput,
+  ): Promise<UserProviderSummary> {
     const parsed = parseUserProviderInput(input);
     this.userStore.upsert(parsed);
     this.models.setProvider(buildUserProvider(parsed, this.credentials));
@@ -157,7 +167,9 @@ export class ModelManager {
     if (!this.userStore.get(id)) {
       throw new CoreError(`User provider not found: ${id}`, "not_found");
     }
-    const parsed = parseUserProviderInput({ ...input, id }, { requireId: true });
+    const parsed = parseUserProviderInput({ ...input, id }, {
+      requireId: true,
+    });
     this.userStore.upsert(parsed);
     this.models.setProvider(buildUserProvider(parsed, this.credentials));
     if (parsed.apiKey !== undefined) {
