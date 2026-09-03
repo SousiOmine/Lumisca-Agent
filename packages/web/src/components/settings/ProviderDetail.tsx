@@ -219,7 +219,11 @@ export function ProviderDetail({
 
   /** Delete a user-defined provider and return to the list. */
   const removeProvider = async () => {
-    if (!confirm(`プロバイダー "${provider?.name ?? providerId}" を削除しますか？`)) {
+    if (
+      !confirm(
+        `プロバイダー "${provider?.name ?? providerId}" を削除しますか？`,
+      )
+    ) {
       return;
     }
     setRemoving(true);

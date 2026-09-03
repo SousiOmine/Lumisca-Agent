@@ -8,18 +8,18 @@
     "jsr:@std/jsonc@^1.0.2": "1.0.2",
     "jsr:@std/yaml@*": "1.2.0",
     "jsr:@std/yaml@^1.2.0": "1.2.0",
-    "npm:@earendil-works/pi-agent-core@0.84.3": "0.84.3_@modelcontextprotocol+sdk@1.30.0__zod@4.4.3_zod@4.4.3",
-    "npm:@earendil-works/pi-ai@0.84.3": "0.84.3_@modelcontextprotocol+sdk@1.30.0__zod@4.4.3_zod@4.4.3",
+    "npm:@earendil-works/pi-agent-core@0.84.4": "0.84.4_@modelcontextprotocol+sdk@1.30.0__zod@4.4.3_zod@4.4.3",
+    "npm:@earendil-works/pi-ai@0.84.4": "0.84.4_@modelcontextprotocol+sdk@1.30.0__zod@4.4.3_zod@4.4.3",
     "npm:@modelcontextprotocol/sdk@1.30.0": "1.30.0_zod@4.4.3",
     "npm:@tabler/icons-react@^3.46.0": "3.46.0_react@19.2.8",
-    "npm:@tauri-apps/cli@2": "2.9.6",
+    "npm:@tauri-apps/cli@2": "2.11.4",
     "npm:@types/node@*": "26.1.2",
     "npm:@types/react@19": "19.2.18",
     "npm:@types/react@^19.2.18": "19.2.18",
-    "npm:@vitejs/plugin-react@6.1.0": "6.1.0_vite@8.2.2__@types+node@26.1.2__esbuild@0.28.2_@types+node@26.1.2_esbuild@0.28.2",
+    "npm:@vitejs/plugin-react@6.1.1": "6.1.1_vite@8.2.2__@types+node@26.1.2__esbuild@0.28.2",
     "npm:esbuild@0.28.2": "0.28.2",
-    "npm:hono@^4.13.4": "4.13.4",
-    "npm:marked@18": "18.0.9",
+    "npm:hono@^4.13.5": "4.13.5",
+    "npm:marked@^18.0.11": "18.0.11",
     "npm:react-dom@19.2.8": "19.2.8_react@19.2.8",
     "npm:react@19.2.8": "19.2.8",
     "npm:sucrase@*": "3.35.1",
@@ -114,7 +114,7 @@
         "@aws-sdk/types",
         "@smithy/core",
         "@smithy/fetch-http-handler",
-        "@smithy/node-http-handler@4.11.3",
+        "@smithy/node-http-handler@4.12.0",
         "@smithy/types",
         "tslib"
       ]
@@ -149,7 +149,7 @@
         "@aws-sdk/types",
         "@smithy/core",
         "@smithy/fetch-http-handler",
-        "@smithy/node-http-handler@4.11.3",
+        "@smithy/node-http-handler@4.12.0",
         "@smithy/types",
         "tslib"
       ]
@@ -183,8 +183,8 @@
         "tslib"
       ]
     },
-    "@aws-sdk/credential-provider-node@3.972.81": {
-      "integrity": "sha512-Rml+WitoFvXmv6JZ18U/xGdGDGGvB/mOin0ya0lTnTrdC0Z1lrVxTYh7iNklZBcvcRMrs4DoEf6xy1KWyrLQQw==",
+    "@aws-sdk/credential-provider-node@3.972.82": {
+      "integrity": "sha512-znDkEOGXB8W3kG1LJUKP3foBZY/9qLM0eil/DxWXSp37XsdsRLQHE/d/OaCGGVgKpA6znR38h/+INk8do1FjiA==",
       "dependencies": [
         "@aws-sdk/credential-provider-env",
         "@aws-sdk/credential-provider-http",
@@ -270,7 +270,7 @@
         "@aws-sdk/types",
         "@smithy/core",
         "@smithy/fetch-http-handler",
-        "@smithy/node-http-handler@4.11.3",
+        "@smithy/node-http-handler@4.12.0",
         "@smithy/types",
         "tslib"
       ]
@@ -332,8 +332,8 @@
     "@babel/runtime@7.29.7": {
       "integrity": "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="
     },
-    "@earendil-works/pi-agent-core@0.84.3_@modelcontextprotocol+sdk@1.30.0__zod@4.4.3_zod@4.4.3": {
-      "integrity": "sha512-VURr+xBRl3RxYcw3kT9Pn3yfi6LbRoCJgHF7h1mAblMjtLNV/MfG/RyF0uJizBAM886AEakSiw3j9c/aSngppg==",
+    "@earendil-works/pi-agent-core@0.84.4_@modelcontextprotocol+sdk@1.30.0__zod@4.4.3_zod@4.4.3": {
+      "integrity": "sha512-HyUnjaOXj6oN/6SNcr8A1J/ElRQA50FtIE0XUTSKAQVqmdlb9qdojOyUQwF/jULE5+yOEtGuVgi/N1RnBiNG+g==",
       "dependencies": [
         "@earendil-works/pi-ai",
         "@earendil-works/pi-telemetry",
@@ -343,8 +343,8 @@
         "yaml"
       ]
     },
-    "@earendil-works/pi-ai@0.84.3_@modelcontextprotocol+sdk@1.30.0__zod@4.4.3_zod@4.4.3": {
-      "integrity": "sha512-M0YUV8vNO3y2WwWSyY8ijKJV5W4gkSUixuvk+Z00ZBjsyMfsdXfITsHEwP1UIf09YRWXT6oGn0GlCamt+P32XQ==",
+    "@earendil-works/pi-ai@0.84.4_@modelcontextprotocol+sdk@1.30.0__zod@4.4.3_zod@4.4.3": {
+      "integrity": "sha512-AClAZxf5+c4RRu44NJPS6wyQy+Nmq+Mzyyrdvm4ZVMNuixelO02RZX4G4Aq1F145Yzp43wnM5S+hLlSI7ypfVw==",
       "dependencies": [
         "@anthropic-ai/sdk",
         "@aws-sdk/client-bedrock-runtime",
@@ -359,8 +359,8 @@
       ],
       "bin": true
     },
-    "@earendil-works/pi-telemetry@0.84.3": {
-      "integrity": "sha512-sgEkWoKrvSGaKn+YfLLFZmn+/A7B/w62eLwTD57nI+C9to8ITlFFVbgC2OtwvPnT3NFGHdCd53qhBEMIlptD1g=="
+    "@earendil-works/pi-telemetry@0.84.4": {
+      "integrity": "sha512-8e2CuxM+ht+hedQXTZmi5JVl6/xDK9RpSDL2+MbITevKYQhMZ/z6lJOTFgox3HQyGxO8mOZEtYGVeQNaD4OzqA=="
     },
     "@esbuild/aix-ppc64@0.28.2": {
       "integrity": "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==",
@@ -506,7 +506,7 @@
       ],
       "scripts": true
     },
-    "@hono/node-server@1.19.9_hono@4.13.4": {
+    "@hono/node-server@1.19.9_hono@4.13.5": {
       "integrity": "sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==",
       "dependencies": [
         "hono"
@@ -708,8 +708,8 @@
         "tslib"
       ]
     },
-    "@smithy/node-http-handler@4.11.3": {
-      "integrity": "sha512-2jY1tSpERfPfWqyBV2pH+iGFaghVsIJszJNsT7hxtQYhVJpWDyc0LqOWI+nXOxOAHaEfZ4PXXtp1wW1TGpHhkA==",
+    "@smithy/node-http-handler@4.12.0": {
+      "integrity": "sha512-0mq1pHadfyXCYCqm2cNpbjNIT+fbaUpNxewZb/YNr2L0IrEVMOb8gM/Fl4K6XvHCW3uSNDFwPl/+iKm0bx9jYg==",
       "dependencies": [
         "@smithy/core",
         "@smithy/types",
@@ -762,63 +762,63 @@
     "@tabler/icons@3.46.0": {
       "integrity": "sha512-f2RYFl3fzPwj5WO82x6en0dmkjefxEfOm16D1ByM6cj/McNiwOkL4VaPUoP9VVIrXAD9WnTSVFr70px703b//A=="
     },
-    "@tauri-apps/cli-darwin-arm64@2.9.6": {
-      "integrity": "sha512-gf5no6N9FCk1qMrti4lfwP77JHP5haASZgVbBgpZG7BUepB3fhiLCXGUK8LvuOjP36HivXewjg72LTnPDScnQQ==",
+    "@tauri-apps/cli-darwin-arm64@2.11.4": {
+      "integrity": "sha512-1ryOF3ZhpZ/nemHV5zVwBQBz9jDGKmKPvWPADOhc83ig0P4bMc2iER4NbC6r9sjeIZ6RVQ4g3RZIYvezhcl4TQ==",
       "os": ["darwin"],
       "cpu": ["arm64"]
     },
-    "@tauri-apps/cli-darwin-x64@2.9.6": {
-      "integrity": "sha512-oWh74WmqbERwwrwcueJyY6HYhgCksUc6NT7WKeXyrlY/FPmNgdyQAgcLuTSkhRFuQ6zh4Np1HZpOqCTpeZBDcw==",
+    "@tauri-apps/cli-darwin-x64@2.11.4": {
+      "integrity": "sha512-uFsGQAAfuyz1k/yGLmkWfkBlgKAqZfxqlHmLWx81QU27RJWfmbNHCIq8T8w1e+VClleIuZUjpHWfoE4E3DLo3A==",
       "os": ["darwin"],
       "cpu": ["x64"]
     },
-    "@tauri-apps/cli-linux-arm-gnueabihf@2.9.6": {
-      "integrity": "sha512-/zde3bFroFsNXOHN204DC2qUxAcAanUjVXXSdEGmhwMUZeAQalNj5cz2Qli2elsRjKN/hVbZOJj0gQ5zaYUjSg==",
+    "@tauri-apps/cli-linux-arm-gnueabihf@2.11.4": {
+      "integrity": "sha512-IaHZn5CdBL21oUmjiVOS1ctw6Ip1O0pjp70FwOWmYz1myWe0SY96ZIj2FYf7pT0m8bI2h/hrs5ZbEXXh44/MkQ==",
       "os": ["linux"],
       "cpu": ["arm"]
     },
-    "@tauri-apps/cli-linux-arm64-gnu@2.9.6": {
-      "integrity": "sha512-pvbljdhp9VOo4RnID5ywSxgBs7qiylTPlK56cTk7InR3kYSTJKYMqv/4Q/4rGo/mG8cVppesKIeBMH42fw6wjg==",
+    "@tauri-apps/cli-linux-arm64-gnu@2.11.4": {
+      "integrity": "sha512-N41/ukTRVe6XSuUTESuFdGeOW2i7k62tK+6gHK5Kd5/q5RPvvi19GaWAVPPb9u95HSGmTChSolBfzynUsssFaA==",
       "os": ["linux"],
       "cpu": ["arm64"]
     },
-    "@tauri-apps/cli-linux-arm64-musl@2.9.6": {
-      "integrity": "sha512-02TKUndpodXBCR0oP//6dZWGYcc22Upf2eP27NvC6z0DIqvkBBFziQUcvi2n6SrwTRL0yGgQjkm9K5NIn8s6jw==",
+    "@tauri-apps/cli-linux-arm64-musl@2.11.4": {
+      "integrity": "sha512-v277UnT/fB64xAfSroL5N3Km3tLmvATWqJJw/wRI+g6o+HkeD0slyE7gOhNs1MbjE41R7bQOTxMVoL3aomUJmw==",
       "os": ["linux"],
       "cpu": ["arm64"]
     },
-    "@tauri-apps/cli-linux-riscv64-gnu@2.9.6": {
-      "integrity": "sha512-fmp1hnulbqzl1GkXl4aTX9fV+ubHw2LqlLH1PE3BxZ11EQk+l/TmiEongjnxF0ie4kV8DQfDNJ1KGiIdWe1GvQ==",
+    "@tauri-apps/cli-linux-riscv64-gnu@2.11.4": {
+      "integrity": "sha512-qqgNkQ2u1yZHxjhxsZaxUtRDW8dIqIYm33rx/mzwQv0SfY9x1B+iraj8vWeFiXjjSVVhEMepXSOts1TqPzvXNQ==",
       "os": ["linux"],
       "cpu": ["riscv64"]
     },
-    "@tauri-apps/cli-linux-x64-gnu@2.9.6": {
-      "integrity": "sha512-vY0le8ad2KaV1PJr+jCd8fUF9VOjwwQP/uBuTJvhvKTloEwxYA/kAjKK9OpIslGA9m/zcnSo74czI6bBrm2sYA==",
+    "@tauri-apps/cli-linux-x64-gnu@2.11.4": {
+      "integrity": "sha512-2VRNWl84FOH0m2giiDkO2h0QXlcMJeX+zJDpI5kDIQAx6s+geF3v48F4DXfJez4GS/FdoDGnPnw1C2iYGbQ7bQ==",
       "os": ["linux"],
       "cpu": ["x64"]
     },
-    "@tauri-apps/cli-linux-x64-musl@2.9.6": {
-      "integrity": "sha512-TOEuB8YCFZTWVDzsO2yW0+zGcoMiPPwcUgdnW1ODnmgfwccpnihDRoks+ABT1e3fHb1ol8QQWsHSCovb3o2ENQ==",
+    "@tauri-apps/cli-linux-x64-musl@2.11.4": {
+      "integrity": "sha512-o9GyhYor/nc7xarmwDE3ka2szuW3uuZzXjHWh64Q8YX5AtSgxdQkFWzrY4O8KiGtVNvFBI14H3Q49Qj5TOIP/A==",
       "os": ["linux"],
       "cpu": ["x64"]
     },
-    "@tauri-apps/cli-win32-arm64-msvc@2.9.6": {
-      "integrity": "sha512-ujmDGMRc4qRLAnj8nNG26Rlz9klJ0I0jmZs2BPpmNNf0gM/rcVHhqbEkAaHPTBVIrtUdf7bGvQAD2pyIiUrBHQ==",
+    "@tauri-apps/cli-win32-arm64-msvc@2.11.4": {
+      "integrity": "sha512-ld5Ehb598m0VkYyylRPNeCFsBe/km0jxis6KgMpl3IGY6I/i1RwQXO05I1AsXUXO2WC6AvB/Lw4qTf/asiuEiQ==",
       "os": ["win32"],
       "cpu": ["arm64"]
     },
-    "@tauri-apps/cli-win32-ia32-msvc@2.9.6": {
-      "integrity": "sha512-S4pT0yAJgFX8QRCyKA1iKjZ9Q/oPjCZf66A/VlG5Yw54Nnr88J1uBpmenINbXxzyhduWrIXBaUbEY1K80ZbpMg==",
+    "@tauri-apps/cli-win32-ia32-msvc@2.11.4": {
+      "integrity": "sha512-12Hxi0XX/H5VFxO/bGgHkFWhml9VMgEOu9CidjeCeTNQ1l6fpUlbiGgSP7CLI3PFtW9/FfbeHieZ+kyWK5H7CA==",
       "os": ["win32"],
       "cpu": ["ia32"]
     },
-    "@tauri-apps/cli-win32-x64-msvc@2.9.6": {
-      "integrity": "sha512-ldWuWSSkWbKOPjQMJoYVj9wLHcOniv7diyI5UAJ4XsBdtaFB0pKHQsqw/ItUma0VXGC7vB4E9fZjivmxur60aw==",
+    "@tauri-apps/cli-win32-x64-msvc@2.11.4": {
+      "integrity": "sha512-+vDiqBIU5dMISg/wNvX3sF+ZHfgJGJ5T0AcO+EHNXV9GGAG+P5fzodlDXD3QdKCRgZxMoCm5PPvj3BqLNjBthw==",
       "os": ["win32"],
       "cpu": ["x64"]
     },
-    "@tauri-apps/cli@2.9.6": {
-      "integrity": "sha512-3xDdXL5omQ3sPfBfdC8fCtDKcnyV7OqyzQgfyT5P3+zY6lcPqIYKQBvUasNvppi21RSdfhy44ttvJmftb0PCDw==",
+    "@tauri-apps/cli@2.11.4": {
+      "integrity": "sha512-R8xGtMpwyetawSqm9kYOuMmEqkhUbvcUy8n0aNXIxollKBLESUu5f4Fx+64hgASYm1H+jSWq6jCW6zqTnH6hqQ==",
       "optionalDependencies": [
         "@tauri-apps/cli-darwin-arm64",
         "@tauri-apps/cli-darwin-x64",
@@ -949,8 +949,8 @@
       "os": ["win32"],
       "cpu": ["x64"]
     },
-    "@vitejs/plugin-react@6.1.0_vite@8.2.2__@types+node@26.1.2__esbuild@0.28.2_@types+node@26.1.2_esbuild@0.28.2": {
-      "integrity": "sha512-qd2BzUBehkov86WFhg0JkEFEYyCLG9uPCe6qWTY/kRlss9OvJrOF2UbIWT7p+8IzZHkEu0DNGHc4HSv+JdDLsw==",
+    "@vitejs/plugin-react@6.1.1_vite@8.2.2__@types+node@26.1.2__esbuild@0.28.2": {
+      "integrity": "sha512-yxLaQV9gkhS8ezJqCM6+ndU7mDY6gqAg75NQ+0IjwEI8IYOmQCgkRwHKVSfWXW076DsqMo0Dk+0FK1U+M5RgFw==",
       "dependencies": [
         "@rolldown/pluginutils",
         "vite"
@@ -1383,8 +1383,8 @@
         "function-bind"
       ]
     },
-    "hono@4.13.4": {
-      "integrity": "sha512-AGEwKIyRMHRv1t8Wjwa3LHxQ61X5CqrdFT+4BRNTpqS5aJNnpl5WLjADb7vFlJzI/8uK7T5QLVApCMQKNa3LgQ=="
+    "hono@4.13.5": {
+      "integrity": "sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw=="
     },
     "http-errors@2.0.1": {
       "integrity": "sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==",
@@ -1566,8 +1566,8 @@
     "lru-cache@10.4.3": {
       "integrity": "sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ=="
     },
-    "marked@18.0.9": {
-      "integrity": "sha512-/Sa4qiiHZxf0/FQdBBowr9q4r10krCwMvpK48FUBdXdUXScDxiQGR9zCPrFgRVR5LU3iySOiIjy09ZQvADir1w==",
+    "marked@18.0.11": {
+      "integrity": "sha512-HnslJfsZkRPBDJRHvVtAaWlZHEpSu7u8LgQuJCELjRKuWR+hpq4A7sLq3p8HaI9ypVoXDXxV34CsQJEe1+J5Aw==",
       "bin": true
     },
     "math-intrinsics@1.1.0": {
@@ -1703,8 +1703,8 @@
         "source-map-js"
       ]
     },
-    "protobufjs@7.6.5": {
-      "integrity": "sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==",
+    "protobufjs@7.6.6": {
+      "integrity": "sha512-dYDWdjSl5RNb7SgPxGQcRU+GtvP7s2fpkrY0r432PcOIaZ0/rBcxEZnQN67iJhFuQiVw754JDoPruPCNdGsbjg==",
       "dependencies": [
         "@protobufjs/aspromise",
         "@protobufjs/base64",
@@ -2103,15 +2103,15 @@
       "jsr:@std/assert@^1.0.19",
       "jsr:@std/jsonc@^1.0.2",
       "jsr:@std/yaml@^1.2.0",
-      "npm:@earendil-works/pi-agent-core@0.84.3",
-      "npm:@earendil-works/pi-ai@0.84.3",
+      "npm:@earendil-works/pi-agent-core@0.84.4",
+      "npm:@earendil-works/pi-ai@0.84.4",
       "npm:@modelcontextprotocol/sdk@1.30.0",
       "npm:@tabler/icons-react@^3.46.0",
       "npm:@types/react@19",
       "npm:@types/react@^19.2.18",
       "npm:esbuild@0.28.2",
-      "npm:hono@^4.13.4",
-      "npm:marked@18",
+      "npm:hono@^4.13.5",
+      "npm:marked@^18.0.11",
       "npm:react-dom@19.2.8",
       "npm:react@19.2.8",
       "npm:sucrase@3.35.1"
@@ -2126,7 +2126,7 @@
       },
       "packages/web": {
         "dependencies": [
-          "npm:@vitejs/plugin-react@6.1.0",
+          "npm:@vitejs/plugin-react@6.1.1",
           "npm:vite@8.2.2"
         ]
       }

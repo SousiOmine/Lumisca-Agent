@@ -876,7 +876,9 @@ export class LumiscaCore {
   /** Create a user-defined OpenAI-compatible provider. Validates, persists,
    * and registers it; an `apiKey` in the input is stored in the credential
    * store. Returns the summary. */
-  async addUserProvider(input: UserProviderInput): Promise<UserProviderSummary> {
+  async addUserProvider(
+    input: UserProviderInput,
+  ): Promise<UserProviderSummary> {
     return await this.models.addUserProvider(input);
   }
 

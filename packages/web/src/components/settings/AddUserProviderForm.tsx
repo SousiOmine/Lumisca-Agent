@@ -209,7 +209,10 @@ export function AddUserProviderForm({
       setProviderApi(initial.api ?? ALLOWED_OPENAI_APIS[0]!);
       setHeaders(
         initial.headers
-          ? Object.entries(initial.headers).map(([k, v]) => ({ key: k, value: v }))
+          ? Object.entries(initial.headers).map(([k, v]) => ({
+            key: k,
+            value: v,
+          }))
           : [],
       );
       setModels(
@@ -250,7 +253,9 @@ export function AddUserProviderForm({
       ...(m.name.trim() ? { name: m.name.trim() } : {}),
       ...(m.reasoning ? { reasoning: true } : {}),
       ...(m.image ? { input: ["text", "image"] as ("text" | "image")[] } : {}),
-      ...(m.contextWindow.trim() ? { contextWindow: Number(m.contextWindow) } : {}),
+      ...(m.contextWindow.trim()
+        ? { contextWindow: Number(m.contextWindow) }
+        : {}),
       ...(m.maxTokens.trim() ? { maxTokens: Number(m.maxTokens) } : {}),
     }));
 
@@ -359,7 +364,10 @@ export function AddUserProviderForm({
 
         <label className="field">
           <span>API</span>
-          <select value={providerApi} onChange={(e) => setProviderApi(e.target.value)}>
+          <select
+            value={providerApi}
+            onChange={(e) => setProviderApi(e.target.value)}
+          >
             {ALLOWED_OPENAI_APIS.map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
@@ -390,7 +398,8 @@ export function AddUserProviderForm({
           <button
             type="button"
             className="btn small"
-            onClick={() => setHeaders((cur) => [...cur, { key: "", value: "" }])}
+            onClick={() =>
+              setHeaders((cur) => [...cur, { key: "", value: "" }])}
           >
             <IconPlus size={14} /> ヘッダーを追加
           </button>

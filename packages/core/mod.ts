@@ -152,10 +152,10 @@ export { THINKING_LEVEL_LABELS } from "./shared.ts";
 export type { ModelInfo, ProviderInfo } from "./shared.ts";
 export {
   ALLOWED_OPENAI_APIS,
-  UserProviderStore,
   type UserProviderConfig,
   type UserProviderInput,
   type UserProviderModel,
+  UserProviderStore,
   type UserProviderSummary,
 } from "./models/user-providers.ts";
 export type {

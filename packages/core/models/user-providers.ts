@@ -189,13 +189,19 @@ export function parseUserProviderInput(
       );
     }
     if (typeof m.contextWindow === "number" && m.contextWindow <= 0) {
-      throw new CoreError(`models[${i}].contextWindow must be positive`, "invalid");
+      throw new CoreError(
+        `models[${i}].contextWindow must be positive`,
+        "invalid",
+      );
     }
     if (typeof m.maxTokens === "number" && m.maxTokens <= 0) {
       throw new CoreError(`models[${i}].maxTokens must be positive`, "invalid");
     }
     if (m.input !== undefined && !isModelInput(m.input)) {
-      throw new CoreError(`models[${i}].input must be ["text"|"image"]`, "invalid");
+      throw new CoreError(
+        `models[${i}].input must be ["text"|"image"]`,
+        "invalid",
+      );
     }
     if (!isCost(m.cost)) {
       throw new CoreError(`models[${i}].cost is malformed`, "invalid");
@@ -206,7 +212,9 @@ export function parseUserProviderInput(
       api: typeof m.api === "string" ? m.api : undefined,
       baseUrl: typeof m.baseUrl === "string" ? m.baseUrl : undefined,
       reasoning: typeof m.reasoning === "boolean" ? m.reasoning : undefined,
-      input: Array.isArray(m.input) ? m.input as ("text" | "image")[] : undefined,
+      input: Array.isArray(m.input)
+        ? m.input as ("text" | "image")[]
+        : undefined,
       contextWindow: typeof m.contextWindow === "number"
         ? m.contextWindow
         : undefined,
