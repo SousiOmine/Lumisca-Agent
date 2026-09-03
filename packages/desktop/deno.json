@@ -1,6 +1,6 @@
 {
   "name": "@lumisca/desktop",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "exports": {},
   "tasks": {
     "dev": "deno run --allow-env --allow-run scripts/dev.ts",
