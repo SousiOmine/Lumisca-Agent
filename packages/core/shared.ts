@@ -34,6 +34,19 @@ export const COMMAND_SAFETY_ENABLED_KEY = "command_safety_enabled";
  * approval entries that were judged safe once and now skip the check. */
 export const COMMAND_SAFETY_APPROVALS_KEY = "command_safety_approvals";
 
+/** Settings-table key for saved prompts: a JSON array of SavedPrompt
+ * entries that can be inserted via the `/prompt` slash menu. */
+export const SAVED_PROMPTS_KEY = "saved_prompts";
+
+/** A saved prompt registered by the user: `id` is the short identifier for
+ * the slash command lookup (e.g. "translate"), `label` is the display name
+ * shown in the menu, and `prompt` is the text inserted into the composer. */
+export interface SavedPrompt {
+  id: string;
+  label: string;
+  prompt: string;
+}
+
 /** What kind of payload the safety check judges; the record is keyed by
  * this plus the resolved cwd, so approvals never cross kinds or
  * directories. */
@@ -84,6 +97,34 @@ export function parseModelPreference(
     // fall through
   }
   return undefined;
+}
+
+/** Parse saved prompts from the settings store; an empty/missing/malformed
+ * value returns an empty array. */
+export function parseSavedPrompts(
+  raw: string | undefined | null,
+): SavedPrompt[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter(
+        (e): e is SavedPrompt =>
+          typeof e === "object" && e !== null &&
+          typeof e.id === "string" && e.id.length > 0 &&
+          typeof e.label === "string" &&
+          typeof e.prompt === "string",
+      );
+    }
+  } catch {
+    // fall through
+  }
+  return [];
+}
+
+/** Serialize saved prompts for the settings store. */
+export function serializeSavedPrompts(prompts: SavedPrompt[]): string {
+  return JSON.stringify(prompts);
 }
 
 /** Theme preference stored in settings; "system" follows the OS color

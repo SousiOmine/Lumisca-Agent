@@ -22,7 +22,7 @@ import type {
   WorkspaceFileEntry,
 } from "./types.ts";
 import { stripDataUrlHeader } from "@lumisca/core/shared";
-import type { CommandApproval } from "@lumisca/core/shared";
+import type { CommandApproval, SavedPrompt } from "@lumisca/core/shared";
 import { splitTabKey } from "./tabs.ts";
 
 /** The server serves both the UI and the API on the same origin. */
@@ -328,6 +328,28 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ content }),
     }),
+
+  /** Saved prompts (user-defined prompt snippets). */
+  getSavedPrompts: () =>
+    request<{ prompts: SavedPrompt[] }>("/api/settings/saved-prompts"),
+  createSavedPrompt: (input: { id: string; label: string; prompt: string }) =>
+    request<SavedPrompt>("/api/settings/saved-prompts", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateSavedPrompt: (
+    id: string,
+    input: { label?: string; prompt?: string },
+  ) =>
+    request<SavedPrompt>(`/api/settings/saved-prompts/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  deleteSavedPrompt: (id: string) =>
+    request<{ ok: boolean }>(
+      `/api/settings/saved-prompts/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
 
   /** Server-side connection registry (the federated peer list). */
   getConnections: () =>

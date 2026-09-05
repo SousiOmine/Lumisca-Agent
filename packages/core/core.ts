@@ -48,6 +48,10 @@ import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   parseModelPreference,
+  parseSavedPrompts,
+  SAVED_PROMPTS_KEY,
+  type SavedPrompt,
+  serializeSavedPrompts,
 } from "./shared.ts";
 import { createWorkspaceRepo, type WorkspaceRepo } from "./workspace/repo.ts";
 import { Sandbox } from "./workspace/sandbox.ts";
@@ -385,6 +389,73 @@ export class LumiscaCore {
     } catch {
       return undefined;
     }
+  }
+
+  // --- saved prompts (user-defined prompt snippets) -----------------------
+
+  /** All saved prompts, in insertion order. */
+  getSavedPrompts(): SavedPrompt[] {
+    return parseSavedPrompts(this.settings.get(SAVED_PROMPTS_KEY));
+  }
+
+  /** Add a saved prompt. Throws when the id already exists. */
+  addSavedPrompt(input: { id: string; label: string; prompt: string }): SavedPrompt {
+    const prompts = this.getSavedPrompts();
+    if (prompts.some((p) => p.id === input.id)) {
+      throw new CoreError(
+        `A saved prompt with id "${input.id}" already exists`,
+        "conflict",
+      );
+    }
+    const entry: SavedPrompt = {
+      id: input.id,
+      label: input.label,
+      prompt: input.prompt,
+    };
+    this.settings.set(
+      SAVED_PROMPTS_KEY,
+      serializeSavedPrompts([...prompts, entry]),
+    );
+    return entry;
+  }
+
+  /** Update a saved prompt's label and/or prompt by id. Throws when the
+   * id does not exist. */
+  updateSavedPrompt(
+    id: string,
+    input: { label?: string; prompt?: string },
+  ): SavedPrompt {
+    const prompts = this.getSavedPrompts();
+    const existing = prompts.find((p) => p.id === id);
+    if (existing === undefined) {
+      throw new CoreError(
+        `Saved prompt not found: ${id}`,
+        "not_found",
+      );
+    }
+    const updated: SavedPrompt = {
+      id,
+      label: input.label ?? existing.label,
+      prompt: input.prompt ?? existing.prompt,
+    };
+    this.settings.set(
+      SAVED_PROMPTS_KEY,
+      serializeSavedPrompts(prompts.map((p) => p.id === id ? updated : p)),
+    );
+    return updated;
+  }
+
+  /** Delete a saved prompt by id. Throws when the id does not exist. */
+  deleteSavedPrompt(id: string): void {
+    const prompts = this.getSavedPrompts();
+    const next = prompts.filter((p) => p.id !== id);
+    if (next.length === prompts.length) {
+      throw new CoreError(
+        `Saved prompt not found: ${id}`,
+        "not_found",
+      );
+    }
+    this.settings.set(SAVED_PROMPTS_KEY, serializeSavedPrompts(next));
   }
 
   // --- workspaces ---------------------------------------------------------

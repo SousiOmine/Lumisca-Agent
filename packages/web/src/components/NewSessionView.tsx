@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { IconArrowUp } from "@tabler/icons-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { IconArrowUp, IconMessage } from "@tabler/icons-react";
 import { api } from "../api.ts";
 import type {
   FederatedWorkspace,
   ModelInfo,
   PeerStatus,
   PendingImage,
+  SavedPrompt,
   ThinkingLevel,
 } from "../types.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
@@ -131,6 +132,23 @@ export function NewSessionView(
   const [error, setError] = useState<string | undefined>();
   const modelTouched = useRef(false);
   const recent = useRecentSessions();
+
+  // --- saved prompts ------------------------------------------------------
+
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
+
+  useEffect(() => {
+    let stale = false;
+    api.getSavedPrompts()
+      .then((result) => {
+        if (stale) return;
+        setSavedPrompts(result.prompts);
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, []);
 
   // Show the last used model (the one a session without an explicit model
   // would get) right away instead of leaving the picker to choose on click.
@@ -271,6 +289,40 @@ export function NewSessionView(
   // model, so the model picker is hidden for them.
   const remoteWorkspace = (selectedWorkspace?.peerId ?? "") !== "";
 
+  // Build the slash commands list including the /prompt submenu.
+  // In chat mode only saved prompts are shown (agent modes need a workspace).
+  const isChat = selectedWorkspace?.workspace.chat ?? false;
+  const allSlashCommands = useMemo<SlashCommand[]>(() => {
+    const promptItems: SlashCommandItem[] = savedPrompts.map((p) => ({
+      id: p.id,
+      label: p.label,
+      description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "..." : ""),
+    }));
+    if (isChat) {
+      // Chat mode: only saved prompts, no agent modes.
+      if (promptItems.length === 0) return [];
+      return [{
+        id: "prompt",
+        label: "保存済みプロンプト",
+        description: "登録済みのプロンプトを挿入",
+        icon: IconMessage,
+        items: promptItems,
+      }];
+    }
+    // Workspace mode: agent modes + saved prompts.
+    const commands = [...slashCommands];
+    if (promptItems.length > 0) {
+      commands.push({
+        id: "prompt",
+        label: "保存済みプロンプト",
+        description: "登録済みのプロンプトを挿入",
+        icon: IconMessage,
+        items: promptItems,
+      });
+    }
+    return commands;
+  }, [isChat, savedPrompts]);
+
   /** Start the session with the composer text, or an explicit message (slash
    * commands build their own prompt). The draft is cleared by the App once
    * the session started; on failure it stays so the user can retry. */
@@ -292,12 +344,20 @@ export function NewSessionView(
     }
   };
 
-  /** A slash command (agent mode) was chosen: build its prompt and start
-   * the session with it like a regular submit. */
+  /** A slash command was chosen. Agent modes (existing commands) build
+   * their prompt and start the session; the /prompt submenu inserts the
+   * saved prompt text into the composer so the user can edit and send it. */
   const handleSlashCommand = (
     command: SlashCommand,
     item?: SlashCommandItem,
   ) => {
+    if (command.id === "prompt" && item) {
+      const saved = savedPrompts.find((p) => p.id === item.id);
+      if (saved) {
+        onInputChange(saved.prompt);
+      }
+      return;
+    }
     const promptText = slashPrompt(command, item);
     if (promptText !== null) void submit(promptText);
   };
@@ -401,10 +461,7 @@ export function NewSessionView(
                 ? selectedWorkspace?.workspace.id
                 : undefined}
               mentionPeerId={selectedWorkspace?.peerId}
-              slashCommands={selectedWorkspace &&
-                  !selectedWorkspace.workspace.chat
-                ? slashCommands
-                : undefined}
+              slashCommands={allSlashCommands.length > 0 ? allSlashCommands : undefined}
               onSlashCommand={handleSlashCommand}
               images={images}
               onImagesChange={onImagesChange}

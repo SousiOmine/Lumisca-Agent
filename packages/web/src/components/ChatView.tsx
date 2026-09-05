@@ -4,8 +4,9 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
-import { IconSend } from "@tabler/icons-react";
+import { IconSend, IconMessage } from "@tabler/icons-react";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
   AskAnswer,
@@ -13,6 +14,7 @@ import type {
   ThinkingLevel,
   ToolResultMessage,
 } from "../types.ts";
+import type { SavedPrompt } from "../types.ts";
 import {
   Composer,
   type SlashCommand,
@@ -27,6 +29,7 @@ import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
+import { api } from "../api.ts";
 
 export { buildTurns } from "./chat/ConversationTurn.tsx";
 
@@ -85,6 +88,58 @@ export function ChatView(
   const userScrolledUp = useRef(false);
   const isRunning = isViewRunning(view);
 
+  // --- saved prompts ------------------------------------------------------
+
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
+
+  useEffect(() => {
+    let stale = false;
+    api.getSavedPrompts()
+      .then((result) => {
+        if (stale) return;
+        setSavedPrompts(result.prompts);
+      })
+      .catch(() => {
+        // Non-critical: saved prompts just won't appear in the menu.
+      });
+    return () => {
+      stale = true;
+    };
+  }, []);
+
+  // Build the slash commands list including the /prompt submenu.
+  // In chat mode only saved prompts are shown (agent modes need a workspace).
+  const allSlashCommands = useMemo<SlashCommand[]>(() => {
+    const promptItems: SlashCommandItem[] = savedPrompts.map((p) => ({
+      id: p.id,
+      label: p.label,
+      description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "..." : ""),
+    }));
+    if (view.info.chat) {
+      // Chat mode: only saved prompts, no agent modes.
+      if (promptItems.length === 0) return [];
+      return [{
+        id: "prompt",
+        label: "保存済みプロンプト",
+        description: "登録済みのプロンプトを挿入",
+        icon: IconMessage,
+        items: promptItems,
+      }];
+    }
+    // Workspace mode: agent modes + saved prompts.
+    const commands = [...slashCommands];
+    if (promptItems.length > 0) {
+      commands.push({
+        id: "prompt",
+        label: "保存済みプロンプト",
+        description: "登録済みのプロンプトを挿入",
+        icon: IconMessage,
+        items: promptItems,
+      });
+    }
+    return commands;
+  }, [view.info.chat, savedPrompts]);
+
   // Pin the scroll to the newest content while the user is at the bottom.
   // A ResizeObserver fires on every content layout change (streaming
   // deltas, tool state changes, images, error rows), so the follow does not
@@ -139,12 +194,21 @@ export function ChatView(
     if (el) el.scrollTop = el.scrollHeight;
   };
 
-  /** A slash command (agent mode) was chosen: build its prompt and send it
-   * like a regular submit. */
+  /** A slash command was chosen. Agent modes (existing commands) build
+   * their prompt and send it like a regular submit; the /prompt submenu
+   * inserts the saved prompt text into the composer so the user can edit
+   * and send it. */
   const handleSlashCommand = (
     command: SlashCommand,
     item?: SlashCommandItem,
   ) => {
+    if (command.id === "prompt" && item) {
+      const saved = savedPrompts.find((p) => p.id === item.id);
+      if (saved) {
+        onInputChange(saved.prompt);
+      }
+      return;
+    }
     const text = slashPrompt(command, item);
     if (text !== null) submit(text);
   };
@@ -284,7 +348,7 @@ export function ChatView(
             ? undefined
             : view.info.workspaceId}
           mentionPeerId={peerId}
-          slashCommands={view.info.chat ? undefined : slashCommands}
+          slashCommands={allSlashCommands}
           onSlashCommand={handleSlashCommand}
           images={images}
           onImagesChange={onImagesChange}
