@@ -16,8 +16,13 @@ export interface SettingsApi {
   clearCommandApprovals(): void;
   /** Saved prompts (user-defined prompt snippets). */
   getSavedPrompts(): SavedPrompt[];
-  addSavedPrompt(input: { id: string; label: string; prompt: string }): SavedPrompt;
-  updateSavedPrompt(id: string, input: { label?: string; prompt?: string }): SavedPrompt;
+  addSavedPrompt(
+    input: { id: string; label: string; prompt: string },
+  ): SavedPrompt;
+  updateSavedPrompt(
+    id: string,
+    input: { label?: string; prompt?: string },
+  ): SavedPrompt;
   deleteSavedPrompt(id: string): void;
 }
 
@@ -59,7 +64,9 @@ export function settingRoutes(core: SettingsApi): Hono {
   });
 
   app.post("/settings/saved-prompts", async (c) => {
-    const body = await parseBody<{ id?: unknown; label?: unknown; prompt?: unknown }>(c);
+    const body = await parseBody<
+      { id?: unknown; label?: unknown; prompt?: unknown }
+    >(c);
     if (!body || typeof body.id !== "string" || body.id.length === 0) {
       throw new AppError("id (string) is required", 400);
     }

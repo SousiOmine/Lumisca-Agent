@@ -41,13 +41,16 @@ export function useSessionActions(
    * session runs on the peer that owns the workspace (remote workspaces
    * use the peer's default model). A chat entry (workspace.chat) starts a
    * "simple chat" session: no workspaceId is sent, so the server creates
-   * it in its folder-less chat workspace. */
+   * it in its folder-less chat workspace. `mode` marks the first prompt
+   * as a mode prompt (e.g. plan mode): the server stores a ModeMessage
+   * (short text + badge) instead of a plain user message. */
   const startSession = useCallback(
     async (
       fws: FederatedWorkspace,
       model: ComposerModel | null,
       text: string,
       images: PendingImage[],
+      mode?: ModePrompt,
     ) => {
       const { peerId, workspace } = fws;
       const session = peerId === ""
@@ -75,7 +78,7 @@ export function useSessionActions(
         return next;
       });
       try {
-        await sessionApi(key).prompt(text.trim(), images);
+        await sessionApi(key).prompt(text.trim(), images, mode);
       } catch (error) {
         setViewError(key, error);
       }
@@ -84,7 +87,12 @@ export function useSessionActions(
   );
 
   const prompt = useCallback(
-    async (key: string, text: string, images: PendingImage[], mode?: ModePrompt) => {
+    async (
+      key: string,
+      text: string,
+      images: PendingImage[],
+      mode?: ModePrompt,
+    ) => {
       const textTrimmed = text.trim();
       if (!textTrimmed && images.length === 0) return;
       // The user message appears via the WebSocket event stream

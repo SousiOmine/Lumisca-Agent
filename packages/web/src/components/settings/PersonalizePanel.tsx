@@ -122,7 +122,9 @@ export function PersonalizePanel() {
     prompt: string;
   }) => {
     try {
-      await api.createSavedPrompt(input as { id: string; label: string; prompt: string });
+      await api.createSavedPrompt(
+        input as { id: string; label: string; prompt: string },
+      );
       setShowAddForm(false);
       await loadPrompts();
     } catch (e) {
@@ -193,7 +195,8 @@ export function PersonalizePanel() {
           </button>
         </div>
         <p className="settings-note">
-          スラッシュコマンド <code>/prompt</code> から呼び出せるプロンプト
+          スラッシュコマンド <code>/prompt</code>{" "}
+          から呼び出せるプロンプト
           スニペットを登録します。識別子は英数字で入力してください。
         </p>
 
@@ -271,7 +274,10 @@ function PromptEditForm({
 }: {
   initial?: SavedPrompt;
   onSave: (
-    input: { id: string; label: string; prompt: string } | { label: string; prompt: string },
+    input: { id: string; label: string; prompt: string } | {
+      label: string;
+      prompt: string;
+    },
   ) => Promise<void>;
   onCancel: () => void;
 }) {

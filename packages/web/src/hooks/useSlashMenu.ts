@@ -23,6 +23,11 @@ export interface SlashCommand extends SlashCommandItem {
   /** Subcommands shown after selecting this command (e.g. the review
    * target). Omitted → the command executes right away. */
   items?: SlashCommandItem[];
+  /** The command takes the user's own text as its subject: the text typed
+   * after the command token (`/plan <依頼文>`) is handed to onSelect so the
+   * parent can wrap it into the mode prompt. When set, the menu hints to
+   * type the request while it is still missing. */
+  requiresText?: boolean;
 }
 
 /** An active `/` command: the caret is inside a query started by `/`. */
@@ -30,6 +35,9 @@ export interface SlashState {
   /** Index of the `/` character in the input. */
   start: number;
   query: string;
+  /** Text typed after the command token (`/plan 履歴機能を追加して` →
+   * "履歴機能を追加して"). Empty for a bare `/command`. */
+  rest: string;
   /** Active index in the currently shown list. */
   active: number;
   /** Command whose subcommands are shown (null = first level). */
@@ -38,15 +46,21 @@ export interface SlashState {
 
 /** Find a `/command` under the caret. The `/` must start the input (only
  * whitespace before it): a slash command replaces the whole message, so it
- * never triggers mid-text (typing `/` in prose stays literal). */
+ * never triggers mid-text (typing `/` in prose stays literal). The text
+ * after the command token (`/plan 依頼文`) is captured as `rest` — text-
+ * taking commands (e.g. plan mode) use it as their subject. */
 function detectSlash(
   value: string,
   caret: number,
-): { start: number; query: string } | null {
+): { start: number; query: string; rest: string } | null {
   const before = value.slice(0, caret);
-  const match = /^(\s*)\/([^\s]*)$/.exec(before);
+  const match = /^(\s*)\/([^\s]*)(?:\s+([\s\S]*))?$/.exec(before);
   if (!match || match[1] === undefined) return null;
-  return { start: match[1].length, query: match[2] ?? "" };
+  return {
+    start: match[1].length,
+    query: match[2] ?? "",
+    rest: match[3] ?? "",
+  };
 }
 
 /** Commands matching the typed query (empty query → all). Matches the id or
@@ -78,7 +92,15 @@ export function isSlashCommand(
 export function useSlashMenu(options: {
   enabled: boolean;
   commands: SlashCommand[];
-  onSelect?: (command: SlashCommand, item?: SlashCommandItem) => void;
+  /** Handed the selection plus the text typed after the command token
+   * (`/plan 依頼文` → "依頼文"; empty for a bare `/command`). Text-taking
+   * commands (requiresText) use it as their subject; the others ignore
+   * it. */
+  onSelect?: (
+    command: SlashCommand,
+    item?: SlashCommandItem,
+    text?: string,
+  ) => void;
 }): {
   slash: SlashState | null;
   setSlash: Dispatch<SetStateAction<SlashState | null>>;
@@ -113,12 +135,16 @@ export function useSlashMenu(options: {
       const det = enabled ? detectSlash(nextValue, caret) : null;
       if (!det) return false;
       setSlash((prev) =>
-        prev && prev.start === det.start && prev.query === det.query ? prev : {
-          start: det.start,
-          query: det.query,
-          active: 0,
-          submenu: null,
-        }
+        prev && prev.start === det.start && prev.query === det.query &&
+          prev.rest === det.rest
+          ? prev
+          : {
+            start: det.start,
+            query: det.query,
+            rest: det.rest,
+            active: 0,
+            submenu: null,
+          }
       );
       return true;
     },
@@ -147,9 +173,9 @@ export function useSlashMenu(options: {
       }
       setSlash(null);
       if (current.submenu === null) {
-        onSelect?.(entry as SlashCommand);
+        onSelect?.(entry as SlashCommand, undefined, current.rest);
       } else {
-        onSelect?.(current.submenu, entry);
+        onSelect?.(current.submenu, entry, current.rest);
       }
     },
     [slash, slashEntries, onSelect],

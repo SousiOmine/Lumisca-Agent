@@ -4,6 +4,7 @@ import { api } from "../api.ts";
 import type {
   FederatedWorkspace,
   ModelInfo,
+  ModePrompt,
   PeerStatus,
   PendingImage,
   SavedPrompt,
@@ -11,7 +12,11 @@ import type {
 } from "../types.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
-import { slashCommands, slashPrompt } from "../slashCommands.ts";
+import {
+  slashCommands,
+  slashPrompt,
+  slashPromptFromText,
+} from "../slashCommands.ts";
 import {
   Composer,
   type ComposerModel,
@@ -54,6 +59,10 @@ interface NewSessionViewProps {
     model: ComposerModel | null,
     text: string,
     images: PendingImage[],
+    /** Set when the first prompt is a mode prompt (e.g. plan mode): the
+     * session starts with a ModeMessage (short text + badge) instead of
+     * a plain user message. */
+    mode?: ModePrompt,
   ) => Promise<void>;
   onWorkspaceChanged: (fws: FederatedWorkspace) => void;
   /** The single delete flow owned by the App (confirm + API + state). */
@@ -325,19 +334,32 @@ export function NewSessionView(
 
   /** Start the session with the composer text, or an explicit message (slash
    * commands build their own prompt). The draft is cleared by the App once
-   * the session started; on failure it stays so the user can retry. */
-  const submit = async (message?: string) => {
-    const trimmed = (message ?? input).trim();
+   * the session started; on failure it stays so the user can retry.
+   * `mode` marks the message as a mode prompt (ModeMessage in the
+   * transcript). Composer text that starts with a text-taking command line
+   * (`/plan 依頼文`) is wrapped into that mode's prompt even when the
+   * slash menu was bypassed (send button, Ctrl+Enter); without the request
+   * text nothing is sent. */
+  const submit = async (message?: string, mode?: ModePrompt) => {
+    let trimmed = (message ?? input).trim();
     if (
       (!trimmed && images.length === 0) ||
       !workspaceKey || !selectedWorkspace || busy
     ) {
       return;
     }
+    if (message === undefined && !isChat) {
+      const line = slashPromptFromText(trimmed);
+      if (line !== null) {
+        if (line.kind === "needs-text") return;
+        trimmed = line.text;
+        mode = line.mode;
+      }
+    }
     setBusy(true);
     setError(undefined);
     try {
-      await onStart(selectedWorkspace, model, trimmed, images);
+      await onStart(selectedWorkspace, model, trimmed, images, mode);
     } catch (e) {
       setError(errorText(e));
       setBusy(false);
@@ -346,10 +368,14 @@ export function NewSessionView(
 
   /** A slash command was chosen. Agent modes (existing commands) build
    * their prompt and start the session; the /prompt submenu inserts the
-   * saved prompt text into the composer so the user can edit and send it. */
+   * saved prompt text into the composer so the user can edit and send it.
+   * `text` is the composer text after the command token (empty for a bare
+   * `/command`); text-taking modes (e.g. plan) wrap it as their subject
+   * and are not sent while it is missing. */
   const handleSlashCommand = (
     command: SlashCommand,
     item?: SlashCommandItem,
+    text?: string,
   ) => {
     if (command.id === "prompt" && item) {
       const saved = savedPrompts.find((p) => p.id === item.id);
@@ -358,8 +384,8 @@ export function NewSessionView(
       }
       return;
     }
-    const result = slashPrompt(command, item);
-    if (result !== null) void submit(result.text);
+    const result = slashPrompt(command, item, text);
+    if (result !== null) void submit(result.text, result.mode);
   };
 
   const deleteWorkspace = async (fws: FederatedWorkspace) => {
@@ -461,7 +487,9 @@ export function NewSessionView(
                 ? selectedWorkspace?.workspace.id
                 : undefined}
               mentionPeerId={selectedWorkspace?.peerId}
-              slashCommands={allSlashCommands.length > 0 ? allSlashCommands : undefined}
+              slashCommands={allSlashCommands.length > 0
+                ? allSlashCommands
+                : undefined}
               onSlashCommand={handleSlashCommand}
               images={images}
               onImagesChange={onImagesChange}

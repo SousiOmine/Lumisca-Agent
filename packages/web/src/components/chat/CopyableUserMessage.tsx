@@ -5,18 +5,25 @@ import type { UserMessageImage } from "./types.ts";
 
 /** A user message with its action row: rewind (restore to the composer)
  * and copy. When `modeLabel` is set, the message is a mode-generated
- * message (e.g. review) and the badge is shown. */
+ * message (e.g. review) and the badge is shown. `rewindText` overrides
+ * what the rewind action restores to the composer (mode messages keep
+ * their short text in the bubble, but may come back as a command line —
+ * see modeRewindText in slashCommands.ts). */
 export function CopyableUserMessage({
   text,
   images,
   timestamp,
   modeLabel,
+  rewindText,
   onRewind,
 }: {
   text: string;
   images: UserMessageImage[];
   timestamp: number;
   modeLabel?: string;
+  /** Text restored to the composer by the rewind action; defaults to
+   * `text` (the bubble content). */
+  rewindText?: string;
   onRewind: (
     timestamp: number,
     text: string,
@@ -43,15 +50,12 @@ export function CopyableUserMessage({
           {images.length > 0 && <ContentImages images={images} />}
           {text && <p>{text}</p>}
         </div>
-        {modeLabel && (
-          <div className="msg-mode-badge">{modeLabel}</div>
-        )}
       </div>
       <div className="msg-user-actions">
         <button
           type="button"
           className="msg-action-btn"
-          onClick={() => onRewind(timestamp, text, images)}
+          onClick={() => onRewind(timestamp, rewindText ?? text, images)}
         >
           <IconArrowBackUp size={16} stroke={1.5} />
         </button>
@@ -66,6 +70,7 @@ export function CopyableUserMessage({
               : <IconClipboard size={16} stroke={1.5} />}
           </button>
         )}
+        {modeLabel && <div className="msg-mode-badge">{modeLabel}</div>}
       </div>
     </div>
   );

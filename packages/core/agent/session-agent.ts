@@ -507,9 +507,11 @@ export class SessionAgent {
     this.askHub.rejectAll();
   }
 
-  /** Undo the transcript from a user message onward: the message itself
-   * and everything after it are removed from memory and the database, and
-   * clients are told to drop them too. The user can then re-send a
+  /** Undo the transcript from a user message (or a mode message — a
+   * slash-command prompt like plan/review; both are user-prompt-shaped
+   * and carry the rewind action in the UI) onward: the message itself
+   * and everything after it are removed from memory and the database,
+   * and clients are told to drop them too. The user can then re-send a
    * corrected prompt (the rewound text is restored to the composer).
    *
    * While a run is active it is aborted first and the drain is awaited, so
@@ -521,7 +523,7 @@ export class SessionAgent {
    *
    * Truncation is positional (the target's exact index), matching the
    * database row order, so messages sharing a millisecond with the target
-   * are handled exactly. A timestamp newer than every user message is
+   * are handled exactly. A timestamp newer than every user/mode message is
    * treated as a queued steer (it sits at the very end, so only the
    * aborted run's artifacts follow it); any other unknown timestamp
    * throws not_found. */
@@ -535,7 +537,9 @@ export class SessionAgent {
     }
     const messages = this.agent.state.messages;
     const index = messages.findIndex(
-      (m) => m.role === "user" && m.timestamp === timestamp,
+      (m) =>
+        (m.role === "user" || m.role === "mode") &&
+        m.timestamp === timestamp,
     );
     let removed: Array<{ role: string; timestamp: number }> = [];
     /** Drop everything at `cut` onward from memory and the database,
@@ -551,7 +555,11 @@ export class SessionAgent {
     if (index !== -1) {
       truncateFrom(index);
     } else if (
-      messages.every((m) => m.role !== "user" || m.timestamp < timestamp)
+      messages.every(
+        (m) =>
+          (m.role !== "user" && m.role !== "mode") ||
+          m.timestamp < timestamp,
+      )
     ) {
       // A queued steer: announced to clients but not in the transcript
       // yet. It is the newest message, so only messages newer than it

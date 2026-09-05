@@ -400,7 +400,9 @@ export class LumiscaCore {
   }
 
   /** Add a saved prompt. Throws when the id already exists. */
-  addSavedPrompt(input: { id: string; label: string; prompt: string }): SavedPrompt {
+  addSavedPrompt(
+    input: { id: string; label: string; prompt: string },
+  ): SavedPrompt {
     const prompts = this.getSavedPrompts();
     if (prompts.some((p) => p.id === input.id)) {
       throw new CoreError(

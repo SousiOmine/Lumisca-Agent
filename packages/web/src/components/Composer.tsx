@@ -85,8 +85,14 @@ interface ComposerProps {
   slashCommands?: SlashCommand[];
   /** A slash command (or one of its subcommands) was chosen. The parent
    * builds the actual prompt and submits it; the input is cleared by the
-   * parent as with a regular submit. */
-  onSlashCommand?: (command: SlashCommand, item?: SlashCommandItem) => void;
+   * parent as with a regular submit. `text` is the composer text typed
+   * after the command token (empty for a bare `/command`) — text-taking
+   * commands (requiresText) use it as their subject. */
+  onSlashCommand?: (
+    command: SlashCommand,
+    item?: SlashCommandItem,
+    text?: string,
+  ) => void;
   /** Images attached for the next send (data URLs). Dropped/pasted files
    * are appended here; the parent clears them after a successful submit. */
   images?: PendingImage[];
@@ -275,6 +281,17 @@ export function Composer({
   const levels = thinkingLevels ?? [];
   const canThink = levels.length > 1;
 
+  // The active slash entry is a text-taking command (requiresText) whose
+  // request text has not been typed yet: the menu hints to keep typing —
+  // Enter would select the command, but without the request nothing is
+  // sent (the parent drops the selection).
+  const slashActiveEntry = slash !== null
+    ? slashEntries[slash.active]
+    : undefined;
+  const activeNeedsText = slash !== null && slash.submenu === null &&
+    !slash.rest && slashActiveEntry !== undefined &&
+    isSlashCommand(slashActiveEntry) && slashActiveEntry.requiresText === true;
+
   // The popover opens above the caret line. Only in the tall new-session
   // textarea does the caret sit near the top often enough to flip below
   // instead of covering the first lines.
@@ -393,39 +410,46 @@ export function Composer({
             {slashEntries.length === 0
               ? <div className="slash-status">一致するコマンドがありません</div>
               : (
-                slashEntries.map((item, index) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`slash-item${
-                      index === slash.active ? " active" : ""
-                    }`}
-                    onMouseDown={(e) => {
-                      e.preventDefault(); // keep focus in the textarea
-                    }}
-                    onMouseEnter={() =>
-                      setSlash((prev) =>
-                        prev ? { ...prev, active: index } : prev
+                <>
+                  {slashEntries.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`slash-item${
+                        index === slash.active ? " active" : ""
+                      }`}
+                      onMouseDown={(e) => {
+                        e.preventDefault(); // keep focus in the textarea
+                      }}
+                      onMouseEnter={() =>
+                        setSlash((prev) =>
+                          prev ? { ...prev, active: index } : prev
+                        )}
+                      onClick={() => selectSlash(index)}
+                    >
+                      {item.icon && (
+                        <item.icon size={14} className="slash-icon" />
                       )}
-                    onClick={() => selectSlash(index)}
-                  >
-                    {item.icon && (
-                      <item.icon size={14} className="slash-icon" />
-                    )}
-                    <span className="slash-item-text">
-                      <span className="slash-item-label">{item.label}</span>
-                      {item.description && (
-                        <span className="slash-item-desc">
-                          {item.description}
-                        </span>
+                      <span className="slash-item-text">
+                        <span className="slash-item-label">{item.label}</span>
+                        {item.description && (
+                          <span className="slash-item-desc">
+                            {item.description}
+                          </span>
+                        )}
+                      </span>
+                      {slash.submenu === null && isSlashCommand(item) &&
+                        (item.items?.length ?? 0) > 0 && (
+                        <IconChevronRight size={13} className="slash-chevron" />
                       )}
-                    </span>
-                    {slash.submenu === null && isSlashCommand(item) &&
-                      (item.items?.length ?? 0) > 0 && (
-                      <IconChevronRight size={13} className="slash-chevron" />
-                    )}
-                  </button>
-                ))
+                    </button>
+                  ))}
+                  {activeNeedsText && (
+                    <div className="slash-status">
+                      依頼内容を入力してEnterで送信
+                    </div>
+                  )}
+                </>
               )}
           </div>
         )}

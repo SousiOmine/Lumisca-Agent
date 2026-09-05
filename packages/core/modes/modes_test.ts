@@ -1,5 +1,6 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { AGENT_MODES, findAgentMode } from "./mod.ts";
+import { buildPlanPrompt, planMode } from "./plan.ts";
 import {
   buildReviewPrompt,
   REVIEW_TARGET_LABELS,
@@ -28,11 +29,17 @@ Deno.test("AGENT_MODES: ids are unique and every mode has a label and options", 
     for (const option of mode.options) {
       assertEquals(mode.buildPrompt(option.id).length > 0, true);
     }
+    // A text-taking mode has no fixed options: the request text is the
+    // subject, so a menu level would have nothing to pick.
+    if (mode.buildPromptForText !== undefined) {
+      assertEquals(mode.options.length, 0);
+    }
   }
 });
 
 Deno.test("findAgentMode finds registered modes and misses unknown ids", () => {
   assertEquals(findAgentMode("review"), reviewMode);
+  assertEquals(findAgentMode("plan"), planMode);
   assertEquals(findAgentMode("nope"), undefined);
 });
 
@@ -86,4 +93,35 @@ Deno.test("review prompt: target-specific git steps", () => {
 Deno.test("REVIEW_TARGET_LABELS covers both targets", () => {
   assertEquals(REVIEW_TARGET_LABELS["base-diff"], "ベースブランチとの差分");
   assertEquals(REVIEW_TARGET_LABELS.uncommitted, "未コミットの変更");
+});
+
+Deno.test("plan mode: takes the request text and has no options", () => {
+  assertEquals(planMode.options.length, 0);
+  assertEquals(planMode.buildPromptForText !== undefined, true);
+  assertEquals(planMode.modeLabel, "プランモード");
+});
+
+Deno.test("plan prompt: embeds the request and the internal rules", () => {
+  const prompt = planMode.buildPromptForText!("ブラウザ履歴機能を追加したい");
+  assertEquals(prompt.includes("ブラウザ履歴機能を追加したい"), true);
+  assertEquals(prompt.includes("実装計画を立案"), true);
+  // No edits until the user explicitly permits them.
+  assertEquals(prompt.includes("明示的に許可するまで"), true);
+  assertEquals(prompt.includes("編集・書き込みは禁止"), true);
+  assertEquals(prompt.includes("write / edit ツールは使用せず"), true);
+  // Undecidable questions go to the ask tool.
+  assertEquals(prompt.includes("ask ツールでユーザーに質問"), true);
+  // Permission is asked at the end, and implementation follows only on
+  // explicit approval.
+  assertEquals(prompt.includes("実装を進めますか"), true);
+  assertEquals(prompt.includes("明示的に実装を許可した場合のみ"), true);
+  assertEquals(prompt.includes("計画に沿って実装を開始"), true);
+});
+
+Deno.test("plan mode: empty fallback prompt asks for the request instead of planning blindly", () => {
+  const prompt = buildPlanPrompt("");
+  assertEquals(prompt.length > 0, true);
+  assertEquals(prompt.includes("依頼内容が指定されていません"), true);
+  assertEquals(prompt.includes("明示的に許可するまで"), true);
+  assertEquals(buildPlanPrompt("  "), buildPlanPrompt(""));
 });

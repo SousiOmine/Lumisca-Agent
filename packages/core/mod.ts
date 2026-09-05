@@ -140,7 +140,11 @@ export { CREDENTIAL_KEY_PREFIX } from "./settings/credentials.ts";
 export { THEME_KEY } from "./settings/repo.ts";
 export type { ThemeSetting } from "./shared.ts";
 export type { SavedPrompt } from "./shared.ts";
-export { SAVED_PROMPTS_KEY, parseSavedPrompts, serializeSavedPrompts } from "./shared.ts";
+export {
+  parseSavedPrompts,
+  SAVED_PROMPTS_KEY,
+  serializeSavedPrompts,
+} from "./shared.ts";
 export { resolveSettingsPath } from "./settings/path.ts";
 export { CONNECTIONS_KEY } from "./settings/connections.ts";
 export type { ConnectionEntry } from "./settings/connections.ts";

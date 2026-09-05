@@ -15,15 +15,17 @@ import type { ConversationTurnData, UserMessageImage } from "./types.ts";
 export type { ConversationTurnData } from "./types.ts";
 
 /** Group the flat agent history by the message that started each run: a
- * user prompt or a system notification (background command completions and
- * sub-agent messages also start a run so the agent can react to them).
- * Empty-response retries (kind "retry") are an internal repair and must
- * not split the turn: the retried response then lands in the same turn,
- * and the whole thing collapses together when the run ends. */
+ * user prompt (plain or mode-generated — mode messages are the slash-command
+ * prompts like `/plan 依頼文` or review) or a system notification
+ * (background command completions and sub-agent messages also start a run
+ * so the agent can react to them). Empty-response retries (kind "retry")
+ * are an internal repair and must not split the turn: the retried response
+ * then lands in the same turn, and the whole thing collapses together when
+ * the run ends. */
 export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   const turns: ConversationTurnData[] = [];
   for (const message of messages) {
-    if (message.role === "user") {
+    if (message.role === "user" || message.role === "mode") {
       turns.push({ user: message, responses: [] });
       continue;
     }

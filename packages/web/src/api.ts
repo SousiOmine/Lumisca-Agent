@@ -6,8 +6,8 @@ import type {
   ConnectionEntry,
   FederatedWorkspace,
   McpInfo,
-  ModePrompt,
   ModelInfo,
+  ModePrompt,
   PeerStatus,
   PendingImage,
   ProviderAuthType,
@@ -169,7 +169,12 @@ export const api = {
     request<{ backgrounds: BackgroundCommandInfo[] }>(
       `/api/sessions/${id}/background`,
     ),
-  prompt: (id: string, text: string, images?: PendingImage[], mode?: ModePrompt) =>
+  prompt: (
+    id: string,
+    text: string,
+    images?: PendingImage[],
+    mode?: ModePrompt,
+  ) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/prompt`, {
       method: "POST",
       body: JSON.stringify(promptBody(text, images, mode)),
@@ -346,10 +351,13 @@ export const api = {
     id: string,
     input: { label?: string; prompt?: string },
   ) =>
-    request<SavedPrompt>(`/api/settings/saved-prompts/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      body: JSON.stringify(input),
-    }),
+    request<SavedPrompt>(
+      `/api/settings/saved-prompts/${encodeURIComponent(id)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(input),
+      },
+    ),
   deleteSavedPrompt: (id: string) =>
     request<{ ok: boolean }>(
       `/api/settings/saved-prompts/${encodeURIComponent(id)}`,

@@ -378,6 +378,45 @@ Deno.test("rewind deletes a user message and everything after it", async () => {
   core.close();
 });
 
+Deno.test("rewind deletes a mode message (slash-command prompt) and everything after it", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([fauxAssistantMessage("plan reply")]);
+  // The web path (startPrompt) with mode metadata: the transcript stores a
+  // ModeMessage (role "mode") instead of a plain user message.
+  core.startPrompt(session.id, "あなたは実装プランナーです。...", undefined, {
+    modeId: "plan",
+    optionId: "",
+    modeLabel: "プランモード",
+    shortText: "履歴機能を追加して",
+  });
+  await core.getAgent(session.id)!.waitForIdle();
+
+  const agent = core.getAgent(session.id)!;
+  const modeMessage = agent.messages.find((m) => m.role === "mode");
+  assertEquals(modeMessage !== undefined, true);
+  assertEquals(agent.messages.length, 2);
+
+  // Rewind the mode message: the whole turn goes away (the UI's rewind
+  // action on a mode message targets it like a user message).
+  await core.rewind(session.id, modeMessage!.timestamp);
+  assertEquals(agent.messages.length, 0);
+
+  // Close and reopen: the database was truncated as well.
+  core.closeSession(session.id);
+  core.openSession(session.id);
+  assertEquals(core.getAgent(session.id)!.messages.length, 0);
+
+  core.close();
+});
+
 Deno.test("rewind mid-history keeps earlier turns and persists without duplicates", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
