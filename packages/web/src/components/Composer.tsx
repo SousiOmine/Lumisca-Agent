@@ -191,6 +191,48 @@ export function Composer({
     onSelect: onSlashCommand,
   });
 
+  /** Complete a text-taking command (e.g. `/plan`) to `/id␣` so the user
+   * can keep typing its request. Without this the parent sends nothing
+   * while the text is missing, which left a bare `/` behind. */
+  const completeSlashTo = useCallback(
+    (command: SlashCommand) => {
+      const ta = textareaRef.current;
+      const caret = ta?.selectionStart ?? value.length;
+      const start = slash?.start ?? 0;
+      const before = value.slice(0, start);
+      const after = value.slice(caret).replace(/^\s*/, "");
+      const next = `${before}/${command.id} ${after}`;
+      onChange(next);
+      const caretAfter = before.length + command.id.length + 2;
+      // Re-evaluate so the menu filters to the completed command with its
+      // "keep typing" hint instead of closing.
+      updateSlash(next, caretAfter);
+      requestAnimationFrame(() => {
+        ta?.focus();
+        ta?.setSelectionRange(caretAfter, caretAfter);
+      });
+    },
+    [slash, value, onChange, updateSlash],
+  );
+
+  /** Select a slash entry, completing text-taking commands whose request
+   * is still missing instead of dropping the selection. */
+  const handleSlashPick = useCallback(
+    (index: number) => {
+      const entry = slashEntries[index];
+      if (
+        slash && slash.submenu === null && entry !== undefined &&
+        isSlashCommand(entry) && entry.requiresText === true &&
+        slash.rest.trim().length === 0
+      ) {
+        completeSlashTo(entry);
+        return;
+      }
+      selectSlash(index);
+    },
+    [slash, slashEntries, completeSlashTo, selectSlash],
+  );
+
   // Switching sessions (different workspace) must not leak a stale mention
   // or slash command.
   useEffect(() => {
@@ -270,6 +312,20 @@ export function Composer({
       e.preventDefault();
       onSubmit();
       return;
+    }
+    // Text-taking commands without their request complete to `/id␣` on
+    // Enter/Tab instead of being dropped by the menu selection.
+    if ((e.key === "Enter" || e.key === "Tab") && slash !== null) {
+      const active = slashEntries[slash.active];
+      if (
+        slash.submenu === null && active !== undefined &&
+        isSlashCommand(active) && active.requiresText === true &&
+        slash.rest.trim().length === 0
+      ) {
+        e.preventDefault();
+        completeSlashTo(active);
+        return;
+      }
     }
     if (handleSlashKeyDown(e)) return;
     if (handleMentionKeyDown(e)) return;
@@ -425,7 +481,7 @@ export function Composer({
                         setSlash((prev) =>
                           prev ? { ...prev, active: index } : prev
                         )}
-                      onClick={() => selectSlash(index)}
+                      onClick={() => handleSlashPick(index)}
                     >
                       {item.icon && (
                         <item.icon size={14} className="slash-icon" />
