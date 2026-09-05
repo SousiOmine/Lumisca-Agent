@@ -24,6 +24,7 @@ import {
   MAX_EMPTY_RESPONSE_RETRIES,
   SessionAgent,
 } from "./session-agent.ts";
+import { MAX_RATE_LIMIT_RETRIES } from "./llm-retry.ts";
 
 /** A tool that succeeds immediately; a tool call keeps the loop going, so
  * a vacant response after a tool call exercises the counter reset. */
@@ -55,6 +56,7 @@ function makeAgent(
   streamFn: StreamFn,
   tools: Tool[] = [],
   onEvent: (event: ClientEvent) => void = () => {},
+  extra: { rateLimitRetrySleep?: (ms: number, signal?: AbortSignal) => Promise<void> } = {},
 ): SessionAgent {
   return new SessionAgent({
     sessionId: "s1",
@@ -78,6 +80,7 @@ function makeAgent(
     onEvent,
     askHub: new AskHub("s1", () => {}),
     renameSession: () => {},
+    ...extra,
   });
 }
 
@@ -136,6 +139,28 @@ function fauxSilentError(): AssistantMessage {
     errorMessage: "Stream ended without finish_reason",
   });
 }
+
+/** A 429 rate-limit turn observed via opencode-go / OpenAI: the provider
+ * text carries "rate_limit_exceeded". Backoff is injected so tests stay fast. */
+function fauxRateLimit(): AssistantMessage {
+  return fauxAssistantMessage("", {
+    stopReason: "error",
+    errorMessage:
+      "OpenAI API error (429): {\"code\":\"rate_limit_exceeded\",\"type\":\"rate_limit_error\"} " +
+      "Rate limit exceeded. Please retry after a brief wait.",
+  });
+}
+
+/** A 429 that exhausted the account's quota: must NOT be retried. */
+function fauxQuotaError(): AssistantMessage {
+  return fauxAssistantMessage("", {
+    stopReason: "error",
+    errorMessage: "insufficient_quota: you have exceeded your quota",
+  });
+}
+
+/** No-delay backoff sleep for rate-limit restart tests. */
+const instantSleep = (): Promise<void> => Promise.resolve();
 
 Deno.test("isSilentErrorResponse: transient outputless errors qualify", () => {
   assertEquals(isSilentErrorResponse(fauxSilentError()), true);
@@ -384,6 +409,85 @@ Deno.test("a permanent silent error is not restarted", async () => {
   // retry notifications.
   assertEquals(retryNotifications(agent.messages).length, 0);
   assertEquals(agent.messages.length, 2);
+});
+
+Deno.test("a rate-limit (429) turn restarts the run and recovers", async () => {
+  const agent = makeAgent(
+    streamSequence([fauxRateLimit(), fauxAssistantMessage("Recovered.")]),
+    [],
+    () => {},
+    { rateLimitRetrySleep: instantSleep },
+  );
+  await agent.prompt("hello");
+
+  const messages = agent.messages;
+  // user, failed rate-limit turn, retry notification, recovered turn.
+  assertEquals(retryNotifications(messages).length, 1);
+  assertEquals(messages.length, 4);
+  const last = messages.at(-1) as AssistantMessage;
+  assertEquals((last.content[0] as TextContent).text, "Recovered.");
+});
+
+Deno.test("rate-limit turns stop restarting after the limit", async () => {
+  const agent = makeAgent(
+    streamSequence(Array.from({ length: MAX_RATE_LIMIT_RETRIES + 2 }, () =>
+      fauxRateLimit(),
+    )),
+    [],
+    () => {},
+    { rateLimitRetrySleep: instantSleep },
+  );
+  await agent.prompt("hello");
+
+  // MAX_RATE_LIMIT_RETRIES restarts, then the next 429 ends the exchange.
+  assertEquals(
+    retryNotifications(agent.messages).length,
+    MAX_RATE_LIMIT_RETRIES,
+  );
+  assertEquals(agent.messages.at(-1)?.role, "assistant");
+});
+
+Deno.test("quota exhaustion (non-rate) is not restarted", async () => {
+  const agent = makeAgent(streamSequence([
+    fauxQuotaError(),
+    fauxAssistantMessage("never produced"),
+  ]));
+  await agent.prompt("hello");
+
+  // The quota error surfaces immediately: one failed turn, no retries.
+  assertEquals(retryNotifications(agent.messages).length, 0);
+  assertEquals(agent.messages.length, 2);
+});
+
+Deno.test("a rate-limit turn with partial output surfaces (no restart)", async () => {
+  const agent = makeAgent(streamSequence([
+    fauxAssistantMessage([fauxText("partial answer")], {
+      stopReason: "error",
+      errorMessage:
+        "OpenAI API error (429): rate_limit_exceeded Rate limit exceeded",
+    }),
+    fauxAssistantMessage("never produced"),
+  ]));
+  await agent.prompt("hello");
+
+  // Visible output means the run made progress — the turn is not restarted.
+  assertEquals(retryNotifications(agent.messages).length, 0);
+  const last = agent.messages.at(-1) as AssistantMessage;
+  assertEquals(last.stopReason, "error");
+});
+
+Deno.test("the rate-limit budget is independent of the vacant budget", async () => {
+  // MAX_RATE_LIMIT_RETRIES rate-limit turns, then a vacant turn: the vacant
+  // turn is still retried because its own budget was never consumed.
+  const agent = makeAgent(streamSequence([
+    ...Array.from({ length: MAX_RATE_LIMIT_RETRIES }, () => fauxRateLimit()),
+    fauxAssistantMessage(""),
+    fauxAssistantMessage("done"),
+  ]), [], () => {}, { rateLimitRetrySleep: instantSleep });
+  await agent.prompt("hello");
+
+  assertEquals(retryNotifications(agent.messages).length, MAX_RATE_LIMIT_RETRIES + 1);
+  assertEquals(agent.messages.at(-1)?.role, "assistant");
 });
 
 /** Collect the session_error events a run emits. */

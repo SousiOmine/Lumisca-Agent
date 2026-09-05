@@ -4,6 +4,7 @@ import type { StreamFn } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 import type { Api } from "@earendil-works/pi-ai";
 import {
+  createAssistantMessageEventStream,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
@@ -139,6 +140,45 @@ async function waitFor(
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
+
+/** A stream function that fails the first call with a provider rate-limit
+ * (429) error, then succeeds — exercising the sub-agent's backoff retry. */
+function rateLimitThenOk(): StreamFn {
+  let calls = 0;
+  return () => {
+    const stream = createAssistantMessageEventStream();
+    if (calls++ < 1) {
+      stream.push({
+        type: "error",
+        reason: "error",
+        error: fauxAssistantMessage("", {
+          stopReason: "error",
+          errorMessage: "OpenAI API error (429): rate_limit_exceeded",
+        }),
+      });
+      stream.end();
+      return stream;
+    }
+    stream.push({ type: "start", partial: fauxAssistantMessage("") });
+    stream.push({
+      type: "text_delta",
+      contentIndex: 0,
+      delta: "done",
+      partial: fauxAssistantMessage("done"),
+    });
+    stream.end(fauxAssistantMessage("done"));
+    return stream;
+  };
+}
+
+Deno.test("sub-agent retries a rate-limited turn then succeeds", async () => {
+  const { hub, events } = makeHub(rateLimitThenOk());
+  hub.spawn("session-1", 0, "general", "desc", "prompt");
+  await waitFor(() => hub.list()[0]?.status === "finished", "task finish");
+  assertEquals(hub.list()[0]?.status, "finished");
+  const end = events.find((e) => e.type === "task_end");
+  assertEquals(end?.status, "finished");
+});
 
 /** Concatenate the text blocks of a message (works on the agent's message
  * union, which mixes content-carrying and non-content variants). */

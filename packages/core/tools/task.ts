@@ -1,7 +1,13 @@
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent, StreamFn } from "@earendil-works/pi-agent-core";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { CoreError, errorMessage } from "../errors.ts";
+import {
+  isRetryableRateLimit,
+  MAX_RATE_LIMIT_RETRIES,
+  rateLimitRetryDelayMs,
+  sleepAbortable,
+} from "../agent/llm-retry.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import {
   addToolsToAgent,
@@ -121,6 +127,9 @@ interface Subagent {
   resultText: string;
   unsubscribe: () => void;
   waiters: Set<Waiter>;
+  /** Aborts the backoff sleep of a rate-limit retry when the sub-agent is
+   * killed or the session closes, so a stop during the wait is not ignored. */
+  abort: AbortController;
 }
 
 /** A blocking task_output wait on a running sub-agent. */
@@ -372,6 +381,7 @@ export class TaskHub {
       // messages (the default conversion would drop their role).
       convertToLlm: (messages) => toLlmMessages(messages),
     });
+    const abort = new AbortController();
     const sub: Subagent = {
       id,
       parentId,
@@ -385,6 +395,7 @@ export class TaskHub {
       resultText: "",
       unsubscribe: agent.subscribe((event) => this.handleEvent(sub, event)),
       waiters: new Set(),
+      abort,
     };
     this.subs.set(id, sub);
     this.emit({
@@ -395,17 +406,69 @@ export class TaskHub {
       subagentType: type,
       description,
     });
-    void agent.prompt(prompt).then(
-      () =>
-        this.finalize(
-          sub,
-          // Still running here (finalize settles it), so the agent is live.
-          sub.agent!.state.errorMessage !== undefined ? "failed" : "finished",
-          sub.agent!.state.errorMessage,
-        ),
-      (error) => this.finalize(sub, "failed", errorMessage(error)),
-    );
+    void this.runSubagent(sub, agent, prompt);
     return this.info(id);
+  }
+
+  /** Run a sub-agent to completion, retrying rate-limited (429) turns with
+   * exponential backoff. The first attempt uses the spawn prompt; a rate-limit
+   * failure drops the empty error turn and continues from the same prompt (no
+   * duplicate user message), backing off before each retry up to
+   * MAX_RATE_LIMIT_RETRIES times. Any other outcome — success, a non-rate
+   * error, an abort, or the exhausted budget — settles the sub-agent once. */
+  private async runSubagent(
+    sub: Subagent,
+    agent: Agent,
+    prompt: string,
+  ): Promise<void> {
+    let first = true;
+    for (let attempt = 1; attempt <= MAX_RATE_LIMIT_RETRIES + 1; attempt++) {
+      if (sub.agent === null || this.closed) return;
+      try {
+        if (first) {
+          await agent.prompt(prompt);
+          first = false;
+        } else {
+          await agent.continue();
+        }
+      } catch {
+        // The agent rejected (a race with another run): settle as failed.
+        this.finalize(sub, "failed", "Sub-agent run was interrupted");
+        return;
+      }
+      if (sub.agent === null || this.closed) return;
+      const last = sub.agent.state.messages.at(-1) as
+        | AssistantMessage
+        | undefined;
+      const rateLimited = last !== undefined &&
+        last.role === "assistant" &&
+        isRetryableRateLimit(last);
+      if (!rateLimited) break;
+      if (attempt >= MAX_RATE_LIMIT_RETRIES + 1) break;
+      // Drop the failed error turn so the continuation re-uses the prompt.
+      const messages = sub.agent.state.messages;
+      if (messages.length > 0 && messages.at(-1)!.role === "assistant") {
+        sub.agent.state.messages = messages.slice(0, -1);
+      }
+      try {
+        await sleepAbortable(rateLimitRetryDelayMs(attempt), sub.abort.signal);
+      } catch {
+        // Aborted during backoff (session closed / killed): leave the error
+        // surfaced and settle.
+        this.finalize(sub, "failed", sub.agent.state.errorMessage);
+        return;
+      }
+      if (sub.agent === null || this.closed) return;
+    }
+    const last = sub.agent?.state.messages.at(-1) as
+      | AssistantMessage
+      | undefined;
+    this.finalize(
+      sub,
+      // Still running here (finalize settles it), so the agent is live.
+      last?.stopReason === "error" ? "failed" : "finished",
+      sub.agent?.state.errorMessage,
+    );
   }
 
   /** Resolve a sub-agent by id, or throw with the list of known ids. */
@@ -660,6 +723,7 @@ export class TaskHub {
     for (const sub of [...this.subs.values()]) {
       if (sub.status !== "running") continue;
       // Running agents always have a live Agent (finalize releases it).
+      sub.abort.abort();
       sub.agent!.abort();
       this.finalize(sub, "aborted");
     }

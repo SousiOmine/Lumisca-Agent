@@ -13,6 +13,12 @@ import type {
   TextContent,
 } from "@earendil-works/pi-ai";
 import { CoreError, errorMessage } from "../errors.ts";
+import {
+  isRetryableRateLimit,
+  MAX_RATE_LIMIT_RETRIES,
+  rateLimitRetryDelayMs,
+  sleepAbortable,
+} from "./llm-retry.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared.ts";
@@ -109,6 +115,22 @@ export function buildRetryNotification(attempt: number): NotificationMessage {
   });
 }
 
+/** The notification queued to retry after a provider rate-limit (429) turn.
+ * Unlike the vacant-response retry, the model was cut off by throttling, not
+ * by producing nothing — so the text tells it to wait and then continue. */
+export function buildRateLimitRetryNotification(
+  attempt: number,
+): NotificationMessage {
+  return notificationMessage({
+    kind: "retry",
+    title: `Rate limited by provider (retry ${attempt})`,
+    body:
+      "The provider returned a rate-limit error. Wait a moment, then continue: " +
+      "respond with text or call a tool.",
+    status: "neutral",
+  });
+}
+
 export interface SessionAgentOptions {
   sessionId: string;
   systemPrompt: string;
@@ -143,6 +165,9 @@ export interface SessionAgentOptions {
   taskHub?: TaskHub;
   /** Persist a new session title (also notifies clients). */
   renameSession: (name: string) => void;
+  /** Backoff sleep used before a rate-limit (429) restart, injectable for
+   * tests; defaults to sleepAbortable (real exponential backoff). */
+  rateLimitRetrySleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** The session's tool registry (owned by the session pool). When set,
    * its tools are never preloaded into the LLM context — the pool seeds it
    * with browser-lab tools, MCP discovery fills it, and the agent only
@@ -214,6 +239,26 @@ export class SessionAgent {
    * once the dead run has fully settled. Null when there is nothing to
    * resume. */
   private pendingErrorRetry: NotificationMessage | null = null;
+  /** Consecutive rate-limited (429) turns in the current exchange, retried
+   * with exponential backoff (see resumeAfterErrorRun). A separate budget
+   * from the vacant-response retries so a rate-limit storm cannot be cut
+   * short by the vacant cap, nor starve it; a turn with output or a new
+   * exchange resets it at their entry points. */
+  private rateLimitRetries = 0;
+  /** The retry notification parked to restart a run after a rate-limited
+   * turn. Set by handleTurnEnd; consumed by resumeAfterErrorRun (which
+   * backs off before re-prompting). Null when there is nothing to resume. */
+  private pendingRateLimitRetry: NotificationMessage | null = null;
+  /** Interrupts the backoff sleep of a rate-limit restart when the run is
+   * aborted or the session closes, so a user stop during the wait is not
+   * ignored. Independent of the agent's own abort signal (which is cleared
+   * between runs and would not fire while we wait outside a run). */
+  private readonly retryAbort = new AbortController();
+  /** Backoff sleep before a rate-limit restart (injectable for tests). */
+  private readonly rateLimitRetrySleep: (
+    ms: number,
+    signal?: AbortSignal,
+  ) => Promise<void>;
   /** Bumped on every abort(); background work that spans multiple runs
    * (the silent-error restart loop) compares epochs so a stop pressed
    * between two attempts stands the restart down instead of firing one
@@ -243,6 +288,7 @@ export class SessionAgent {
       options.fastModel !== undefined && !options.disableTitleGeneration
         ? new TitleGenerator(options.fastModel, options.streamFn)
         : null;
+    this.rateLimitRetrySleep = options.rateLimitRetrySleep ?? sleepAbortable;
     this.backgroundManager = options.backgroundManager ?? null;
     this.backgroundUnsubscribe = this.backgroundManager === null
       ? null
@@ -290,6 +336,8 @@ export class SessionAgent {
     // A user prompt starts a fresh exchange: it does not inherit the
     // previous run's vacant-response history.
     this.emptyResponseRetries = 0;
+    this.rateLimitRetries = 0;
+    this.pendingRateLimitRetry = null;
     this.maybeGenerateTitle(text);
     try {
       await this.agent.prompt(text, images);
@@ -354,6 +402,8 @@ export class SessionAgent {
       // (same contract as prompt()); a steer joins the current run and
       // leaves the counter alone.
       this.emptyResponseRetries = 0;
+      this.rateLimitRetries = 0;
+      this.pendingRateLimitRetry = null;
       void this.startRun(message);
       return;
     }
@@ -377,6 +427,8 @@ export class SessionAgent {
     // (same contract as prompt()); a steer joins the current run and
     // leaves the counter alone.
     this.emptyResponseRetries = 0;
+    this.rateLimitRetries = 0;
+    this.pendingRateLimitRetry = null;
     void this.startRun(message);
   }
 
@@ -438,11 +490,15 @@ export class SessionAgent {
     // A notification that starts its own run begins a fresh exchange:
     // reset the vacant-response history (same contract as prompt()).
     this.emptyResponseRetries = 0;
+    this.rateLimitRetries = 0;
+    this.pendingRateLimitRetry = null;
     if (!this.mcpReadyDone) {
       // MCP attachment may still be in flight (a very fast command); wait
       // for it, then re-check — a user prompt may have started meanwhile.
       void this.mcpReady.then(() => {
         this.emptyResponseRetries = 0;
+        this.rateLimitRetries = 0;
+        this.pendingRateLimitRetry = null;
         void this.startRun(message);
       });
       return;
@@ -488,6 +544,7 @@ export class SessionAgent {
 
   abort(): void {
     this.rejectPendingAsks();
+    this.retryAbort.abort();
     this.abortEpoch++;
     this.agent.abort();
   }
@@ -581,6 +638,8 @@ export class SessionAgent {
     // events, no transcript row) — dropping it here leaves no trace,
     // exactly like clearing the queues.
     this.pendingErrorRetry = null;
+    this.pendingRateLimitRetry = null;
+    this.rateLimitRetries = 0;
     this.emit({
       type: "messages_truncated",
       sessionId: this.sessionId,
@@ -596,6 +655,7 @@ export class SessionAgent {
   close(): void {
     this.closed = true;
     this.rejectPendingAsks();
+    this.retryAbort.abort();
     this.agent.abort();
     this.backgroundUnsubscribe?.();
     this.taskHub?.setParentDelivery(null);
@@ -770,42 +830,63 @@ export class SessionAgent {
     });
   }
 
-  /** Retry a vacant assistant response (no text, no tool call): the model
-   * ended its turn without producing anything, leaving the user with a
-   * silent run. Mid-run vacancies get their retry notification queued via
-   * followUp — the loop picks it up right where it was about to stop, so
-   * the retry happens within the same run and the UI keeps the turn
-   * expanded until it completes. Transient stream errors (stopReason
-   * "error", zero output) terminate the loop before it drains any queue,
-   * so their retry notification is parked in pendingErrorRetry instead
-   * and the run is restarted once it settles (see resumeAfterErrorRun);
-   * permanent failures are left alone entirely — they can never recover,
-   * and a followUp queued behind an errored run would leak into the next.
-   * User-initiated stops (aborted) are never resurrected. A response with
-   * output resets the consecutive-retry count; once the limit is hit the
-   * run ends normally. */
+  /** Retry an outputless assistant response. Three cases:
+   *  - a vacant normal stop (no error): retried in-run via followUp,
+   *    counting the vacant-response budget;
+   *  - a transient stream error (no output, e.g. deepseek cut off): the
+   *    run is parked (pendingErrorRetry) and restarted once it settles
+   *    (resumeAfterErrorRun);
+   *  - a provider rate-limit (429, no output): like the transient error but
+   *    on its own budget and with a backoff before the restart.
+   * Permanent failures (unconfigured provider, quota exhaustion, content
+   * filter) surface immediately — they can never recover. A response with
+   * output resets both retry counters (the run made progress); user-initiated
+   * stops (aborted) are never resurrected. Once a budget is hit the run ends. */
   private handleTurnEnd(message: AgentMessage): void {
     if (message.role !== "assistant") return;
     const assistant = message as AssistantMessage;
     if (!hasNoVisibleOutput(assistant)) {
+      // Any visible output resets both retry counters: the run made progress.
       this.emptyResponseRetries = 0;
+      this.rateLimitRetries = 0;
       return;
     }
     if (assistant.stopReason === "aborted") return;
+    const rateLimit = isRetryableRateLimit(assistant);
     const transientStreamError = isSilentErrorResponse(assistant);
-    if (!transientStreamError && assistant.stopReason === "error") return;
-    if (
-      this.closed || this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES
-    ) {
+    if (!rateLimit && !transientStreamError) {
+      // Outputless but not retryable: a vacant normal stop retries in-run
+      // (followUp); a permanent error (unconfigured provider, etc.) surfaces.
+      if (assistant.stopReason === "error") return;
+      if (
+        this.closed || this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES
+      ) {
+        return;
+      }
+      this.emptyResponseRetries++;
+      this.agent.followUp(
+        buildRetryNotification(this.emptyResponseRetries),
+      );
       return;
     }
+    // Retryable outputless failure: rate-limit or transient stream error.
+    // Separate budgets so a long rate-limit storm is not cut short by the
+    // vacant-response cap, nor vice versa. The restart is parked and
+    // consumed once the dead run settles (resumeAfterErrorRun); the retry
+    // notification becomes its next prompt.
+    if (this.closed) return;
+    if (rateLimit) {
+      if (this.rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) return;
+      this.rateLimitRetries++;
+      this.pendingRateLimitRetry = buildRateLimitRetryNotification(
+        this.rateLimitRetries,
+      );
+      return;
+    }
+    // Transient stream error with no output (e.g. deepseek stream cut off).
+    if (this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES) return;
     this.emptyResponseRetries++;
-    const notification = buildRetryNotification(this.emptyResponseRetries);
-    if (transientStreamError) {
-      this.pendingErrorRetry = notification;
-      return;
-    }
-    this.agent.followUp(notification);
+    this.pendingErrorRetry = buildRetryNotification(this.emptyResponseRetries);
   }
 
   /** Restart a run that a silent-error turn killed (see handleTurnEnd):
@@ -821,10 +902,29 @@ export class SessionAgent {
     const epoch = this.abortEpoch;
     while (
       !this.closed && this.abortEpoch === epoch &&
-      this.pendingErrorRetry !== null
+      (this.pendingErrorRetry !== null || this.pendingRateLimitRetry !== null)
     ) {
-      const message = this.pendingErrorRetry;
-      this.pendingErrorRetry = null;
+      // Rate-limit restarts back off before re-prompting (retrying
+      // immediately would re-hit the limit); silent-error restarts keep
+      // their historical immediate retry (no rate limit involved).
+      const isRateLimit = this.pendingRateLimitRetry !== null;
+      const message = isRateLimit
+        ? this.pendingRateLimitRetry!
+        : this.pendingErrorRetry!;
+      if (isRateLimit) {
+        this.pendingRateLimitRetry = null;
+      } else {
+        this.pendingErrorRetry = null;
+      }
+      if (isRateLimit) {
+        const delayMs = rateLimitRetryDelayMs(this.rateLimitRetries);
+        try {
+          await this.rateLimitRetrySleep(delayMs, this.retryAbort.signal);
+        } catch {
+          // Aborted during backoff: stand down, leave the error surfaced.
+          return;
+        }
+      }
       try {
         await this.agent.prompt(message);
       } catch {

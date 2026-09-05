@@ -60,6 +60,7 @@ import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
 import { SessionPool } from "./agent/pool.ts";
+import { withProviderRetryDefaults } from "./agent/llm-retry.ts";
 import { buildChatSystemPrompt, buildSystemPrompt } from "./tools/mod.ts";
 import { CoreError } from "./errors.ts";
 import { APP_MCP_SETTINGS_KEY } from "./mcp/config.ts";
@@ -119,7 +120,9 @@ export class LumiscaCore {
     this.workspaces = createWorkspaceRepo(db);
     this.sessions = createSessionRepo(db);
     this.messages = createMessageRepo(db);
-    const streamFn = this.models.models.streamSimple.bind(this.models.models);
+    const streamFn = withProviderRetryDefaults(
+      this.models.models.streamSimple.bind(this.models.models),
+    );
     this.commandSafety = new CommandSafety({
       getSetting: (key) => this.settings.get(key),
       setSetting: (key, value) => this.settings.set(key, value),
