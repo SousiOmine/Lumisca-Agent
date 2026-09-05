@@ -17,6 +17,7 @@ export type {
   NotificationPayload,
   NotificationStatus,
 } from "./types/notification.ts";
+export type { ModeMessage, ModePrompt } from "./types/mode-message.ts";
 export type { AgentMessage } from "@earendil-works/pi-agent-core";
 export type { ImageContent } from "@earendil-works/pi-ai";
 export { SessionAgent } from "./agent/session-agent.ts";

@@ -6,6 +6,7 @@ import type {
   ConnectionEntry,
   FederatedWorkspace,
   McpInfo,
+  ModePrompt,
   ModelInfo,
   PeerStatus,
   PendingImage,
@@ -80,8 +81,11 @@ function peerRouted<T, A extends unknown[]>(
 export type SessionInfoDto = SessionInfo & { lastError?: string };
 
 /** Build a prompt request body. Images are data URLs; the payload sent to
- * the agent is the base64 data without the `data:<mime>;base64,` header. */
-function promptBody(text: string, images?: PendingImage[]) {
+ * the agent is the base64 data without the `data:<mime>;base64,` header.
+ * `mode` (optional) attaches mode metadata so the server creates a
+ * ModeMessage (short text + badge in the UI) instead of a plain user
+ * message. */
+function promptBody(text: string, images?: PendingImage[], mode?: ModePrompt) {
   return {
     text,
     ...(images && images.length > 0
@@ -92,6 +96,7 @@ function promptBody(text: string, images?: PendingImage[]) {
         })),
       }
       : {}),
+    ...(mode ? { mode } : {}),
   };
 }
 
@@ -164,10 +169,10 @@ export const api = {
     request<{ backgrounds: BackgroundCommandInfo[] }>(
       `/api/sessions/${id}/background`,
     ),
-  prompt: (id: string, text: string, images?: PendingImage[]) =>
+  prompt: (id: string, text: string, images?: PendingImage[], mode?: ModePrompt) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/prompt`, {
       method: "POST",
-      body: JSON.stringify(promptBody(text, images)),
+      body: JSON.stringify(promptBody(text, images, mode)),
     }),
   abort: (id: string) =>
     request<{ ok: boolean }>(`/api/sessions/${id}/abort`, { method: "POST" }),
@@ -457,11 +462,12 @@ export const fed = {
     sessionId: string,
     text: string,
     images?: PendingImage[],
+    mode?: ModePrompt,
   ) =>
     fedRequest<{ ok: boolean }>(
       peerId,
       `/sessions/${encodeURIComponent(sessionId)}/prompt`,
-      { method: "POST", body: JSON.stringify(promptBody(text, images)) },
+      { method: "POST", body: JSON.stringify(promptBody(text, images, mode)) },
     ),
   abort: (peerId: string, sessionId: string) =>
     fedRequest<{ ok: boolean }>(
@@ -561,10 +567,10 @@ export function sessionApi(key: string) {
     ),
     prompt: peerRouted(
       peerId,
-      (text: string, images?: PendingImage[]) =>
-        api.prompt(sessionId, text, images),
-      (p, text: string, images?: PendingImage[]) =>
-        fed.prompt(p, sessionId, text, images),
+      (text: string, images?: PendingImage[], mode?: ModePrompt) =>
+        api.prompt(sessionId, text, images, mode),
+      (p, text: string, images?: PendingImage[], mode?: ModePrompt) =>
+        fed.prompt(p, sessionId, text, images, mode),
     ),
     abort: peerRouted(
       peerId,

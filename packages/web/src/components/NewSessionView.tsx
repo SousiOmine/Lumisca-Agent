@@ -358,8 +358,8 @@ export function NewSessionView(
       }
       return;
     }
-    const promptText = slashPrompt(command, item);
-    if (promptText !== null) void submit(promptText);
+    const result = slashPrompt(command, item);
+    if (result !== null) void submit(result.text);
   };
 
   const deleteWorkspace = async (fws: FederatedWorkspace) => {

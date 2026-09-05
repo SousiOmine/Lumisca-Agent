@@ -5,6 +5,7 @@ import type {
   BackgroundCommandInfo,
   CreateSessionInput,
   ImageContent,
+  ModePrompt,
   SessionAgent,
   SessionInfo,
   TaskInfo,
@@ -30,6 +31,7 @@ const MAX_IMAGE_BASE64_LENGTH = 20 * 1024 * 1024;
 interface PromptBody {
   text?: unknown;
   images?: unknown;
+  mode?: unknown;
 }
 
 interface AnswerBody {
@@ -74,7 +76,33 @@ export function parseAnswerBody(body: AnswerBody): {
 export function parsePromptBody(body: PromptBody): {
   text: string;
   images?: ImageContent[];
+  mode?: ModePrompt;
 } {
+  // Parse optional mode metadata.
+  let mode: ModePrompt | undefined;
+  if (body.mode !== undefined) {
+    if (typeof body.mode !== "object" || body.mode === null) {
+      throw new AppError("mode must be an object", 400);
+    }
+    const m = body.mode as Record<string, unknown>;
+    if (
+      typeof m.modeId !== "string" ||
+      typeof m.optionId !== "string" ||
+      typeof m.modeLabel !== "string" ||
+      typeof m.shortText !== "string"
+    ) {
+      throw new AppError(
+        "mode must have modeId, optionId, modeLabel, and shortText (strings)",
+        400,
+      );
+    }
+    mode = {
+      modeId: m.modeId,
+      optionId: m.optionId,
+      modeLabel: m.modeLabel,
+      shortText: m.shortText,
+    };
+  }
   const images: ImageContent[] = [];
   if (body.images !== undefined) {
     if (!Array.isArray(body.images) || body.images.length > MAX_PROMPT_IMAGES) {
@@ -108,7 +136,7 @@ export function parsePromptBody(body: PromptBody): {
   if (typeof text !== "string" || (text.length === 0 && images.length === 0)) {
     throw new AppError("text (string) is required", 400);
   }
-  return { text, images: images.length > 0 ? images : undefined };
+  return { text, images: images.length > 0 ? images : undefined, mode };
 }
 
 /** The slice of the core these routes need (interface segregation). */
@@ -129,7 +157,12 @@ export interface SessionApi {
     thinkingLevel: ThinkingLevel;
     thinkingLevels: ThinkingLevel[];
   } | null;
-  startPrompt(id: string, text: string, images?: ImageContent[]): void;
+  startPrompt(
+    id: string,
+    text: string,
+    images?: ImageContent[],
+    mode?: ModePrompt,
+  ): void;
   abort(id: string): void;
   rewind(id: string, timestamp: number): Promise<void>;
   setSessionModel(id: string, provider: string, modelId: string): void;
@@ -260,10 +293,10 @@ export function sessionRoutes(core: SessionApi): Hono {
 
   app.post("/sessions/:id/prompt", async (c) => {
     const body = await parseBody<PromptBody>(c);
-    const { text, images } = parsePromptBody(body ?? {});
+    const { text, images, mode } = parsePromptBody(body ?? {});
     // Fire-and-forget: the run progresses via the WebSocket event stream,
     // so the request does not stay open for the whole agent execution.
-    core.startPrompt(c.req.param("id"), text, images);
+    core.startPrompt(c.req.param("id"), text, images, mode);
     return c.json({ ok: true });
   });
 

@@ -1,9 +1,10 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Message } from "@earendil-works/pi-ai";
-// Loads the declaration merge that adds NotificationMessage to pi's
-// AgentMessage union (see pi-augmentation.ts). Every importer of this
-// module therefore sees the augmented type.
+// Loads the declaration merge that adds NotificationMessage and
+// ModeMessage to pi's AgentMessage union (see pi-augmentation.ts). Every
+// importer of this module therefore sees the augmented type.
 import "./pi-augmentation.ts";
+import { modeFullPromptText, type ModeMessage } from "./mode-message.ts";
 
 /** Kind of a system notification injected into an agent loop: background
  * command completions (async_bash), sub-agent task completions (task),
@@ -56,9 +57,10 @@ export function notificationText(
 }
 
 /** Convert agent messages to LLM messages: notification messages become
- * user messages carrying notificationText (so the system prompt's prefix
- * contract stays valid), everything else passes the standard role filter
- * (the same one pi applies by default). */
+ * user messages carrying notificationText, mode messages become user
+ * messages carrying the full prompt text (so the LLM sees the full
+ * mode prompt), everything else passes the standard role filter (the
+ * same one pi applies by default). */
 export function toLlmMessages(messages: AgentMessage[]): Message[] {
   const out: Message[] = [];
   for (const message of messages) {
@@ -70,12 +72,21 @@ export function toLlmMessages(messages: AgentMessage[]): Message[] {
       });
       continue;
     }
+    if (message.role === "mode") {
+      const modeMsg = message as ModeMessage;
+      out.push({
+        role: "user",
+        content: [{ type: "text", text: modeFullPromptText(modeMsg) }],
+        timestamp: message.timestamp,
+      });
+      continue;
+    }
     if (
       message.role === "user" ||
       message.role === "assistant" ||
       message.role === "toolResult"
     ) {
-      out.push(message);
+      out.push(message as Message);
     }
   }
   return out;

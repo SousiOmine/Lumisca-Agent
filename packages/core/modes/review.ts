@@ -65,6 +65,7 @@ export const REVIEW_TARGET_LABELS: Record<ReviewTarget, string> = {
 export const reviewMode: AgentMode = {
   id: "review",
   label: "レビュー",
+  modeLabel: "レビューモード",
   description: "コード変更をレビューします",
   options: [
     {
@@ -81,5 +82,10 @@ export const reviewMode: AgentMode = {
   buildPrompt(optionId: string): string {
     const target = optionId === "uncommitted" ? "uncommitted" : "base-diff";
     return buildReviewPrompt(target);
+  },
+  buildShortText(optionId: string): string {
+    const target = optionId === "uncommitted" ? "uncommitted" : "base-diff";
+    const targetLabel = REVIEW_TARGET_LABELS[target];
+    return `${targetLabel}をレビューしてください`;
   },
 };

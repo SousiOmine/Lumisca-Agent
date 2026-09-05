@@ -40,6 +40,8 @@ import type {
   NotificationPayload,
 } from "../types/notification.ts";
 import { toLlmMessages } from "../types/notification.ts";
+import type { ModePrompt } from "../types/mode-message.ts";
+import { buildModeMessage } from "../types/mode-message.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 
@@ -328,8 +330,33 @@ export class SessionAgent {
    * events) so clients render it right away. When the loop drains it, it
    * re-emits the same events for the same message (identical role +
    * timestamp), which the UI dedups, and persistMessages saves it exactly
-   * once at that point. */
-  promptWhileRunning(text: string, images?: ImageContent[]): void {
+   * once at that point.
+   *
+   * When `mode` is provided, a ModeMessage is stored in the transcript
+   * instead of a regular user message: the UI renders the short text +
+   * mode badge, while the LLM receives the full prompt (via
+   * toLlmMessages). */
+  promptWhileRunning(
+    text: string,
+    images?: ImageContent[],
+    mode?: ModePrompt,
+  ): void {
+    this.maybeGenerateTitle(mode ? mode.shortText : text);
+    if (mode) {
+      const message = buildModeMessage(mode, text, Date.now());
+      this.emit({ type: "message_start", sessionId: this.sessionId, message });
+      this.emit({ type: "message_end", sessionId: this.sessionId, message });
+      if (this.isStreaming) {
+        this.agent.steer(message);
+        return;
+      }
+      // Starting a run from user input resets the vacant-response history
+      // (same contract as prompt()); a steer joins the current run and
+      // leaves the counter alone.
+      this.emptyResponseRetries = 0;
+      void this.startRun(message);
+      return;
+    }
     this.maybeGenerateTitle(text);
     const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
     if (images !== undefined && images.length > 0) {

@@ -27,11 +27,17 @@ export interface AgentMode {
   label: string;
   /** Menu description shown under the label. */
   description: string;
+  /** Badge label shown under the user message, e.g. "レビューモード". */
+  modeLabel: string;
   /** Second-level options offered after selecting the mode. */
   options: AgentModeOption[];
   /** The user message sent when the mode (or one of its options) is
    * selected. `optionId` is empty for modes without options. */
   buildPrompt(optionId: string): string;
+  /** Build a short display text for the user message, e.g.
+   * "未コミットの変更をレビューしてください". Shown in the chat UI
+   * instead of the full prompt. */
+  buildShortText(optionId: string): string;
 }
 
 /** Every registered agent mode, in menu order. */

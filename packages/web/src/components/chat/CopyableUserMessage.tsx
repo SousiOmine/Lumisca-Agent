@@ -4,16 +4,19 @@ import { ContentImages } from "../ContentImages.tsx";
 import type { UserMessageImage } from "./types.ts";
 
 /** A user message with its action row: rewind (restore to the composer)
- * and copy. */
+ * and copy. When `modeLabel` is set, the message is a mode-generated
+ * message (e.g. review) and the badge is shown. */
 export function CopyableUserMessage({
   text,
   images,
   timestamp,
+  modeLabel,
   onRewind,
 }: {
   text: string;
   images: UserMessageImage[];
   timestamp: number;
+  modeLabel?: string;
   onRewind: (
     timestamp: number,
     text: string,
@@ -40,6 +43,9 @@ export function CopyableUserMessage({
           {images.length > 0 && <ContentImages images={images} />}
           {text && <p>{text}</p>}
         </div>
+        {modeLabel && (
+          <div className="msg-mode-badge">{modeLabel}</div>
+        )}
       </div>
       <div className="msg-user-actions">
         <button

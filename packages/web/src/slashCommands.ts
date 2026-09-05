@@ -5,6 +5,7 @@
 
 import type { ComponentType } from "react";
 import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
+import type { ModePrompt } from "@lumisca/core";
 import {
   IconCode,
   IconFileDiff,
@@ -40,16 +41,26 @@ export const slashCommands: SlashCommand[] = AGENT_MODES.map((mode) => ({
     : undefined,
 }));
 
-/** Build the user message a slash-command selection sends; null when the
- * selection does not resolve to a registered mode (defensive — the menu
- * only lists registered ones). */
+/** Build the user message + mode metadata a slash-command selection sends;
+ * null when the selection does not resolve to a registered mode (defensive
+ * — the menu only lists registered ones). */
 export function slashPrompt(
   command: SlashCommand,
   item?: SlashCommandItem,
-): string | null {
+): { text: string; mode: ModePrompt } | null {
   const mode = findAgentMode(command.id);
   if (!mode) return null;
-  if (item !== undefined) return mode.buildPrompt(item.id);
-  if (mode.options.length === 0) return mode.buildPrompt("");
+  const optionId = item !== undefined ? item.id : "";
+  if (item !== undefined || mode.options.length === 0) {
+    return {
+      text: mode.buildPrompt(optionId),
+      mode: {
+        modeId: mode.id,
+        optionId,
+        modeLabel: mode.modeLabel,
+        shortText: mode.buildShortText(optionId),
+      },
+    };
+  }
   return null;
 }

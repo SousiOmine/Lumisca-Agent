@@ -5,6 +5,7 @@ import {
   notificationText,
   toLlmMessages,
 } from "./notification.ts";
+import type { ModeMessage } from "./mode-message.ts";
 
 function notification(
   overrides: Partial<NotificationMessage> = {},
@@ -79,4 +80,23 @@ Deno.test("toLlmMessages drops roles the provider cannot see", () => {
   const converted = toLlmMessages(messages);
   assertEquals(converted.length, 1);
   assertEquals(converted[0]!.role, "user");
+});
+
+Deno.test("toLlmMessages converts mode messages to user messages with the full prompt", () => {
+  const modeMsg: ModeMessage = {
+    role: "mode",
+    modeId: "review",
+    optionId: "uncommitted",
+    modeLabel: "レビューモード",
+    shortText: "未コミットの変更をレビューしてください",
+    fullPrompt: "あなたはコードレビュアーです。…(長文)",
+    timestamp: 1700000000000,
+  };
+  const converted = toLlmMessages([modeMsg]);
+  assertEquals(converted.length, 1);
+  assertEquals(converted[0], {
+    role: "user",
+    content: [{ type: "text", text: modeMsg.fullPrompt }],
+    timestamp: modeMsg.timestamp,
+  });
 });

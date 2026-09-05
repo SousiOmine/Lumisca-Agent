@@ -145,8 +145,8 @@ export function App({ initialData }: AppProps): ReactElement {
               onInputChange={(input) => updateDraft(draftKey, { input })}
               images={draft.images}
               onImagesChange={(images) => updateDraft(draftKey, { images })}
-              onPrompt={(text, images) =>
-                activeTab && prompt(activeTab, text, images)}
+              onPrompt={(text, images, mode) =>
+                activeTab && prompt(activeTab, text, images, mode)}
               onAbort={() => activeTab && abort(activeTab)}
               onRewind={(timestamp) =>
                 activeTab ? rewind(activeTab, timestamp) : Promise.resolve()}

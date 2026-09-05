@@ -8,6 +8,7 @@ import {
   type AskAnswer,
   emptyView,
   type FederatedWorkspace,
+  type ModePrompt,
   type PendingImage,
   type SessionView,
   type ThinkingLevel,
@@ -83,13 +84,13 @@ export function useSessionActions(
   );
 
   const prompt = useCallback(
-    async (key: string, text: string, images: PendingImage[]) => {
+    async (key: string, text: string, images: PendingImage[], mode?: ModePrompt) => {
       const textTrimmed = text.trim();
       if (!textTrimmed && images.length === 0) return;
       // The user message appears via the WebSocket event stream
       // (message_start), so no optimistic append is needed.
       try {
-        await sessionApi(key).prompt(textTrimmed, images);
+        await sessionApi(key).prompt(textTrimmed, images, mode);
       } catch (error) {
         setViewError(key, error);
       }

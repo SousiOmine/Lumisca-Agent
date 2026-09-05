@@ -6,6 +6,7 @@ Deno.test("parsePromptBody passes text-only prompts through", () => {
   assertEquals(parsePromptBody({ text: "hello" }), {
     text: "hello",
     images: undefined,
+    mode: undefined,
   });
 });
 
