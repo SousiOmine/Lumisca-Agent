@@ -3,7 +3,9 @@ import { basename } from "node:path";
 import {
   type AgentMessage,
   contentText,
+  formatContextUsageLine,
   type LumiscaCore,
+  summarizeContextUsage,
 } from "@lumisca/core";
 import { parseFlags } from "./flags.ts";
 import {
@@ -38,6 +40,9 @@ export interface RunResult {
   messages: AgentMessage[];
   /** The last session error (undefined when the run completed cleanly). */
   error?: string;
+  /** Context window of the run's model (undefined when unknown). Used to
+   * render the context usage line without another model lookup. */
+  contextWindow?: number;
 }
 
 const RUN_SESSION_PREFIX = "Run ";
@@ -233,7 +238,15 @@ export async function runOnce(
   // agent loop itself throws. Check both.
   const error = core.getSessionLastError(session.id) ??
     assistantErrorMessage(messages);
-  return { sessionId: session.id, provider, modelId, messages, error };
+  const contextWindow = core.getModel(provider, modelId)?.contextWindow;
+  return {
+    sessionId: session.id,
+    provider,
+    modelId,
+    messages,
+    error,
+    ...(contextWindow === undefined ? {} : { contextWindow }),
+  };
 }
 
 /** The errorMessage of the last assistant message with an error stop
@@ -267,8 +280,12 @@ export function finalAnswerText(messages: AgentMessage[]): string {
 }
 
 /** Print the run result: the full transcript as JSON (--json) or the
- * final answer text. */
+ * final answer text. A context usage line ("301.2K/1M (30.1%) · Avg cache
+ * hit 92.4%") follows on stderr in text mode (stdout stays pipe-clean)
+ * and joins the JSON payload in --json mode. */
 export function printRunResult(result: RunResult, json: boolean): void {
+  const summary = summarizeContextUsage(result.messages);
+  const line = formatContextUsageLine(summary, result.contextWindow);
   if (json) {
     console.log(JSON.stringify(
       {
@@ -276,6 +293,12 @@ export function printRunResult(result: RunResult, json: boolean): void {
         provider: result.provider,
         modelId: result.modelId,
         messages: result.messages,
+        contextUsage: {
+          ...summary,
+          ...(result.contextWindow === undefined
+            ? {}
+            : { contextWindow: result.contextWindow }),
+        },
       },
       null,
       2,
@@ -283,4 +306,5 @@ export function printRunResult(result: RunResult, json: boolean): void {
     return;
   }
   console.log(finalAnswerText(result.messages));
+  if (line) console.error(`Context: ${line}`);
 }

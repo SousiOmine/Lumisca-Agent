@@ -104,6 +104,19 @@ export {
   stripDataUrlHeader,
   toDataUrl,
 } from "./shared.ts";
+export {
+  contextTokensOf,
+  contextUsageRatio,
+  formatCompactTokens,
+  formatContextUsageLine,
+  formatPercent1,
+  summarizeContextUsage,
+} from "./shared.ts";
+export type {
+  ContextUsageLike,
+  ContextUsageMessageLike,
+  ContextUsageSummary,
+} from "./shared.ts";
 export type { McpServerConfigLike } from "./shared.ts";
 export {
   loadMcpConfig,

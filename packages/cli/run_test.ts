@@ -306,6 +306,110 @@ Deno.test("printRunResult prints the full transcript as JSON with --json", () =>
   assertEquals(parsed.messages[1]!.role, "assistant");
 });
 
+Deno.test("printRunResult reports context usage on stderr in text mode", () => {
+  const result: RunResult = {
+    sessionId: "s1",
+    provider: "p",
+    modelId: "m",
+    contextWindow: 1_000_000,
+    messages: [
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "final text" }],
+        usage: {
+          input: 1200,
+          output: 10,
+          cacheRead: 300000,
+          cacheWrite: 0,
+          totalTokens: 301210,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      },
+    ] as never,
+  };
+  const logs: string[] = [];
+  const errors: string[] = [];
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = (...args: unknown[]) => logs.push(args.join(" "));
+  console.error = (...args: unknown[]) => errors.push(args.join(" "));
+  try {
+    printRunResult(result, false);
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  assertEquals(logs, ["final text"]);
+  assertEquals(errors, ["Context: 301.2K/1M (30.1%) · Avg cache hit 99.6%"]);
+});
+
+Deno.test("printRunResult stays silent on stderr without usage", () => {
+  const result: RunResult = {
+    sessionId: "s1",
+    provider: "p",
+    modelId: "m",
+    messages: [
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+      { role: "assistant", content: [{ type: "text", text: "final text" }] },
+    ] as never,
+  };
+  const errors: string[] = [];
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = () => {};
+  console.error = (...args: unknown[]) => errors.push(args.join(" "));
+  try {
+    printRunResult(result, false);
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  assertEquals(errors, []);
+});
+
+Deno.test("printRunResult embeds contextUsage in --json output", () => {
+  const result: RunResult = {
+    sessionId: "s1",
+    provider: "p",
+    modelId: "m",
+    contextWindow: 1_000_000,
+    messages: [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+        usage: {
+          input: 1200,
+          output: 10,
+          cacheRead: 300000,
+          cacheWrite: 0,
+          totalTokens: 301210,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      },
+    ] as never,
+  };
+  const logs: string[] = [];
+  const original = console.log;
+  console.log = (...args: unknown[]) => logs.push(args.join(" "));
+  try {
+    printRunResult(result, true);
+  } finally {
+    console.log = original;
+  }
+  assertEquals(logs.length, 1);
+  const parsed = JSON.parse(logs[0]!) as {
+    contextUsage: {
+      turns: number;
+      currentTokens: number;
+      contextWindow: number;
+    };
+  };
+  assertEquals(parsed.contextUsage.turns, 1);
+  assertEquals(parsed.contextUsage.currentTokens, 301200);
+  assertEquals(parsed.contextUsage.contextWindow, 1_000_000);
+});
+
 Deno.test("RUN_USAGE documents the run command", () => {
   assertStringIncludes(RUN_USAGE, "lumisca run");
   assertStringIncludes(RUN_USAGE, "--prompt");

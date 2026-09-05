@@ -2607,6 +2607,87 @@ select:focus {
   color: var(--accent);
 }
 
+/* ---- context usage meter (composer footer) ------------------------------ */
+
+.ctx-wrap {
+  position: relative;
+}
+
+.ctx-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ctx-meter:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.ctx-meter.open {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.ctx-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 300px;
+  max-width: calc(100vw - 40px);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ctx-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ctx-row .mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.ctx-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.ctx-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--text);
+}
+
+.ctx-bar-fill.warn {
+  background: var(--error);
+}
+
 .model-popover {
   position: absolute;
   bottom: calc(100% + 6px);

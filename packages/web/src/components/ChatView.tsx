@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { IconMessage, IconSend } from "@tabler/icons-react";
+import { summarizeContextUsage } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
   AskAnswer,
@@ -35,6 +36,7 @@ import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
 import { api } from "../api.ts";
+import { useProviderModels } from "../providers.ts";
 
 export { buildTurns } from "./chat/ConversationTurn.tsx";
 
@@ -293,6 +295,22 @@ export function ChatView(
     return map;
   }, [view.messages]);
 
+  // Context meter for the composer footer: the latest turn's input usage
+  // against the current model's window, plus the session-average cache
+  // hit rate. The window comes from the owning peer's model list ("" =
+  // this server); without usage yet the meter stays hidden.
+  const summary = useMemo(
+    () => summarizeContextUsage(view.messages),
+    [view.messages],
+  );
+  const { modelsByProvider } = useProviderModels(peerId ?? "");
+  const contextWindow = modelsByProvider.get(view.info.modelProvider)?.find(
+    (m) => m.id === view.info.modelId,
+  )?.contextWindow;
+  const contextUsage = summary.currentTokens === undefined
+    ? undefined
+    : { summary, contextWindow };
+
   return (
     <div className="chat">
       <div className="chat-panels">
@@ -376,6 +394,7 @@ export function ChatView(
           onSlashCommand={handleSlashCommand}
           images={images}
           onImagesChange={onImagesChange}
+          contextUsage={contextUsage}
         />
       </div>
     </div>

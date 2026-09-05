@@ -19,6 +19,12 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { MAX_PROMPT_IMAGES, THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
+import {
+  ContextUsageCard,
+  type ContextUsageData,
+  ContextUsageTrigger,
+} from "./ContextUsage.tsx";
+export type { ContextUsageData };
 import { ModelPicker } from "./ModelPicker.tsx";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
@@ -97,6 +103,9 @@ interface ComposerProps {
    * are appended here; the parent clears them after a successful submit. */
   images?: PendingImage[];
   onImagesChange?: (images: PendingImage[]) => void;
+  /** Context usage for the meter + popover above the footer (undefined
+   * hides it: the session has no assistant usage yet). */
+  contextUsage?: ContextUsageData;
 }
 
 /** Shared chat input: textarea + model picker + submit, in one rounded box.
@@ -128,9 +137,11 @@ export function Composer({
   onSlashCommand,
   images = [],
   onImagesChange,
+  contextUsage,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showThinkingPicker, setShowThinkingPicker] = useState(false);
+  const [showCtx, setShowCtx] = useState(false);
   const [dragging, setDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Latest images, read inside the async FileReader callback so a burst of
@@ -145,6 +156,7 @@ export function Composer({
   // trigger keeps working).
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const thinkingPickerRef = useRef<HTMLDivElement>(null);
+  const ctxRef = useRef<HTMLDivElement>(null);
   useClickOutside(
     modelPickerRef,
     () => setShowModelPicker(false),
@@ -155,6 +167,7 @@ export function Composer({
     () => setShowThinkingPicker(false),
     showThinkingPicker,
   );
+  useClickOutside(ctxRef, () => setShowCtx(false), showCtx);
 
   const slashEnabled = slashCommands !== undefined;
 
@@ -525,6 +538,7 @@ export function Composer({
                 onClick={() => {
                   setShowModelPicker((o) => !o);
                   setShowThinkingPicker(false);
+                  setShowCtx(false);
                 }}
                 title="モデルを選択"
               >
@@ -555,6 +569,7 @@ export function Composer({
                         !o
                       );
                       setShowModelPicker(false);
+                      setShowCtx(false);
                     }}
                     title="思考強度"
                   >
@@ -611,6 +626,26 @@ export function Composer({
             </div>
           )}
         <div className="input-actions">
+          {contextUsage !== undefined && (
+            <div className="ctx-wrap" ref={ctxRef}>
+              <ContextUsageTrigger
+                summary={contextUsage.summary}
+                contextWindow={contextUsage.contextWindow}
+                open={showCtx}
+                onToggle={() => {
+                  setShowCtx((o) => !o);
+                  setShowModelPicker(false);
+                  setShowThinkingPicker(false);
+                }}
+              />
+              {showCtx && (
+                <ContextUsageCard
+                  summary={contextUsage.summary}
+                  contextWindow={contextUsage.contextWindow}
+                />
+              )}
+            </div>
+          )}
           {onAbort && (
             <button
               type="button"
