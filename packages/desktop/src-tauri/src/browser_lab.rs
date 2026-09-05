@@ -14,7 +14,15 @@
 //!   the main window: multiple WebView2 controllers inside one top-level
 //!   window break mouse routing to the main webview (windows show up as
 //!   an unresponsive title bar), so the lab keeps its own window and is
-//!   kept on top of the main window instead (see `raise` / `sync`).
+//!   kept on top of the main window instead (see `raise` / `sync`). The
+//!   pane is OWNED by the main window (`WebviewWindowBuilder::owner`):
+//!   the Windows shell binds owned windows to the owner's virtual
+//!   desktop, so switching desktops hides the pane with the app instead
+//!   of leaving it visible on every desktop (an unowned, taskbar-less
+//!   window is not tracked per desktop and lingers after the switch).
+//!   `match_main_desktop` re-pins the pane to the main window's desktop
+//!   explicitly as well — right after creation, on every open, when the
+//!   pane is shown, and on every sync.
 //! - observe/act/wait/screenshot drive the page through
 //!   `eval_with_callback` — the probe runs in the page, results come back
 //!   through the eval callback. No polling, no push channel. These work
@@ -296,12 +304,73 @@ fn raise_pane(pane: &WebviewWindow) {
 #[cfg(not(windows))]
 fn raise_pane(_pane: &WebviewWindow) {}
 
+/// Pin the lab pane to the main window's virtual desktop (Windows).
+///
+/// The pane is owned by the main window (see `ensure_window`), which
+/// binds it to the owner's virtual desktop in the shell's tracking —
+/// the real fix for the pane lingering on other desktops after a
+/// switch. This function enforces that binding explicitly: it asks the
+/// shell (`IVirtualDesktopManager`) which desktop the main window lives
+/// on and moves the pane there. It runs right after creation, on every
+/// open, whenever the pane is shown, and on every sync, so a desktop
+/// switch at any point in the pane's life cannot leave it behind (task
+/// view would otherwise show the borderless pane on every desktop).
+/// Moving a window that is already there is a no-op, and any failure
+/// (no virtual desktop support, a window destroyed meanwhile) only
+/// skips the move.
+#[cfg(windows)]
+fn match_main_desktop(pane: &WebviewWindow, main: &WebviewWindow) {
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
+
+    // ensure_window runs on the RPC thread, which is not COM-initialized:
+    // initialize this thread's apartment and release it again below
+    // (S_OK = we initialized it; S_FALSE = it was already initialized in
+    // the same mode, e.g. sync() on the app's main thread, and is not
+    // ours to release; anything else skips the move entirely).
+    let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    if init.is_err() {
+        return;
+    }
+    let must_uninit = init.0 == 0;
+    let (Ok(pane_hwnd), Ok(main_hwnd)) = (pane.hwnd(), main.hwnd()) else {
+        if must_uninit {
+            unsafe { CoUninitialize() };
+        }
+        return;
+    };
+    // The manager is dropped before CoUninitialize below: releasing the
+    // COM interface after the apartment went away would be a use-after-
+    // uninit.
+    if let Ok(manager) = unsafe {
+        CoCreateInstance::<_, IVirtualDesktopManager>(
+            &VirtualDesktopManager,
+            None,
+            CLSCTX_INPROC_SERVER,
+        )
+    } {
+        if let Ok(desktop) = unsafe { manager.GetWindowDesktopId(main_hwnd) } {
+            let _ = unsafe { manager.MoveWindowToDesktop(pane_hwnd, &desktop) };
+        }
+    }
+    if must_uninit {
+        unsafe { CoUninitialize() };
+    }
+}
+
+#[cfg(not(windows))]
+fn match_main_desktop(_pane: &WebviewWindow, _main: &WebviewWindow) {}
+
 impl LabCore {
     /// Create the lab window on demand (idempotent per call — this IS
     /// open()'s job), or navigate the existing one. Runs on the RPC
     /// thread: window creation/navigation are message-driven and
-    /// thread-safe; the geometry is applied right after creation (the
-    /// window starts hidden so it never flashes at a default position).
+    /// thread-safe; ownership, geometry and the virtual-desktop pin are
+    /// applied at creation (the window starts hidden so it never
+    /// flashes at a default position or on a wrong desktop).
     fn ensure_window(&self, url: &str, visible: bool) -> Result<WebviewWindow, RpcError> {
         let parsed =
             url::Url::parse(url).map_err(|e| RpcError::invalid(format!("URL が不正です: {e}")))?;
@@ -318,6 +387,7 @@ impl LabCore {
         if let Some(window) = self.window.lock().unwrap().clone() {
             let _ = window.navigate(parsed);
             place_pane(&window, &main);
+            match_main_desktop(&window, &main);
             self.apply_visibility(&window, visible)?;
             *self.visible.lock().unwrap() = visible;
             return Ok(window);
@@ -332,6 +402,18 @@ impl LabCore {
         .resizable(false)
         .skip_taskbar(true)
         .shadow(false)
+        // Owned by the main window. The Windows shell binds owned
+        // windows to the owner's virtual desktop: a taskbar-less,
+        // unowned top-level window is not tracked per desktop and stays
+        // visible on EVERY desktop after a switch (the pane "lingering"
+        // on other desktops while the app does not). Ownership also
+        // keeps the pane above the app and hides it when the app is
+        // minimized — the pane is an overlay docked to the app, so both
+        // match its intended behavior.
+        .owner(&main)
+        .map_err(|e| {
+            RpcError::internal(format!("ブラウザペインをメイン窓に紐づけられません: {e}"))
+        })?
         // Start hidden: `place_pane` runs after creation, and an
         // unplaced flash at the default position would be ugly.
         .visible(false)
@@ -346,7 +428,11 @@ impl LabCore {
         let window = builder
             .build()
             .map_err(|e| RpcError::internal(format!("ブラウザペインを作成できません: {e}")))?;
+        // Pin before the first show: the window is created hidden, so a
+        // desktop switch mid-creation can never flash the borderless
+        // pane on the wrong desktop.
         place_pane(&window, &main);
+        match_main_desktop(&window, &main);
         raise_pane(&window);
         self.apply_visibility(&window, visible)?;
         *self.window.lock().unwrap() = Some(window.clone());
@@ -363,7 +449,15 @@ impl LabCore {
         if visible {
             window
                 .show()
-                .map_err(|e| RpcError::internal(format!("ブラウザペインを表示できません: {e}")))
+                .map_err(|e| RpcError::internal(format!("ブラウザペインを表示できません: {e}")))?;
+            // Re-pin on every show: the pane is owned (and thus bound)
+            // to the main window's desktop, but re-asserting it costs
+            // nothing and covers a main window that moved to another
+            // desktop while the pane was hidden.
+            if let Some(main) = self.app.get_webview_window(MAIN_WINDOW_LABEL) {
+                match_main_desktop(window, &main);
+            }
+            Ok(())
         } else {
             window
                 .hide()
@@ -372,9 +466,10 @@ impl LabCore {
     }
 
     /// Keep the pane glued to the main window: re-apply the overlay
-    /// geometry, and — while the main window is the focused one — bring
-    /// the lab above it (without stealing activation). Called from
-    /// lib.rs on the main window's Moved / Resized / Focused events.
+    /// geometry, pin it to the main window's virtual desktop, and —
+    /// while the main window is the focused one — bring the lab above it
+    /// (without stealing activation). Called from lib.rs on the main
+    /// window's Moved / Resized / Focused events.
     fn sync(&self) {
         let Some(pane) = self.window.lock().unwrap().clone() else {
             return;
@@ -383,6 +478,7 @@ impl LabCore {
             return;
         };
         place_pane(&pane, &main);
+        match_main_desktop(&pane, &main);
         self.reapply_emulation(&pane);
         // Only raise when the main window holds focus: raising while
         // another app is active would float the lab over that app, and
@@ -466,6 +562,13 @@ impl LabCore {
             } else {
                 window.hide()
             };
+            // Same re-pin as apply_visibility: showing the pane (here
+            // from the header) re-asserts the main window's desktop.
+            if visible {
+                if let Some(main) = self.app.get_webview_window(MAIN_WINDOW_LABEL) {
+                    match_main_desktop(&window, &main);
+                }
+            }
             *self.visible.lock().unwrap() = visible;
         }
         self.state_json()

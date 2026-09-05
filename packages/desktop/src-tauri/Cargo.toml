@@ -26,10 +26,14 @@ lumisca-browser-rpc = { path = "../../browser-rpc" }
 
 [target.'cfg(windows)'.dependencies]
 # Same version tauri/tao already use (no duplicate in the tree). Used to
-# force-activate the window before a bridge-started caption drag.
+# force-activate the window before a bridge-started caption drag, and for
+# IVirtualDesktopManager (the browser lab pane follows the main window
+# across Windows virtual desktops — see browser_lab.rs).
 windows = { version = "0.61", features = [
   "Win32_Foundation",
+  "Win32_System_Com",
   "Win32_System_Threading",
+  "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }
 # Direct WebView2 COM access for the browser lab's CDP screenshot and
