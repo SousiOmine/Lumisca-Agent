@@ -58,9 +58,9 @@ use std::time::Duration;
 // Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
 // `open` on every platform; only the CDP calls themselves are Windows-only.
 use lumisca_browser_rpc::emulation;
-use lumisca_browser_rpc::server::RpcHandler;
 #[cfg(windows)]
 use lumisca_browser_rpc::limits;
+use lumisca_browser_rpc::server::RpcHandler;
 use lumisca_browser_rpc::{error_codes, methods, policy, probe, RpcError};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
@@ -402,18 +402,6 @@ impl LabCore {
         .resizable(false)
         .skip_taskbar(true)
         .shadow(false)
-        // Owned by the main window. The Windows shell binds owned
-        // windows to the owner's virtual desktop: a taskbar-less,
-        // unowned top-level window is not tracked per desktop and stays
-        // visible on EVERY desktop after a switch (the pane "lingering"
-        // on other desktops while the app does not). Ownership also
-        // keeps the pane above the app and hides it when the app is
-        // minimized — the pane is an overlay docked to the app, so both
-        // match its intended behavior.
-        .owner(&main)
-        .map_err(|e| {
-            RpcError::internal(format!("ブラウザペインをメイン窓に紐づけられません: {e}"))
-        })?
         // Start hidden: `place_pane` runs after creation, and an
         // unplaced flash at the default position would be ugly.
         .visible(false)
@@ -425,6 +413,22 @@ impl LabCore {
                 .iter()
                 .any(|scheme| candidate.as_str().starts_with(scheme))
         });
+        // Owned by the main window (Windows only). The Windows shell
+        // binds owned windows to the owner's virtual desktop: a
+        // taskbar-less, unowned top-level window is not tracked per
+        // desktop and stays visible on EVERY desktop after a switch
+        // (the pane "lingering" on other desktops while the app does
+        // not). Ownership also keeps the pane above the app and hides
+        // it when the app is minimized — the pane is an overlay docked
+        // to the app, so both match its intended behavior.
+        // Owner windows (MSDN) are a Windows-only concept and the
+        // method does not exist on `WebviewWindowBuilder` for
+        // macOS/Linux, so the binding is compiled for Windows only;
+        // elsewhere the pane stays a fully independent window.
+        #[cfg(windows)]
+        let builder = builder.owner(&main).map_err(|e| {
+            RpcError::internal(format!("ブラウザペインをメイン窓に紐づけられません: {e}"))
+        })?;
         let window = builder
             .build()
             .map_err(|e| RpcError::internal(format!("ブラウザペインを作成できません: {e}")))?;
@@ -510,8 +514,7 @@ impl LabCore {
         let _ = pane.with_webview(move |platform| {
             use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
             use windows::core::HSTRING;
-            let Ok(core_webview) = (|| unsafe { platform.controller().CoreWebView2() })()
-            else {
+            let Ok(core_webview) = (|| unsafe { platform.controller().CoreWebView2() })() else {
                 return;
             };
             let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
@@ -519,9 +522,8 @@ impl LabCore {
             ));
             let method = HSTRING::from("Emulation.setDeviceMetricsOverride");
             let cdp_params = HSTRING::from(params.to_string());
-            let _ = unsafe {
-                core_webview.CallDevToolsProtocolMethod(&method, &cdp_params, &handler)
-            };
+            let _ =
+                unsafe { core_webview.CallDevToolsProtocolMethod(&method, &cdp_params, &handler) };
         });
     }
 
