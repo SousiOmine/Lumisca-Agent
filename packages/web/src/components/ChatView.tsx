@@ -4,7 +4,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { IconMessage, IconSend } from "@tabler/icons-react";
 import { summarizeContextUsage } from "@lumisca/core/shared";
@@ -16,7 +15,6 @@ import type {
   ThinkingLevel,
   ToolResultMessage,
 } from "../types.ts";
-import type { SavedPrompt } from "../types.ts";
 import {
   Composer,
   type SlashCommand,
@@ -35,8 +33,8 @@ import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
-import { api } from "../api.ts";
 import { useProviderModels } from "../providers.ts";
+import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 
 export { buildTurns } from "./chat/ConversationTurn.tsx";
 
@@ -95,24 +93,9 @@ export function ChatView(
   const userScrolledUp = useRef(false);
   const isRunning = isViewRunning(view);
 
-  // --- saved prompts ------------------------------------------------------
-
-  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
-
-  useEffect(() => {
-    let stale = false;
-    api.getSavedPrompts()
-      .then((result) => {
-        if (stale) return;
-        setSavedPrompts(result.prompts);
-      })
-      .catch(() => {
-        // Non-critical: saved prompts just won't appear in the menu.
-      });
-    return () => {
-      stale = true;
-    };
-  }, []);
+  // --- saved prompts (shared hook so the menu refreshes after the settings
+  // panel mutates the list) ----------------------------------------------
+  const { prompts: savedPrompts } = useSavedPrompts();
 
   // Build the slash commands list including the /prompt submenu.
   // In chat mode only saved prompts are shown (agent modes need a workspace).
@@ -390,7 +373,9 @@ export function ChatView(
             ? undefined
             : view.info.workspaceId}
           mentionPeerId={peerId}
-          slashCommands={allSlashCommands}
+          slashCommands={allSlashCommands.length > 0
+            ? allSlashCommands
+            : undefined}
           onSlashCommand={handleSlashCommand}
           images={images}
           onImagesChange={onImagesChange}

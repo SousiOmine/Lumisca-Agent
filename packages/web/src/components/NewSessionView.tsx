@@ -7,9 +7,9 @@ import type {
   ModePrompt,
   PeerStatus,
   PendingImage,
-  SavedPrompt,
   ThinkingLevel,
 } from "../types.ts";
+import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import {
@@ -142,22 +142,9 @@ export function NewSessionView(
   const modelTouched = useRef(false);
   const recent = useRecentSessions();
 
-  // --- saved prompts ------------------------------------------------------
-
-  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
-
-  useEffect(() => {
-    let stale = false;
-    api.getSavedPrompts()
-      .then((result) => {
-        if (stale) return;
-        setSavedPrompts(result.prompts);
-      })
-      .catch(() => {});
-    return () => {
-      stale = true;
-    };
-  }, []);
+  // --- saved prompts (shared hook so the menu refreshes after the settings
+  // panel mutates the list) ----------------------------------------------
+  const { prompts: savedPrompts } = useSavedPrompts();
 
   // Show the last used model (the one a session without an explicit model
   // would get) right away instead of leaving the picker to choose on click.

@@ -9,6 +9,7 @@ import {
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import type { SavedPrompt } from "../../types.ts";
+import { notifySavedPromptsUpdated } from "../../hooks/useSavedPrompts.ts";
 
 /** Settings → パーソナライズ. Edits the machine-level AGENTS.md that lives
  * next to the settings file, and manages saved prompts (user-defined prompt
@@ -111,6 +112,7 @@ export function PersonalizePanel() {
     try {
       await api.deleteSavedPrompt(id);
       await loadPrompts();
+      notifySavedPromptsUpdated();
     } catch (e) {
       setPromptsError(errorText(e));
     }
@@ -127,6 +129,7 @@ export function PersonalizePanel() {
       );
       setShowAddForm(false);
       await loadPrompts();
+      notifySavedPromptsUpdated();
     } catch (e) {
       setPromptsError(errorText(e));
     }
@@ -140,6 +143,7 @@ export function PersonalizePanel() {
       await api.updateSavedPrompt(id, input);
       setEditingPrompt(null);
       await loadPrompts();
+      notifySavedPromptsUpdated();
     } catch (e) {
       setPromptsError(errorText(e));
     }

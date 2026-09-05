@@ -77,6 +77,20 @@ function filterSlashCommands(
   );
 }
 
+/** Items matching the typed query (empty query → all). Used for the second
+ * level (e.g. saved prompts inside /prompt). */
+function filterSlashItems(
+  items: SlashCommandItem[],
+  query: string,
+): SlashCommandItem[] {
+  if (query.trim() === "") return items;
+  const q = query.trim().toLowerCase();
+  return items.filter((item) =>
+    item.id.toLowerCase().includes(q) ||
+    item.label.toLowerCase().includes(q)
+  );
+}
+
 /** Narrowing helper: entries of the first level are commands. */
 export function isSlashCommand(
   entry: SlashCommand | SlashCommandItem,
@@ -123,10 +137,11 @@ export function useSlashMenu(options: {
   const [slash, setSlash] = useState<SlashState | null>(null);
 
   /** Entries shown in the slash menu right now: query-filtered commands at
-   * the first level, the subcommand list inside a submenu. */
+   * the first level, the subcommand list (filtered by the text after the
+   * command when present) inside a submenu. */
   const slashEntries: SlashCommandItem[] = slash !== null
     ? slash.submenu !== null
-      ? slash.submenu.items ?? []
+      ? filterSlashItems(slash.submenu.items ?? [], slash.rest)
       : filterSlashCommands(commands, slash.query)
     : [];
 
@@ -134,21 +149,63 @@ export function useSlashMenu(options: {
     (nextValue: string, caret: number): boolean => {
       const det = enabled ? detectSlash(nextValue, caret) : null;
       if (!det) return false;
-      setSlash((prev) =>
-        prev && prev.start === det.start && prev.query === det.query &&
-          prev.rest === det.rest
-          ? prev
-          : {
+      setSlash((prev) => {
+        // Keep the submenu open while the user types the filter text
+        // after the command (e.g. `/prompt test` filters the prompt list
+        // by "test" instead of closing the submenu).
+        if (
+          prev !== null && prev.submenu !== null &&
+          prev.start === det.start &&
+          prev.query.toLowerCase() === det.query.toLowerCase() &&
+          prev.submenu.id.toLowerCase() === det.query.toLowerCase()
+        ) {
+          if (prev.rest === det.rest) return prev;
+          return { ...prev, rest: det.rest, active: 0 };
+        }
+
+        // Auto-open the submenu when the query exactly matches a single
+        // command that has subcommands (e.g. typing `/prompt` or
+        // `/prompt ` immediately shows the saved prompts).
+        const filtered = filterSlashCommands(commands, det.query);
+        const first = filtered[0];
+        const exact = filtered.length === 1 && first !== undefined &&
+          (first.items?.length ?? 0) > 0 &&
+          first.id.toLowerCase() === det.query.toLowerCase();
+        if (exact && first !== undefined) {
+          const submenu: SlashCommand = first;
+          if (
+            prev !== null && prev.submenu?.id === submenu.id &&
+            prev.start === det.start && prev.query === det.query &&
+            prev.rest === det.rest
+          ) {
+            return prev;
+          }
+          return {
             start: det.start,
             query: det.query,
             rest: det.rest,
             active: 0,
-            submenu: null,
-          }
-      );
+            submenu,
+          };
+        }
+
+        if (
+          prev && prev.start === det.start && prev.query === det.query &&
+          prev.rest === det.rest && prev.submenu === null
+        ) {
+          return prev;
+        }
+        return {
+          start: det.start,
+          query: det.query,
+          rest: det.rest,
+          active: 0,
+          submenu: null,
+        };
+      });
       return true;
     },
-    [enabled],
+    [enabled, commands],
   );
 
   const resetSlash = useCallback(() => {
