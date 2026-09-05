@@ -1,9 +1,9 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
-  fauxAssistantMessage,
-  type AssistantMessageEventStream,
   type Api,
+  type AssistantMessageEventStream,
   type Context,
+  fauxAssistantMessage,
   type Model,
 } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
@@ -152,6 +152,9 @@ Deno.test("streamText backoff delays grow exponentially", async () => {
   } finally {
     Math.random = realRandom;
   }
-  assertEquals(delays, [RATE_LIMIT_BASE_DELAY_MS, RATE_LIMIT_BASE_DELAY_MS * 2]);
+  assertEquals(delays, [
+    RATE_LIMIT_BASE_DELAY_MS,
+    RATE_LIMIT_BASE_DELAY_MS * 2,
+  ]);
   assert(delays.length === 2);
 });

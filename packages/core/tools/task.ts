@@ -1,7 +1,7 @@
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent, StreamFn } from "@earendil-works/pi-agent-core";
 import type { Api, AssistantMessage, Model } from "@earendil-works/pi-ai";
-import { CoreError, errorMessage } from "../errors.ts";
+import { CoreError } from "../errors.ts";
 import {
   isRetryableRateLimit,
   MAX_RATE_LIMIT_RETRIES,

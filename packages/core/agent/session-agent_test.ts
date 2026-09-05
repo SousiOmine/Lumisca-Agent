@@ -56,7 +56,9 @@ function makeAgent(
   streamFn: StreamFn,
   tools: Tool[] = [],
   onEvent: (event: ClientEvent) => void = () => {},
-  extra: { rateLimitRetrySleep?: (ms: number, signal?: AbortSignal) => Promise<void> } = {},
+  extra: {
+    rateLimitRetrySleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  } = {},
 ): SessionAgent {
   return new SessionAgent({
     sessionId: "s1",
@@ -146,7 +148,7 @@ function fauxRateLimit(): AssistantMessage {
   return fauxAssistantMessage("", {
     stopReason: "error",
     errorMessage:
-      "OpenAI API error (429): {\"code\":\"rate_limit_exceeded\",\"type\":\"rate_limit_error\"} " +
+      'OpenAI API error (429): {"code":"rate_limit_exceeded","type":"rate_limit_error"} ' +
       "Rate limit exceeded. Please retry after a brief wait.",
   });
 }
@@ -430,9 +432,9 @@ Deno.test("a rate-limit (429) turn restarts the run and recovers", async () => {
 
 Deno.test("rate-limit turns stop restarting after the limit", async () => {
   const agent = makeAgent(
-    streamSequence(Array.from({ length: MAX_RATE_LIMIT_RETRIES + 2 }, () =>
-      fauxRateLimit(),
-    )),
+    streamSequence(
+      Array.from({ length: MAX_RATE_LIMIT_RETRIES + 2 }, () => fauxRateLimit()),
+    ),
     [],
     () => {},
     { rateLimitRetrySleep: instantSleep },
@@ -479,14 +481,22 @@ Deno.test("a rate-limit turn with partial output surfaces (no restart)", async (
 Deno.test("the rate-limit budget is independent of the vacant budget", async () => {
   // MAX_RATE_LIMIT_RETRIES rate-limit turns, then a vacant turn: the vacant
   // turn is still retried because its own budget was never consumed.
-  const agent = makeAgent(streamSequence([
-    ...Array.from({ length: MAX_RATE_LIMIT_RETRIES }, () => fauxRateLimit()),
-    fauxAssistantMessage(""),
-    fauxAssistantMessage("done"),
-  ]), [], () => {}, { rateLimitRetrySleep: instantSleep });
+  const agent = makeAgent(
+    streamSequence([
+      ...Array.from({ length: MAX_RATE_LIMIT_RETRIES }, () => fauxRateLimit()),
+      fauxAssistantMessage(""),
+      fauxAssistantMessage("done"),
+    ]),
+    [],
+    () => {},
+    { rateLimitRetrySleep: instantSleep },
+  );
   await agent.prompt("hello");
 
-  assertEquals(retryNotifications(agent.messages).length, MAX_RATE_LIMIT_RETRIES + 1);
+  assertEquals(
+    retryNotifications(agent.messages).length,
+    MAX_RATE_LIMIT_RETRIES + 1,
+  );
   assertEquals(agent.messages.at(-1)?.role, "assistant");
 });
 

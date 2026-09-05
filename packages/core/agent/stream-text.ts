@@ -2,8 +2,8 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import {
   isRetryableRateLimitError,
-  retryOnRateLimitError,
   type RateLimitRetryOptions,
+  retryOnRateLimitError,
 } from "./llm-retry.ts";
 
 type StreamRequest = Parameters<StreamFn>[1];

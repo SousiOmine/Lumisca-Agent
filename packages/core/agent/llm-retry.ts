@@ -93,12 +93,12 @@ export class RetryAbortError extends Error {
 
 /** Sleep that rejects with RetryAbortError when `signal` fires, so a user
  * stop during backoff cancels the retry immediately instead of hanging. */
-export async function sleepAbortable(
+export function sleepAbortable(
   ms: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (ms <= 0) return;
-  if (signal?.aborted) throw new RetryAbortError();
+  if (ms <= 0) return Promise.resolve();
+  if (signal?.aborted) return Promise.reject(new RetryAbortError());
   return new Promise<void>((resolve, reject) => {
     const onAbort = () => {
       clearTimeout(timer);
@@ -136,7 +136,7 @@ export async function retryOnRateLimitError<T>(
   const maxRetries = opts.maxRetries ?? MAX_RATE_LIMIT_RETRIES;
   const sleep = opts.sleep ?? sleepAbortable;
   let lastError: unknown;
-  for (let n = 0; ; n++) {
+  for (let n = 0;; n++) {
     try {
       return await attempt();
     } catch (error) {
@@ -174,7 +174,9 @@ export function applyProviderRetryDefaults(
       maxRetryDelayMs: PROVIDER_DEFAULT_MAX_RETRY_DELAY_MS,
     };
   }
-  if (options.maxRetries === undefined && options.maxRetryDelayMs === undefined) {
+  if (
+    options.maxRetries === undefined && options.maxRetryDelayMs === undefined
+  ) {
     return {
       ...options,
       maxRetries: PROVIDER_DEFAULT_MAX_RETRIES,

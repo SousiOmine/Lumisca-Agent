@@ -30,7 +30,9 @@ Deno.test("isRetryableRateLimit: openai 429 rate_limit_exceeded qualifies", () =
   );
   assertEquals(
     isRetryableRateLimit(
-      rateLimited("Error from provider: [rate_limit_exceeded] Rate limit exceeded"),
+      rateLimited(
+        "Error from provider: [rate_limit_exceeded] Rate limit exceeded",
+      ),
     ),
     true,
   );
@@ -39,14 +41,18 @@ Deno.test("isRetryableRateLimit: openai 429 rate_limit_exceeded qualifies", () =
     true,
   );
   assertEquals(
-    isRetryableRateLimit(rateLimited("Upstream returned HTTP 429 (too many requests)")),
+    isRetryableRateLimit(
+      rateLimited("Upstream returned HTTP 429 (too many requests)"),
+    ),
     true,
   );
 });
 
 Deno.test("isRetryableRateLimit: quota/billing exhaustion does not", () => {
   assertEquals(
-    isRetryableRateLimit(rateLimited("insufficient_quota: you have hit your quota")),
+    isRetryableRateLimit(
+      rateLimited("insufficient_quota: you have hit your quota"),
+    ),
     false,
   );
   assertEquals(
@@ -58,11 +64,15 @@ Deno.test("isRetryableRateLimit: quota/billing exhaustion does not", () => {
     false,
   );
   assertEquals(
-    isRetryableRateLimit(rateLimited("GoUsageLimitError: monthly usage limit reached")),
+    isRetryableRateLimit(
+      rateLimited("GoUsageLimitError: monthly usage limit reached"),
+    ),
     false,
   );
   assertEquals(
-    isRetryableRateLimit(rateLimited("FreeUsageLimitError: enable available balance")),
+    isRetryableRateLimit(
+      rateLimited("FreeUsageLimitError: enable available balance"),
+    ),
     false,
   );
 });
@@ -71,7 +81,9 @@ Deno.test("isRetryableRateLimit: non-rate errors do not", () => {
   // Normal stop, outputless is not an error.
   assertEquals(isRetryableRateLimit(fauxAssistantMessage("")), false);
   assertEquals(
-    isRetryableRateLimit(rateLimited("Provider is not configured: amazon-bedrock")),
+    isRetryableRateLimit(
+      rateLimited("Provider is not configured: amazon-bedrock"),
+    ),
     false,
   );
   assertEquals(
@@ -155,10 +167,12 @@ function instantSleep(): Promise<void> {
 Deno.test("retryOnRateLimitError retries rate limits then succeeds", async () => {
   let calls = 0;
   const result = await retryOnRateLimitError(
-    async () => {
+    () => {
       calls++;
-      if (calls < 3) throw new Error("OpenAI API error (429): rate_limit_exceeded");
-      return "ok";
+      if (calls < 3) {
+        throw new Error("OpenAI API error (429): rate_limit_exceeded");
+      }
+      return Promise.resolve("ok");
     },
     isRetryableRateLimitError,
     { sleep: instantSleep, maxRetries: 5 },
@@ -170,7 +184,7 @@ Deno.test("retryOnRateLimitError retries rate limits then succeeds", async () =>
 Deno.test("retryOnRateLimitError stops at non-rate errors", async () => {
   let calls = 0;
   const err = await retryOnRateLimitError(
-    async () => {
+    () => {
       calls++;
       throw new Error("boom");
     },
@@ -184,7 +198,7 @@ Deno.test("retryOnRateLimitError stops at non-rate errors", async () => {
 Deno.test("retryOnRateLimitError gives up after the budget", async () => {
   let calls = 0;
   const err = await retryOnRateLimitError(
-    async () => {
+    () => {
       calls++;
       throw new Error("429 rate_limit_exceeded");
     },
@@ -199,7 +213,7 @@ Deno.test("retryOnRateLimitError gives up after the budget", async () => {
 Deno.test("retryOnRateLimitError respects the default budget", async () => {
   let calls = 0;
   await retryOnRateLimitError(
-    async () => {
+    () => {
       calls++;
       throw new Error("429 rate_limit_exceeded");
     },
