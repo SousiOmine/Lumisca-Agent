@@ -70,6 +70,7 @@ interface NewSessionViewProps {
   onDeleteWorkspace: (fws: FederatedWorkspace) => Promise<void>;
   /** Reopen a closed session in a tab (recent sessions list). */
   onReopenSession: (key: string) => void;
+  /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
 }
 

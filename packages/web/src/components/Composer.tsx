@@ -77,7 +77,7 @@ interface ComposerProps {
    * selected workspace is on another server: the session is created with
    * the peer's default model). */
   hideModelSwitch?: boolean;
-  /** Open the settings modal from the model picker's "Manage models" link. */
+  /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
   /** When set, typing `@` offers workspace files/folders to insert as
    * `FolderName/rel/path`. The workspace may live on a peer (`mentionPeerId`

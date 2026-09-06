@@ -16,7 +16,10 @@ import { TitleBar } from "./components/TitleBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
 import { RecentSessionsModal } from "./components/RecentSessionsModal.tsx";
-import { SettingsModal } from "./components/SettingsModal.tsx";
+import {
+  type SettingsCategory,
+  SettingsModal,
+} from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { PaneHeader } from "./components/PaneHeader.tsx";
 
@@ -52,7 +55,9 @@ export function App({ initialData }: AppProps): ReactElement {
   // switch (keyed below), so the draft lives here and is fed back into
   // the view when its tab is shown again. Closing a tab discards it.
   const { drafts, updateDraft, clearDraft } = useDrafts(tabs);
-  const [showSettings, setShowSettings] = useState(false);
+  const [settingsCategory, setSettingsCategory] = useState<
+    SettingsCategory | null
+  >(null);
   const [showRecent, setShowRecent] = useState(false);
   // Auto-update state (desktop only); polled here and shared with the
   // settings panel and the update banner below.
@@ -95,7 +100,7 @@ export function App({ initialData }: AppProps): ReactElement {
       <TitleBar
         onNew={openDraftTab}
         onOpenRecent={() => setShowRecent(true)}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenSettings={() => setSettingsCategory("general")}
         onQuit={quit}
         paneOpen={pane.open}
         paneVisible={pane.visible}
@@ -113,7 +118,7 @@ export function App({ initialData }: AppProps): ReactElement {
           onCloseOthers={closeOtherTabs}
           onNew={openDraftTab}
           onOpenRecent={() => setShowRecent(true)}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={() => setSettingsCategory("general")}
           isDesktop={update.status !== null}
           onQuit={quit}
         />
@@ -162,7 +167,7 @@ export function App({ initialData }: AppProps): ReactElement {
                   activeView.info.modelId,
                   level,
                 )}
-              onOpenSettings={() => setShowSettings(true)}
+              onOpenSettings={() => setSettingsCategory("providers")}
             />
           )
           : (
@@ -184,7 +189,7 @@ export function App({ initialData }: AppProps): ReactElement {
               onWorkspaceChanged={handleWorkspaceChanged}
               onDeleteWorkspace={deleteWorkspace}
               onReopenSession={reopenSession}
-              onOpenSettings={() => setShowSettings(true)}
+              onOpenSettings={() => setSettingsCategory("providers")}
             />
           )}
       </div>
@@ -199,12 +204,13 @@ export function App({ initialData }: AppProps): ReactElement {
           onHide={() => pane.setVisible(false)}
         />
       )}
-      {showSettings && (
+      {settingsCategory !== null && (
         <SettingsModal
           theme={theme}
           onThemeChange={setTheme}
           update={update}
-          onClose={() => setShowSettings(false)}
+          initialCategory={settingsCategory}
+          onClose={() => setSettingsCategory(null)}
         />
       )}
       {showRecent && (

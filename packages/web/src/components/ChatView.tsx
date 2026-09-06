@@ -62,6 +62,7 @@ interface ChatViewProps {
   onAnswer: (toolCallId: string, answers: AskAnswer[]) => Promise<void>;
   onModelChange: (provider: string, modelId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
+  /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
 }
 

@@ -52,7 +52,9 @@ const MENU_MARGIN = 8;
  * the per-session model chosen in the chatbox picker. The fast model runs
  * the sub-agents (the task tool) and generates session titles; its
  * thinking level is the sub-agents' reasoning level. */
-export function ModelPreferencePanel() {
+export function ModelPreferencePanel(
+  { onOpenProviders }: { onOpenProviders: () => void },
+) {
   const [values, setValues] = useState<
     Record<string, ModelPreference | undefined>
   >({});
@@ -268,7 +270,10 @@ export function ModelPreferencePanel() {
             imageOnly={openRowDef.imageOnly}
             onSelect={(provider, modelId) =>
               save(openRow, { provider, modelId })}
-            onOpenSettings={() => setOpenRow(null)}
+            onOpenSettings={() => {
+              setOpenRow(null);
+              onOpenProviders();
+            }}
           />
         </div>
       )}

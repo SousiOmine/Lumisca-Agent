@@ -33,10 +33,13 @@ interface SettingsModalProps {
   theme: ThemeSetting;
   onThemeChange: (theme: ThemeSetting) => void;
   update: UpdateControls;
+  /** Category selected when the modal opens (the model picker opens it
+   * with "providers"). */
+  initialCategory: SettingsCategory;
   onClose: () => void;
 }
 
-type Category =
+export type SettingsCategory =
   | "general"
   | "providers"
   | "models"
@@ -56,7 +59,7 @@ type ProvidersView =
   | { kind: "editUser"; providerId: string };
 
 const CATEGORIES: {
-  id: Category;
+  id: SettingsCategory;
   label: string;
   icon: ReactNode;
 }[] = [
@@ -98,9 +101,10 @@ export function SettingsModal({
   theme,
   onThemeChange,
   update,
+  initialCategory,
   onClose,
 }: SettingsModalProps) {
-  const [category, setCategory] = useState<Category>("general");
+  const [category, setCategory] = useState<SettingsCategory>(initialCategory);
   const [providersView, setProvidersView] = useState<ProvidersView>({
     kind: "list",
   });
@@ -109,7 +113,7 @@ export function SettingsModal({
   const userProviderForEdit = (id: string): UserProviderSummary | undefined =>
     userProviders.providers.find((p) => p.id === id);
 
-  const openCategory = (id: Category) => {
+  const openCategory = (id: SettingsCategory) => {
     setCategory(id);
     setProvidersView({ kind: "list" });
   };
@@ -222,7 +226,9 @@ export function SettingsModal({
           )}
           {category === "models" && (
             <>
-              <ModelPreferencePanel />
+              <ModelPreferencePanel
+                onOpenProviders={() => openCategory("providers")}
+              />
               <ModelList />
             </>
           )}

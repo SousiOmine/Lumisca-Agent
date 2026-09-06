@@ -27,7 +27,7 @@ export interface ModelPickerProps {
     modelId: string,
     info?: ModelInfo,
   ) => void;
-  /** Open the settings modal (for "Manage models" link). */
+  /** Open the provider settings (the "設定画面" link). */
   onOpenSettings?: () => void;
 }
 
