@@ -510,3 +510,49 @@ Deno.test("parallel writes to the same file are serialized", async () => {
     await removeDirRetry(root);
   }
 });
+
+Deno.test("edit reports added/removed line counts in details", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await Deno.writeTextFile(file, "one\ntwo\nthree\nfour\nfive\n");
+    const replaced = await makeFs(root).edit.execute("id", {
+      path: `${folder}/sample.txt`,
+      old_string: "two\nthree",
+      new_string: "TWO\nTHREE\nEXTRA",
+    });
+    assertEquals(replaced.details.addedLines, 3);
+    assertEquals(replaced.details.removedLines, 2);
+    // A one-line change inside a matched block reports +1 -1.
+    const single = await makeFs(root).edit.execute("id", {
+      path: `${folder}/sample.txt`,
+      old_string: "four\nfive",
+      new_string: "four\nFIVE",
+    });
+    assertEquals(single.details.addedLines, 1);
+    assertEquals(single.details.removedLines, 1);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("write reports added/removed line counts in details", async () => {
+  const { root, folder } = await fsFixture();
+  try {
+    const { write } = makeFs(root);
+    const created = await write.execute("id", {
+      path: `${folder}/new.txt`,
+      content: "a\nb\nc\n",
+    });
+    assertEquals(created.details.addedLines, 3);
+    assertEquals(created.details.removedLines, 0);
+    const overwritten = await write.execute("id", {
+      path: `${folder}/new.txt`,
+      content: "x\ny\nz\nw\n",
+    });
+    assertEquals(overwritten.details.addedLines, 4);
+    assertEquals(overwritten.details.removedLines, 3);
+  } finally {
+    await removeDirRetry(root);
+  }
+});

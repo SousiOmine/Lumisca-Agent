@@ -20,6 +20,7 @@ export * from "./tool-names.ts";
 export * from "./interaction.ts";
 export * from "./providers.ts";
 export * from "./content.ts";
+export * from "./diff-stat.ts";
 export * from "./mcp-config.ts";
 export * from "./context-usage.ts";
 export * from "./misc.ts";

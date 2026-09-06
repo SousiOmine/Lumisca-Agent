@@ -2,6 +2,7 @@ import { extname, join } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import {
   decodeUtf8,
+  diffLineCounts,
   TOOL_EDIT,
   TOOL_LIST_DIR,
   TOOL_READ,
@@ -346,8 +347,10 @@ export function createWriteFileTool(
         // full rewrite never flips the whole file to LF (new files stay
         // as sent, normally LF).
         let content = params.content;
+        let previous = "";
         try {
           const existing = await Deno.readTextFile(filePath);
+          previous = existing;
           if (existing.includes("\r\n")) {
             content = content.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
           }
@@ -355,9 +358,15 @@ export function createWriteFileTool(
           // File does not exist yet: write the content as-is.
         }
         await Deno.writeTextFile(filePath, content);
+        const { addedLines, removedLines } = diffLineCounts(previous, content);
         return {
           content: [{ type: "text", text: `Wrote ${filePath}` }],
-          details: { path: filePath, bytes: content.length },
+          details: {
+            path: filePath,
+            bytes: content.length,
+            addedLines,
+            removedLines,
+          },
         };
       });
     },
@@ -432,12 +441,22 @@ export function createEditFileTool(
         const note = occurrences > 1
           ? `\n[warning: old_string appeared ${occurrences} times; only the first was replaced]`
           : "";
+        const { addedLines, removedLines } = diffLineCounts(
+          params.old_string,
+          params.new_string,
+        );
         return {
           content: [{
             type: "text",
             text: `Edited ${filePath}${note}`,
           }],
-          details: { path: filePath, replacements: 1, occurrences },
+          details: {
+            path: filePath,
+            replacements: 1,
+            occurrences,
+            addedLines,
+            removedLines,
+          },
         };
       });
     },

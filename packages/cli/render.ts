@@ -4,6 +4,7 @@ import {
   contentText,
   type LumiscaCore,
 } from "@lumisca/core";
+import { formatDiffStat, TOOL_EDIT, TOOL_WRITE } from "@lumisca/core/shared";
 import { color, error, errorText, getPromptFn, header, info } from "./ui.ts";
 
 /** Event-rendering helpers for the REPL. Kept separate from the input loop
@@ -43,12 +44,23 @@ export function printToolEnd(
   isError: boolean,
 ): void {
   const r = result as
-    | { content?: Array<{ type: string; text?: string }> }
+    | {
+      content?: Array<{ type: string; text?: string }>;
+      details?: { addedLines?: unknown; removedLines?: unknown };
+    }
     | null;
   const text = r?.content
     ? contentText(r.content as Array<{ type: string; text?: string }>)
     : "";
-  const summary = summarize(text, 200);
+  let stat = "";
+  if (
+    !isError && (toolName === TOOL_EDIT || toolName === TOOL_WRITE) &&
+    typeof r?.details?.addedLines === "number" &&
+    typeof r?.details?.removedLines === "number"
+  ) {
+    stat = formatDiffStat(r.details.addedLines, r.details.removedLines);
+  }
+  const summary = summarize(text, 200) + (stat ? ` (${stat})` : "");
   if (isError) {
     console.log(color.red(`  ✗ ${toolName} → ${summary}`));
   } else {

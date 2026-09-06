@@ -186,6 +186,12 @@ export {
   withTimeout,
 } from "./shared/mod.ts";
 export {
+  diffLineCounts,
+  formatDiffStat,
+  splitDiffLines,
+} from "./shared/mod.ts";
+export type { DiffLineCounts } from "./shared/mod.ts";
+export {
   parseSavedPrompts,
   SAVED_PROMPTS_KEY,
   serializeSavedPrompts,

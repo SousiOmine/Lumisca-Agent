@@ -216,6 +216,33 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
+/** Added/removed line counts of an edit/write result, for the `+10 -5`
+ * badge. Reads the structured details the tools report; results written
+ * before the counts existed simply show no badge. */
+function toolDiffStat(
+  name: string,
+  result?: ToolResultMessage,
+): { added: number; removed: number } | null {
+  if (
+    name !== TOOL_EDIT && name !== "Edit" &&
+    name !== TOOL_WRITE && name !== "Write"
+  ) {
+    return null;
+  }
+  if (!result || result.isError) return null;
+  const details = result.details as
+    | { addedLines?: unknown; removedLines?: unknown }
+    | undefined;
+  if (
+    typeof details?.addedLines !== "number" ||
+    typeof details?.removedLines !== "number"
+  ) {
+    return null;
+  }
+  if (details.addedLines === 0 && details.removedLines === 0) return null;
+  return { added: details.addedLines, removed: details.removedLines };
+}
+
 interface ToolCallProps {
   toolCall: ToolCallBlock;
   result?: ToolResultMessage;
@@ -235,6 +262,8 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
     toolCall.name,
     toolCall.arguments as Record<string, unknown>,
   );
+
+  const diffStat = toolDiffStat(toolCall.name, result);
 
   return (
     <div className="tool-timeline">
@@ -256,6 +285,16 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
             <span className="tool-line-sep">·</span>
             <span className="tool-line-summary">{summary}</span>
           </>
+        )}
+        {diffStat && (
+          <span className="tool-line-diff">
+            {diffStat.added > 0 && (
+              <span className="tool-diff-added">+{diffStat.added}</span>
+            )}
+            {diffStat.removed > 0 && (
+              <span className="tool-diff-removed">-{diffStat.removed}</span>
+            )}
+          </span>
         )}
         {state === "done" && (
           <IconCheck

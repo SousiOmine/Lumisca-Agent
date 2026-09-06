@@ -986,6 +986,23 @@ select:focus {
   flex: 1;
 }
 
+.tool-line-diff {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tool-diff-added {
+  color: var(--ok);
+}
+
+.tool-diff-removed {
+  color: var(--error);
+}
+
 .tool-line-check {
   color: var(--ok);
   flex: none;
