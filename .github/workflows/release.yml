@@ -36,6 +36,8 @@ jobs:
     outputs:
       releaseId: ${{ steps.create.outputs.releaseId }}
     steps:
+      - uses: actions/checkout@v7
+
       - name: Create draft release (reuse on rerun)
         id: create
         env:
