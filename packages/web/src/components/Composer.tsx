@@ -10,15 +10,13 @@ import {
 } from "preact/compat";
 import {
   IconArrowLeft,
-  IconBrain,
-  IconCheck,
   IconChevronRight,
   IconFile,
   IconFolder,
   IconPlayerStop,
   IconX,
 } from "@tabler/icons-preact";
-import { MAX_PROMPT_IMAGES, THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
+import { MAX_PROMPT_IMAGES } from "@lumisca/core/shared";
 import {
   ContextUsageCard,
   type ContextUsageData,
@@ -26,6 +24,7 @@ import {
 } from "./ContextUsage.tsx";
 export type { ContextUsageData };
 import { ModelPicker } from "./ModelPicker.tsx";
+import { ThinkingLevelPicker } from "./ThinkingLevelPicker.tsx";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
 import { useMention } from "../hooks/useMention.ts";
@@ -140,7 +139,6 @@ export function Composer({
   contextUsage,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [showThinkingPicker, setShowThinkingPicker] = useState(false);
   const [showCtx, setShowCtx] = useState(false);
   const [dragging, setDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -155,17 +153,11 @@ export function Composer({
   // dropdown (the refs wrap the trigger button + popover, so toggling the
   // trigger keeps working).
   const modelPickerRef = useRef<HTMLDivElement>(null);
-  const thinkingPickerRef = useRef<HTMLDivElement>(null);
   const ctxRef = useRef<HTMLDivElement>(null);
   useClickOutside(
     modelPickerRef,
     () => setShowModelPicker(false),
     showModelPicker,
-  );
-  useClickOutside(
-    thinkingPickerRef,
-    () => setShowThinkingPicker(false),
-    showThinkingPicker,
   );
   useClickOutside(ctxRef, () => setShowCtx(false), showCtx);
 
@@ -540,7 +532,6 @@ export function Composer({
                 className="model-switch"
                 onClick={() => {
                   setShowModelPicker((o) => !o);
-                  setShowThinkingPicker(false);
                   setShowCtx(false);
                 }}
                 title="モデルを選択"
@@ -563,52 +554,15 @@ export function Composer({
                 </span>
               </button>
               {canThink && onThinkingLevelChange && (
-                <div className="thinking-control" ref={thinkingPickerRef}>
-                  <button
-                    type="button"
-                    className="thinking-switch"
-                    onClick={() => {
-                      setShowThinkingPicker((o) =>
-                        !o
-                      );
-                      setShowModelPicker(false);
-                      setShowCtx(false);
-                    }}
-                    title="思考強度"
-                  >
-                    <IconBrain size={13} />
-                    <span>{THINKING_LEVEL_LABELS[thinkingLevel ?? "off"]}</span>
-                    <span
-                      className={`chevron${showThinkingPicker ? " open" : ""}`}
-                    >
-                      <IconChevronRight size={13} />
-                    </span>
-                  </button>
-                  {showThinkingPicker && (
-                    <div className="thinking-popover">
-                      {levels.map((level) => (
-                        <button
-                          key={level}
-                          type="button"
-                          className={`thinking-option${
-                            (thinkingLevel ?? "off") === level
-                              ? " selected"
-                              : ""
-                          }`}
-                          onClick={() => {
-                            onThinkingLevelChange(level);
-                            setShowThinkingPicker(false);
-                          }}
-                        >
-                          <span>{THINKING_LEVEL_LABELS[level]}</span>
-                          {(thinkingLevel ?? "off") === level && (
-                            <IconCheck size={13} className="thinking-check" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <ThinkingLevelPicker
+                  value={thinkingLevel ?? "off"}
+                  levels={levels}
+                  onChange={onThinkingLevelChange}
+                  onOpen={() => {
+                    setShowModelPicker(false);
+                    setShowCtx(false);
+                  }}
+                />
               )}
               {showModelPicker && (
                 <div className="model-popover">
@@ -638,7 +592,6 @@ export function Composer({
                 onToggle={() => {
                   setShowCtx((o) => !o);
                   setShowModelPicker(false);
-                  setShowThinkingPicker(false);
                 }}
               />
               {showCtx && (

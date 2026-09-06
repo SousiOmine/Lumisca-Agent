@@ -265,21 +265,15 @@
   color: var(--text);
 }
 
-.model-pref-level {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-.model-pref-level select {
-  padding: 2px 6px;
-  font-size: 12px;
-}
-
 .model-pref-unset {
   font-style: italic;
+}
+
+/* The settings panel has room below the row, so the shared picker's
+ * popover drops downward here (in the chat input it opens upward). */
+.model-pref-panel .thinking-popover {
+  top: calc(100% + 6px);
+  bottom: auto;
 }
 
 .model-pref-actions {

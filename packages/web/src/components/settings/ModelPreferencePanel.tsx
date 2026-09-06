@@ -4,7 +4,6 @@ import {
   IMAGE_MODEL_KEY,
   parseModelPreference,
   serializeModelPreference,
-  THINKING_LEVEL_LABELS,
 } from "@lumisca/core/shared";
 import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
@@ -16,6 +15,7 @@ import {
   useProviderModels,
 } from "../../providers.ts";
 import { ModelPicker } from "../ModelPicker.tsx";
+import { ThinkingLevelPicker } from "../ThinkingLevelPicker.tsx";
 
 interface ModelPrefRow {
   key: string;
@@ -146,6 +146,31 @@ export function ModelPreferencePanel(
     setOpenRow(rowKey);
   };
 
+  /** Persist the fast model's thinking level (the reasoning level the
+   * sub-agents run on). */
+  const changeLevel = async (
+    pref: ModelPreference | undefined,
+    level: ThinkingLevel,
+  ) => {
+    if (pref === undefined) return;
+    setSavingLevel(true);
+    try {
+      const thinkingLevel = await setModelThinkingLevel(
+        "",
+        pref.provider,
+        pref.modelId,
+        level,
+      );
+      setLevels((prev) =>
+        prev === undefined ? prev : { ...prev, current: thinkingLevel }
+      );
+    } catch (err) {
+      setSaveError(errorText(err));
+    } finally {
+      setSavingLevel(false);
+    }
+  };
+
   const save = async (rowKey: string, pref: ModelPreference | undefined) => {
     setSaving(rowKey);
     setSaveError(undefined);
@@ -170,11 +195,6 @@ export function ModelPreferencePanel(
 
   return (
     <div className="settings-pane model-pref-panel">
-      <p className="settings-note">
-        エージェントで使うモデルとは別に、補助的な用途のモデルを設定します
-        (チャット欄のモデル選択には影響しません)。
-      </p>
-
       {ROWS.map((row) => {
         const value = values[row.key];
         return (
@@ -193,40 +213,12 @@ export function ModelPreferencePanel(
                       {value.provider}/{value.modelId}
                     </span>
                     {row.thinking && levels && (
-                      <label className="model-pref-level" title="思考強度">
-                        <select
-                          value={levels.current}
-                          disabled={savingLevel}
-                          onChange={async (e) => {
-                            const level = e.currentTarget
-                              .value as ThinkingLevel;
-                            setSavingLevel(true);
-                            try {
-                              const thinkingLevel = await setModelThinkingLevel(
-                                "",
-                                value.provider,
-                                value.modelId,
-                                level,
-                              );
-                              setLevels((prev) =>
-                                prev === undefined
-                                  ? prev
-                                  : { ...prev, current: thinkingLevel }
-                              );
-                            } catch (err) {
-                              setSaveError(errorText(err));
-                            } finally {
-                              setSavingLevel(false);
-                            }
-                          }}
-                        >
-                          {levels.supported.map((level) => (
-                            <option key={level} value={level}>
-                              {THINKING_LEVEL_LABELS[level]}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <ThinkingLevelPicker
+                        value={levels.current}
+                        levels={levels.supported}
+                        onChange={(level) => void changeLevel(value, level)}
+                        disabled={savingLevel}
+                      />
                     )}
                   </>
                 )
