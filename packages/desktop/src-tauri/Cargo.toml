@@ -17,6 +17,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2"
 tauri-plugin-dialog = "2"
+# OS notifications for agent events observed while the window is hidden
+# (agent_end / question). Used only from Rust (notify.rs through the
+# shell bridge) — never through frontend IPC — so no capability entry is
+# needed, mirroring the updater/dialog pattern.
+tauri-plugin-notification = "2"
 url = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -32,10 +37,19 @@ lumisca-browser-rpc = { path = "../../browser-rpc" }
 windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
   "Win32_System_Threading",
+  "Win32_System_Variant",
+  "Win32_Storage_EnhancedStorage",
   "Win32_UI_Shell",
+  "Win32_UI_Shell_PropertiesSystem",
   "Win32_UI_WindowsAndMessaging",
 ] }
+# WinRT toasts under our own AppUserModelID with a click-to-focus handler
+# (notify.rs). Same windows 0.61 line the rest of the shell uses; also the
+# backend notify-rust (via tauri-plugin-notification) uses on other
+# platforms.
+tauri-winrt-notification = "0.7"
 # Direct WebView2 COM access for the browser lab's CDP screenshot and
 # (future) runtime/console/network events. Same version wry uses.
 webview2-com = "0.38"

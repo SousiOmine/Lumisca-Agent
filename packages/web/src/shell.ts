@@ -26,6 +26,13 @@ export interface ShellState {
   maximized: boolean;
 }
 
+declare global {
+  /** Embedded by the server when LUMISCA_TOKEN auth is enabled (also
+   * declared in api.ts; repeated here so this module type-checks
+   * standalone — global augmentations merge). */
+  var __LUMISCA_TOKEN__: string | undefined;
+}
+
 /** Bridge base URL (the `lumisca://` custom protocol; http-homed for
  * WebView2 on Windows, fetched as a custom scheme on macOS/Linux). */
 const BRIDGE = /Windows/i.test(navigator.userAgent)
@@ -124,10 +131,47 @@ export const windowApi = {
   minimize: () => shellCall("window/minimize"),
   toggleMaximize: () => shellCall("window/toggle-maximize"),
   close: () => shellCall("window/close"),
+  /** Bring the main window to the front (restore when minimized, then
+   * focus). Used after a background-notification toast when the OS does
+   * not activate the app on its own. */
+  focus: () => shellCall("window/focus"),
   /** Start moving the window (the page has no Tauri IPC, so the native
    * `data-tauri-drag-region` path is unavailable; the bridge starts the
    * OS drag instead). */
   startDrag: () => shellCall("window/start-drag"),
+};
+
+/** Main-window visibility reported by the shell bridge (`window/state`).
+ * The agent-event notifier uses it to tell "the user can see us" apart
+ * from "we exist but are hidden" (minimized, behind another app, on
+ * another virtual desktop). */
+export interface WindowState {
+  focused: boolean;
+  minimized: boolean;
+  visible: boolean;
+  maximized: boolean;
+}
+
+/** Query the main window's visibility. Rejects outside the desktop
+ * shell (callers fall back to `document.hidden` there). */
+export const windowStateApi = {
+  getState: () => shellCall<WindowState>("window/state"),
+};
+
+/** Agent-event notifications shown while the window is hidden. Every call
+ * carries the fresh display text; the shell truncates and shows it as an
+ * OS notification (plus a taskbar flash), and never fails the caller —
+ * a denied notification path only logs in the shell. `urgent` (the
+ * ask-tool question) keeps the toast on screen longer on Windows.
+ * Rejects outside the desktop shell (callers treat that as
+ * "desktop-only, skip"). */
+export const notifyApi = {
+  notify: (title: string, body: string, urgent: boolean) =>
+    shellCall<{ ok: boolean }>("notify", {
+      title,
+      body,
+      urgent: String(urgent),
+    }),
 };
 
 /** Auto-update actions. Every call returns the fresh status so the UI can

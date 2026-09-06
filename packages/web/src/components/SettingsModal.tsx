@@ -33,6 +33,9 @@ interface SettingsModalProps {
   theme: ThemeSetting;
   onThemeChange: (theme: ThemeSetting) => void;
   update: UpdateControls;
+  /** Background agent-event notifications (desktop only). */
+  notifyEnabled: boolean;
+  onNotifyEnabledChange: (enabled: boolean) => void;
   /** Category selected when the modal opens (the model picker opens it
    * with "providers"). */
   initialCategory: SettingsCategory;
@@ -101,6 +104,8 @@ export function SettingsModal({
   theme,
   onThemeChange,
   update,
+  notifyEnabled,
+  onNotifyEnabledChange,
   initialCategory,
   onClose,
 }: SettingsModalProps) {
@@ -162,6 +167,8 @@ export function SettingsModal({
               onCheck={update.check}
               onDownload={update.download}
               onInstall={update.install}
+              notifyEnabled={notifyEnabled}
+              onNotifyEnabledChange={onNotifyEnabledChange}
             />
           )}
           {category === "providers" && providersView.kind === "list" && (

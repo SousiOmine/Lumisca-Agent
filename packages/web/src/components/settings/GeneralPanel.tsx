@@ -7,6 +7,9 @@ interface GeneralPanelProps {
   onCheck: () => void;
   onDownload: () => void;
   onInstall: () => void;
+  /** Background agent-event notifications (desktop only). */
+  notifyEnabled: boolean;
+  onNotifyEnabledChange: (enabled: boolean) => void;
 }
 
 function formatBytes(bytes: number | null): string {
@@ -19,7 +22,15 @@ function formatBytes(bytes: number | null): string {
  * update state lives in the desktop shell (the page may be served by a
  * remote server), so everything here goes through the shell bridge. */
 export function GeneralPanel(
-  { status, onSetAuto, onCheck, onDownload, onInstall }: GeneralPanelProps,
+  {
+    status,
+    onSetAuto,
+    onCheck,
+    onDownload,
+    onInstall,
+    notifyEnabled,
+    onNotifyEnabledChange,
+  }: GeneralPanelProps,
 ) {
   if (status === null) {
     return (
@@ -149,6 +160,24 @@ export function GeneralPanel(
         </p>
       )}
       {status.error && <div className="error-text">{status.error}</div>}
+
+      <div className="update-item">
+        <div className="update-info">
+          <span className="update-label">バックグラウンド通知</span>
+          <span className="update-desc">
+            ウィンドウがフォーカスされていないとき（最小化・他のアプリが前面・別の仮想デスクトップ）に、エージェントの応答完了と質問をOS通知で知らせます。
+          </span>
+        </div>
+        <label className="toggle-switch">
+          <input
+            type="checkbox"
+            checked={notifyEnabled}
+            onChange={(e) => onNotifyEnabledChange(e.currentTarget.checked)}
+            aria-label="バックグラウンド通知"
+          />
+          <span className="toggle-slider" />
+        </label>
+      </div>
     </div>
   );
 }

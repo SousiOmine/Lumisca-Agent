@@ -30,7 +30,7 @@ use crate::update::{
     check_for_updates, download_update, install_update, set_auto_update, update_status_json,
 };
 use crate::window::navigate_main;
-use crate::{browser_lab, AppState};
+use crate::{browser_lab, notify, AppState};
 
 /// JSON body of a lumisca://shell/* bridge response.
 type BridgeResponse = HttpResponse<Vec<u8>>;
@@ -344,6 +344,35 @@ pub(crate) fn handle_shell_request(
                 crate::window::focus_window_for_drag(&window);
                 let _ = window.start_dragging();
             }
+            bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
+        }
+        // --- background agent-event notifications -------------------------
+        //
+        // The frontend watches the agent event stream; when a run ends
+        // (`agent_end`) or the agent asks a question (the ask tool) while
+        // the main window has no focus (minimized, behind another app, on
+        // another virtual desktop), it shows an OS notification here.
+        // Windows toasts carry our AppUserModelID (Lumisca name + icon)
+        // with an explicit click-to-focus handler; `window/focus` covers
+        // the programmatic path.
+        "window/state" => bridge_json(
+            StatusCode::OK,
+            serde_json::to_value(notify::window_state(app)).unwrap(),
+        ),
+        "window/focus" => {
+            notify::focus_main(app);
+            bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
+        }
+        "notify" => {
+            let title = get("title").unwrap_or_default();
+            let body = get("body").unwrap_or_default();
+            if title.is_empty() && body.is_empty() {
+                return bridge_error(StatusCode::BAD_REQUEST, "title or body required");
+            }
+            // The ask-tool question keeps its toast on screen longer
+            // (Windows); the run-end toast uses the default duration.
+            let urgent = matches!(get("urgent").as_deref(), Some("1") | Some("true"));
+            notify::show_notification(app, &title, &body, urgent);
             bridge_json(StatusCode::OK, serde_json::json!({ "ok": true }))
         }
         "quit" => {

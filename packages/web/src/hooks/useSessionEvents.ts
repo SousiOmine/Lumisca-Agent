@@ -12,6 +12,7 @@ import {
   sameTodoPlan,
 } from "../events.ts";
 import { tabKey } from "../tabs.ts";
+import { maybeNotifyAgentEnd, maybeNotifyQuestion } from "../notify.ts";
 import type {
   AgentMessage,
   BackgroundCommandInfo,
@@ -166,11 +167,38 @@ export function useSessionEvents() {
   }, [syncState]);
 
   /** Apply a WS event to the matching session view (pure reducer). Events
-   * carry the peer id ("" = this server); the tab key resolves the view. */
+   * carry the peer id ("" = this server); the tab key resolves the view.
+   *
+   * `agent_end` and `question` events additionally arm an OS notification
+   * when the app is hidden (the notify module decides): the reducer below
+   * must stay the single writer of view state, so notification sends are
+   * fire-and-forget and never block or reorder the state update. */
   const handleEvent = useCallback(
     (event: ClientEvent & { peerId?: string }) => {
       if (event.type === "session_created") return;
       const key = tabKey(event.peerId ?? "", event.sessionId);
+      if (event.type === "agent_end" || event.type === "question") {
+        const view = viewsRef.current.get(key);
+        const name = view?.info.name ?? event.sessionId;
+        if (event.type === "agent_end") {
+          // A duplicate delivery (same run's end seen twice) must not
+          // notify twice: the first end stamps agentEndedAt, and only a
+          // new agent_start clears it for the next run.
+          if (view?.agentEndedAt === undefined) {
+            void maybeNotifyAgentEnd(name);
+          }
+        } else {
+          // Same dedup contract as the reducer's pendingQuestions: a
+          // re-delivered question (same tool call) notifies once.
+          if (
+            !view?.pendingQuestions.some((q) =>
+              q.toolCallId === event.toolCallId
+            )
+          ) {
+            void maybeNotifyQuestion(name, event.questions);
+          }
+        }
+      }
       setViews((prev) => {
         const target = prev.get(key);
         if (!target) return prev;

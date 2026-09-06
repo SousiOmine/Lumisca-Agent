@@ -9,6 +9,7 @@ import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { usePane } from "./hooks/usePane.ts";
 import { quit } from "./shell.ts";
+import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
 import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
 import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
 import { TabBar } from "./components/TabBar.tsx";
@@ -58,7 +59,15 @@ export function App({ initialData }: AppProps): ReactElement {
   const [settingsCategory, setSettingsCategory] = useState<
     SettingsCategory | null
   >(null);
+  // Background agent-event notifications (desktop only): the event hook
+  // reads the persisted value directly, so this state only drives the
+  // settings toggle.
+  const [notifyEnabled, setNotifyEnabledState] = useState(isNotifyEnabled);
   const [showRecent, setShowRecent] = useState(false);
+  const handleNotifyEnabledChange = (enabled: boolean) => {
+    setNotifyEnabled(enabled);
+    setNotifyEnabledState(enabled);
+  };
   // Auto-update state (desktop only); polled here and shared with the
   // settings panel and the update banner below.
   const update = useUpdateStatus(true);
@@ -209,6 +218,8 @@ export function App({ initialData }: AppProps): ReactElement {
           theme={theme}
           onThemeChange={setTheme}
           update={update}
+          notifyEnabled={notifyEnabled}
+          onNotifyEnabledChange={handleNotifyEnabledChange}
           initialCategory={settingsCategory}
           onClose={() => setSettingsCategory(null)}
         />

@@ -12,6 +12,7 @@ use tauri::{Manager, WindowEvent};
 
 pub mod bridge;
 pub mod browser_lab;
+pub mod notify;
 pub mod server;
 pub mod update;
 pub mod window;
@@ -69,6 +70,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        // OS notifications for background agent events (see notify.rs).
+        // Used from Rust only, so no frontend IPC capability is needed.
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let handle = app.handle().clone();
             let settings = update::load_desktop_settings(&handle);
