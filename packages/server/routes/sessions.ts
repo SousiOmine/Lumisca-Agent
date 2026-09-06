@@ -288,13 +288,13 @@ export function sessionRoutes(core: SessionApi): Hono {
     return c.json(sessionJson(await core.openSession(id)));
   });
 
-  app.post("/sessions/:id/close", (c) => {
-    core.closeSession(c.req.param("id"));
+  app.post("/sessions/:id/close", async (c) => {
+    await core.closeSession(c.req.param("id"));
     return c.json({ ok: true });
   });
 
-  app.delete("/sessions/:id", (c) => {
-    core.deleteSession(c.req.param("id"));
+  app.delete("/sessions/:id", async (c) => {
+    await core.deleteSession(c.req.param("id"));
     return c.json({ ok: true });
   });
 

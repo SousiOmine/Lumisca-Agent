@@ -106,11 +106,11 @@ if (allowedHosts.length > 0) {
   console.log(`Allowed hosts: ${allowedHosts.join(", ")}`);
 }
 
-const shutdown = () => {
+const shutdown = async () => {
   console.log("\nShutting down...");
   disposeServer(server);
   server.shutdown();
-  core.close();
+  await core.close();
   Deno.exit(0);
 };
 Deno.addSignalListener("SIGINT", shutdown);

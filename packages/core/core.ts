@@ -204,8 +204,13 @@ export class LumiscaCore {
     return core;
   }
 
-  close(): void {
-    this.pool.closeAll();
+  /** Shut the core down: close every session (killing their MCP server
+   * processes) and close the database. Resolves once every child
+   * process is dead, so callers that delete workspace folders afterwards
+   * must await it (on Windows a live child running with the folder as
+   * its working directory blocks deletion). */
+  async close(): Promise<void> {
+    await this.pool.closeAll();
     this.db.close();
   }
 
@@ -552,13 +557,17 @@ export class LumiscaCore {
     return this.decorateSession(session);
   }
 
-  closeSession(id: string): void {
-    this.pool.close(id);
+  async closeSession(id: string): Promise<void> {
+    await this.pool.close(id);
   }
 
-  deleteSession(id: string): void {
-    this.pool.delete(id);
+  async deleteSession(id: string): Promise<void> {
+    // Start the teardown first (its synchronous prefix runs inline),
+    // then drop the persisted row synchronously so the session is
+    // synchronously gone for callers that do not await.
+    const closing = this.pool.delete(id);
     this.sessions.delete(id);
+    await closing;
   }
 
   getAgent(id: string): SessionAgent | undefined {

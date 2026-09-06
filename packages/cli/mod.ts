@@ -132,7 +132,7 @@ async function runCommand(args: string[]): Promise<number> {
     return 1;
   } finally {
     await closeBrowserBackend(browserBackend);
-    core.close();
+    await core.close();
   }
 }
 
@@ -215,7 +215,7 @@ async function main(): Promise<number> {
     return 0;
   } finally {
     await closeBrowserBackend(browserBackend);
-    core.close();
+    await core.close();
   }
 }
 

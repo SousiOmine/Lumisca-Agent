@@ -481,33 +481,38 @@ export class SessionPool {
   /** Close a session's agent (unsubscribing from background completions),
    * stop its background commands, abort its sub-agents, tear down its MCP
    * server processes, and discard its todo plan. The persisted session
-   * stays; openSession rebuilds it with fresh managers and an empty plan. */
-  close(id: string): void {
+   * stays; openSession rebuilds it with fresh managers and an empty plan.
+   * Await the returned promise when ordering matters (e.g. deleting the
+   * workspace folder afterwards): the MCP child processes are only
+   * guaranteed dead once it resolves. */
+  async close(id: string): Promise<void> {
     const resources = this.sessions.get(id);
     if (!resources) return;
     resources.agent?.close();
     resources.background?.killAll();
     resources.tasks?.close();
-    void resources.mcp?.manager.close();
     this.sessions.delete(id);
+    await resources.mcp?.manager.close();
   }
 
   /** Close and forget a session entirely (persisted rows are deleted by
    * the caller). */
-  delete(id: string): void {
-    this.close(id);
+  async delete(id: string): Promise<void> {
+    await this.close(id);
   }
 
   /** Close every agent, stop every background command, abort every
-   * sub-agent, and tear down every MCP attachment (core shutdown). */
-  closeAll(): void {
-    for (const resources of this.sessions.values()) {
+   * sub-agent, and tear down every MCP attachment (core shutdown).
+   * Resolves once every MCP child process is dead. */
+  async closeAll(): Promise<void> {
+    const all = [...this.sessions.values()];
+    this.sessions.clear();
+    for (const resources of all) {
       resources.agent?.close();
       resources.background?.killAll();
       resources.tasks?.close();
-      void resources.mcp?.manager.close();
     }
-    this.sessions.clear();
+    await Promise.all(all.map((resources) => resources.mcp?.manager.close()));
   }
 
   /** The shared "session is streaming" guard behind every configuration

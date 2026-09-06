@@ -1603,7 +1603,10 @@ Deno.test("MCP config API: get, put, validate and rebuild sessions", async () =>
     );
   } finally {
     server.shutdown();
-    core.close();
+    // Await the MCP teardown: the spawned server runs with the workspace
+    // folder as its working directory, which blocks deletion on Windows
+    // until the child is dead.
+    await core.close();
     // The MCP server process must be dead before the dir can go.
     await removeDirRetry(root);
   }
@@ -1719,7 +1722,9 @@ Deno.test("app-level MCP config API applies to every workspace", async () => {
     );
   } finally {
     server.shutdown();
-    core.close();
+    // Await the MCP teardown (see the note above): the workspace folder
+    // is the spawned server's working directory.
+    await core.close();
     if (root) await removeDirRetry(root);
   }
 });

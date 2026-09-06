@@ -37,6 +37,13 @@ export interface McpServerStatus {
 export class McpManager {
   private readonly clients = new Map<string, McpServerClient>();
   private readonly errors = new Map<string, string>();
+  /** Connects in flight, keyed by server name: a close() that lands
+   * mid-connect must wait for these and close the late arrivals instead
+   * of orphaning their child processes (see close()). */
+  private readonly pendingConnects = new Map<
+    string,
+    Promise<McpServerClient>
+  >();
   private toolsCache: McpToolDef[] | null = null;
   private closed = false;
 
@@ -55,16 +62,32 @@ export class McpManager {
     }
   }
 
-  private async getClient(
+  private getClient(
     server: McpServerConfig,
   ): Promise<McpServerClient> {
     this.assertOpen();
-    let client = this.clients.get(server.name);
-    if (client === undefined) {
-      client = await McpServerClient.connect(server, this.cwd);
-      this.clients.set(server.name, client);
+    const existing = this.clients.get(server.name);
+    if (existing !== undefined) return Promise.resolve(existing);
+    // Dedupe concurrent connects for the same server and, crucially,
+    // register the client on completion: a close() that ran mid-connect
+    // waits for this promise (see close()) and closes the late arrival
+    // instead of leaking its child process.
+    let pending = this.pendingConnects.get(server.name);
+    if (pending === undefined) {
+      pending = McpServerClient.connect(server, this.cwd).then(
+        (client) => {
+          this.pendingConnects.delete(server.name);
+          this.clients.set(server.name, client);
+          return client;
+        },
+        (error) => {
+          this.pendingConnects.delete(server.name);
+          throw error;
+        },
+      );
+      this.pendingConnects.set(server.name, pending);
     }
-    return client;
+    return pending;
   }
 
   private dropClient(name: string): void {
@@ -145,12 +168,21 @@ export class McpManager {
     });
   }
 
-  /** Disconnect every server (kills stdio child processes). */
+  /** Disconnect every server (kills stdio child processes). A connect()
+   * that is still in flight keeps running to completion and then
+   * registers its client in getClient(); this loops until every spawned
+   * child is closed, so a close during discovery cannot orphan a server
+   * process. No new connects can start from here: getClient refuses once
+   * closed, so the loop always terminates. */
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    for (const client of this.clients.values()) {
-      await client.close();
+    for (;;) {
+      for (const client of this.clients.values()) {
+        await client.close();
+      }
+      if (this.pendingConnects.size === 0) break;
+      await Promise.allSettled(this.pendingConnects.values());
     }
     this.clients.clear();
     this.toolsCache = null;
