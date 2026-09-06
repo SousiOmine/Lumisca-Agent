@@ -342,17 +342,6 @@ export function Composer({
   const levels = thinkingLevels ?? [];
   const canThink = levels.length > 1;
 
-  // The active slash entry is a text-taking command (requiresText) whose
-  // request text has not been typed yet: the menu hints to keep typing —
-  // Enter would select the command, but without the request nothing is
-  // sent (the parent drops the selection).
-  const slashActiveEntry = slash !== null
-    ? slashEntries[slash.active]
-    : undefined;
-  const activeNeedsText = slash !== null && slash.submenu === null &&
-    !slash.rest && slashActiveEntry !== undefined &&
-    isSlashCommand(slashActiveEntry) && slashActiveEntry.requiresText === true;
-
   // The popover opens above the caret line. Only in the tall new-session
   // textarea does the caret sit near the top often enough to flip below
   // instead of covering the first lines.
@@ -473,48 +462,37 @@ export function Composer({
             )}
             {slashEntries.length === 0
               ? <div className="slash-status">一致するコマンドがありません</div>
-              : (
-                <>
-                  {slashEntries.map((item, index) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`slash-item${
-                        index === slash.active ? " active" : ""
-                      }`}
-                      onMouseDown={(e) => {
-                        e.preventDefault(); // keep focus in the textarea
-                      }}
-                      onMouseEnter={() =>
-                        setSlash((prev) =>
-                          prev ? { ...prev, active: index } : prev
-                        )}
-                      onClick={() => handleSlashPick(index)}
-                    >
-                      {item.icon && (
-                        <item.icon size={14} className="slash-icon" />
-                      )}
-                      <span className="slash-item-text">
-                        <span className="slash-item-label">{item.label}</span>
-                        {item.description && (
-                          <span className="slash-item-desc">
-                            {item.description}
-                          </span>
-                        )}
+              : slashEntries.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`slash-item${
+                    index === slash.active ? " active" : ""
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // keep focus in the textarea
+                  }}
+                  onMouseEnter={() =>
+                    setSlash((prev) =>
+                      prev ? { ...prev, active: index } : prev
+                    )}
+                  onClick={() => handleSlashPick(index)}
+                >
+                  {item.icon && <item.icon size={14} className="slash-icon" />}
+                  <span className="slash-item-text">
+                    <span className="slash-item-label">{item.label}</span>
+                    {item.description && (
+                      <span className="slash-item-desc">
+                        {item.description}
                       </span>
-                      {slash.submenu === null && isSlashCommand(item) &&
-                        (item.items?.length ?? 0) > 0 && (
-                        <IconChevronRight size={13} className="slash-chevron" />
-                      )}
-                    </button>
-                  ))}
-                  {activeNeedsText && (
-                    <div className="slash-status">
-                      依頼内容を入力してEnterで送信
-                    </div>
+                    )}
+                  </span>
+                  {slash.submenu === null && isSlashCommand(item) &&
+                    (item.items?.length ?? 0) > 0 && (
+                    <IconChevronRight size={13} className="slash-chevron" />
                   )}
-                </>
-              )}
+                </button>
+              ))}
           </div>
         )}
       </div>
