@@ -1686,6 +1686,17 @@ select:focus {
   color: var(--text-dim);
 }
 
+.question-free-input {
+  width: 100%;
+  margin-top: 6px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.question-free-input:not(:placeholder-shown) {
+  border-color: var(--accent);
+}
+
 .question-card-footer {
   display: flex;
   align-items: center;

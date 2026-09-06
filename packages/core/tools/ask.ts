@@ -80,9 +80,10 @@ export class AskHub {
 
   /** Resolve a pending ask with the user's answers. Throws when the ask is
    * gone (already answered, or the run was torn down). The answers are
-   * validated against the pending questions (ids and option labels), so a
-   * malformed client request surfaces as a 400 instead of reaching the
-   * agent. */
+   * validated against the pending questions (ids and non-empty values);
+   * values may be option labels or free-text input, since the UI always
+   * offers a free-text field alongside the options. A malformed client
+   * request surfaces as a 400 instead of reaching the agent. */
   answer(toolCallId: string, answers: AskAnswer[]): void {
     const pending = this.pending.get(toolCallId);
     if (!pending) {
@@ -112,11 +113,10 @@ export class AskHub {
           "invalid",
         );
       }
-      const labels = new Set(question.options.map((o) => o.label));
       for (const value of answer.values) {
-        if (!labels.has(value)) {
+        if (typeof value !== "string" || value.trim().length === 0) {
           throw new CoreError(
-            `Unknown option for question "${answer.id}": ${value}`,
+            `Question "${answer.id}" has an empty answer`,
             "invalid",
           );
         }
@@ -167,10 +167,12 @@ const askSchema = object({
 });
 
 /** Build the tool that lets the agent ask the user a question. The user
- * answers in the UI (a panel above the composer); the selected option
- * labels are returned as the tool result, so the agent can continue from
- * the answer. The tool blocks the run until the user answers (or the run
- * is aborted). */
+ * answers in the UI (a panel above the composer): predefined options plus
+ * a free-text field that is always available, so the agent must not add
+ * its own "Other / free input" option. The selected option labels and/or
+ * the free-text input are returned as the tool result, so the agent can
+ * continue from the answer. The tool blocks the run until the user answers
+ * (or the run is aborted). */
 export function createAskTool(hub: AskHub): Tool<typeof askSchema> {
   return {
     name: TOOL_ASK,
@@ -182,7 +184,9 @@ export function createAskTool(hub: AskHub): Tool<typeof askSchema> {
       "The user answers in the UI (a panel appears above the chat input); " +
       "the run waits for the answer. Every question offers predefined " +
       "options (use `multi: true` when several may apply, `recommended` to " +
-      "preselect one). Do not use this for information you can obtain from " +
+      "preselect one). A free-text field is always shown alongside the " +
+      "options, so the user can type any answer — never add your own " +
+      '"Other" option. Do not use this for information you can obtain from ' +
       "your own tools.",
     parameters: askSchema,
     execute: async (toolCallId, params, _signal): Promise<ToolResult> => {

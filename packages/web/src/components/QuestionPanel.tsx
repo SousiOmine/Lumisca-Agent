@@ -5,20 +5,49 @@ import type { AskAnswer, AskQuestion, PendingQuestion } from "../types.ts";
 /** Selected option indices per question id, inside one question card. */
 type Selections = Record<string, number[]>;
 
-/** The user's answer for one question: the labels of the selected options. */
-function toAnswer(question: AskQuestion, indices: number[]): AskAnswer {
-  return {
-    id: question.id,
-    values: indices.map((i) => question.options[i]!.label),
-  };
+/** Free-text input per question id, inside one question card. Always
+ * available alongside the predefined options. */
+type CustomInputs = Record<string, string>;
+
+/** The user's answer for one question: the selected option labels and/or
+ * the free-text input. Single choice is exclusive (free text wins);
+ * multi choice combines selections with the free text. */
+function toAnswer(
+  question: AskQuestion,
+  indices: number[],
+  custom: string,
+): AskAnswer {
+  const trimmed = custom.trim();
+  if (trimmed.length === 0) {
+    return {
+      id: question.id,
+      values: indices.map((i) => question.options[i]!.label),
+    };
+  }
+  if (question.multi === true) {
+    return {
+      id: question.id,
+      values: [
+        ...indices.map((i) => question.options[i]!.label),
+        trimmed,
+      ],
+    };
+  }
+  return { id: question.id, values: [trimmed] };
 }
 
-/** True when every question has at least one selection (submit enabled). */
+/** True when every question has at least one selection or a free-text
+ * input (submit enabled). */
 function allAnswered(
   questions: AskQuestion[],
   selections: Selections,
+  customs: CustomInputs,
 ): boolean {
-  return questions.every((q) => (selections[q.id]?.length ?? 0) > 0);
+  return questions.every(
+    (q) =>
+      (selections[q.id]?.length ?? 0) > 0 ||
+      (customs[q.id]?.trim().length ?? 0) > 0,
+  );
 }
 
 /** Initial selection: the recommended option is preselected when given. */
@@ -44,10 +73,13 @@ function QuestionCard({
   const [selections, setSelections] = useState<Selections>(() =>
     initialSelections(pending.questions)
   );
+  const [customs, setCustoms] = useState<CustomInputs>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /** Toggle (multi) or replace (single) the selection of an option. */
+  /** Toggle (multi) or replace (single) the selection of an option.
+   * Single choice is exclusive with the free-text input: picking an
+   * option clears it. */
   const select = (questionId: string, index: number, multi: boolean) => {
     setSelections((prev) => {
       const current = prev[questionId] ?? [];
@@ -58,6 +90,24 @@ function QuestionCard({
         : [index];
       return { ...prev, [questionId]: next };
     });
+    if (!multi) {
+      setCustoms((prev) =>
+        prev[questionId] ? { ...prev, [questionId]: "" } : prev
+      );
+    }
+  };
+
+  /** Edit the free-text input. Single choice is exclusive: typing clears
+   * the option selections so the answer stays a single value. */
+  const editCustom = (questionId: string, value: string, multi: boolean) => {
+    setCustoms((prev) => ({ ...prev, [questionId]: value }));
+    if (!multi && value.trim().length > 0) {
+      setSelections((prev) =>
+        (prev[questionId]?.length ?? 0) > 0
+          ? { ...prev, [questionId]: [] }
+          : prev
+      );
+    }
   };
 
   const submit = async () => {
@@ -66,7 +116,9 @@ function QuestionCard({
     try {
       await onAnswer(
         pending.toolCallId,
-        pending.questions.map((q) => toAnswer(q, selections[q.id] ?? [])),
+        pending.questions.map((q) =>
+          toAnswer(q, selections[q.id] ?? [], customs[q.id] ?? "")
+        ),
       );
       // The panel disappears once the tool_end event arrives.
     } catch (e) {
@@ -84,6 +136,7 @@ function QuestionCard({
       {pending.questions.map((q) => {
         const multi = q.multi === true;
         const selected = selections[q.id] ?? [];
+        const custom = customs[q.id] ?? "";
         return (
           <div key={q.id} className="question-item">
             {q.header && <div className="question-header">{q.header}</div>}
@@ -118,6 +171,14 @@ function QuestionCard({
                 );
               })}
             </div>
+            <input
+              type="text"
+              className="question-free-input"
+              placeholder="自由入力（選択肢にない場合はこちらに入力）"
+              aria-label={`${q.question}への自由入力`}
+              value={custom}
+              onChange={(e) => editCustom(q.id, e.target.value, multi)}
+            />
           </div>
         );
       })}
@@ -126,7 +187,8 @@ function QuestionCard({
           type="button"
           className="btn primary"
           onClick={submit}
-          disabled={submitting || !allAnswered(pending.questions, selections)}
+          disabled={submitting ||
+            !allAnswered(pending.questions, selections, customs)}
         >
           <IconSend size={13} />
           {submitting ? "送信中..." : "回答を送信"}

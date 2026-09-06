@@ -5,7 +5,6 @@ import {
   type LumiscaCore,
 } from "@lumisca/core";
 import { color, error, errorText, getPromptFn, header, info } from "./ui.ts";
-import { selectFromList } from "./select.ts";
 
 /** Event-rendering helpers for the REPL. Kept separate from the input loop
  * (repl.ts) so the terminal formatting lives in one place. */
@@ -88,10 +87,11 @@ export class StreamPrinter {
 }
 
 /** Answer the agent's questions (the ask tool) inline: each question is
- * shown with its options and the user answers in the terminal; the answers
- * resolve the blocked run via core.answerQuestion. Without this the run
- * would block forever — the REPL loop waits for the agent to idle before
- * reading input, so the answering must happen here, in the event handler. */
+ * shown with its options plus a free-text field that is always available,
+ * and the user answers in the terminal; the answers resolve the blocked
+ * run via core.answerQuestion. Without this the run would block forever —
+ * the REPL loop waits for the agent to idle before reading input, so the
+ * answering must happen here, in the event handler. */
 export async function answerQuestions(
   core: LumiscaCore,
   sessionId: string,
@@ -106,7 +106,9 @@ export async function answerQuestions(
         ? await pickMulti(question)
         : await pickSingle(question);
       if (chosen === null) {
-        info("回答が必要です(エージェントが待機中)。選択してください。");
+        info(
+          "回答が必要です(エージェントが待機中)。選択肢の番号か自由入力で回答してください。",
+        );
       }
     }
     answers.push({ id: question.id, values: chosen });
@@ -119,20 +121,9 @@ export async function answerQuestions(
   }
 }
 
-/** One-of-N selection with the shared searchable picker. */
-async function pickSingle(question: AskQuestion): Promise<string[] | null> {
-  const option = await selectFromList(
-    question.question,
-    question.options.map((o) => ({
-      label: o.description ? `${o.label} — ${o.description}` : o.label,
-      value: o.label,
-    })),
-  );
-  return option === null ? null : [option];
-}
-
-/** Several-of-N selection: a numbered list plus comma-separated input. */
-async function pickMulti(question: AskQuestion): Promise<string[] | null> {
+/** Print the options of a question as a numbered list. Shared by the
+ * single and multi pickers so the free-text guidance cannot drift. */
+function printOptions(question: AskQuestion): void {
   header(question.question);
   question.options.forEach((option, i) => {
     const label = option.description
@@ -140,18 +131,44 @@ async function pickMulti(question: AskQuestion): Promise<string[] | null> {
       : option.label;
     console.log(`  ${color.yellow(String(i + 1).padStart(2))}  ${label}`);
   });
-  const input = await getPromptFn()("番号をカンマ区切りで選択 (空Enterで戻る)");
+}
+
+/** One-of-N selection: a number picks the option, any other text is the
+ * free-text answer. */
+async function pickSingle(question: AskQuestion): Promise<string[] | null> {
+  printOptions(question);
+  const input = await getPromptFn()(
+    "番号で選択、または自由入力 (空Enterで戻る)",
+  );
+  if (input === null) return null;
+  const trimmed = input.trim();
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  if (Number.isInteger(n) && n >= 1 && n <= question.options.length) {
+    return [question.options[n - 1]!.label];
+  }
+  return [trimmed];
+}
+
+/** Several-of-N selection: comma-separated numbers pick the options; any
+ * other text is a free-text answer (mixed input like `1,3,自由な案` is
+ * allowed). */
+async function pickMulti(question: AskQuestion): Promise<string[] | null> {
+  printOptions(question);
+  const input = await getPromptFn()(
+    "番号をカンマ区切りで選択、または自由入力 (空Enterで戻る、混在可 例: 1,3,自由な案)",
+  );
   if (input === null) return null;
   const values: string[] = [];
   for (const raw of input.split(",")) {
-    const n = Number(raw.trim());
-    if (!Number.isInteger(n)) continue;
-    const option = question.options[n - 1];
-    if (option === undefined) {
-      error(`無効な番号: ${raw.trim()}`);
-      return null;
+    const token = raw.trim();
+    if (token === "") continue;
+    const n = Number(token);
+    if (Number.isInteger(n) && n >= 1 && n <= question.options.length) {
+      values.push(question.options[n - 1]!.label);
+    } else {
+      values.push(token);
     }
-    values.push(option.label);
   }
   return values.length > 0 ? values : null;
 }

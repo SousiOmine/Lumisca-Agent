@@ -173,9 +173,10 @@ export interface AskOption {
 }
 
 /** One question the agent asks the user (the `ask` tool). The UI renders
- * it above the composer; the user's answer is returned as the tool result.
- * `multi` (default false) allows several options; `recommended` preselects
- * the option at that index when the question appears. */
+ * it above the composer together with a free-text field that is always
+ * available; the user's answer is returned as the tool result. `multi`
+ * (default false) allows several options; `recommended` preselects the
+ * option at that index when the question appears. */
 export interface AskQuestion {
   id: string;
   question: string;
@@ -185,8 +186,10 @@ export interface AskQuestion {
   recommended?: number;
 }
 
-/** The user's answer to one question: the selected option labels (`values`
- * holds one label for single choice, several for multi). */
+/** The user's answer to one question: the selected option labels and/or
+ * the free-text input (`values` holds one entry for single choice,
+ * several for multi). Entries that match no option label are the user's
+ * free-text answers. */
 export interface AskAnswer {
   id: string;
   values: string[];

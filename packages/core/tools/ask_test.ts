@@ -91,7 +91,7 @@ Deno.test("answer rejects for an unknown tool call id", () => {
   );
 });
 
-Deno.test("answer rejects for unknown question ids and options", async () => {
+Deno.test("answer rejects for unknown question ids", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   const promise = tool.execute(
@@ -110,9 +110,51 @@ Deno.test("answer rejects for unknown question ids and options", async () => {
     "Unknown question id: q2",
     "invalid",
   );
+  // A rejected validation must not consume the pending ask.
+  hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Deno"] }]);
+  await promise;
+});
+
+Deno.test("answer accepts free-text values outside the options", async () => {
+  const { hub } = makeHub();
+  const tool = createAskTool(hub);
+  const promise = tool.execute(
+    TOOL_CALL_ID,
+    {
+      questions: [{
+        id: "q1",
+        question: "Which language?",
+        options: [{ label: "Deno" }, { label: "Node" }],
+      }],
+    },
+    undefined,
+  );
+  hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Python"] }]);
+  const result = await promise;
+  assertEquals(
+    toolText(result),
+    "Answers from the user:\n- Which language?: Python",
+  );
+  assertEquals(result.details, { answers: [{ id: "q1", values: ["Python"] }] });
+});
+
+Deno.test("answer rejects empty values", async () => {
+  const { hub } = makeHub();
+  const tool = createAskTool(hub);
+  const promise = tool.execute(
+    TOOL_CALL_ID,
+    {
+      questions: [{
+        id: "q1",
+        question: "Which language?",
+        options: [{ label: "Deno" }, { label: "Node" }],
+      }],
+    },
+    undefined,
+  );
   assertThrowsCoreError(
-    () => hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Python"] }]),
-    'Unknown option for question "q1": Python',
+    () => hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["   "] }]),
+    'Question "q1" has an empty answer',
     "invalid",
   );
   // A rejected validation must not consume the pending ask.

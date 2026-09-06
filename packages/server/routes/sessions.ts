@@ -41,7 +41,8 @@ interface AnswerBody {
 
 /** Validate an answer request body for a pending ask (the ask tool): the
  * tool call id and the answer list shape. The core validates the values
- * against the pending questions (ids and option labels). */
+ * against the pending questions (ids and non-empty values; option labels
+ * or free-text input). */
 export function parseAnswerBody(body: AnswerBody): {
   toolCallId: string;
   answers: AskAnswer[];
