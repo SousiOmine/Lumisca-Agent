@@ -1137,7 +1137,7 @@ Deno.test("thinking level reaches the provider stream options", async () => {
   core.close();
 });
 
-Deno.test("thinking level change is refused while a session using the model streams", async () => {
+Deno.test("thinking level change while streaming applies from the next run without error", async () => {
   const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
   const core = LumiscaCore.forTesting([faux.provider]);
   const { ws } = await makeWorkspace(core);
@@ -1147,26 +1147,42 @@ Deno.test("thinking level change is refused while a session using the model stre
     modelId: faux.getModel().id,
   });
 
+  let firstReasoning: unknown = "unset";
   faux.setResponses([
-    async () => {
+    async (_context, options) => {
+      firstReasoning = (options as { reasoning?: unknown }).reasoning;
       await new Promise((resolve) => setTimeout(resolve, 200));
       return fauxAssistantMessage("slow reply");
     },
   ]);
   core.startPrompt(session.id, "go");
-  assertThrows(
-    () =>
-      core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "high"),
-    Error,
-    "already running",
-  );
-
-  await core.getAgent(session.id)!.waitForIdle();
-  // Idle again: the change goes through.
+  // Changing while streaming must not throw: the new level is persisted
+  // and the open agent picks it up in place, while the in-flight run keeps
+  // the level it started with.
   assertEquals(
     core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "high"),
     "high",
   );
+  assertEquals(core.getSession(session.id)!.thinkingLevel, "high");
+  assertEquals(
+    core.getAgent(session.id)!.agent.state.thinkingLevel,
+    "high",
+  );
+
+  await core.getAgent(session.id)!.waitForIdle();
+  // The in-flight run started before the change, so it used the old level.
+  assertEquals(firstReasoning, undefined);
+
+  // The next run uses the new level without any rebuild.
+  let secondReasoning: unknown = "unset";
+  faux.setResponses([
+    (_context, options) => {
+      secondReasoning = (options as { reasoning?: unknown }).reasoning;
+      return fauxAssistantMessage("ok");
+    },
+  ]);
+  await core.prompt(session.id, "again");
+  assertEquals(secondReasoning, "high");
   core.close();
 });
 

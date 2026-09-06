@@ -722,9 +722,12 @@ export class LumiscaCore {
   }
 
   /** Set the thinking level of a model (persisted, per model). Open
-   * sessions using the model are rebuilt so the change applies immediately;
-   * throws `conflict` while any of them is streaming. Returns the level
-   * that will actually be used (unsupported requests are clamped). */
+   * sessions using the model pick the change up in place from their next
+   * run onward — the agent is not rebuilt, so this never throws `conflict`
+   * while a session is streaming. The in-flight run keeps the level it
+   * started with; newly created sessions use the new level from the start.
+   * Returns the level that will actually be used (unsupported requests are
+   * clamped). */
   setModelThinkingLevel(
     providerId: string,
     modelId: string,
@@ -743,13 +746,14 @@ export class LumiscaCore {
         "not_found",
       );
     }
-    const affected = this.sessions.list().filter(
-      (s) => s.modelProvider === providerId && s.modelId === modelId,
-    );
-    let effective: ThinkingLevel = "off";
-    this.pool.applyChange(affected, () => {
-      effective = this.models.setThinkingLevel(providerId, modelId, level);
-    });
+    const effective = this.models.setThinkingLevel(providerId, modelId, level);
+    for (const session of this.sessions.list()) {
+      if (
+        session.modelProvider === providerId && session.modelId === modelId
+      ) {
+        this.pool.setThinkingLevel(session.id, effective);
+      }
+    }
     return effective;
   }
 

@@ -286,6 +286,16 @@ export class SessionAgent {
     return this.agent.state.messages;
   }
 
+  /** Update the reasoning level used from the next run onward. The
+   * in-flight run (if any) keeps the level it started with: pi-agent-core
+   * snapshots `thinkingLevel` into the loop config at run start, so
+   * mutating the state mid-run never affects the current turn — only
+   * subsequent prompts. Rebuilding the agent is therefore unnecessary,
+   * and changing the level never throws `conflict` while streaming. */
+  setThinkingLevel(level: ThinkingLevel): void {
+    this.agent.state.thinkingLevel = level;
+  }
+
   /** Run a prompt to completion. `images` are attached to the user message
    * (base64, passed through to vision-capable models; pi omits them for
    * text-only models). Waits for MCP tools to attach first (they spawn
