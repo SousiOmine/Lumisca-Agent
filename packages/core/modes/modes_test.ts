@@ -113,7 +113,12 @@ Deno.test("plan prompt: embeds the request and the internal rules", () => {
   assertEquals(prompt.includes("ask ツールでユーザーに質問"), true);
   // Permission is asked at the end, and implementation follows only on
   // explicit approval.
-  assertEquals(prompt.includes("実装を進めますか"), true);
+  assertEquals(
+    prompt.includes(
+      "計画立案が完了したあと，計画をユーザーに説明し，askツールでユーザーに計画を実行するか否かを確認してください（「実装を進める」「計画のみで終了」などの選択肢を用意してください）",
+    ),
+    true,
+  );
   assertEquals(prompt.includes("明示的に実装を許可した場合のみ"), true);
   assertEquals(prompt.includes("計画に沿って実装を開始"), true);
 });
