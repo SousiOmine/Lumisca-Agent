@@ -8,6 +8,7 @@ import {
 
 const planCommand = slashCommands.find((c) => c.id === "plan");
 const reviewCommand = slashCommands.find((c) => c.id === "review");
+const goalCommand = slashCommands.find((c) => c.id === "goal");
 
 Deno.test("slashCommands: plan is a text-taking leaf command", () => {
   assertEquals(planCommand !== undefined, true);
@@ -71,6 +72,11 @@ Deno.test("modeRewindText: text-taking modes restore as a command line", () => {
     modeRewindText("plan", "履歴機能を追加して"),
     "/plan 履歴機能を追加して",
   );
+  // Goal mode behaves the same: `/goal <ゴール文>`.
+  assertEquals(
+    modeRewindText("goal", "全テストが通るまで実装して"),
+    "/goal 全テストが通るまで実装して",
+  );
   // Menu modes keep their self-contained short text.
   assertEquals(
     modeRewindText("review", "未コミットの変更をレビューしてください"),
@@ -78,4 +84,33 @@ Deno.test("modeRewindText: text-taking modes restore as a command line", () => {
   );
   // Unknown mode ids degrade to the short text.
   assertEquals(modeRewindText("nope", "なにか"), "なにか");
+});
+
+Deno.test("slashCommands: goal is a text-taking leaf command", () => {
+  assertEquals(goalCommand !== undefined, true);
+  assertEquals(goalCommand!.requiresText, true);
+  assertEquals(goalCommand!.items, undefined);
+});
+
+Deno.test("slashPrompt: goal mode wraps the trailing text", () => {
+  const result = slashPrompt(
+    goalCommand!,
+    undefined,
+    "  全テストが通るまで実装して ",
+  );
+  assertEquals(result !== null, true);
+  assertEquals(result!.mode.modeId, "goal");
+  assertEquals(result!.mode.optionId, "");
+  assertEquals(result!.mode.modeLabel, "ゴールモード");
+  assertEquals(result!.mode.shortText, "全テストが通るまで実装して");
+  assertEquals(result!.text.includes("全テストが通るまで実装して"), true);
+  assertEquals(result!.text.includes("ゴール達成エージェント"), true);
+});
+
+Deno.test("slashPromptFromText: /goal <goal> wraps as a text line", () => {
+  const line = slashPromptFromText("/goal 全テストが通るまで実装して");
+  if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
+  assertEquals(line.mode.modeId, "goal");
+  assertEquals(line.mode.shortText, "全テストが通るまで実装して");
+  assertEquals(line.text.includes("全テストが通るまで実装して"), true);
 });

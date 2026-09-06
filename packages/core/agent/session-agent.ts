@@ -51,6 +51,10 @@ import type { ModePrompt } from "../types/mode-message.ts";
 import { buildModeMessage } from "../types/mode-message.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
+import type { GoalInfo } from "../shared/goal.ts";
+import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";
+import type { GoalStore } from "../goal/loop.ts";
+import { resolveMaxGoalIterations, runGoalLoop } from "../goal/loop.ts";
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
@@ -81,6 +85,10 @@ export interface SessionAgentOptions {
   /** The configured fast model: generates the session title from the
    * first user message (see TitleGenerator). */
   fastModel?: Model<Api>;
+  /** Session-bound goal persistence (the sessions table, via the pool).
+   * Undefined in tests and sessions without goal support: the goal loop
+   * is then disabled and goal mode behaves like a plain prompt. */
+  goalStore?: GoalStore;
   /** Skip title generation even when a fast model is configured. Headless
    * runs (CLI `run`, harness use) must not fire an extra LLM request per
    * session — the title is never seen by anyone. */
@@ -145,6 +153,23 @@ export class SessionAgent {
   /** Generates the session title from the first user message (null when
    * no fast model is configured). */
   private readonly titleGenerator: TitleGenerator | null;
+  /** The main model of this session (the judge fallback when no fast
+   * model is configured). */
+  private readonly mainModel: Model<Api>;
+  /** The fast model for goal judgements (undefined when unset: the main
+   * model judges instead). Shared with the title generator's model. */
+  private readonly fastModelForGoal: Model<Api> | undefined;
+  /** The stream function for goal judgements (same pipeline as titles). */
+  private readonly streamFnForGoal: StreamFn;
+  /** Session-bound goal persistence (null when the goal loop is disabled). */
+  private readonly goalStore: GoalStore | null;
+  /** Bumped to cancel a running goal loop (abort / rewind / explicit
+   * cancel). Compared by epoch like abortEpoch so a stop between two
+   * iterations stands the next judge/turn down. */
+  private goalEpoch = 0;
+  /** True while the goal loop runs; re-entrant prompts join instead of
+   * starting a second loop. */
+  private goalLoopRunning = false;
   private readonly renameSession: (name: string) => void;
   /** Question hub backing the ask tool; rejects pending asks when the run
    * ends or the session closes (see rejectPendingAsks). */
@@ -221,6 +246,10 @@ export class SessionAgent {
       options.fastModel !== undefined && !options.disableTitleGeneration
         ? new TitleGenerator(options.fastModel, options.streamFn)
         : null;
+    this.mainModel = options.model;
+    this.fastModelForGoal = options.fastModel;
+    this.streamFnForGoal = options.streamFn;
+    this.goalStore = options.goalStore ?? null;
     this.rateLimitRetrySleep = options.rateLimitRetrySleep ?? sleepAbortable;
     this.backgroundManager = options.backgroundManager ?? null;
     this.backgroundUnsubscribe = this.backgroundManager === null
@@ -282,6 +311,7 @@ export class SessionAgent {
       });
     }
     await this.resumeAfterErrorRun();
+    await this.maybeRunGoalLoop();
   }
 
   /** Kick off title generation on the first prompt of a fresh session (no
@@ -337,6 +367,7 @@ export class SessionAgent {
       this.emptyResponseRetries = 0;
       this.rateLimitRetries = 0;
       this.pendingRateLimitRetry = null;
+      this.startGoalIfNeeded(mode);
       void this.startRun(message);
       return;
     }
@@ -370,13 +401,35 @@ export class SessionAgent {
    * right after session creation), so wait for it; if a run started
    * concurrently, the prompt fails and the message is steered into that
    * run instead (it is then processed at that run's next turn boundary).
-   * A silent-error restart parked during the run is resumed afterwards. */
+   * A silent-error restart parked during the run is resumed afterwards,
+   * then the goal loop (when active) judges and continues. */
   private async startRun(message: AgentMessage): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
     try {
       await this.agent.prompt(message);
     } catch {
       this.agent.steer(message);
+    }
+    await this.resumeAfterErrorRun();
+    await this.maybeRunGoalLoop();
+  }
+
+  /** One main-agent turn without triggering the goal loop (the loop's own
+   * `runTurn`): the judge's next prompt runs to completion, then the loop
+   * judges again. Separated from startRun/prompt so injected turns do not
+   * recurse into the loop. */
+  private async runMainTurn(instruction: string): Promise<void> {
+    this.emptyResponseRetries = 0;
+    this.rateLimitRetries = 0;
+    this.pendingRateLimitRetry = null;
+    try {
+      await this.agent.prompt(instruction);
+    } catch (error) {
+      this.emit({
+        type: "session_error",
+        sessionId: this.sessionId,
+        message: errorMessage(error),
+      });
     }
     await this.resumeAfterErrorRun();
   }
@@ -480,7 +533,91 @@ export class SessionAgent {
     this.rejectPendingAsks();
     this.retryAbort.abort();
     this.abortEpoch++;
+    // An abort also stops the autonomous goal loop: the user must be able
+    // to interrupt a running goal at any time. The goal is cleared so the
+    // right-side panel disappears; a re-send restarts it.
+    this.cancelGoalForAbort();
     this.agent.abort();
+  }
+
+  /** The session's active goal, if any (for the right-side panel resync). */
+  getGoal(): GoalInfo | undefined {
+    return this.goalStore?.loadGoal();
+  }
+
+  /** Cancel the active goal without emitting a user-visible abort of the
+   * run itself (the panel's cancel button path via Core). No-op when no
+   * goal runs. */
+  cancelGoal(): void {
+    this.goalEpoch++;
+    if (this.goalStore?.loadGoal() === undefined) return;
+    const text = this.goalStore.clearGoal();
+    if (text === undefined) return;
+    this.emit({
+      type: "goal_done",
+      sessionId: this.sessionId,
+      text,
+      achieved: false,
+      reason: "ユーザーにより中断されました",
+    });
+  }
+
+  /** Abort-path goal cancellation (shares cancelGoal's clearing but keeps
+   * the method small for the abort fast path). */
+  private cancelGoalForAbort(): void {
+    this.goalEpoch++;
+    if (this.goalStore?.loadGoal() === undefined) return;
+    const text = this.goalStore!.clearGoal();
+    if (text === undefined) return;
+    this.emit({
+      type: "goal_done",
+      sessionId: this.sessionId,
+      text,
+      achieved: false,
+      reason: "ユーザーにより中断されました",
+    });
+  }
+
+  /** Start the autonomous goal when a `/goal` mode prompt arrives. The
+   * goal text is the mode's short text (the user-typed goal); the full
+   * prompt already runs as this turn. Emits `goal_start` for the panel. */
+  private startGoalIfNeeded(mode: ModePrompt): void {
+    if (mode.modeId !== "goal" || this.goalStore === null) return;
+    const text = mode.shortText.trim();
+    if (text.length === 0) return;
+    const maxIterations = resolveMaxGoalIterations(
+      DEFAULT_MAX_GOAL_ITERATIONS,
+    );
+    const goal = this.goalStore.saveGoal(text, maxIterations);
+    this.emit({ type: "goal_start", sessionId: this.sessionId, goal });
+  }
+
+  /** Run the goal loop when a goal is active (after every completed run).
+   * Re-entrant prompts join the running loop instead of starting another.
+   * Each iteration judges with the fast model (main-model fallback) and
+   * injects the next prompt until done, capped, or cancelled. */
+  private async maybeRunGoalLoop(): Promise<void> {
+    if (this.goalStore === null || this.goalLoopRunning || this.closed) return;
+    if (this.goalStore.loadGoal() === undefined) return;
+    this.goalLoopRunning = true;
+    const epoch = this.goalEpoch;
+    try {
+      await runGoalLoop({
+        sessionId: this.sessionId,
+        loadGoal: () => this.goalStore!.loadGoal(),
+        saveGoal: (text, max) => this.goalStore!.saveGoal(text, max),
+        updateGoal: (patch) => this.goalStore!.updateGoal(patch),
+        clearGoal: () => this.goalStore!.clearGoal(),
+        getTranscript: () => this.messages,
+        getJudgeModel: () => this.fastModelForGoal ?? this.mainModel,
+        streamFn: this.streamFnForGoal,
+        runTurn: (instruction) => this.runMainTurn(instruction),
+        emit: (event) => this.emit(event),
+        isCancelled: () => this.closed || this.goalEpoch !== epoch,
+      });
+    } finally {
+      this.goalLoopRunning = false;
+    }
   }
 
   /** Resolve a pending ask (the ask tool) with the user's answers, letting
@@ -532,6 +669,18 @@ export class SessionAgent {
         (m.role === "user" || m.role === "mode") &&
         m.timestamp === timestamp,
     );
+    // Goal declarations (modeId "goal") that would disappear with the
+    // truncation: rewinding them away cancels the goal. Captured before
+    // the splice mutates the array.
+    const goalTimestamps = new Set(
+      messages
+        .filter(
+          (m) =>
+            m.role === "mode" &&
+            (m as { modeId?: unknown }).modeId === "goal",
+        )
+        .map((m) => m.timestamp),
+    );
     let removed: Array<{ role: string; timestamp: number }> = [];
     /** Drop everything at `cut` onward from memory and the database,
      * recording what was removed for the clients. */
@@ -574,10 +723,38 @@ export class SessionAgent {
     this.pendingErrorRetry = null;
     this.pendingRateLimitRetry = null;
     this.rateLimitRetries = 0;
+    // Rewinding away the goal's own mode message cancels the goal: the
+    // declaration itself is gone, so the loop must not continue. Any other
+    // rewind leaves the goal intact (the user only corrected a later turn).
+    this.cancelGoalWhenRewound(goalTimestamps, removed);
     this.emit({
       type: "messages_truncated",
       sessionId: this.sessionId,
       removed,
+    });
+  }
+
+  /** Cancel the goal when a rewind removed its declaration. Only a removed
+   * timestamp matching a goal mode message cancels; rewinding plan/review
+   * or plain user turns leaves the goal intact. */
+  private cancelGoalWhenRewound(
+    goalTimestamps: Set<number>,
+    removed: Array<{ role: string; timestamp: number }>,
+  ): void {
+    if (this.goalStore === null) return;
+    if (this.goalStore.loadGoal() === undefined) return;
+    if (goalTimestamps.size === 0) return;
+    const removedGoal = removed.some((m) => goalTimestamps.has(m.timestamp));
+    if (!removedGoal) return;
+    this.goalEpoch++;
+    const text = this.goalStore.clearGoal();
+    if (text === undefined) return;
+    this.emit({
+      type: "goal_done",
+      sessionId: this.sessionId,
+      text,
+      achieved: false,
+      reason: "巻き戻しにより中断されました",
     });
   }
 
@@ -588,6 +765,10 @@ export class SessionAgent {
    * with the pool (its server processes serve the sub-agents too). */
   close(): void {
     this.closed = true;
+    // Stop the goal loop without clearing the persisted goal: reopening
+    // the session shows the goal again via the resync endpoint, but does
+    // not auto-resume the loop.
+    this.goalEpoch++;
     this.rejectPendingAsks();
     this.retryAbort.abort();
     this.agent.abort();

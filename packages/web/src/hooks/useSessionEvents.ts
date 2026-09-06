@@ -8,6 +8,7 @@ import {
   mergeMessages,
   mergeTasks,
   sameBackgrounds,
+  sameGoal,
   sameTasks,
   sameTodoPlan,
 } from "../events.ts";
@@ -17,6 +18,7 @@ import type {
   AgentMessage,
   BackgroundCommandInfo,
   ClientEvent,
+  GoalInfo,
   SessionView,
   TaskInfo,
   TodoPhase,
@@ -58,6 +60,7 @@ export function useSessionEvents() {
     const todos = new Map<string, TodoPhase[]>();
     const tasks = new Map<string, TaskInfo[]>();
     const backgrounds = new Map<string, BackgroundCommandInfo[]>();
+    const goals = new Map<string, GoalInfo | null>();
     await Promise.all(ids.map(async (id) => {
       // Fetch independently: one failing (e.g. the session was deleted)
       // must not drop the other.
@@ -84,10 +87,16 @@ export function useSessionEvents() {
       } catch {
         // Server not reachable yet; keep the current backgrounds.
       }
+      try {
+        const { goal } = await sessionApi(id).getGoal();
+        goals.set(id, goal);
+      } catch {
+        // Server not reachable yet; keep the current goal.
+      }
     }));
     if (
       messages.size === 0 && todos.size === 0 && tasks.size === 0 &&
-      backgrounds.size === 0
+      backgrounds.size === 0 && goals.size === 0
     ) {
       return;
     }
@@ -99,6 +108,7 @@ export function useSessionEvents() {
           ...todos.keys(),
           ...tasks.keys(),
           ...backgrounds.keys(),
+          ...goals.keys(),
         ])
       ) {
         const v = next.get(id);
@@ -124,10 +134,13 @@ export function useSessionEvents() {
           : mergeBackgrounds(v.backgrounds, fetchedBackgrounds);
         const backgroundsChanged = fetchedBackgrounds !== undefined &&
           !sameBackgrounds(mergedBackgrounds, v.backgrounds);
+        const fetchedGoal = goals.get(id);
+        const goalChanged = fetchedGoal !== undefined &&
+          !sameGoal(fetchedGoal ?? undefined, v.goal);
         if (
           merged.length === v.messages.length && !todoChanged &&
           !tasksChanged &&
-          !backgroundsChanged
+          !backgroundsChanged && !goalChanged
         ) {
           continue;
         }
@@ -137,6 +150,7 @@ export function useSessionEvents() {
           ...(todoChanged ? { todos: todo } : {}),
           ...(tasksChanged ? { tasks: mergedTasks } : {}),
           ...(backgroundsChanged ? { backgrounds: mergedBackgrounds } : {}),
+          ...(goalChanged ? { goal: fetchedGoal ?? undefined } : {}),
         });
       }
       return next;

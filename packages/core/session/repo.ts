@@ -1,7 +1,15 @@
 import type { LumiscaDb } from "../db/mod.ts";
 import type { SessionInfo } from "../types/session.ts";
+import type { GoalInfo, GoalStatus } from "../shared/goal.ts";
 
 export interface SessionRecord extends SessionInfo {}
+
+export interface GoalUpdate {
+  iteration?: number;
+  status?: GoalStatus;
+  /** Undefined leaves the reason unchanged; null clears it; a string sets it. */
+  lastReason?: string | null;
+}
 
 export interface SessionRepo {
   create(
@@ -18,9 +26,17 @@ export interface SessionRepo {
   updateModel(id: string, provider: string, modelId: string): void;
   rename(id: string, name: string): void;
   updateSystemPrompt(id: string, systemPrompt: string): void;
+  /** The session's active goal, if any (goal_text NULL means none). */
+  getGoal(id: string): GoalInfo | undefined;
+  /** Start (or replace) the session's active goal. Resets the progress. */
+  setGoal(id: string, text: string, maxIterations: number): void;
+  /** Update the active goal's progress (no-op when there is none). */
+  updateGoal(id: string, patch: GoalUpdate): void;
+  /** Drop the active goal (completion, limit, cancel, or rewind). */
+  clearGoal(id: string): void;
 }
 
-function toSession(row: {
+interface SessionRow {
   id: string;
   workspace_id: string;
   name: string;
@@ -29,7 +45,28 @@ function toSession(row: {
   system_prompt: string | null;
   created_at: number;
   updated_at: number;
-}): SessionRecord {
+  goal_text?: string | null;
+  goal_iteration?: number | null;
+  goal_max_iterations?: number | null;
+  goal_status?: string | null;
+  goal_last_reason?: string | null;
+}
+
+function toGoal(row: SessionRow): GoalInfo | undefined {
+  if (row.goal_text === undefined || row.goal_text === null) return undefined;
+  const text = row.goal_text.trim();
+  if (text.length === 0) return undefined;
+  const status = row.goal_status === "judging" ? "judging" : "active";
+  return {
+    text,
+    iteration: row.goal_iteration ?? 0,
+    maxIterations: row.goal_max_iterations ?? 10,
+    status,
+    ...(row.goal_last_reason ? { lastReason: row.goal_last_reason } : {}),
+  };
+}
+
+function toSession(row: SessionRow): SessionRecord {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -67,6 +104,18 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
   const updateSystemPromptStmt = db.db.prepare(
     "UPDATE sessions SET system_prompt = ? WHERE id = ?",
   );
+  const setGoalStmt = db.db.prepare(`
+    UPDATE sessions
+    SET goal_text = ?, goal_iteration = 0, goal_max_iterations = ?,
+        goal_status = 'active', goal_last_reason = NULL, updated_at = ?
+    WHERE id = ?
+  `);
+  const clearGoalStmt = db.db.prepare(`
+    UPDATE sessions
+    SET goal_text = NULL, goal_iteration = 0,
+        goal_status = NULL, goal_last_reason = NULL, updated_at = ?
+    WHERE id = ?
+  `);
 
   return {
     create(input): SessionRecord {
@@ -96,16 +145,14 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
     },
 
     get(id: string): SessionRecord | undefined {
-      const row = getStmt.get(id) as
-        | Parameters<typeof toSession>[0]
-        | undefined;
+      const row = getStmt.get(id) as unknown as SessionRow | undefined;
       return row ? toSession(row) : undefined;
     },
 
     list(workspaceId?: string): SessionRecord[] {
       const rows = (workspaceId ? listByWorkspaceStmt : listStmt).all(
         ...(workspaceId ? [workspaceId] : []),
-      ) as Array<Parameters<typeof toSession>[0]>;
+      ) as unknown as SessionRow[];
       return rows.map(toSession);
     },
 
@@ -127,6 +174,55 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
 
     updateSystemPrompt(id: string, systemPrompt: string): void {
       updateSystemPromptStmt.run(systemPrompt, id);
+    },
+
+    getGoal(id: string): GoalInfo | undefined {
+      const row = getStmt.get(id) as unknown as SessionRow | undefined;
+      return row ? toGoal(row) : undefined;
+    },
+
+    setGoal(id: string, text: string, maxIterations: number): void {
+      setGoalStmt.run(text, maxIterations, Date.now(), id);
+    },
+
+    updateGoal(id: string, patch: GoalUpdate): void {
+      const current = getStmt.get(id) as unknown as SessionRow | undefined;
+      if (
+        !current || current.goal_text === null ||
+        current.goal_text === undefined
+      ) {
+        return;
+      }
+      const next: GoalInfo = {
+        text: current.goal_text,
+        iteration: patch.iteration ?? current.goal_iteration ?? 0,
+        maxIterations: current.goal_max_iterations ?? 10,
+        status: patch.status ?? (
+          current.goal_status === "judging" ? "judging" : "active"
+        ),
+        ...(patch.lastReason !== undefined
+          ? (patch.lastReason === null ? {} : { lastReason: patch.lastReason })
+          : (current.goal_last_reason
+            ? { lastReason: current.goal_last_reason }
+            : {})),
+      };
+      db.db.prepare(`
+        UPDATE sessions
+        SET goal_iteration = ?, goal_max_iterations = ?,
+            goal_status = ?, goal_last_reason = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        next.iteration,
+        next.maxIterations,
+        next.status,
+        next.lastReason ?? null,
+        Date.now(),
+        id,
+      );
+    },
+
+    clearGoal(id: string): void {
+      clearGoalStmt.run(Date.now(), id);
     },
   };
 }

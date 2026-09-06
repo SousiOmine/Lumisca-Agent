@@ -14,6 +14,7 @@ import {
   IconGitBranch,
   IconGitCommit,
   IconListCheck,
+  IconTarget,
 } from "@tabler/icons-preact";
 import type { SlashCommand, SlashCommandItem } from "./components/Composer.tsx";
 
@@ -27,6 +28,7 @@ const MODE_ICONS: Record<string, Icon> = {
   "base-diff": IconGitBranch,
   uncommitted: IconGitCommit,
   plan: IconListCheck,
+  goal: IconTarget,
 };
 
 const FALLBACK_ICON: Icon = IconCode;

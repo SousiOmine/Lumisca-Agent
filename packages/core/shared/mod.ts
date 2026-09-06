@@ -9,6 +9,7 @@
  * - `./settings-keys.ts` — settings keys, saved prompts, model prefs,
  * - `./tool-names.ts` — TOOL_* agent-visible contract constants,
  * - `./interaction.ts` — ask / todo / task shapes,
+ * - `./goal.ts` — goal snapshot shapes,
  * - `./providers.ts` — thinking levels, provider/login/model summaries,
  * - `./content.ts` — message content helpers,
  * - `./mcp-config.ts` — MCP server config serialization,
@@ -18,6 +19,7 @@
 export * from "./settings-keys.ts";
 export * from "./tool-names.ts";
 export * from "./interaction.ts";
+export * from "./goal.ts";
 export * from "./providers.ts";
 export * from "./content.ts";
 export * from "./diff-stat.ts";

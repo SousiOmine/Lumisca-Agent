@@ -115,6 +115,12 @@ export function useSessionActions(
     sessionApi(key).abort().catch(console.error);
   }, []);
 
+  /** Cancel the session's active goal (the goal panel's button). Errors
+   * surface on the view; a missing goal is a no-op server-side. */
+  const cancelGoal = useCallback((key: string) => {
+    sessionApi(key).cancelGoal().catch(console.error);
+  }, []);
+
   /** Answer a pending ask (the ask tool): the answer is sent to the server
    * owning the session, which resolves the blocked run. Errors surface in
    * the question panel (the question may already be gone, e.g. after a
@@ -200,6 +206,7 @@ export function useSessionActions(
     startSession,
     prompt,
     abort,
+    cancelGoal,
     answer,
     rewind,
     changeModel,

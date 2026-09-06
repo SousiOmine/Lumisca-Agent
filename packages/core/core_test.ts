@@ -745,7 +745,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db1.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    5,
+    6,
   );
   db1.close();
 
@@ -754,7 +754,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db2.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    5,
+    6,
   );
   db2.close();
 
@@ -818,10 +818,20 @@ Deno.test("migration drops the legacy settings table", async () => {
     .all()
     .find((c) => c.name === "chat");
   assertEquals(chatColumn !== undefined, true, "chat column must be added");
+  // The goal-mode migration ran too: one active goal per session.
+  const goalColumn = db.db
+    .prepare("PRAGMA table_info(sessions)")
+    .all()
+    .find((c) => c.name === "goal_text");
+  assertEquals(
+    goalColumn !== undefined,
+    true,
+    "goal_text column must be added",
+  );
   assertEquals(
     (db.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    5,
+    6,
   );
   db.close();
 

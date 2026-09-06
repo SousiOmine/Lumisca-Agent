@@ -312,6 +312,95 @@
   overflow: hidden;
 }
 
+/* The session's active goal (/goal mode), stacked at the top of the
+ * fixed right-side panels. A rounded card that follows the theme tokens;
+ * hidden by the component while no goal runs. */
+.goal-panel {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px var(--shadow);
+  overflow: hidden;
+  font-size: 12px;
+  animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+.goal-panel-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.goal-panel-header:hover {
+  background: var(--accent-soft);
+}
+
+.goal-panel-title {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.goal-panel-summary {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.goal-panel-body {
+  border-top: 1px solid var(--border);
+  max-height: min(50vh, 360px);
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.goal-text {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.goal-reason {
+  color: var(--text-dim);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.goal-cancel {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.goal-cancel:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
 /* status colors: current task pops in the accent, done in the ok color,
  * blocked in the error color, abandoned fades out. */
 .todo-task.in_progress {

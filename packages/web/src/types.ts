@@ -8,6 +8,7 @@ import type {
   BackgroundCommandInfo,
   ClientEvent as CoreClientEvent,
   ConnectionEntry,
+  GoalInfo,
   McpInfo,
   McpServerInfo,
   ModelInfo,
@@ -42,6 +43,7 @@ export type {
   AskQuestion,
   BackgroundCommandInfo,
   ConnectionEntry,
+  GoalInfo,
   McpInfo,
   McpServerInfo,
   ModelInfo,
@@ -158,6 +160,10 @@ export interface SessionView {
    * `background_delta`, settled by `background_end`; the resync replaces
    * the list from the server snapshot. */
   backgrounds: BackgroundView[];
+  /** The session's active goal (`/goal` mode), shown in the right-side
+   * goal panel. Set by `goal_start`/`goal_progress`, cleared by
+   * `goal_done`; the resync replaces it from the server snapshot. */
+  goal?: GoalInfo;
   /** Keys (role:timestamp) of messages deleted by rewind. Kept so a later
    * resync (merge is append-only) cannot resurrect them. */
   removed: Set<string>;

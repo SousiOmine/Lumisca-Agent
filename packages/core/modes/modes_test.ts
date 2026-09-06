@@ -1,5 +1,6 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { AGENT_MODES, findAgentMode } from "./mod.ts";
+import { buildGoalPrompt, goalMode } from "./goal.ts";
 import { buildPlanPrompt, planMode } from "./plan.ts";
 import {
   buildReviewPrompt,
@@ -40,6 +41,7 @@ Deno.test("AGENT_MODES: ids are unique and every mode has a label and options", 
 Deno.test("findAgentMode finds registered modes and misses unknown ids", () => {
   assertEquals(findAgentMode("review"), reviewMode);
   assertEquals(findAgentMode("plan"), planMode);
+  assertEquals(findAgentMode("goal"), goalMode);
   assertEquals(findAgentMode("nope"), undefined);
 });
 
@@ -129,4 +131,31 @@ Deno.test("plan mode: empty fallback prompt asks for the request instead of plan
   assertEquals(prompt.includes("依頼内容が指定されていません"), true);
   assertEquals(prompt.includes("明示的に許可するまで"), true);
   assertEquals(buildPlanPrompt("  "), buildPlanPrompt(""));
+});
+
+Deno.test("goal mode: takes the goal text and has no options", () => {
+  assertEquals(goalMode.options.length, 0);
+  assertEquals(goalMode.buildPromptForText !== undefined, true);
+  assertEquals(goalMode.modeLabel, "ゴールモード");
+});
+
+Deno.test("goal prompt: embeds the goal and the working rules", () => {
+  const prompt = goalMode.buildPromptForText!("全テストが通るまで実装して");
+  assertEquals(prompt.includes("全テストが通るまで実装して"), true);
+  assertEquals(prompt.includes("ゴール達成エージェント"), true);
+  assertEquals(prompt.includes("ゴールが達成できたら"), true);
+  // Undecidable questions go to the ask tool.
+  assertEquals(prompt.includes("ask ツールでユーザーに質問"), true);
+  // The main agent is not instructed about turn-bounding: continuation
+  // is the server-side loop's job, not the prompt's.
+  assertEquals(prompt.includes("1ターンでできる範囲"), false);
+  assertEquals(prompt.includes("継続の判断はシステム"), false);
+});
+
+Deno.test("goal mode: empty fallback prompt asks for the goal instead of running blindly", () => {
+  const prompt = buildGoalPrompt("");
+  assertEquals(prompt.length > 0, true);
+  assertEquals(prompt.includes("ゴールが指定されていません"), true);
+  assertEquals(prompt.includes("ゴール達成エージェント"), true);
+  assertEquals(buildGoalPrompt("  "), buildGoalPrompt(""));
 });

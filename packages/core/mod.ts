@@ -34,6 +34,11 @@ export {
 } from "./modes/review.ts";
 export type { ReviewTarget } from "./modes/review.ts";
 export {
+  buildGoalPrompt,
+  DEFAULT_MAX_GOAL_ITERATIONS,
+  goalMode,
+} from "./modes/goal.ts";
+export {
   buildChatSystemPrompt,
   buildSystemPrompt,
   createChatTools,
@@ -107,6 +112,7 @@ export type {
 export type { AskAnswer, AskOption, AskQuestion } from "./shared/mod.ts";
 export type { TodoPhase, TodoStatus, TodoTask } from "./shared/mod.ts";
 export type { SubagentStatus, SubagentType, TaskInfo } from "./shared/mod.ts";
+export type { GoalInfo, GoalStatus } from "./shared/mod.ts";
 export type {
   BackgroundCommandInfo,
   BackgroundCommandReason,

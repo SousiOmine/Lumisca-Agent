@@ -58,6 +58,20 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec(
       "ALTER TABLE workspaces ADD COLUMN chat INTEGER NOT NULL DEFAULT 0",
     ),
+  // Goal mode (the `/goal` autonomous loop): one active goal per session.
+  // goal_text NULL means no active goal; the remaining columns carry the
+  // loop progress shown in the right-side panel.
+  (db) => {
+    db.exec("ALTER TABLE sessions ADD COLUMN goal_text TEXT");
+    db.exec(
+      "ALTER TABLE sessions ADD COLUMN goal_iteration INTEGER NOT NULL DEFAULT 0",
+    );
+    db.exec(
+      "ALTER TABLE sessions ADD COLUMN goal_max_iterations INTEGER NOT NULL DEFAULT 10",
+    );
+    db.exec("ALTER TABLE sessions ADD COLUMN goal_status TEXT");
+    db.exec("ALTER TABLE sessions ADD COLUMN goal_last_reason TEXT");
+  },
 ];
 
 /** Apply pending migrations, tracked via PRAGMA user_version. */

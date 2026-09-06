@@ -6,12 +6,14 @@ import {
   mergeMessages,
   mergeTasks,
   sameBackgrounds,
+  sameGoal,
   sameTodoPlan,
 } from "./events.ts";
 import {
   type AgentMessage,
   type BackgroundCommandInfo,
   type BackgroundView,
+  type GoalInfo,
   isViewRunning,
   type SessionView,
   type TaskInfo,
@@ -733,4 +735,77 @@ Deno.test("events: sameBackgrounds compares snapshots exactly", () => {
   textChanged[0]!.liveText = "y";
   assertEquals(sameBackgrounds(list, textChanged), true);
   assertEquals(sameBackgrounds(list, []), false);
+});
+
+// --- goal events (/goal mode) --------------------------------------------------
+
+const GOAL: GoalInfo = {
+  text: "全テストが通るまで実装して",
+  iteration: 1,
+  maxIterations: 10,
+  status: "active",
+  lastReason: "login test fails",
+};
+
+Deno.test("events: goal events set, update, and clear the panel", () => {
+  let v = view();
+  assertEquals(v.goal, undefined);
+  v = applyEvent({ type: "goal_start", sessionId: "s1", goal: GOAL }, v)!;
+  assertEquals(v.goal, GOAL);
+
+  // Progress replaces the snapshot wholesale.
+  const next: GoalInfo = { ...GOAL, iteration: 2, status: "judging" };
+  v = applyEvent({ type: "goal_progress", sessionId: "s1", goal: next }, v)!;
+  assertEquals(v.goal, next);
+
+  // A re-delivered snapshot converges without duplicating.
+  v = applyEvent({ type: "goal_progress", sessionId: "s1", goal: next }, v)!;
+  assertEquals(v.goal, next);
+
+  // Done clears the panel.
+  v = applyEvent(
+    {
+      type: "goal_done",
+      sessionId: "s1",
+      text: GOAL.text,
+      achieved: true,
+      reason: "all green",
+    },
+    v,
+  )!;
+  assertEquals(v.goal, undefined);
+
+  // Clearing twice is a no-op (same reference).
+  assertEquals(
+    applyEvent(
+      {
+        type: "goal_done",
+        sessionId: "s1",
+        text: GOAL.text,
+        achieved: true,
+        reason: "all green",
+      },
+      v,
+    ),
+    v,
+  );
+
+  // Another session's goal events do not touch this view.
+  assertEquals(
+    applyEvent({ type: "goal_start", sessionId: "s2", goal: GOAL }, v),
+    null,
+  );
+});
+
+Deno.test("events: sameGoal compares snapshots exactly", () => {
+  assertEquals(sameGoal(undefined, undefined), true);
+  assertEquals(sameGoal(GOAL, structuredClone(GOAL)), true);
+  assertEquals(sameGoal(GOAL, undefined), false);
+  assertEquals(sameGoal(undefined, GOAL), false);
+  const iterated = { ...GOAL, iteration: 2 };
+  assertEquals(sameGoal(GOAL, iterated), false);
+  const judging = { ...GOAL, status: "judging" as const };
+  assertEquals(sameGoal(GOAL, judging), false);
+  const reasoned = { ...GOAL, lastReason: "other" };
+  assertEquals(sameGoal(GOAL, reasoned), false);
 });

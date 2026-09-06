@@ -169,6 +169,18 @@ export const api = {
     request<{ backgrounds: BackgroundCommandInfo[] }>(
       `/api/sessions/${id}/background`,
     ),
+  /** The session's active goal (`/goal` mode); re-fetched after a WS drop
+   * or page reload to restore the right-side goal panel (goal events are
+   * not replayed). Null when no goal runs. */
+  getGoal: (id: string) =>
+    request<{ goal: import("./types.ts").GoalInfo | null }>(
+      `/api/sessions/${id}/goal`,
+    ),
+  /** Cancel the session's active goal (the goal panel's cancel button). */
+  cancelGoal: (id: string) =>
+    request<{ ok: boolean }>(`/api/sessions/${id}/goal`, {
+      method: "DELETE",
+    }),
   prompt: (
     id: string,
     text: string,
@@ -459,6 +471,17 @@ export const fed = {
       peerId,
       `/sessions/${encodeURIComponent(sessionId)}/background`,
     ),
+  getGoal: (peerId: string, sessionId: string) =>
+    fedRequest<{ goal: import("./types.ts").GoalInfo | null }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/goal`,
+    ),
+  cancelGoal: (peerId: string, sessionId: string) =>
+    fedRequest<{ ok: boolean }>(
+      peerId,
+      `/sessions/${encodeURIComponent(sessionId)}/goal`,
+      { method: "DELETE" },
+    ),
   closeSession: (peerId: string, sessionId: string) =>
     fedRequest<{ ok: boolean }>(
       peerId,
@@ -567,6 +590,16 @@ export function sessionApi(key: string) {
       peerId,
       () => api.getBackground(sessionId),
       (p) => fed.getBackground(p, sessionId),
+    ),
+    getGoal: peerRouted(
+      peerId,
+      () => api.getGoal(sessionId),
+      (p) => fed.getGoal(p, sessionId),
+    ),
+    cancelGoal: peerRouted(
+      peerId,
+      () => api.cancelGoal(sessionId),
+      (p) => fed.cancelGoal(p, sessionId),
     ),
     close: peerRouted(
       peerId,

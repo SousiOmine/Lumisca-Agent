@@ -69,6 +69,24 @@ export interface SessionPoolDeps {
   updateSystemPrompt(id: string, systemPrompt: string): void;
   streamFn: StreamFn;
   messageRepo: MessageRepo;
+  /** Session-bound goal persistence (the sessions table). The pool binds
+   * these to one session when building its agent; the agent's loop calls
+   * them to persist progress shown in the right-side panel. */
+  loadGoal(sessionId: string): import("../shared/goal.ts").GoalInfo | undefined;
+  saveGoal(
+    sessionId: string,
+    text: string,
+    maxIterations: number,
+  ): import("../shared/goal.ts").GoalInfo;
+  updateGoal(
+    sessionId: string,
+    patch: {
+      iteration?: number;
+      status?: import("../shared/goal.ts").GoalStatus;
+      lastReason?: string | null;
+    },
+  ): import("../shared/goal.ts").GoalInfo | undefined;
+  clearGoal(sessionId: string): string | undefined;
   /** Command safety check for the session's bash/eval/async_bash tools
    * (the fast model judges commands before they run). Always present; the
    * check itself is a no-op while the feature is disabled. */
@@ -461,6 +479,13 @@ export class SessionPool {
       fastModel: this.deps.getFastModel(),
       disableTitleGeneration: options.headless ?? false,
       renameSession: (name) => this.deps.renameSession(session.id, name),
+      goalStore: {
+        loadGoal: () => this.deps.loadGoal(session.id),
+        saveGoal: (text, maxIterations) =>
+          this.deps.saveGoal(session.id, text, maxIterations),
+        updateGoal: (patch) => this.deps.updateGoal(session.id, patch),
+        clearGoal: () => this.deps.clearGoal(session.id),
+      },
       onEvent: (event) => {
         // Remember failures for clients that do not see the WS stream;
         // a new run clears the stale error.

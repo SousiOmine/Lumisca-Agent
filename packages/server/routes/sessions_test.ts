@@ -10,6 +10,25 @@ Deno.test("parsePromptBody passes text-only prompts through", () => {
   });
 });
 
+Deno.test("parsePromptBody passes goal mode metadata through", () => {
+  const { text, mode } = parsePromptBody({
+    text: "full goal prompt",
+    mode: {
+      modeId: "goal",
+      optionId: "",
+      modeLabel: "ゴールモード",
+      shortText: "全テストを通す",
+    },
+  });
+  assertEquals(text, "full goal prompt");
+  assertEquals(mode, {
+    modeId: "goal",
+    optionId: "",
+    modeLabel: "ゴールモード",
+    shortText: "全テストを通す",
+  });
+});
+
 Deno.test("parsePromptBody converts data-URL images to content blocks", () => {
   const { text, images } = parsePromptBody({
     text: "what is this?",

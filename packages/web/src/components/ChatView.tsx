@@ -29,6 +29,7 @@ import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { BackgroundPanel } from "./BackgroundPanel.tsx";
+import { GoalPanel } from "./GoalPanel.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
@@ -62,6 +63,8 @@ interface ChatViewProps {
   onAnswer: (toolCallId: string, answers: AskAnswer[]) => Promise<void>;
   onModelChange: (provider: string, modelId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
+  /** Cancel the session's active goal (the goal panel's button). */
+  onCancelGoal: () => void;
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
 }
@@ -80,6 +83,7 @@ export function ChatView(
     onAnswer,
     onModelChange,
     onThinkingLevelChange,
+    onCancelGoal,
     onOpenSettings,
   }: ChatViewProps,
 ) {
@@ -298,6 +302,7 @@ export function ChatView(
   return (
     <div className="chat">
       <div className="chat-panels">
+        <GoalPanel goal={view.goal} onCancel={onCancelGoal} />
         <TodoPanel todos={view.todos} />
         <TaskPanel tasks={view.tasks} />
         <BackgroundPanel commands={view.backgrounds} />

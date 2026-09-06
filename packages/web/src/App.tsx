@@ -75,6 +75,7 @@ export function App({ initialData }: AppProps): ReactElement {
     startSession,
     prompt,
     abort,
+    cancelGoal,
     answer,
     rewind,
     changeModel,
@@ -176,6 +177,7 @@ export function App({ initialData }: AppProps): ReactElement {
                   activeView.info.modelId,
                   level,
                 )}
+              onCancelGoal={() => activeTab && cancelGoal(activeTab)}
               onOpenSettings={() => setSettingsCategory("providers")}
             />
           )

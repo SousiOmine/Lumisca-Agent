@@ -147,6 +147,22 @@ export class LumiscaCore {
         this.sessions.updateSystemPrompt(id, systemPrompt),
       streamFn,
       messageRepo: this.messages,
+      loadGoal: (id) => this.sessions.getGoal(id),
+      saveGoal: (id, text, maxIterations) => {
+        this.sessions.setGoal(id, text, maxIterations);
+        const goal = this.sessions.getGoal(id);
+        if (!goal) throw new CoreError(`Session not found: ${id}`, "not_found");
+        return goal;
+      },
+      updateGoal: (id, patch) => {
+        this.sessions.updateGoal(id, patch);
+        return this.sessions.getGoal(id);
+      },
+      clearGoal: (id) => {
+        const goal = this.sessions.getGoal(id);
+        this.sessions.clearGoal(id);
+        return goal?.text;
+      },
       commandSafety: this.commandSafety,
       // Resolved lazily (open) so the circular wiring stays one-way:
       // the pool references the service, the service references the pool
@@ -593,6 +609,21 @@ export class LumiscaCore {
    * the background panel after a WS drop or page reload. */
   getBackground(id: string): BackgroundCommandInfo[] {
     return this.pool.getBackground(id);
+  }
+
+  /** The session's active goal (`/goal` mode), if any. Persisted in the
+   * sessions table so a reopened session shows it again via the resync
+   * endpoint; the right-side panel renders it while present. */
+  getGoal(id: string): import("./shared/goal.ts").GoalInfo | undefined {
+    return this.sessions.getGoal(id);
+  }
+
+  /** Cancel the session's active goal (the panel's cancel button). Clears
+   * the persisted goal and stops the agent's loop; no-op when no goal
+   * runs. The agent emits `goal_done` so the panel clears. */
+  cancelGoal(id: string): void {
+    this.pool.require(id).cancelGoal();
+    this.sessions.touch(id);
   }
 
   /** The last failure of a session, if any. Cleared when a new run starts.

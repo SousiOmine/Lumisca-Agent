@@ -3,6 +3,7 @@ import type {
   BackgroundCommandInfo,
   BackgroundView,
   ClientEvent,
+  GoalInfo,
   SessionView,
   TaskInfo,
   TaskView,
@@ -127,6 +128,19 @@ export function mergeTasks(
     });
   }
   return merged;
+}
+
+/** True when two goal snapshots are identical (text, progress, status,
+ * and reason). The resync replaces the snapshot, so an unchanged goal
+ * must not trigger a view update on every sync tick. */
+export function sameGoal(
+  a: GoalInfo | undefined,
+  b: GoalInfo | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.text === b.text && a.iteration === b.iteration &&
+    a.maxIterations === b.maxIterations && a.status === b.status &&
+    (a.lastReason ?? "") === (b.lastReason ?? "");
 }
 
 /** True when two background-command lists are identical (ids, commands, and
@@ -367,6 +381,20 @@ export function applyEvent(
     }
     case "session_error":
       return { ...view, error: event.message };
+    case "goal_start":
+    case "goal_progress": {
+      // The goal snapshot changed; the event carries the full snapshot,
+      // so a resync that re-delivers it converges to the same state.
+      return sameGoal(view.goal, event.goal)
+        ? view
+        : { ...view, goal: event.goal };
+    }
+    case "goal_done": {
+      // The goal finished (achieved, capped, cancelled, or errored): the
+      // panel clears. The outcome itself lands in the chat as the final
+      // assistant message or a session_error, so no text is kept here.
+      return view.goal === undefined ? view : { ...view, goal: undefined };
+    }
     case "messages_truncated": {
       // The transcript was rewound from a user message onward: drop the
       // exact messages the server removed, and tombstone their keys so an
