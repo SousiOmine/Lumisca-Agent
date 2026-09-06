@@ -1,0 +1,640 @@
+/* chat.css — chat column, messages, markdown, tool timeline.
+ * Cascade position 6/14: order is defined by ../styles.css (@import order).
+ * See ./README.md before adding new files. */
+
+/* ---- chat --------------------------------------------------------------- */
+
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* Without this, the automatic minimum size is the full history height,
+   * so .chat grows past the viewport and the page scrolls instead of
+   * .chat-scroll. */
+  min-height: 0;
+  background: var(--bg);
+}
+
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  min-height: 0;
+  padding: 20px 0 10px;
+}
+
+.chat-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.chat-empty-inner {
+  text-align: center;
+  max-width: 420px;
+  animation: lum-fade var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+.chat-column {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* user messages are set apart with a slightly darker background */
+.msg.user {
+  background: var(--user-msg-bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+.msg-user-wrap {
+  position: relative;
+}
+
+.msg-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.msg-action-btn {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  font-size: 11px;
+}
+
+.msg-user-wrap:hover .msg-action-btn {
+  opacity: 1;
+}
+
+.msg-action-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.msg-body {
+  min-width: 0;
+  font-size: 14px;
+}
+
+.msg-body p {
+  margin: 0 0 10px;
+}
+
+.msg-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---- images inside messages / tool results -------------------------------- */
+
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.msg-images:last-child {
+  margin-bottom: 0;
+}
+
+.msg-image {
+  max-width: 320px;
+  max-height: 240px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  object-fit: contain;
+}
+
+.msg-body pre {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.msg-body code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.msg-body pre code {
+  background: none;
+  padding: 0;
+}
+
+/* markdown-rendered assistant messages */
+.markdown ul,
+.markdown ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.markdown li {
+  margin: 3px 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 14px 0 8px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.markdown h1 {
+  font-size: 18px;
+}
+.markdown h2 {
+  font-size: 16px;
+}
+.markdown h3 {
+  font-size: 15px;
+}
+.markdown h4 {
+  font-size: 14px;
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.markdown a:hover {
+  text-decoration: underline;
+}
+
+.markdown blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--text-dim);
+}
+
+.markdown table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---- completed-turn activity --------------------------------------------- */
+
+.conversation-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+.agent-activity {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.agent-activity:not(:disabled) {
+  cursor: pointer;
+}
+
+.agent-activity:not(:disabled):hover {
+  color: var(--text-dim);
+}
+
+.agent-activity:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.agent-activity svg,
+.agent-activity-spacer {
+  flex: none;
+}
+
+.agent-activity-spacer {
+  width: 14px;
+}
+
+.agent-activity-chevron {
+  transition: transform 140ms ease;
+}
+
+.agent-activity.expanded .agent-activity-chevron {
+  transform: rotate(90deg);
+}
+
+.agent-work-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+/* ---- tool calls (timeline) ---------------------------------------------- */
+
+.tool-timeline {
+  margin: 2px 0;
+}
+
+.tool-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tool-line:hover {
+  background: var(--accent-soft);
+}
+
+.tool-line-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex: none;
+  transition: transform 120ms ease;
+}
+
+.tool-line.open .tool-line-chevron {
+  transform: rotate(90deg);
+}
+
+.tool-line-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.tool-line-name {
+  color: var(--accent);
+  font-weight: 500;
+  flex: none;
+}
+
+.tool-line-sep {
+  color: var(--text-faint);
+  flex: none;
+}
+
+.tool-line-summary {
+  color: var(--text-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tool-line-diff {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tool-diff-added {
+  color: var(--ok);
+}
+
+.tool-diff-removed {
+  color: var(--error);
+}
+
+.tool-line-check {
+  color: var(--ok);
+  flex: none;
+}
+
+.tool-line-error {
+  color: var(--error);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: none;
+}
+
+.tool-detail {
+  padding: 4px 6px 4px 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+.tool-detail-args {
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  margin-bottom: 6px;
+}
+
+.tool-detail-result {
+  white-space: pre-wrap;
+  color: var(--text);
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.tool-detail-result.error {
+  color: var(--error);
+}
+
+.tool-detail-result pre {
+  margin: 0;
+}
+
+.tool-detail-result .msg-images {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+/* ---- mode badge on user messages (review, etc.) ---------------------------
+ * Rendered at the bottom-right OUTSIDE the gray message bubble (in the
+ * actions row), as a faint label: the bubble itself stays clean and the
+ * mode name recedes behind the message content. */
+
+.msg-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.03em;
+}
+
+/* ---- system notifications (compact rows) --------------------------------- */
+
+.notification-timeline {
+  margin: 2px 0;
+}
+
+.notification-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.notification-line.static {
+  cursor: default;
+}
+
+.notification-line:hover {
+  background: var(--accent-soft);
+}
+
+.notification-line-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex: none;
+  transition: transform 120ms ease;
+}
+
+.notification-line.open .notification-line-chevron {
+  transform: rotate(90deg);
+}
+
+.notification-line-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.notification-line-summary {
+  color: var(--text-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.notification-line-check {
+  color: var(--ok);
+  flex: none;
+}
+
+.notification-line-error {
+  color: var(--error);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex: none;
+}
+
+.notification-detail {
+  padding: 4px 6px 4px 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+.notification-detail-body {
+  white-space: pre-wrap;
+  color: var(--text);
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.notification-detail-body pre {
+  margin: 0;
+}
+
+/* ---- tool calls (legacy boxed style, unused) ---------------------------- */
+
+.tool {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
+.tool-head:hover {
+  background: var(--surface-2);
+}
+
+.tool-head .chevron {
+  color: var(--text-faint);
+  display: grid;
+  place-items: center;
+  transition: transform 120ms ease;
+}
+
+.tool-head.open .chevron {
+  transform: rotate(90deg);
+}
+
+.tool-head .tool-name {
+  color: var(--accent);
+}
+
+.tool-head .tool-state {
+  margin-left: auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* rotating loader for in-progress states (see ToolCall) */
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tool-head .tool-state.running {
+  color: var(--accent);
+}
+
+.tool-head .tool-state.error {
+  color: var(--error);
+}
+
+.tool-head .tool-state.done {
+  color: var(--ok);
+}
+
+.tool-body {
+  border-top: 1px solid var(--border);
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+.tool-args {
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+}
+
+.tool-result {
+  white-space: pre-wrap;
+  color: var(--text);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.tool-result.error {
+  color: var(--error);
+}

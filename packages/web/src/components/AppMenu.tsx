@@ -28,7 +28,7 @@ interface AppMenuProps {
 }
 
 /** The pane width in CSS pixels. Must match `--pane-width` in
- * styles.css and PANE_WIDTH in browser_lab.rs. */
+ * styles/tokens.css and PANE_WIDTH in browser_lab.rs. */
 const PANE_WIDTH = 460;
 
 /** Hamburger app menu (新しいタブ / 過去のセッション / 設定 / 終了). Shown

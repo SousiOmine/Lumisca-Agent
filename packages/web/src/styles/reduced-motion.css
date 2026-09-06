@@ -1,0 +1,56 @@
+/* reduced-motion.css — prefers-reduced-motion overrides.
+ * Cascade position 14/14: order is defined by ../styles.css (@import order).
+ * See ./README.md before adding new files. */
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot,
+  .cursor,
+  .spin {
+    animation: none;
+  }
+
+  .agent-activity-chevron {
+    transition: none;
+  }
+
+  .modal-backdrop,
+  .modal,
+  .app-menu,
+  .tab-context-menu,
+  .mention-popover,
+  .slash-popover,
+  .peer-picker-popover,
+  .workspace-popover,
+  .thinking-popover,
+  .ctx-popover,
+  .model-popover,
+  .model-pref-popover,
+  .conversation-turn,
+  .msg.user,
+  .chat-empty-inner,
+  .error-banner,
+  .tool-detail,
+  .notification-detail,
+  .agent-work-log,
+  .todo-panel,
+  .task-panel,
+  .background-panel,
+  .question-card,
+  .update-banner,
+  .new-session-card,
+  .input-image {
+    animation: none;
+  }
+
+  .btn,
+  .icon-btn,
+  .input-composer,
+  .ctx-bar-fill {
+    transition: none;
+  }
+
+  .btn:active:not(:disabled),
+  .icon-btn:active {
+    transform: none;
+  }
+}

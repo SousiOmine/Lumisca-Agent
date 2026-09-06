@@ -1,0 +1,610 @@
+/* settings.css — settings modal + provider/model/appearance panels.
+ * Cascade position 12/14: order is defined by ../styles.css (@import order).
+ * See ./README.md before adding new files. */
+
+/* ---- settings --------------------------------------------------------------- */
+
+.settings-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* The device-code shown during an OAuth login (ChatGPT etc.). */
+.login-code {
+  font-family: var(--mono);
+  font-size: 20px;
+  letter-spacing: 0.15em;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+  user-select: all;
+}
+
+/* command safety panel */
+.settings-warning {
+  margin: 0;
+  font-size: 12px;
+  color: var(--error);
+}
+
+.approval-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.approval-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.approval-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.approval-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 320px;
+}
+
+.approval-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 6px 8px;
+}
+
+.approval-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.approval-command {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.approval-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* personalization panel */
+.settings-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Card wrapping one model row in the custom-provider form. */
+.user-provider-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.personalize-textarea {
+  flex: 1;
+  min-height: 300px;
+  resize: vertical;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-saved {
+  font-size: 12px;
+  color: var(--ok);
+}
+
+/* saved prompts cards */
+.saved-prompt-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.saved-prompt-card + .saved-prompt-card {
+  margin-top: 6px;
+}
+
+.saved-prompt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.saved-prompt-id {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  padding: 1px 6px;
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+
+.saved-prompt-label {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-prompt-actions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.saved-prompt-text {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 100px;
+  overflow-y: auto;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+/* saved prompt edit/add form */
+.saved-prompt-form {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 10px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.saved-prompt-form label.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.saved-prompt-form label.field textarea {
+  font-size: 12.5px;
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* model preference rows (fast model / image analysis model) */
+.model-pref-panel {
+  /* settings-pane stretches (flex: 1) for full-height panels like the
+     personalization textarea; this panel must not grow, or a large gap
+     appears above the model enablement list below. */
+  flex: none;
+}
+
+.model-pref-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+
+.model-pref-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.model-pref-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.model-pref-desc {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.model-pref-value {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-pref-value .mono {
+  color: var(--text);
+}
+
+.model-pref-level {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.model-pref-level select {
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.model-pref-unset {
+  font-style: italic;
+}
+
+.model-pref-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+/* model picker popover inside the settings dialog: fixed so it is not
+   clipped by the scrolling settings content */
+.model-pref-popover {
+  position: fixed;
+  z-index: 60;
+  width: min(480px, calc(100vw - 40px));
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+  overflow: hidden;
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+/* two-pane settings modal: left category sidebar, right content */
+.modal-settings {
+  height: min(720px, calc(100vh - 48px));
+  overflow: hidden;
+}
+
+.settings-body {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.settings-nav {
+  width: 210px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-dim);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.settings-nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.settings-nav-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.settings-content input[type="checkbox"] {
+  accent-color: var(--text-dim);
+}
+
+.provider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 12px 14px;
+}
+
+.provider-row .provider-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+/* status badge shared by provider detail/list and the MCP list */
+.provider-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.provider-row .provider-state {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.provider-row .provider-state.configured {
+  color: var(--ok);
+}
+
+.provider-row input {
+  width: 260px;
+}
+
+/* ---- model list (settings) -------------------------------------------------- */
+
+.model-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.model-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: background 120ms ease;
+}
+
+.model-group-header:hover {
+  background: var(--surface-3, var(--surface-2));
+}
+
+.model-group-chevron {
+  flex: none;
+  color: var(--text-dim);
+  transition: transform 150ms ease;
+}
+
+.model-group-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.model-group-icon {
+  flex: none;
+  color: var(--text-dim);
+}
+
+.model-group-name {
+  flex: 1;
+}
+
+.model-group-count {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.model-group-items {
+  display: flex;
+  flex-direction: column;
+}
+
+.model-toggle-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px 8px 36px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.model-toggle-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- appearance settings ---------------------------------------------------- */
+
+.appearance-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.appearance-label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- toggle switch ---------------------------------------------------------- */
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-3, #ccc);
+  border-radius: 20px;
+  transition: background 200ms ease;
+}
+
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 200ms ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent, #4f7df5);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+}
+
+/* ---- general settings (app info / auto-update) ---------------------------- */
+
+.update-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+
+.update-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.update-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.update-desc {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.update-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+}
+
+.update-status-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.update-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.update-progress {
+  width: 140px;
+  height: 6px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--surface-3, #ccc);
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
+.update-percent {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}

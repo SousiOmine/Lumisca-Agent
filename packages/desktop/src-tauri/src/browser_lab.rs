@@ -75,17 +75,17 @@ const MAIN_WINDOW_LABEL: &str = "main";
 /// The lumisca:// shell bridge must never be reachable from the lab.
 const BLOCKED_SCHEMES: [&str; 1] = ["lumisca:"];
 /// Pane width in logical pixels. Must match `--pane-width`
-/// in packages/web/src/styles.css (the Preact UI reserves this space).
+/// in packages/web/src/styles/tokens.css (the Preact UI reserves this space).
 /// The pane itself is content-agnostic: today it hosts the browser lab,
 /// later surfaces can reuse the same dock.
 const PANE_WIDTH: f64 = 460.0;
 /// Height of the pane's header strip (rendered by the Preact UI in the
 /// main window) in logical pixels. The pane window is positioned BELOW
 /// this strip so the header never overlaps it. Must match
-/// `--pane-header-height` in styles.css.
+/// `--pane-header-height` in packages/web/src/styles/tokens.css.
 const PANE_HEADER_HEIGHT: f64 = 36.0;
 /// Height of the app's title bar in logical pixels. Must match
-/// `--tab-height` in styles.css (the pane starts below it).
+/// `--tab-height` in packages/web/src/styles/tokens.css (the pane starts below it).
 const APP_TITLEBAR_HEIGHT: f64 = 40.0;
 
 /// How long one eval (observe/act/screenshot) may take before the RPC

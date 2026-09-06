@@ -1,0 +1,71 @@
+/* tokens.css — Fluent design tokens (dark + light theme variables).
+ * Cascade position 1/14: order is defined by ../styles.css (@import order).
+ * See ./README.md before adding new files. */
+
+/* ---- Fluent design tokens -------------------------------------------------- */
+
+:root {
+  /* dark theme (default) */
+  --bg: #1b1b1b;
+  --surface: #2d2d2d;
+  --surface-2: #383838;
+  --surface-3: #424242;
+  --border: #3b3b3b;
+  --border-strong: #4d4d4d;
+  --text: #ffffff;
+  --text-dim: #9d9d9d;
+  --text-faint: #6f6f6f;
+  --accent: #d6d6d6;
+  --accent-soft: rgba(255, 255, 255, 0.1);
+  --accent-dim: #9d9d9d;
+  --ok: #6ccb5f;
+  --error: #f1707b;
+  --error-soft: rgba(241, 112, 123, 0.12);
+  --shadow: rgba(0, 0, 0, 0.35);
+  --user-msg-bg: #141414;
+  --input-bg: var(--surface);
+  --mono: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+  --ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius-sm: 4px;
+  --radius: 8px;
+  --tab-height: 40px;
+  /* the docked pane (the agent's browser lab today, hosting a native
+   * surface at the right edge). Must match PANE_WIDTH /
+   * PANE_HEADER_HEIGHT in packages/desktop/src-tauri/src/browser_lab.rs
+   * (the native pane window is positioned against these same numbers). */
+  --pane-width: 460px;
+  --pane-header-height: 36px;
+  /* selected tab: a white card that floats above the bar */
+  --tab-active-bg: #ffffff;
+  --tab-active-text: #1b1b1b;
+  --tab-active-dim: rgba(0, 0, 0, 0.45);
+  --tab-active-hover: rgba(0, 0, 0, 0.08);
+  --tab-active-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  /* shared motion tokens: keep durations short and easing uniform so
+   * animations feel calm and professional */
+  --lum-ease: cubic-bezier(0.2, 0, 0, 1);
+  --lum-dur-fast: 120ms;
+  --lum-dur-mid: 180ms;
+}
+
+html[data-theme="light"] {
+  --bg: #f2f2f2;
+  --surface: #f5f5f5;
+  --surface-2: #fafafa;
+  --surface-3: #efefef;
+  --border: #e3e3e3;
+  --border-strong: #c8c8c8;
+  --text: #1b1b1b;
+  --text-dim: #616161;
+  --text-faint: #9a9a9a;
+  --accent: #1b1b1b;
+  --accent-soft: rgba(0, 0, 0, 0.07);
+  --accent-dim: #616161;
+  --ok: #107c10;
+  --error: #c42b1c;
+  --error-soft: rgba(196, 43, 28, 0.08);
+  --shadow: rgba(0, 0, 0, 0.14);
+  --user-msg-bg: #e9e9e9;
+  --input-bg: #ffffff;
+  --tab-active-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}

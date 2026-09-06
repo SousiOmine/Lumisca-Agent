@@ -1,0 +1,360 @@
+/* chrome.css — title bar, tab bar, menus, live indicators.
+ * Cascade position 5/14: order is defined by ../styles.css (@import order).
+ * See ./README.md before adding new files. */
+
+/* ---- tab bar ------------------------------------------------------------- */
+
+/* ---- custom title bar (desktop) ----------------------------------------- */
+/* The desktop window is undecorated (tauri.conf.json); this strip hosts
+ * the tab bar on the left and the app menu + window controls on the
+ * right, and its empty area is the drag handle (see TitleBar.tsx). */
+
+.titlebar {
+  display: flex;
+  align-items: stretch;
+  height: var(--tab-height);
+  flex: none;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The tab bar inside the title bar drops its own chrome (background and
+ * bottom border) and fills the space left of the window controls. */
+.titlebar .tabbar {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: transparent;
+  border-bottom: none;
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  margin-left: auto;
+}
+
+.titlebar-controls .app-menu-wrapper {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.titlebar-btn {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 100%;
+  color: var(--text-dim);
+  /* hosts the pane "alive but hidden" dot */
+  position: relative;
+}
+
+.titlebar-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* the docked pane toggle: lit while the pane's surface exists */
+.titlebar-btn.active {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+/* the pane is open but hidden (the agent may still be operating the
+ * surface in the background) */
+.titlebar-btn-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.titlebar-btn.close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  padding: 0 4px;
+  background: var(--surface);
+  height: var(--tab-height);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  user-select: none;
+  /* the bar's own bottom edge: the tabs float above it as cards */
+  border-bottom: 1px solid var(--border);
+  /* Chrome bar: never shrink when the chat history overflows the viewport. */
+  flex: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px 0 10px;
+  min-width: 104px;
+  max-width: 192px;
+  /* an invisible border keeps the box identical to the active card, so
+   * selecting a tab never shifts the layout */
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  margin: 3px 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  position: relative;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.tab:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* selected tab: a white card floating on the bar — bordered and rounded
+ * on all sides (inset by margin) so it never merges with content below */
+.tab.active {
+  background: var(--tab-active-bg);
+  color: var(--tab-active-text);
+  border-color: var(--border-strong);
+  box-shadow: var(--tab-active-shadow);
+}
+
+.tab .tab-name {
+  font-family: var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.tab .tab-close {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  flex: none;
+}
+
+.tab .tab-close:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* inside the white active card, close button and badge use dark-on-white */
+.tab.active .tab-close {
+  color: var(--tab-active-dim);
+}
+
+.tab.active .tab-close:hover {
+  background: var(--tab-active-hover);
+  color: var(--tab-active-text);
+}
+
+.tab-new {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  border-radius: var(--radius);
+  margin: 3px 0;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.tab-new:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.tabbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding: 0 8px;
+  border-left: 1px solid var(--border);
+  flex: none;
+}
+
+/* hamburger app menu */
+.app-menu-wrapper {
+  position: relative;
+}
+
+.app-menu {
+  z-index: 50;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+.app-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-menu-item:hover {
+  background: var(--surface-2);
+}
+
+.app-menu-shortcut {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.app-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+/* right-click menu on a tab */
+.tab-context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+.tab-context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab-context-item:hover {
+  background: var(--surface-2);
+}
+
+.tab-context-item:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.tab-context-item:disabled:hover {
+  background: transparent;
+}
+
+.tab-context-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.tab-context-submenu-trigger {
+  position: relative;
+}
+
+.tab-context-submenu-trigger > svg {
+  margin-left: auto;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.tab-context-submenu {
+  position: absolute;
+  top: 0;
+  left: calc(100% - 2px);
+  min-width: 190px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.tab-context-submenu.flip-left {
+  left: auto;
+  right: calc(100% - 2px);
+}
+
+/* the viewport cannot fit the flipped submenu either: overlay the menu */
+.tab-context-submenu.clamp-left {
+  left: 8px;
+  right: auto;
+}
+
+/* kept mounted (so it can be measured for the flip decision) but inert */
+.tab-context-submenu.hidden {
+  visibility: hidden;
+}
+
+/* live indicator: a pulsing accent dot while the session is working */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.tab-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex: none;
+}
+
+.tab.active .tab-badge {
+  color: var(--accent-dim);
+}

@@ -1,0 +1,90 @@
+/* layout.css — app layout + docked pane.
+ * Cascade position 4/14: order is defined by ../styles.css (@import order).
+ * See ./README.md before adding new files. */
+
+/* ---- layout ------------------------------------------------------------ */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Everything below the title bar (update banner, chat, new-session
+ * screen). While the docked pane is visible this area reserves the
+ * pane's width on the right — the pane is a native window that overlays
+ * the app window's right edge below the title bar. */
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app.pane-open .app-body {
+  padding-right: var(--pane-width);
+}
+
+/* The fixed top-right progress cards (todo / tasks / background) would
+ * sit underneath the native pane window: shift them left of the pane. */
+.app.pane-open .chat-panels {
+  right: calc(12px + var(--pane-width));
+}
+
+/* Centered modals: keep them fully visible by centering them in the area
+ * left of the pane instead of under it. */
+.app.pane-open .modal-backdrop {
+  margin-right: var(--pane-width);
+}
+
+/* The docked pane's header strip: rendered by this webview directly
+ * ABOVE the native pane window (which starts below this strip), so it
+ * never overlaps it and stays fully clickable. */
+.pane-header {
+  position: fixed;
+  top: var(--tab-height);
+  right: 0;
+  width: var(--pane-width);
+  height: var(--pane-header-height);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  z-index: 20;
+}
+
+.pane-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  flex: none;
+}
+
+.pane-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.pane-hide {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  flex: none;
+}
+
+.pane-hide:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}

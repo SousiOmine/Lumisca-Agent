@@ -1,0 +1,165 @@
+/* modals.css — modal shell + session error banner.
+ * Cascade position 11/14: order is defined by ../styles.css (@import order).
+ * See ./README.md before adding new files. */
+
+/* ---- modals --------------------------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+.modal {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(720px, calc(100vh - 48px));
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 12px 40px var(--shadow);
+  animation: lum-rise var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* one-line modal title rows (back button / title / right-aligned actions) */
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.modal-header .push {
+  margin-left: auto;
+}
+
+.error-text {
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+/* the session error banner: the whole row is clickable to copy the
+   error text; the copy icon sits at the row's top-right */
+.error-banner {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  user-select: text;
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+.error-banner .msg-body {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.error-copy-btn {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  margin-top: -2px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.error-banner:hover .error-copy-btn {
+  color: var(--text);
+}
+
+.faint-box {
+  padding: 8px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.model-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  background: var(--bg);
+}
+
+.model-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.model-item input[type="checkbox"] {
+  accent-color: var(--text-dim);
+}
+
+.model-item:hover {
+  background: var(--surface-2);
+}
+
+.model-item.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.model-item .model-id {
+  font-family: var(--mono);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-item .model-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

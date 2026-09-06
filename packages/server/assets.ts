@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { bundleClient } from "./bundle.ts";
 import { webClientEntry, webFaviconPath, webStylesPath } from "./paths.ts";
 
@@ -14,6 +14,46 @@ export interface AssetsManifest {
   "app.js": string;
   "styles.css": string;
   "favicon.png": string;
+}
+
+/** Resolve the styles entry (`styles.css`) into a single stylesheet.
+ * The entry is a manifest of relative `@import "./styles/<part>.css";`
+ * lines (see `packages/web/src/styles/README.md`); the imports are inlined
+ * in order so the cascade matches what Vite serves in dev. A plain
+ * stylesheet without imports is returned as-is (backwards compatible). */
+export async function bundleStylesCss(entryPath: string): Promise<string> {
+  const entry = await Deno.readTextFile(entryPath);
+  const importPattern = /@import\s+"([^"]+)";/g;
+  const parts: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = importPattern.exec(entry)) !== null) {
+    const rel = match[1];
+    if (rel !== undefined) parts.push(rel);
+  }
+  if (parts.length === 0) return entry;
+  const rest = entry
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(importPattern, "")
+    .trim();
+  if (rest !== "") {
+    throw new Error(
+      `${entryPath}: only comments and relative @import lines are allowed`,
+    );
+  }
+  const dir = dirname(entryPath);
+  const bodies = await Promise.all(parts.map(async (rel) => {
+    if (!rel.endsWith(".css")) {
+      throw new Error(`${entryPath}: non-css import is not allowed: ${rel}`);
+    }
+    // join() normalizes `..`; anything left pointing outside the web
+    // sources is rejected instead of read.
+    const resolved = join(dir, rel);
+    if (relative(dir, resolved).startsWith("..")) {
+      throw new Error(`${entryPath}: import escapes the web sources: ${rel}`);
+    }
+    return await Deno.readTextFile(resolved);
+  }));
+  return bodies.join("\n");
 }
 
 /** Bundle the client and read the static assets into a manifest. This is
@@ -33,7 +73,7 @@ export async function buildAssetsManifest(
       outfile: tmp,
     });
     const appJs = await Deno.readTextFile(tmp);
-    const css = await Deno.readTextFile(webStylesPath(repoRoot));
+    const css = await bundleStylesCss(webStylesPath(repoRoot));
     const faviconBytes = await Deno.readFile(webFaviconPath(repoRoot));
     // Chunked so any icon size stays within the call-stack limits of
     // spread + String.fromCharCode.
@@ -133,7 +173,7 @@ export class Assets {
   async getCss(): Promise<string> {
     if (this.cssCache === null) {
       if (this.hasWebSources()) {
-        this.cssCache = await Deno.readTextFile(webStylesPath(this.repoRoot));
+        this.cssCache = await bundleStylesCss(webStylesPath(this.repoRoot));
       } else {
         const embedded = this.embedded("styles.css");
         if (embedded === undefined) {
