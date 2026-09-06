@@ -194,8 +194,7 @@ export function PersonalizePanel() {
           </button>
         </div>
         <p className="settings-note">
-          <code>/prompt</code> から呼び出せるプロンプト
-          スニペットを登録します。
+          <code>/prompt</code> から呼び出せるプロンプト スニペットを登録します。
         </p>
         {promptsError && <p className="error-text">{promptsError}</p>}
 
