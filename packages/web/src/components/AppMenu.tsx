@@ -19,9 +19,12 @@ interface AppMenuProps {
   /** Extra class for the trigger button (it lives in the title bar on
    * desktop, in the tab bar in a plain browser). */
   buttonClass?: string;
-  /** The docked pane is open: shift the menu left by the pane width so
-   * it does not end up underneath the native pane window. */
-  paneOpen?: boolean;
+  /** The docked pane is visible (shown): shift the menu left by the
+   * pane width so it does not end up underneath the native pane window.
+   * Must track visibility, not mere existence: a hidden-but-alive pane
+   * (`open` without `visible`) has its native window hidden and needs
+   * no avoidance. */
+  paneVisible?: boolean;
 }
 
 /** The pane width in CSS pixels. Must match `--pane-width` in
@@ -38,7 +41,7 @@ export function AppMenu({
   onQuit,
   isDesktop,
   buttonClass = "icon-btn",
-  paneOpen = false,
+  paneVisible = false,
 }: AppMenuProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -75,7 +78,7 @@ export function AppMenu({
             position: "fixed",
             top: pos.y,
             right: globalThis.innerWidth - pos.x +
-              (paneOpen ? PANE_WIDTH : 0),
+              (paneVisible ? PANE_WIDTH : 0),
           }}
         >
           <button

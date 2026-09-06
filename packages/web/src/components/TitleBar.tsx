@@ -128,7 +128,7 @@ export function TitleBar({
           onQuit={onQuit}
           isDesktop
           buttonClass="titlebar-btn"
-          paneOpen={paneOpen}
+          paneVisible={paneVisible}
         />
         <button
           type="button"
