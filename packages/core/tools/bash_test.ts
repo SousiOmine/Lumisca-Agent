@@ -100,9 +100,10 @@ Deno.test({
         !text.includes("\uFFFD"),
         `output contains mojibake: ${text}`,
       );
-      // The code page number must be visible (932 on Japanese Windows).
+      // The code page number must be visible (932 on Japanese Windows,
+      // 65001 when Windows runs in UTF-8 mode, 850/437 on Western runners).
       assert(
-        /9\d\d/.test(text) || /8\d\d/.test(text),
+        /Active code page:\s*\d+/.test(text),
         `code page missing: ${text}`,
       );
     } finally {

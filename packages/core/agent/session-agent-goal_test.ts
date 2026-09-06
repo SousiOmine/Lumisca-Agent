@@ -6,6 +6,7 @@ import {
 import type {
   Api,
   AssistantMessageEventStream,
+  Context,
   Model,
 } from "@earendil-works/pi-ai";
 import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
@@ -61,7 +62,7 @@ function mixedStream(
   mainResponses: string[],
   judgeReplies: string[],
 ): StreamFn {
-  return ((_model, request: { systemPrompt?: string }) => {
+  return ((_model: Model<Api>, request: Context) => {
     const systemPrompt = request?.systemPrompt ?? "";
     if (systemPrompt.includes("goal judge")) {
       const text = judgeReplies.shift() ?? "";
@@ -81,7 +82,7 @@ function mixedStream(
     stream.push({ type: "start", partial: message });
     stream.end(message);
     return stream;
-  }) as unknown as StreamFn;
+  });
 }
 
 function makeGoalAgent(
