@@ -4,8 +4,8 @@ import {
   useEffect,
   useMemo,
   useRef,
-} from "react";
-import { IconMessage, IconSend } from "@tabler/icons-react";
+} from "preact/compat";
+import { IconMessage, IconSend } from "@tabler/icons-preact";
 import { summarizeContextUsage } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {

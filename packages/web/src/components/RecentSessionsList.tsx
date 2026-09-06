@@ -1,4 +1,4 @@
-import { IconRefresh } from "@tabler/icons-react";
+import { IconRefresh } from "@tabler/icons-preact";
 import type { RecentSessionItem } from "../hooks/useRecentSessions.ts";
 
 interface RecentSessionsListProps {

@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "preact/compat";
 import {
   IconArrowLeft,
   IconCheck,
   IconPlus,
   IconTrash,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import type { UserProviderSummary } from "../../types.ts";
@@ -71,7 +71,7 @@ function ModelRowEditor({
         <input
           placeholder="モデルID (例: gpt-4o)"
           value={row.id}
-          onChange={(e) => set({ id: e.target.value })}
+          onChange={(e) => set({ id: e.currentTarget.value })}
           style={{ flex: 1 }}
         />
         <button
@@ -86,14 +86,14 @@ function ModelRowEditor({
       <input
         placeholder="表示名（任意）"
         value={row.name}
-        onChange={(e) => set({ name: e.target.value })}
+        onChange={(e) => set({ name: e.currentTarget.value })}
       />
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input
             type="checkbox"
             checked={row.reasoning}
-            onChange={(e) => set({ reasoning: e.target.checked })}
+            onChange={(e) => set({ reasoning: e.currentTarget.checked })}
           />
           推論モード対応
         </label>
@@ -101,7 +101,7 @@ function ModelRowEditor({
           <input
             type="checkbox"
             checked={row.image}
-            onChange={(e) => set({ image: e.target.checked })}
+            onChange={(e) => set({ image: e.currentTarget.checked })}
           />
           画像入力対応
         </label>
@@ -111,14 +111,14 @@ function ModelRowEditor({
           placeholder="コンテキストウィンドウ (トークン)"
           value={row.contextWindow}
           inputMode="numeric"
-          onChange={(e) => set({ contextWindow: e.target.value })}
+          onChange={(e) => set({ contextWindow: e.currentTarget.value })}
           style={{ flex: 1 }}
         />
         <input
           placeholder="最大出力 (トークン)"
           value={row.maxTokens}
           inputMode="numeric"
-          onChange={(e) => set({ maxTokens: e.target.value })}
+          onChange={(e) => set({ maxTokens: e.currentTarget.value })}
           style={{ flex: 1 }}
         />
       </div>
@@ -140,13 +140,13 @@ function HeaderRowEditor({
       <input
         placeholder="ヘッダー名"
         value={row.key}
-        onChange={(e) => onChange({ ...row, key: e.target.value })}
+        onChange={(e) => onChange({ ...row, key: e.currentTarget.value })}
         style={{ flex: 1 }}
       />
       <input
         placeholder="値"
         value={row.value}
-        onChange={(e) => onChange({ ...row, value: e.target.value })}
+        onChange={(e) => onChange({ ...row, value: e.currentTarget.value })}
         style={{ flex: 1 }}
       />
       <button type="button" className="btn small" onClick={onRemove}>
@@ -328,7 +328,7 @@ export function AddUserProviderForm({
           <input
             placeholder="例: 自宅 vLLM"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setName(e.currentTarget.value)}
           />
         </label>
 
@@ -340,7 +340,7 @@ export function AddUserProviderForm({
             disabled={!idEditable}
             onChange={(e) => {
               setIdTouched(true);
-              setId(e.target.value);
+              setId(e.currentTarget.value);
             }}
           />
           <p className="settings-note">
@@ -355,7 +355,7 @@ export function AddUserProviderForm({
           <input
             placeholder="https://api.example.com/v1"
             value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
+            onChange={(e) => setBaseUrl(e.currentTarget.value)}
           />
           <p className="settings-note">
             OpenAI 互換エンドポイントの基底 URL (通常は /v1 まで)
@@ -366,7 +366,7 @@ export function AddUserProviderForm({
           <span>API</span>
           <select
             value={providerApi}
-            onChange={(e) => setProviderApi(e.target.value)}
+            onChange={(e) => setProviderApi(e.currentTarget.value)}
           >
             {ALLOWED_OPENAI_APIS.map((a) => (
               <option key={a} value={a}>{a}</option>
@@ -381,7 +381,7 @@ export function AddUserProviderForm({
             type="password"
             placeholder={initial?.hasApiKey ? "設定済み（上書き）" : "APIキー"}
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(e) => setApiKey(e.currentTarget.value)}
           />
         </label>
 

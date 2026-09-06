@@ -4,7 +4,7 @@ import {
   type SetStateAction,
   useCallback,
   useState,
-} from "react";
+} from "preact/compat";
 
 /** Pixel position of the caret within the textarea (mirror-div technique:
  * clone the textarea's metrics, render the text up to the caret, and read

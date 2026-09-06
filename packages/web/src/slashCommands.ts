@@ -5,7 +5,7 @@
  * `buildPromptForText`, e.g. plan mode) execute with the composer text
  * typed after the command token (`/plan 依頼文`) as their subject. */
 
-import type { ComponentType } from "react";
+import type { ReactNode } from "preact/compat";
 import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
 import type { ModePrompt } from "@lumisca/core";
 import {
@@ -14,10 +14,12 @@ import {
   IconGitBranch,
   IconGitCommit,
   IconListCheck,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import type { SlashCommand, SlashCommandItem } from "./components/Composer.tsx";
 
-type Icon = ComponentType<{ size?: number; className?: string }>;
+type Icon = (
+  props: { size?: string | number; className?: string },
+) => ReactNode;
 
 /** Icons of known modes and their options, keyed by id. */
 const MODE_ICONS: Record<string, Icon> = {

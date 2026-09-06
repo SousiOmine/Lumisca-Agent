@@ -67,7 +67,7 @@ export function GeneralPanel(
           <input
             type="checkbox"
             checked={status.autoUpdate}
-            onChange={(e) => onSetAuto(e.target.checked)}
+            onChange={(e) => onSetAuto(e.currentTarget.checked)}
             aria-label="自動アップデート"
           />
           <span className="toggle-slider" />

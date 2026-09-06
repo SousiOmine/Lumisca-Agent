@@ -23,7 +23,7 @@ export function AppearancePanel(
         <span className="appearance-label">テーマ</span>
         <select
           value={theme}
-          onChange={(e) => onThemeChange(e.target.value as ThemeSetting)}
+          onChange={(e) => onThemeChange(e.currentTarget.value as ThemeSetting)}
           aria-label="テーマ"
         >
           {THEME_OPTIONS.map((option) => (

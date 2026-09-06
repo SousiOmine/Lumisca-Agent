@@ -1,13 +1,13 @@
 import {
   type ClipboardEvent,
-  type ComponentType,
   type DragEvent,
   type KeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useRef,
   useState,
-} from "react";
+} from "preact/compat";
 import {
   IconArrowLeft,
   IconBrain,
@@ -17,7 +17,7 @@ import {
   IconFolder,
   IconPlayerStop,
   IconX,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { MAX_PROMPT_IMAGES, THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
 import {
   ContextUsageCard,
@@ -60,7 +60,7 @@ interface ComposerProps {
   onThinkingLevelChange?: (level: ThinkingLevel) => void;
   submitLabel: string;
   /** Optional Tabler icon shown before the submit label. */
-  submitIcon?: ComponentType<{ size?: number }>;
+  submitIcon?: (props: { size?: string | number }) => ReactNode;
   /** Icon-only submit: hide the label text; submitLabel is still used as
    * the accessible name and tooltip. */
   submitIconOnly?: boolean;
@@ -274,7 +274,7 @@ export function Composer({
   /** Paste support: image items in the clipboard become attachments; text
    * pastes behave as usual (no preventDefault). */
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(e.clipboardData.items)
+    const files = Array.from(e.clipboardData?.items ?? [])
       .filter((item) => item.type.startsWith("image/"))
       .map((item) => item.getAsFile())
       .filter((f): f is File => f !== null);
@@ -283,23 +283,23 @@ export function Composer({
     for (const file of files) addImage(file);
   };
 
-  const handleDragOver = (e: DragEvent) => {
-    if (e.dataTransfer.types.includes("Files")) {
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (e.dataTransfer?.types.includes("Files")) {
       e.preventDefault();
       setDragging(true);
     }
   };
 
-  const handleDragLeave = (e: DragEvent) => {
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
     // Fires when entering children; only clear when leaving the composer.
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
     setDragging(false);
   };
 
-  const handleDrop = (e: DragEvent) => {
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragging(false);
-    for (const file of Array.from(e.dataTransfer.files)) {
+    for (const file of Array.from(e.dataTransfer?.files ?? [])) {
       if (file.type.startsWith("image/")) addImage(file);
     }
   };
@@ -401,8 +401,11 @@ export function Composer({
           placeholder={placeholder}
           value={value}
           onChange={(e) => {
-            onChange(e.target.value);
-            updateSuggestions(e.target.value, e.target.selectionStart);
+            onChange(e.currentTarget.value);
+            updateSuggestions(
+              e.currentTarget.value,
+              e.currentTarget.selectionStart,
+            );
           }}
           onSelect={(e) => {
             updateSuggestions(

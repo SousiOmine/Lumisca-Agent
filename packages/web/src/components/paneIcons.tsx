@@ -1,5 +1,5 @@
-import type { ReactElement } from "react";
-import { IconBrowser, IconLayoutSidebarRight } from "@tabler/icons-react";
+import type { ReactElement } from "preact/compat";
+import { IconBrowser, IconLayoutSidebarRight } from "@tabler/icons-preact";
 
 /** Resolve the icon for a docked pane content kind. Unknown kinds (a
  * future desktop shell returning a content type this UI does not know

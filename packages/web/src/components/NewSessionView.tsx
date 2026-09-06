@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { IconArrowUp, IconMessage } from "@tabler/icons-react";
+import { useEffect, useMemo, useRef, useState } from "preact/compat";
+import { IconArrowUp, IconMessage } from "@tabler/icons-preact";
 import { api } from "../api.ts";
 import type {
   FederatedWorkspace,

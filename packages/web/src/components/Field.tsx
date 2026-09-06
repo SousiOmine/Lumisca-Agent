@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from "preact/compat";
 
 /** A labeled full-width field (label above, input below — matches the
  * settings forms). */

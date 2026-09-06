@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "preact/compat";
 import { shellAvailable, updateApi, type UpdateStatus } from "../shell.ts";
 
 /** Poll interval while a check/download is in flight (progress bar) vs

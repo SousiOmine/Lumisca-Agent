@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { IconDownload, IconX } from "@tabler/icons-react";
+import { useEffect, useRef, useState } from "preact/compat";
+import { IconDownload, IconX } from "@tabler/icons-preact";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 
 /** The "update ready" strip under the title bar (desktop only; renders

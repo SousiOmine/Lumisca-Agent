@@ -7,7 +7,7 @@ import {
   useEffect,
   useRef,
   useState,
-} from "react";
+} from "preact/compat";
 import { api, fed } from "../api.ts";
 import type { WorkspaceFileEntry } from "../types.ts";
 
@@ -109,7 +109,7 @@ export function useMention(options: {
     (nextValue: string, caret: number): boolean => {
       const det = enabled ? detectMention(nextValue, caret) : null;
       if (!det) {
-        // No-op when already closed (React bails out on the same value).
+        // No-op when already closed (Preact bails out on the same value).
         setMention((prev) => (prev === null ? prev : null));
         return false;
       }

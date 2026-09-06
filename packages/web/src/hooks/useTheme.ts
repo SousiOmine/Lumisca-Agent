@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "preact/compat";
 import { api } from "../api.ts";
 import { THEME_KEY } from "@lumisca/core/shared";
 import type { ThemeSetting } from "../types.ts";

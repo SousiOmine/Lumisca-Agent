@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "preact/compat";
 import { fed, workspaceApi } from "../api.ts";
 import { errorText } from "../providers.ts";
 import type { FederatedWorkspace, InitialData, PeerStatus } from "../types.ts";

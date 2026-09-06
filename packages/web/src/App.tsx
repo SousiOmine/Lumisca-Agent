@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useState } from "preact/compat";
 import type { InitialData } from "./types.ts";
 import type { SessionView } from "./types.ts";
 import { splitTabKey } from "./tabs.ts";

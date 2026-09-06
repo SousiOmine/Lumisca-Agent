@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "preact/compat";
 import {
   IconArrowLeft,
   IconCheck,
@@ -12,7 +12,7 @@ import {
   IconSend,
   IconTrash,
   IconX,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { errorText, useProviders, useUserProviders } from "../../providers.ts";
@@ -340,7 +340,7 @@ export function ProviderDetail({
           type={type}
           placeholder={prompt.placeholder}
           value={promptValue}
-          onChange={(e) => setPromptValue(e.target.value)}
+          onChange={(e) => setPromptValue(e.currentTarget.value)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
           style={{ flex: 1 }}
         />
@@ -457,7 +457,7 @@ export function ProviderDetail({
                     ? "新しいAPIキー(上書き)"
                     : "APIキーを入力"}
                   value={key}
-                  onChange={(e) => setKey(e.target.value)}
+                  onChange={(e) => setKey(e.currentTarget.value)}
                   style={{ flex: 1 }}
                 />
                 <button

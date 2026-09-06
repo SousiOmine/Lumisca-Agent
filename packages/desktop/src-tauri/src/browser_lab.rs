@@ -75,11 +75,11 @@ const MAIN_WINDOW_LABEL: &str = "main";
 /// The lumisca:// shell bridge must never be reachable from the lab.
 const BLOCKED_SCHEMES: [&str; 1] = ["lumisca:"];
 /// Pane width in logical pixels. Must match `--pane-width`
-/// in packages/web/src/styles.css (the React UI reserves this space).
+/// in packages/web/src/styles.css (the Preact UI reserves this space).
 /// The pane itself is content-agnostic: today it hosts the browser lab,
 /// later surfaces can reuse the same dock.
 const PANE_WIDTH: f64 = 460.0;
-/// Height of the pane's header strip (rendered by the React UI in the
+/// Height of the pane's header strip (rendered by the Preact UI in the
 /// main window) in logical pixels. The pane window is positioned BELOW
 /// this strip so the header never overlaps it. Must match
 /// `--pane-header-height` in styles.css.
@@ -966,7 +966,7 @@ impl LabHandler {
 
 /// The pane state as JSON for the bridge: `open` = the pane window
 /// exists, `visible` = the pane is shown, `content` = the hosted
-/// surface's kind/label (the browser lab) or null. The React UI polls
+/// surface's kind/label (the browser lab) or null. The Preact UI polls
 /// this and drives the pane layout.
 pub fn pane_state(app: &AppHandle) -> Value {
     match lab_of(app) {

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState } from "preact/compat";
 import {
   IconChevronDown,
   IconChevronUp,
   IconTerminal,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import type { BackgroundView } from "../types.ts";
 
 /** The session's background commands (the async_bash tool), stacked under

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState } from "preact/compat";
 import {
   IconBrain,
   IconCheck,
@@ -15,7 +15,7 @@ import {
   IconTerminal2,
   IconUsers,
   IconWorldSearch,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import {
   contentImages,
   contentText,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState } from "preact/compat";
 import {
   IconBrain,
   IconCheck,
@@ -6,7 +6,7 @@ import {
   IconRefresh,
   IconSend,
   IconTerminal2,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import type { NotificationMessage } from "../types.ts";
 
 /** Icon for the notification kind. */

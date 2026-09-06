@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { IconChevronDown, IconServer } from "@tabler/icons-react";
+import { useRef, useState } from "preact/compat";
+import { IconChevronDown, IconServer } from "@tabler/icons-preact";
 import type { FederatedWorkspace, PeerStatus } from "../types.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 

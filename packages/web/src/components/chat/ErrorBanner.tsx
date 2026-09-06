@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { IconCheck, IconClipboard } from "@tabler/icons-react";
+import { useState } from "preact/compat";
+import { IconCheck, IconClipboard } from "@tabler/icons-preact";
 
 /** The session error banner. Clicking it copies the error text to the
  * clipboard — provider error messages are long and hard to select by

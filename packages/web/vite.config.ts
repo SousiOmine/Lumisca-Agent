@@ -1,12 +1,12 @@
 import { fileURLToPath } from "node:url";
-import react from "@vitejs/plugin-react";
+import preact from "@preact/preset-vite";
 import { defineConfig } from "vite";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const apiTarget = "http://127.0.0.1:8000";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [preact()],
   resolve: {
     alias: {
       "@lumisca/core/shared": fileURLToPath(

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "preact/compat";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
@@ -196,7 +196,8 @@ export function ModelPreferencePanel() {
                           value={levels.current}
                           disabled={savingLevel}
                           onChange={async (e) => {
-                            const level = e.target.value as ThinkingLevel;
+                            const level = e.currentTarget
+                              .value as ThinkingLevel;
                             setSavingLevel(true);
                             try {
                               const thinkingLevel = await setModelThinkingLevel(

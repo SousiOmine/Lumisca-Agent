@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { IconChevronRight, IconPlugConnected } from "@tabler/icons-react";
+import { useMemo, useState } from "preact/compat";
+import { IconChevronRight, IconPlugConnected } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { filterByQuery, useProviderModels } from "../../providers.ts";
 import type { ModelInfo } from "../../types.ts";
@@ -84,7 +84,7 @@ export function ModelList() {
       <input
         placeholder="モデルを検索..."
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={(e) => setSearch(e.currentTarget.value)}
       />
 
       {loading && <div className="faint-box">読み込み中...</div>}
@@ -137,7 +137,7 @@ export function ModelList() {
                             toggleModel(
                               pm.providerId,
                               m.id,
-                              e.target.checked,
+                              e.currentTarget.checked,
                             )}
                         />
                         <span className="toggle-slider" />

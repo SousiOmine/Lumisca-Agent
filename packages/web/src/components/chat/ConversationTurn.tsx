@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState } from "preact/compat";
 import { contentText } from "@lumisca/core/shared";
 import type {
   AgentMessage,

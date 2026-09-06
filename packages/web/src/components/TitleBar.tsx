@@ -1,5 +1,10 @@
-import { type MouseEvent, type ReactNode, useEffect, useState } from "react";
-import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-react";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "preact/compat";
+import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
 import { shellCall, type ShellState, windowApi } from "../shell.ts";
 import { AppMenu } from "./AppMenu.tsx";
 import { paneIcon } from "./paneIcons.tsx";
@@ -83,16 +88,16 @@ export function TitleBar({
 
   /** Tabs, the app menu and window buttons must stay clickable, not
    * drag. */
-  const isInteractive = (e: MouseEvent) =>
+  const isInteractive = (e: MouseEvent<HTMLDivElement>) =>
     (e.target as HTMLElement).closest("button, .tab") !== null;
 
-  const onMouseDown = (e: MouseEvent) => {
+  const onMouseDown = (e: MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0 || isInteractive(e)) return;
     e.preventDefault();
     windowApi.startDrag().catch(() => {});
   };
 
-  const onDoubleClick = (e: MouseEvent) => {
+  const onDblClick = (e: MouseEvent<HTMLDivElement>) => {
     if (isInteractive(e)) return;
     windowApi.toggleMaximize().catch(() => {});
   };
@@ -101,7 +106,7 @@ export function TitleBar({
     <div
       className="titlebar"
       onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
+      onDblClick={onDblClick}
     >
       {children}
       <div className="titlebar-controls">

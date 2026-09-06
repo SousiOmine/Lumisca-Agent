@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "preact/compat";
 import { api, fed } from "../api.ts";
 import type { PeerStatus, SessionInfo } from "../types.ts";
 import { errorText } from "../providers.ts";

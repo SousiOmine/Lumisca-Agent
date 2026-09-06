@@ -1,4 +1,4 @@
-import { IconPlus } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-preact";
 import { useProviders } from "../../providers.ts";
 
 /** Settings → provider list: configured first, then everything else.

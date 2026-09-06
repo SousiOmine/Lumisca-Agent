@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import {
   IconCheck,
   IconEdit,
   IconPlus,
   IconTrash,
   IconX,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import type { SavedPrompt } from "../../types.ts";
@@ -162,9 +162,9 @@ export function PersonalizePanel() {
         <textarea
           className="personalize-textarea mono"
           value={content}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(e.currentTarget.value)}
           placeholder="例:\n- 回答は日本語で記述してください。\n- 変更後は必ずテストを実行してください。"
-          spellCheck={false}
+          spellcheck={false}
           disabled={loading}
         />
         {error && <p className="error-text">{error}</p>}
@@ -344,7 +344,7 @@ function PromptEditForm({
           <input
             placeholder="例: translate"
             value={id}
-            onChange={(e) => setId(e.target.value)}
+            onChange={(e) => setId(e.currentTarget.value)}
             disabled={isEdit}
           />
         </label>
@@ -353,7 +353,7 @@ function PromptEditForm({
           <input
             placeholder="例: 翻訳"
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
+            onChange={(e) => setLabel(e.currentTarget.value)}
           />
         </label>
       </div>
@@ -363,9 +363,9 @@ function PromptEditForm({
           className="mono"
           placeholder="例: 次のテキストを日本語に翻訳してください:\n\n{ここにテキスト}"
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => setPrompt(e.currentTarget.value)}
           rows={4}
-          spellCheck={false}
+          spellcheck={false}
         />
       </label>
       {error && <p className="error-text">{error}</p>}

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { ReactNode } from "react";
+import { useState } from "preact/compat";
+import type { ReactNode } from "preact/compat";
 import {
   IconBrain,
   IconPalette,
@@ -10,7 +10,7 @@ import {
   IconUser,
   IconWorld,
   IconX,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { Modal } from "./Modal.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";

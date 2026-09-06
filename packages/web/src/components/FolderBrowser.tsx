@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState } from "preact/compat";
 import {
   IconArrowLeft,
   IconArrowUp,
   IconChevronRight,
   IconDeviceDesktop,
   IconFolder,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { workspaceApi } from "../api.ts";
 import { errorText } from "../providers.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";

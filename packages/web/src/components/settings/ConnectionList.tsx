@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { useEffect, useState } from "preact/compat";
+import type { CSSProperties } from "preact/compat";
+import { IconPlus, IconTrash } from "@tabler/icons-preact";
 import type { ConnectionEntry } from "../../types.ts";
 import { api } from "../../api.ts";
 import { shellAvailable, shellCall, type ShellState } from "../../shell.ts";
 import { errorText } from "../../providers.ts";
 import { Field } from "../Field.tsx";
 
-const ACTIVE_TAG: React.CSSProperties = {
+const ACTIVE_TAG: CSSProperties = {
   fontSize: 11,
   padding: "2px 8px",
   borderRadius: 999,
@@ -286,23 +287,23 @@ function ServerCard({
       <Field label="名前">
         <input
           value={server.name}
-          onChange={(e) => onChange({ name: e.target.value })}
+          onChange={(e) => onChange({ name: e.currentTarget.value })}
           placeholder="例: 自宅サーバー"
         />
       </Field>
       <Field label="URL">
         <input
           value={server.url}
-          onChange={(e) => onChange({ url: e.target.value })}
+          onChange={(e) => onChange({ url: e.currentTarget.value })}
           placeholder="http://100.64.0.5:8000"
-          spellCheck={false}
+          spellcheck={false}
         />
       </Field>
       <Field label="トークン (LUMISCA_TOKEN と同じ値)">
         <input
           type="password"
           value={server.token}
-          onChange={(e) => onChange({ token: e.target.value })}
+          onChange={(e) => onChange({ token: e.currentTarget.value })}
         />
       </Field>
       {result && (

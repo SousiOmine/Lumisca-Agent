@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import type { PendingImage } from "../types.ts";
 
 /** Draft (unsent) composer content of a tab: text + attached images. */

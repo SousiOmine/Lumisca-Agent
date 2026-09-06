@@ -1,11 +1,11 @@
 import {
-  type ComponentType,
   type Dispatch,
   type KeyboardEvent,
+  type ReactNode,
   type SetStateAction,
   useCallback,
   useState,
-} from "react";
+} from "preact/compat";
 
 /** One selectable entry of the slash-command menu: a command (first level)
  * or one of its subcommands (second level). */
@@ -13,7 +13,7 @@ export interface SlashCommandItem {
   id: string;
   label: string;
   description?: string;
-  icon?: ComponentType<{ size?: number; className?: string }>;
+  icon?: (props: { size?: string | number; className?: string }) => ReactNode;
 }
 
 /** A slash command offered when the input starts with `/`. Commands with

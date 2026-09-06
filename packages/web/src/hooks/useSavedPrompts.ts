@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "preact/compat";
 import { api } from "../api.ts";
 import type { SavedPrompt } from "../types.ts";
 import { useAsyncEffect } from "./useAsync.ts";

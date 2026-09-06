@@ -283,7 +283,7 @@ pub(crate) fn handle_shell_request(
         //
         // The agent's lab is overlaid as a pane on the app window's
         // right edge (its own borderless window, glued to the main
-        // window — see browser_lab.rs). The React UI polls `state` to
+        // window — see browser_lab.rs). The Preact UI polls `state` to
         // lay itself out around the pane (it must reserve the pane's
         // width and shift fixed-position panels away from it) and drives
         // show/hide here. Hiding the pane is a UI choice only: the lab

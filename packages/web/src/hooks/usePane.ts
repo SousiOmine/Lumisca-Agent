@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "preact/compat";
 import { paneApi, type PaneState } from "../shell.ts";
 
 /** Poll interval while the shell is reachable: the pane opens and closes

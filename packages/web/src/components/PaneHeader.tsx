@@ -1,4 +1,4 @@
-import { IconArrowBarToRight } from "@tabler/icons-react";
+import { IconArrowBarToRight } from "@tabler/icons-preact";
 import type { PaneContent } from "../shell.ts";
 import { paneIcon } from "./paneIcons.tsx";
 

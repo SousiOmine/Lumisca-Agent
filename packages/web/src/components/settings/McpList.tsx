@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from "preact/compat";
 import {
   IconAlertTriangle,
   IconChevronRight,
@@ -6,7 +6,7 @@ import {
   IconPlugConnected,
   IconPlus,
   IconTrash,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { serializeMcpServers } from "@lumisca/core/shared";
 import type { McpInfo, McpServerInfo } from "../../types.ts";
 import { api } from "../../api.ts";

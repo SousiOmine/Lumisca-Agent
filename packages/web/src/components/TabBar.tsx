@@ -1,5 +1,5 @@
-import { type MouseEvent, useEffect, useRef, useState } from "react";
-import { IconChevronRight, IconPlus, IconX } from "@tabler/icons-react";
+import { type MouseEvent, useEffect, useRef, useState } from "preact/compat";
+import { IconChevronRight, IconPlus, IconX } from "@tabler/icons-preact";
 import { isViewRunning, type SessionView } from "../types.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { AppMenu } from "./AppMenu.tsx";
@@ -59,7 +59,7 @@ export function TabBar({
   const menuRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
 
-  const openMenu = (id: string, e: MouseEvent) => {
+  const openMenu = (id: string, e: MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     setMenu({ tabId: id, x: e.clientX, y: e.clientY });
     setPos({ x: e.clientX, y: e.clientY });

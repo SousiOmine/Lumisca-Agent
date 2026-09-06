@@ -1,5 +1,5 @@
 /**
- * The HTML document served by the app: a static shell. The React app is
+ * The HTML document served by the app: a static shell. The Preact app is
  * rendered entirely client-side, so the shell only carries the theme (the
  * first paint is already themed — no flash), the inlined styles, and two
  * scripts: the externalized initial data + auth token (inline scripts are
@@ -9,8 +9,8 @@
 /**
  * Content-Security-Policy for the page. Inline scripts are banned, so
  * the initial data and auth token are served from /assets/initial-data.js
- * instead of an inline <script>. Inline style attributes (React style
- * props) need 'unsafe-inline' for styles. connect-src names the page's own
+ * instead of an inline <script>. Inline style attributes (style props)
+ * need 'unsafe-inline' for styles. connect-src names the page's own
  * host for the WebSocket event stream — CSP3 would match 'self' for a
  * same-host ws: upgrade, but naming it explicitly is portable — and the
  * shell bridge used by the desktop app (settings → 接続先サーバー): the

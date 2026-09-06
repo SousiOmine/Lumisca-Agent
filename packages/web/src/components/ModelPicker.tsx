@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "preact/compat";
 import {
   IconBrain,
   IconCheck,
   IconChevronRight,
   IconSettings,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { formatModelMeta } from "@lumisca/core/shared";
 import type { ModelInfo } from "../types.ts";
 import { filterByQuery, useProviderModels } from "../providers.ts";
@@ -147,7 +147,7 @@ export function ModelPicker({
                 className="mp-model-search"
                 placeholder="モデルを検索..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => setSearch(e.currentTarget.value)}
               />
               {loading && <div className="mp-loading">読み込み中...</div>}
               <div className="mp-model-list">

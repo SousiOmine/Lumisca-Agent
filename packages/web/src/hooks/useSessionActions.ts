@@ -1,4 +1,9 @@
-import { type Dispatch, type SetStateAction, useCallback, useRef } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useRef,
+} from "preact/compat";
 import { api, fed, sessionApi } from "../api.ts";
 import {
   setModelThinkingLevel,

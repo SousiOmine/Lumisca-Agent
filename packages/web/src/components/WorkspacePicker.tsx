@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState } from "preact/compat";
 import {
   IconChevronDown,
   IconFolder,
@@ -6,7 +6,7 @@ import {
   IconPencil,
   IconPlus,
   IconTrash,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import type { FederatedWorkspace } from "../types.ts";
 import { tabKey } from "../tabs.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";

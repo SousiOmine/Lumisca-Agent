@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
 import { api, modelApi } from "./api.ts";
 import { splitTabKey } from "./tabs.ts";

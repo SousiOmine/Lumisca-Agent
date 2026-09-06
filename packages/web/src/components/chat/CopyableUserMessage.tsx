@@ -1,5 +1,9 @@
-import { useState } from "react";
-import { IconArrowBackUp, IconCheck, IconClipboard } from "@tabler/icons-react";
+import { useState } from "preact/compat";
+import {
+  IconArrowBackUp,
+  IconCheck,
+  IconClipboard,
+} from "@tabler/icons-preact";
 import { ContentImages } from "../ContentImages.tsx";
 import type { UserMessageImage } from "./types.ts";
 

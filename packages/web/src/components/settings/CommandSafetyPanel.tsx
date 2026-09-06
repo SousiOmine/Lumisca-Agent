@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState } from "preact/compat";
 import {
   COMMAND_SAFETY_ENABLED_KEY,
   FAST_MODEL_KEY,
@@ -108,7 +108,7 @@ export function CommandSafetyPanel() {
             type="checkbox"
             checked={enabled}
             disabled={saving}
-            onChange={(e) => setEnabledValue(e.target.checked)}
+            onChange={(e) => setEnabledValue(e.currentTarget.checked)}
             aria-label="コマンド安全チェック"
           />
           <span className="toggle-slider" />

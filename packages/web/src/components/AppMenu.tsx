@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
+import { useRef, useState } from "preact/compat";
 import {
   IconHistory,
   IconMenu2,
   IconPlus,
   IconPower,
   IconSettings,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 
 interface AppMenuProps {

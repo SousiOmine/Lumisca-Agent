@@ -5,7 +5,7 @@
     "dev": "deno run -A npm:vite@8.2.2 --configLoader native"
   },
   "imports": {
-    "@vitejs/plugin-react": "npm:@vitejs/plugin-react@6.1.1",
+    "@preact/preset-vite": "npm:@preact/preset-vite@2.10.6",
     "vite": "npm:vite@8.2.2"
   },
   "exports": {

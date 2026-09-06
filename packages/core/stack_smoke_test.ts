@@ -9,8 +9,9 @@ import {
   Type,
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { IconMoon, IconPlus, IconSun } from "@tabler/icons-react";
-import { createElement } from "react";
+import { IconMoon, IconPlus, IconSun } from "@tabler/icons-preact";
+import { createElement } from "preact";
+import { renderToString } from "preact-render-to-string";
 import { assertEquals } from "@std/assert";
 
 /**
@@ -123,9 +124,8 @@ Deno.test("pi-agent-core executes tools", async () => {
   assertEquals(toolResults.length, 1);
 });
 
-Deno.test("tabler icons render in Deno (SSR)", async () => {
-  const { renderToReadableStream } = await import("react-dom/server");
-  const stream = await renderToReadableStream(
+Deno.test("tabler icons render in Deno (SSR)", () => {
+  const html = renderToString(
     createElement(
       "div",
       null,
@@ -134,14 +134,6 @@ Deno.test("tabler icons render in Deno (SSR)", async () => {
       createElement(IconSun, { size: 16 }),
     ),
   );
-  const reader = stream.getReader();
-  let html = "";
-  const decoder = new TextDecoder();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    html += decoder.decode(value);
-  }
   if (!html.includes("<svg")) {
     throw new Error(`expected svg output, got: ${html.slice(0, 120)}`);
   }

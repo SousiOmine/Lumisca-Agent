@@ -1,5 +1,9 @@
-import { useState } from "react";
-import { IconChevronDown, IconChevronUp, IconUsers } from "@tabler/icons-react";
+import { useState } from "preact/compat";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconUsers,
+} from "@tabler/icons-preact";
 import type { TaskView } from "../types.ts";
 
 /** The session's sub-agent tasks (the task tool), stacked under the todo

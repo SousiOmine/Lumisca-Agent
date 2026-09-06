@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { IconMessageQuestion, IconSend } from "@tabler/icons-react";
+import { useState } from "preact/compat";
+import { IconMessageQuestion, IconSend } from "@tabler/icons-preact";
 import type { AskAnswer, AskQuestion, PendingQuestion } from "../types.ts";
 
 /** Selected option indices per question id, inside one question card. */
@@ -177,7 +177,7 @@ function QuestionCard({
               placeholder="自由入力（選択肢にない場合はこちらに入力）"
               aria-label={`${q.question}への自由入力`}
               value={custom}
-              onChange={(e) => editCustom(q.id, e.target.value, multi)}
+              onChange={(e) => editCustom(q.id, e.currentTarget.value, multi)}
             />
           </div>
         );

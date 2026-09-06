@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo } from "preact/compat";
 import { renderMarkdown } from "../../markdown.ts";
 
 /** Memoized markdown rendering: message text is static once a message is

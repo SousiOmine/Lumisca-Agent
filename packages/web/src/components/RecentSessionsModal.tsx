@@ -1,4 +1,4 @@
-import { IconX } from "@tabler/icons-react";
+import { IconX } from "@tabler/icons-preact";
 import { Modal } from "./Modal.tsx";
 import { RecentSessionsList } from "./RecentSessionsList.tsx";
 import { useRecentSessions } from "../hooks/useRecentSessions.ts";

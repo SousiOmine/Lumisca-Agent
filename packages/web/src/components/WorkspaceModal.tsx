@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { useEffect, useState } from "preact/compat";
+import { IconPlus, IconTrash } from "@tabler/icons-preact";
 import { workspaceApi } from "../api.ts";
 import type { Workspace } from "../types.ts";
 import { Modal } from "./Modal.tsx";
@@ -141,7 +141,7 @@ export function WorkspaceModal(
               <input
                 placeholder="例: プロジェクトA"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(e.currentTarget.value)}
               />
             </label>
 

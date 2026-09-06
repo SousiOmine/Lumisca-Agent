@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
-import type { DependencyList } from "react";
+import { useCallback, useEffect, useState } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
 
 /** Stale probe passed to async effects: true once the effect was cleaned
@@ -33,7 +32,7 @@ export function useAsyncEffect(
     };
     // Deps are caller-controlled, mirroring useEffect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps as DependencyList);
+  }, deps);
 }
 
 /** One-shot async data load with stale protection, loading/error state,

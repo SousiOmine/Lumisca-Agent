@@ -5,7 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
-} from "react";
+} from "preact/compat";
 import { sessionApi, type SessionInfoDto } from "../api.ts";
 import {
   type AgentMessage,

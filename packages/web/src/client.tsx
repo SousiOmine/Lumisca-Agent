@@ -1,4 +1,4 @@
-import { createRoot } from "react-dom/client";
+import { createRoot } from "preact/compat/client";
 import { App } from "./App.tsx";
 import type { InitialData } from "./types.ts";
 

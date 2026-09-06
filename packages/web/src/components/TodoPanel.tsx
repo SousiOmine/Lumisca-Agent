@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState } from "preact/compat";
 import {
   IconChevronDown,
   IconChevronUp,
   IconListCheck,
-} from "@tabler/icons-react";
+} from "@tabler/icons-preact";
 import type { TodoPhase, TodoTask } from "../types.ts";
 
 /** Marker glyph per status, mirroring the tool's text rendering. */

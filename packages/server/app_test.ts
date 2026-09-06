@@ -1510,8 +1510,8 @@ Deno.test("server bundles and serves the client app", async () => {
     const res = await fetch(`${base}/assets/app.js`);
     assertEquals(res.status, 200);
     const js = await res.text();
-    assertEquals(js.length > 10_000, true, "bundle should include react");
-    assertEquals(js.includes("createRoot"), true);
+    assertEquals(js.length > 100_000, true, "bundle should include the app");
+    assertEquals(js.includes("input-composer"), true);
   } finally {
     server.shutdown();
     core.close();

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { IconArrowLeft, IconPlugConnected } from "@tabler/icons-react";
+import { useMemo, useState } from "preact/compat";
+import { IconArrowLeft, IconPlugConnected } from "@tabler/icons-preact";
 import { filterByQuery, useProviders } from "../../providers.ts";
 
 /** Settings → add provider: searchable list of every known provider, plus
@@ -35,7 +35,7 @@ export function AddProviderFlow({
       <input
         placeholder="プロバイダーを検索..."
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={(e) => setSearch(e.currentTarget.value)}
       />
       <div className="model-list" style={{ maxHeight: 360 }}>
         {visible.map((p) => (

@@ -1,6 +1,6 @@
-import { useState } from "react";
-import type { CSSProperties } from "react";
-import { IconArrowLeft } from "@tabler/icons-react";
+import { useState } from "preact/compat";
+import type { CSSProperties } from "preact/compat";
+import { IconArrowLeft } from "@tabler/icons-preact";
 import type { McpServerInfo } from "../../types.ts";
 import { Field } from "../Field.tsx";
 
@@ -118,7 +118,7 @@ export function McpDetail({
         <Field label="名前">
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => setName(e.currentTarget.value)}
             placeholder="例: filesystem"
             style={fullWidth}
           />
@@ -127,7 +127,7 @@ export function McpDetail({
         <Field label="種類">
           <select
             value={type}
-            onChange={(e) => setType(e.target.value as "stdio" | "http")}
+            onChange={(e) => setType(e.currentTarget.value as "stdio" | "http")}
             style={fullWidth}
           >
             <option value="stdio">stdio (子プロセス)</option>
@@ -141,7 +141,7 @@ export function McpDetail({
               <Field label="コマンド">
                 <input
                   value={command}
-                  onChange={(e) => setCommand(e.target.value)}
+                  onChange={(e) => setCommand(e.currentTarget.value)}
                   placeholder="例: npx"
                   style={fullWidth}
                 />
@@ -150,7 +150,7 @@ export function McpDetail({
                 <textarea
                   rows={3}
                   value={args}
-                  onChange={(e) => setArgs(e.target.value)}
+                  onChange={(e) => setArgs(e.currentTarget.value)}
                   placeholder={ARGS_PLACEHOLDER}
                   style={{ ...fullWidth, fontFamily: "monospace" }}
                 />
@@ -158,7 +158,7 @@ export function McpDetail({
               <Field label="作業ディレクトリ (省略可)">
                 <input
                   value={cwd}
-                  onChange={(e) => setCwd(e.target.value)}
+                  onChange={(e) => setCwd(e.currentTarget.value)}
                   placeholder="ワークスペース基準の相対パス"
                   style={fullWidth}
                 />
@@ -169,7 +169,7 @@ export function McpDetail({
             <Field label="URL">
               <input
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => setUrl(e.currentTarget.value)}
                 placeholder="https://example.com/mcp"
                 style={fullWidth}
               />
@@ -180,7 +180,7 @@ export function McpDetail({
           <textarea
             rows={3}
             value={env}
-            onChange={(e) => setEnv(e.target.value)}
+            onChange={(e) => setEnv(e.currentTarget.value)}
             placeholder={ENV_PLACEHOLDER}
             style={{ ...fullWidth, fontFamily: "monospace" }}
           />
@@ -191,7 +191,7 @@ export function McpDetail({
             <textarea
               rows={3}
               value={headers}
-              onChange={(e) => setHeaders(e.target.value)}
+              onChange={(e) => setHeaders(e.currentTarget.value)}
               placeholder={HEADERS_PLACEHOLDER}
               style={{ ...fullWidth, fontFamily: "monospace" }}
             />
