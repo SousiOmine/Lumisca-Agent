@@ -12,6 +12,14 @@ name: Release
 # cannot install unsigned updates. For production macOS distribution, set
 # the APPLE_* secrets (certificate + notarytool) so tauri-action signs and
 # notarizes the artifacts.
+#
+# Operation notes (learned from v0.6.1):
+# - Do NOT publish the draft release until all three matrix jobs are green.
+#   Publishing early freezes a partial `latest.json` (updater manifest).
+# - The draft release is created exactly once by the `create-release` job
+#   and the matrix jobs upload into it via `releaseId`. Letting every
+#   matrix job get-or-create the release by tag races and produces two
+#   Release objects sharing one tag.
 
 on:
   push:
@@ -19,7 +27,32 @@ on:
   workflow_dispatch:
 
 jobs:
+  create-release:
+    # Single writer for the draft Release — eliminates the parallel
+    # get-or-create race between matrix jobs.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      releaseId: ${{ steps.create.outputs.releaseId }}
+    steps:
+      - name: Create draft release (reuse on rerun)
+        id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          case "$TAG" in
+            v*) ;;
+            *) echo "::error::Expected a vX.Y.Z tag, got ref '$TAG'. Trigger this workflow by pushing a tag."; exit 1 ;;
+          esac
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --title "Lumisca $TAG" --generate-notes
+          fi
+          echo "releaseId=$(gh release view "$TAG" --json databaseId --jq .databaseId)" >> "$GITHUB_OUTPUT"
+
   build-and-release:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -92,6 +125,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: packages/desktop
+          # Upload into the draft created by `create-release` instead of
+          # get-or-creating by tag in every matrix job (race → duplicate
+          # releases sharing one tag, as happened with v0.6.1).
+          releaseId: ${{ needs.create-release.outputs.releaseId }}
           tagName: v__VERSION__
           releaseName: "Lumisca v__VERSION__"
           releaseDraft: true
