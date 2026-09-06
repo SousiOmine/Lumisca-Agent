@@ -18,7 +18,6 @@ export function AppearancePanel(
 ) {
   return (
     <div className="settings-pane">
-      <p className="settings-note">アプリの配色を設定します。</p>
       <div className="appearance-item">
         <span className="appearance-label">テーマ</span>
         <select

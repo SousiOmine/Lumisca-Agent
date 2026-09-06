@@ -153,12 +153,7 @@ export function PersonalizePanel() {
     <>
       {/* --- AGENTS.md (custom instructions) --- */}
       <div className="settings-pane" style={{ marginBottom: 24 }}>
-        <h3 style={{ margin: "0 0 8px" }}>カスタム指示 (AGENTS.md)</h3>
-        <p className="settings-note">
-          AI へのカスタム指示を設定します。システムプロンプトの最後に付加され、
-          <strong>新しく作成するセッションにのみ反映</strong>されます
-          (既存のセッションには影響しません)。
-        </p>
+        <h3 style={{ margin: "0 0 8px" }}>カスタム指示</h3>
         <textarea
           className="personalize-textarea mono"
           value={content}
@@ -199,11 +194,9 @@ export function PersonalizePanel() {
           </button>
         </div>
         <p className="settings-note">
-          スラッシュコマンド <code>/prompt</code>{" "}
-          から呼び出せるプロンプト
-          スニペットを登録します。識別子は英数字で入力してください。
+          <code>/prompt</code> から呼び出せるプロンプト
+          スニペットを登録します。
         </p>
-
         {promptsError && <p className="error-text">{promptsError}</p>}
 
         {promptsLoading && prompts.length === 0 && (

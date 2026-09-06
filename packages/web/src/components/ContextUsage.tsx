@@ -68,7 +68,7 @@ export function ContextUsageCard({
   return (
     <div className="ctx-popover" role="dialog" aria-label="コンテキスト使用量">
       <div className="ctx-row">
-        <span>Context window</span>
+        <span>コンテキストウィンドウ</span>
         <span className="mono">{headRight}</span>
       </div>
       {ratio !== undefined && (
@@ -87,7 +87,7 @@ export function ContextUsageCard({
         </div>
       )}
       <div className="ctx-row">
-        <span>Average cache hit rate</span>
+        <span>キャッシュヒット率</span>
         <span className="mono">
           {summary.averageCacheHitRate === undefined
             ? "—"

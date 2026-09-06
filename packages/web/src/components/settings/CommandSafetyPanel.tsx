@@ -88,15 +88,10 @@ export function CommandSafetyPanel() {
 
   return (
     <div className="settings-pane">
-      <p className="settings-note">
-        bash / eval の実行前に、高速モデルがコマンドの安全性を自動判定します。
-        安全と判定されたコマンドは承認リストに記録され、次回からは判定なしで
-        実行されます。危険と判定されたコマンドのほか、判定できなかった
-        コマンド（判定が失敗・タイムアウトした場合）も実行されず、停止理由が
-        エージェントに返されます。
-      </p>
-
-      <div className="update-item">
+      <div
+        className="update-item"
+        title="bash / eval の実行前に、高速モデルがコマンドの安全性を自動判定します。安全と判定されたコマンドは承認リストに記録され、次回からは判定なしで実行されます。危険と判定されたコマンドのほか、判定できなかったコマンド（判定が失敗・タイムアウトした場合）も実行されず、停止理由がエージェントに返されます。"
+      >
         <div className="update-info">
           <span className="update-label">コマンド安全チェック</span>
           <span className="update-desc">

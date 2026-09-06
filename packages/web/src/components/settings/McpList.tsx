@@ -130,11 +130,6 @@ export function McpList() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <p className="settings-note">
-          アプリ全体で使うMCPサーバーです(全ワークスペースに適用)。
-          各ワークスペースの .mcp.json も自動的にマージされます。
-        </p>
-
         {error && <p className="error-text">{error}</p>}
         {loading && <p className="settings-note">読み込み中…</p>}
         {!loading && config && config.servers.length === 0 && (

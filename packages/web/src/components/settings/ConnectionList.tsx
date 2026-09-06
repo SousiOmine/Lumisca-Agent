@@ -157,10 +157,6 @@ export function ConnectionList() {
       {desktop !== null && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <p className="settings-note">
-            登録したサーバーのワークスペース・セッションが一覧に表示されます
-            (フェデレーション)。リストはこのサーバーのデータベースに保存されます。
-          </p>
-          <p className="settings-note">
             {desktop
               ? state?.mode === "remote"
                 ? `現在の表示: ${state.url ?? ""}`

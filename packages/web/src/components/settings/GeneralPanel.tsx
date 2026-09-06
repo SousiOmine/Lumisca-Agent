@@ -55,10 +55,6 @@ export function GeneralPanel(
 
   return (
     <div className="settings-pane">
-      <p className="settings-note">
-        アプリのバージョン情報と自動アップデートの設定です。
-      </p>
-
       <div className="update-item">
         <div className="update-info">
           <span className="update-label">アプリ情報</span>
@@ -71,7 +67,7 @@ export function GeneralPanel(
         <div className="update-info">
           <span className="update-label">自動アップデート</span>
           <span className="update-desc">
-            起動時と定期的に新しいバージョンをチェックし、自動でダウンロードします。インストールはこの画面または通知バナーから行えます。
+            起動時と定期的に新しいバージョンをチェックし、自動でダウンロードします。
           </span>
         </div>
         <label className="toggle-switch">
@@ -164,9 +160,6 @@ export function GeneralPanel(
       <div className="update-item">
         <div className="update-info">
           <span className="update-label">バックグラウンド通知</span>
-          <span className="update-desc">
-            ウィンドウがフォーカスされていないとき（最小化・他のアプリが前面・別の仮想デスクトップ）に、エージェントの応答完了と質問をOS通知で知らせます。
-          </span>
         </div>
         <label className="toggle-switch">
           <input
