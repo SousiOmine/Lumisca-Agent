@@ -26,6 +26,8 @@ import {
   BROWSER_TOOL_NAMES,
   createBrowserToolsFrom,
 } from "../browser/tools.ts";
+import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 
 /** Module logger (debug-gated): attachment rebuilds/teardowns are the
  * first thing to check when MCP tools misbehave. */
@@ -313,6 +315,21 @@ export class SessionPool {
     // sub-agent surface: the background-command manager, the task hub and
     // the runtime resolver are skipped, and the tool set is the chat one.
     const chat = workspace.chat;
+    // The PDF page-as-image tool lives in the session's tool registry
+    // (discoverable via tool_search), never preloaded into the LLM
+    // context — the same contract as MCP and browser-lab tools. Unlike
+    // the browser-lab tools it needs no host backend beyond the workspace
+    // itself, so every coding session seeds it; chat sessions (no
+    // workspace folders to resolve against) remove it. Remove-then-add
+    // rebuilds the sandbox on every open, so workspace folder changes
+    // apply without stale paths (the registry itself is reused across
+    // agent rebuilds).
+    registry.removeTools(PDF_TOOL_NAMES);
+    if (!chat) {
+      registry.addTools(
+        createPdfTools({ sandbox: new Sandbox(workspace.folders) }),
+      );
+    }
     // Reuse the session's manager when one exists (agent rebuild); create
     // it on first open. Shared by the async_bash tools and the session
     // agent: the tools start/check/kill commands, the agent turns

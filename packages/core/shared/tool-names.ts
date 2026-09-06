@@ -34,3 +34,7 @@ export const TOOL_BROWSER_ACT = "browser_act";
 export const TOOL_BROWSER_WAIT = "browser_wait";
 export const TOOL_BROWSER_SCREENSHOT = "browser_screenshot";
 export const TOOL_BROWSER_CLOSE = "browser_close";
+/** PDF page-as-image tool (renders workspace PDF pages to PNG images for
+ * vision models; discoverable via tool_search, never preloaded — the same
+ * contract as MCP and browser-lab tools). */
+export const TOOL_PDF_READ_PAGES = "pdf_read_pages";

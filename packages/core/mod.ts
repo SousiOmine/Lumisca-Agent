@@ -71,6 +71,18 @@ export {
   createBrowserTools,
   createBrowserToolsFrom,
 } from "./browser/tools.ts";
+export {
+  createPdfTools,
+  createUnpdfRenderer,
+  DEFAULT_PDF_DPI,
+  MAX_PDF_PAGES_PER_CALL,
+  PDF_TOOL_NAMES,
+} from "./pdf/tools.ts";
+export type {
+  PdfRenderer,
+  PdfRenderResult,
+  RenderedPdfPage,
+} from "./pdf/tools.ts";
 export { formatSnapshot } from "./browser/tools.ts";
 export { HttpBrowserBackend } from "./browser/client.ts";
 export { LazyBrowserBackend } from "./browser/lazy.ts";

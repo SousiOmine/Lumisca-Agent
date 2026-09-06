@@ -18,6 +18,7 @@ import {
   serializeModelPreference,
   TOOL_BROWSER_OPEN,
   TOOL_CALL,
+  TOOL_PDF_READ_PAGES,
   TOOL_SEARCH,
 } from "./shared/mod.ts";
 import { MCP_TOOLS_PROMPT_NOTE } from "./mcp/tools.ts";
@@ -1692,6 +1693,55 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
   }
 });
 
+Deno.test("pdf tool is seeded into the session registry via tool_search", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  try {
+    // No browser backend, no MCP servers: the PDF page-as-image tool is
+    // still seeded by the pool at open.
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const agent = core.getAgent(session.id)!;
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === TOOL_PDF_READ_PAGES),
+      false,
+      "the pdf tool must stay out of the agent tool set",
+    );
+    assertEquals(
+      agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH) &&
+        agent.agent.state.tools.some((t) => t.name === TOOL_CALL),
+      true,
+      "search/call pair must be attached for the pdf tool",
+    );
+
+    // The model finds it through tool_search.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "pdf" }),
+      ]),
+      fauxAssistantMessage("Done."),
+    ]);
+    await core.prompt(session.id, "What PDF tools exist?");
+
+    const messages = core.getAgent(session.id)!.messages;
+    const toolResults = messages.filter((m) => m.role === "toolResult");
+    assertEquals(toolResults.length, 1);
+    const tr = toolResults[0] as {
+      content: Array<{ type: string; text: string }>;
+    };
+    assert(
+      tr.content[0]!.text.includes(TOOL_PDF_READ_PAGES),
+      `pdf tool not discoverable: ${tr.content[0]!.text}`,
+    );
+  } finally {
+    core.close();
+  }
+});
+
 Deno.test("detaching the browser backend removes browser tools on rebuild", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
@@ -1710,9 +1760,11 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
     );
 
     // Detach and rebuild (a model switch rebuilds the agent of an open
-    // session): the seeded browser tools are removed from the registry,
-    // so the rebuilt agent finds no discoverable tools at all — the pair
-    // is not attached, exactly like a session that never had a backend.
+    // session): the seeded browser tools are removed from the registry.
+    // The registry is not empty afterwards — the PDF page-as-image tool
+    // is seeded for every workspace session — so the search/call pair
+    // and the on-demand-tools note stay attached; only the browser tools
+    // are gone.
     core.setBrowserBackend(undefined);
     core.setSessionModel(session.id, providerId, modelId);
     const detached = core.getAgent(session.id)!;
@@ -1722,23 +1774,27 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
     );
     assertEquals(
       detached.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
-      false,
-      "an empty registry must not attach the search/call pair",
+      true,
+      "the search/call pair stays attached for the PDF tool",
     );
     assertEquals(
       detached.agent.state.tools.some((t) => t.name.startsWith("browser_")),
       false,
     );
+    assertEquals(
+      detached.agent.state.tools.some((t) => t.name === TOOL_PDF_READ_PAGES),
+      false,
+      "the PDF tool must stay out of the agent tool set (discoverable via tool_search)",
+    );
     // The rebuilt agent starts from the creation-time snapshot, which —
     // created while the backend was attached — still lists the built-in
-    // web-browser skill (its description mentions tool_search). What must
-    // be gone is the runtime-appended on-demand tools note, which follows
-    // the registry: an empty registry attaches neither the search/call
-    // pair nor the note.
+    // web-browser skill (its description mentions tool_search). The
+    // runtime-appended on-demand tools note follows the registry: it
+    // stays as long as the registry holds the PDF tool.
     assertEquals(
       detached.agent.state.systemPrompt.includes(MCP_TOOLS_PROMPT_NOTE),
-      false,
-      "the on-demand-tools note must be gone with the registry",
+      true,
+      "the on-demand-tools note stays while the registry holds tools",
     );
 
     // Re-attaching restores the browser tools on the next rebuild.
