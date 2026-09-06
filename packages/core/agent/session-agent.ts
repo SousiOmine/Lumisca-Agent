@@ -13,6 +13,7 @@ import type {
   TextContent,
 } from "@earendil-works/pi-ai";
 import { CoreError, errorMessage } from "../errors.ts";
+import { createLogger } from "../log.ts";
 import {
   isRetryableRateLimit,
   MAX_RATE_LIMIT_RETRIES,
@@ -21,7 +22,7 @@ import {
 } from "./llm-retry.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
-import type { ThinkingLevel } from "../shared.ts";
+import type { ThinkingLevel } from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import {
   addToolsToAgent,
@@ -33,14 +34,14 @@ import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
 import type { AskHub } from "../tools/ask.ts";
-import type { AskAnswer } from "../shared.ts";
+import type { AskAnswer } from "../shared/mod.ts";
 import type {
   BackgroundCommandDone,
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { formatBackgroundNotification } from "../tools/background.ts";
 import { notificationMessage } from "../tools/subagent-format.ts";
-import type { TaskHub } from "../tools/task.ts";
+import type { TaskHub } from "../tools/task-hub.ts";
 import type {
   NotificationMessage,
   NotificationPayload,
@@ -51,85 +52,17 @@ import { buildModeMessage } from "../types/mode-message.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 
-/** Maximum consecutive vacant responses (no text, no tool call) to retry
- * before giving up and ending the run normally. Shared by both retry
- * mechanisms — in-run vacant retries and silent-error restarts — so a
- * model that keeps failing can never loop forever. */
-export const MAX_EMPTY_RESPONSE_RETRIES = 3;
+/** Module logger (debug-gated): title-generation misses and other
+ * best-effort failures land here instead of vanishing silently. */
+const log = createLogger("session-agent");
 
-/** True when the response produced nothing the user can see: no text and
- * no tool call. Thinking blocks alone don't count as output (the user
- * never sees them). */
-function hasNoVisibleOutput(message: AssistantMessage): boolean {
-  return message.content.every(
-    (block) =>
-      block.type !== "toolCall" &&
-      (block.type !== "text" || block.text.trim().length === 0),
-  );
-}
-
-/** True when the assistant response produced neither text nor a tool call:
- * the model ended its turn without any output. Error/aborted stops are
- * handled separately (see isSilentErrorResponse and handleTurnEnd) — they
- * terminate the run instead of continuing the loop. */
-export function isVacantResponse(message: AssistantMessage): boolean {
-  if (message.stopReason === "error" || message.stopReason === "aborted") {
-    return false;
-  }
-  return hasNoVisibleOutput(message);
-}
-
-/** Error-message signatures of transient transport failures: streams cut
- * off mid-flight (the observed "Stream ended without finish_reason"),
- * connection resets, provider-side blips. Only these qualify for
- * automatic restarts — a silent PERMANENT failure (unconfigured or
- * unauthorized provider, content filter, context overflow) has no chance
- * of recovering, so it must surface immediately instead of burning
- * through the retry limit. */
-const TRANSIENT_STREAM_ERROR_PATTERN =
-  /without finish_reason|finish_reason: network_error|fetch failed|network|socket hang up|connection|terminated|premature close|timed out|\b(?:500|502|503|504|529)\b|overloaded/i;
-
-/** True when the stream died before the model produced anything: an
- * error-stopped response with zero output (thinking alone doesn't count —
- * the user never sees it) whose cause looks transient. The agent loop
- * exits immediately on these turns without draining the follow-up queue,
- * so the in-run vacant-retry cannot fire; SessionAgent restarts the run
- * itself once it settles (see handleTurnEnd / resumeAfterErrorRun). An
- * unknown error message is conservatively treated as permanent. */
-export function isSilentErrorResponse(message: AssistantMessage): boolean {
-  if (message.stopReason !== "error") return false;
-  if (!hasNoVisibleOutput(message)) return false;
-  return TRANSIENT_STREAM_ERROR_PATTERN.test(message.errorMessage ?? "");
-}
-
-/** The notification queued to retry a vacant response. The text is
- * self-contained (no system-prompt prefix contract): the model reads it as
- * a user message telling it its previous response was empty. */
-export function buildRetryNotification(attempt: number): NotificationMessage {
-  return notificationMessage({
-    kind: "retry",
-    title: `Previous response was empty (retry ${attempt})`,
-    body:
-      "You produced neither text nor a tool call. Continue: respond with text or call a tool.",
-    status: "neutral",
-  });
-}
-
-/** The notification queued to retry after a provider rate-limit (429) turn.
- * Unlike the vacant-response retry, the model was cut off by throttling, not
- * by producing nothing — so the text tells it to wait and then continue. */
-export function buildRateLimitRetryNotification(
-  attempt: number,
-): NotificationMessage {
-  return notificationMessage({
-    kind: "retry",
-    title: `Rate limited by provider (retry ${attempt})`,
-    body:
-      "The provider returned a rate-limit error. Wait a moment, then continue: " +
-      "respond with text or call a tool.",
-    status: "neutral",
-  });
-}
+import {
+  buildRateLimitRetryNotification,
+  buildRetryNotification,
+  hasNoVisibleOutput,
+  isSilentErrorResponse,
+  MAX_EMPTY_RESPONSE_RETRIES,
+} from "./retry-policy.ts";
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -457,8 +390,9 @@ export class SessionAgent {
     try {
       const title = await this.titleGenerator!.generateTitle(text);
       this.renameSession(title);
-    } catch {
-      // Keep the provisional name.
+    } catch (error) {
+      // Keep the provisional name; the failure is only visible on debug.
+      log.debug(`title generation failed: ${errorMessage(error)}`);
     }
   }
 

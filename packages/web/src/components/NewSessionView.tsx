@@ -10,6 +10,7 @@ import type {
   ThinkingLevel,
 } from "../types.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
+import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import {
@@ -150,24 +151,21 @@ export function NewSessionView(
   // would get) right away instead of leaving the picker to choose on click.
   // A selection the user already made is never overwritten by the late
   // response.
-  useEffect(() => {
-    let stale = false;
-    api.getDefaultModel()
-      .then((m) => {
-        if (stale) return;
-        if (m && !modelTouched.current) {
-          setModel({
-            provider: m.provider,
-            modelId: m.modelId,
-            thinkingLevel: m.thinkingLevel,
-            thinkingLevels: m.thinkingLevels,
-          });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      stale = true;
-    };
+  useAsyncEffect(async (isStale) => {
+    try {
+      const m = await api.getDefaultModel();
+      if (isStale()) return;
+      if (m && !modelTouched.current) {
+        setModel({
+          provider: m.provider,
+          modelId: m.modelId,
+          thinkingLevel: m.thinkingLevel,
+          thinkingLevels: m.thinkingLevels,
+        });
+      }
+    } catch {
+      // Non-critical: the picker stays on its default.
+    }
   }, []);
 
   // Filter workspaces by the selected peer. The pinned chat entry ("simple

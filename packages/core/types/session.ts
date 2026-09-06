@@ -1,4 +1,4 @@
-import type { ThinkingLevel } from "../shared.ts";
+import type { ThinkingLevel } from "../shared/mod.ts";
 
 export interface SessionInfo {
   id: string;

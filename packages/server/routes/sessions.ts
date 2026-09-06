@@ -12,7 +12,12 @@ import type {
   ThinkingLevel,
   TodoPhase,
 } from "@lumisca/core";
-import { AppError, parseBody } from "./util.ts";
+import {
+  AppError,
+  parseBody,
+  requireNonEmptyString,
+  requireNumber,
+} from "./util.ts";
 
 interface SessionBody {
   /** Omitted → a chat session ("simple chat" without a workspace). */
@@ -47,9 +52,10 @@ export function parseAnswerBody(body: AnswerBody): {
   toolCallId: string;
   answers: AskAnswer[];
 } {
-  if (typeof body.toolCallId !== "string" || body.toolCallId.length === 0) {
-    throw new AppError("toolCallId (string) is required", 400);
-  }
+  const toolCallId = requireNonEmptyString(
+    body.toolCallId,
+    "toolCallId (string)",
+  );
   if (!Array.isArray(body.answers) || body.answers.length === 0) {
     throw new AppError("answers (array) is required", 400);
   }
@@ -68,7 +74,7 @@ export function parseAnswerBody(body: AnswerBody): {
     }
     answers.push({ id, values: values as string[] });
   }
-  return { toolCallId: body.toolCallId, answers };
+  return { toolCallId, answers };
 }
 
 /** Validate a prompt request body; `images` are base64 data + mimeType,
@@ -325,16 +331,11 @@ export function sessionRoutes(core: SessionApi): Hono {
    * restore the rewound text to the composer. */
   app.post("/sessions/:id/rewind", async (c) => {
     const body = await parseBody<{ timestamp?: unknown }>(c);
-    if (
-      !body || typeof body.timestamp !== "number" ||
-      !Number.isFinite(body.timestamp)
-    ) {
-      throw new AppError("timestamp (number) is required", 400);
-    }
+    const timestamp = requireNumber(body?.timestamp, "timestamp (number)");
     const id = c.req.param("id");
     requireSession(id);
     await core.openSession(id);
-    await core.rewind(id, body.timestamp);
+    await core.rewind(id, timestamp);
     return c.json({ ok: true });
   });
 

@@ -4,7 +4,7 @@ import type {
   AuthInteraction,
   AuthPrompt,
 } from "@earendil-works/pi-ai";
-import { autoAnswerSelect } from "@lumisca/core";
+import { autoAnswerSelect, errorMessage } from "@lumisca/core";
 import type {
   ProviderLoginEvent,
   ProviderLoginPrompt,
@@ -196,10 +196,6 @@ export class LoginSession {
       entry.reject(reason);
     }
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** Signatures of OpenAI-side throttling / bot detection (a 429 status, a

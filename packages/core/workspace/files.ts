@@ -12,6 +12,20 @@ export interface WorkspaceFileEntry {
   isDir: boolean;
 }
 
+/** True when `path` exists (any kind). Never throws: missing paths,
+ * permission errors, and races with deletion all read as "absent". Single
+ * home for the `Deno.stat(path).catch(() => null)` existence probe. */
+export async function fileExists(path: string): Promise<boolean> {
+  return (await Deno.stat(path).catch(() => null)) !== null;
+}
+
+/** True when `path` is an existing directory. Never throws (see
+ * {@link fileExists}). */
+export async function isDirectory(path: string): Promise<boolean> {
+  const stat = await Deno.stat(path).catch(() => null);
+  return stat !== null && stat.isDirectory;
+}
+
 /** Directories skipped while walking (on top of hidden `.`-prefixed ones):
  * the tools' shared build-artifact/VCS set plus dependency trees. Without
  * these, a single build-output tree can consume the whole entry budget

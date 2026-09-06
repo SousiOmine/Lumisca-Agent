@@ -1,3 +1,5 @@
+import { safeJsonParse } from "../shared/mod.ts";
+
 /** A server connection entry — a client-side registry that lets the user
  * switch between servers from the settings UI. Shared by web clients
  * (server-side copy); stored in the settings file. */
@@ -25,12 +27,7 @@ function isConnectionEntry(value: unknown): value is ConnectionEntry {
 
 /** Parse the stored registry; malformed or absent values yield []. */
 export function parseConnections(value: string | undefined): ConnectionEntry[] {
-  if (!value) return [];
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isConnectionEntry);
-  } catch {
-    return [];
-  }
+  const parsed = safeJsonParse<unknown>(value);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(isConnectionEntry);
 }

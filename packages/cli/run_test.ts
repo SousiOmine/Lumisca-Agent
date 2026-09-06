@@ -1,3 +1,4 @@
+import { removeDirRetry } from "@lumisca/core/test-utils";
 import { join } from "node:path";
 import {
   assertEquals,
@@ -129,7 +130,7 @@ Deno.test("runOnce executes a headless run and returns the transcript", async ()
     assertEquals(core.getAgent(result.sessionId)!.isStreaming, false);
   } finally {
     core.close();
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -154,7 +155,7 @@ Deno.test("runOnce surfaces session errors on the result", async () => {
     assertEquals(result.error, "boom");
   } finally {
     core.close();
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -192,7 +193,7 @@ Deno.test("runOnce reuses a workspace with the same folder", async () => {
     );
   } finally {
     core.close();
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -256,7 +257,7 @@ Deno.test("runOnce skips a disabled last-used model (default path)", async () =>
     );
   } finally {
     core.close();
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 

@@ -1,4 +1,4 @@
-import { TOOL_SEARCH } from "../shared.ts";
+import { TOOL_SEARCH } from "../shared/mod.ts";
 import type { ToolRegistryProvider } from "./registry.ts";
 import { integer, object, optional, string, type Tool } from "./schema.ts";
 

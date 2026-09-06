@@ -1,1 +1,1 @@
-export { contentText } from "./shared.ts";
+export { contentText } from "./shared/mod.ts";

@@ -1,5 +1,4 @@
 import { basename, join } from "node:path";
-import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
 import {
@@ -7,87 +6,15 @@ import {
   createReadFileTool,
   createWriteFileTool,
 } from "./filesystem.ts";
-
-/** Minimal 1x1 transparent PNG (67 bytes). */
-const MINI_PNG = new Uint8Array([
-  0x89,
-  0x50,
-  0x4e,
-  0x47,
-  0x0d,
-  0x0a,
-  0x1a,
-  0x0a,
-  0x00,
-  0x00,
-  0x00,
-  0x0d,
-  0x49,
-  0x48,
-  0x44,
-  0x52,
-  0x00,
-  0x00,
-  0x00,
-  0x01,
-  0x00,
-  0x00,
-  0x00,
-  0x01,
-  0x08,
-  0x06,
-  0x00,
-  0x00,
-  0x00,
-  0x1f,
-  0x15,
-  0xc4,
-  0x89,
-  0x00,
-  0x00,
-  0x00,
-  0x0d,
-  0x49,
-  0x44,
-  0x41,
-  0x54,
-  0x78,
-  0x9c,
-  0x62,
-  0x00,
-  0x01,
-  0x00,
-  0x00,
-  0x05,
-  0x00,
-  0x01,
-  0x0d,
-  0x0a,
-  0x2d,
-  0xb4,
-  0x00,
-  0x00,
-  0x00,
-  0x00,
-  0x49,
-  0x45,
-  0x4e,
-  0x44,
-  0xae,
-  0x42,
-  0x60,
-  0x82,
-]);
+import {
+  makeRealTempDir,
+  MINI_PNG,
+  removeDirRetry,
+  toolText,
+} from "../test-utils.ts";
 
 function makeRead(root: string) {
   return createReadFileTool({ sandbox: new Sandbox([root]) });
-}
-
-function toolText(result: { content: { type: string; text?: string }[] }) {
-  return result.content
-    .filter((c) => c.type === "text")
-    .map((c) => c.text ?? "")
-    .join("");
 }
 
 /** Content after the `--- path lines spec ---` header line. */
@@ -96,9 +23,7 @@ function bodyOf(text: string): string {
 }
 
 async function fixture(): Promise<{ root: string; folder: string }> {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-read-" }),
-  );
+  const root = await makeRealTempDir("lumisca-read-");
   await Deno.writeFile(join(root, "pic.png"), MINI_PNG);
   await Deno.writeTextFile(join(root, "notes.txt"), "hello world\n");
   await Deno.writeTextFile(join(root, "drawing.svg"), "<svg></svg>");
@@ -127,7 +52,7 @@ Deno.test("read passes raster images to the model as image blocks", async () => 
     const text = toolText(result);
     assert(text.includes("[image: pic.png"), `note missing: ${text}`);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -154,7 +79,7 @@ Deno.test("read maps common image extensions to mime types", async () => {
       await Deno.remove(join(root, name));
     }
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -176,7 +101,7 @@ Deno.test("read keeps text, SVG and line-ranged reads on the text path", async (
     });
     assertEquals(partial.content.filter((c) => c.type === "image").length, 0);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -193,7 +118,7 @@ Deno.test("read extracts line ranges from the path", async () => {
     );
     assertEquals(bodyOf(text), "line 5\nline 6\nline 7\nline 8");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -223,7 +148,7 @@ Deno.test("read supports single lines, N+M and comma-separated ranges", async ()
     // Output follows file order, not the order of the ranges.
     assertEquals(bodyOf(multiText), "line 2\nline 3\nline 10\nline 11");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -246,7 +171,7 @@ Deno.test("read rejects invalid line ranges", async () => {
       );
     }
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -260,14 +185,12 @@ Deno.test("read notes when a range extends past the end of the file", async () =
     assertEquals(bodyOf(text).split("\n")[0] ?? "", "line 5");
     assert(text.endsWith("[end of file: 15 lines]"), text);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
 Deno.test("read suggests a line range when a large file is cut off", async () => {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-read-" }),
-  );
+  const root = await makeRealTempDir("lumisca-read-");
   const folder = basename(root);
   try {
     // ~600KB, so the whole-file read caps at the 512KB chunk limit.
@@ -278,14 +201,12 @@ Deno.test("read suggests a line range when a large file is cut off", async () =>
     const text = toolText(result);
     assert(text.includes("[file continues; read with"), text);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
 Deno.test("read line ranges stay memory-bounded on huge single-line files", async () => {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-read-" }),
-  );
+  const root = await makeRealTempDir("lumisca-read-");
   const folder = basename(root);
   try {
     // A 4MB line with no newlines — far beyond any output budget; the
@@ -302,7 +223,7 @@ Deno.test("read line ranges stay memory-bounded on huge single-line files", asyn
     assert(text.includes(tail), `tail missing: ${text.slice(-100)}`);
     assert(text.length < 200 * 1024, `output too large: ${text.length}`);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -326,9 +247,7 @@ function makeFs(root: string) {
 
 /** A temp dir plus `folder` (basename) for tool paths, like `fixture`. */
 async function fsFixture(): Promise<{ root: string; folder: string }> {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-fs-" }),
-  );
+  const root = await makeRealTempDir("lumisca-fs-");
   return { root, folder: basename(root) };
 }
 
@@ -343,10 +262,10 @@ Deno.test("edit matches CRLF files with an LF old_string and keeps CRLF", async 
       new_string: "const a = 1;\nconst b = 20;", // LF too
     });
     assert(toolText(result).startsWith("Edited"), toolText(result));
-    const text = new TextDecoder().decode(await Deno.readFile(file));
+    const text = await Deno.readTextFile(file);
     assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -360,10 +279,10 @@ Deno.test("edit matches CRLF files with a CRLF old_string", async () => {
       old_string: "const a = 1;\r\nconst b = 2;",
       new_string: "const a = 1;\r\nconst b = 20;",
     });
-    const text = new TextDecoder().decode(await Deno.readFile(file));
+    const text = await Deno.readTextFile(file);
     assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -380,10 +299,10 @@ Deno.test("edit matches LF files with a CRLF old_string", async () => {
       old_string: "const a = 1;\r\nconst b = 2;",
       new_string: "const a = 1;\nconst b = 20;",
     });
-    const text = new TextDecoder().decode(await Deno.readFile(file));
+    const text = await Deno.readTextFile(file);
     assertEquals(text, "const a = 1;\nconst b = 20;\nconst c = 3;\n");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -397,14 +316,14 @@ Deno.test("edit converts an LF new_string to CRLF in a CRLF file", async () => {
       old_string: "const b = 2;",
       new_string: "const b = 20;\nconst d = 4;", // LF only
     });
-    const text = new TextDecoder().decode(await Deno.readFile(file));
+    const text = await Deno.readTextFile(file);
     // No mixed line endings: the replacement follows the file's CRLF.
     assertEquals(
       text,
       "const a = 1;\r\nconst b = 20;\r\nconst d = 4;\r\nconst c = 3;\r\n",
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -424,7 +343,7 @@ Deno.test("edit throws when old_string is missing", async () => {
       "old_string not found",
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -439,7 +358,7 @@ Deno.test("edit replaces only the first occurrence and warns", async () => {
       new_string: "A\nB",
     });
     assertEquals(
-      new TextDecoder().decode(await Deno.readFile(file)),
+      await Deno.readTextFile(file),
       "A\nB\na\nb\n",
     );
     assert(
@@ -447,7 +366,7 @@ Deno.test("edit replaces only the first occurrence and warns", async () => {
       toolText(result),
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -460,10 +379,10 @@ Deno.test("write keeps an existing CRLF file's line endings", async () => {
       path: `${folder}/sample.txt`,
       content: "const a = 1;\nconst b = 20;\nconst c = 3;\n", // LF as sent
     });
-    const text = new TextDecoder().decode(await Deno.readFile(file));
+    const text = await Deno.readTextFile(file);
     assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -476,11 +395,11 @@ Deno.test("write creates new files with line endings as sent", async () => {
       content: "a\nb\n",
     });
     assertEquals(
-      new TextDecoder().decode(await Deno.readFile(file)),
+      await Deno.readTextFile(file),
       "a\nb\n",
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -500,7 +419,7 @@ Deno.test("read strips CR so CRLF files display as clean LF lines", async () => 
     assert(!whole.includes("\r"), `CR leaked into read output: ${whole}`);
     assertEquals(whole, "one\ntwo\nthree\n");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -559,7 +478,7 @@ Deno.test(
         );
       }
     } finally {
-      await Deno.remove(root, { recursive: true });
+      await removeDirRetry(root);
     }
   },
 );
@@ -588,6 +507,6 @@ Deno.test("parallel writes to the same file are serialized", async () => {
     const onlyB = lines.every((line) => line === "BBBB");
     assert(onlyA || onlyB, "final content must be one write's content");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });

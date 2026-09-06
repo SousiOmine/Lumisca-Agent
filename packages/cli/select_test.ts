@@ -1,3 +1,4 @@
+import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore } from "@lumisca/core";
 import { withPromptFn } from "./ui.ts";
@@ -76,7 +77,7 @@ Deno.test("pickWorkspace creates a new workspace from the picker", async () => {
     assertEquals(created!.id !== ws.id, true, "a new workspace is created");
   });
   core.close();
-  await Deno.remove(root, { recursive: true });
+  await removeDirRetry(root);
 });
 
 Deno.test("pickWorkspace falls back to creation when none exist", async () => {
@@ -88,7 +89,7 @@ Deno.test("pickWorkspace falls back to creation when none exist", async () => {
     assertEquals(core.getWorkspace(id!)?.name, "first-ws");
   });
   core.close();
-  await Deno.remove(root, { recursive: true });
+  await removeDirRetry(root);
 });
 
 Deno.test("pickModel offers only providers configured in Lumisca and enabled models", async () => {

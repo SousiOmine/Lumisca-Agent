@@ -3,7 +3,9 @@ import { basename } from "node:path";
 import {
   type AgentMessage,
   contentText,
+  decodeUtf8,
   formatContextUsageLine,
+  formatSessionName,
   type LumiscaCore,
   summarizeContextUsage,
 } from "@lumisca/core";
@@ -44,8 +46,6 @@ export interface RunResult {
    * render the context usage line without another model lookup. */
   contextWindow?: number;
 }
-
-const RUN_SESSION_PREFIX = "Run ";
 
 /** Parse `lumisca run` flags. Throws with a usage message on invalid
  * input. */
@@ -116,7 +116,7 @@ function readStdin(): string {
     out.set(chunk, offset);
     offset += chunk.length;
   }
-  return new TextDecoder().decode(out);
+  return decodeUtf8(out);
 }
 
 /** Sentinel for --help (the caller prints the usage text). */
@@ -224,7 +224,7 @@ export async function runOnce(
 
   const session = core.createSession({
     workspaceId: workspace.id,
-    name: `${RUN_SESSION_PREFIX}${new Date().toLocaleString()}`,
+    name: formatSessionName(new Date(), "Run"),
     modelProvider: provider,
     modelId,
     headless: true,

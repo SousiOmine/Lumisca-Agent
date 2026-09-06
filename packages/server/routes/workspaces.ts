@@ -1,23 +1,17 @@
 import { Hono } from "hono";
 import type { Workspace, WorkspaceFileEntry } from "@lumisca/core";
 import { listWorkspaceFiles, suggestWorkspaceFiles } from "@lumisca/core";
-import { AppError, parseBody, ttlCache } from "./util.ts";
+import {
+  AppError,
+  parseBody,
+  requireNonEmptyString,
+  requireStringArray,
+  ttlCache,
+} from "./util.ts";
 
 interface WorkspaceBody {
   name?: unknown;
   folders?: unknown;
-}
-
-/** Coerce a parsed body into a string array; throws 400 on wrong types
- * instead of silently stringifying numbers/null into `"null"`. */
-function folderList(folders: unknown): string[] {
-  if (
-    !Array.isArray(folders) ||
-    folders.some((f) => typeof f !== "string" || f.length === 0)
-  ) {
-    throw new AppError("folders (non-empty string[]) is required", 400);
-  }
-  return folders as string[];
 }
 
 /** The slice of the core these routes need (interface segregation). */
@@ -50,10 +44,13 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
 
   app.post("/workspaces", async (c) => {
     const body = await parseBody<WorkspaceBody>(c);
-    if (!body || typeof body.name !== "string" || body.name.length === 0) {
+    if (!body) {
       throw new AppError("name (non-empty string) is required", 400);
     }
-    const ws = await core.createWorkspace(body.name, folderList(body.folders));
+    const ws = await core.createWorkspace(
+      requireNonEmptyString(body.name, "name (non-empty string)"),
+      requireStringArray(body.folders, "folders (non-empty string[])"),
+    );
     return c.json(ws, 201);
   });
 
@@ -80,7 +77,12 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
     const ws = await core.updateWorkspace(c.req.param("id"), {
       ...(typeof body.name === "string" ? { name: body.name } : {}),
       ...(body.folders !== undefined
-        ? { folders: folderList(body.folders) }
+        ? {
+          folders: requireStringArray(
+            body.folders,
+            "folders (non-empty string[])",
+          ),
+        }
         : {}),
     });
     return c.json(ws);

@@ -1,3 +1,4 @@
+import { removeDirRetry } from "@lumisca/core/test-utils";
 import { join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { Assets, type AssetsManifest } from "./assets.ts";
@@ -19,6 +20,6 @@ Deno.test("packaged assets use the startup-captured manifest path", async () => 
     assertEquals(await assets.getCss(), manifest["styles.css"]);
     assertEquals(await assets.getFavicon(), favicon);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });

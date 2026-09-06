@@ -1,3 +1,4 @@
+import { removeDirRetry } from "../test-utils.ts";
 import { assert, assertEquals, assertMatch } from "@std/assert";
 import {
   BROWSER_TOOL_NAMES,
@@ -22,7 +23,7 @@ import {
   TOOL_BROWSER_OPEN,
   TOOL_BROWSER_SCREENSHOT,
   TOOL_BROWSER_WAIT,
-} from "../shared.ts";
+} from "../shared/mod.ts";
 
 /** Run fn, return the thrown error (asserting one was thrown). */
 async function expectThrow(fn: () => Promise<unknown>): Promise<Error> {
@@ -471,6 +472,6 @@ Deno.test("browser tools are never preloaded — they live in the registry", asy
       height: 600,
     });
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });

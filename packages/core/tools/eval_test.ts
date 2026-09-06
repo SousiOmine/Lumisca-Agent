@@ -2,16 +2,10 @@ import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { createEvalTool } from "./eval.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
+import { removeDirRetry, toolText } from "../test-utils.ts";
 
 function makeEval() {
   return createEvalTool();
-}
-
-function toolText(result: { content: { type: string; text?: string }[] }) {
-  return result.content
-    .filter((c) => c.type === "text")
-    .map((c) => c.text ?? "")
-    .join("");
 }
 
 Deno.test("eval returns the completion value of an expression", async () => {
@@ -163,7 +157,7 @@ Deno.test("eval can read files via the exposed Deno namespace", async () => {
     );
     assertEquals(toolText(result), "[result]\n{ a: 41 }");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -189,7 +183,7 @@ Deno.test("eval supports top-level await and awaits promise completions", async 
     );
     assertEquals(toolText(promised), "[result]\n'hello'");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 

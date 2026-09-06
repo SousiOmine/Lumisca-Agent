@@ -2,7 +2,7 @@ import { relative } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { BUILD_ARTIFACT_DIRS, walkEntries } from "../workspace/walk.ts";
 import { errorMessage } from "../errors.ts";
-import { TOOL_GLOB, TOOL_GREP } from "../shared.ts";
+import { TOOL_GLOB, TOOL_GREP } from "../shared/mod.ts";
 import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
 import {
   boolean,

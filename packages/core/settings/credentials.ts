@@ -5,6 +5,7 @@ import type {
   CredentialStore,
 } from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "./repo.ts";
+import { safeJsonParse } from "../shared/mod.ts";
 
 /** Settings-file key prefix for credentials. Shared with the server layer
  * (settings API filters these keys out) — single source of truth. */
@@ -21,12 +22,8 @@ export function createDbCredentialStore(
 ): CredentialStore {
   function read(providerId: string): Credential | undefined {
     const raw = settings.get(`${CREDENTIAL_KEY_PREFIX}${providerId}`);
-    if (!raw) return undefined;
-    try {
-      return JSON.parse(raw) as Credential;
-    } catch {
-      return undefined;
-    }
+    // Corrupt entries read as unset (rewritten on next login).
+    return safeJsonParse<Credential>(raw);
   }
 
   return {
@@ -38,12 +35,10 @@ export function createDbCredentialStore(
       for (const [key, value] of settings.list()) {
         if (!key.startsWith(CREDENTIAL_KEY_PREFIX)) continue;
         const providerId = key.slice(CREDENTIAL_KEY_PREFIX.length);
-        try {
-          const credential = JSON.parse(value) as Credential;
-          infos.push({ providerId, type: credential.type });
-        } catch {
-          // ignore malformed entries
-        }
+        // Malformed entries are skipped, never surfaced.
+        const credential = safeJsonParse<Credential>(value);
+        if (credential === undefined) continue;
+        infos.push({ providerId, type: credential.type });
       }
       return Promise.resolve(infos);
     },

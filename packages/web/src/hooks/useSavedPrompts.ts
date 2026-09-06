@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api.ts";
 import type { SavedPrompt } from "../types.ts";
+import { useAsyncEffect } from "./useAsync.ts";
 
 /** Custom event name dispatched after saved prompts are mutated (create /
  * update / delete) so every slash-menu instance can re-fetch without a
@@ -21,30 +22,24 @@ export function useSavedPrompts(): {
   reload: () => void;
 } {
   const [prompts, setPrompts] = useState<SavedPrompt[]>([]);
+  const [seq, setSeq] = useState(0);
 
-  const reload = useCallback(() => {
-    let stale = false;
-    api.getSavedPrompts()
-      .then((result) => {
-        if (stale) return;
-        setPrompts(result.prompts);
-      })
-      .catch(() => {
-        // Non-critical: keep the last known list.
-      });
-    return () => {
-      stale = true;
-    };
-  }, []);
+  const reload = useCallback(() => setSeq((s) => s + 1), []);
+
+  useAsyncEffect(async (isStale) => {
+    try {
+      const result = await api.getSavedPrompts();
+      if (isStale()) return;
+      setPrompts(result.prompts);
+    } catch {
+      // Non-critical: keep the last known list.
+    }
+  }, [seq]);
 
   useEffect(() => {
-    const cleanup = reload();
-    const handler = () => {
-      reload();
-    };
+    const handler = () => reload();
     globalThis.addEventListener(SAVED_PROMPTS_UPDATED_EVENT, handler);
     return () => {
-      cleanup?.();
       globalThis.removeEventListener(SAVED_PROMPTS_UPDATED_EVENT, handler);
     };
   }, [reload]);

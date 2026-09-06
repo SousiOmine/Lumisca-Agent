@@ -8,6 +8,7 @@ import {
   THEME_KEY,
   type ThemeSetting,
 } from "@lumisca/core";
+import type { InitialData } from "@lumisca/core/shared";
 import { Assets } from "./assets.ts";
 import { renderHtmlDocument } from "./render.ts";
 import { fsRoutes } from "./routes/fs.ts";
@@ -21,7 +22,6 @@ import { federationRoutes } from "./routes/federation.ts";
 import { FederationClient } from "./federation.ts";
 import { isLoopbackHost, jsonError, LOOPBACK_HOSTS } from "./routes/util.ts";
 export { isLoopbackHost } from "./routes/util.ts";
-import type { InitialData } from "@lumisca/web/types";
 
 export interface AppOptions {
   /** Repository root (defaults to the current working directory). */

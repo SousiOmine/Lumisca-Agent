@@ -1,5 +1,5 @@
+import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { join } from "node:path";
-import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   discoverSkills,
@@ -32,9 +32,7 @@ Do the alpha thing.
  *       nested/SKILL.md       (valid, nested level)
  */
 async function fixture(): Promise<string> {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-skills-" }),
-  );
+  const root = await makeRealTempDir("lumisca-skills-");
   await Deno.mkdir(join(root, ".git"), { recursive: true });
 
   const skill = (dir: string, content: string) =>
@@ -138,7 +136,7 @@ Deno.test("discoverSkills finds skills at every level up to the repo root", asyn
       join(root, "pkg", ".agents", "skills", "nested", "SKILL.md"),
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -152,15 +150,13 @@ Deno.test("discoverSkills skips skills with invalid frontmatter or name mismatch
     assertEquals(names.includes("broken"), false);
     assertEquals(names.includes("long"), false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
 Deno.test("workspace skills shadow global skills of the same name", async () => {
   const root = await fixture();
-  const global = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-global-" }),
-  );
+  const global = await makeRealTempDir("lumisca-global-");
   try {
     await Deno.mkdir(join(global, "alpha"), { recursive: true });
     await Deno.writeTextFile(
@@ -181,8 +177,8 @@ Deno.test("workspace skills shadow global skills of the same name", async () => 
     assertEquals(only?.source, "global");
     assertEquals(only?.path, join(global, "global-only", "SKILL.md"));
   } finally {
-    await Deno.remove(root, { recursive: true });
-    await Deno.remove(global, { recursive: true });
+    await removeDirRetry(root);
+    await removeDirRetry(global);
   }
 });
 
@@ -197,7 +193,7 @@ Deno.test("discoverSkills dedupes skills reachable from overlapping folders", as
       1,
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -212,7 +208,7 @@ Deno.test("formatAvailableSkills renders one line per skill", async () => {
     assert(text.includes("- alpha: Alpha skill for testing."));
     assert(text.startsWith("- alpha:"));
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -227,7 +223,7 @@ Deno.test("loadSkillContent reads SKILL.md and follow-up files", async () => {
     await Deno.writeTextFile(join(alpha.dir!, "reference.md"), "# Reference\n");
     assertEquals(loadSkillContent(alpha, "reference.md"), "# Reference\n");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -256,6 +252,6 @@ Deno.test("loadSkillContent rejects paths escaping the skill directory", async (
       "No such file",
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });

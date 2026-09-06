@@ -1,3 +1,4 @@
+import { removeDirRetry } from "../test-utils.ts";
 import { join } from "node:path";
 import { assertEquals, assertThrows } from "@std/assert";
 import { parseJsonc, SettingsFileError } from "./jsonc.ts";
@@ -72,7 +73,7 @@ Deno.test("file settings repo: string roundtrip and persistence", async () => {
     reopened.delete("theme");
     assertEquals(createFileSettingsRepo(path).get("theme"), undefined);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -95,7 +96,7 @@ Deno.test("file settings repo: JSON values are written natively", async () => {
     // Values read back exactly as they were set.
     assertEquals(repo.get("connections"), '[{"id":"srv-1","name":"自宅"}]');
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -108,7 +109,7 @@ Deno.test("file settings repo: missing file means empty settings", async () => {
     repo.set("theme", "light"); // creates the parent directory
     assertEquals(createFileSettingsRepo(path).get("theme"), "light");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -123,7 +124,7 @@ Deno.test("file settings repo: malformed file fails fast with its path", async (
       path,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -138,7 +139,7 @@ Deno.test("file settings repo: non-object top level is rejected", async () => {
       "must contain a JSON object",
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -166,7 +167,7 @@ Deno.test("file settings repo exposes its directory; in-memory has none", async 
     assertEquals(repo.dir(), join(dir, "nested"));
     assertEquals(createInMemorySettingsRepo().dir(), undefined);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 

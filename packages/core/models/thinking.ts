@@ -1,4 +1,4 @@
-import type { ThinkingLevel } from "../shared.ts";
+import type { ThinkingLevel } from "../shared/mod.ts";
 
 /** All levels in pi-ai's order (weakest to strongest, "off" first). */
 export const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [

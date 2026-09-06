@@ -7,7 +7,7 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai";
 import { type ClientEvent, LumiscaCore } from "./mod.ts";
-import { FAST_MODEL_KEY, serializeModelPreference } from "./shared.ts";
+import { FAST_MODEL_KEY, serializeModelPreference } from "./shared/mod.ts";
 
 function setup() {
   const faux = fauxProvider();

@@ -1,5 +1,5 @@
 import { CoreError } from "../errors.ts";
-import { type AskAnswer, type AskQuestion, TOOL_ASK } from "../shared.ts";
+import { type AskAnswer, type AskQuestion, TOOL_ASK } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import {
   array,

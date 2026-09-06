@@ -1,4 +1,5 @@
 import { cpus, release } from "node:os";
+import { decodeUtf8 } from "./shared/mod.ts";
 
 /** Model facts for the system prompt's environment section. */
 export interface EnvironmentModel {
@@ -18,7 +19,7 @@ function probeOutput(command: string, args: string[]): string | undefined {
       stderr: "piped",
     }).outputSync();
     if (!out.success) return undefined;
-    return new TextDecoder().decode(out.stdout).trim();
+    return decodeUtf8(out.stdout).trim();
   } catch {
     return undefined;
   }

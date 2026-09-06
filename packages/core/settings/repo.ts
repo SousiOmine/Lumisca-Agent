@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseJsonc, SettingsFileError } from "./jsonc.ts";
-export { THEME_KEY } from "../shared.ts";
+export { THEME_KEY } from "../shared/mod.ts";
 
 export interface SettingsRepo {
   get(key: string): string | undefined;

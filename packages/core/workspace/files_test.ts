@@ -1,3 +1,4 @@
+import { removeDirRetry } from "../test-utils.ts";
 import { basename, join } from "node:path";
 import { assertEquals } from "@std/assert";
 import {
@@ -38,7 +39,7 @@ Deno.test("listWorkspaceFiles returns folder-relative posix paths", async () => 
     const main = entries.find((e) => e.name === "main.ts");
     assertEquals(main?.isDir, false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -77,7 +78,7 @@ Deno.test("listWorkspaceFiles skips hidden entries, excluded dirs and symlinks",
     assertEquals(paths.some((p) => p.includes("/bin/")), false);
     assertEquals(paths.some((p) => p.includes("/obj/")), false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -103,7 +104,7 @@ Deno.test("listWorkspaceFiles emits files before subdirectories of a level", asy
       ],
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -116,7 +117,7 @@ Deno.test("listWorkspaceFiles stops at the max entry cap", async () => {
     const entries = await listWorkspaceFiles(workspace(root), 5);
     assertEquals(entries.length, 5);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -135,8 +136,8 @@ Deno.test("listWorkspaceFiles covers every folder of a multi-folder workspace", 
     assertEquals(paths.includes(basename(b)), true);
     assertEquals(paths.includes(`${basename(b)}/two.txt`), true);
   } finally {
-    await Deno.remove(a, { recursive: true });
-    await Deno.remove(b, { recursive: true });
+    await removeDirRetry(a);
+    await removeDirRetry(b);
   }
 });
 

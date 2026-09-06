@@ -1,4 +1,4 @@
-import { TOOL_CALL } from "../shared.ts";
+import { TOOL_CALL } from "../shared/mod.ts";
 import type { ToolRegistryProvider } from "./registry.ts";
 import {
   object,

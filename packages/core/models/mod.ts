@@ -13,7 +13,7 @@ import type {
   Provider,
 } from "@earendil-works/pi-ai";
 import type { SettingsRepo } from "../settings/repo.ts";
-import type { ThinkingLevel } from "../shared.ts";
+import { safeJsonParse, type ThinkingLevel } from "../shared/mod.ts";
 import { CoreError } from "../errors.ts";
 import { loadCustomProviders } from "./custom.ts";
 import { extraProviders } from "./extra-providers.ts";
@@ -37,12 +37,8 @@ export function createDbModelsStore(settings: SettingsRepo): ModelsStore {
   return {
     read(providerId: string): Promise<ModelsStoreEntry | undefined> {
       const raw = settings.get(`${CATALOG_PREFIX}${providerId}`);
-      if (!raw) return Promise.resolve(undefined);
-      try {
-        return Promise.resolve(JSON.parse(raw) as ModelsStoreEntry);
-      } catch {
-        return Promise.resolve(undefined);
-      }
+      // A corrupt cache entry reads as a miss (refetched on next use).
+      return Promise.resolve(safeJsonParse<ModelsStoreEntry>(raw));
     },
     write(providerId: string, entry: ModelsStoreEntry): Promise<void> {
       settings.set(`${CATALOG_PREFIX}${providerId}`, JSON.stringify(entry));

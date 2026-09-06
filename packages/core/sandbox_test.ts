@@ -1,3 +1,4 @@
+import { removeDirRetry } from "./test-utils.ts";
 import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { assertEquals } from "@std/assert";
@@ -150,7 +151,7 @@ Deno.test("sandbox rejects an ambiguous folder name", async () => {
     assertEquals(r.ok, false);
     if (!r.ok) assertEquals(r.reason.includes("Ambiguous"), true);
   } finally {
-    await Deno.remove(parent, { recursive: true });
+    await removeDirRetry(parent);
   }
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   COMMAND_SAFETY_ENABLED_KEY,
   FAST_MODEL_KEY,
@@ -7,6 +7,7 @@ import {
 import type { CommandApproval } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
+import { useAsyncEffect } from "../../hooks/useAsync.ts";
 
 /** Settings → セキュリティ: the command safety check. When enabled, the
  * fast model judges every bash / eval / async_bash command before it runs;
@@ -20,11 +21,12 @@ export function CommandSafetyPanel() {
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let stale = false;
-    api.getSettings()
+  // The two loads are independent: fire both at once like before, with the
+  // shared stale guard instead of a local flag.
+  useAsyncEffect((isStale) => {
+    void api.getSettings()
       .then((settings) => {
-        if (stale) return;
+        if (isStale()) return;
         setEnabled(settings[COMMAND_SAFETY_ENABLED_KEY] === "1");
         setFastModelSet(
           parseModelPreference(settings[FAST_MODEL_KEY]) !== undefined,
@@ -32,18 +34,15 @@ export function CommandSafetyPanel() {
         setLoaded(true);
       })
       .catch((e) => {
-        if (!stale) setError(errorText(e));
+        if (!isStale()) setError(errorText(e));
       });
-    api.getCommandSafety()
+    void api.getCommandSafety()
       .then((state) => {
-        if (!stale) setApprovals(state.approvals);
+        if (!isStale()) setApprovals(state.approvals);
       })
       .catch((e) => {
-        if (!stale) setError(errorText(e));
+        if (!isStale()) setError(errorText(e));
       });
-    return () => {
-      stale = true;
-    };
   }, []);
 
   const setEnabledValue = async (next: boolean) => {

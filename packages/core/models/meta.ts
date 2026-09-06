@@ -1,1 +1,1 @@
-export { formatModelMeta } from "../shared.ts";
+export { formatModelMeta } from "../shared/mod.ts";

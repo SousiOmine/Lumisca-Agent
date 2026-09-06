@@ -18,6 +18,8 @@ import {
 import type { ClientEvent } from "../types/event.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { LumiscaCore } from "../mod.ts";
+import { decodeUtf8 } from "../shared/mod.ts";
+import { removeDirRetry, toolText } from "../test-utils.ts";
 
 /** Cross-platform commands. The Windows shell has no sleep; ping is the
  * classic stand-in. */
@@ -94,20 +96,13 @@ async function removeTreeRetry(root: string): Promise<void> {
   const deadline = Date.now() + 5000;
   for (;;) {
     try {
-      await Deno.remove(root, { recursive: true });
+      await removeDirRetry(root);
       return;
     } catch (error) {
       if (Date.now() >= deadline) throw error;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
-}
-
-function toolText(
-  result: { content: { type: "text" | "image"; text?: string }[] },
-): string {
-  return result.content.map((c) => (c.type === "text" ? (c.text ?? "") : ""))
-    .join("");
 }
 
 // --- manager ---------------------------------------------------------------
@@ -271,7 +266,7 @@ Deno.test("async_bash start tool forwards env vars", async () => {
     assert(done.tail.includes("hello-env"), `tail: ${done.tail}`);
   } finally {
     manager.killAll();
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -423,7 +418,7 @@ Deno.test("async_bash tool resolves cwd, reports status and kill", async () => {
     const kill = await killTool.execute("4", { id: "1" }, undefined);
     assertEquals(kill.details?.alreadyExited, true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -446,7 +441,7 @@ Deno.test("async_bash tools reject unknown ids", async () => {
     }
     assert(killMessage.includes("Unknown background command"), killMessage);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -465,7 +460,7 @@ Deno.test("async_bash tool rejects an unknown cwd", async () => {
     }
     assert(message.includes("Unknown workspace folder"), message);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -532,7 +527,7 @@ Deno.test("trimIncompleteUtf8 drops incomplete trailing sequences", () => {
   assertEquals(trimIncompleteUtf8(full).length, full.length);
   // "a" + the first two bytes of あ: the incomplete sequence must go.
   const cut = full.slice(0, 3);
-  assertEquals(new TextDecoder().decode(trimIncompleteUtf8(cut)), "a");
+  assertEquals(decodeUtf8(trimIncompleteUtf8(cut)), "a");
   const ascii = new TextEncoder().encode("abc");
   assertEquals(trimIncompleteUtf8(ascii).length, 3);
   assertEquals(trimIncompleteUtf8(new Uint8Array(0)).length, 0);
@@ -618,7 +613,7 @@ Deno.test("background completion is injected into the agent loop", async () => {
     );
   } finally {
     core.close();
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 

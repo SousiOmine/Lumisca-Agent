@@ -105,11 +105,10 @@ export interface PendingImage {
   name?: string;
 }
 
-/** Initial data served by the server's bootstrap script (/assets/initial-data.js). */
-export interface InitialData {
-  workspaces: Workspace[];
-  theme: ThemeSetting;
-}
+/** Initial data served by the server's bootstrap script (/assets/initial-data.js).
+ * Canonical definition lives in `@lumisca/core/shared` (so the server never
+ * imports from `@lumisca/web`); re-exported here for web consumers. */
+export type { InitialData } from "@lumisca/core/shared";
 
 /** One pending ask (the `ask` tool): questions awaiting the user's answers,
  * tied to the tool call that asked them. */

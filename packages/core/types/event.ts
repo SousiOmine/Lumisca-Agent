@@ -4,7 +4,7 @@ import type {
   SubagentStatus,
   SubagentType,
   TodoPhase,
-} from "../shared.ts";
+} from "../shared/mod.ts";
 import type { SessionInfo } from "./session.ts";
 
 /** Events emitted by the core and forwarded to any client (WebSocket, CLI). */

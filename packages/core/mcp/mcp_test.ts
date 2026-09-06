@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { errorMessage } from "../errors.ts";
 import {
@@ -13,6 +12,7 @@ import { McpManager } from "./manager.ts";
 import { createMcpTools, sanitizeServerName } from "./tools.ts";
 import { McpService } from "./service.ts";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
+import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import type { Workspace } from "../types/workspace.ts";
 
 // --- config -----------------------------------------------------------------
@@ -87,7 +87,7 @@ Deno.test("parseMcpConfig rejects invalid configurations", () => {
 });
 
 Deno.test("loadMcpConfig reads the workspace file and expands env", async () => {
-  const root = realpathSync(await Deno.makeTempDir({ prefix: "lumisca-mcp-" }));
+  const root = await makeRealTempDir("lumisca-mcp-");
   try {
     // Missing file → empty config.
     assertEquals(loadMcpConfig(root).servers.length, 0);
@@ -141,19 +141,7 @@ const FAKE_SERVER = join(
   "fake-mcp-server.ts",
 );
 
-/** Windows can hold a directory handle briefly after a spawned child exits;
- * retry removal instead of failing the test. */
-async function removeDirRetry(path: string): Promise<void> {
-  for (let i = 0; i < 20; i++) {
-    try {
-      await Deno.remove(path, { recursive: true });
-      return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-  await Deno.remove(path, { recursive: true }); // last attempt: surface errors
-}
+/** Build a manager backed by the fake MCP server script. */
 
 function makeManager(cwd: string, extra: Record<string, unknown> = {}) {
   const config = parseMcpConfig(
@@ -442,9 +430,7 @@ Deno.test("http servers work over streamable HTTP with session ids", async () =>
 // --- plugin integration (McpService.loadMergedConfig) -----------------------
 
 Deno.test("loadMergedConfig merges app, workspace and plugin MCP servers", async () => {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-mcp-plugins-" }),
-  );
+  const root = await makeRealTempDir("lumisca-mcp-plugins-");
   const pluginDir = join(root, ".agents", "plugins", "demo");
   await Deno.mkdir(pluginDir, { recursive: true });
   await Deno.writeTextFile(

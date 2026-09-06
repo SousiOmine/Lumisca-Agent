@@ -15,6 +15,7 @@ import {
   startServer,
   validateHostConfig,
 } from "./app.ts";
+import { removeDirRetry } from "@lumisca/core/test-utils";
 function setup() {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
@@ -22,20 +23,6 @@ function setup() {
   const port = server.addr.port;
   const base = `http://127.0.0.1:${port}`;
   return { core, server, faux, base };
-}
-
-/** Windows can hold a directory handle briefly after a spawned child exits;
- * retry removal instead of failing the test. */
-async function removeDirRetry(path: string): Promise<void> {
-  for (let i = 0; i < 20; i++) {
-    try {
-      await Deno.remove(path, { recursive: true });
-      return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-  await Deno.remove(path, { recursive: true }); // last attempt: surface errors
 }
 
 function json(
@@ -74,7 +61,7 @@ Deno.test("health and workspaces API", async () => {
     });
     assertEquals(bad.status, 400);
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -117,7 +104,7 @@ Deno.test("workspace files API returns @-mention suggestions", async () => {
     const unknown = await json(base, "/api/workspaces/nope/files");
     assertEquals(unknown.status, 404);
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -164,8 +151,8 @@ Deno.test("workspace update and delete API", async () => {
     const after = await json(base, "/api/workspaces");
     assertEquals((await after.json()).length, 0);
 
-    await Deno.remove(root, { recursive: true });
-    await Deno.remove(extra, { recursive: true });
+    await removeDirRetry(root);
+    await removeDirRetry(extra);
   } finally {
     server.shutdown();
     core.close();
@@ -209,7 +196,7 @@ Deno.test("session prompt roundtrip via API", async () => {
     assertEquals(messages.length, 2);
     assertEquals(messages[1].role, "assistant");
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -357,7 +344,7 @@ Deno.test("rewind truncates messages via the API and rejects bad bodies", async 
     });
     assertEquals(unknown.status, 404);
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -407,7 +394,7 @@ Deno.test("websocket streams agent events", async () => {
     assertEquals(events.includes("message_end"), true);
     assertEquals(events.includes("agent_end"), true);
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -485,7 +472,7 @@ Deno.test("session model switch API", async () => {
     assertEquals(updated.modelProvider, faux.provider.id);
     assertEquals(updated.modelId, faux.getModel().id);
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -525,7 +512,7 @@ Deno.test("default model API returns the last used model", async () => {
     assertEquals(defaultModel.provider, faux.provider.id);
     assertEquals(defaultModel.modelId, faux.getModel().id);
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -583,7 +570,7 @@ Deno.test("filesystem browse API", async () => {
     );
     assertEquals(missing.status, 400);
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -720,7 +707,7 @@ Deno.test("prompt API steers a prompt sent while the session is streaming", asyn
       .filter((m) => m.role === "user")
       .map((m) => (m.content[0] as { text: string }).text);
     assertEquals(userTexts, ["go", "again"]);
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();
@@ -1378,7 +1365,7 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
       });
       assertEquals(unknown.status, 404);
       hubWs.close();
-      await Deno.remove(hubRoot, { recursive: true });
+      await removeDirRetry(hubRoot);
     } finally {
       disposeServer(hubServer);
       hubServer.shutdown();
@@ -1652,7 +1639,7 @@ Deno.test("MCP config API rejects invalid input", async () => {
     const after = await json(base, `/api/workspaces/${ws.id}/mcp`);
     assertEquals((await after.json()).exists, false);
 
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   } finally {
     server.shutdown();
     core.close();

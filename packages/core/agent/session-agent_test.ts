@@ -22,8 +22,8 @@ import {
   isSilentErrorResponse,
   isVacantResponse,
   MAX_EMPTY_RESPONSE_RETRIES,
-  SessionAgent,
-} from "./session-agent.ts";
+} from "./retry-policy.ts";
+import { SessionAgent } from "./session-agent.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "./llm-retry.ts";
 
 /** A tool that succeeds immediately; a tool call keeps the loop going, so

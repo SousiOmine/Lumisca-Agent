@@ -9,7 +9,15 @@ import type {
   UserProviderInput,
   UserProviderSummary,
 } from "@lumisca/core";
-import { AppError, parseBody, ttlCache } from "./util.ts";
+import {
+  AppError,
+  parseBody,
+  requireBody,
+  requireBoolean,
+  requireNonEmptyString,
+  requireString,
+  ttlCache,
+} from "./util.ts";
 import { LoginSessions } from "../login.ts";
 
 /** Auth checks are cached briefly; invalidated when a key or credential
@@ -128,29 +136,25 @@ export function providerRoutes(core: ProviderApi): Hono {
 
   app.put("/providers/:id/models/:modelId", async (c) => {
     const body = await parseBody<{ enabled?: unknown }>(c);
-    if (!body || typeof body.enabled !== "boolean") {
-      throw new AppError("enabled (boolean) is required", 400);
-    }
+    const enabled = requireBoolean(body?.enabled, "enabled (boolean)");
     // Hono already decodes path params once; the client percent-encodes
     // model ids, so decoding again here would corrupt ids containing `+`
     // (or throw on malformed escapes like %zz).
     core.setModelEnabled(
       c.req.param("id"),
       c.req.param("modelId"),
-      body.enabled,
+      enabled,
     );
     return c.json({ ok: true });
   });
 
   app.put("/providers/:id/models/:modelId/thinking-level", async (c) => {
     const body = await parseBody<{ level?: unknown }>(c);
-    if (!body || typeof body.level !== "string") {
-      throw new AppError("level (string) is required", 400);
-    }
+    const level = requireString(body?.level, "level (string)");
     const thinkingLevel = core.setModelThinkingLevel(
       c.req.param("id"),
       c.req.param("modelId"),
-      body.level,
+      level,
     );
     return c.json({ ok: true, thinkingLevel });
   });
@@ -163,10 +167,8 @@ export function providerRoutes(core: ProviderApi): Hono {
 
   app.post("/providers/:id/api-key", async (c) => {
     const body = await parseBody<{ key?: unknown }>(c);
-    if (!body || typeof body.key !== "string" || body.key.length === 0) {
-      throw new AppError("key (string) is required", 400);
-    }
-    await core.setProviderApiKey(c.req.param("id"), body.key);
+    const key = requireNonEmptyString(body?.key, "key (string)");
+    await core.setProviderApiKey(c.req.param("id"), key);
     invalidateAuth(c.req.param("id"));
     return c.json({ ok: true });
   });
@@ -251,10 +253,10 @@ export function providerRoutes(core: ProviderApi): Hono {
   });
 
   app.post("/providers/user", async (c) => {
-    const body = await parseBody<UserProviderInput>(c);
-    if (body === undefined) {
-      throw new AppError("provider config (object) is required", 400);
-    }
+    const body = requireBody(
+      await parseBody<UserProviderInput>(c),
+      "provider config (object)",
+    );
     // CoreError ("invalid") → 400, ("not_found") → 404 via the global
     // error handler; id uniqueness is enforced by upsert (the id is the
     // key), so no extra collision check is needed here.
@@ -264,10 +266,10 @@ export function providerRoutes(core: ProviderApi): Hono {
 
   app.put("/providers/user/:id", async (c) => {
     const id = c.req.param("id");
-    const body = await parseBody<UserProviderInput>(c);
-    if (body === undefined) {
-      throw new AppError("provider config (object) is required", 400);
-    }
+    const body = requireBody(
+      await parseBody<UserProviderInput>(c),
+      "provider config (object)",
+    );
     const updated = await core.updateUserProvider(id, body);
     return c.json(updated);
   });

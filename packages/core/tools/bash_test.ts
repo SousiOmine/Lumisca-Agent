@@ -3,18 +3,12 @@ import { assert, assertEquals } from "@std/assert";
 import { createBashTool } from "./bash.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
+import { removeDirRetry, toolText } from "../test-utils.ts";
 
 function makeTool() {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const sandbox = new Sandbox([root]);
   return { tool: createBashTool({ sandbox }), root, sandbox };
-}
-
-function toolText(
-  result: { content: { type: "text" | "image"; text?: string }[] },
-): string {
-  return result.content.map((c) => (c.type === "text" ? (c.text ?? "") : ""))
-    .join("");
 }
 
 Deno.test("bash tool reports exit code", async () => {
@@ -28,7 +22,7 @@ Deno.test("bash tool reports exit code", async () => {
     assertEquals(result.details?.exitCode, 3);
     assertEquals(toolText(result).includes("[exit code: 3]"), true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -47,7 +41,7 @@ Deno.test("bash tool merges stdout and stderr", async () => {
     assertEquals(text.includes("hello"), true);
     assertEquals(text.includes("boom"), true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -64,7 +58,7 @@ Deno.test("bash tool resolves cwd by workspace folder name", async () => {
     const text = toolText(result);
     assertEquals(text.includes(basename(root)), true, `cwd mismatch: ${text}`);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -83,7 +77,7 @@ Deno.test("bash tool rejects an unknown cwd", async () => {
     }
     assert(message.includes("Unknown workspace folder"), `message: ${message}`);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -112,7 +106,7 @@ Deno.test({
         `code page missing: ${text}`,
       );
     } finally {
-      await Deno.remove(root, { recursive: true });
+      await removeDirRetry(root);
     }
   },
 });
@@ -138,7 +132,7 @@ Deno.test({
       assertEquals(text.includes("True"), true, `output: ${text}`);
       assertEquals(text.includes("False"), false, `output: ${text}`);
     } finally {
-      await Deno.remove(root, { recursive: true });
+      await removeDirRetry(root);
     }
   },
 });
@@ -169,7 +163,7 @@ Deno.test("bash tool passes env vars to the command", async () => {
     );
     assertEquals(toolText(result).includes("hello-env"), true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -193,7 +187,7 @@ Deno.test("bash tool per-call env overrides the tool-level env", async () => {
     assertEquals(text.includes("call-level"), true);
     assertEquals(text.includes("tool-level"), false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -216,7 +210,7 @@ Deno.test("bash tool returns the safety reason when the check blocks", async () 
     assertEquals(text.includes("[blocked by safety check]"), true);
     assertEquals(text.includes("rm -rf / destroys the host"), true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -236,6 +230,6 @@ Deno.test("bash tool runs normally when the check approves", async () => {
     assertEquals(result.details?.blocked, undefined);
     assertEquals(toolText(result).includes("approved"), true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });

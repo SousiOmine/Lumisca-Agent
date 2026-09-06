@@ -19,8 +19,9 @@ import {
   TOOL_BROWSER_OPEN,
   TOOL_CALL,
   TOOL_SEARCH,
-} from "./shared.ts";
+} from "./shared/mod.ts";
 import { MCP_TOOLS_PROMPT_NOTE } from "./mcp/tools.ts";
+import { makeRealTempDir, MINI_PNG, removeDirRetry } from "./test-utils.ts";
 
 function setup() {
   const faux = fauxProvider();
@@ -64,7 +65,7 @@ Deno.test("workspace creation resolves folders and rejects missing ones", async 
     Error,
     "does not exist",
   );
-  await Deno.remove(root, { recursive: true });
+  await removeDirRetry(root);
 });
 
 Deno.test("session prompt persists messages and restores them", async () => {
@@ -179,8 +180,8 @@ Deno.test("tools block file access outside the workspace", async () => {
   assertEquals(tr2.content[0]!.text.includes("hello"), true);
 
   core.close();
-  await Deno.remove(root, { recursive: true });
-  await Deno.remove(outside, { recursive: true });
+  await removeDirRetry(root);
+  await removeDirRetry(outside);
 });
 
 Deno.test("model enablement is persisted", () => {
@@ -298,8 +299,8 @@ Deno.test("workspace update rebuilds session tools", async () => {
   assertEquals(fetched!.folders.length, 2);
 
   core.close();
-  await Deno.remove(root, { recursive: true });
-  await Deno.remove(extra, { recursive: true });
+  await removeDirRetry(root);
+  await removeDirRetry(extra);
 });
 
 Deno.test("startPrompt steers a prompt sent while streaming", async () => {
@@ -646,8 +647,8 @@ Deno.test("model switch and workspace update are refused while streaming", async
   assertEquals(updated.folders.length, 2);
 
   core.close();
-  await Deno.remove(root, { recursive: true });
-  await Deno.remove(extra, { recursive: true });
+  await removeDirRetry(root);
+  await removeDirRetry(extra);
 });
 
 Deno.test("workspaces require at least one folder", async () => {
@@ -731,7 +732,7 @@ Deno.test("credentials are guarded on every settings surface", async () => {
     });
   } finally {
     core.close();
-    await Deno.remove(dir, { recursive: true });
+    await removeDirRetry(dir);
   }
 });
 
@@ -756,7 +757,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   );
   db2.close();
 
-  await Deno.remove(dir, { recursive: true });
+  await removeDirRetry(dir);
 });
 
 Deno.test("migration drops the legacy settings table", async () => {
@@ -823,7 +824,7 @@ Deno.test("migration drops the legacy settings table", async () => {
   );
   db.close();
 
-  await Deno.remove(dir, { recursive: true });
+  await removeDirRetry(dir);
 });
 
 // --- chat sessions (ワークスペースなしのシンプルチャット) ----------------
@@ -1202,7 +1203,7 @@ Deno.test("generated system prompt is snapshotted at creation, not rebuilt on re
   );
 
   core.close();
-  await Deno.remove(root, { recursive: true });
+  await removeDirRetry(root);
 });
 
 Deno.test("personalization (machine AGENTS.md) is appended last and frozen per session", async () => {
@@ -1265,15 +1266,13 @@ Deno.test("personalization (machine AGENTS.md) is appended last and frozen per s
   assertEquals(Deno.readTextFileSync(agentFile), "New instructions.\n");
 
   core.close();
-  await Deno.remove(dir, { recursive: true });
-  await Deno.remove(root, { recursive: true });
+  await removeDirRetry(dir);
+  await removeDirRetry(root);
 });
 
 Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => {
   const { core, faux, providerId, modelId } = setup();
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-core-" }),
-  );
+  const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
     import.meta.dirname!,
     "..",
@@ -1348,7 +1347,7 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
     // The MCP server process may hold the directory briefly on Windows.
     for (let i = 0; i < 20; i++) {
       try {
-        await Deno.remove(root, { recursive: true });
+        await removeDirRetry(root);
         break;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1371,9 +1370,7 @@ async function waitForSearchTools(
 
 Deno.test("app-level MCP config persists and applies to sessions", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-core-" }),
-  );
+  const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
     import.meta.dirname!,
     "..",
@@ -1436,7 +1433,7 @@ Deno.test("app-level MCP config persists and applies to sessions", async () => {
     core.close();
     for (let i = 0; i < 20; i++) {
       try {
-        await Deno.remove(root, { recursive: true });
+        await removeDirRetry(root);
         break;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1447,9 +1444,7 @@ Deno.test("app-level MCP config persists and applies to sessions", async () => {
 
 Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
   const { core, faux, providerId, modelId } = setup();
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-core-" }),
-  );
+  const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
     import.meta.dirname!,
     "..",
@@ -1509,7 +1504,7 @@ Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
     core.close();
     for (let i = 0; i < 20; i++) {
       try {
-        await Deno.remove(root, { recursive: true });
+        await removeDirRetry(root);
         break;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1520,9 +1515,7 @@ Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
 
 Deno.test("first prompt waits for MCP tools to attach", async () => {
   const { core, faux, providerId, modelId } = setup();
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-core-" }),
-  );
+  const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
     import.meta.dirname!,
     "..",
@@ -1578,7 +1571,7 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
     core.close();
     for (let i = 0; i < 20; i++) {
       try {
-        await Deno.remove(root, { recursive: true });
+        await removeDirRetry(root);
         break;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1763,77 +1756,6 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
 });
 
 // --- image analysis model (画像分析モデル) --------------------------------
-
-/** Minimal 1x1 transparent PNG (67 bytes). */
-const MINI_PNG = new Uint8Array([
-  0x89,
-  0x50,
-  0x4e,
-  0x47,
-  0x0d,
-  0x0a,
-  0x1a,
-  0x0a,
-  0x00,
-  0x00,
-  0x00,
-  0x0d,
-  0x49,
-  0x48,
-  0x44,
-  0x52,
-  0x00,
-  0x00,
-  0x00,
-  0x01,
-  0x00,
-  0x00,
-  0x00,
-  0x01,
-  0x08,
-  0x06,
-  0x00,
-  0x00,
-  0x00,
-  0x1f,
-  0x15,
-  0xc4,
-  0x89,
-  0x00,
-  0x00,
-  0x00,
-  0x0d,
-  0x49,
-  0x44,
-  0x41,
-  0x54,
-  0x78,
-  0x9c,
-  0x62,
-  0x00,
-  0x01,
-  0x00,
-  0x00,
-  0x05,
-  0x00,
-  0x01,
-  0x0d,
-  0x0a,
-  0x2d,
-  0xb4,
-  0x00,
-  0x00,
-  0x00,
-  0x00,
-  0x49,
-  0x45,
-  0x4e,
-  0x44,
-  0xae,
-  0x42,
-  0x60,
-  0x82,
-]);
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";

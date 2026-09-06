@@ -1,6 +1,6 @@
 import { CoreError } from "../errors.ts";
-import type { TodoPhase, TodoStatus, TodoTask } from "../shared.ts";
-import { TOOL_TODO } from "../shared.ts";
+import type { TodoPhase, TodoStatus, TodoTask } from "../shared/mod.ts";
+import { TOOL_TODO } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import {
   array,

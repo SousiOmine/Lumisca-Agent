@@ -8,6 +8,7 @@
  */
 import { HttpBrowserBackend, LazyBrowserBackend } from "@lumisca/core";
 import type { BrowserBackend } from "@lumisca/core";
+import { decodeUtf8, withTimeout } from "@lumisca/core/shared";
 
 /** Browser preview policy of the CLI. */
 export type BrowserPreviewMode = "auto" | "always" | "never";
@@ -104,7 +105,7 @@ async function readReadyLine(
         ),
       ]);
       if (done) break;
-      buffer += new TextDecoder().decode(value);
+      buffer += decodeUtf8(value);
       const newline = buffer.indexOf("\n");
       if (newline >= 0) {
         const line = buffer.slice(0, newline).trim();
@@ -162,10 +163,7 @@ async function spawnHost(
   if ("error" in ready) {
     // Give a crashing host a moment to die, so the exit/message check
     // below can report the cause.
-    const status = await Promise.race([
-      child.status,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 300)),
-    ]);
+    const status = await withTimeout(child.status, 300, null);
     let detail = stderrTail.trim();
     if (status !== null) {
       detail = `(exit code ${status.code}) ${detail}`;

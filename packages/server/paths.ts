@@ -23,9 +23,10 @@ export function webFaviconPath(repoRoot: string): string {
 }
 
 /** esbuild alias target for `@lumisca/core/shared` (the browser-safe
- * helper module; esbuild does not read deno.json workspace exports). */
+ * helper modules behind the shared barrel; esbuild does not read
+ * deno.json workspace exports). */
 export function coreSharedPath(repoRoot: string): string {
-  return join(repoRoot, "packages", "core", "shared.ts");
+  return join(repoRoot, "packages", "core", "shared", "mod.ts");
 }
 
 /** esbuild alias target for `@lumisca/core/modes` (the agent-mode

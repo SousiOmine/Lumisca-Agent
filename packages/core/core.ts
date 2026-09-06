@@ -1,5 +1,4 @@
 import { LumiscaDb } from "./db/mod.ts";
-import { dirname, join } from "node:path";
 import type { ClientEvent } from "./types/event.ts";
 import type { SessionInfo } from "./types/session.ts";
 import type { Workspace } from "./types/workspace.ts";
@@ -14,11 +13,8 @@ import {
   CONNECTIONS_KEY,
   parseConnections,
 } from "./settings/connections.ts";
-import {
-  createDbCredentialStore,
-  CREDENTIAL_KEY_PREFIX,
-  setApiKey,
-} from "./settings/credentials.ts";
+import { assertNotProtected, filterExposedSettings } from "./settings/guard.ts";
+import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
 import type { CredentialStore, Provider } from "@earendil-works/pi-ai";
 import type {
   Api,
@@ -39,31 +35,29 @@ import {
   getSupportedThinkingLevels,
   isThinkingLevel,
 } from "./models/thinking.ts";
-import type { ThinkingLevel } from "./shared.ts";
-import type { AskAnswer } from "./shared.ts";
-import type { TaskInfo, TodoPhase } from "./shared.ts";
-import type { CommandApproval } from "./shared.ts";
+import type { ThinkingLevel } from "./shared/mod.ts";
+import type { AskAnswer } from "./shared/mod.ts";
+import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
+import type { CommandApproval } from "./shared/mod.ts";
 import type { BackgroundCommandInfo } from "./tools/background.ts";
 import {
-  COMMAND_SAFETY_APPROVALS_KEY,
   FAST_MODEL_KEY,
+  formatSessionName,
   IMAGE_MODEL_KEY,
   parseModelPreference,
-  parseSavedPrompts,
-  SAVED_PROMPTS_KEY,
   type SavedPrompt,
-  serializeSavedPrompts,
-} from "./shared.ts";
-import { createWorkspaceRepo, type WorkspaceRepo } from "./workspace/repo.ts";
-import { Sandbox } from "./workspace/sandbox.ts";
+} from "./shared/mod.ts";
+import { CoreError } from "./errors.ts";
+import { createWorkspaceRepo } from "./workspace/repo.ts";
+import { WorkspaceService } from "./workspaces.ts";
+import { PersonalizationService } from "./personalization.ts";
+import { SavedPromptsService } from "./saved-prompts.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
 import { SessionPool } from "./agent/pool.ts";
 import { withProviderRetryDefaults } from "./agent/llm-retry.ts";
 import { buildChatSystemPrompt, buildSystemPrompt } from "./tools/mod.ts";
-import { CoreError } from "./errors.ts";
-import { APP_MCP_SETTINGS_KEY } from "./mcp/config.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
 import { CommandSafety } from "./safety/command-safety.ts";
@@ -86,7 +80,9 @@ export interface CreateSessionInput {
 
 /**
  * Root object shared by every frontend (web server, CLI, desktop).
- * Owns the database, models, workspaces, and live session agents.
+ * A thin facade over focused services (settings guard, personalization,
+ * saved prompts, workspaces, models, sessions, MCP): orchestration lives
+ * here, domain logic lives there.
  */
 export class LumiscaCore {
   readonly db: LumiscaDb;
@@ -94,7 +90,9 @@ export class LumiscaCore {
 
   private readonly settings: SettingsRepo;
   private readonly credentials: CredentialStore;
-  private readonly workspaces: WorkspaceRepo;
+  private readonly workspaces: WorkspaceService;
+  private readonly personalization: PersonalizationService;
+  private readonly savedPrompts: SavedPromptsService;
   private readonly sessions: SessionRepo;
   private readonly messages: MessageRepo;
   private readonly pool: SessionPool;
@@ -117,7 +115,8 @@ export class LumiscaCore {
       this.settings,
       modelsStore,
     );
-    this.workspaces = createWorkspaceRepo(db);
+    this.personalization = new PersonalizationService(this.settings);
+    this.savedPrompts = new SavedPromptsService(this.settings);
     this.sessions = createSessionRepo(db);
     this.messages = createMessageRepo(db);
     const streamFn = withProviderRetryDefaults(
@@ -165,6 +164,12 @@ export class LumiscaCore {
       requireWorkspace: (id) => this.requireWorkspace(id),
       applySessionChange: (sessions, mutate) =>
         this.pool.applyChange(sessions, mutate),
+    });
+    this.workspaces = new WorkspaceService(createWorkspaceRepo(db), {
+      listSessions: (workspaceId) => this.sessions.list(workspaceId),
+      applyChange: (sessions, mutate) =>
+        this.pool.applyChange(sessions, mutate),
+      deleteSession: (id) => this.pool.delete(id),
     });
   }
 
@@ -244,17 +249,17 @@ export class LumiscaCore {
    * they have their own APIs and must never be readable through the generic
    * settings surface. */
   getSetting(key: string): string | undefined {
-    this.assertNotProtected(key);
+    assertNotProtected(key);
     return this.settings.get(key);
   }
 
   setSetting(key: string, value: string): void {
-    this.assertNotProtected(key);
+    assertNotProtected(key);
     this.settings.set(key, value);
   }
 
   deleteSetting(key: string): void {
-    this.assertNotProtected(key);
+    assertNotProtected(key);
     this.settings.delete(key);
   }
 
@@ -290,46 +295,11 @@ export class LumiscaCore {
     this.settings.set(CONNECTIONS_KEY, JSON.stringify(entries));
   }
 
-  /** The protected-key category of a settings key, or undefined when the
-   * key is safe to expose through the generic settings surface. Credentials
-   * have their own API (/providers/:id/api-key), the app MCP config its own
-   * (/api/mcp), and the connection registry its own (/api/connections);
-   * touching any of them through the generic settings surface would bypass
-   * those APIs. Single source of truth for both the read/write guard and
-   * the listSettings filter. */
-  private protectedKeyReason(key: string): string | undefined {
-    if (key.startsWith(CREDENTIAL_KEY_PREFIX)) {
-      return "credentials cannot be accessed through this endpoint";
-    }
-    if (key === APP_MCP_SETTINGS_KEY) {
-      // The app MCP config may contain secrets (env vars, headers).
-      return "MCP configuration cannot be accessed through this endpoint";
-    }
-    if (key === CONNECTIONS_KEY) {
-      // The connection registry contains server tokens.
-      return "connection registry cannot be accessed through this endpoint";
-    }
-    return undefined;
-  }
-
-  private assertNotProtected(key: string): void {
-    const reason = this.protectedKeyReason(key);
-    if (reason !== undefined) {
-      throw new CoreError(reason, "forbidden");
-    }
-  }
-
   /** Non-protected settings only; credentials, MCP config, connection
    * registry and the command-safety approvals record are never exposed
    * through the generic settings surface (each has its own API). */
   listSettings(): Map<string, string> {
-    const safe = new Map<string, string>();
-    for (const [key, value] of this.settings.list()) {
-      if (this.protectedKeyReason(key) !== undefined) continue;
-      if (key === COMMAND_SAFETY_APPROVALS_KEY) continue;
-      safe.set(key, value);
-    }
-    return safe;
+    return filterExposedSettings(this.settings.list());
   }
 
   async setProviderApiKey(providerId: string, key: string): Promise<void> {
@@ -358,71 +328,27 @@ export class LumiscaCore {
   /** The machine-level AGENTS.md (next to the settings file) with the path
    * it lives at. Absent file → empty content. */
   getPersonalization(): { path: string; content: string } {
-    const path = this.personalizationPath();
-    return {
-      path: path ?? "",
-      content: this.loadPersonalInstructions() ?? "",
-    };
+    return this.personalization.get();
   }
 
   /** Replace the machine-level AGENTS.md. Applies to sessions created from
    * now on; existing sessions keep their snapshot. */
   setPersonalization(content: string): void {
-    const path = this.personalizationPath();
-    if (path === undefined) {
-      throw new CoreError("No settings directory", "unavailable");
-    }
-    Deno.mkdirSync(dirname(path), { recursive: true });
-    Deno.writeTextFileSync(path, content, { mode: 0o600 });
-  }
-
-  /** The path of the machine-level AGENTS.md, or undefined when the core
-   * has no settings directory (in-memory repos). */
-  private personalizationPath(): string | undefined {
-    const dir = this.settings.dir();
-    return dir === undefined ? undefined : join(dir, "AGENTS.md");
-  }
-
-  /** Personal instructions to append to generated system prompts. Reads the
-   * machine-level AGENTS.md next to the settings file (absent → undefined). */
-  private loadPersonalInstructions(): string | undefined {
-    const path = this.personalizationPath();
-    if (path === undefined) return undefined;
-    try {
-      return Deno.readTextFileSync(path);
-    } catch {
-      return undefined;
-    }
+    this.personalization.set(content);
   }
 
   // --- saved prompts (user-defined prompt snippets) -----------------------
 
   /** All saved prompts, in insertion order. */
   getSavedPrompts(): SavedPrompt[] {
-    return parseSavedPrompts(this.settings.get(SAVED_PROMPTS_KEY));
+    return this.savedPrompts.list();
   }
 
   /** Add a saved prompt. Throws when the id already exists. */
   addSavedPrompt(
     input: { id: string; label: string; prompt: string },
   ): SavedPrompt {
-    const prompts = this.getSavedPrompts();
-    if (prompts.some((p) => p.id === input.id)) {
-      throw new CoreError(
-        `A saved prompt with id "${input.id}" already exists`,
-        "conflict",
-      );
-    }
-    const entry: SavedPrompt = {
-      id: input.id,
-      label: input.label,
-      prompt: input.prompt,
-    };
-    this.settings.set(
-      SAVED_PROMPTS_KEY,
-      serializeSavedPrompts([...prompts, entry]),
-    );
-    return entry;
+    return this.savedPrompts.add(input);
   }
 
   /** Update a saved prompt's label and/or prompt by id. Throws when the
@@ -431,50 +357,18 @@ export class LumiscaCore {
     id: string,
     input: { label?: string; prompt?: string },
   ): SavedPrompt {
-    const prompts = this.getSavedPrompts();
-    const existing = prompts.find((p) => p.id === id);
-    if (existing === undefined) {
-      throw new CoreError(
-        `Saved prompt not found: ${id}`,
-        "not_found",
-      );
-    }
-    const updated: SavedPrompt = {
-      id,
-      label: input.label ?? existing.label,
-      prompt: input.prompt ?? existing.prompt,
-    };
-    this.settings.set(
-      SAVED_PROMPTS_KEY,
-      serializeSavedPrompts(prompts.map((p) => p.id === id ? updated : p)),
-    );
-    return updated;
+    return this.savedPrompts.update(id, input);
   }
 
   /** Delete a saved prompt by id. Throws when the id does not exist. */
   deleteSavedPrompt(id: string): void {
-    const prompts = this.getSavedPrompts();
-    const next = prompts.filter((p) => p.id !== id);
-    if (next.length === prompts.length) {
-      throw new CoreError(
-        `Saved prompt not found: ${id}`,
-        "not_found",
-      );
-    }
-    this.settings.set(SAVED_PROMPTS_KEY, serializeSavedPrompts(next));
+    this.savedPrompts.delete(id);
   }
 
-  // --- workspaces ---------------------------------------------------------
+  // --- workspaces (delegated to WorkspaceService) -------------------------
 
   async createWorkspace(name: string, folders: string[]): Promise<Workspace> {
-    const resolved = await this.resolveFolders(folders);
-    if (resolved.length === 0) {
-      throw new CoreError(
-        "Workspace must contain at least one folder",
-        "invalid",
-      );
-    }
-    return this.workspaces.create(name, resolved);
+    return await this.workspaces.create(name, folders);
   }
 
   /** The user-facing workspace list. The folder-less chat workspace is an
@@ -483,7 +377,7 @@ export class LumiscaCore {
    * workspaces they can actually manage. Chat sessions are started without
    * a workspaceId instead of by picking this workspace. */
   listWorkspaces(): Workspace[] {
-    return this.workspaces.list().filter((w) => !w.chat);
+    return this.workspaces.list();
   }
 
   getWorkspace(id: string): Workspace | undefined {
@@ -497,41 +391,10 @@ export class LumiscaCore {
     id: string,
     input: { name?: string; folders?: string[] },
   ): Promise<Workspace> {
-    const current = this.requireWorkspace(id);
-    if (current.chat) {
-      throw new CoreError(
-        "The chat workspace cannot be edited",
-        "forbidden",
-      );
-    }
-    const name = input.name ?? current.name;
-    const folders = input.folders !== undefined
-      ? await this.resolveFolders(input.folders)
-      : current.folders;
-    if (folders.length === 0) {
-      throw new CoreError(
-        "Workspace must contain at least one folder",
-        "invalid",
-      );
-    }
-    const sessions = this.sessions.list(id);
-    this.pool.applyChange(sessions, () => {
-      this.workspaces.update(id, name, folders);
-    });
-    return this.workspaces.get(id)!;
+    return await this.workspaces.update(id, input);
   }
 
   deleteWorkspace(id: string): void {
-    const current = this.requireWorkspace(id);
-    if (current.chat) {
-      throw new CoreError(
-        "The chat workspace cannot be deleted",
-        "forbidden",
-      );
-    }
-    for (const session of this.sessions.list(id)) {
-      this.pool.delete(session.id);
-    }
     this.workspaces.delete(id);
   }
 
@@ -540,11 +403,7 @@ export class LumiscaCore {
    * workspaceId) lives here; the workspace itself is not user-manageable
    * (update/delete are refused). */
   private getOrCreateChatWorkspace(): Workspace {
-    const existing = this.workspaces.list().find((w) => w.chat);
-    if (existing) return existing;
-    // An internal singleton, not user-manageable: no event is emitted (the
-    // workspace list is refetched by clients anyway).
-    return this.workspaces.create("チャット", [], { chat: true });
+    return this.workspaces.getOrCreateChatWorkspace();
   }
 
   // --- MCP configuration ----------------------------------------------------
@@ -655,7 +514,7 @@ export class LumiscaCore {
     );
     const session = this.sessions.create({
       workspaceId: workspace.id,
-      name: input.name ?? `Session ${new Date().toLocaleString()}`,
+      name: input.name ?? formatSessionName(),
       modelProvider: model.provider,
       modelId: model.modelId,
       systemPrompt,
@@ -990,11 +849,7 @@ export class LumiscaCore {
   // --- internals ----------------------------------------------------------
 
   private requireWorkspace(id: string): Workspace {
-    const workspace = this.workspaces.get(id);
-    if (!workspace) {
-      throw new CoreError(`Workspace not found: ${id}`, "not_found");
-    }
-    return workspace;
+    return this.workspaces.require(id);
   }
 
   /** The full generated system prompt for a workspace: base prompt +
@@ -1019,7 +874,7 @@ export class LumiscaCore {
         name: this.models.getModel(model.provider, model.modelId)?.name,
       }
       : undefined;
-    const personal = this.loadPersonalInstructions();
+    const personal = this.personalization.load();
     if (workspace.chat) {
       return buildChatSystemPrompt(
         personal,
@@ -1035,17 +890,6 @@ export class LumiscaCore {
       headless,
       browserAvailable,
     );
-  }
-
-  /** Resolve workspace folders to real paths; rejects missing ones. */
-  private async resolveFolders(folders: string[]): Promise<string[]> {
-    const resolved: string[] = [];
-    for (const folder of folders) {
-      const r = await Sandbox.resolveFolder(folder);
-      if (!r.ok) throw new CoreError(r.reason, "invalid");
-      resolved.push(r.path);
-    }
-    return [...new Set(resolved)];
   }
 
   /** Resolve the model for a new session: explicit choice, else the

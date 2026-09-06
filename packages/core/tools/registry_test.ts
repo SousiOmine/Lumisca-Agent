@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { TOOL_CALL, TOOL_SEARCH } from "../shared.ts";
+import { TOOL_CALL, TOOL_SEARCH } from "../shared/mod.ts";
 import { createToolCallTool } from "./call-tool.ts";
 import { MAX_SEARCH_DESCRIPTION_CHARS, ToolRegistry } from "./registry.ts";
 import { createToolSearchTool } from "./search-tool.ts";

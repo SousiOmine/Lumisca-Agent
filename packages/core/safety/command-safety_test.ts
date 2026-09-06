@@ -6,11 +6,11 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
-import type { CommandApproval } from "../shared.ts";
+import type { CommandApproval } from "../shared/mod.ts";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,
   COMMAND_SAFETY_ENABLED_KEY,
-} from "../shared.ts";
+} from "../shared/mod.ts";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import {
   CommandSafety,

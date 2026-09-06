@@ -1,3 +1,4 @@
+import { removeDirRetry } from "../test-utils.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
@@ -21,7 +22,7 @@ import {
   TOOL_BROWSER_OPEN,
   TOOL_CALL,
   TOOL_SEARCH,
-} from "../shared.ts";
+} from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import type { Workspace } from "../types/workspace.ts";
@@ -30,9 +31,8 @@ import {
   createSendMessageTool,
   createTaskOutputTool,
   createTaskTool,
-  MAX_SUBAGENTS,
-  TaskHub,
 } from "./task.ts";
+import { MAX_SUBAGENTS, TaskHub } from "./task-hub.ts";
 
 function makeWorkspace(root: string): Workspace {
   return {
@@ -649,7 +649,7 @@ Deno.test("a task runs in the background and its completion reaches the parent",
   } finally {
     unsubscribe();
     core.close();
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -707,7 +707,7 @@ Deno.test("a waiting task_output receives the result and suppresses the notifica
     );
   } finally {
     core.close();
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -749,7 +749,7 @@ Deno.test("sub-agents survive a session rebuild and remain listed", async () => 
     assertEquals(tasks[0]!.status, "finished");
   } finally {
     core.close();
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 

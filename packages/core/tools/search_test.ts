@@ -1,9 +1,9 @@
 import { basename, join } from "node:path";
-import { realpathSync } from "node:fs";
 import { assert, assertEquals } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { errorMessage } from "../errors.ts";
 import { GitignoreMatcher } from "./gitignore.ts";
+import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";
 import { createGlobTool, createGrepTool, globToRegExp } from "./search.ts";
 
 function makeTools(root: string) {
@@ -15,20 +15,11 @@ function makeTools(root: string) {
   };
 }
 
-function toolText(
-  result: { content: { type: "text" | "image"; text?: string }[] },
-): string {
-  return result.content.map((c) => (c.type === "text" ? (c.text ?? "") : ""))
-    .join("");
-}
-
 /** Fixture tree used by most tests. The root is realpath'd so that paths
  * match what the sandbox resolves (makeTempDir may return 8.3 short names
  * on Windows, e.g. `MAINPC~1`, which realpathSync expands). */
 async function fixture(prefix = "lumisca-search-"): Promise<string> {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix }),
-  );
+  const root = await makeRealTempDir(prefix);
   await Deno.writeTextFile(
     join(root, "a.ts"),
     "const foo = 1;\nconst baz = 2;\n",
@@ -79,7 +70,7 @@ Deno.test("grep searches hidden files and node_modules by default, skips binary 
     assertEquals(result.details?.matches, 4);
     assertEquals(result.details?.files, 4);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -100,7 +91,7 @@ Deno.test("grep is case-insensitive by default and honors case", async () => {
     );
     assertEquals(toolText(sensitive).includes("sub"), false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -130,7 +121,7 @@ Deno.test("grep respects .gitignore by default and gitignore: false includes the
     assertEquals(included.details?.matches, 5);
     assertEquals(includedText.includes("out.txt"), true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -156,7 +147,7 @@ Deno.test("grep applies .gitignore rules when path targets a subdirectory", asyn
     );
     assertEquals(toolText(included).includes("app.log"), true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -179,7 +170,7 @@ Deno.test("grep honors negated .gitignore rules", async () => {
     assertEquals(text.includes("logs"), false);
     assertEquals(text.includes("important.log"), true); // re-included
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -222,7 +213,7 @@ Deno.test("GitignoreMatcher applies git rule semantics", async () => {
     assertEquals(matcher.ignores(join(root, "sub"), "rooted.ts", false), false);
     assertEquals(matcher.ignores(join(root, "sub"), "c.ts", false), false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -248,7 +239,7 @@ Deno.test("grep with an explicit path bypasses filters and caps results", async 
     );
     assertEquals(capped.details?.matches, 2);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -265,8 +256,8 @@ Deno.test("grep rejects paths outside the workspace", async () => {
     }
     assert(message.includes("outside the workspace"), `message: ${message}`);
   } finally {
-    await Deno.remove(root, { recursive: true });
-    await Deno.remove(outside, { recursive: true });
+    await removeDirRetry(root);
+    await removeDirRetry(outside);
   }
 });
 
@@ -282,7 +273,7 @@ Deno.test("grep reports invalid patterns as errors", async () => {
     }
     assert(message.includes("Invalid pattern"), `message: ${message}`);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -319,7 +310,7 @@ Deno.test("grep and glob reject overly long patterns (ReDoS bound)", async () =>
       `glob message: ${globMessage}`,
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -337,7 +328,7 @@ Deno.test("glob finds files by pattern, searching hidden files by default", asyn
     // a.ts, sub/c.ts, node_modules/pkg/d.ts, .hidden/e.ts
     assertEquals(result.details?.count, 4);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -359,7 +350,7 @@ Deno.test("glob skips hidden files with hidden: false", async () => {
     // a.ts, sub/c.ts, node_modules/pkg/d.ts
     assertEquals(result.details?.count, 3);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -392,7 +383,7 @@ Deno.test("glob respects .gitignore by default and gitignore: false includes the
     assertEquals(noHiddenNoIgnore.details?.count, 3);
     assertEquals(toolText(noHiddenNoIgnore).includes("node_modules"), true);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -416,7 +407,7 @@ Deno.test("glob supports brace alternation and scoped roots", async () => {
     assertEquals(toolText(scoped).includes("c.ts"), true);
     assertEquals(toolText(scoped).includes("a.ts"), false);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -461,7 +452,7 @@ Deno.test("grep and glob always skip build-artifact and VCS directories", async 
     assertEquals(globText.includes(".git"), false);
     assertEquals(globResult.details?.count, 6); // a.ts, b.js, sub/c.ts, node_modules/pkg/d.ts, .hidden/e.ts, bin.dat
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 

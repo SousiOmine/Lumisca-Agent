@@ -1,5 +1,5 @@
+import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { join } from "node:path";
-import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   discoverSkills,
@@ -24,9 +24,7 @@ Do it my way.
 /** Fixture repository root with a `.git` marker and, optionally, a user
  * `web-browser` skill in `.agents/skills`. */
 async function fixtureRoot(withUserBrowser: boolean): Promise<string> {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-builtin-" }),
-  );
+  const root = await makeRealTempDir("lumisca-builtin-");
   await Deno.mkdir(join(root, ".git"), { recursive: true });
   if (withUserBrowser) {
     const dir = join(root, ".agents", "skills", "web-browser");
@@ -94,7 +92,7 @@ Deno.test("built-in skills fill gaps when no user skill exists", async () => {
     assert(browser !== undefined);
     assertEquals(browser.source, "builtin");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -115,15 +113,13 @@ Deno.test("workspace skills shadow built-in skills of the same name", async () =
       1,
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
 Deno.test("global skills shadow built-in skills of the same name", async () => {
   const root = await fixtureRoot(false);
-  const global = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-builtin-global-" }),
-  );
+  const global = await makeRealTempDir("lumisca-builtin-global-");
   try {
     const dir = join(global, "web-browser");
     await Deno.mkdir(dir, { recursive: true });
@@ -136,8 +132,8 @@ Deno.test("global skills shadow built-in skills of the same name", async () => {
     assert(browser !== undefined);
     assertEquals(browser.source, "global");
   } finally {
-    await Deno.remove(root, { recursive: true });
-    await Deno.remove(global, { recursive: true });
+    await removeDirRetry(root);
+    await removeDirRetry(global);
   }
 });
 

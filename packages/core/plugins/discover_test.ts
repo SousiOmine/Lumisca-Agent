@@ -1,5 +1,5 @@
+import { makeRealTempDir } from "../test-utils.ts";
 import { join } from "node:path";
-import { realpathSync } from "node:fs";
 import { assert, assertEquals } from "@std/assert";
 import { discoverPlugins } from "./discover.ts";
 import { PLUGIN_SCHEMA_URL } from "./manifest.ts";
@@ -37,9 +37,7 @@ const MANIFEST = (name: string) =>
  *   .agents/skills/        (workspace skills for precedence tests)
  */
 async function fixture(): Promise<string> {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-plugins-" }),
-  );
+  const root = await makeRealTempDir("lumisca-plugins-");
   await Deno.mkdir(join(root, ".git"), { recursive: true });
 
   const writeAt = (rel: string, content: string) =>
@@ -111,9 +109,7 @@ async function fixture(): Promise<string> {
 async function globalFixture(): Promise<
   { dir: string; pluginDir: string; skillsDir: string }
 > {
-  const dir = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-global-" }),
-  );
+  const dir = await makeRealTempDir("lumisca-global-");
   const pluginDir = join(dir, ".agents", "plugins");
   const skillsDir = join(dir, ".agents", "skills");
   await Deno.mkdir(pluginDir, { recursive: true });

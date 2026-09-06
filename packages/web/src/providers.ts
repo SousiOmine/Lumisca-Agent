@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { errorMessage as errorText } from "@lumisca/core/shared";
 import { api, modelApi } from "./api.ts";
 import { splitTabKey } from "./tabs.ts";
+import { useAsyncEffect } from "./hooks/useAsync.ts";
 import type {
   ModelInfo,
   ProviderInfo,
@@ -94,43 +95,37 @@ export function useProviderModels(peerId = ""): UseProviderModelsResult {
   const [error, setError] = useState<ProviderModelsError | null>(null);
   const [reloadSeq, setReloadSeq] = useState(0);
 
-  useEffect(() => {
-    let stale = false;
+  useAsyncEffect(async (isStale) => {
     setLoading(true);
     setError(null);
-    (async () => {
-      try {
-        const ps = await modelApi(peerId).listProviders();
-        if (stale) return;
-        setProviders(ps);
-        if (ps.length === 0) {
-          setModelsByProvider(new Map());
-          setLoading(false);
-          return;
-        }
-        try {
-          const entries = await Promise.all(
-            ps.map(async (p) =>
-              [p.id, await modelApi(peerId).listModels(p.id)] as const
-            ),
-          );
-          if (stale) return;
-          setModelsByProvider(new Map(entries));
-        } catch (e) {
-          if (!stale) setError({ phase: "models", message: errorText(e) });
-        } finally {
-          if (!stale) setLoading(false);
-        }
-      } catch (e) {
-        if (!stale) {
-          setError({ phase: "providers", message: errorText(e) });
-          setLoading(false);
-        }
+    try {
+      const ps = await modelApi(peerId).listProviders();
+      if (isStale()) return;
+      setProviders(ps);
+      if (ps.length === 0) {
+        setModelsByProvider(new Map());
+        setLoading(false);
+        return;
       }
-    })();
-    return () => {
-      stale = true;
-    };
+      try {
+        const entries = await Promise.all(
+          ps.map(async (p) =>
+            [p.id, await modelApi(peerId).listModels(p.id)] as const
+          ),
+        );
+        if (isStale()) return;
+        setModelsByProvider(new Map(entries));
+      } catch (e) {
+        if (!isStale()) setError({ phase: "models", message: errorText(e) });
+      } finally {
+        if (!isStale()) setLoading(false);
+      }
+    } catch (e) {
+      if (!isStale()) {
+        setError({ phase: "providers", message: errorText(e) });
+        setLoading(false);
+      }
+    }
   }, [peerId, reloadSeq]);
 
   const reload = useCallback(() => setReloadSeq((s) => s + 1), []);

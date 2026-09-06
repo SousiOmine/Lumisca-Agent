@@ -1,8 +1,12 @@
 export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
 export { CoreError, errorMessage } from "./errors.ts";
+export { createLogger, logDebug } from "./log.ts";
+export type { Logger, LogLevel } from "./log.ts";
 export { Sandbox } from "./workspace/sandbox.ts";
 export {
+  fileExists,
+  isDirectory,
   listWorkspaceFiles,
   suggestWorkspaceFiles,
 } from "./workspace/files.ts";
@@ -58,9 +62,9 @@ export { builtinSkills } from "./skills/builtin/mod.ts";
 export type { BuiltinContext } from "./skills/builtin/mod.ts";
 export { AskHub } from "./tools/ask.ts";
 export { TodoHub } from "./tools/todo.ts";
-export { TaskHub } from "./tools/task.ts";
-export type { ParentDelivery } from "./tools/task.ts";
-export { MAX_SUBAGENT_DEPTH, MAX_SUBAGENTS } from "./tools/task.ts";
+export { TaskHub } from "./tools/task-hub.ts";
+export type { ParentDelivery } from "./tools/task-hub.ts";
+export { MAX_SUBAGENT_DEPTH, MAX_SUBAGENTS } from "./tools/task-hub.ts";
 export type { BrowserBackend } from "./browser/types.ts";
 export {
   BROWSER_TOOL_NAMES,
@@ -88,9 +92,9 @@ export type {
   WaitOptions,
   WaitResult,
 } from "./browser/types.ts";
-export type { AskAnswer, AskOption, AskQuestion } from "./shared.ts";
-export type { TodoPhase, TodoStatus, TodoTask } from "./shared.ts";
-export type { SubagentStatus, SubagentType, TaskInfo } from "./shared.ts";
+export type { AskAnswer, AskOption, AskQuestion } from "./shared/mod.ts";
+export type { TodoPhase, TodoStatus, TodoTask } from "./shared/mod.ts";
+export type { SubagentStatus, SubagentType, TaskInfo } from "./shared/mod.ts";
 export type {
   BackgroundCommandInfo,
   BackgroundCommandReason,
@@ -103,7 +107,7 @@ export {
   serializeMcpServers,
   stripDataUrlHeader,
   toDataUrl,
-} from "./shared.ts";
+} from "./shared/mod.ts";
 export {
   contextTokensOf,
   contextUsageRatio,
@@ -111,13 +115,13 @@ export {
   formatContextUsageLine,
   formatPercent1,
   summarizeContextUsage,
-} from "./shared.ts";
+} from "./shared/mod.ts";
 export type {
   ContextUsageLike,
   ContextUsageMessageLike,
   ContextUsageSummary,
-} from "./shared.ts";
-export type { McpServerConfigLike } from "./shared.ts";
+} from "./shared/mod.ts";
+export type { McpServerConfigLike } from "./shared/mod.ts";
 export {
   loadMcpConfig,
   MCP_CONFIG_FILE,
@@ -150,14 +154,30 @@ export {
 } from "./plugins/mcp.ts";
 export type { PluginMcpResult } from "./plugins/mcp.ts";
 export { CREDENTIAL_KEY_PREFIX } from "./settings/credentials.ts";
+export {
+  assertNotProtected,
+  filterExposedSettings,
+  protectedKeyReason,
+} from "./settings/guard.ts";
+export { PersonalizationService } from "./personalization.ts";
+export { SavedPromptsService } from "./saved-prompts.ts";
+export { WorkspaceService } from "./workspaces.ts";
+export type { WorkspaceServiceDeps } from "./workspaces.ts";
 export { THEME_KEY } from "./settings/repo.ts";
-export type { ThemeSetting } from "./shared.ts";
-export type { SavedPrompt } from "./shared.ts";
+export type { ThemeSetting } from "./shared/mod.ts";
+export type { InitialData } from "./shared/mod.ts";
+export type { SavedPrompt } from "./shared/mod.ts";
+export {
+  decodeUtf8,
+  formatSessionName,
+  safeJsonParse,
+  withTimeout,
+} from "./shared/mod.ts";
 export {
   parseSavedPrompts,
   SAVED_PROMPTS_KEY,
   serializeSavedPrompts,
-} from "./shared.ts";
+} from "./shared/mod.ts";
 export { resolveSettingsPath } from "./settings/path.ts";
 export { CONNECTIONS_KEY } from "./settings/connections.ts";
 export type { ConnectionEntry } from "./settings/connections.ts";
@@ -167,9 +187,9 @@ export {
   getSupportedThinkingLevels,
   isThinkingLevel,
 } from "./models/thinking.ts";
-export type { ThinkingLevel } from "./shared.ts";
-export { THINKING_LEVEL_LABELS } from "./shared.ts";
-export type { ModelInfo, ProviderInfo } from "./shared.ts";
+export type { ThinkingLevel } from "./shared/mod.ts";
+export { THINKING_LEVEL_LABELS } from "./shared/mod.ts";
+export type { ModelInfo, ProviderInfo } from "./shared/mod.ts";
 export {
   ALLOWED_OPENAI_APIS,
   type UserProviderConfig,
@@ -183,7 +203,7 @@ export type {
   ProviderLoginEvent,
   ProviderLoginPrompt,
   ProviderLoginSnapshot,
-} from "./shared.ts";
+} from "./shared/mod.ts";
 export { autoAnswerSelect } from "./models/interaction.ts";
 export type { SettingsRepo } from "./settings/repo.ts";
 export type { ModelManager } from "./models/mod.ts";

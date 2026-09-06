@@ -4,7 +4,7 @@ import type {
   NotificationMessage,
   NotificationPayload,
 } from "../types/notification.ts";
-import type { SubagentType, TaskInfo } from "../shared.ts";
+import type { SubagentType, TaskInfo } from "../shared/mod.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
 /** The system prompt of one sub-agent. Teaches the notification prefixes so

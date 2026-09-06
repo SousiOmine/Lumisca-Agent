@@ -1,23 +1,14 @@
 import { join } from "node:path";
-import { realpathSync } from "node:fs";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createSkillTool } from "../skills/tool.ts";
+import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";
 import { discoverSkills, type SkillDef } from "../skills/discover.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
-
-function toolText(
-  result: { content: { type: "text" | "image"; text?: string }[] },
-): string {
-  return result.content.map((c) => (c.type === "text" ? (c.text ?? "") : ""))
-    .join("");
-}
 
 async function makeTool(): Promise<
   { root: string; skills: SkillDef[]; tool: ReturnType<typeof createSkillTool> }
 > {
-  const root = realpathSync(
-    await Deno.makeTempDir({ prefix: "lumisca-skill-tool-" }),
-  );
+  const root = await makeRealTempDir("lumisca-skill-tool-");
   await Deno.mkdir(join(root, ".agents", "skills", "demo"), {
     recursive: true,
   });
@@ -45,7 +36,7 @@ Deno.test("skill tool loads SKILL.md content for a known skill", async () => {
       join(root, ".agents", "skills", "demo", "SKILL.md"),
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -59,7 +50,7 @@ Deno.test("skill tool reads a follow-up file from the skill directory", async ()
     );
     assertEquals(toolText(result), "# Reference\nDetails.\n");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -76,7 +67,7 @@ Deno.test("skill tool rejects unknown skill names", async () => {
       'Unknown skill "nope"',
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 
@@ -96,7 +87,7 @@ Deno.test("skill tool rejects follow-up reads that escape the skill directory", 
       "escapes",
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await removeDirRetry(root);
   }
 });
 

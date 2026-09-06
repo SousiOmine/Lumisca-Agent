@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { ClientEvent } from "../types/event.ts";
 import { AskHub, createAskTool } from "./ask.ts";
+import { toolText } from "../test-utils.ts";
 
 /** A hub whose emitted events are recorded, so tests can observe the
  * `question` event and resolve the ask as the HTTP layer would. */
@@ -12,13 +13,6 @@ function makeHub() {
 
 /** The tool call id the tests execute with. */
 const TOOL_CALL_ID = "call-1";
-
-function toolText(result: { content: { type: string; text?: string }[] }) {
-  return result.content
-    .filter((c) => c.type === "text")
-    .map((c) => c.text ?? "")
-    .join("");
-}
 
 Deno.test("ask emits a question event and resolves with the answers", async () => {
   const { hub, events } = makeHub();

@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import type { CommandApproval, SavedPrompt } from "@lumisca/core/shared";
-import { AppError, parseBody } from "./util.ts";
+import {
+  AppError,
+  parseBody,
+  requireNonEmptyString,
+  requireString,
+} from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation).
  * Credential filtering/guarding lives in the core, not here. */
@@ -37,10 +42,8 @@ export function settingRoutes(core: SettingsApi): Hono {
     // Core refuses credential keys (throws CoreError → 403); credentials
     // have their own endpoint (/providers/:id/api-key).
     const body = await parseBody<{ value?: unknown }>(c);
-    if (!body || typeof body.value !== "string") {
-      throw new AppError("value (string) is required", 400);
-    }
-    core.setSetting(c.req.param("key"), body.value);
+    const value = requireString(body?.value, "value (string)");
+    core.setSetting(c.req.param("key"), value);
     return c.json({ ok: true });
   });
 
@@ -50,10 +53,8 @@ export function settingRoutes(core: SettingsApi): Hono {
 
   app.put("/personalize", async (c) => {
     const body = await parseBody<{ content?: unknown }>(c);
-    if (!body || typeof body.content !== "string") {
-      throw new AppError("content (string) is required", 400);
-    }
-    core.setPersonalization(body.content);
+    const content = requireString(body?.content, "content (string)");
+    core.setPersonalization(content);
     return c.json(core.getPersonalization());
   });
 
@@ -67,19 +68,10 @@ export function settingRoutes(core: SettingsApi): Hono {
     const body = await parseBody<
       { id?: unknown; label?: unknown; prompt?: unknown }
     >(c);
-    if (!body || typeof body.id !== "string" || body.id.length === 0) {
-      throw new AppError("id (string) is required", 400);
-    }
-    if (typeof body.label !== "string" || body.label.length === 0) {
-      throw new AppError("label (string) is required", 400);
-    }
-    if (typeof body.prompt !== "string" || body.prompt.length === 0) {
-      throw new AppError("prompt (string) is required", 400);
-    }
     const prompt = core.addSavedPrompt({
-      id: body.id,
-      label: body.label,
-      prompt: body.prompt,
+      id: requireNonEmptyString(body?.id, "id (string)"),
+      label: requireNonEmptyString(body?.label, "label (string)"),
+      prompt: requireNonEmptyString(body?.prompt, "prompt (string)"),
     });
     return c.json(prompt, 201);
   });
@@ -117,10 +109,9 @@ export function settingRoutes(core: SettingsApi): Hono {
 
   app.delete("/settings/command-safety/approvals", async (c) => {
     const body = await parseBody<{ hash?: unknown }>(c);
-    if (!body || typeof body.hash !== "string" || body.hash.length === 0) {
-      throw new AppError("hash (string) is required", 400);
-    }
-    core.deleteCommandApproval(body.hash);
+    core.deleteCommandApproval(
+      requireNonEmptyString(body?.hash, "hash (string)"),
+    );
     return c.json({ ok: true });
   });
 

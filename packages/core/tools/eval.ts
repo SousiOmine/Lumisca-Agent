@@ -1,6 +1,6 @@
 import { inspect } from "node:util";
 import { type Context, createContext, runInContext } from "node:vm";
-import { TOOL_EVAL } from "../shared.ts";
+import { TOOL_EVAL } from "../shared/mod.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { errorMessage } from "../errors.ts";
 import {

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { Hono } from "hono";
-import { AppError } from "./util.ts";
+import { isDirectory } from "@lumisca/core";
+import { AppError, requireNonEmptyString } from "./util.ts";
 
 /** Filesystem browser endpoints (workspace folder picker). */
 export function fsRoutes(): Hono {
@@ -23,10 +24,8 @@ export function fsRoutes(): Hono {
   });
 
   app.get("/fs/browse", async (c) => {
-    const path = c.req.query("path") ?? "";
-    if (!path) throw new AppError("path is required", 400);
-    const stat = await Deno.stat(path).catch(() => null);
-    if (!stat || !stat.isDirectory) {
+    const path = requireNonEmptyString(c.req.query("path") ?? "", "path");
+    if (!await isDirectory(path)) {
       throw new AppError(`not a directory: ${path}`, 400);
     }
     const entries: Array<{ name: string; path: string }> = [];

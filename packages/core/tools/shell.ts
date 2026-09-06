@@ -1,3 +1,5 @@
+import { decodeUtf8 } from "../shared/mod.ts";
+
 /** How a shell is invoked: the program plus fixed leading args (the command
  * string is appended as one final argv element). */
 export interface Shell {
@@ -70,7 +72,7 @@ function whereAll(file: string): string[] {
       stderr: "null",
     }).outputSync();
     if (!success) return [];
-    return new TextDecoder().decode(stdout)
+    return decodeUtf8(stdout)
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0);

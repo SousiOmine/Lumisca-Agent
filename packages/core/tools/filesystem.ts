@@ -1,6 +1,12 @@
 import { extname, join } from "node:path";
 import type { Sandbox } from "../workspace/sandbox.ts";
-import { TOOL_EDIT, TOOL_LIST_DIR, TOOL_READ, TOOL_WRITE } from "../shared.ts";
+import {
+  decodeUtf8,
+  TOOL_EDIT,
+  TOOL_LIST_DIR,
+  TOOL_READ,
+  TOOL_WRITE,
+} from "../shared/mod.ts";
 import { object, string, type Tool } from "./schema.ts";
 import {
   DEFAULT_READ_LIMIT,
@@ -289,7 +295,7 @@ export function createReadFileTool(
         const bytes = read === null
           ? new Uint8Array(0)
           : buffer.subarray(0, read);
-        const text = new TextDecoder().decode(bytes);
+        const text = decodeUtf8(bytes);
         // Normalize CRLF so the model sees the same LF-style lines as
         // line-ranged reads (edits match line endings leniently).
         const { text: trimmed, truncated } = truncate(

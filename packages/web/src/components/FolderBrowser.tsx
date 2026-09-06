@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   IconArrowLeft,
   IconArrowUp,
@@ -8,6 +8,7 @@ import {
 } from "@tabler/icons-react";
 import { workspaceApi } from "../api.ts";
 import { errorText } from "../providers.ts";
+import { useAsyncEffect } from "../hooks/useAsync.ts";
 
 interface BrowseEntry {
   name: string;
@@ -38,27 +39,28 @@ export function FolderBrowser({
   const fsRoots = () => wsApi.fsRoots();
   const fsBrowse = (p: string) => wsApi.fsBrowse(p);
 
-  useEffect(() => {
-    fsRoots().then(setRoots).catch((e) => setError(errorText(e)));
+  useAsyncEffect(async (isStale) => {
+    try {
+      const roots = await fsRoots();
+      if (isStale()) return;
+      setRoots(roots);
+    } catch (e) {
+      if (!isStale()) setError(errorText(e));
+    }
   }, [peerId]);
 
-  useEffect(() => {
+  useAsyncEffect(async (isStale) => {
     if (path === null) return;
     // Ignore responses for a path we navigated away from (rapid 上へ clicks).
-    let stale = false;
     setError(undefined);
-    fsBrowse(path)
-      .then((r) => {
-        if (stale) return;
-        setParent(r.parent);
-        setEntries(r.entries);
-      })
-      .catch((e) => {
-        if (!stale) setError(errorText(e));
-      });
-    return () => {
-      stale = true;
-    };
+    try {
+      const r = await fsBrowse(path);
+      if (isStale()) return;
+      setParent(r.parent);
+      setEntries(r.entries);
+    } catch (e) {
+      if (!isStale()) setError(errorText(e));
+    }
   }, [path, peerId]);
 
   const go = (p: string | null) => {

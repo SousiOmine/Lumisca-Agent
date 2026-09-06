@@ -1,11 +1,12 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import { streamText } from "../agent/stream-text.ts";
-import type { CommandApproval, CommandSafetyKind } from "../shared.ts";
+import type { CommandApproval, CommandSafetyKind } from "../shared/mod.ts";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,
   COMMAND_SAFETY_ENABLED_KEY,
-} from "../shared.ts";
+  safeJsonParse,
+} from "../shared/mod.ts";
 
 /** The outcome of one safety check. `ok: false` carries the judge's reason,
  * which becomes the tool result text (the command is not executed). */
@@ -90,17 +91,14 @@ export class CommandSafety {
 
   /** The recorded approvals, in insertion order. */
   approvals(): CommandApproval[] {
-    const raw = this.deps.getSetting(COMMAND_SAFETY_APPROVALS_KEY);
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (Array.isArray(parsed)) {
-        // Drop entries that are not in the expected shape (a legacy record
-        // of plain command strings migrates to an empty list).
-        return parsed.filter(isCommandApproval);
-      }
-    } catch {
-      // Corrupt record: treat as empty (the next approval rewrites it).
+    // A corrupt record reads as empty (the next approval rewrites it).
+    const parsed = safeJsonParse<unknown>(
+      this.deps.getSetting(COMMAND_SAFETY_APPROVALS_KEY),
+    );
+    if (Array.isArray(parsed)) {
+      // Drop entries that are not in the expected shape (a legacy record
+      // of plain command strings migrates to an empty list).
+      return parsed.filter(isCommandApproval);
     }
     return [];
   }
@@ -263,17 +261,13 @@ export function parseVerdict(
 ): { safe: boolean; reason: string } | null {
   const match = text.trim().match(/\{[\s\S]*\}/);
   if (match === null) return null;
-  try {
-    const parsed = JSON.parse(match[0]) as unknown;
-    if (
-      typeof parsed === "object" && parsed !== null &&
-      typeof (parsed as { safe?: unknown }).safe === "boolean" &&
-      typeof (parsed as { reason?: unknown }).reason === "string"
-    ) {
-      return parsed as { safe: boolean; reason: string };
-    }
-  } catch {
-    // fall through
+  const parsed = safeJsonParse<unknown>(match[0]);
+  if (
+    typeof parsed === "object" && parsed !== null &&
+    typeof (parsed as { safe?: unknown }).safe === "boolean" &&
+    typeof (parsed as { reason?: unknown }).reason === "string"
+  ) {
+    return parsed as { safe: boolean; reason: string };
   }
   return null;
 }

@@ -6,11 +6,11 @@ import {
   stringMap,
   type Tool,
 } from "./schema.ts";
-import { TOOL_BASH } from "../shared.ts";
+import { TOOL_BASH } from "../shared/mod.ts";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
-import { killProcessTree } from "./background.ts";
+import { killProcessTree } from "./process-tree.ts";
 import { getShell } from "./shell.ts";
 import { requireResolved } from "./resolve.ts";
 import { safetyBlockResult } from "./safety.ts";

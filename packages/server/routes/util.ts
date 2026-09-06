@@ -66,6 +66,72 @@ export async function parseBody<T = unknown>(
   }
 }
 
+/** Require the parsed body itself (most POST/PUT handlers need an object,
+ * not an empty body). */
+export function requireBody<T>(body: T | undefined, what = "JSON body"): T {
+  if (body === undefined || body === null) {
+    throw new AppError(`${what} is required`, 400);
+  }
+  return body;
+}
+
+/** Require a string field; throws `"<what> is required"` otherwise.
+ * Empty strings pass — use {@link requireNonEmptyString} when emptiness
+ * is also invalid. */
+export function requireString(value: unknown, what: string): string {
+  if (typeof value !== "string") {
+    throw new AppError(`${what} is required`, 400);
+  }
+  return value;
+}
+
+/** Require a non-empty string field; throws `"<what> is required"` for
+ * missing, non-string, or empty values. */
+export function requireNonEmptyString(value: unknown, what: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new AppError(`${what} is required`, 400);
+  }
+  return value;
+}
+
+/** Require a boolean field; throws `"<what> is required"` otherwise. */
+export function requireBoolean(value: unknown, what: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new AppError(`${what} is required`, 400);
+  }
+  return value;
+}
+
+/** Require a finite-number field; throws `"<what> is required"`
+ * otherwise. */
+export function requireNumber(value: unknown, what: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new AppError(`${what} is required`, 400);
+  }
+  return value;
+}
+
+/** Require an array field; throws `"<what> is required"` otherwise. */
+export function requireArray(value: unknown, what: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new AppError(`${what} is required`, 400);
+  }
+  return value;
+}
+
+/** Require a string array whose entries are all non-empty; throws
+ * `"<what> is required"` otherwise. Shared by workspace folders and any
+ * future string-list field so the coercion never varies. */
+export function requireStringArray(value: unknown, what: string): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.some((v) => typeof v !== "string" || v.length === 0)
+  ) {
+    throw new AppError(`${what} is required`, 400);
+  }
+  return value as string[];
+}
+
 /** A small TTL cache: entries expire `ttlMs` after being set; with `max`
  * set, the oldest entry is evicted on overflow. Shared by the workspace
  * file cache and the provider auth cache so the pattern lives once. */

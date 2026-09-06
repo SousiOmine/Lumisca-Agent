@@ -1,4 +1,4 @@
-import { TOOL_SKILL } from "../shared.ts";
+import { TOOL_SKILL } from "../shared/mod.ts";
 import {
   object,
   optional,

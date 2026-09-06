@@ -8,6 +8,7 @@ import {
 } from "@lumisca/core/shared";
 import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
+import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useClickOutside } from "../../hooks/useClickOutside.ts";
 import {
   errorText,
@@ -74,23 +75,18 @@ export function ModelPreferencePanel() {
   const { modelsByProvider, reload: reloadModels } = useProviderModels();
 
   /** Load the stored preferences once. */
-  useEffect(() => {
-    let stale = false;
-    api.getSettings()
-      .then((settings) => {
-        if (stale) return;
-        setValues({
-          [FAST_MODEL_KEY]: parseModelPreference(settings[FAST_MODEL_KEY]),
-          [IMAGE_MODEL_KEY]: parseModelPreference(settings[IMAGE_MODEL_KEY]),
-        });
-        setLoaded(true);
-      })
-      .catch((e) => {
-        if (!stale) setLoadError(errorText(e));
+  useAsyncEffect(async (isStale) => {
+    try {
+      const settings = await api.getSettings();
+      if (isStale()) return;
+      setValues({
+        [FAST_MODEL_KEY]: parseModelPreference(settings[FAST_MODEL_KEY]),
+        [IMAGE_MODEL_KEY]: parseModelPreference(settings[IMAGE_MODEL_KEY]),
       });
-    return () => {
-      stale = true;
-    };
+      setLoaded(true);
+    } catch (e) {
+      if (!isStale()) setLoadError(errorText(e));
+    }
   }, []);
 
   /** The stored + supported thinking levels of the fast model, derived

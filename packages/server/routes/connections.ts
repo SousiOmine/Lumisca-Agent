@@ -1,6 +1,12 @@
 import { Hono } from "hono";
 import type { ConnectionEntry } from "@lumisca/core";
-import { AppError, parseBody } from "./util.ts";
+import {
+  AppError,
+  parseBody,
+  requireArray,
+  requireNonEmptyString,
+  requireString,
+} from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface ConnectionsApi {
@@ -11,30 +17,19 @@ export interface ConnectionsApi {
 /** Coerce a parsed body into ConnectionEntry[]; throws 400 on wrong types
  * or empty URLs instead of silently persisting garbage. */
 function connectionList(value: unknown): ConnectionEntry[] {
-  if (!Array.isArray(value)) {
-    throw new AppError("connections (array) is required", 400);
-  }
-  const entries: ConnectionEntry[] = [];
-  for (const item of value) {
+  const items = requireArray(value, "connections (array)");
+  return items.map((item) => {
     if (typeof item !== "object" || item === null) {
       throw new AppError("each connection must be an object", 400);
     }
     const e = item as Record<string, unknown>;
-    if (
-      typeof e.id !== "string" || typeof e.name !== "string" ||
-      typeof e.url !== "string" || typeof e.token !== "string"
-    ) {
-      throw new AppError(
-        "each connection needs id/name/url/token (strings)",
-        400,
-      );
-    }
-    if (e.id.length === 0 || e.url.length === 0) {
-      throw new AppError("id and url must not be empty", 400);
-    }
-    entries.push({ id: e.id, name: e.name, url: e.url, token: e.token });
-  }
-  return entries;
+    return {
+      id: requireNonEmptyString(e.id, "id (string)"),
+      name: requireString(e.name, "name (string)"),
+      url: requireNonEmptyString(e.url, "url (string)"),
+      token: requireString(e.token, "token (string)"),
+    };
+  });
 }
 
 /** Server-side connection registry: the federated peer list. Web clients

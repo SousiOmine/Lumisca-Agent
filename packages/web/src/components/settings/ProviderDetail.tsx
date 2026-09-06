@@ -14,6 +14,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { api } from "../../api.ts";
+import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { errorText, useProviders, useUserProviders } from "../../providers.ts";
 import type {
   ProviderAuthType,
@@ -79,14 +80,10 @@ export function ProviderDetail({
     setAuth(authState);
   };
 
-  useEffect(() => {
-    let stale = false;
+  useAsyncEffect((isStale) => {
     load().catch((e) => {
-      if (!stale) setError(errorText(e));
+      if (!isStale()) setError(errorText(e));
     });
-    return () => {
-      stale = true;
-    };
   }, [providerId]);
 
   const provider = providers.find((p) => p.id === providerId);

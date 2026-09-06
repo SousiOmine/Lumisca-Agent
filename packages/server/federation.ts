@@ -1,10 +1,15 @@
 import type { ClientEvent, ConnectionEntry } from "@lumisca/core";
+import { createLogger } from "@lumisca/core";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, LOOPBACK_HOSTS } from "./routes/util.ts";
 
 /** Error thrown when a peer cannot be reached or answers with an error;
  * carries the HTTP status to return to the UI. */
 export class PeerError extends AppError {}
+
+/** Debug-gated logger: reconnect storms are normal (a peer may be down),
+ * but diagnosing "why is the peer red" needs the attempt trail. */
+const log = createLogger("federation");
 
 /** Event-stream reconnect backoff: 2s → 4s → 8s … capped at 30s. */
 const RECONNECT_BASE_MS = 2000;
@@ -37,6 +42,7 @@ class PeerEventStream {
     try {
       ws = new WebSocket(wsUrl);
     } catch {
+      log.debug(`peer ${this.peer.id}: connect failed, reconnecting`);
       this.scheduleReconnect();
       return;
     }
@@ -54,6 +60,7 @@ class PeerEventStream {
     };
     ws.onclose = () => {
       this.ws = null;
+      log.debug(`peer ${this.peer.id}: stream closed, reconnecting`);
       this.scheduleReconnect();
     };
     ws.onerror = () => {

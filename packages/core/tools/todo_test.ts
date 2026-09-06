@@ -1,7 +1,8 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import type { TodoPhase } from "../shared.ts";
+import type { TodoPhase } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import { createTodoTool, formatTodo, TodoHub } from "./todo.ts";
+import { toolText } from "../test-utils.ts";
 
 /** A hub whose emitted events are recorded, so tests can observe the
  * `todo` snapshot events. */
@@ -13,13 +14,6 @@ function makeHub() {
 
 /** The tool call id the tests execute with. */
 const TOOL_CALL_ID = "call-1";
-
-function toolText(result: { content: { type: string; text?: string }[] }) {
-  return result.content
-    .filter((c) => c.type === "text")
-    .map((c) => c.text ?? "")
-    .join("");
-}
 
 /** The todo payload of the last `todo` event emitted so far. */
 function lastTodo(events: ClientEvent[]): TodoPhase[] {

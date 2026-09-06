@@ -179,7 +179,7 @@ export async function pickModel(core: LumiscaCore): Promise<
     `モデルを選択 (${models.length} 件)`,
     models.map((m) => {
       // Terminal-safe thinking marker: the web UI shows a Tabler icon
-      // instead of the emoji (see formatModelMeta in core/shared.ts).
+      // instead of the emoji (see formatModelMeta in core/shared/mod.ts).
       const meta = formatModelMeta(m.contextWindow) +
         (m.reasoning ? " 🧠" : "");
       return {

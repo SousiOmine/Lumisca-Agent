@@ -1,7 +1,8 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
 import { CoreError } from "../errors.ts";
-import type { ThinkingLevel, TodoPhase } from "../shared.ts";
+import { createLogger } from "../log.ts";
+import type { ThinkingLevel, TodoPhase } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
@@ -10,8 +11,8 @@ import { BackgroundProcessManager } from "../tools/background.ts";
 import type { BackgroundCommandInfo } from "../tools/background.ts";
 import { AskHub } from "../tools/ask.ts";
 import { TodoHub } from "../tools/todo.ts";
-import { TaskHub } from "../tools/task.ts";
-import type { TaskInfo } from "../shared.ts";
+import { TaskHub } from "../tools/task-hub.ts";
+import type { TaskInfo } from "../shared/mod.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
@@ -25,6 +26,10 @@ import {
   BROWSER_TOOL_NAMES,
   createBrowserToolsFrom,
 } from "../browser/tools.ts";
+
+/** Module logger (debug-gated): attachment rebuilds/teardowns are the
+ * first thing to check when MCP tools misbehave. */
+const log = createLogger("pool");
 
 /** Everything the pool needs to build and manage agents, injected by
  * LumiscaCore so the pool stays free of repository wiring. */
@@ -236,6 +241,9 @@ export class SessionPool {
     let mcp = resources.mcp;
     if (mcp === undefined || !sameMcpConfig(mcp.config, mergedMcp.config)) {
       const previous = mcp;
+      if (previous !== undefined) {
+        log.debug(`session ${session.id}: MCP config changed, rebuilding`);
+      }
       mcp = new McpAttachment(
         new McpManager(mergedMcp.config, workspace.folders[0] ?? Deno.cwd()),
         mergedMcp.config,

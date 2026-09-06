@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { McpInfo } from "@lumisca/core";
-import { AppError } from "./util.ts";
+import { requireNonEmptyString } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface McpApi {
@@ -19,9 +19,9 @@ async function putConfig(
   apply: (text: string) => McpInfo | Promise<McpInfo>,
 ) {
   const text = await c.req.text();
-  if (text.trim().length === 0) {
-    throw new AppError("JSON body is required", 400);
-  }
+  // Blank (or whitespace-only) bodies are rejected like an absent body:
+  // there is no config to validate or store.
+  requireNonEmptyString(text.trim(), "JSON body");
   return c.json(await apply(text));
 }
 

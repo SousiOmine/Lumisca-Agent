@@ -1,3 +1,4 @@
+import { removeDirRetry } from "../test-utils.ts";
 import { join } from "node:path";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
@@ -334,5 +335,5 @@ Deno.test("LumiscaCore.open registers the custom provider from env", async () =>
       core.close();
     }
   });
-  await Deno.remove(dir, { recursive: true });
+  await removeDirRetry(dir);
 });

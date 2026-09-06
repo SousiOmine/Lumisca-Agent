@@ -10,7 +10,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@lumisca/core/shared": fileURLToPath(
-        new URL("../core/shared.ts", import.meta.url),
+        new URL("../core/shared/mod.ts", import.meta.url),
       ),
       "@lumisca/core/modes": fileURLToPath(
         new URL("../core/modes/mod.ts", import.meta.url),

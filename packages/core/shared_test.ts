@@ -10,7 +10,7 @@ import {
   parseModelPreference,
   serializeModelPreference,
   summarizeContextUsage,
-} from "./shared.ts";
+} from "./shared/mod.ts";
 
 Deno.test("model preference keys are distinct settings keys", () => {
   assertEquals(FAST_MODEL_KEY, "model_fast");

@@ -40,7 +40,7 @@ import {
   TOOL_BROWSER_OPEN,
   TOOL_BROWSER_SCREENSHOT,
   TOOL_BROWSER_WAIT,
-} from "../shared.ts";
+} from "../shared/mod.ts";
 
 /** Text cap for one observe result (the format below), applied before the
  * shared MAX_TOOL_OUTPUT truncation so the agent never sees a mid-element

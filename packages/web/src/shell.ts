@@ -1,3 +1,5 @@
+import { withTimeout } from "@lumisca/core/shared";
+
 /** Bridge to the desktop shell. The settings UI is served by the
  * (possibly remote) server, so it cannot call Tauri commands; instead it
  * fetches the shell bridge URL handled by the Tauri custom protocol.
@@ -50,13 +52,8 @@ export async function shellCall<T>(
 }
 
 /** Race a probe against a timeout (the shell bridge may be unreachable —
- * a slow DNS failure must not stall the UI). */
-function withTimeout<T>(probe: Promise<T>, fallback: T, ms = 2500): Promise<T> {
-  const timeout = new Promise<T>((resolve) =>
-    setTimeout(() => resolve(fallback), ms)
-  );
-  return Promise.race([probe, timeout]);
-}
+ * a slow DNS failure must not stall the UI). Uses the shared core helper
+ * so the CLI browser host and the web shell share one timeout pattern. */
 
 /** Whether the desktop shell bridge is reachable (false in browsers).
  * Bounded by a timeout so a slow DNS failure does not stall the UI. */
@@ -66,6 +63,7 @@ export function shellAvailable(): Promise<boolean> {
       () => true,
       () => false,
     ),
+    2500,
     false,
   );
 }
@@ -79,6 +77,7 @@ export function nativeFolderPickerAvailable(): Promise<boolean> {
       (s) => s.mode === "local",
       () => false,
     ),
+    2500,
     false,
   );
 }
