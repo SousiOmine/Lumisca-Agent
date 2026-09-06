@@ -10,13 +10,14 @@ import {
 } from "preact/compat";
 import {
   IconArrowLeft,
+  IconBrain,
   IconChevronRight,
   IconFile,
   IconFolder,
   IconPlayerStop,
   IconX,
 } from "@tabler/icons-preact";
-import { MAX_PROMPT_IMAGES } from "@lumisca/core/shared";
+import { MAX_PROMPT_IMAGES, THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
 import {
   ContextUsageCard,
   type ContextUsageData,
@@ -24,7 +25,6 @@ import {
 } from "./ContextUsage.tsx";
 export type { ContextUsageData };
 import { ModelPicker } from "./ModelPicker.tsx";
-import { ThinkingLevelPicker } from "./ThinkingLevelPicker.tsx";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
 import { useMention } from "../hooks/useMention.ts";
@@ -534,7 +534,7 @@ export function Composer({
                   setShowModelPicker((o) => !o);
                   setShowCtx(false);
                 }}
-                title="モデルを選択"
+                title="モデル・思考強度を選択"
               >
                 <span
                   className="live-dot"
@@ -549,34 +549,36 @@ export function Composer({
                     ? `${model.provider}/${model.modelId}`
                     : "モデルを選択"}
                 </span>
+                {canThink && (
+                  <span className="model-thinking-label">
+                    <IconBrain size={12} />
+                    <span>
+                      {THINKING_LEVEL_LABELS[thinkingLevel ?? "off"]}
+                    </span>
+                  </span>
+                )}
                 <span className={`chevron${showModelPicker ? " open" : ""}`}>
                   <IconChevronRight size={13} />
                 </span>
               </button>
-              {canThink && onThinkingLevelChange && (
-                <ThinkingLevelPicker
-                  value={thinkingLevel ?? "off"}
-                  levels={levels}
-                  onChange={onThinkingLevelChange}
-                  onOpen={() => {
-                    setShowModelPicker(false);
-                    setShowCtx(false);
-                  }}
-                />
-              )}
               {showModelPicker && (
                 <div className="model-popover">
                   <ModelPicker
                     value={model}
                     peerId={peerId}
                     onSelect={(provider, modelId, info) => {
+                      // Stays open: the thinking pane follows the newly
+                      // selected model, so strength can be tuned in the
+                      // same opening. Closes on outside click / Escape.
                       onModelSelect(provider, modelId, info);
-                      setShowModelPicker(false);
                     }}
                     onOpenSettings={() => {
                       setShowModelPicker(false);
                       onOpenSettings?.();
                     }}
+                    thinkingValue={thinkingLevel}
+                    thinkingLevels={thinkingLevels}
+                    onThinkingChange={onThinkingLevelChange}
                   />
                 </div>
               )}

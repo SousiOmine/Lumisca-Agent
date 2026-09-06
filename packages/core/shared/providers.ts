@@ -25,6 +25,19 @@ export const THINKING_LEVEL_LABELS: Record<ThinkingLevel, string> = {
   max: "Max",
 };
 
+/** Thinking levels weakest-first ("off" first). Single source of truth for
+ * the strength order; the web slider sorts supported levels with this, and
+ * `models/thinking.ts` derives `ALL_THINKING_LEVELS` from it. */
+export const THINKING_LEVEL_ORDER: readonly ThinkingLevel[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
 /** Provider summary for pickers and lists. Shared by the server routes
  * (which build these) and the web UI (which renders them). */
 export interface ProviderInfo {

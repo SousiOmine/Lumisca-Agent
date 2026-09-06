@@ -327,12 +327,6 @@
   padding: 4px 8px;
 }
 
-.input-composer .thinking-switch {
-  background: transparent;
-  border-color: transparent;
-  padding: 4px 8px;
-}
-
 .input-hint {
   font-size: 11.5px;
   color: var(--text-faint);

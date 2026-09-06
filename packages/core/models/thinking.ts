@@ -1,15 +1,10 @@
-import type { ThinkingLevel } from "../shared/mod.ts";
+import { THINKING_LEVEL_ORDER, type ThinkingLevel } from "../shared/mod.ts";
 
-/** All levels in pi-ai's order (weakest to strongest, "off" first). */
-export const ALL_THINKING_LEVELS: readonly ThinkingLevel[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
+/** All levels in pi-ai's order (weakest to strongest, "off" first).
+ * Alias of the shared `THINKING_LEVEL_ORDER` so the order has a single
+ * source of truth (the web slider sorts with the shared constant). */
+export const ALL_THINKING_LEVELS: readonly ThinkingLevel[] =
+  THINKING_LEVEL_ORDER;
 
 /** Structural subset of pi-ai's Model: everything the level helpers need. */
 export interface ThinkingModel {

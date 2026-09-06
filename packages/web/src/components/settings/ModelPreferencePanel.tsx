@@ -1,11 +1,21 @@
-import { useEffect, useRef, useState } from "preact/compat";
+import {
+  createPortal,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/compat";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   parseModelPreference,
   serializeModelPreference,
 } from "@lumisca/core/shared";
-import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
+import {
+  type ModelPreference,
+  THINKING_LEVEL_LABELS,
+  type ThinkingLevel,
+} from "@lumisca/core/shared";
 import { api } from "../../api.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useClickOutside } from "../../hooks/useClickOutside.ts";
@@ -15,7 +25,6 @@ import {
   useProviderModels,
 } from "../../providers.ts";
 import { ModelPicker } from "../ModelPicker.tsx";
-import { ThinkingLevelPicker } from "../ThinkingLevelPicker.tsx";
 
 interface ModelPrefRow {
   key: string;
@@ -42,6 +51,7 @@ const ROWS: ModelPrefRow[] = [
     description:
       "画像認識に対応していないモデルの代わりに、画像の解釈を担当するモデル。",
     imageOnly: true,
+    thinking: true,
   },
 ];
 
@@ -64,17 +74,24 @@ export function ModelPreferencePanel(
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | undefined>();
-  /** Stored thinking level of the fast model (the one sub-agents run on),
-   * loaded from the model catalog. */
-  const [levels, setLevels] = useState<
-    { current: ThinkingLevel; supported: ThinkingLevel[] } | undefined
-  >();
+  /** Optimistic thinking levels committed through the slider, keyed by
+   * `provider/modelId`. The catalog copy goes stale after a commit until
+   * the next refetch, so this keeps the row readout and the picker pane
+   * in sync right away (keyed by model, a later model switch naturally
+   * misses it). */
+  const [levelOverrides, setLevelOverrides] = useState<
+    Record<string, ThinkingLevel>
+  >({});
   const [savingLevel, setSavingLevel] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const anchors = useRef<Record<string, HTMLButtonElement | null>>({});
   // Model catalog of this server (settings are always local); the fast
   // model's thinking level is derived from it below.
-  const { modelsByProvider, reload: reloadModels } = useProviderModels();
+  const {
+    modelsByProvider,
+    loading: modelsLoading,
+    reload: reloadModels,
+  } = useProviderModels();
 
   /** Load the stored preferences once. */
   useAsyncEffect(async (isStale) => {
@@ -91,29 +108,31 @@ export function ModelPreferencePanel(
     }
   }, []);
 
-  /** The stored + supported thinking levels of the fast model, derived
-   * from the model catalog once its provider's models arrive (undefined
-   * when the model is unset, gone, or has no levels). */
-  const fastPref = values[FAST_MODEL_KEY];
-  useEffect(() => {
-    if (fastPref === undefined) {
-      setLevels(undefined);
-      return;
+  /** The stored + supported thinking levels of every thinking-capable
+   * row, derived from the model catalog once its provider's models
+   * arrive (undefined when the model is unset, gone, or has no levels).
+   * Committed-but-not-yet-refetched levels win via `levelOverrides`. */
+  const levelsByRow = useMemo(() => {
+    const out: Record<
+      string,
+      { current: ThinkingLevel; supported: ThinkingLevel[] } | undefined
+    > = {};
+    for (const row of ROWS) {
+      if (!row.thinking) continue;
+      const pref = values[row.key];
+      if (pref === undefined) continue;
+      const model = modelsByProvider.get(pref.provider)?.find(
+        (m) => m.id === pref.modelId,
+      );
+      const supported = model?.thinkingLevels ?? [];
+      out[row.key] = supported.length <= 1 ? undefined : {
+        current: levelOverrides[`${pref.provider}/${pref.modelId}`] ??
+          model?.thinkingLevel ?? "off",
+        supported,
+      };
     }
-    const models = modelsByProvider.get(fastPref.provider);
-    if (models === undefined) return; // provider's models not loaded yet
-    const model = models.find((m) => m.id === fastPref.modelId);
-    if (model === undefined) {
-      setLevels(undefined);
-      return;
-    }
-    const supported = model.thinkingLevels ?? [];
-    setLevels(
-      supported.length <= 1
-        ? undefined
-        : { current: model.thinkingLevel ?? "off", supported },
-    );
-  }, [modelsByProvider, fastPref]);
+    return out;
+  }, [modelsByProvider, values, levelOverrides]);
 
   // Close on outside click, Escape, scroll and window blur (the settings
   // content scrolls independently of the fixed-position popover).
@@ -122,7 +141,10 @@ export function ModelPreferencePanel(
     onBlur: true,
   });
 
-  // Clamp the popover position to the viewport once it renders.
+  // Clamp the popover position to the viewport once it renders. Re-run
+  // when the catalog arrives: the popover jumps to full width once
+  // providers/models render, and a measurement taken while still
+  // loading would leave it overflowing.
   useEffect(() => {
     if (openRow === null) return;
     const el = popoverRef.current;
@@ -138,7 +160,7 @@ export function ModelPreferencePanel(
         Math.min(prev.y, globalThis.innerHeight - rect.height - MENU_MARGIN),
       ),
     }));
-  }, [openRow]);
+  }, [openRow, modelsLoading]);
 
   const openPicker = (rowKey: string, button: HTMLButtonElement) => {
     const rect = button.getBoundingClientRect();
@@ -146,8 +168,9 @@ export function ModelPreferencePanel(
     setOpenRow(rowKey);
   };
 
-  /** Persist the fast model's thinking level (the reasoning level the
-   * sub-agents run on). */
+  /** Persist a row model's thinking level (the reasoning level the
+   * model runs on). Applies the server-confirmed level optimistically
+   * and refreshes the catalog for eventual consistency. */
   const changeLevel = async (
     pref: ModelPreference | undefined,
     level: ThinkingLevel,
@@ -161,9 +184,11 @@ export function ModelPreferencePanel(
         pref.modelId,
         level,
       );
-      setLevels((prev) =>
-        prev === undefined ? prev : { ...prev, current: thinkingLevel }
-      );
+      setLevelOverrides((prev) => ({
+        ...prev,
+        [`${pref.provider}/${pref.modelId}`]: thinkingLevel,
+      }));
+      reloadModels();
     } catch (err) {
       setSaveError(errorText(err));
     } finally {
@@ -177,13 +202,14 @@ export function ModelPreferencePanel(
     try {
       await api.setSetting(rowKey, pref ? serializeModelPreference(pref) : "");
       setValues((prev) => ({ ...prev, [rowKey]: pref }));
-      setOpenRow(null);
-      // The fast model's thinking level follows the model: refresh the
-      // catalog (the level effect above re-derives it; a fresh fetch also
-      // covers a provider configured during this session).
-      if (rowKey === FAST_MODEL_KEY) {
-        reloadModels();
-      }
+      // Keep the picker open after a model pick so the thinking pane can
+      // be tuned for the new model in the same opening (it closes on
+      // outside click / Escape / scroll). Clearing from the row button
+      // never has the popover open, so nothing changes there.
+      // A picked model brings its own levels: refresh the catalog (a
+      // fresh fetch also covers a provider configured during this
+      // session).
+      reloadModels();
     } catch (e) {
       setSaveError(errorText(e));
     } finally {
@@ -212,13 +238,10 @@ export function ModelPreferencePanel(
                     <span className="mono">
                       {value.provider}/{value.modelId}
                     </span>
-                    {row.thinking && levels && (
-                      <ThinkingLevelPicker
-                        value={levels.current}
-                        levels={levels.supported}
-                        onChange={(level) => void changeLevel(value, level)}
-                        disabled={savingLevel}
-                      />
+                    {row.thinking && levelsByRow[row.key] && (
+                      <span className="model-pref-level">
+                        {THINKING_LEVEL_LABELS[levelsByRow[row.key]!.current]}
+                      </span>
                     )}
                   </>
                 )
@@ -251,7 +274,13 @@ export function ModelPreferencePanel(
         );
       })}
 
-      {openRow !== null && openRowDef && (
+      {
+        /* Portaled to the body: the settings modal clips overflowing
+          descendants (overflow: hidden), which would cut off the wide
+          three-pane picker. At body level the viewport clamp above keeps
+          it fully visible (z-index sits above the modal backdrop). */
+      }
+      {openRow !== null && openRowDef && createPortal(
         <div
           className="model-pref-popover"
           style={{ left: pos.x, top: pos.y }}
@@ -266,8 +295,19 @@ export function ModelPreferencePanel(
               setOpenRow(null);
               onOpenProviders();
             }}
+            thinkingValue={openRowDef.thinking
+              ? levelsByRow[openRow]?.current
+              : undefined}
+            thinkingLevels={openRowDef.thinking
+              ? levelsByRow[openRow]?.supported
+              : undefined}
+            onThinkingChange={openRowDef.thinking
+              ? (level) => void changeLevel(values[openRow], level)
+              : undefined}
+            thinkingDisabled={savingLevel || saving !== null}
           />
-        </div>
+        </div>,
+        document.body,
       )}
 
       {loadError && (

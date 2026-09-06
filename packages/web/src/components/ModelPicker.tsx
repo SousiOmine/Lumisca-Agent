@@ -6,8 +6,9 @@ import {
   IconSettings,
 } from "@tabler/icons-preact";
 import { formatModelMeta } from "@lumisca/core/shared";
-import type { ModelInfo } from "../types.ts";
+import type { ModelInfo, ThinkingLevel } from "../types.ts";
 import { filterByQuery, useProviderModels } from "../providers.ts";
+import { ThinkingLevelSlider } from "./ThinkingLevelSlider.tsx";
 
 export interface ModelPickerProps {
   value: { provider: string; modelId: string } | null;
@@ -29,10 +30,24 @@ export interface ModelPickerProps {
   ) => void;
   /** Open the provider settings (the "設定画面" link). */
   onOpenSettings?: () => void;
+  /** Stored thinking level of the current model, shown in the third
+   * (thinking-strength) pane. Takes precedence over the catalog entry so
+   * the slider stays in sync right after a change, before any refetch. */
+  thinkingValue?: ThinkingLevel;
+  /** Supported levels of the current model. Used when its catalog entry
+   * is missing (list still loading, credentials removed). */
+  thinkingLevels?: ThinkingLevel[];
+  /** Persist a thinking-level change for the current model. Omit to
+   * render the third pane without a slider (empty margin). */
+  onThinkingChange?: (level: ThinkingLevel) => void;
+  thinkingDisabled?: boolean;
 }
 
-/** Cascading two-panel model picker: providers on the left, models on the right.
- * Only providers with configured credentials are offered. */
+/** Cascading three-panel model picker: providers on the left, models in
+ * the middle, thinking strength on the right. Only providers with
+ * configured credentials are offered. The third pane keeps a fixed width
+ * even for models without thinking support (empty margin then), so the
+ * popover never changes size when switching models. */
 export function ModelPicker({
   value,
   enabledOnly = true,
@@ -40,6 +55,10 @@ export function ModelPicker({
   peerId = "",
   onSelect,
   onOpenSettings,
+  thinkingValue,
+  thinkingLevels,
+  onThinkingChange,
+  thinkingDisabled,
 }: ModelPickerProps) {
   const { providers: fetchedProviders, modelsByProvider, loading, error } =
     useProviderModels(peerId);
@@ -91,6 +110,18 @@ export function ModelPicker({
   // The actively displayed provider: hovered > selected
   const activeProvider = hoveredProvider ?? providerId;
 
+  // Thinking-strength pane: always bound to the committed current model
+  // (never to the hovered preview), so a slider gesture only ever edits
+  // the model the session actually runs on. The catalog entry wins for
+  // the level list; the explicit props cover "catalog not loaded yet".
+  const currentInfo = value
+    ? modelsByProvider.get(value.provider)?.find((m) => m.id === value.modelId)
+    : undefined;
+  const resolvedLevels = currentInfo?.thinkingLevels ?? thinkingLevels ?? [];
+  const resolvedValue = thinkingValue ?? currentInfo?.thinkingLevel ?? "off";
+  const showThinkingSlider = onThinkingChange !== undefined &&
+    resolvedLevels.length > 1;
+
   return (
     <div className="model-picker">
       {error !== null
@@ -141,7 +172,7 @@ export function ModelPicker({
               </button>
             </div>
 
-            {/* Right column: models */}
+            {/* Middle column: models */}
             <div className="mp-models">
               <input
                 className="mp-model-search"
@@ -186,6 +217,28 @@ export function ModelPicker({
                   </div>
                 )}
               </div>
+            </div>
+
+            {
+              /* Far-right column: thinking strength (fixed width; for
+                models without levels it stays a borderless empty
+                margin, so the popover size never shifts while
+                switching models). */
+            }
+            <div className={`mp-thinking${showThinkingSlider ? "" : " empty"}`}>
+              {showThinkingSlider
+                ? (
+                  <>
+                    <div className="mp-thinking-head">思考強度</div>
+                    <ThinkingLevelSlider
+                      value={resolvedValue}
+                      levels={resolvedLevels}
+                      onCommit={onThinkingChange!}
+                      disabled={thinkingDisabled}
+                    />
+                  </>
+                )
+                : <div className="mp-thinking-empty" aria-hidden="true" />}
             </div>
           </>
         )}

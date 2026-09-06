@@ -269,11 +269,10 @@
   font-style: italic;
 }
 
-/* The settings panel has room below the row, so the shared picker's
- * popover drops downward here (in the chat input it opens upward). */
-.model-pref-panel .thinking-popover {
-  top: calc(100% + 6px);
-  bottom: auto;
+/* Stored thinking level readout next to the fast model id (the slider
+ * itself lives in the picker's third pane). */
+.model-pref-level {
+  color: var(--text-faint);
 }
 
 .model-pref-actions {
@@ -287,7 +286,7 @@
 .model-pref-popover {
   position: fixed;
   z-index: 60;
-  width: min(480px, calc(100vw - 40px));
+  width: min(640px, calc(100vw - 40px));
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
