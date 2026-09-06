@@ -922,8 +922,6 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-left: 14px;
-  border-left: 1px solid var(--border);
 }
 
 /* ---- tool calls (timeline) ---------------------------------------------- */
