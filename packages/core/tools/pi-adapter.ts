@@ -1,4 +1,4 @@
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "../ai/types.ts";
 import type { Infer, Tool, ToolSchema } from "./schema.ts";
 
 /**

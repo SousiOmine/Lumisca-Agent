@@ -6,7 +6,7 @@ import {
   MAX_GOAL_TRANSCRIPT_CHARS,
   parseGoalVerdict,
 } from "./judge.ts";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@lumisca/core";
 
 Deno.test("parseGoalVerdict: parses an achieved verdict", () => {
   const verdict = parseGoalVerdict(

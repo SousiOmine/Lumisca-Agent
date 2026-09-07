@@ -7,7 +7,7 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import type { AgentMessage, BrowserBackend, ClientEvent } from "./mod.ts";
 import { LumiscaCore } from "./mod.ts";

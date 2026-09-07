@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage } from "../ai/types.ts";
 import type { NotificationMessage } from "../types/notification.ts";
 import { notificationMessage } from "../tools/subagent-format.ts";
 

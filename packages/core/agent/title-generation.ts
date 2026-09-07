@@ -1,5 +1,5 @@
-import type { Api, Model } from "@earendil-works/pi-ai";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
+import type { Api, Model } from "../ai/types.ts";
+import type { StreamFn } from "../ai/types.ts";
 import { streamText } from "./stream-text.ts";
 
 /** System prompt for the title model: a short, plain session title based

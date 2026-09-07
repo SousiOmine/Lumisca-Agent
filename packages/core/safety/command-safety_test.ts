@@ -4,8 +4,8 @@ import {
   type AssistantMessage,
   createAssistantMessageEventStream,
   type Model,
-} from "@earendil-works/pi-ai";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
+} from "@lumisca/core";
+import type { StreamFn } from "@lumisca/core";
 import type { CommandApproval } from "../shared/mod.ts";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,

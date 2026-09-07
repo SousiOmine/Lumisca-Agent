@@ -4,7 +4,7 @@ import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore, type TodoPhase } from "@lumisca/core";
 import { COMMAND_SAFETY_APPROVALS_KEY } from "@lumisca/core/shared";

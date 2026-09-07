@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage } from "@lumisca/core";
 import {
   isRetryableRateLimit,
   isRetryableRateLimitError,

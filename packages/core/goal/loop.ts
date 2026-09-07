@@ -1,5 +1,5 @@
-import type { Api, Model } from "@earendil-works/pi-ai";
-import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
+import type { Api, Model } from "../ai/types.ts";
+import type { AgentMessage, StreamFn } from "../ai/types.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";

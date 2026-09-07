@@ -1,4 +1,4 @@
-import type { Message, ToolCall } from "@earendil-works/pi-ai";
+import type { Message, ToolCall } from "@lumisca/core";
 
 /** Shared domain types; single source of truth in packages/core. */
 import type {

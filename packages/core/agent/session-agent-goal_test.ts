@@ -2,14 +2,14 @@ import { assertEquals } from "@std/assert";
 import {
   createAssistantMessageEventStream,
   fauxAssistantMessage,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import type {
   Api,
   AssistantMessageEventStream,
   Context,
   Model,
-} from "@earendil-works/pi-ai";
-import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
+} from "@lumisca/core";
+import type { AgentMessage, StreamFn } from "@lumisca/core";
 import { AskHub } from "../tools/ask.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";

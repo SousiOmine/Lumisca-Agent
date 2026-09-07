@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "../ai/types.ts";
 import type { LumiscaDb } from "../db/mod.ts";
 
 export interface StoredMessage {

@@ -5,7 +5,7 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import { type ClientEvent, LumiscaCore } from "./mod.ts";
 import { FAST_MODEL_KEY, serializeModelPreference } from "./shared/mod.ts";
 

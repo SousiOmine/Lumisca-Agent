@@ -5,8 +5,8 @@ import {
   type Context,
   fauxAssistantMessage,
   type Model,
-} from "@earendil-works/pi-ai";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
+} from "@lumisca/core";
+import type { StreamFn } from "@lumisca/core";
 import { RATE_LIMIT_BASE_DELAY_MS, RetryAbortError } from "./llm-retry.ts";
 import { streamText } from "./stream-text.ts";
 

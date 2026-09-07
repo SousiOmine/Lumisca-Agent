@@ -5,7 +5,7 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import { createAsyncBashTools } from "./background.ts";
 import {
   BACKGROUND_TAIL_LIMIT,

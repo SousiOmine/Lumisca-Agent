@@ -1,16 +1,16 @@
 import { removeDirRetry } from "../test-utils.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
-import type { Model } from "@earendil-works/pi-ai";
-import type { Api } from "@earendil-works/pi-ai";
+import type { StreamFn } from "@lumisca/core";
+import type { Model } from "@lumisca/core";
+import type { Api } from "@lumisca/core";
 import {
   createAssistantMessageEventStream,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import { CoreError, LumiscaCore } from "../mod.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";
@@ -46,7 +46,7 @@ function makeWorkspace(root: string): Workspace {
 
 /** A stream function that never settles: sub-agents stay running until the
  * test tears the hub down. */
-const hangingStream: StreamFn = () => new Promise<never>(() => {});
+const hangingStream: StreamFn = () => createAssistantMessageEventStream();
 
 interface HubFixture {
   core: LumiscaCore;
@@ -82,7 +82,7 @@ function makeScriptedHub() {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
-  const streamFn = core.models.models.streamSimple.bind(core.models.models);
+  const streamFn = core.models.models.streamFn();
   const events: ClientEvent[] = [];
   const root = Deno.makeTempDirSync({ prefix: "lumisca-task-" });
   const hub = new TaskHub({

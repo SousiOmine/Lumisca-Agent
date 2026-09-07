@@ -1,6 +1,6 @@
 import { assert, assertEquals } from "@std/assert";
 import { friendlyLoginError, LoginSession } from "./login.ts";
-import type { AuthInteraction } from "@earendil-works/pi-ai";
+import type { AuthInteraction } from "@lumisca/core";
 import type { ProviderLoginSnapshot } from "@lumisca/core";
 
 function create(script: (interaction: AuthInteraction) => Promise<void>) {

@@ -1,14 +1,15 @@
 import { DatabaseSync } from "node:sqlite";
-import { Agent } from "@earendil-works/pi-agent-core";
 import {
-  createModels,
+  Agent,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
-  Type,
-} from "@earendil-works/pi-ai";
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+  LumiscaModels,
+  type AgentTool,
+} from "@lumisca/core";
+import { builtinProviders } from "./models/dev-catalog.ts";
+import { extraProviders } from "./models/extra-providers.ts";
 import { IconMoon, IconPlus, IconSun } from "@tabler/icons-preact";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -16,9 +17,9 @@ import { assertEquals } from "@std/assert";
 
 /**
  * Stack smoke tests: verify that the external building blocks this project
- * relies on (node:sqlite, pi-ai, pi-agent-core, tabler icons) work under
- * Deno. These guard against silent incompatibilities when the stack is
- * upgraded.
+ * relies on (node:sqlite, the Lumisca AI layer backed by Vercel AI SDK,
+ * tabler icons) work under Deno. These guard against silent incompatibilities
+ * when the stack is upgraded.
  */
 
 Deno.test("node:sqlite works in Deno", () => {
@@ -39,29 +40,25 @@ Deno.test("node:sqlite works in Deno", () => {
   db.close();
 });
 
-Deno.test("pi-ai loads builtin models in Deno", () => {
-  const models = builtinModels();
-  const providers = models.getProviders();
-  assertEquals(providers.length > 0, true, "at least one provider registered");
-  const all = models.getModels();
-  assertEquals(all.length > 0, true, "at least one model");
+Deno.test("the model registry loads builtin and extra providers", () => {
+  const models = new LumiscaModels();
+  for (const provider of builtinProviders()) models.setProvider(provider);
+  for (const provider of extraProviders()) models.setProvider(provider);
+  assertEquals(models.getProviders().length > 0, true);
+  assertEquals(models.getModels().length > 0, true);
 });
 
-function createFauxModels() {
+Deno.test("the agent runs a simple prompt", async () => {
   const faux = fauxProvider();
-  const models = createModels();
-  models.setProvider(faux.provider);
-  return { faux, models };
-}
-
-Deno.test("pi-agent-core runs a simple prompt", async () => {
-  const { faux, models } = createFauxModels();
   faux.setResponses([fauxAssistantMessage("Hello from faux!")]);
-  const model = faux.getModel();
-
   const agent = new Agent({
-    initialState: { systemPrompt: "You are a helpful assistant.", model },
-    streamFn: models.streamSimple.bind(models),
+    initialState: {
+      systemPrompt: "You are a helpful assistant.",
+      model: faux.getModel(),
+      tools: [],
+    },
+    streamFn: faux.streamFn,
+    sessionId: "s1",
   });
 
   const events: string[] = [];
@@ -70,15 +67,33 @@ Deno.test("pi-agent-core runs a simple prompt", async () => {
   });
 
   await agent.prompt("Hi");
-  const last = agent.state.messages.at(-1);
-  assertEquals(last?.role, "assistant");
+  const last = agent.messages.at(-1) as { role: string; content: unknown[] };
+  assertEquals(last.role, "assistant");
   assertEquals(events.includes("agent_start"), true);
   assertEquals(events.includes("agent_end"), true);
-  assertEquals(events.includes("message_update"), true);
+  assertEquals(events.includes("turn_end"), true);
 });
 
-Deno.test("pi-agent-core executes tools", async () => {
-  const { faux, models } = createFauxModels();
+function fauxToolDef(): AgentTool {
+  return {
+    name: "get_time",
+    label: "Get Time",
+    description: "Get the current time",
+    parameters: {
+      type: "object",
+      properties: { timezone: { type: "string" } },
+      required: ["timezone"],
+    },
+    execute: () =>
+      Promise.resolve({
+        content: [{ type: "text", text: "12:00 UTC" }],
+        details: {},
+      }),
+  };
+}
+
+Deno.test("the agent executes tools", async () => {
+  const faux = fauxProvider();
   const model = faux.getModel();
 
   faux.setResponses([
@@ -93,21 +108,10 @@ Deno.test("pi-agent-core executes tools", async () => {
     initialState: {
       systemPrompt: "You are a helpful assistant.",
       model,
-      tools: [{
-        name: "get_time",
-        label: "Get Time",
-        description: "Get the current time",
-        parameters: Type.Object({
-          timezone: Type.String(),
-        }),
-        execute: () =>
-          Promise.resolve({
-            content: [{ type: "text", text: "12:00 UTC" }],
-            details: {},
-          }),
-      }],
+      tools: [fauxToolDef()],
     },
-    streamFn: models.streamSimple.bind(models),
+    streamFn: faux.streamFn,
+    sessionId: "s1",
   });
 
   const events: string[] = [];
@@ -118,9 +122,7 @@ Deno.test("pi-agent-core executes tools", async () => {
   await agent.prompt("What time is it?");
   assertEquals(events.includes("tool_execution_start"), true);
   assertEquals(events.includes("tool_execution_end"), true);
-  const toolResults = agent.state.messages.filter((m) =>
-    m.role === "toolResult"
-  );
+  const toolResults = agent.messages.filter((m) => m.role === "toolResult");
   assertEquals(toolResults.length, 1);
 });
 

@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "../ai/types.ts";
 import { contentText } from "../content.ts";
 import type {
   NotificationMessage,

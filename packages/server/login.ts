@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type {
-  AuthEvent,
   AuthInteraction,
+  AuthNotice,
   AuthPrompt,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import { autoAnswerSelect, errorMessage } from "@lumisca/core";
 import type {
   ProviderLoginEvent,
@@ -165,7 +165,7 @@ export class LoginSession {
     this.onExpire(this.sessionId);
   }
 
-  private notify(event: AuthEvent): void {
+  private notify(event: AuthNotice): void {
     if (this.settled) return;
     // The pi-ai AuthEvent and our frontend-safe ProviderLoginEvent have
     // identical shapes (minus nothing), so a pass-through cast suffices.

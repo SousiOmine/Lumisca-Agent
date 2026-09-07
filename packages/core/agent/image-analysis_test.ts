@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage } from "@lumisca/core";
 import type {
   Api,
   AssistantMessageEventStream,
@@ -7,8 +7,8 @@ import type {
   ImageContent,
   Model,
   TextContent,
-} from "@earendil-works/pi-ai";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
+} from "@lumisca/core";
+import type { StreamFn } from "@lumisca/core";
 import { ImageAnalyzer } from "./image-analysis.ts";
 
 const IMAGE: ImageContent = {

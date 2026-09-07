@@ -3,7 +3,7 @@ import type {
   AuthInteraction,
   AuthType,
   Provider,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import type {
   AuthCheck,
   ModelInfo,

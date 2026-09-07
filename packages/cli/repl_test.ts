@@ -4,7 +4,7 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
-} from "@earendil-works/pi-ai";
+} from "@lumisca/core";
 import { LumiscaCore } from "@lumisca/core";
 import { handleCommand, runRepl } from "./repl.ts";
 import { withPromptFn } from "./ui.ts";

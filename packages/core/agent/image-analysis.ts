@@ -3,8 +3,8 @@ import type {
   ImageContent,
   Model,
   TextContent,
-} from "@earendil-works/pi-ai";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
+} from "../ai/types.ts";
+import type { StreamFn } from "../ai/types.ts";
 import { streamText } from "./stream-text.ts";
 
 /** System prompt for the image analysis model: it must produce a

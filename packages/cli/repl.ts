@@ -5,7 +5,7 @@ import {
   type LumiscaCore,
   THINKING_LEVEL_LABELS,
 } from "@lumisca/core";
-import type { AuthInteraction } from "@earendil-works/pi-ai";
+import type { AuthInteraction } from "@lumisca/core";
 import {
   color,
   error,
@@ -166,6 +166,7 @@ async function runOAuthLogin(
   providerId: string,
 ): Promise<void> {
   const interaction: AuthInteraction = {
+    signal: new AbortController().signal,
     prompt: async (prompt) => {
       if (prompt.type === "select") {
         const auto = autoAnswerSelect(prompt.options);
@@ -185,7 +186,7 @@ async function runOAuthLogin(
     notify: (event) => {
       if (event.type === "device_code") {
         header("デバイスコード");
-        console.log(`  ${color.cyan(event.userCode)}`);
+        console.log(`  ${color.cyan(event.userCode ?? "")}`);
         info(`以下のURLを開いてコードを入力・承認してください:`);
         console.log(`  ${event.verificationUri}`);
       } else if (event.type === "auth_url") {
@@ -193,7 +194,7 @@ async function runOAuthLogin(
         console.log(`  ${event.url}`);
         if (event.instructions) console.log(`  ${event.instructions}`);
       } else {
-        info(event.message);
+        info(event.message ?? "");
       }
     },
   };

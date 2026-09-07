@@ -1,11 +1,11 @@
 import { assertEquals } from "@std/assert";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage } from "@lumisca/core";
 import type {
   Api,
   AssistantMessageEventStream,
   Model,
-} from "@earendil-works/pi-ai";
-import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
+} from "@lumisca/core";
+import type { AgentMessage, StreamFn } from "@lumisca/core";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { resolveMaxGoalIterations, runGoalLoop } from "./loop.ts";

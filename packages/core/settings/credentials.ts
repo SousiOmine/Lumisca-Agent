@@ -3,9 +3,23 @@ import type {
   Credential,
   CredentialInfo,
   CredentialStore,
-} from "@earendil-works/pi-ai";
+} from "../ai/types.ts";
 import type { SettingsRepo } from "./repo.ts";
 import { safeJsonParse } from "../shared/mod.ts";
+
+/** Narrow a stored credential to an api-key credential. */
+export function isApiKeyCredential(
+  credential: Credential | undefined,
+): credential is ApiKeyCredential {
+  return credential?.type === "api_key" && credential.key.length > 0;
+}
+
+/** The api key of a stored credential, or undefined when unset. */
+export function apiKeyOf(credential: Credential | undefined): string | undefined {
+  return credential?.type === "api_key" && credential.key.length > 0
+    ? credential.key
+    : undefined;
+}
 
 /** Settings-file key prefix for credentials. Shared with the server layer
  * (settings API filters these keys out) — single source of truth. */

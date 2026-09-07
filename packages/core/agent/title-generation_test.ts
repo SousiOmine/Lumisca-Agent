@@ -1,12 +1,12 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage } from "@lumisca/core";
 import type {
   Api,
   AssistantMessageEventStream,
   Context,
   Model,
-} from "@earendil-works/pi-ai";
-import type { StreamFn } from "@earendil-works/pi-agent-core";
+} from "@lumisca/core";
+import type { StreamFn } from "@lumisca/core";
 import { cleanTitle, TitleGenerator } from "./title-generation.ts";
 
 function fakeModel(): Model<Api> {

@@ -22,8 +22,37 @@ export type {
   NotificationStatus,
 } from "./types/notification.ts";
 export type { ModeMessage, ModePrompt } from "./types/mode-message.ts";
-export type { AgentMessage } from "@earendil-works/pi-agent-core";
-export type { ImageContent } from "@earendil-works/pi-ai";
+export { Agent, type AgentDefaults, type AgentInit } from "./ai/agent.ts";
+export { LumiscaModels, type LumiscaModelsOptions } from "./ai/models.ts";
+export { languageModelFor } from "./ai/lang-model.ts";
+export {
+  createAssistantMessageEventStream,
+  type AssistantMessageEventStream,
+} from "./ai/event-stream.ts";
+export {
+  fauxProvider,
+  fauxAssistantMessage,
+  fauxText,
+  fauxThinking,
+  fauxToolCall,
+  type FauxProvider,
+} from "./ai/faux.ts";
+export type {
+  AgentMessage,
+  AssistantMessage,
+  ImageContent,
+  Message,
+  TextContent,
+  ThinkingContent,
+  ToolCall,
+  StreamFn,
+  AgentEvent,
+  AgentTool,
+  ThinkingLevelMap,
+  ModelCompat,
+  Usage,
+  Context,
+} from "./ai/types.ts";
 export { SessionAgent } from "./agent/session-agent.ts";
 export { AGENT_MODES, findAgentMode } from "./modes/mod.ts";
 export type { AgentMode, AgentModeOption } from "./modes/mod.ts";
@@ -235,7 +264,10 @@ export type {
   Api,
   AuthCheck,
   AuthInteraction,
+  AuthNotice,
+  AuthPrompt,
+  AuthPromptOption,
   AuthType,
   Model,
   Provider,
-} from "@earendil-works/pi-ai";
+} from "./ai/types.ts";

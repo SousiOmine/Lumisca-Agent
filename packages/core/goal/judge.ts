@@ -1,5 +1,5 @@
-import type { Api, Model } from "@earendil-works/pi-ai";
-import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
+import type { Api, Model } from "../ai/types.ts";
+import type { AgentMessage, StreamFn } from "../ai/types.ts";
 import { streamText } from "../agent/stream-text.ts";
 import { contentText, safeJsonParse } from "../shared/mod.ts";
 

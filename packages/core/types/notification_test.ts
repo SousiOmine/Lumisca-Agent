@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@lumisca/core";
 import {
   type NotificationMessage,
   notificationText,
@@ -47,8 +47,7 @@ Deno.test("toLlmMessages converts notifications to user messages", () => {
         output: 0,
         cacheRead: 0,
         cacheWrite: 0,
-        totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        total: 0,
       },
       stopReason: "stop",
       timestamp: 3,

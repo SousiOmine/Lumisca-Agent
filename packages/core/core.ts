@@ -15,7 +15,7 @@ import {
 } from "./settings/connections.ts";
 import { assertNotProtected, filterExposedSettings } from "./settings/guard.ts";
 import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
-import type { CredentialStore, Provider } from "@earendil-works/pi-ai";
+import type { CredentialStore, Provider } from "./ai/types.ts";
 import type {
   Api,
   AuthCheck,
@@ -23,7 +23,7 @@ import type {
   AuthType,
   ImageContent,
   Model,
-} from "@earendil-works/pi-ai";
+} from "./ai/types.ts";
 import type { ModePrompt } from "./types/mode-message.ts";
 import { createDbModelsStore, ModelManager } from "./models/mod.ts";
 import type {
@@ -119,9 +119,7 @@ export class LumiscaCore {
     this.savedPrompts = new SavedPromptsService(this.settings);
     this.sessions = createSessionRepo(db);
     this.messages = createMessageRepo(db);
-    const streamFn = withProviderRetryDefaults(
-      this.models.models.streamSimple.bind(this.models.models),
-    );
+    const streamFn = withProviderRetryDefaults(this.models.models.streamFn());
     this.commandSafety = new CommandSafety({
       getSetting: (key) => this.settings.get(key),
       setSetting: (key, value) => this.settings.set(key, value),

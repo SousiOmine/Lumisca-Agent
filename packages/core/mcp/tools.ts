@@ -1,4 +1,4 @@
-import type { Agent } from "@earendil-works/pi-agent-core";
+import type { Agent } from "../ai/agent.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { Tool } from "../tools/schema.ts";
 import type { McpManager, McpToolDef } from "./manager.ts";

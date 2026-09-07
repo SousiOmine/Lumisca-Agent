@@ -6,7 +6,7 @@ import {
   assertStringIncludes,
   assertThrows,
 } from "@std/assert";
-import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxProvider } from "@lumisca/core";
 import { LumiscaCore } from "@lumisca/core";
 import {
   finalAnswerText,

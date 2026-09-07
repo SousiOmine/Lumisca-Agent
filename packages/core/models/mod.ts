@@ -1,4 +1,4 @@
-import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { LumiscaModels } from "../ai/models.ts";
 import type {
   Api,
   AuthCheck,
@@ -9,35 +9,33 @@ import type {
   Model,
   ModelsStore,
   ModelsStoreEntry,
-  MutableModels,
   Provider,
-} from "@earendil-works/pi-ai";
+} from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import { safeJsonParse, type ThinkingLevel } from "../shared/mod.ts";
 import { CoreError } from "../errors.ts";
-import { loadCustomProviders } from "./custom.ts";
-import { extraProviders } from "./extra-providers.ts";
-import { clampThinkingLevel } from "./thinking.ts";
-import {
-  buildUserProvider,
-  parseUserProviderInput,
-  type UserProviderConfig,
-  type UserProviderInput,
-  UserProviderStore,
-  type UserProviderSummary,
+import type {
+  UserProviderConfig,
+  UserProviderInput,
+  UserProviderSummary,
 } from "./user-providers.ts";
+import { buildUserProvider, parseUserProviderInput, UserProviderStore } from "./user-providers.ts";
+import { extraProviders } from "./extra-providers.ts";
+import { loadCustomProviders } from "./custom.ts";
+import { builtinProviders } from "./dev-catalog.ts";
+import { clampThinkingLevel } from "./thinking.ts";
 import { setApiKey } from "../settings/credentials.ts";
 
 const CATALOG_PREFIX = "model_catalog:";
 const ENABLED_PREFIX = "model_enabled:";
 const THINKING_PREFIX = "model_thinking:";
 
-/** Persistent model catalog cache stored in the settings store. */
+/** Persistent model catalog cache stored in the settings store. Kept for
+ * compatibility with the original ModelManager signature. */
 export function createDbModelsStore(settings: SettingsRepo): ModelsStore {
   return {
     read(providerId: string): Promise<ModelsStoreEntry | undefined> {
       const raw = settings.get(`${CATALOG_PREFIX}${providerId}`);
-      // A corrupt cache entry reads as a miss (refetched on next use).
       return Promise.resolve(safeJsonParse<ModelsStoreEntry>(raw));
     },
     write(providerId: string, entry: ModelsStoreEntry): Promise<void> {
@@ -51,9 +49,9 @@ export function createDbModelsStore(settings: SettingsRepo): ModelsStore {
   };
 }
 
-/** Owns the pi-ai Models collection and resolves providers/models. */
+/** Owns the Lumisca model registry and resolves providers/models. */
 export class ModelManager {
-  readonly models: MutableModels;
+  readonly models: LumiscaModels;
   private readonly settings: SettingsRepo;
   private readonly credentials: CredentialStore;
   /** Ids of providers defined by Lumisca's own config (models.json,
@@ -69,15 +67,20 @@ export class ModelManager {
   constructor(
     credentials: CredentialStore,
     settings: SettingsRepo,
-    modelsStore?: ModelsStore,
+    _modelsStore?: ModelsStore,
   ) {
-    this.models = builtinModels({ credentials, modelsStore }) as MutableModels;
+    this.models = new LumiscaModels({
+      credentials,
+      env: () => Deno.env.toObject(),
+    });
     this.settings = settings;
     this.credentials = credentials;
+    // ai-sdk built-in providers (OpenAI, Anthropic, Google, Mistral).
+    for (const provider of builtinProviders()) {
+      this.models.setProvider(provider);
+    }
     // Lumisca-shipped providers outside the SDK catalog (DeepInfra,
-    // ClinePass) are registered right after the builtins. setProvider
-    // upserts by id, so the custom providers below can still override
-    // them (e.g. point "deepinfra" at a compatible endpoint).
+    // ClinePass, OpenCode Go) are registered right after the builtins.
     for (const provider of extraProviders()) {
       this.models.setProvider(provider);
     }
@@ -94,8 +97,7 @@ export class ModelManager {
       this.models.setProvider(provider);
     }
     // User-defined providers are loaded from the settings store and
-    // registered after the other custom providers (so a user can override a
-    // builtin id too — e.g. point "openai" at a compatible endpoint).
+    // registered after the other custom providers.
     this.userStore = new UserProviderStore(settings);
     for (const config of this.userStore.list()) {
       customIds.add(config.id);
@@ -136,7 +138,7 @@ export class ModelManager {
   }
 
   /** Create a user-defined provider. Validates the input, persists it,
-   * registers it with the SDK, and — when an `apiKey` was supplied —
+   * registers it with the registry, and — when an `apiKey` was supplied —
    * stores it in the credential store. Returns the summary. */
   async addUserProvider(
     input: UserProviderInput,
@@ -175,8 +177,8 @@ export class ModelManager {
     return await this.summarizeUserProvider(parsed);
   }
 
-  /** Remove a user-defined provider, unregister it from the SDK, and delete
-   * any stored API key. */
+  /** Remove a user-defined provider, unregister it from the registry, and
+   * delete any stored API key. */
   async removeUserProvider(id: string): Promise<void> {
     if (!this.userStore.get(id)) {
       throw new CoreError(`User provider not found: ${id}`, "not_found");
@@ -194,7 +196,7 @@ export class ModelManager {
     const credential = await this.credentials.read(config.id);
     return {
       ...config,
-      hasApiKey: credential?.key !== undefined && credential.key !== "",
+      hasApiKey: credential?.type === "api_key" && credential.key !== "",
     };
   }
 
@@ -238,11 +240,9 @@ export class ModelManager {
 
   /** Whether the provider resolves auth (env var or stored key) without a
    * network call — the runtime capability check. Unlike
-   * `LumiscaCore.hasConfiguredAuth`, ambient env keys of built-in
-   * providers count, so this must not be used to decide what the UI
-   * offers. */
+   * `hasConfiguredAuth`, ambient env keys of built-in providers count. */
   async hasProviderAuth(providerId: string): Promise<boolean> {
-    return (await this.models.getAuth(providerId)) !== undefined;
+    return (await this.models.checkAuth(providerId)) !== undefined;
   }
 
   /** Enable or disable a model for the UI. Disabled models are hidden
@@ -301,3 +301,10 @@ export class ModelManager {
     return null;
   }
 }
+
+// Re-exported types for the server layer's user-provider surface.
+export type {
+  UserProviderConfig,
+  UserProviderInput,
+  UserProviderSummary,
+} from "./user-providers.ts";

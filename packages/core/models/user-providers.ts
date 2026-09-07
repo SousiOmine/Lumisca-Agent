@@ -1,4 +1,4 @@
-import type { ApiKeyAuth, Provider } from "@earendil-works/pi-ai";
+import type { ApiKeyAuth, Credential, Provider } from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import { CoreError } from "../errors.ts";
 import { buildModel, buildProvider } from "./custom.ts";
@@ -244,19 +244,10 @@ export function parseUserProviderInput(
 function credentialStoreApiKey(providerId: string): ApiKeyAuth {
   return {
     name: `API key (${providerId})`,
-    login: async (interaction) => {
-      interaction.signal.throwIfAborted();
-      const key = await interaction.prompt({
-        type: "secret",
-        message: "Enter API key",
-      });
-      interaction.signal.throwIfAborted();
-      return { type: "api_key", key };
-    },
-    resolve: ({ credential, signal }) => {
-      signal.throwIfAborted();
+    login: () => Promise.resolve({ type: "api_key", key: "" } as Credential),
+    resolve: ({ credential }) => {
       return Promise.resolve(
-        credential?.key
+        credential?.type === "api_key" && credential.key.length > 0
           ? {
             auth: { apiKey: credential.key },
             source: "stored credential",

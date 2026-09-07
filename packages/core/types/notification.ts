@@ -1,9 +1,4 @@
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Message } from "@earendil-works/pi-ai";
-// Loads the declaration merge that adds NotificationMessage and
-// ModeMessage to pi's AgentMessage union (see pi-augmentation.ts). Every
-// importer of this module therefore sees the augmented type.
-import "./pi-augmentation.ts";
+import type { AgentMessage, Message } from "../ai/types.ts";
 import { modeFullPromptText, type ModeMessage } from "./mode-message.ts";
 
 /** Kind of a system notification injected into an agent loop: background

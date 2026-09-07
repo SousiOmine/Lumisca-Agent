@@ -1,17 +1,15 @@
-import { Agent } from "@earendil-works/pi-agent-core";
+import { Agent } from "../ai/agent.ts";
 import type {
   AgentEvent,
   AgentMessage,
   StreamFn,
-} from "@earendil-works/pi-agent-core";
-import type {
   Api,
   AssistantMessage,
   ImageContent,
   Message,
   Model,
   TextContent,
-} from "@earendil-works/pi-ai";
+} from "../ai/types.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import {
@@ -311,8 +309,17 @@ export class SessionAgent {
     this.rateLimitRetries = 0;
     this.pendingRateLimitRetry = null;
     this.maybeGenerateTitle(text);
+    const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
+    if (images !== undefined && images.length > 0) content.push(...images);
+    const message: AgentMessage = {
+      role: "user",
+      content,
+      timestamp: Date.now(),
+    };
+    this.emit({ type: "message_start", sessionId: this.sessionId, message });
+    this.emit({ type: "message_end", sessionId: this.sessionId, message });
     try {
-      await this.agent.prompt(text, images);
+      await this.agent.prompt(message);
     } catch (error) {
       this.emit({
         type: "session_error",
@@ -480,6 +487,10 @@ export class SessionAgent {
   private injectNotification(payload: NotificationPayload): void {
     if (this.closed) return;
     const message = notificationMessage(payload);
+    // Announce the notification to clients (the agent appends it to the
+    // transcript without re-emitting — see Agent.append).
+    this.emit({ type: "message_start", sessionId: this.sessionId, message });
+    this.emit({ type: "message_end", sessionId: this.sessionId, message });
     if (this.isStreaming) {
       this.agent.steer(message);
       return;

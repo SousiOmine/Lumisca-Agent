@@ -1,13 +1,10 @@
-import {
-  type Api,
-  type ApiKeyAuth,
-  createProvider,
-  envApiKeyAuth,
-  type Model,
-  type Provider,
-  type ProviderStreams,
-} from "@earendil-works/pi-ai";
-import { getApiProvider } from "@earendil-works/pi-ai/compat";
+import type {
+  Api,
+  ApiKeyAuth,
+  Credential,
+  Model,
+  Provider,
+} from "../ai/types.ts";
 
 /**
  * Custom OpenAI-compatible providers for headless/agent use.
@@ -81,16 +78,36 @@ function isModelsFileConfig(value: unknown): value is ModelsFileConfig {
 function fixedKeyAuth(key: string): ApiKeyAuth {
   return {
     name: "API key",
-    login: async (interaction) => {
-      interaction.signal.throwIfAborted();
-      const entered = await interaction.prompt({
-        type: "secret",
-        message: "Enter API key",
-      });
-      return { type: "api_key", key: entered };
-    },
-    resolve: () =>
+    login: () => Promise.resolve({ type: "api_key", key } as Credential),
+    resolve: (_context) =>
       Promise.resolve({ auth: { apiKey: key }, source: "models.json" }),
+  };
+}
+
+/** Auth that resolves from the stored credential first, then the matching
+ * environment variable. This keeps the "credential store + key injection"
+ * contract: a key the user stored in Lumisca wins over the ambient env. */
+export function envApiKeyAuth(
+  name: string,
+  envVars: string[],
+): ApiKeyAuth {
+  return {
+    name,
+    resolve: ({ credential, env }) => {
+      if (credential?.type === "api_key" && credential.key.length > 0) {
+        return Promise.resolve({
+          auth: { apiKey: credential.key },
+          source: "stored credential",
+        });
+      }
+      for (const key of envVars) {
+        const value = env[key];
+        if (value !== undefined && value.length > 0) {
+          return Promise.resolve({ auth: { apiKey: value }, source: key });
+        }
+      }
+      return Promise.resolve(undefined);
+    },
   };
 }
 
@@ -114,6 +131,15 @@ function modelsFileApiKey(
   return fixedKeyAuth(apiKey);
 }
 
+/** The request apis custom providers may declare. */
+const KNOWN_APIS = new Set([
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+  "google-generative-ai",
+  "mistral-conversations",
+]);
+
 export function buildModel(
   providerId: string,
   definition: ModelsFileModel,
@@ -124,6 +150,12 @@ export function buildModel(
   },
 ): Model<Api> {
   const api = definition.api ?? providerCfg.api ?? "openai-completions";
+  if (!KNOWN_APIS.has(api)) {
+    throw new Error(
+      `models.json provider "${providerId}": unsupported api "${api}" ` +
+        `(model "${definition.id}")`,
+    );
+  }
   const baseUrl = definition.baseUrl ?? providerCfg.baseUrl;
   if (!baseUrl) {
     throw new Error(
@@ -131,16 +163,7 @@ export function buildModel(
         `(set it on the provider or on model "${definition.id}")`,
     );
   }
-  if (getApiProvider(api) === undefined) {
-    throw new Error(
-      `models.json provider "${providerId}": unsupported api "${api}" ` +
-        `(model "${definition.id}")`,
-    );
-  }
-  if (
-    definition.contextWindow !== undefined &&
-    definition.contextWindow <= 0
-  ) {
+  if (definition.contextWindow !== undefined && definition.contextWindow <= 0) {
     throw new Error(
       `models.json provider "${providerId}", model "${definition.id}": ` +
         "invalid contextWindow",
@@ -163,9 +186,6 @@ export function buildModel(
     cost: definition.cost ?? DEFAULT_COST,
     contextWindow: definition.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
     maxTokens: definition.maxTokens ?? DEFAULT_MAX_TOKENS,
-    // pi-ai sends model.headers (merged into the auth headers by
-    // Models.applyAuth); provider-level headers alone would be ignored,
-    // so they are propagated onto every model of the provider.
     headers: providerCfg.headers,
   };
 }
@@ -180,21 +200,15 @@ export function buildProvider(input: {
   auth: ApiKeyAuth;
   models: Model<Api>[];
 }): Provider {
-  // The api map covers every api used by the models; getApiProvider has
-  // already validated the names (see buildModel).
-  const apiMap: Record<string, ProviderStreams> = {};
-  for (const model of input.models) {
-    apiMap[model.api] = getApiProvider(model.api)!;
-  }
-  return createProvider({
+  return {
     id: input.id,
     name: input.name,
     baseUrl: input.baseUrl,
     headers: input.headers,
     auth: { apiKey: input.auth },
-    models: input.models,
-    api: apiMap as Partial<Record<Api, ProviderStreams>>,
-  });
+    getModels: () => input.models,
+    resolveCredential: (context) => input.auth.resolve(context),
+  };
 }
 
 /** The env-var custom provider, or undefined when LUMISCA_BASE_URL is not

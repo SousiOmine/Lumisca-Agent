@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "./messages.ts";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@lumisca/core";
 
 function sampleMessage(): AgentMessage {
   return {
