@@ -203,7 +203,9 @@ export class CommandSafety {
           }],
         },
         "safety check request failed",
-        { signal: controller.signal },
+        // One-off conversation per check: a fresh id each call
+        // (session-affinity gateways require a conversation id).
+        { signal: controller.signal, sessionId: crypto.randomUUID() },
       );
       return parseVerdict(text);
     };

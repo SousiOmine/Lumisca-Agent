@@ -13,6 +13,7 @@ import type {
   TextContent,
 } from "@lumisca/core";
 import type { AgentMessage, StreamFn } from "@lumisca/core";
+import type { StreamOptions } from "../ai/types.ts";
 import { AskHub } from "../tools/ask.ts";
 import { object, type Tool } from "../tools/schema.ts";
 import type { ClientEvent } from "../types/event.ts";
@@ -95,6 +96,20 @@ function retryNotifications(
       m.role === "notification" && m.kind === "retry",
   );
 }
+
+Deno.test("stream calls carry the session id (conversation affinity)", async () => {
+  const seen: (StreamOptions | undefined)[] = [];
+  const base = streamSequence([fauxAssistantMessage("hi")]);
+  const streamFn: StreamFn = (model, context, options) => {
+    seen.push(options);
+    return base(model, context, options);
+  };
+  const agent = makeAgent(streamFn);
+  await agent.prompt("hello");
+
+  assertEquals(seen.length, 1);
+  assertEquals(seen[0]?.sessionId, "s1");
+});
 
 Deno.test("isVacantResponse: vacant when there is no text and no tool call", () => {
   assertEquals(isVacantResponse(fauxAssistantMessage("")), true);

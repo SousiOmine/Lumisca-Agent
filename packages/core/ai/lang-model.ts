@@ -16,7 +16,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createMistral } from "@ai-sdk/mistral";
 import { createAzure } from "@ai-sdk/azure";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
-import type { Api, Model } from "./types.ts";
+import type { Api, Model, StreamOptions } from "./types.ts";
 
 export interface ResolvedApiKey {
   apiKey: string;
@@ -96,6 +96,35 @@ function compatibleSettings(
     apiKey: settings.apiKey,
     headers: settings.headers,
   });
+}
+
+/** OpenCode Go's managed-inference API requires a stable per-conversation id
+ * on every request (the x-opencode-session header, mandatory since
+ * 2026-09-05 — see vercel/ai#20271). The AI SDK does not manage
+ * conversations, so the transport maps the caller's conversation id onto
+ * that header. Same id as models/extra-providers.ts's catalog constant;
+ * duplicated here so the transport layer stays independent of the catalog. */
+const OPENCODE_GO_PROVIDER_ID = "opencode-go";
+
+/** Request headers that carry the caller's conversation id onto the
+ * provider (see {@link OPENCODE_GO_PROVIDER_ID}). Undefined for providers
+ * without session affinity; applied by the stream transport per request so
+ * the Vercel SDK merges them over the provider factory's own headers.
+ * Throws when an OpenCode Go request has no conversation id — the gateway
+ * rejects header-less requests outright, so fail here with the cause
+ * instead of surfacing a remote 400. */
+export function sessionHeadersFor(
+  model: Model<Api>,
+  options?: StreamOptions,
+): Record<string, string> | undefined {
+  if (model.provider !== OPENCODE_GO_PROVIDER_ID) return undefined;
+  const sessionId = options?.sessionId;
+  if (sessionId === undefined || sessionId === "") {
+    throw new Error(
+      "OpenCode Go requests need a stable conversation id: pass options.sessionId (sent as the x-opencode-session header)",
+    );
+  }
+  return { "x-opencode-session": sessionId };
 }
 
 /** True for the first-party OpenAI provider (which supports the responses

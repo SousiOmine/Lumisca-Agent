@@ -255,7 +255,9 @@ export class Agent {
         tools: this.state.tools,
         thinkingLevel: this.runThinkingLevel,
       },
-      { signal: this.abortController.signal },
+      // The session id is the conversation this exchange belongs to —
+      // session-affinity gateways (OpenCode Go) require it on every turn.
+      { signal: this.abortController.signal, sessionId: this.sessionId },
     );
 
     for await (const event of stream) {

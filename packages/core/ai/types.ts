@@ -414,6 +414,12 @@ export interface StreamOptions {
   signal?: AbortSignal;
   maxRetries?: number;
   maxRetryDelayMs?: number;
+  /** Stable id of the conversation this request belongs to. Agent sessions
+   * pass their session id; one-off auxiliary calls (title generation,
+   * image analysis, judgements) pass a fresh id per call. Session-affinity
+   * gateways require it — OpenCode Go rejects requests without one since
+   * 2026-09-05 (sent as the x-opencode-session header, see lang-model.ts). */
+  sessionId?: string;
 }
 
 /** One LLM turn (no auto tool loop): streams the model's response. The agent

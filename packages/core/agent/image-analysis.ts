@@ -102,6 +102,9 @@ export class ImageAnalyzer {
         }],
       },
       "image analysis failed",
+      // One-off conversation: a fresh id per analysis request
+      // (session-affinity gateways require a conversation id on every request).
+      { sessionId: crypto.randomUUID() },
     );
     const trimmed = text.trim();
     if (!trimmed) throw new Error("image analysis returned no text");

@@ -13,6 +13,7 @@ import {
   streamText as vercelStreamText,
 } from "ai";
 import type { LanguageModel } from "ai";
+import { sessionHeadersFor } from "./lang-model.ts";
 import type {
   Api,
   AssistantMessage,
@@ -72,6 +73,11 @@ async function* runStream(
   // providers that do not support reasoning are unaffected.
   const reasoning = reasoningHint(model, context.thinkingLevel ?? "off");
   if (reasoning !== undefined) request.reasoning = reasoning;
+  // Conversation affinity: providers that require a stable per-conversation
+  // id (OpenCode Go's x-opencode-session) get it as a request header — the
+  // SDK merges request headers over the provider factory's own headers.
+  const sessionHeaders = sessionHeadersFor(model, options);
+  if (sessionHeaders !== undefined) request.headers = sessionHeaders;
 
   const result = vercelStreamText(request as never);
   // Emit a start (empty partial) first, then text/thinking deltas as they

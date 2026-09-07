@@ -53,6 +53,9 @@ export class TitleGenerator {
         }],
       },
       "title generation failed",
+      // One-off conversation: a fresh id per title request (session-affinity
+      // gateways require a conversation id on every request).
+      { sessionId: crypto.randomUUID() },
     );
     const title = cleanTitle(text);
     if (!title) throw new Error("title generation returned no text");

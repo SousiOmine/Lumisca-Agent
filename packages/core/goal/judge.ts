@@ -70,7 +70,9 @@ export class GoalJudge {
           }],
         },
         "goal judgement request failed",
-        { signal: controller.signal },
+        // One-off conversation per judgement: a fresh id each call
+        // (session-affinity gateways require a conversation id).
+        { signal: controller.signal, sessionId: crypto.randomUUID() },
       );
       return parseGoalVerdict(text);
     };
