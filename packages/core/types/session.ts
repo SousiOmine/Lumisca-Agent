@@ -1,4 +1,5 @@
 import type { ThinkingLevel } from "../shared/mod.ts";
+import type { ModelInfo } from "../shared/providers.ts";
 
 export interface SessionInfo {
   id: string;
@@ -16,6 +17,11 @@ export interface SessionInfo {
   thinkingLevel?: ThinkingLevel;
   /** The thinking levels the session's model supports. */
   thinkingLevels?: ThinkingLevel[];
+  /** The session's model with its catalog metadata (context window,
+   * reasoning flag, modalities). Attached by the core when sessions are
+   * returned so clients render model-specific UI (e.g. the context meter)
+   * without fetching the model list; absent on raw rows. */
+  model?: ModelInfo;
   /** True for sessions of the folder-less chat workspace ("simple chat"
    * without a workspace). Attached by the core when sessions are returned;
    * absent on raw rows. */

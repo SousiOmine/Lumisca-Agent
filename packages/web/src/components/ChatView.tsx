@@ -263,9 +263,11 @@ export function ChatView(
     [view.messages],
   );
   const { modelsByProvider } = useProviderModels(peerId ?? "");
-  const contextWindow = modelsByProvider.get(view.info.modelProvider)?.find(
+  const currentModel = modelsByProvider.get(view.info.modelProvider)?.find(
     (m) => m.id === view.info.modelId,
-  )?.contextWindow;
+  );
+  const contextWindow = currentModel?.contextWindow ??
+    view.info.model?.contextWindow;
   const contextUsage = summary.currentTokens === undefined
     ? undefined
     : { summary, contextWindow };

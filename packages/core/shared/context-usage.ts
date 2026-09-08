@@ -1,13 +1,27 @@
 /** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db / pi imports), bundled into the browser client. */
 
-/** Minimal usage shape for context accounting. pi-ai reports per-turn
- * `usage` on assistant messages as `{ input, cacheRead, cacheWrite, ... }`
- * (input = uncached input tokens); this interface keeps the shared module
- * pi-free so the web bundle and the CLI share one implementation. */
+/** Minimal usage shape for context accounting. The Vercel-backed
+ * transport emits the app's own `Usage` (`{ input, cacheRead, cacheWrite,
+ * ... }` — see ai/types.ts) on assistant messages, so `input` is the
+ * uncached input tokens. Older rows (or test doubles) may report the
+ * provider's split instead (`{ inputTokens, inputTokenDetails:
+ * { noCacheTokens, cacheReadTokens, cacheWriteTokens } }`), so the helpers
+ * below accept both shapes. This interface keeps the shared module pi-free
+ * so the web bundle and the CLI share one implementation. */
 export interface ContextUsageLike {
+  /** Uncached input tokens (app shape). */
   input?: number | null;
+  /** App-shape cache reads. */
   cacheRead?: number | null;
+  /** App-shape cache writes. */
   cacheWrite?: number | null;
+  /** Provider-shape total input tokens (Vercel LanguageModelUsage). */
+  inputTokens?: number | null;
+  inputTokenDetails?: {
+    noCacheTokens?: number | null;
+    cacheReadTokens?: number | null;
+    cacheWriteTokens?: number | null;
+  } | null;
 }
 
 /** Minimal message shape for context accounting (only the fields the
@@ -41,13 +55,53 @@ function usageNumber(value: number | null | undefined): number {
     : 0;
 }
 
+/** The usage's splitting convention: the app's own `Usage` shape breaks
+ * input into input/cacheRead/cacheWrite fields; the Vercel provider shape
+ * reports inputTokens + inputTokenDetails (noCache/cacheRead/cacheWrite).
+ * The two shapes are mutually exclusive because the transport (or a test
+ * double) fills exactly one of them. */
+function isVercelShape(usage: ContextUsageLike): boolean {
+  return typeof usage.inputTokens === "number" ||
+    (usage.inputTokenDetails !== undefined &&
+      usage.inputTokenDetails !== null);
+}
+
+/** Uncached input tokens of one usage row, in either shape. */
+function inputTokensOf(usage: ContextUsageLike): number {
+  if (isVercelShape(usage)) {
+    return usageNumber(usage.inputTokenDetails?.noCacheTokens) +
+      usageNumber(usage.input);
+  }
+  return usageNumber(usage.input);
+}
+
 /** Input context of one turn: uncached input + cache reads + cache writes.
  * All three count against the model's context window on providers that
- * report the split (e.g. Anthropic via pi-ai). */
+ * report the split (e.g. Anthropic via pi-ai). In the Vercel provider
+ * shape, `inputTokens` is the full prompt (cached reads included), so it
+ * is the total directly; the details only split it, and counting them
+ * again would double it. When the transport only reports the split (no
+ * aggregate), the parts are summed. */
 export function contextTokensOf(usage?: ContextUsageLike | null): number {
   if (!usage) return 0;
+  if (isVercelShape(usage)) {
+    const total = usageNumber(usage.inputTokens);
+    if (total > 0) return total;
+    return inputTokensOf(usage) +
+      usageNumber(usage.inputTokenDetails?.cacheReadTokens) +
+      usageNumber(usage.inputTokenDetails?.cacheWriteTokens);
+  }
   return usageNumber(usage.input) + usageNumber(usage.cacheRead) +
     usageNumber(usage.cacheWrite);
+}
+
+/** Cache-read tokens of one usage row, in either shape. */
+function cacheReadOf(usage: ContextUsageLike): number {
+  if (isVercelShape(usage)) {
+    return usageNumber(usage.inputTokenDetails?.cacheReadTokens) +
+      usageNumber(usage.cacheRead);
+  }
+  return usageNumber(usage.cacheRead);
 }
 
 /** Summarize context usage over a transcript. Only `role === "assistant"`
@@ -64,7 +118,7 @@ export function summarizeContextUsage(
   for (const message of messages) {
     if (message.role !== "assistant" || !message.usage) continue;
     const tokens = contextTokensOf(message.usage);
-    const cacheRead = usageNumber(message.usage.cacheRead);
+    const cacheRead = cacheReadOf(message.usage);
     turns++;
     currentTokens = tokens;
     currentCacheRead = cacheRead;

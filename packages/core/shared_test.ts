@@ -53,6 +53,36 @@ Deno.test("contextTokensOf sums input/cacheRead/cacheWrite", () => {
   );
 });
 
+Deno.test("contextTokensOf reads the provider (Vercel) usage shape", () => {
+  // inputTokens is the full prompt (cached reads included): the total is
+  // taken directly, never re-summed from the split parts.
+  assertEquals(
+    contextTokensOf({
+      inputTokens: 301200,
+      inputTokenDetails: {
+        noCacheTokens: 1200,
+        cacheReadTokens: 300000,
+        cacheWriteTokens: 0,
+      },
+    }),
+    301200,
+  );
+  // Without an aggregate the split parts are summed.
+  assertEquals(
+    contextTokensOf({
+      inputTokenDetails: {
+        noCacheTokens: 500,
+        cacheReadTokens: 9500,
+        cacheWriteTokens: 0,
+      },
+    }),
+    10000,
+  );
+  // Clean misses / malformed values count as 0.
+  assertEquals(contextTokensOf({ inputTokens: 0 }), 0);
+  assertEquals(contextTokensOf({}), 0);
+});
+
 Deno.test("summarizeContextUsage takes the latest turn and averages cache hits", () => {
   const summary = summarizeContextUsage([
     { role: "user" },
@@ -75,6 +105,31 @@ Deno.test("summarizeContextUsage takes the latest turn and averages cache hits",
     summary.averageCacheHitRate,
     309000 / 311200,
   );
+});
+
+Deno.test("summarizeContextUsage reads the provider (Vercel) usage shape", () => {
+  const summary = summarizeContextUsage([
+    {
+      role: "assistant",
+      usage: {
+        inputTokens: 301200,
+        inputTokenDetails: { noCacheTokens: 1200, cacheReadTokens: 300000 },
+      },
+    },
+    {
+      role: "assistant",
+      usage: {
+        inputTokens: 501000,
+        inputTokenDetails: { noCacheTokens: 1000, cacheReadTokens: 500000 },
+      },
+    },
+  ]);
+  assertEquals(summary.turns, 2);
+  assertEquals(summary.currentTokens, 501000);
+  assertEquals(summary.currentCacheRead, 500000);
+  assertEquals(summary.totalTokens, 802200);
+  assertEquals(summary.totalCacheRead, 800000);
+  assertEquals(summary.averageCacheHitRate, 800000 / 802200);
 });
 
 Deno.test("summarizeContextUsage ignores rows without usage", () => {

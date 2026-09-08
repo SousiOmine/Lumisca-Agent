@@ -972,6 +972,19 @@ export class LumiscaCore {
         session.modelId,
       ),
       thinkingLevels: getSupportedThinkingLevels(model),
+      // The model's catalog metadata (context window etc.) rides along so
+      // clients can render model-specific UI without a model-list fetch —
+      // the session's own model is authoritative even when the catalog
+      // changes afterwards.
+      model: model !== undefined
+        ? {
+          id: model.id,
+          name: model.name,
+          contextWindow: model.contextWindow,
+          reasoning: model.reasoning,
+          input: model.input,
+        }
+        : undefined,
       chat: this.getWorkspace(session.workspaceId)?.chat ?? false,
     };
   }

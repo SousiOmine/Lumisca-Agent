@@ -12,7 +12,7 @@ import {
   streamText as vercelStreamText,
   tool,
 } from "ai";
-import type { LanguageModel } from "ai";
+import type { LanguageModel, LanguageModelUsage } from "ai";
 import { sessionHeadersFor } from "./lang-model.ts";
 import type {
   AgentTool,
@@ -24,6 +24,7 @@ import type {
   StreamFn,
   StreamOptions,
   StreamRequest,
+  Usage,
 } from "./types.ts";
 // (no direct event-stream imports here; streams are produced by the
 // transport from the Vercel result, and consumers type them via types.ts)
@@ -36,6 +37,13 @@ export interface StreamTransport {
 /** The reason text used when a provider is not configured. */
 const NOT_CONFIGURED = (providerId: string) =>
   `Provider is not configured: ${providerId}`;
+
+/** Structural guard for the streamed `finish-step` usage part (the stream
+ * parts are typed loosely here, so the shape is validated at runtime). */
+function isLanguageModelUsage(value: unknown): value is LanguageModelUsage {
+  return typeof value === "object" && value !== null &&
+    ("inputTokens" in value || "outputTokens" in value);
+}
 
 /** Build the Vercel-backed StreamFn over a transport. */
 export function createStreamFn(transport: StreamTransport): StreamFn {
@@ -96,6 +104,7 @@ async function* runStream(
   yield { type: "start", partial: modelStartPartial(model) };
   let text = "";
   let thinking = "";
+  let streamedUsage: LanguageModelUsage | undefined;
   try {
     // fullStream yields every part (text/reasoning deltas, tool calls and
     // tool results) in the order they happen, so tool_execution_start
@@ -164,6 +173,24 @@ async function* runStream(
           };
           break;
         }
+        case "finish-step": {
+          // The step's usage arrives before the final `finish` part:
+          // capture it so the done message carries the real token counts
+          // (input/cacheRead/cacheWrite) instead of zeros.
+          const usage = (p as { usage?: unknown }).usage;
+          if (isLanguageModelUsage(usage)) streamedUsage = usage;
+          break;
+        }
+        case "finish": {
+          // A stream that ends with an error right after the model call
+          // may skip `finish-step`; the `finish` part still carries the
+          // total usage the provider consumed.
+          const usage = (p as { totalUsage?: unknown }).totalUsage;
+          if (isLanguageModelUsage(usage) && streamedUsage === undefined) {
+            streamedUsage = usage;
+          }
+          break;
+        }
         case "error": {
           const message = p.error instanceof Error
             ? p.error.message
@@ -189,6 +216,7 @@ async function* runStream(
   const steps = (await result.steps) as unknown as Array<{
     text?: string;
     reasoningText?: string;
+    usage?: LanguageModelUsage;
     toolCalls?: Array<{
       toolCallId: string;
       toolName: string;
@@ -206,13 +234,43 @@ async function* runStream(
   const finalThinking = thinking.length > 0
     ? thinking
     : (lastStep?.reasoningText ?? "");
+  const finalUsage = stepUsage(streamedUsage, lastStep);
   const message = buildAssistantMessage(
     model,
     lastStep,
     finalText,
     finalThinking,
+    finalUsage,
   );
   yield { type: "done", message };
+}
+
+/** Read the step usage. Prefer the streamed (`finish-step`) usage so a
+ * mid-stream failure still reports the tokens the provider already
+ * consumed; `result.steps` is the fallback. Normalize undefined fields to
+ * 0 for the app's `Usage` shape. */
+function stepUsage(
+  streamedUsage: LanguageModelUsage | undefined,
+  step: { usage?: LanguageModelUsage } | undefined,
+): Usage {
+  const usage = streamedUsage ?? step?.usage;
+  const input = typeof usage?.inputTokens === "number" ? usage.inputTokens : 0;
+  const cacheRead = usage?.inputTokenDetails?.cacheReadTokens ?? 0;
+  const cacheWrite = usage?.inputTokenDetails?.cacheWriteTokens ?? 0;
+  const output = typeof usage?.outputTokens === "number"
+    ? usage.outputTokens
+    : 0;
+  const reasoningTokens = usage?.outputTokenDetails?.reasoningTokens ?? 0;
+  return {
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    ...(reasoningTokens > 0 ? { reasoningTokens } : {}),
+    ...(typeof usage?.totalTokens === "number"
+      ? { total: usage.totalTokens }
+      : {}),
+  };
 }
 
 /** Map a Lumisca thinking level to a Vercel reasoning hint (best effort).
@@ -267,6 +325,7 @@ function buildAssistantMessage(
     | undefined,
   text: string,
   thinking: string,
+  usage: Usage,
 ): AssistantMessage {
   const content: AssistantMessage["content"] = [];
   if (thinking.length > 0) {
@@ -297,7 +356,7 @@ function buildAssistantMessage(
     api: model.api,
     provider: model.provider,
     model: model.id,
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    usage,
     stopReason: step && (step.toolCalls?.length ?? 0) > 0 ? "toolUse" : "stop",
     timestamp: Date.now(),
   };

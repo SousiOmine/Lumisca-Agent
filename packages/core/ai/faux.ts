@@ -24,6 +24,7 @@ import type {
   ThinkingContent,
   ThinkingLevelMap,
   ToolCall,
+  Usage,
 } from "./types.ts";
 
 export function fauxText(text: string): TextContent {
@@ -45,8 +46,12 @@ export function fauxToolCall(
 /** Build an AssistantMessage from a string or content block array. */
 export function fauxAssistantMessage(
   content: string | AssistantMessageContent,
-  opts: { stopReason?: StopReason; errorMessage?: string; timestamp?: number } =
-    {},
+  opts: {
+    stopReason?: StopReason;
+    errorMessage?: string;
+    timestamp?: number;
+    usage?: Usage;
+  } = {},
 ): AssistantMessage {
   const normalized: AssistantMessageContent = typeof content === "string"
     ? [{ type: "text", text: content }]
@@ -57,7 +62,7 @@ export function fauxAssistantMessage(
     api: "openai-completions",
     provider: "faux",
     model: "faux",
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    usage: opts.usage ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     stopReason: opts.stopReason ?? "stop",
     errorMessage: opts.errorMessage,
     timestamp: opts.timestamp ?? Date.now(),
