@@ -52,7 +52,7 @@ export function CopyableUserMessage({
       <div className="msg user">
         <div className="msg-body">
           {images.length > 0 && <ContentImages images={images} />}
-          {text && <p>{text}</p>}
+          {text && <p className="msg-user-text">{text}</p>}
         </div>
       </div>
       <div className="msg-user-actions">

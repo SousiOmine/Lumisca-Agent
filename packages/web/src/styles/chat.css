@@ -108,6 +108,14 @@
   margin-bottom: 0;
 }
 
+/* User messages keep the line breaks typed in the composer: the default
+ * white-space:normal collapses them into single spaces, which made
+ * multi-line prompts look like one unbroken sentence. */
+.msg-body p.msg-user-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* ---- images inside messages / tool results -------------------------------- */
 
 .msg-images {
