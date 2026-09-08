@@ -230,10 +230,22 @@ export class Agent {
    * `turn_end` fires per turn (tool-call turns included) so the session
    * agent's retry policy observes progress. When a test double (faux
    * provider) bypasses the SDK, the done message may still carry
-   * unexecuted tool calls — those are executed here as a fallback. */
+   * unexecuted tool calls — those are executed here as a fallback.
+   *
+   * A message steered in while the agent is working (a sub-agent
+   * completion, a user message, a follow-up retry) is picked up at the top
+   * of the loop and becomes the next turn, so notifications reach the LLM
+   * at the next turn boundary instead of only after the whole tool chain
+   * finishes — the UI already announces them immediately, and deferring
+   * them to the end of the chain left the agent blind to them mid-loop. */
   private async exchangeLoop(): Promise<void> {
     for (;;) {
       if (this.abortRequested) return;
+      if (this.steerQueue.length > 0) {
+        const queued = this.steerQueue.shift()!;
+        this.append(queued);
+        continue;
+      }
       const { assistant, executedIds } = await this.step();
       if (this.abortRequested) return;
       this.emit({ type: "turn_end", message: assistant });
