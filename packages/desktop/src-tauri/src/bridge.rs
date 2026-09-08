@@ -117,8 +117,10 @@ fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String
         return Err(format!("サーバーに接続できません: {url}"));
     }
     let page = page_url(url, token);
-    *app.state::<AppState>().last_remote.lock().unwrap() =
-        Some((url.to_string(), token.to_string()));
+    *app.state::<AppState>()
+        .last_remote
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some((url.to_string(), token.to_string()));
     navigate_main(app, &page)?;
     Ok(page)
 }
@@ -126,11 +128,16 @@ fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String
 fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
     // If the background startup is still running, wait for its result
     // instead of spawning a second server instance.
-    let pending = app.state::<AppState>().startup_task.lock().unwrap().clone();
+    let pending = app
+        .state::<AppState>()
+        .startup_task
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     if let Some(shared) = pending {
         let deadline = Instant::now() + CONNECT_LOCAL_WAIT_TIMEOUT;
         loop {
-            if let Some(result) = shared.lock().unwrap().clone() {
+            if let Some(result) = shared.lock().unwrap_or_else(|e| e.into_inner()).clone() {
                 return result;
             }
             if Instant::now() >= deadline {
@@ -138,7 +145,10 @@ fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
                 // panicked and never filled the slot). Forget it so the
                 // next attempt starts a server directly instead of waiting
                 // again.
-                *app.state::<AppState>().startup_task.lock().unwrap() = None;
+                *app.state::<AppState>()
+                    .startup_task
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = None;
                 return Err(
                     "ローカルサーバーの起動がタイムアウトしました。しばらく待ってからもう一度お試しください。"
                         .into(),
@@ -148,7 +158,10 @@ fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
         }
     }
     let url = ensure_local_server(app)?;
-    *app.state::<AppState>().last_remote.lock().unwrap() = None;
+    *app.state::<AppState>()
+        .last_remote
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
     navigate_main(app, &url)?;
     Ok(url)
 }
@@ -185,8 +198,13 @@ pub(crate) fn handle_shell_request(
     match action.as_str() {
         "state" => {
             let state = app.state::<AppState>();
-            let startup = state.startup.lock().unwrap();
-            let mode = if state.last_remote.lock().unwrap().is_some() {
+            let startup = state.startup.lock().unwrap_or_else(|e| e.into_inner());
+            let mode = if state
+                .last_remote
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_some()
+            {
                 "remote"
             } else {
                 "local"

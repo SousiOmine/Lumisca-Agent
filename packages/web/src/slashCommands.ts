@@ -7,16 +7,39 @@
 
 import type { ReactNode } from "preact/compat";
 import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
-import type { ModePrompt } from "@lumisca/core";
+import type { ModePrompt, SavedPrompt } from "@lumisca/core";
 import {
   IconCode,
   IconFileDiff,
   IconGitBranch,
   IconGitCommit,
   IconListCheck,
+  IconMessage,
   IconTarget,
 } from "@tabler/icons-preact";
-import type { SlashCommand, SlashCommandItem } from "./components/Composer.tsx";
+
+/** One selectable entry of the slash-command menu: a command (first level)
+ * or one of its subcommands (second level). */
+export interface SlashCommandItem {
+  id: string;
+  label: string;
+  description?: string;
+  icon?: (props: { size?: string | number; className?: string }) => ReactNode;
+}
+
+/** A slash command offered when the input starts with `/`. Commands with
+ * `items` open a second level before executing; leaf commands execute
+ * directly. */
+export interface SlashCommand extends SlashCommandItem {
+  /** Subcommands shown after selecting this command (e.g. the review
+   * target). Omitted → the command executes right away. */
+  items?: SlashCommandItem[];
+  /** The command takes the user's own text as its subject: the text typed
+   * after the command token (`/plan <依頼文>`) is handed to onSelect so the
+   * parent can wrap it into the mode prompt. When set, the menu hints to
+   * type the request while it is still missing. */
+  requiresText?: boolean;
+}
 
 type Icon = (
   props: { size?: string | number; className?: string },
@@ -51,6 +74,65 @@ export const slashCommands: SlashCommand[] = AGENT_MODES.map((mode) => ({
     }))
     : undefined,
 }));
+
+/** Build the slash-commands menu including the /prompt submenu.
+ * In chat mode only saved prompts are shown (agent modes need a workspace).
+ * Shared between ChatView and NewSessionView so the logic is not duplicated. */
+export function buildSlashCommands(
+  savedPrompts: SavedPrompt[],
+  isChat: boolean,
+): SlashCommand[] {
+  const promptItems: SlashCommandItem[] = savedPrompts.map((p) => ({
+    id: p.id,
+    label: p.label,
+    description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "..." : ""),
+  }));
+  if (isChat) {
+    // Chat mode: only saved prompts, no agent modes.
+    if (promptItems.length === 0) return [];
+    return [{
+      id: "prompt",
+      label: "保存済みプロンプト",
+      description: "登録済みのプロンプトを挿入",
+      icon: IconMessage,
+      items: promptItems,
+    }];
+  }
+  // Workspace mode: agent modes + saved prompts.
+  const commands = [...slashCommands];
+  if (promptItems.length > 0) {
+    commands.push({
+      id: "prompt",
+      label: "保存済みプロンプト",
+      description: "登録済みのプロンプトを挿入",
+      icon: IconMessage,
+      items: promptItems,
+    });
+  }
+  return commands;
+}
+
+/** Resolve a slash-command selection: returns the saved prompt to insert
+ * when the /prompt submenu was used, or the mode prompt to submit for
+ * agent modes. Returns null when the command is invalid. */
+export function resolveSlashCommand(
+  command: SlashCommand,
+  savedPrompts: SavedPrompt[],
+  item?: SlashCommandItem,
+  text?: string,
+):
+  | { savedPrompt: string }
+  | { modePrompt: { text: string; mode: ModePrompt } }
+  | null {
+  if (command.id === "prompt" && item) {
+    const saved = savedPrompts.find((p) => p.id === item.id);
+    if (saved) return { savedPrompt: saved.prompt };
+    return null;
+  }
+  const result = slashPrompt(command, item, text);
+  if (result !== null) return { modePrompt: result };
+  return null;
+}
 
 /** Build the user message + mode metadata a slash-command selection sends;
  * null when the selection does not resolve to a registered mode (defensive

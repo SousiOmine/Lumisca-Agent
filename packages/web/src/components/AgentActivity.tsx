@@ -2,7 +2,7 @@ import { useEffect, useState } from "preact/compat";
 import { IconChevronRight, IconLoader2 } from "@tabler/icons-preact";
 
 /** Format elapsed milliseconds as "Xm Ys" or "Ys". */
-export function formatElapsed(ms: number): string {
+function formatElapsed(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
   const hour = Math.floor(totalSec / 3600);
   const min = Math.floor((totalSec % 3600) / 60);

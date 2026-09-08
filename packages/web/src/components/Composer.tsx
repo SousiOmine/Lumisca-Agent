@@ -29,7 +29,7 @@ import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
 import { useMention } from "../hooks/useMention.ts";
 import { isSlashCommand, useSlashMenu } from "../hooks/useSlashMenu.ts";
-import type { SlashCommand, SlashCommandItem } from "../hooks/useSlashMenu.ts";
+import type { SlashCommand, SlashCommandItem } from "../slashCommands.ts";
 export type { SlashCommand, SlashCommandItem };
 import type { ModelInfo, PendingImage, ThinkingLevel } from "../types.ts";
 

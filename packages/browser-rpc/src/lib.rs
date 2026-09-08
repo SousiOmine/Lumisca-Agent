@@ -10,6 +10,7 @@
 //! hosts share one implementation instead of drifting.
 
 pub mod emulation;
+pub mod eval;
 pub mod policy;
 pub mod probe;
 pub mod rpc;

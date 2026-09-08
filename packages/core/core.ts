@@ -25,7 +25,7 @@ import type {
   Model,
 } from "./ai/types.ts";
 import type { ModePrompt } from "./types/mode-message.ts";
-import { createDbModelsStore, ModelManager } from "./models/mod.ts";
+import { ModelManager } from "./models/mod.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
@@ -109,11 +109,9 @@ export class LumiscaCore {
     this.db = db;
     this.settings = settings;
     this.credentials = createDbCredentialStore(this.settings);
-    const modelsStore = createDbModelsStore(this.settings);
     this.models = new ModelManager(
       this.credentials,
       this.settings,
-      modelsStore,
     );
     this.personalization = new PersonalizationService(this.settings);
     this.savedPrompts = new SavedPromptsService(this.settings);

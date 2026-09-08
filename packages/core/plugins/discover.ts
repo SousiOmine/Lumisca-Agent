@@ -1,5 +1,6 @@
 import { basename, join } from "node:path";
 import { repoChain } from "../memory/agents-md.ts";
+import { readIfExists, resolveGlobalDirs } from "../shared/fs-util.ts";
 import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { McpServerConfig } from "../mcp/config.ts";
@@ -206,15 +207,5 @@ function scanPluginMcp(
 
 function resolveGlobalPluginDirs(injected?: string[]): string[] {
   if (injected !== undefined) return injected;
-  const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME");
-  if (home === undefined || home === "") return [];
-  return [join(home, AGENTS_PLUGINS_DIR)];
-}
-
-function readIfExists(path: string): string | undefined {
-  try {
-    return Deno.readTextFileSync(path);
-  } catch {
-    return undefined;
-  }
+  return resolveGlobalDirs(AGENTS_PLUGINS_DIR);
 }

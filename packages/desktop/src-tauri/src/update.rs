@@ -135,7 +135,7 @@ fn updater(app: &AppHandle) -> Result<Arc<Updater>, String> {
 /// version (shown in the 一般 settings panel).
 pub(crate) fn update_status_json(app: &AppHandle) -> serde_json::Value {
     let state = app.state::<AppState>();
-    let st = state.update.lock().unwrap();
+    let st = state.update.lock().unwrap_or_else(|e| e.into_inner());
     let mut value = serde_json::to_value(&*st).unwrap_or_else(|_| serde_json::json!({}));
     value["currentVersion"] = app.package_info().version.to_string().into();
     value
@@ -143,7 +143,7 @@ pub(crate) fn update_status_json(app: &AppHandle) -> serde_json::Value {
 
 fn fail_update(app: &AppHandle, message: &str) {
     let state = app.state::<AppState>();
-    let mut st = state.update.lock().unwrap();
+    let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
     st.checking = false;
     st.downloading = false;
     st.error = Some(message.to_string());
@@ -151,7 +151,11 @@ fn fail_update(app: &AppHandle, message: &str) {
 
 /// Whether automatic updates are enabled (the persisted desktop setting).
 pub(crate) fn auto_update_enabled(app: &AppHandle) -> bool {
-    app.state::<AppState>().update.lock().unwrap().auto_update
+    app.state::<AppState>()
+        .update
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .auto_update
 }
 
 /// Persist and apply the auto-update toggle. Turning it on kicks off the
@@ -160,7 +164,11 @@ pub(crate) fn set_auto_update(app: &AppHandle, enabled: bool) -> Result<(), Stri
     let mut settings = load_desktop_settings(app);
     settings.auto_update = enabled;
     save_desktop_settings(app, &settings)?;
-    app.state::<AppState>().update.lock().unwrap().auto_update = enabled;
+    app.state::<AppState>()
+        .update
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .auto_update = enabled;
     if enabled {
         tauri::async_runtime::spawn(check_for_updates(app.clone(), true));
     }
@@ -175,7 +183,7 @@ pub(crate) async fn check_for_updates(app: AppHandle, auto: bool) {
     // before the awaits below.
     let auto_download = {
         let state = app.state::<AppState>();
-        let mut st = state.update.lock().unwrap();
+        let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
         if st.checking || st.downloading || st.ready {
             return;
         }
@@ -213,12 +221,15 @@ pub(crate) async fn check_for_updates(app: AppHandle, auto: bool) {
         Ok(Some(update)) => {
             {
                 let state = app.state::<AppState>();
-                let mut st = state.update.lock().unwrap();
+                let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
                 st.checking = false;
                 st.available = true;
                 st.latest_version = Some(update.version.to_string());
             }
-            *app.state::<AppState>().pending.lock().unwrap() = Some(PendingUpdate {
+            *app.state::<AppState>()
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(PendingUpdate {
                 update,
                 bytes: Vec::new(),
             });
@@ -228,7 +239,7 @@ pub(crate) async fn check_for_updates(app: AppHandle, auto: bool) {
         }
         Ok(None) => {
             let state = app.state::<AppState>();
-            let mut st = state.update.lock().unwrap();
+            let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
             st.checking = false;
             st.available = false;
             st.latest_version = None;
@@ -247,7 +258,7 @@ pub(crate) async fn check_for_updates(app: AppHandle, auto: bool) {
 pub(crate) async fn download_update(app: AppHandle) {
     {
         let state = app.state::<AppState>();
-        let mut st = state.update.lock().unwrap();
+        let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
         if !st.available || st.downloading || st.ready {
             return;
         }
@@ -257,10 +268,15 @@ pub(crate) async fn download_update(app: AppHandle) {
         st.error = None;
     }
 
-    let pending = app.state::<AppState>().pending.lock().unwrap().take();
+    let pending = app
+        .state::<AppState>()
+        .pending
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
     let Some(pending) = pending else {
         let state = app.state::<AppState>();
-        let mut st = state.update.lock().unwrap();
+        let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
         st.downloading = false;
         st.error =
             Some("ダウンロードできる更新が見つかりません。もう一度確認してください。".into());
@@ -274,7 +290,7 @@ pub(crate) async fn download_update(app: AppHandle) {
             |chunk, total| {
                 received += chunk as u64;
                 let state = app.state::<AppState>();
-                let mut st = state.update.lock().unwrap();
+                let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
                 st.downloaded = Some(received);
                 st.total = total;
                 st.progress = total.map(|t| received as f64 / t as f64);
@@ -285,24 +301,30 @@ pub(crate) async fn download_update(app: AppHandle) {
 
     match result {
         Ok(bytes) => {
-            *app.state::<AppState>().pending.lock().unwrap() = Some(PendingUpdate {
+            *app.state::<AppState>()
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(PendingUpdate {
                 update: pending.update,
                 bytes,
             });
             let state = app.state::<AppState>();
-            let mut st = state.update.lock().unwrap();
+            let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
             st.downloading = false;
             st.ready = true;
             st.progress = Some(1.0);
         }
         Err(e) => {
             // Keep the update record so the download can be retried.
-            *app.state::<AppState>().pending.lock().unwrap() = Some(PendingUpdate {
+            *app.state::<AppState>()
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(PendingUpdate {
                 update: pending.update,
                 bytes: Vec::new(),
             });
             let state = app.state::<AppState>();
-            let mut st = state.update.lock().unwrap();
+            let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
             st.downloading = false;
             st.ready = false;
             st.progress = None;
@@ -317,17 +339,25 @@ pub(crate) async fn download_update(app: AppHandle) {
 /// installer is ready to launch, so an earlier failure leaves the UI alive.
 pub(crate) fn install_update(app: AppHandle) {
     std::thread::spawn(move || {
-        let pending = app.state::<AppState>().pending.lock().unwrap().take();
+        let pending = app
+            .state::<AppState>()
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
         let Some(pending) = pending else {
             let state = app.state::<AppState>();
-            let mut st = state.update.lock().unwrap();
+            let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
             st.error = Some("インストールできる更新がありません。".into());
             return;
         };
         if let Err(e) = pending.update.install(&pending.bytes) {
-            *app.state::<AppState>().pending.lock().unwrap() = Some(pending);
+            *app.state::<AppState>()
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(pending);
             let state = app.state::<AppState>();
-            let mut st = state.update.lock().unwrap();
+            let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
             st.error = Some(format!("インストールに失敗しました: {e}"));
         }
         // On success the installer is running and this process has exited.

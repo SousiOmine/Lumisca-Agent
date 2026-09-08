@@ -5,7 +5,7 @@ import {
   useMemo,
   useRef,
 } from "preact/compat";
-import { IconMessage, IconSend } from "@tabler/icons-preact";
+import { IconSend } from "@tabler/icons-preact";
 import { summarizeContextUsage } from "@lumisca/core/shared";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
@@ -21,8 +21,8 @@ import {
   type SlashCommandItem,
 } from "./Composer.tsx";
 import {
-  slashCommands,
-  slashPrompt,
+  buildSlashCommands,
+  resolveSlashCommand,
   slashPromptFromText,
 } from "../slashCommands.ts";
 import { QuestionPanel } from "./QuestionPanel.tsx";
@@ -104,36 +104,10 @@ export function ChatView(
 
   // Build the slash commands list including the /prompt submenu.
   // In chat mode only saved prompts are shown (agent modes need a workspace).
-  const allSlashCommands = useMemo<SlashCommand[]>(() => {
-    const promptItems: SlashCommandItem[] = savedPrompts.map((p) => ({
-      id: p.id,
-      label: p.label,
-      description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "..." : ""),
-    }));
-    if (view.info.chat) {
-      // Chat mode: only saved prompts, no agent modes.
-      if (promptItems.length === 0) return [];
-      return [{
-        id: "prompt",
-        label: "保存済みプロンプト",
-        description: "登録済みのプロンプトを挿入",
-        icon: IconMessage,
-        items: promptItems,
-      }];
-    }
-    // Workspace mode: agent modes + saved prompts.
-    const commands = [...slashCommands];
-    if (promptItems.length > 0) {
-      commands.push({
-        id: "prompt",
-        label: "保存済みプロンプト",
-        description: "登録済みのプロンプトを挿入",
-        icon: IconMessage,
-        items: promptItems,
-      });
-    }
-    return commands;
-  }, [view.info.chat, savedPrompts]);
+  const allSlashCommands = useMemo<SlashCommand[]>(
+    () => buildSlashCommands(savedPrompts, view.info.chat ?? false),
+    [view.info.chat, savedPrompts],
+  );
 
   // Pin the scroll to the newest content while the user is at the bottom.
   // A ResizeObserver fires on every content layout change (streaming
@@ -216,15 +190,12 @@ export function ChatView(
     item?: SlashCommandItem,
     text?: string,
   ) => {
-    if (command.id === "prompt" && item) {
-      const saved = savedPrompts.find((p) => p.id === item.id);
-      if (saved) {
-        onInputChange(saved.prompt);
-      }
-      return;
+    const result = resolveSlashCommand(command, savedPrompts, item, text);
+    if (result && "savedPrompt" in result) {
+      onInputChange(result.savedPrompt);
+    } else if (result && "modePrompt" in result) {
+      submit(result.modePrompt.text, result.modePrompt.mode);
     }
-    const result = slashPrompt(command, item, text);
-    if (result !== null) submit(result.text, result.mode);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

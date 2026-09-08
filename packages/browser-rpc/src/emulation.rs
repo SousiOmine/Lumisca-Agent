@@ -68,7 +68,7 @@ pub fn capture_screenshot_params(
         },
     });
     if format == "jpeg" {
-        params["quality"] = serde_json::json!(quality.unwrap_or(80).min(100).max(1));
+        params["quality"] = serde_json::json!(quality.unwrap_or(80).clamp(1, 100));
     }
     params
 }

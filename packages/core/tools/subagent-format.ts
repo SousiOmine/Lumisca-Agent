@@ -1,5 +1,5 @@
 import type { AgentMessage } from "../ai/types.ts";
-import { contentText } from "../content.ts";
+import { contentText } from "../shared/mod.ts";
 import type {
   NotificationMessage,
   NotificationPayload,

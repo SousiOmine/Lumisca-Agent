@@ -19,6 +19,9 @@ use std::time::Duration;
 // Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
 // `open` on every platform; only the CDP calls themselves are Windows-only.
 use lumisca_browser_rpc::emulation;
+use lumisca_browser_rpc::eval::{
+    driver, probe_method_of, to_js_literal, EVAL_TIMEOUT, WAIT_HEADROOM,
+};
 use lumisca_browser_rpc::server::RpcHandler;
 use lumisca_browser_rpc::{error_codes, limits, methods, policy, probe, RpcError, RpcServer};
 use serde_json::{json, Value};
@@ -27,12 +30,6 @@ use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWi
 use tao::window::WindowBuilder;
 use wry::{WebView, WebViewBuilder};
 
-/// How long one eval (observe/act/screenshot) may take before the RPC
-/// answers `timeout`.
-const EVAL_TIMEOUT: Duration = Duration::from_secs(8);
-/// Headroom added on top of a wait's own timeout (its in-page deadline
-/// governs).
-const WAIT_HEADROOM: Duration = Duration::from_secs(3);
 /// Default idle timeout when --idle-timeout-ms is not given.
 const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 /// How long the process stays alive after replying to `close`, so the HTTP
@@ -162,7 +159,7 @@ fn main() {
                 HostCommand::Screenshot { params, reply } => {
                     host.screenshot(&params, reply);
                 }
-                HostCommand::Close { reply } => host.close(reply),
+                HostCommand::Close { reply } => host.close(reply, &proxy),
                 HostCommand::Shutdown => {
                     // The parent died, or the idle timeout fired: leave
                     // immediately. The OS reclaims the WebView.
@@ -326,11 +323,11 @@ impl Host {
                     .load_url(url)
                     .map_err(|e| RpcError::internal(format!("navigate に失敗しました: {e}")))?;
                 if let Some(window) = &self.owning_window {
-                    let _ = window.set_inner_size(tao::dpi::LogicalSize::new(
+                    window.set_inner_size(tao::dpi::LogicalSize::new(
                         f64::from(width),
                         f64::from(height),
                     ));
-                    let _ = window.set_visible(visible);
+                    window.set_visible(visible);
                     if visible {
                         window.set_focus();
                     }
@@ -442,15 +439,18 @@ impl Host {
             .map_err(|e| RpcError::not_open(format!("ブラウザウィンドウが利用できません: {e}")))
     }
 
-    fn close(&mut self, reply: Reply) {
+    fn close(&mut self, reply: Reply, proxy: &EventLoopProxy<HostCommand>) {
         self.webview = None;
         self.owning_window = None;
         let _ = reply.send(r#"{"closed":true}"#.to_string());
         // The HTTP response needs a moment to reach the client before the
-        // process exits.
-        std::thread::spawn(|| {
+        // process exits. Send a delayed Shutdown via the event loop
+        // proxy so the normal event-loop exit path (Event::LoopDestroyed
+        // → rpc.stop()) runs instead of std::process::exit(0).
+        let proxy = proxy.clone();
+        std::thread::spawn(move || {
             std::thread::sleep(CLOSE_FLUSH_GRACE);
-            std::process::exit(0);
+            let _ = proxy.send_event(HostCommand::Shutdown);
         });
     }
 
@@ -505,7 +505,7 @@ impl Host {
                 "png" => json!({ "format": "png", "fromSurface": true }),
                 "jpeg" => json!({
                     "format": "jpeg",
-                    "quality": quality.unwrap_or(80).min(100).max(1),
+                    "quality": quality.unwrap_or(80).clamp(1, 100),
                     "fromSurface": true,
                 }),
                 other => {
@@ -602,38 +602,6 @@ impl Host {
     }
 }
 
-/// The eval driver (same shape as the Desktop host): a catch-all IIFE.
-fn driver(probe_call: &str) -> String {
-    format!(
-        concat!(
-            "(function () {{ var p = window.__lumiscaProbe; ",
-            "if (!p) {{ return {{ ok: false, code: \"probe_missing\", ",
-            "error: \"probe is not installed on this page\" }}; }} ",
-            "try {{ {probe_call} }} ",
-            "catch (e) {{ return {{ ok: false, code: \"probe_error\", ",
-            "error: String((e && (e.message || e)) || e) }}; }} }})()",
-        ),
-        probe_call = probe_call,
-    )
-}
-
-/// JSON → JS literal for embedding into the driver.
-fn to_js_literal(value: &Value) -> String {
-    serde_json::to_string(value)
-        .unwrap_or_else(|_| "null".to_string())
-        .replace('\u{2028}', "\\u2028")
-        .replace('\u{2029}', "\\u2029")
-}
-
-/// RPC method → probe function name. The wire protocol says `observe`;
-/// the probe's snapshot builder is called `snapshot`.
-fn probe_method_of(rpc_method: &str) -> &str {
-    match rpc_method {
-        methods::OBSERVE => "snapshot",
-        other => other,
-    }
-}
-
 /// The reply payload is the raw eval string; encode an RpcError into the
 /// same shape when the main thread fails before any eval ran.
 fn reply_after_error(reply: Reply, error: RpcError) -> Result<(), mpsc::SendError<String>> {
@@ -663,12 +631,7 @@ fn send_value(reply: Reply, result: Result<Value, RpcError>) {
 /// failed send loses only the fit update; the next open or resize
 /// retries it.
 #[cfg(windows)]
-fn apply_device_metrics(
-    webview: &WebView,
-    viewport: (u32, u32),
-    area_w: f64,
-    area_h: f64,
-) {
+fn apply_device_metrics(webview: &WebView, viewport: (u32, u32), area_w: f64, area_h: f64) {
     use windows::core::HSTRING;
     use wry::WebViewExtWindows;
 
@@ -759,23 +722,5 @@ mod tests {
         let args = vec!["--token".to_string(), "abc".to_string()];
         assert_eq!(arg_value(&args, "--token").as_deref(), Some("abc"));
         assert_eq!(arg_value(&args, "--nope"), None);
-    }
-
-    #[test]
-    fn driver_is_syntactically_valid_and_self_contained() {
-        let script = driver("return p.snapshot({});");
-        assert!(script.contains("__lumiscaProbe"));
-        assert!(script.contains("probe_missing"));
-        assert!(script.contains("probe_error"));
-        assert!(!script.contains("`"));
-        assert!(!script.contains("${"));
-    }
-
-    #[test]
-    fn to_js_literal_escapes_js_line_separators() {
-        let value = json!({ "value": "a\u{2028}b\u{2029}c" });
-        let literal = to_js_literal(&value);
-        assert!(literal.contains("\\u2028"));
-        assert!(literal.contains("\\u2029"));
     }
 }

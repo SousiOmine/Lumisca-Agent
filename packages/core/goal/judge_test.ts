@@ -1,12 +1,49 @@
 import { assertEquals } from "@std/assert";
 import {
   buildGoalJudgeUserText,
-  excerptTranscript,
   lastAssistantOutput,
   MAX_GOAL_TRANSCRIPT_CHARS,
   parseGoalVerdict,
 } from "./judge.ts";
 import type { AgentMessage } from "@lumisca/core";
+
+/** Test-only helper: render recent agent messages as plain text (kept for
+ * tests/debug). Mirrors the now-removed `excerptTranscript` from judge.ts. */
+function excerptTranscript(messages: AgentMessage[]): string {
+  const lines: string[] = [];
+  for (const message of messages) {
+    const role = message.role;
+    const m = message as {
+      content?: unknown;
+      fullPrompt?: unknown;
+      title?: unknown;
+      body?: unknown;
+    };
+    let text = "";
+    if (typeof m.fullPrompt === "string") text = m.fullPrompt;
+    else if (typeof m.title === "string" || typeof m.body === "string") {
+      text = `${m.title ?? ""}\n${m.body ?? ""}`.trim();
+    } else {
+      const content = m.content as
+        | string
+        | Array<{ type: string; text?: string }>
+        | undefined;
+      if (content !== undefined) {
+        text = Array.isArray(content)
+          ? content
+            .filter((b) => b.type === "text")
+            .map((b) => b.text ?? "")
+            .join("\n")
+          : String(content);
+      }
+    }
+    if (text.trim().length === 0) continue;
+    lines.push(`[${role}] ${text}`);
+  }
+  const joined = lines.join("\n\n");
+  if (joined.length <= MAX_GOAL_TRANSCRIPT_CHARS) return joined;
+  return joined.slice(joined.length - MAX_GOAL_TRANSCRIPT_CHARS);
+}
 
 Deno.test("parseGoalVerdict: parses an achieved verdict", () => {
   const verdict = parseGoalVerdict(

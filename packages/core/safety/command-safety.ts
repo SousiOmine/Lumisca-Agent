@@ -1,6 +1,6 @@
 import type { Api, Model } from "../ai/types.ts";
 import type { StreamFn } from "../ai/types.ts";
-import { streamText } from "../agent/stream-text.ts";
+import { streamText } from "../ai/stream.ts";
 import type { CommandApproval, CommandSafetyKind } from "../shared/mod.ts";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,

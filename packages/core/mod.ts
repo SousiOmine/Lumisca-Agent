@@ -1,7 +1,7 @@
 export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
 export { CoreError, errorMessage } from "./errors.ts";
-export { createLogger, logDebug } from "./log.ts";
+export { createLogger } from "./log.ts";
 export type { Logger, LogLevel } from "./log.ts";
 export { Sandbox } from "./workspace/sandbox.ts";
 export {
@@ -148,7 +148,7 @@ export type {
   BackgroundCommandState,
 } from "./tools/background.ts";
 export { BackgroundProcessManager } from "./tools/background.ts";
-export { contentText } from "./content.ts";
+export { contentText } from "./shared/mod.ts";
 export {
   MAX_PROMPT_IMAGES,
   serializeMcpServers,

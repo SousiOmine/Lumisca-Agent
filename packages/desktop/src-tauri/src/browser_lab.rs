@@ -58,6 +58,9 @@ use std::time::Duration;
 // Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
 // `open` on every platform; only the CDP calls themselves are Windows-only.
 use lumisca_browser_rpc::emulation;
+use lumisca_browser_rpc::eval::{
+    driver, probe_method_of, to_js_literal, EVAL_TIMEOUT, WAIT_HEADROOM,
+};
 #[cfg(windows)]
 use lumisca_browser_rpc::limits;
 use lumisca_browser_rpc::server::RpcHandler;
@@ -88,12 +91,6 @@ const PANE_HEADER_HEIGHT: f64 = 36.0;
 /// `--tab-height` in packages/web/src/styles/tokens.css (the pane starts below it).
 const APP_TITLEBAR_HEIGHT: f64 = 40.0;
 
-/// How long one eval (observe/act/screenshot) may take before the RPC
-/// answers `timeout`. Waits are exempt: their in-page deadline governs,
-/// and the host adds headroom below.
-const EVAL_TIMEOUT: Duration = Duration::from_secs(8);
-/// Headroom added on top of a wait's own timeout.
-const WAIT_HEADROOM: Duration = Duration::from_secs(3);
 /// How long the page gets to answer a CDP method call.
 const CDP_TIMEOUT: Duration = Duration::from_secs(8);
 
@@ -183,11 +180,16 @@ impl BrowserLab {
         if let Some(mut rpc) = self.rpc.take() {
             rpc.stop();
         }
-        let window = self.core.window.lock().unwrap().take();
+        let window = self
+            .core
+            .window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
         if let Some(window) = window {
             let _ = window.destroy();
         }
-        *self.core.visible.lock().unwrap() = false;
+        *self.core.visible.lock().unwrap_or_else(|e| e.into_inner()) = false;
     }
 }
 
@@ -208,41 +210,6 @@ impl RpcHandler for LabHandler {
             methods::CLOSE => self.close(),
             _ => Err(RpcError::invalid(format!("unknown method: {method}"))),
         }
-    }
-}
-
-/// The eval driver: a catch-all IIFE so a missing probe or a probe
-/// exception reads as a well-formed result, never as an eval failure.
-fn driver(probe_call: &str) -> String {
-    format!(
-        concat!(
-            "(function () {{ var p = window.__lumiscaProbe; ",
-            "if (!p) {{ return {{ ok: false, code: \"probe_missing\", ",
-            "error: \"probe is not installed on this page\" }}; }} ",
-            "try {{ {probe_call} }} ",
-            "catch (e) {{ return {{ ok: false, code: \"probe_error\", ",
-            "error: String((e && (e.message || e)) || e) }}; }} }})()",
-        ),
-        probe_call = probe_call,
-    )
-}
-
-/// JSON → JS literal for embedding into the driver (serde's JSON is valid
-/// JS for our value shapes; line separators must be escaped for the JS
-/// string literal).
-fn to_js_literal(value: &Value) -> String {
-    serde_json::to_string(value)
-        .unwrap_or_else(|_| "null".to_string())
-        .replace('\u{2028}', "\\u2028")
-        .replace('\u{2029}', "\\u2029")
-}
-
-/// RPC method → probe function name. The wire protocol says `observe`;
-/// the probe's snapshot builder is called `snapshot`.
-fn probe_method_of(rpc_method: &str) -> &str {
-    match rpc_method {
-        methods::OBSERVE => "snapshot",
-        other => other,
     }
 }
 
@@ -382,14 +349,19 @@ impl LabCore {
         // outside close(), e.g. after a WebView2 crash), forget the stale
         // handle so the next open builds a fresh window.
         if self.app.get_webview_window(LAB_WINDOW_LABEL).is_none() {
-            *self.window.lock().unwrap() = None;
+            *self.window.lock().unwrap_or_else(|e| e.into_inner()) = None;
         }
-        if let Some(window) = self.window.lock().unwrap().clone() {
+        if let Some(window) = self
+            .window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        {
             let _ = window.navigate(parsed);
             place_pane(&window, &main);
             match_main_desktop(&window, &main);
             self.apply_visibility(&window, visible)?;
-            *self.visible.lock().unwrap() = visible;
+            *self.visible.lock().unwrap_or_else(|e| e.into_inner()) = visible;
             return Ok(window);
         }
         let builder = WebviewWindowBuilder::new(
@@ -439,8 +411,8 @@ impl LabCore {
         match_main_desktop(&window, &main);
         raise_pane(&window);
         self.apply_visibility(&window, visible)?;
-        *self.window.lock().unwrap() = Some(window.clone());
-        *self.visible.lock().unwrap() = visible;
+        *self.window.lock().unwrap_or_else(|e| e.into_inner()) = Some(window.clone());
+        *self.visible.lock().unwrap_or_else(|e| e.into_inner()) = visible;
         Ok(window)
     }
 
@@ -475,7 +447,12 @@ impl LabCore {
     /// (without stealing activation). Called from lib.rs on the main
     /// window's Moved / Resized / Focused events.
     fn sync(&self) {
-        let Some(pane) = self.window.lock().unwrap().clone() else {
+        let Some(pane) = self
+            .window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        else {
             return;
         };
         let Some(main) = self.app.get_webview_window(MAIN_WINDOW_LABEL) else {
@@ -500,21 +477,24 @@ impl LabCore {
     /// send loses only the fit update — the next open or resize retries.
     #[cfg(windows)]
     fn reapply_emulation(&self, pane: &WebviewWindow) {
-        let (width, height) = match *self.viewport.lock().unwrap() {
+        let (width, height) = match *self.viewport.lock().unwrap_or_else(|e| e.into_inner()) {
             Some(vp) => vp,
             None => return,
         };
         let (area_w, area_h) = pane_size(pane);
         let scale = emulation::fit_scale(width, height, area_w, area_h);
-        if *self.applied_scale.lock().unwrap() == Some(scale) {
+        if *self.applied_scale.lock().unwrap_or_else(|e| e.into_inner()) == Some(scale) {
             return;
         }
-        self.applied_scale.lock().unwrap().replace(scale);
+        self.applied_scale
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .replace(scale);
         let params = emulation::device_metrics_params(width, height, scale);
         let _ = pane.with_webview(move |platform| {
             use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
             use windows::core::HSTRING;
-            let Ok(core_webview) = (|| unsafe { platform.controller().CoreWebView2() })() else {
+            let Ok(core_webview) = (unsafe { platform.controller().CoreWebView2() }) else {
                 return;
             };
             let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
@@ -538,8 +518,12 @@ impl LabCore {
     /// lab reports itself as kind "browser" with the loaded page URL as
     /// the label.
     fn state_json(&self) -> Value {
-        let open = self.window.lock().unwrap().is_some();
-        let visible = *self.visible.lock().unwrap();
+        let open = self
+            .window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some();
+        let visible = *self.visible.lock().unwrap_or_else(|e| e.into_inner());
         let content = if open {
             let label = self
                 .window
@@ -558,7 +542,12 @@ impl LabCore {
     /// Show or hide the pane (UI choice). The lab keeps running while
     /// hidden; the agent's observe/act calls are unaffected.
     fn set_pane_visible(&self, visible: bool) -> Value {
-        if let Some(window) = self.window.lock().unwrap().clone() {
+        if let Some(window) = self
+            .window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        {
             let _ = if visible {
                 window.show()
             } else {
@@ -571,13 +560,13 @@ impl LabCore {
                     match_main_desktop(&window, &main);
                 }
             }
-            *self.visible.lock().unwrap() = visible;
+            *self.visible.lock().unwrap_or_else(|e| e.into_inner()) = visible;
         }
         self.state_json()
     }
 
     fn toggle_pane(&self) -> Value {
-        let visible = !*self.visible.lock().unwrap();
+        let visible = !*self.visible.lock().unwrap_or_else(|e| e.into_inner());
         self.set_pane_visible(visible)
     }
 }
@@ -606,7 +595,7 @@ impl LabHandler {
         // The agent-chosen viewport: the pane is a fixed-width strip, so
         // the page lays out at this size and is scaled to fit the pane
         // (device emulation, Windows only — see apply_emulation).
-        *self.core.viewport.lock().unwrap() = Some((width, height));
+        *self.core.viewport.lock().unwrap_or_else(|e| e.into_inner()) = Some((width, height));
 
         let window = self.core.ensure_window(url, visible)?;
         self.apply_emulation(&window)?;
@@ -627,7 +616,7 @@ impl LabHandler {
     fn apply_emulation(&self, window: &WebviewWindow) -> Result<(), RpcError> {
         #[cfg(windows)]
         {
-            let viewport = *self.core.viewport.lock().unwrap();
+            let viewport = *self.core.viewport.lock().unwrap_or_else(|e| e.into_inner());
             let (width, height) = match viewport {
                 // open() always sets the viewport before calling.
                 Some(vp) => vp,
@@ -642,7 +631,11 @@ impl LabHandler {
                 &params,
                 CDP_TIMEOUT,
             )?;
-            *self.core.applied_scale.lock().unwrap() = Some(scale);
+            *self
+                .core
+                .applied_scale
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(scale);
         }
         #[cfg(not(windows))]
         {
@@ -669,7 +662,11 @@ impl LabHandler {
         })?;
         let req_id = self.core.next_req.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
-        self.core.pending.lock().unwrap().insert(req_id, tx);
+        self.core
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(req_id, tx);
 
         let probe_call = format!(
             "return p.{probe_method}({args});",
@@ -686,14 +683,22 @@ impl LabHandler {
                 .remove(&callback_req_id)
                 .map(|tx| tx.send(result));
         }) {
-            self.core.pending.lock().unwrap().remove(&req_id);
+            self.core
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&req_id);
             return Err(RpcError::not_open(format!(
                 "ブラウザペインが利用できません: {e}"
             )));
         }
 
         let result = rx.recv_timeout(timeout).map_err(|_| {
-            self.core.pending.lock().unwrap().remove(&req_id);
+            self.core
+                .pending
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&req_id);
             RpcError::timeout(format!(
                 "ページが {method} に応答しませんでした ({timeout:?})"
             ))
@@ -820,7 +825,7 @@ impl LabHandler {
             .and_then(Value::as_str)
             .unwrap_or("png");
         let quality = params.get("quality").and_then(Value::as_u64);
-        let viewport = *self.core.viewport.lock().unwrap();
+        let viewport = *self.core.viewport.lock().unwrap_or_else(|e| e.into_inner());
         let cdp_params = match viewport {
             Some((width, height)) => {
                 emulation::capture_screenshot_params(width, height, format, quality)
@@ -829,7 +834,7 @@ impl LabHandler {
                 "png" => json!({ "format": "png", "fromSurface": true }),
                 "jpeg" => json!({
                     "format": "jpeg",
-                    "quality": quality.unwrap_or(80).min(100).max(1),
+                    "quality": quality.unwrap_or(80).clamp(1, 100),
                     "fromSurface": true,
                 }),
                 other => {
@@ -940,7 +945,12 @@ impl LabHandler {
     }
 
     fn close(&self) -> Result<Value, RpcError> {
-        let window = self.core.window.lock().unwrap().take();
+        let window = self
+            .core
+            .window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
         if let Some(window) = window {
             let (tx, rx) = mpsc::channel();
             let app = self.core.app.clone();
@@ -951,14 +961,19 @@ impl LabHandler {
             .map_err(|e| RpcError::internal(format!("main thread dispatch に失敗しました: {e}")))?;
             let _ = rx.recv_timeout(EVAL_TIMEOUT);
         }
-        *self.core.visible.lock().unwrap() = false;
+        *self.core.visible.lock().unwrap_or_else(|e| e.into_inner()) = false;
         Ok(json!({ "closed": true }))
     }
 
     fn require_window(&self) -> Result<WebviewWindow, RpcError> {
-        self.core.window.lock().unwrap().clone().ok_or_else(|| {
-            RpcError::not_open("ブラウザは開いていません (先に browser_open を呼んでください)")
-        })
+        self.core
+            .window
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| {
+                RpcError::not_open("ブラウザは開いていません (先に browser_open を呼んでください)")
+            })
     }
 }
 
@@ -1004,8 +1019,8 @@ pub fn sync_pane(app: &AppHandle) {
 /// Called from lib.rs's window-event handler for the lab label.
 pub fn forget_window(app: &AppHandle) {
     if let Some(core) = lab_of(app) {
-        *core.window.lock().unwrap() = None;
-        *core.visible.lock().unwrap() = false;
+        *core.window.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *core.visible.lock().unwrap_or_else(|e| e.into_inner()) = false;
     }
 }
 
@@ -1014,14 +1029,19 @@ pub fn forget_window(app: &AppHandle) {
 /// pane never exists).
 fn lab_of(app: &AppHandle) -> Option<Arc<LabCore>> {
     let state = app.try_state::<AppState>()?;
-    let lab = state.browser_lab.lock().unwrap();
+    let lab = state.browser_lab.lock().unwrap_or_else(|e| e.into_inner());
     lab.as_ref().map(|lab| lab.core.clone())
 }
 
 /// Shut the lab down (app exit). Idempotent.
 pub fn shutdown(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
-        if let Some(mut lab) = state.browser_lab.lock().unwrap().take() {
+        if let Some(mut lab) = state
+            .browser_lab
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
             lab.shutdown();
         }
     }

@@ -1,5 +1,10 @@
 import { isAbsolute, join, normalize, sep } from "node:path";
 import { repoChain } from "../memory/agents-md.ts";
+import { isWithinRealpath } from "../plugins/mcp.ts";
+import {
+  readIfExists,
+  resolveGlobalDirs as resolveGlobalDirsBase,
+} from "../shared/fs-util.ts";
 import { parseSkillFrontmatter } from "./frontmatter.ts";
 
 /** Directory holding skills inside a repository level or in the home
@@ -177,9 +182,7 @@ function scanSkillsDir(
 
 function resolveGlobalDirs(injected?: string[]): string[] {
   if (injected !== undefined) return injected;
-  const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME");
-  if (home === undefined || home === "") return [];
-  return [join(home, AGENTS_SKILLS_DIR)];
+  return resolveGlobalDirsBase(AGENTS_SKILLS_DIR);
 }
 
 function resolveInside(dir: string, relativePath: string): string {
@@ -193,13 +196,10 @@ function resolveInside(dir: string, relativePath: string): string {
   if (resolved !== root && !resolved.startsWith(root + sep)) {
     throw new Error(`Path escapes the skill directory: ${relativePath}`);
   }
-  return resolved;
-}
-
-function readIfExists(path: string): string | undefined {
-  try {
-    return Deno.readTextFileSync(path);
-  } catch {
-    return undefined;
+  // Symlink-aware containment check: the resolved path must stay inside
+  // the real (symlink-resolved) skill directory.
+  if (!isWithinRealpath(root, resolved)) {
+    throw new Error(`Path escapes the skill directory: ${relativePath}`);
   }
+  return resolved;
 }

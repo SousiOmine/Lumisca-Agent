@@ -1,6 +1,6 @@
 import type { Api, Model } from "../ai/types.ts";
 import type { AgentMessage, StreamFn } from "../ai/types.ts";
-import { streamText } from "../agent/stream-text.ts";
+import { streamText } from "../ai/stream.ts";
 import { contentText, safeJsonParse } from "../shared/mod.ts";
 
 /** System prompt for the judging model: decide whether the goal is
@@ -146,23 +146,6 @@ export function lastAssistantOutput(messages: AgentMessage[]): string {
     return text.slice(text.length - MAX_GOAL_TRANSCRIPT_CHARS);
   }
   return "";
-}
-
-/** Render recent agent messages as plain text (kept for tests/debug).
- * The goal loop itself uses {@link lastAssistantOutput} instead. */
-export function excerptTranscript(messages: AgentMessage[]): string {
-  const lines: string[] = [];
-  for (const message of messages) {
-    const role = message.role;
-    // Mode/notification internals carry no progress signal beyond their
-    // text; include them under their own label when they have text.
-    const text = transcriptTextOf(message);
-    if (text.trim().length === 0) continue;
-    lines.push(`[${role}] ${text}`);
-  }
-  const joined = lines.join("\n\n");
-  if (joined.length <= MAX_GOAL_TRANSCRIPT_CHARS) return joined;
-  return joined.slice(joined.length - MAX_GOAL_TRANSCRIPT_CHARS);
 }
 
 /** Plain-text rendering of one transcript message for the judge. */

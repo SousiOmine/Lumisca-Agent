@@ -113,9 +113,19 @@ jobs:
           EXPECTED="${TAG#v}"
           CONF=$(node -p "require('./src-tauri/tauri.conf.json').version")
           CARGO=$(grep -m1 '^version' src-tauri/Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          echo "tag=$EXPECTED conf=$CONF cargo=$CARGO"
-          if [ "$EXPECTED" != "$CONF" ] || [ "$EXPECTED" != "$CARGO" ]; then
-            echo "::error::Version mismatch — tag $TAG expects $EXPECTED but found conf=$CONF cargo=$CARGO"
+          NPCKG=$(node -p "require('./package.json').version")
+          DNJSON=$(node -e "const t=require('fs').readFileSync('deno.json','utf8');const m=t.match(/\"version\":\s*\"([^\"]+)\"/);console.log(m?m[1]:'')")
+          echo "tag=$EXPECTED conf=$CONF cargo=$CARGO npm=$NPCKG deno=$DNJSON"
+          FAIL=""
+          for pair in "conf:$CONF" "cargo:$CARGO" "npm package.json:$NPCKG" "deno.json:$DNJSON"; do
+            NAME="${pair%%:*}"; VAL="${pair#*:}"
+            if [ "$VAL" != "$EXPECTED" ]; then
+              echo "::error::$NAME version $VAL != tag $EXPECTED"
+              FAIL=1
+            fi
+          done
+          if [ -n "$FAIL" ]; then
+            echo "::error::Version mismatch — tag $TAG expects $EXPECTED; update every manifest before tagging."
             exit 1
           fi
 

@@ -1,6 +1,6 @@
 import type { Api, Model } from "../ai/types.ts";
 import type { StreamFn } from "../ai/types.ts";
-import { streamText } from "./stream-text.ts";
+import { streamText } from "../ai/stream.ts";
 
 /** System prompt for the title model: a short, plain session title based
  * on the user's first message. */

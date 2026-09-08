@@ -7,12 +7,10 @@ import type {
   Credential,
   CredentialStore,
   Model,
-  ModelsStore,
-  ModelsStoreEntry,
   Provider,
 } from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
-import { safeJsonParse, type ThinkingLevel } from "../shared/mod.ts";
+import type { ThinkingLevel } from "../shared/mod.ts";
 import { CoreError } from "../errors.ts";
 import type {
   UserProviderConfig,
@@ -30,28 +28,8 @@ import { builtinProviders } from "./dev-catalog.ts";
 import { clampThinkingLevel } from "./thinking.ts";
 import { setApiKey } from "../settings/credentials.ts";
 
-const CATALOG_PREFIX = "model_catalog:";
 const ENABLED_PREFIX = "model_enabled:";
 const THINKING_PREFIX = "model_thinking:";
-
-/** Persistent model catalog cache stored in the settings store. Kept for
- * compatibility with the original ModelManager signature. */
-export function createDbModelsStore(settings: SettingsRepo): ModelsStore {
-  return {
-    read(providerId: string): Promise<ModelsStoreEntry | undefined> {
-      const raw = settings.get(`${CATALOG_PREFIX}${providerId}`);
-      return Promise.resolve(safeJsonParse<ModelsStoreEntry>(raw));
-    },
-    write(providerId: string, entry: ModelsStoreEntry): Promise<void> {
-      settings.set(`${CATALOG_PREFIX}${providerId}`, JSON.stringify(entry));
-      return Promise.resolve();
-    },
-    delete(providerId: string): Promise<void> {
-      settings.delete(`${CATALOG_PREFIX}${providerId}`);
-      return Promise.resolve();
-    },
-  };
-}
 
 /** Owns the Lumisca model registry and resolves providers/models. */
 export class ModelManager {
@@ -71,7 +49,6 @@ export class ModelManager {
   constructor(
     credentials: CredentialStore,
     settings: SettingsRepo,
-    _modelsStore?: ModelsStore,
   ) {
     this.models = new LumiscaModels({
       credentials,

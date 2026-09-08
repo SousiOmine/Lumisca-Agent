@@ -40,14 +40,6 @@ pub fn check(url: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Check and normalize: returns the URL to hand to the webview (the
-/// original, with the fragment preserved — hash-only navigation is part
-/// of the page's own behavior).
-pub fn require_allowed(url: &str) -> Result<&str, String> {
-    check(url)?;
-    Ok(url)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

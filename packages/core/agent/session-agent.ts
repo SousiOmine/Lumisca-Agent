@@ -301,13 +301,21 @@ export class SessionAgent {
    * `session_error` event, never through the returned promise — callers
    * (HTTP fire-and-forget, CLI) all listen on events, so awaiting here only
    * means "the run finished". */
+  /** Reset the retry state for a fresh exchange. A user prompt, a
+   * notification that starts its own run, or a goal-loop turn all start a
+   * fresh exchange: they do not inherit the previous run's
+   * vacant-response / rate-limit retry history. */
+  private resetRetryState(): void {
+    this.emptyResponseRetries = 0;
+    this.rateLimitRetries = 0;
+    this.pendingRateLimitRetry = null;
+  }
+
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
     // A user prompt starts a fresh exchange: it does not inherit the
     // previous run's vacant-response history.
-    this.emptyResponseRetries = 0;
-    this.rateLimitRetries = 0;
-    this.pendingRateLimitRetry = null;
+    this.resetRetryState();
     this.maybeGenerateTitle(text);
     const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
     if (images !== undefined && images.length > 0) content.push(...images);
@@ -381,9 +389,7 @@ export class SessionAgent {
       // Starting a run from user input resets the vacant-response history
       // (same contract as prompt()); a steer joins the current run and
       // leaves the counter alone.
-      this.emptyResponseRetries = 0;
-      this.rateLimitRetries = 0;
-      this.pendingRateLimitRetry = null;
+      this.resetRetryState();
       this.startGoalIfNeeded(mode);
       void this.startRun(message);
       return;
@@ -407,9 +413,7 @@ export class SessionAgent {
     // Starting a run from user input resets the vacant-response history
     // (same contract as prompt()); a steer joins the current run and
     // leaves the counter alone.
-    this.emptyResponseRetries = 0;
-    this.rateLimitRetries = 0;
-    this.pendingRateLimitRetry = null;
+    this.resetRetryState();
     void this.startRun(message);
   }
 
@@ -436,9 +440,7 @@ export class SessionAgent {
    * judges again. Separated from startRun/prompt so injected turns do not
    * recurse into the loop. */
   private async runMainTurn(instruction: string): Promise<void> {
-    this.emptyResponseRetries = 0;
-    this.rateLimitRetries = 0;
-    this.pendingRateLimitRetry = null;
+    this.resetRetryState();
     try {
       await this.agent.prompt(instruction);
     } catch (error) {
@@ -497,16 +499,12 @@ export class SessionAgent {
     }
     // A notification that starts its own run begins a fresh exchange:
     // reset the vacant-response history (same contract as prompt()).
-    this.emptyResponseRetries = 0;
-    this.rateLimitRetries = 0;
-    this.pendingRateLimitRetry = null;
+    this.resetRetryState();
     if (!this.mcpReadyDone) {
       // MCP attachment may still be in flight (a very fast command); wait
       // for it, then re-check — a user prompt may have started meanwhile.
       void this.mcpReady.then(() => {
-        this.emptyResponseRetries = 0;
-        this.rateLimitRetries = 0;
-        this.pendingRateLimitRetry = null;
+        this.resetRetryState();
         void this.startRun(message);
       });
       return;
@@ -557,7 +555,9 @@ export class SessionAgent {
     // An abort also stops the autonomous goal loop: the user must be able
     // to interrupt a running goal at any time. The goal is cleared so the
     // right-side panel disappears; a re-send restarts it.
-    this.cancelGoalForAbort();
+    // cancelGoal is used directly — it is small and the abort fast path
+    // does not need a separate method.
+    this.cancelGoal();
     this.agent.abort();
   }
 
@@ -568,27 +568,12 @@ export class SessionAgent {
 
   /** Cancel the active goal without emitting a user-visible abort of the
    * run itself (the panel's cancel button path via Core). No-op when no
-   * goal runs. */
+   * goal runs. Also used by the abort fast path to stop the autonomous
+   * goal loop. */
   cancelGoal(): void {
     this.goalEpoch++;
     if (this.goalStore?.loadGoal() === undefined) return;
     const text = this.goalStore.clearGoal();
-    if (text === undefined) return;
-    this.emit({
-      type: "goal_done",
-      sessionId: this.sessionId,
-      text,
-      achieved: false,
-      reason: "ユーザーにより中断されました",
-    });
-  }
-
-  /** Abort-path goal cancellation (shares cancelGoal's clearing but keeps
-   * the method small for the abort fast path). */
-  private cancelGoalForAbort(): void {
-    this.goalEpoch++;
-    if (this.goalStore?.loadGoal() === undefined) return;
-    const text = this.goalStore!.clearGoal();
     if (text === undefined) return;
     this.emit({
       type: "goal_done",

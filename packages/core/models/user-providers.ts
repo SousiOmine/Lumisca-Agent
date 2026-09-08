@@ -1,6 +1,7 @@
 import type { ApiKeyAuth, Credential, Provider } from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import { CoreError } from "../errors.ts";
+import { isRecord } from "../shared/fs-util.ts";
 import { buildModel, buildProvider } from "./custom.ts";
 
 /**
@@ -75,10 +76,6 @@ export interface UserProviderSummary extends UserProviderConfig {
 }
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isAllowedApi(value: unknown): value is AllowedApi {
   return typeof value === "string" &&

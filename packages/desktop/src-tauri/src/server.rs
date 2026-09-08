@@ -301,7 +301,7 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
 /// environment (and the agent no browser tools).
 fn browser_lab_env(app: &AppHandle) -> Option<(String, String)> {
     let state = app.state::<AppState>();
-    let guard = state.browser_lab.lock().unwrap();
+    let guard = state.browser_lab.lock().unwrap_or_else(|e| e.into_inner());
     let lab = guard.as_ref()?;
     Some(lab.endpoint())
 }
@@ -331,7 +331,13 @@ fn kill_process_tree(child: &mut Child) {
 /// Kill and drop the running local server, if any. Used when the main
 /// window is destroyed and by the updater's exit hook.
 pub(crate) fn stop_local_server(app: &AppHandle) {
-    if let Some(mut local) = app.state::<AppState>().local.lock().unwrap().take() {
+    if let Some(mut local) = app
+        .state::<AppState>()
+        .local
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    {
         kill_process_tree(&mut local.child);
     }
 }
@@ -357,7 +363,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         }
         // The stored server is dead (or never started): drop it and fall
         // through to a fresh start.
-        if let Some(mut stale) = state.local.lock().unwrap().take() {
+        if let Some(mut stale) = state.local.lock().unwrap_or_else(|e| e.into_inner()).take() {
             kill_process_tree(&mut stale.child);
         }
     }
@@ -381,7 +387,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
     }
     let port = server_port.ok_or("Lumisca server did not become ready")?;
     let child = server_child.ok_or("Lumisca server did not become ready")?;
-    *state.local.lock().unwrap() = Some(LocalServer {
+    *state.local.lock().unwrap_or_else(|e| e.into_inner()) = Some(LocalServer {
         child,
         port,
         token: token.clone(),
@@ -395,7 +401,10 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
 /// progress ("starting" → "ready"/"error") for the splash to poll.
 pub(crate) fn start_local_server_async(app: &AppHandle) {
     let shared: StartupTask = Arc::new(Mutex::new(None));
-    *app.state::<AppState>().startup_task.lock().unwrap() = Some(shared.clone());
+    *app.state::<AppState>()
+        .startup_task
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(shared.clone());
     let handle = app.clone();
     std::thread::spawn(move || {
         let result = ensure_local_server(&handle);
@@ -405,9 +414,10 @@ pub(crate) fn start_local_server_async(app: &AppHandle) {
         };
         {
             let state = handle.state::<AppState>();
-            *shared.lock().unwrap() = Some(result.clone());
-            *state.startup_task.lock().unwrap() = None;
-            *state.startup.lock().unwrap() = StartupStatus::new(status, error);
+            *shared.lock().unwrap_or_else(|e| e.into_inner()) = Some(result.clone());
+            *state.startup_task.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            *state.startup.lock().unwrap_or_else(|e| e.into_inner()) =
+                StartupStatus::new(status, error);
         }
         if let Ok(url) = result {
             let handle = handle.clone();

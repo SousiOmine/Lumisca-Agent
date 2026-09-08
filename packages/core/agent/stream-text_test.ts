@@ -8,7 +8,7 @@ import {
 } from "@lumisca/core";
 import type { StreamFn } from "@lumisca/core";
 import { RATE_LIMIT_BASE_DELAY_MS, RetryAbortError } from "./llm-retry.ts";
-import { streamText } from "./stream-text.ts";
+import { streamText } from "../ai/stream.ts";
 
 function fakeModel(): Model<Api> {
   return { id: "m", name: "m" } as unknown as Model<Api>;

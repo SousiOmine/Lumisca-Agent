@@ -315,26 +315,34 @@ export function sessionRoutes(core: SessionApi): Hono {
   });
 
   app.post("/sessions/:id/close", async (c) => {
-    await core.closeSession(c.req.param("id"));
+    const id = c.req.param("id");
+    requireSession(id);
+    await core.closeSession(id);
     return c.json({ ok: true });
   });
 
   app.delete("/sessions/:id", async (c) => {
-    await core.deleteSession(c.req.param("id"));
+    const id = c.req.param("id");
+    requireSession(id);
+    await core.deleteSession(id);
     return c.json({ ok: true });
   });
 
   app.post("/sessions/:id/prompt", async (c) => {
     const body = await parseBody<PromptBody>(c);
     const { text, images, mode } = parsePromptBody(body ?? {});
+    const id = c.req.param("id");
+    requireSession(id);
     // Fire-and-forget: the run progresses via the WebSocket event stream,
     // so the request does not stay open for the whole agent execution.
-    core.startPrompt(c.req.param("id"), text, images, mode);
+    core.startPrompt(id, text, images, mode);
     return c.json({ ok: true });
   });
 
   app.post("/sessions/:id/abort", (c) => {
-    core.abort(c.req.param("id"));
+    const id = c.req.param("id");
+    requireSession(id);
+    core.abort(id);
     return c.json({ ok: true });
   });
 

@@ -5,6 +5,7 @@ import type {
   Model,
   Provider,
 } from "../ai/types.ts";
+import { isRecord } from "../shared/fs-util.ts";
 
 /**
  * Custom OpenAI-compatible providers for headless/agent use.
@@ -64,10 +65,6 @@ interface ModelsFileModel {
 
 interface ModelsFileConfig {
   providers: Record<string, ModelsFileProvider>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isModelsFileConfig(value: unknown): value is ModelsFileConfig {

@@ -1,34 +1,13 @@
 import {
   type Dispatch,
   type KeyboardEvent,
-  type ReactNode,
   type SetStateAction,
   useCallback,
   useState,
 } from "preact/compat";
+import type { SlashCommand, SlashCommandItem } from "../slashCommands.ts";
 
-/** One selectable entry of the slash-command menu: a command (first level)
- * or one of its subcommands (second level). */
-export interface SlashCommandItem {
-  id: string;
-  label: string;
-  description?: string;
-  icon?: (props: { size?: string | number; className?: string }) => ReactNode;
-}
-
-/** A slash command offered when the input starts with `/`. Commands with
- * `items` open a second level before executing; leaf commands execute
- * directly. */
-export interface SlashCommand extends SlashCommandItem {
-  /** Subcommands shown after selecting this command (e.g. the review
-   * target). Omitted → the command executes right away. */
-  items?: SlashCommandItem[];
-  /** The command takes the user's own text as its subject: the text typed
-   * after the command token (`/plan <依頼文>`) is handed to onSelect so the
-   * parent can wrap it into the mode prompt. When set, the menu hints to
-   * type the request while it is still missing. */
-  requiresText?: boolean;
-}
+export type { SlashCommand, SlashCommandItem };
 
 /** An active `/` command: the caret is inside a query started by `/`. */
 export interface SlashState {

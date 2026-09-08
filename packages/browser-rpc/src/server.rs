@@ -145,7 +145,7 @@ fn handle_connection(
     if reader.read_line(&mut request_line)? == 0 {
         return Ok(()); // client closed before sending anything
     }
-    let mut parts = request_line.trim_end().split_whitespace();
+    let mut parts = request_line.split_whitespace();
     let method = parts.next().unwrap_or("").to_string();
     let path = parts.next().unwrap_or("").to_string();
     // Consume headers.

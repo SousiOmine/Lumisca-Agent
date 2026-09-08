@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { readIfExists } from "../shared/fs-util.ts";
 
 /** Combined project memory budget (matches Codex's project_doc_max_bytes). */
 const MAX_MEMORY_BYTES = 32 * 1024;
@@ -41,15 +42,6 @@ export function repoChain(folder: string): string[] {
   return chain;
 }
 
-function readIfExists(dir: string, name: string): string | undefined {
-  const path = join(dir, name);
-  try {
-    return Deno.readTextFileSync(path);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Load project memory (AGENTS.md / AGENTS.override.md) for a set of
  * workspace folders. For each folder, the repository root is located (via
@@ -64,8 +56,8 @@ export function loadProjectMemory(folders: string[]): string {
 
   for (const folder of folders) {
     for (const dir of repoChain(folder)) {
-      const override = readIfExists(dir, "AGENTS.override.md");
-      const content = override ?? readIfExists(dir, "AGENTS.md");
+      const override = readIfExists(join(dir, "AGENTS.override.md"));
+      const content = override ?? readIfExists(join(dir, "AGENTS.md"));
       if (content === undefined) continue;
       const path = join(
         dir,

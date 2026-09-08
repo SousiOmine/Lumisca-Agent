@@ -30,6 +30,10 @@ import type {
  * a re-sync runs. */
 const DISCONNECTED_SYNC_INTERVAL_MS = 10_000;
 
+/** Event-stream reconnect backoff: 2s → 4s → 8s … capped at 30s. */
+const RECONNECT_BASE_MS = 2000;
+const RECONNECT_MAX_MS = 30_000;
+
 /** Session views plus the WebSocket event stream that feeds them:
  * reconnect with resync on drop, state sync while disconnected and on
  * tab-return, and per-view error recording. The returned setViews is
@@ -240,9 +244,10 @@ export function useSessionEvents() {
 
   useEffect(() => {
     let disposed = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let syncTimer: ReturnType<typeof setInterval> | undefined;
     let disconnect: (() => void) | undefined;
+    let reconnectAttempts = 0;
     // Whether the event stream is currently connected. While it is up the
     // events are the live source; while it is down a short-interval sync
     // covers everything (see syncState). The flags live in this effect's
@@ -263,6 +268,31 @@ export function useSessionEvents() {
       }, DISCONNECTED_SYNC_INTERVAL_MS);
     };
 
+    /** Cancel any pending reconnect and close the existing socket, so
+     * connect() always starts from a clean slate (prevents double-open). */
+    const cleanup = () => {
+      if (reconnectTimer !== undefined) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+      }
+      disconnect?.();
+      disconnect = undefined;
+    };
+
+    /** Schedule the next reconnect with exponential backoff. */
+    const scheduleReconnect = () => {
+      if (disposed || reconnectTimer !== undefined) return;
+      const delay = Math.min(
+        RECONNECT_BASE_MS * 2 ** reconnectAttempts,
+        RECONNECT_MAX_MS,
+      );
+      reconnectAttempts++;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        connect();
+      }, delay);
+    };
+
     // Opportunistic sync: a run that finishes entirely inside a disconnect
     // window — or a todo mutation whose snapshot event was lost — would
     // otherwise only appear at the next reconnect. While connected the WS
@@ -271,11 +301,25 @@ export function useSessionEvents() {
     // disconnected case).
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return;
-      if (connected) syncState();
+      if (connected) {
+        syncState();
+      } else {
+        // Tab returns to foreground while disconnected: try to reconnect
+        // immediately instead of waiting for the backoff timer.
+        if (reconnectTimer !== undefined) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = undefined;
+        }
+        connect();
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
 
     const connect = () => {
+      // Ensure any existing connection and pending reconnect are torn down
+      // before opening a new one, so the socket is always singular.
+      cleanup();
+      if (disposed) return;
       disconnect = connectEvents(
         handleEvent,
         () => {
@@ -284,13 +328,14 @@ export function useSessionEvents() {
           connected = false;
           startSyncTimer();
           resync();
-          timer = setTimeout(connect, 1500);
+          scheduleReconnect();
         },
         () => {
           // On (re)open: re-sync state (events emitted while the socket
           // was down are merged in) and stop the fallback interval — the
-          // stream is the live source again.
+          // stream is the live source again. Reset the backoff counter.
           connected = true;
+          reconnectAttempts = 0;
           stopSyncTimer();
           resync();
         },
@@ -300,10 +345,9 @@ export function useSessionEvents() {
 
     return () => {
       disposed = true;
-      if (timer) clearTimeout(timer);
+      cleanup();
       stopSyncTimer();
       document.removeEventListener("visibilitychange", onVisibility);
-      disconnect?.();
     };
   }, [handleEvent, resync, syncState]);
 

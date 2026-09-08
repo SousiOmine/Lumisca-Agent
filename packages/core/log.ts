@@ -64,11 +64,3 @@ export function createLogger(scope: string): Logger {
     },
   };
 }
-
-/** Shorthand for one-off debug logging without holding a logger:
- * `logDebug("pool", "rebuilt session " + id)`. Subject to the same
- * `LUMISCA_DEBUG` gate as `Logger.debug`. */
-export function logDebug(scope: string, message: string): void {
-  if (!debugEnabled()) return;
-  console.debug(formatLine(scope, message));
-}

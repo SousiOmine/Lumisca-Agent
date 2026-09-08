@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "preact/compat";
-import { IconArrowUp, IconMessage } from "@tabler/icons-preact";
+import { IconArrowUp } from "@tabler/icons-preact";
 import { api } from "../api.ts";
 import type {
   FederatedWorkspace,
@@ -14,8 +14,8 @@ import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import {
-  slashCommands,
-  slashPrompt,
+  buildSlashCommands,
+  resolveSlashCommand,
   slashPromptFromText,
 } from "../slashCommands.ts";
 import {
@@ -287,36 +287,10 @@ export function NewSessionView(
   // Build the slash commands list including the /prompt submenu.
   // In chat mode only saved prompts are shown (agent modes need a workspace).
   const isChat = selectedWorkspace?.workspace.chat ?? false;
-  const allSlashCommands = useMemo<SlashCommand[]>(() => {
-    const promptItems: SlashCommandItem[] = savedPrompts.map((p) => ({
-      id: p.id,
-      label: p.label,
-      description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "..." : ""),
-    }));
-    if (isChat) {
-      // Chat mode: only saved prompts, no agent modes.
-      if (promptItems.length === 0) return [];
-      return [{
-        id: "prompt",
-        label: "保存済みプロンプト",
-        description: "登録済みのプロンプトを挿入",
-        icon: IconMessage,
-        items: promptItems,
-      }];
-    }
-    // Workspace mode: agent modes + saved prompts.
-    const commands = [...slashCommands];
-    if (promptItems.length > 0) {
-      commands.push({
-        id: "prompt",
-        label: "保存済みプロンプト",
-        description: "登録済みのプロンプトを挿入",
-        icon: IconMessage,
-        items: promptItems,
-      });
-    }
-    return commands;
-  }, [isChat, savedPrompts]);
+  const allSlashCommands = useMemo<SlashCommand[]>(
+    () => buildSlashCommands(savedPrompts, isChat),
+    [isChat, savedPrompts],
+  );
 
   /** Start the session with the composer text, or an explicit message (slash
    * commands build their own prompt). The draft is cleared by the App once
@@ -363,15 +337,12 @@ export function NewSessionView(
     item?: SlashCommandItem,
     text?: string,
   ) => {
-    if (command.id === "prompt" && item) {
-      const saved = savedPrompts.find((p) => p.id === item.id);
-      if (saved) {
-        onInputChange(saved.prompt);
-      }
-      return;
+    const result = resolveSlashCommand(command, savedPrompts, item, text);
+    if (result && "savedPrompt" in result) {
+      onInputChange(result.savedPrompt);
+    } else if (result && "modePrompt" in result) {
+      void submit(result.modePrompt.text, result.modePrompt.mode);
     }
-    const result = slashPrompt(command, item, text);
-    if (result !== null) void submit(result.text, result.mode);
   };
 
   const deleteWorkspace = async (fws: FederatedWorkspace) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/compat";
 import {
   IconCheck,
   IconEdit,
@@ -9,7 +9,10 @@ import {
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import type { SavedPrompt } from "../../types.ts";
-import { notifySavedPromptsUpdated } from "../../hooks/useSavedPrompts.ts";
+import {
+  notifySavedPromptsUpdated,
+  useSavedPrompts,
+} from "../../hooks/useSavedPrompts.ts";
 
 /** Settings → パーソナライズ. Edits the machine-level AGENTS.md that lives
  * next to the settings file, and manages saved prompts (user-defined prompt
@@ -84,34 +87,16 @@ export function PersonalizePanel() {
 
   // --- Saved prompts -----------------------------------------------------
 
-  const [prompts, setPrompts] = useState<SavedPrompt[]>([]);
-  const [promptsLoading, setPromptsLoading] = useState(false);
-  const [promptsError, setPromptsError] = useState<string | null>(null);
+  const { prompts, reload: loadPrompts } = useSavedPrompts();
   const [editingPrompt, setEditingPrompt] = useState<SavedPrompt | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-
-  const loadPrompts = useCallback(async () => {
-    setPromptsLoading(true);
-    setPromptsError(null);
-    try {
-      const result = await api.getSavedPrompts();
-      setPrompts(result.prompts);
-    } catch (e) {
-      setPromptsError(errorText(e));
-    } finally {
-      setPromptsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadPrompts();
-  }, [loadPrompts]);
+  const [promptsError, setPromptsError] = useState<string | null>(null);
 
   const handleDeletePrompt = async (id: string) => {
     if (!confirm(`プロンプト "${id}" を削除しますか？`)) return;
     try {
       await api.deleteSavedPrompt(id);
-      await loadPrompts();
+      loadPrompts();
       notifySavedPromptsUpdated();
     } catch (e) {
       setPromptsError(errorText(e));
@@ -128,7 +113,7 @@ export function PersonalizePanel() {
         input as { id: string; label: string; prompt: string },
       );
       setShowAddForm(false);
-      await loadPrompts();
+      loadPrompts();
       notifySavedPromptsUpdated();
     } catch (e) {
       setPromptsError(errorText(e));
@@ -142,7 +127,7 @@ export function PersonalizePanel() {
     try {
       await api.updateSavedPrompt(id, input);
       setEditingPrompt(null);
-      await loadPrompts();
+      loadPrompts();
       notifySavedPromptsUpdated();
     } catch (e) {
       setPromptsError(errorText(e));
@@ -198,11 +183,7 @@ export function PersonalizePanel() {
         </p>
         {promptsError && <p className="error-text">{promptsError}</p>}
 
-        {promptsLoading && prompts.length === 0 && (
-          <p className="settings-note">読み込み中...</p>
-        )}
-
-        {!promptsLoading && prompts.length === 0 && !showAddForm && (
+        {prompts.length === 0 && !showAddForm && (
           <p className="settings-note" style={{ fontStyle: "italic" }}>
             保存済みプロンプトはまだありません。「追加」ボタンから追加してください。
           </p>
