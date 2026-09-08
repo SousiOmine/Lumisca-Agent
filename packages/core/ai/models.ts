@@ -55,7 +55,9 @@ export class LumiscaModels {
   }
 
   getModel(providerId: string, modelId: string): Model | undefined {
-    return this.providers.get(providerId)?.getModels().find((m) => m.id === modelId);
+    return this.providers.get(providerId)?.getModels().find((m) =>
+      m.id === modelId
+    );
   }
 
   getModels(providerId?: string): readonly Model[] {
@@ -96,7 +98,10 @@ export class LumiscaModels {
     }
     const credential = await login(interaction);
     if (this.credentials !== undefined) {
-      const stored = this.credentials.modify(providerId, () => Promise.resolve(credential));
+      const stored = this.credentials.modify(
+        providerId,
+        () => Promise.resolve(credential),
+      );
       await stored;
     }
     return credential;
@@ -135,7 +140,9 @@ export class LumiscaModels {
   }
 
   /** Resolve an API key for a provider (env var or stored credential). */
-  private async resolveKey(providerId: string): Promise<ResolvedApiKey | undefined> {
+  private async resolveKey(
+    providerId: string,
+  ): Promise<ResolvedApiKey | undefined> {
     const provider = this.providers.get(providerId);
     if (provider === undefined) return undefined;
     const credential = await this.credentials?.read(providerId);

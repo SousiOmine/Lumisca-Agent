@@ -17,9 +17,9 @@ import type {
   Model,
   ModelThinkingLevel,
   Provider,
+  StopReason,
   StreamFn,
   StreamOptions,
-  StopReason,
   TextContent,
   ThinkingContent,
   ThinkingLevelMap,
@@ -45,7 +45,8 @@ export function fauxToolCall(
 /** Build an AssistantMessage from a string or content block array. */
 export function fauxAssistantMessage(
   content: string | AssistantMessageContent,
-  opts: { stopReason?: StopReason; errorMessage?: string; timestamp?: number } = {},
+  opts: { stopReason?: StopReason; errorMessage?: string; timestamp?: number } =
+    {},
 ): AssistantMessage {
   const normalized: AssistantMessageContent = typeof content === "string"
     ? [{ type: "text", text: content }]
@@ -130,10 +131,13 @@ export function fauxProvider(options: FauxOptions = {}): FauxProvider {
     getModels: () => models,
     resolveCredential: () =>
       Promise.resolve({ auth: { apiKey: "faux-key" }, source: "faux" }),
-    auth: { apiKey: {
-      name: "Faux",
-      resolve: () => Promise.resolve({ auth: { apiKey: "faux-key" }, source: "faux" }),
-    } },
+    auth: {
+      apiKey: {
+        name: "Faux",
+        resolve: () =>
+          Promise.resolve({ auth: { apiKey: "faux-key" }, source: "faux" }),
+      },
+    },
   };
 
   const streamFn: StreamFn = (_model, context, options) => {
@@ -144,7 +148,18 @@ export function fauxProvider(options: FauxOptions = {}): FauxProvider {
       return stream;
     }
     const produce = typeof entry === "function"
-      ? entry(context, { ...options, reasoning: (context.thinkingLevel !== undefined && context.thinkingLevel !== 'off' ? context.thinkingLevel : undefined) }, undefined, _model)
+      ? entry(
+        context,
+        {
+          ...options,
+          reasoning: context.thinkingLevel !== undefined &&
+              context.thinkingLevel !== "off"
+            ? context.thinkingLevel
+            : undefined,
+        },
+        undefined,
+        _model,
+      )
       : entry;
     Promise.resolve(produce).then((message) => {
       // Emit start(partial) first, then text/thinking deltas (so

@@ -88,7 +88,12 @@ export function languageModelFor(
 /** build a compatible provider (baseURL + name required). */
 function compatibleSettings(
   model: Model<Api>,
-  settings: { apiKey: string; baseURL?: string; headers?: Record<string, string>; name: string },
+  settings: {
+    apiKey: string;
+    baseURL?: string;
+    headers?: Record<string, string>;
+    name: string;
+  },
 ) {
   return createOpenAICompatible({
     name: settings.name,

@@ -5,8 +5,8 @@
  * stable place.
  */
 export {
-  streamText,
   isRetryableRateLimitError,
-  retryOnRateLimitError,
   type RateLimitRetryOptions,
+  retryOnRateLimitError,
+  streamText,
 } from "../ai/stream.ts";

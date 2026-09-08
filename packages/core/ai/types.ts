@@ -28,9 +28,17 @@ export type Api =
 
 // ---- thinking levels -------------------------------------------------------
 
-export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type ThinkingLevel =
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh"
+  | "max";
 export type ModelThinkingLevel = "off" | ThinkingLevel;
-export type ThinkingLevelMap = Partial<Record<ModelThinkingLevel, string | null>>;
+export type ThinkingLevelMap = Partial<
+  Record<ModelThinkingLevel, string | null>
+>;
 
 // ---- content blocks ----------------------------------------------------------
 
@@ -62,7 +70,8 @@ export interface ToolCall {
   namespace?: string;
 }
 
-export type AssistantMessageContent = (TextContent | ThinkingContent | ToolCall)[];
+export type AssistantMessageContent =
+  (TextContent | ThinkingContent | ToolCall)[];
 
 // ---- usage / cost ----------------------------------------------------------
 
@@ -336,9 +345,24 @@ export interface AuthPromptOption {
 }
 
 export type AuthPrompt =
-  | { type: "secret"; message: string; placeholder?: string; signal?: AbortSignal }
-  | { type: "text"; message: string; placeholder?: string; signal?: AbortSignal }
-  | { type: "manual_code"; message: string; placeholder?: string; signal?: AbortSignal }
+  | {
+    type: "secret";
+    message: string;
+    placeholder?: string;
+    signal?: AbortSignal;
+  }
+  | {
+    type: "text";
+    message: string;
+    placeholder?: string;
+    signal?: AbortSignal;
+  }
+  | {
+    type: "manual_code";
+    message: string;
+    placeholder?: string;
+    signal?: AbortSignal;
+  }
   | {
     type: "select";
     message: string;
@@ -388,8 +412,28 @@ export type StreamEvent =
   | { type: "thinking_delta"; delta: string; [k: string]: unknown }
   | { type: "toolcall_delta"; delta: string; [k: string]: unknown }
   | { type: "error"; errorMessage?: string; [k: string]: unknown }
-  | { type: "toolcall_start"; toolCallId: string; toolName: string; args: Record<string, unknown>; [k: string]: unknown }
-  | { type: "toolcall_result"; toolCallId: string; toolName: string; content: Array<{ type: "text" | "image"; text?: string; data?: string; mimeType?: string }>; isError: boolean; [k: string]: unknown }
+  | {
+    type: "toolcall_start";
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    [k: string]: unknown;
+  }
+  | {
+    type: "toolcall_result";
+    toolCallId: string;
+    toolName: string;
+    content: Array<
+      {
+        type: "text" | "image";
+        text?: string;
+        data?: string;
+        mimeType?: string;
+      }
+    >;
+    isError: boolean;
+    [k: string]: unknown;
+  }
   | { type: "done"; message: AssistantMessage; [k: string]: unknown };
 
 export type AssistantMessageEventStream = AsyncIterable<StreamEvent> & {
@@ -498,7 +542,11 @@ export interface Models {
   getModels(providerId?: string): readonly Model[];
   getAuth(providerId: string): Promise<Credential | undefined>;
   checkAuth(providerId: string): Promise<AuthCheck | undefined>;
-  login(providerId: string, type: AuthType, interaction: AuthInteraction): Promise<Credential>;
+  login(
+    providerId: string,
+    type: AuthType,
+    interaction: AuthInteraction,
+  ): Promise<Credential>;
   logout(providerId: string): Promise<void>;
   streamFn?: StreamFn;
 }

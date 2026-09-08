@@ -1,12 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
 import {
   Agent,
+  type AgentTool,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
   LumiscaModels,
-  type AgentTool,
 } from "@lumisca/core";
 import { builtinProviders } from "./models/dev-catalog.ts";
 import { extraProviders } from "./models/extra-providers.ts";

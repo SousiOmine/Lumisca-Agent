@@ -28,7 +28,7 @@ export const DEEPINFRA_BASE_URL = "https://api.deepinfra.com/v1/openai";
 /** Cline's OpenAI-compatible endpoint; ClinePass serves its models here. */
 export const CLINEPASS_BASE_URL = "https://api.cline.bot/api/v1";
 
-export { deepinfraProvider, clinepassProvider, opencodeGoProvider };
+export { clinepassProvider, deepinfraProvider, opencodeGoProvider };
 
 /** Every Lumisca-shipped provider outside the SDK catalog. Registered by
  * ModelManager after the built-ins. The DeepInfra / ClinePass / OpenCode Go

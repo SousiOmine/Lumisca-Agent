@@ -13,8 +13,8 @@ import type { StreamFn } from "./types.ts";
 import type {
   AgentEvent,
   AgentMessage,
-  AgentTool,
   AgentState,
+  AgentTool,
   Api,
   AssistantMessage,
   ImageContent,
@@ -44,7 +44,13 @@ export interface AgentInit {
 
 /** A completion (tool result) of one tool call. */
 interface ToolOutcome {
-  content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
+  content: Array<
+    { type: "text"; text: string } | {
+      type: "image";
+      data: string;
+      mimeType: string;
+    }
+  >;
   details: unknown;
   isError: boolean;
 }
@@ -113,7 +119,10 @@ export class Agent {
   /** Run a prompt: a string (+images) becomes a user message; a pre-built
    * AgentMessage (notification/mode/user) is used as-is. If a run is already
    * active the message is steered to the next turn boundary. */
-  async prompt(input: string | AgentMessage, images?: ImageContent[]): Promise<void> {
+  async prompt(
+    input: string | AgentMessage,
+    images?: ImageContent[],
+  ): Promise<void> {
     const message = normalizeInput(input, images);
     if (this.runningInner) {
       this.steerQueue.push(message);
@@ -298,7 +307,10 @@ export class Agent {
           assistantMessageEvent: { type: "thinking_delta", delta: event.delta },
         });
       } else if (event.type === "error") {
-        const ev = event as { errorMessage?: string; error?: { errorMessage?: string } };
+        const ev = event as {
+          errorMessage?: string;
+          error?: { errorMessage?: string };
+        };
         errorMessage = ev.errorMessage ?? ev.error?.errorMessage;
       } else if (event.type === "toolcall_start") {
         // The SDK is executing this tool call: only the start event is
@@ -327,7 +339,13 @@ export class Agent {
           role: "toolResult" as const,
           toolCallId: event.toolCallId,
           toolName: event.toolName,
-          content: event.content as Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>,
+          content: event.content as Array<
+            { type: "text"; text: string } | {
+              type: "image";
+              data: string;
+              mimeType: string;
+            }
+          >,
           details: {},
           isError: event.isError,
           timestamp: Date.now(),
@@ -402,7 +420,9 @@ export class Agent {
             isError: false,
           };
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = error instanceof Error
+            ? error.message
+            : String(error);
           outcome = {
             content: [{ type: "text", text: message }],
             details: {},
@@ -457,7 +477,10 @@ function placeholderAssistant(model: Model<Api>): AssistantMessage {
   };
 }
 
-function errorAssistant(model: Model<Api>, errorMessage: string): AssistantMessage {
+function errorAssistant(
+  model: Model<Api>,
+  errorMessage: string,
+): AssistantMessage {
   return {
     role: "assistant",
     content: [],

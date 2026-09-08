@@ -63,7 +63,10 @@ Deno.test("DeepInfra models are OpenAI-compatible with documented fields", () =>
   const m3 = byId.get("MiniMaxAI/MiniMax-M3")!;
   assertEquals(m3.provider, DEEPINFRA_PROVIDER_ID);
   assertEquals(m3.reasoning, true);
-  assertEquals((m3.input ?? []).every((i) => i === "text" || i === "image"), true);
+  assertEquals(
+    (m3.input ?? []).every((i) => i === "text" || i === "image"),
+    true,
+  );
 });
 
 Deno.test("ClinePass models use the cline-pass slug", () => {

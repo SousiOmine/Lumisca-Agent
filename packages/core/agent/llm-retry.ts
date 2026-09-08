@@ -6,10 +6,10 @@ import {
   RATE_LIMIT_BASE_DELAY_MS,
   RATE_LIMIT_MAX_DELAY_MS,
   rateLimitRetryDelayMs,
+  type RateLimitRetryOptions,
   RetryAbortError,
   retryOnRateLimitError,
   sleepAbortable,
-  type RateLimitRetryOptions,
 } from "../ai/stream.ts";
 
 // The rate-limit retry primitives live in the transport (ai/stream.ts); the
@@ -22,10 +22,10 @@ export {
   RATE_LIMIT_BASE_DELAY_MS,
   RATE_LIMIT_MAX_DELAY_MS,
   rateLimitRetryDelayMs,
+  type RateLimitRetryOptions,
   RetryAbortError,
   retryOnRateLimitError,
   sleepAbortable,
-  type RateLimitRetryOptions,
 };
 
 /** Provider-default retry budget for the initial HTTP request. */

@@ -1,9 +1,4 @@
-import type {
-  Api,
-  ImageContent,
-  Model,
-  TextContent,
-} from "../ai/types.ts";
+import type { Api, ImageContent, Model, TextContent } from "../ai/types.ts";
 import type { StreamFn } from "../ai/types.ts";
 import { streamText } from "./stream-text.ts";
 

@@ -1,10 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "@lumisca/core";
-import type {
-  Api,
-  AssistantMessageEventStream,
-  Model,
-} from "@lumisca/core";
+import type { Api, AssistantMessageEventStream, Model } from "@lumisca/core";
 import type { AgentMessage, StreamFn } from "@lumisca/core";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";

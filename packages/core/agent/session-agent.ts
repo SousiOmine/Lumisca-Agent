@@ -2,12 +2,12 @@ import { Agent } from "../ai/agent.ts";
 import type {
   AgentEvent,
   AgentMessage,
-  StreamFn,
   Api,
   AssistantMessage,
   ImageContent,
   Message,
   Model,
+  StreamFn,
   TextContent,
 } from "../ai/types.ts";
 import { CoreError, errorMessage } from "../errors.ts";

@@ -26,32 +26,32 @@ export { Agent, type AgentDefaults, type AgentInit } from "./ai/agent.ts";
 export { LumiscaModels, type LumiscaModelsOptions } from "./ai/models.ts";
 export { languageModelFor } from "./ai/lang-model.ts";
 export {
-  createAssistantMessageEventStream,
   type AssistantMessageEventStream,
+  createAssistantMessageEventStream,
 } from "./ai/event-stream.ts";
 export {
-  fauxProvider,
   fauxAssistantMessage,
+  type FauxProvider,
+  fauxProvider,
   fauxText,
   fauxThinking,
   fauxToolCall,
-  type FauxProvider,
 } from "./ai/faux.ts";
 export type {
+  AgentEvent,
   AgentMessage,
+  AgentTool,
   AssistantMessage,
+  Context,
   ImageContent,
   Message,
+  ModelCompat,
+  StreamFn,
   TextContent,
   ThinkingContent,
-  ToolCall,
-  StreamFn,
-  AgentEvent,
-  AgentTool,
   ThinkingLevelMap,
-  ModelCompat,
+  ToolCall,
   Usage,
-  Context,
 } from "./ai/types.ts";
 export { SessionAgent } from "./agent/session-agent.ts";
 export { AGENT_MODES, findAgentMode } from "./modes/mod.ts";

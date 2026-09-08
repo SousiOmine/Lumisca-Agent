@@ -1,9 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import type {
-  AuthInteraction,
-  AuthType,
-  Provider,
-} from "@lumisca/core";
+import type { AuthInteraction, AuthType, Provider } from "@lumisca/core";
 import type {
   AuthCheck,
   ModelInfo,

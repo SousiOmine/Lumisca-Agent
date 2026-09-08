@@ -19,7 +19,11 @@ import type {
   UserProviderInput,
   UserProviderSummary,
 } from "./user-providers.ts";
-import { buildUserProvider, parseUserProviderInput, UserProviderStore } from "./user-providers.ts";
+import {
+  buildUserProvider,
+  parseUserProviderInput,
+  UserProviderStore,
+} from "./user-providers.ts";
 import { extraProviders } from "./extra-providers.ts";
 import { loadCustomProviders } from "./custom.ts";
 import { builtinProviders } from "./dev-catalog.ts";

@@ -18,7 +18,12 @@ import { toAgentTool } from "../tools/pi-adapter.ts";
 import { object, string, type Tool } from "../tools/schema.ts";
 
 function fakeModel(): Model<Api> {
-  return { id: "m", name: "m", api: "openai-completions", provider: "faux" } as unknown as Model<Api>;
+  return {
+    id: "m",
+    name: "m",
+    api: "openai-completions",
+    provider: "faux",
+  } as unknown as Model<Api>;
 }
 
 const echoSchema = object({ text: string("Text to echo") });
@@ -41,7 +46,11 @@ function countingEchoTool(counter: { calls: number }): Tool<typeof echoSchema> {
 }
 
 /** Serve one scripted StreamFn event list per LLM call. */
-function scriptedStreamFn(scripts: Array<(stream: ReturnType<typeof createAssistantMessageEventStream>) => void>): StreamFn {
+function scriptedStreamFn(
+  scripts: Array<
+    (stream: ReturnType<typeof createAssistantMessageEventStream>) => void
+  >,
+): StreamFn {
   let index = 0;
   return () => {
     const stream = createAssistantMessageEventStream();
@@ -125,9 +134,14 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
     (m as { toolCallId?: string }).toolCallId === "t1"
   );
   // Transcript order stays assistant(toolCalls) → toolResults.
-  assertEquals(assistantIndex !== -1 && resultIndex !== -1 && assistantIndex < resultIndex, true);
+  assertEquals(
+    assistantIndex !== -1 && resultIndex !== -1 && assistantIndex < resultIndex,
+    true,
+  );
   const assistant = messages[assistantIndex] as AssistantMessage;
-  const recorded = assistant.content.find((b) => b.type === "toolCall") as ToolCall;
+  const recorded = assistant.content.find((b) =>
+    b.type === "toolCall"
+  ) as ToolCall;
   assertEquals(recorded.arguments, { text: "hi" });
 });
 

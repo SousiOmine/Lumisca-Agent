@@ -3,31 +3,29 @@
  * pi-agent-core). The rest of the app imports types and helpers from here.
  */
 export {
-  createAssistantMessageEventStream,
   type AssistantMessageEventStream,
+  createAssistantMessageEventStream,
 } from "./event-stream.ts";
 export {
   createStreamFn,
-  streamText,
   isRetryableRateLimitError,
-  retryOnRateLimitError,
   type RateLimitRetryOptions,
+  retryOnRateLimitError,
+  streamText,
   type StreamTransport,
 } from "./stream.ts";
 export { languageModelFor, type ResolvedApiKey } from "./lang-model.ts";
 export { Agent, type AgentDefaults, type AgentInit } from "./agent.ts";
 export { LumiscaModels, type LumiscaModelsOptions } from "./models.ts";
 export {
-  fauxProvider,
   fauxAssistantMessage,
+  type FauxProvider,
+  fauxProvider,
   fauxText,
   fauxThinking,
   fauxToolCall,
-  type FauxProvider,
 } from "./faux.ts";
 export type {
-  AuthNotice,
-  AuthPromptOption,
   AgentEvent,
   AgentMessage,
   AgentState,
@@ -39,7 +37,9 @@ export type {
   AssistantMessageContent,
   AuthCheck,
   AuthInteraction,
+  AuthNotice,
   AuthPrompt,
+  AuthPromptOption,
   AuthType,
   Credential,
   CredentialInfo,
@@ -48,12 +48,12 @@ export type {
   LlmContentBlock,
   LlmMessage,
   Message,
-  ModeMessage,
   Model,
   ModelCost,
-  ModelThinkingLevel,
   ModelsStore,
   ModelsStoreEntry,
+  ModelThinkingLevel,
+  ModeMessage,
   NotificationMessage,
   OAuthAuth,
   OAuthCredential,

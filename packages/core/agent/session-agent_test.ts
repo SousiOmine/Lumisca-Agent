@@ -6,12 +6,7 @@ import {
   fauxThinking,
   fauxToolCall,
 } from "@lumisca/core";
-import type {
-  Api,
-  AssistantMessage,
-  Model,
-  TextContent,
-} from "@lumisca/core";
+import type { Api, AssistantMessage, Model, TextContent } from "@lumisca/core";
 import type { AgentMessage, StreamFn } from "@lumisca/core";
 import type { StreamOptions } from "../ai/types.ts";
 import { AskHub } from "../tools/ask.ts";

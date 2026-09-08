@@ -15,7 +15,9 @@ export function isApiKeyCredential(
 }
 
 /** The api key of a stored credential, or undefined when unset. */
-export function apiKeyOf(credential: Credential | undefined): string | undefined {
+export function apiKeyOf(
+  credential: Credential | undefined,
+): string | undefined {
   return credential?.type === "api_key" && credential.key.length > 0
     ? credential.key
     : undefined;

@@ -1,9 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type {
-  AuthInteraction,
-  AuthNotice,
-  AuthPrompt,
-} from "@lumisca/core";
+import type { AuthInteraction, AuthNotice, AuthPrompt } from "@lumisca/core";
 import { autoAnswerSelect, errorMessage } from "@lumisca/core";
 import type {
   ProviderLoginEvent,

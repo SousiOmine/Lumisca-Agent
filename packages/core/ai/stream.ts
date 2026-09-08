@@ -9,15 +9,15 @@
 import {
   isStepCount,
   jsonSchema,
-  tool,
   streamText as vercelStreamText,
+  tool,
 } from "ai";
 import type { LanguageModel } from "ai";
 import { sessionHeadersFor } from "./lang-model.ts";
 import type {
+  AgentTool,
   Api,
   AssistantMessage,
-  AgentTool,
   LlmMessage,
   Model,
   StreamEvent,
@@ -231,10 +231,14 @@ function reasoningHint(
 ): string | undefined {
   if (model.reasoning !== true) return undefined;
   if (level === "off") return undefined;
-  const mapped = model.thinkingLevelMap?.[level as keyof typeof model.thinkingLevelMap];
+  const mapped = model.thinkingLevelMap
+    ?.[level as keyof typeof model.thinkingLevelMap];
   return mapped && mapped !== "null"
     ? mapped
-    : ({ low: "low", medium: "medium", high: "high" } as Record<string, string>)[level];
+    : ({ low: "low", medium: "medium", high: "high" } as Record<
+      string,
+      string
+    >)[level];
 }
 
 /** An empty placeholder assistant message for the stream's start event. */
@@ -352,9 +356,9 @@ function toCoreMessages(messages: LlmMessage[]): unknown[] {
       const isError = m.isError === true;
       const text = typeof m.content === "object" && Array.isArray(m.content)
         ? (m.content as Array<Record<string, unknown>>)
-            .filter((b) => b.type === "text")
-            .map((b) => String(b.text ?? ""))
-            .join("\n")
+          .filter((b) => b.type === "text")
+          .map((b) => String(b.text ?? ""))
+          .join("\n")
         : String(m.content ?? "");
       out.push({
         role: "tool",
@@ -484,8 +488,14 @@ export async function streamText(
       if (event.type === "text_delta") {
         text += event.delta;
       } else if (event.type === "error") {
-        const errorEvent = event as { errorMessage?: string; error?: { errorMessage?: string } };
-        throw new Error(errorEvent.errorMessage ?? errorEvent.error?.errorMessage ?? failureLabel);
+        const errorEvent = event as {
+          errorMessage?: string;
+          error?: { errorMessage?: string };
+        };
+        throw new Error(
+          errorEvent.errorMessage ?? errorEvent.error?.errorMessage ??
+            failureLabel,
+        );
       }
     }
     return text;
