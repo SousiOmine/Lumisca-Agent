@@ -470,12 +470,13 @@ const listDirSchema = object({
 // --- per-file serialization ------------------------------------------------
 
 /**
- * pi-agent-core executes the tool calls of one assistant message in
- * parallel (toolExecution defaults to "parallel"), so several edits to
- * the SAME file can run concurrently. Each edit is a read-modify-write
- * (read → replace → write) without atomicity; two concurrent edits would
- * both read the pre-edit content and the later write would silently
- * discard the earlier one (a lost update both report as "Edited").
+ * The tool calls of one assistant message may run concurrently (the AI SDK
+ * executes a step's tool calls in parallel, and the agent's fallback path
+ * covers test doubles), so several edits to the SAME file can overlap.
+ * Each edit is a read-modify-write (read → replace → write) without
+ * atomicity; two concurrent edits would both read the pre-edit content and
+ * the later write would silently discard the earlier one (a lost update
+ * both report as "Edited").
  *
  * The lock serializes operations per resolved file path: concurrent edits
  * to one file queue up and each sees the previous operation's result;

@@ -388,6 +388,8 @@ export type StreamEvent =
   | { type: "thinking_delta"; delta: string; [k: string]: unknown }
   | { type: "toolcall_delta"; delta: string; [k: string]: unknown }
   | { type: "error"; errorMessage?: string; [k: string]: unknown }
+  | { type: "toolcall_start"; toolCallId: string; toolName: string; args: Record<string, unknown>; [k: string]: unknown }
+  | { type: "toolcall_result"; toolCallId: string; toolName: string; content: Array<{ type: "text" | "image"; text?: string; data?: string; mimeType?: string }>; isError: boolean; [k: string]: unknown }
   | { type: "done"; message: AssistantMessage; [k: string]: unknown };
 
 export type AssistantMessageEventStream = AsyncIterable<StreamEvent> & {

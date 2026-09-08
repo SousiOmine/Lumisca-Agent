@@ -40,7 +40,7 @@ export async function createMcpTools(
   return defs.map((def) => createMcpTool(manager, def));
 }
 
-/** Add tools to a pi agent that are not already registered, appending at
+/** Add tools to an agent that are not already registered, appending at
  * the end so the existing tool definitions (and their prefix-cache block)
  * stay untouched. Used for the search/call tools, whose set is fixed once
  * the session's registry is populated. */

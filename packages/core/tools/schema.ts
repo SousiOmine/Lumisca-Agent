@@ -1,12 +1,10 @@
 /**
  * Tool schema DSL: plain JSON Schema with type-level inference.
  *
- * Deliberately independent of pi-ai (which re-exports TypeBox): tool
- * schemas are plain JSON Schema objects, which pi's validateToolArguments
- * accepts directly (it explicitly supports schemas without TypeBox Kind
- * markers — manual coercion + Ajv validation). Keeping this module free of
- * pi imports confines the pi-ai dependency to the adapter and the agent
- * boundary.
+ * Tool schemas are plain JSON Schema objects, which the Vercel AI SDK
+ * transport wraps with `jsonSchema()` (see ai/stream.ts) before handing
+ * them to the provider. Keeping this module free of SDK imports confines
+ * the transport coupling to the adapter and the agent boundary.
  */
 
 // --- schema types ----------------------------------------------------------
@@ -170,22 +168,20 @@ export function object<P extends Record<string, ToolSchema>>(
 
 // --- tool interface -----------------------------------------------------------
 
-/** A content block of a tool result: text, or an image (base64 `data`).
- * Structurally compatible with pi's TextContent / ImageContent so results
- * pass through toAgentTool() unchanged. */
+/** A content block of a tool result: text, or an image (base64 `data`). */
 export type ToolContentBlock =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string };
 
-/** Result of a tool execution: text/image content (structurally compatible
- * with pi's TextContent/ImageContent) plus structured details for the UI. */
+/** Result of a tool execution: text/image content plus structured details
+ * for the UI. */
 export interface ToolResult {
   content: ToolContentBlock[];
   details: Record<string, unknown>;
 }
 
 /** A coding tool, independent of the agent runtime's tool type. Converted
- * to pi's AgentTool by toAgentTool() at the agent boundary. */
+ * to the agent's AgentTool by toAgentTool() at the agent boundary. */
 export interface Tool<P extends ToolSchema = ToolSchema> {
   name: string;
   label: string;

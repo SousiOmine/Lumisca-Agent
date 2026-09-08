@@ -214,29 +214,45 @@ export class Agent {
     this.state.messages.push(message);
   }
 
-  /** One exchange: repeatedly call the stream until the model stops (no tool
-   * calls), executing any tool calls in between. `turn_end` is emitted for
-   * every assistant turn (tool-call turns included) so the session agent's
-   * retry policy sees the turn's output and resets its vacant-response
-   * counter on progress. */
+  /** One exchange: each step() is a single LLM turn whose tool calls the
+   * AI SDK already executed (single step via `stopWhen: isStepCount(1)` in
+   * the transport). The loop continues while the turn ends with tool calls
+   * so the model sees their results; it ends on a text-only turn.
+   * `turn_end` fires per turn (tool-call turns included) so the session
+   * agent's retry policy observes progress. When a test double (faux
+   * provider) bypasses the SDK, the done message may still carry
+   * unexecuted tool calls — those are executed here as a fallback. */
   private async exchangeLoop(): Promise<void> {
     for (;;) {
       if (this.abortRequested) return;
-      const assistant = await this.step();
+      const { assistant, executedIds } = await this.step();
       if (this.abortRequested) return;
       this.emit({ type: "turn_end", message: assistant });
-      const toolCalls = assistant.content.filter(
+      const pending = assistant.content.filter(
         (b): b is ToolCall => b.type === "toolCall",
       );
-      if (toolCalls.length === 0) return;
-      await this.executeTools(toolCalls);
+      if (pending.length === 0) return;
+      // Fallback: the SDK did not execute these tool calls (faux provider /
+      // test doubles yield no toolcall_result events). Only the missing
+      // calls run here — SDK-executed calls already have their results in
+      // the transcript and must never run twice.
+      const missing = pending.filter((call) => !executedIds.has(call.id));
+      if (missing.length > 0) {
+        await this.executeTools(missing);
+      }
       if (this.abortRequested) return;
     }
   }
 
-  /** One LLM call: stream the model and record the resulting AssistantMessage
-   * (emitting message_start/deltas/message_end). */
-  private async step(): Promise<AssistantMessage> {
+  /** One LLM call: stream a single turn (the SDK executes the turn's tool
+   * calls via their execute functions) and record the resulting
+   * AssistantMessage, emitting message_start/deltas/message_end and
+   * tool_execution_start/end events. Returns the assistant message plus
+   * the ids the SDK executed (empty for test doubles that bypass it). */
+  private async step(): Promise<{
+    assistant: AssistantMessage;
+    executedIds: Set<string>;
+  }> {
     const model = this.state.model;
     this.emit({ type: "message_start", message: placeholderAssistant(model) });
 
@@ -245,6 +261,12 @@ export class Agent {
     let errorMessage: string | undefined;
     let text = "";
     let thinking = "";
+    const executedIds = new Set<string>();
+    // Tool results the SDK produced during this turn. Buffered while
+    // streaming (events go out immediately) and appended to the transcript
+    // AFTER the assistant message, so the order stays
+    // assistant(toolCalls) → toolResults — the order providers expect.
+    const pendingResults: ToolResultMessage[] = [];
 
     const llmMessages = await this.convertToLlm(this.state.messages);
     const stream = this.streamFn(
@@ -278,6 +300,38 @@ export class Agent {
       } else if (event.type === "error") {
         const ev = event as { errorMessage?: string; error?: { errorMessage?: string } };
         errorMessage = ev.errorMessage ?? ev.error?.errorMessage;
+      } else if (event.type === "toolcall_start") {
+        // The SDK is executing this tool call: only the start event is
+        // emitted here — the SDK runs the tool and a toolcall_result event
+        // follows with its output.
+        this.emit({
+          type: "tool_execution_start",
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+        });
+      } else if (event.type === "toolcall_result") {
+        // The SDK finished executing this tool. Emit the end event now;
+        // the transcript record waits until after the assistant message
+        // (see pendingResults). The id marks the call as executed so the
+        // exchange loop never runs it a second time.
+        executedIds.add(event.toolCallId);
+        this.emit({
+          type: "tool_execution_end",
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          result: { content: event.content, details: {} },
+          isError: event.isError,
+        });
+        pendingResults.push({
+          role: "toolResult" as const,
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          content: event.content as Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>,
+          details: {},
+          isError: event.isError,
+          timestamp: Date.now(),
+        });
       } else if (event.type === "done") {
         final = event.message;
       }
@@ -303,12 +357,17 @@ export class Agent {
     }
 
     this.state.messages.push(final!);
+    for (const result of pendingResults) {
+      this.state.messages.push(result);
+    }
     this.state.errorMessage = errorMessage ?? this.state.errorMessage;
     this.emit({ type: "message_end", message: final! });
-    return final!;
+    return { assistant: final!, executedIds };
   }
 
-  /** Execute the model's tool calls, recording toolResult messages. */
+  /** Fallback: execute tool calls the SDK did not run. Only test doubles
+   * (faux provider) that bypass the SDK's tool loop reach here — the real
+   * Vercel transport executes via the tools' execute functions. */
   private async executeTools(toolCalls: ToolCall[]): Promise<void> {
     for (const call of toolCalls) {
       if (this.abortRequested) return;

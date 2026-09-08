@@ -15,6 +15,7 @@
     "npm:@ai-sdk/mistral@4.0.39": "4.0.39_zod@4.4.3",
     "npm:@ai-sdk/openai-compatible@3.0.44": "3.0.44_zod@4.4.3",
     "npm:@ai-sdk/openai@4.0.60": "4.0.60_zod@4.4.3",
+    "npm:@ai-sdk/provider@4.0.10": "4.0.10",
     "npm:@modelcontextprotocol/sdk@1.30.0": "1.30.0_zod@4.4.3",
     "npm:@napi-rs/canvas@1.0.8": "1.0.8",
     "npm:@opencode-ai/models@0.0.67": "0.0.67",

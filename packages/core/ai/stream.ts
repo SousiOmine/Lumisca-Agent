@@ -7,8 +7,8 @@
  * so the transport surface stays exactly one function.
  */
 import {
+  isStepCount,
   jsonSchema,
-  stepCountIs,
   tool,
   streamText as vercelStreamText,
 } from "ai";
@@ -18,7 +18,6 @@ import type {
   Api,
   AssistantMessage,
   AgentTool,
-  LlmContentBlock,
   LlmMessage,
   Model,
   StreamEvent,
@@ -44,7 +43,18 @@ export function createStreamFn(transport: StreamTransport): StreamFn {
     runStream(model, context, options, transport);
 }
 
-/** Run one LLM turn over Vercel streamText, yielding stream events. */
+/** Run one LLM turn with the Vercel AI SDK.
+ *
+ * Tools are passed WITH execute functions, so the SDK itself executes every
+ * tool call of this turn (single step via `stopWhen: isStepCount(1)`) and
+ * feeds the results back into the step — the Agent never executes tools for
+ * the real transport. The multi-turn loop stays in the Agent
+ * (ai/agent.ts `exchangeLoop`), which keeps per-turn control (steer, abort,
+ * turn_end/retry policy, event bridge) while execution lives in the SDK.
+ *
+ * The generator consumes `result.fullStream` so text/thinking deltas and
+ * tool-call/tool-result parts arrive interleaved in real time, then yields
+ * the done event carrying the turn's AssistantMessage. */
 async function* runStream(
   model: Model<Api>,
   context: StreamRequest,
@@ -63,9 +73,12 @@ async function* runStream(
       ? { system: context.systemPrompt }
       : {}),
     ...(context.tools !== undefined && context.tools.length > 0
-      ? { tools: toToolSet(context.tools) }
+      ? { tools: toExecutableToolSet(context.tools, options?.signal) }
       : {}),
-    stopWhen: stepCountIs(1),
+    // Exactly one LLM turn per StreamFn call: the SDK executes this turn's
+    // tool calls (via the execute functions above); the Agent's outer loop
+    // decides whether another turn follows.
+    stopWhen: isStepCount(1),
     ...(options?.signal !== undefined ? { abortSignal: options.signal } : {}),
   };
   // Reasoning levels: map the model's stored thinking level to a Vercel
@@ -80,49 +93,148 @@ async function* runStream(
   if (sessionHeaders !== undefined) request.headers = sessionHeaders;
 
   const result = vercelStreamText(request as never);
-  // Emit a start (empty partial) first, then text/thinking deltas as they
-  // arrive; the authoritative AssistantMessage is carried by the done event.
   yield { type: "start", partial: modelStartPartial(model) };
   let text = "";
   let thinking = "";
   try {
-    for await (const delta of result.textStream) {
-      text += delta;
-      yield { type: "text_delta", delta };
-    }
-    const reasoning = await result.reasoningText;
-    if (reasoning !== undefined && reasoning.length > 0) {
-      thinking = reasoning;
-      yield { type: "thinking_delta", delta: reasoning };
+    // fullStream yields every part (text/reasoning deltas, tool calls and
+    // tool results) in the order they happen, so tool_execution_start
+    // reaches the UI before the tool runs and tool_execution_end after.
+    for await (const part of result.fullStream) {
+      const p = part as {
+        type?: string;
+        text?: unknown;
+        delta?: unknown;
+        toolCallId?: unknown;
+        toolName?: unknown;
+        input?: unknown;
+        output?: unknown;
+        error?: unknown;
+      };
+      switch (p.type) {
+        case "text-delta": {
+          const delta = typeof p.text === "string" ? p.text : "";
+          if (delta.length === 0) break;
+          text += delta;
+          yield { type: "text_delta", delta };
+          break;
+        }
+        case "reasoning-delta": {
+          const delta = typeof p.text === "string" ? p.text : "";
+          if (delta.length === 0) break;
+          thinking += delta;
+          yield { type: "thinking_delta", delta };
+          break;
+        }
+        case "tool-input-delta": {
+          const delta = typeof p.delta === "string" ? p.delta : "";
+          if (delta.length === 0) break;
+          yield { type: "toolcall_delta", delta };
+          break;
+        }
+        case "tool-call": {
+          yield {
+            type: "toolcall_start",
+            toolCallId: String(p.toolCallId ?? ""),
+            toolName: String(p.toolName ?? ""),
+            args: toArgsRecord(p.input),
+          };
+          break;
+        }
+        case "tool-result": {
+          yield {
+            type: "toolcall_result",
+            toolCallId: String(p.toolCallId ?? ""),
+            toolName: String(p.toolName ?? ""),
+            content: [{ type: "text" as const, text: outputText(p.output) }],
+            isError: false,
+          };
+          break;
+        }
+        case "tool-error": {
+          yield {
+            type: "toolcall_result",
+            toolCallId: String(p.toolCallId ?? ""),
+            toolName: String(p.toolName ?? ""),
+            content: [{
+              type: "text" as const,
+              text: errorText(p.error),
+            }],
+            isError: true,
+          };
+          break;
+        }
+        case "error": {
+          const message = p.error instanceof Error
+            ? p.error.message
+            : typeof p.error === "string"
+            ? p.error
+            : "The model stream produced an error";
+          yield { type: "error", errorMessage: message };
+          return;
+        }
+        default:
+          break;
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     yield { type: "error", errorMessage: message };
     return;
   }
-  const step = (await result.steps).at(-1);
-  const message = buildAssistantMessage(model, step, text, thinking);
+
+  // Single-step run: the (only) step carries this turn's text, tool calls
+  // (already executed by the SDK — see the tool-result parts above) and
+  // finish reason for the Agent's event bridge.
+  const steps = (await result.steps) as unknown as Array<{
+    text?: string;
+    reasoningText?: string;
+    toolCalls?: Array<{
+      toolCallId: string;
+      toolName: string;
+      /** v7 field name for the model-generated arguments. */
+      input?: unknown;
+      /** Pre-v7 field name (kept as a fallback for test doubles). */
+      args?: unknown;
+    }>;
+  }>;
+  const lastStep = steps.at(-1);
+  // Prefer the streamed text (fullStream already delivered every delta);
+  // fall back to the step text when the stream carried none (e.g. a cached
+  // or non-streaming provider path).
+  const finalText = text.length > 0 ? text : (lastStep?.text ?? "");
+  const finalThinking = thinking.length > 0
+    ? thinking
+    : (lastStep?.reasoningText ?? "");
+  const message = buildAssistantMessage(
+    model,
+    lastStep,
+    finalText,
+    finalThinking,
+  );
   yield { type: "done", message };
 }
 
-/** Map a Lumisca thinking level to a Vercel reasoning hint (best effort). */
+/** Map a Lumisca thinking level to a Vercel reasoning hint (best effort).
+ * Returns a plain string (`"high"`, etc.) or `undefined` — not an object
+ * with `{ enabled, effort }` — because the `@ai-sdk/openai-compatible`
+ * provider sends the whole reasoning value as `reasoning_effort`:
+ *
+ *   reasoning_effort = isCustomReasoning(reasoning) ? reasoning : undefined
+ *
+ * An object like `{ enabled: true }` or `{ enabled: false }` reaches the
+ * wire as-is, which OpenCode Go / Console Go rejects since it expects a
+ * string like `"low"`, `"medium"`, `"high"`, etc. */
 function reasoningHint(
   model: Model<Api>,
   level: string,
-): { enabled: boolean; effort?: string } | undefined {
+): string | undefined {
   if (model.reasoning !== true) return undefined;
-  const mapped = level !== "off"
-    ? model.thinkingLevelMap?.[level as keyof typeof model.thinkingLevelMap]
-    : undefined;
-  const effort = mapped && mapped !== "null"
+  if (level === "off") return undefined;
+  const mapped = model.thinkingLevelMap?.[level as keyof typeof model.thinkingLevelMap];
+  return mapped && mapped !== "null"
     ? mapped
-    : level !== "off"
-    ? { low: "low", medium: "medium", high: "high" }[level]
-    : undefined;
-  if (effort === undefined) {
-    return level === "off" ? { enabled: false } : undefined;
-  }
-  return { enabled: true, effort };
+    : ({ low: "low", medium: "medium", high: "high" } as Record<string, string>)[level];
 }
 
 /** An empty placeholder assistant message for the stream's start event. */
@@ -142,7 +254,13 @@ function modelStartPartial(model: Model<Api>): AssistantMessage {
 /** Build the final AssistantMessage from a Vercel step result. */
 function buildAssistantMessage(
   model: Model<Api>,
-  step: { text?: string; reasoning?: unknown; toolCalls?: unknown[] } | undefined,
+  step:
+    | {
+      text?: string;
+      reasoning?: unknown;
+      toolCalls?: unknown[];
+    }
+    | undefined,
   text: string,
   thinking: string,
 ): AssistantMessage {
@@ -154,12 +272,19 @@ function buildAssistantMessage(
     content.push({ type: "text", text } as never);
   }
   for (const call of step?.toolCalls ?? []) {
-    const c = call as { toolCallId?: string; toolName?: string; args?: unknown };
+    const c = call as {
+      toolCallId?: string;
+      toolName?: string;
+      /** AI SDK v7 field name for the model-generated arguments. */
+      input?: unknown;
+      /** Pre-v7 field name (kept as a fallback for test doubles). */
+      args?: unknown;
+    };
     content.push({
       type: "toolCall",
       id: c.toolCallId ?? "",
       name: c.toolName ?? "",
-      arguments: (c.args ?? {}) as Record<string, unknown>,
+      arguments: toArgsRecord(c.input ?? c.args),
     } as never);
   }
   return {
@@ -174,32 +299,110 @@ function buildAssistantMessage(
   };
 }
 
-/** Convert Lumisca LLM messages to Vercel CoreMessage[]. */
+/** Normalize model-generated tool arguments to a plain record. Anything
+ * non-object (including undefined) becomes `{}` so the transcript and the
+ * UI never see a missing args object. */
+function toArgsRecord(input: unknown): Record<string, unknown> {
+  if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+    return input as Record<string, unknown>;
+  }
+  return {};
+}
+
+/** Render an SDK tool `output` (whatever the execute function returned)
+ * as the transcript/display text. */
+function outputText(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (typeof output === "object" && output !== null) {
+    const o = output as { type?: unknown; value?: unknown; text?: unknown };
+    if (typeof o.value === "string") return o.value;
+    if (typeof o.text === "string" && typeof o.type === "string") {
+      return o.text;
+    }
+    try {
+      return JSON.stringify(output);
+    } catch {
+      return String(output);
+    }
+  }
+  if (output === undefined || output === null) return "Tool completed.";
+  return String(output);
+}
+
+/** Render an SDK tool `error` as the transcript/display text. */
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+/** Convert Lumisca LLM messages to Vercel CoreMessage[] (v7 format). */
 function toCoreMessages(messages: LlmMessage[]): unknown[] {
   const out: unknown[] = [];
   for (const message of messages) {
-    if (typeof message.content === "string") {
-      out.push({ role: message.role, content: message.content });
-      continue;
-    }
-    const parts = contentToParts(message.content);
-    if (message.role === "assistant") {
-      out.push({ role: "assistant", content: parts });
-    } else if (message.role === "toolResult") {
-      const m = message as unknown as {
-        toolCallId: string;
-        toolName: string;
-        isError: boolean;
-      };
+    if (message.role === "toolResult") {
+      // Tool results: Vercel v7 expects role "tool" with ToolResultPart[]
+      const m = message as unknown as Record<string, unknown>;
+      const toolCallId = String(m.toolCallId ?? "");
+      const toolName = String(m.toolName ?? "");
+      const isError = m.isError === true;
+      const text = typeof m.content === "object" && Array.isArray(m.content)
+        ? (m.content as Array<Record<string, unknown>>)
+            .filter((b) => b.type === "text")
+            .map((b) => String(b.text ?? ""))
+            .join("\n")
+        : String(m.content ?? "");
       out.push({
         role: "tool",
         content: [{
           type: "tool-result",
-          toolCallId: m.toolCallId,
-          toolName: m.toolName,
-          content: resultText(message.content),
-          isError: m.isError,
+          toolCallId,
+          toolName,
+          output: {
+            type: isError ? "error-text" : "text",
+            value: text || "Tool completed.",
+          },
         }],
+      });
+      continue;
+    }
+    if (typeof message.content === "string") {
+      out.push({ role: message.role, content: message.content });
+      continue;
+    }
+    // Build content parts: text + images (user), text + tool-calls (assistant)
+    const parts: unknown[] = [];
+    for (const block of message.content) {
+      if (block.type === "text") {
+        parts.push({ type: "text", text: block.text });
+      } else if (block.type === "image") {
+        parts.push({
+          type: "image",
+          image: `data:${block.mimeType};base64,${block.data}`,
+        });
+      }
+    }
+    for (const block of message.content as unknown[]) {
+      const b = block as { type?: string };
+      if (b.type === "toolCall") {
+        const tc = block as Record<string, unknown>;
+        parts.push({
+          type: "tool-call",
+          toolCallId: String(tc.id ?? ""),
+          toolName: String(tc.name ?? ""),
+          // Vercel v7 uses `input` (not `args`) for tool-call arguments
+          input: (tc.arguments as Record<string, unknown>) ?? {},
+        });
+      }
+    }
+    if (message.role === "assistant") {
+      out.push({
+        role: "assistant",
+        content: parts.length > 0 ? parts : "",
       });
     } else {
       out.push({ role: message.role, content: parts });
@@ -208,43 +411,54 @@ function toCoreMessages(messages: LlmMessage[]): unknown[] {
   return out;
 }
 
-function contentToParts(content: LlmContentBlock[]): unknown[] {
-  const parts: unknown[] = [];
-  for (const block of content) {
-    if (block.type === "text") {
-      parts.push({ type: "text", text: block.text });
-    } else if (block.type === "image") {
-      parts.push({
-        type: "image",
-        image: `data:${block.mimeType};base64,${block.data}`,
-      });
-    }
-    // thinking blocks are not sent to the model; toolCall blocks are only
-    // present on assistant messages, handled by toCoreMessages via text parts.
-  }
-  return parts;
-}
-
-/** Join the text of tool-result content blocks into a plain string. */
-function resultText(content: LlmContentBlock[]): string {
-  const pieces: string[] = [];
-  for (const block of content) {
-    if (block.type === "text") pieces.push(block.text);
-  }
-  return pieces.join("\n");
-}
-
-/** Convert Lumisca AgentTools to a Vercel tool set (schema only — the agent
- * runtime executes tools itself so it can emit tool_start/end events). */
-function toToolSet(tools: AgentTool[]): Record<string, unknown> {
+/** Convert Lumisca AgentTools to Vercel Tool objects WITH execute functions,
+ * so the AI SDK executes tools instead of the Agent doing it manually.
+ * Tools without `execute` (edge case) are passed as schema-only.
+ * Uses `inputSchema` (Vercel v7 property name), not `parameters`. */
+function toExecutableToolSet(
+  tools: AgentTool[],
+  signal?: AbortSignal,
+): Record<string, unknown> {
   const set: Record<string, unknown> = {};
   for (const t of tools) {
-    set[t.name] = tool({
-      description: t.description,
-      inputSchema: jsonSchema(
-        (t.parameters ?? { type: "object", properties: {} }) as never,
-      ),
-    });
+    const inputSchema = jsonSchema(
+      (t.parameters ?? { type: "object", properties: {} }) as never,
+    );
+    if (typeof t.execute === "function") {
+      const exec = t.execute;
+      // Cast through `never`: Vercel v7's tool() generic inference rejects
+      // unknown-input tools with execute. The actual types are determined at
+      // call time by the SDK, so `never` is safe here.
+      set[t.name] = tool({
+        description: t.description,
+        inputSchema,
+        execute: async (
+          input: Record<string, unknown>,
+          options: { toolCallId: string; abortSignal?: AbortSignal },
+        ) => {
+          const prepared = t.prepareArguments
+            ? t.prepareArguments(input)
+            : input;
+          // Prefer the SDK's per-tool abort signal (covers tool timeouts);
+          // fall back to the request signal when the SDK provides none.
+          const toolSignal = options.abortSignal ?? signal;
+          const result = await exec(
+            options.toolCallId,
+            prepared as never,
+            toolSignal,
+          );
+          const text = result.content
+            .filter((c): c is { type: "text"; text: string } =>
+              c.type === "text"
+            )
+            .map((c) => c.text)
+            .join("\n");
+          return text;
+        },
+      } as never);
+    } else {
+      set[t.name] = tool({ description: t.description, inputSchema } as never);
+    }
   }
   return set;
 }
