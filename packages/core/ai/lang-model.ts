@@ -65,16 +65,32 @@ export function languageModelFor(
         ? createOpenAI(settings).chat(model.id)
         : compatibleSettings(model, settings).chatModel(model.id);
     case "openai-responses":
-      return isFirstPartyOpenAI(model)
-        ? createOpenAI(settings).responses(model.id)
-        : compatibleSettings(model, settings).chatModel(model.id);
+      // The api declares the OpenAI Responses API, so drive it with the
+      // @ai-sdk/openai responses model against the model's own base URL.
+      // Third-party gateways that only serve some models over /v1/responses
+      // (OpenCode Go / Zen Responses-only models, custom user providers
+      // that picked this api) must not be downgraded to chat completions —
+      // their gateway rejects chat requests for those models.
+      return createOpenAI(settings).responses(model.id);
     case "anthropic-messages":
+      // @ai-sdk/anthropic appends `/messages` to the base URL. Gateways
+      // that expose an Anthropic-style endpoint per model publish the full
+      // model path in the model id (OpenCode Zen: base URL
+      // https://opencode.ai/zen/v1 with ids like `models/minimax-m3`), so
+      // the id doubles as the API path.
       return createAnthropic(settings)(model.id);
     case "google-generative-ai":
-      return createGoogleGenerativeAI(settings)(model.id);
     case "google-vertex":
+      // @ai-sdk/google appends `/models/{id}:generateContent` to the base
+      // URL. Gateways that expose a Gemini-style endpoint per model publish
+      // the full model path in the model id (OpenCode Zen: base URL
+      // https://opencode.ai/zen/v1 with ids like `models/gemini-3.5-flash`),
+      // so the id doubles as the API path.
       return createGoogleGenerativeAI(settings)(model.id);
     case "mistral-conversations":
+      // @ai-sdk/mistral appends `/chat/completions` to the base URL with
+      // the model id in the request body, so it stays on the provider base
+      // URL and the plain model id.
       return createMistral(settings)(model.id);
     case "azure-openai-responses":
       return createAzure(settings)(model.id);
@@ -132,8 +148,9 @@ export function sessionHeadersFor(
   return { "x-opencode-session": sessionId };
 }
 
-/** True for the first-party OpenAI provider (which supports the responses
- * api natively); everything else is routed through the compatible factory. */
+/** True for the first-party OpenAI provider. Its chat-completions requests
+ * go through the official @ai-sdk/openai chat model (rather than the
+ * compatible factory) because they hit api.openai.com. */
 function isFirstPartyOpenAI(model: Model<Api>): boolean {
   return model.provider === "openai" ||
     model.baseUrl === undefined ||

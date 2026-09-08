@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { sessionHeadersFor } from "./lang-model.ts";
+import { languageModelFor, sessionHeadersFor } from "./lang-model.ts";
 import { opencodeGoProvider } from "../models/dev-catalog.ts";
 import type { Api, Model } from "./types.ts";
 
@@ -44,4 +44,54 @@ Deno.test("sessionHeadersFor fails fast when an OpenCode Go request has no conve
     Error,
     "x-opencode-session",
   );
+});
+
+Deno.test("openai-responses resolves to the official Responses model even for third-party gateways", () => {
+  const go = opencodeGoProvider();
+  const muse = go.getModels().find((m) =>
+    m.id === "muse-spark-1.3-contributor"
+  )!;
+  assertEquals(muse.api, "openai-responses");
+
+  const lm = languageModelFor(muse, { apiKey: "test-key", source: "test" });
+  const unwrapped = lm as unknown as {
+    provider?: string;
+    modelId?: string;
+    config?: { baseURL?: string };
+  };
+  // The @ai-sdk/openai responses model, not the chat-completions fallback.
+  assertEquals(unwrapped.modelId, "muse-spark-1.3-contributor");
+  assertEquals(
+    unwrapped.provider?.endsWith(".responses"),
+    true,
+    `expected a .responses provider, got ${unwrapped.provider}`,
+  );
+  // It still targets the gateway's base URL and appends /responses.
+  assertEquals(unwrapped.config?.baseURL, "https://opencode.ai/zen/go/v1");
+});
+
+Deno.test("OpenCode Go chat/anthropic models resolve to their declared transports", () => {
+  const go = opencodeGoProvider();
+  const byId = new Map(go.getModels().map((m) => [m.id, m]));
+  const key = { apiKey: "test-key", source: "test" };
+
+  // Chat surface: the OpenAI-compatible chat model on the gateway base URL.
+  const flash = byId.get("deepseek-v4-flash")!;
+  assertEquals(flash.api, "openai-completions");
+  const chatLm = languageModelFor(flash, key) as unknown as {
+    provider?: string;
+    modelId?: string;
+  };
+  assertEquals(chatLm.provider, "opencode-go:deepseek-v4-flash.chat");
+  assertEquals(chatLm.modelId, "deepseek-v4-flash");
+
+  // Anthropic surface: model id stays plain while the base URL receives
+  // the appended `/messages` path.
+  const minimax = byId.get("minimax-m3")!;
+  assertEquals(minimax.api, "anthropic-messages");
+  const anthropicLm = languageModelFor(minimax, key) as unknown as {
+    provider?: string;
+    modelId?: string;
+  };
+  assertEquals(anthropicLm.modelId, "minimax-m3");
 });

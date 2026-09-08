@@ -15,8 +15,14 @@ import { buildProvider, envApiKeyAuth } from "./custom.ts";
  *
  * The allow-list keeps the model picker focused; models.dev still supplies
  * every provider/model's ids, names, limits, modalities and reasoning flag.
- * Providers whose npm package is not bundled fall back to the
- * @ai-sdk/openai-compatible transport (they are OpenAI-compatible).
+ *
+ * models.dev's provider-level `npm` names the @ai-sdk/* package a provider's
+ * models are served through. Gateways such as OpenCode Go / Zen override it
+ * per model to pick the wire protocol: Responses-only models are marked
+ * @ai-sdk/openai (POSTed to /v1/responses), Anthropic-shape models
+ * @ai-sdk/anthropic (/v1/messages), and the rest stay on the provider's
+ * OpenAI-compatible /chat/completions surface. Bundled native packages map
+ * to their Lumisca api; anything else is OpenAI-compatible.
  */
 
 /** Providers exposed in the Lumisca picker. Edit to widen/narrow. */
@@ -36,7 +42,8 @@ export const DEV_PROVIDER_IDS: readonly string[] = [
   "huggingface",
 ];
 
-/** First-party providers with a native @ai-sdk/* package we install. */
+/** First-party providers with a native @ai-sdk/* package we install. A
+ * model-level npm override selects the same transports (OpenCode Go / Zen). */
 const NATIVE_AI_SDK = new Map<string, Api>([
   ["@ai-sdk/anthropic", "anthropic-messages"],
   ["@ai-sdk/google", "google-generative-ai"],
@@ -60,15 +67,38 @@ const KNOWN_BASE_URLS: Record<string, string> = {
 function apiFor(
   providerId: string,
   providerNpm: string,
-  shape: string | undefined,
+  m: Pick<DevModel, "provider">,
 ): Api {
+  // First-party OpenAI stays on the app's default chat transport unless the
+  // metadata explicitly marks the responses shape.
   if (providerId === "openai") {
-    return shape === "responses" ? "openai-responses" : "openai-completions";
+    return m.provider?.shape === "responses"
+      ? "openai-responses"
+      : "openai-completions";
   }
-  const native = NATIVE_AI_SDK.get(providerNpm);
-  if (native !== undefined) return native;
-  // Everything else is OpenAI-compatible (or a bundled-native openai).
-  return shape === "responses" ? "openai-responses" : "openai-completions";
+  // A model-level npm override wins over its provider's npm: OpenCode Go /
+  // Zen serve Responses-only, Anthropic-shape and chat models side by side,
+  // and models.dev encodes the per-model SDK there.
+  const npm = m.provider?.npm ?? providerNpm;
+  const shape = m.provider?.shape;
+  switch (npm) {
+    case "@ai-sdk/anthropic":
+    case "@ai-sdk/google":
+    case "@ai-sdk/mistral":
+    case "@ai-sdk/azure":
+    case "@ai-sdk/amazon-bedrock":
+      return NATIVE_AI_SDK.get(npm)!;
+    case "@ai-sdk/openai":
+      // @ai-sdk/openai drives both APIs; models.dev omits `shape` when the
+      // SDK default applies (the Responses API).
+      return shape === "completions"
+        ? "openai-completions"
+        : "openai-responses";
+    default:
+      // Unbundled / OpenAI-compatible packages (openai-compatible,
+      // deepinfra, groq, ...) are chat-completions endpoints.
+      return "openai-completions";
+  }
 }
 
 /** Build a Lumisca Model from a models.dev Model entry. */
@@ -91,7 +121,7 @@ function toLumiscaModel(
   return {
     id: m.id,
     name: m.name,
-    api: apiFor(providerId, providerNpm, m.provider?.shape),
+    api: apiFor(providerId, providerNpm, m),
     provider: providerId,
     baseUrl: m.provider?.api ?? providerBaseUrl,
     reasoning: m.reasoning,
