@@ -136,6 +136,9 @@ Deno.test("runRepl re-subscribes after /new so tool output still renders", async
   const { core, faux, providerId, modelId } = setup();
   const { session } = await makeSession(core, providerId, modelId);
   await core.openSession(session.id);
+  // /new picks the model through pickModel, which only offers providers
+  // explicitly configured in Lumisca.
+  await core.setProviderApiKey(providerId, "test-key");
 
   // The new session's run executes a bash tool call; its tool_start must be
   // rendered. With the old unsubscribe-without-resubscribe bug the event

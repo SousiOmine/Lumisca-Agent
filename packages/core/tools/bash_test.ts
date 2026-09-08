@@ -100,10 +100,11 @@ Deno.test({
         !text.includes("\uFFFD"),
         `output contains mojibake: ${text}`,
       );
-      // The code page number must be visible (932 on Japanese Windows,
-      // 65001 when Windows runs in UTF-8 mode, 850/437 on Western runners).
+      // The code page number must be visible — `chcp` prints a localized
+      // label ("Active code page: 932" / "現在のコード ページ: 932"), so
+      // only the number itself is asserted, never the label text.
       assert(
-        /Active code page:\s*\d+/.test(text),
+        /(^|\D)\d{3}(\D|$)/.test(text),
         `code page missing: ${text}`,
       );
     } finally {

@@ -145,6 +145,7 @@ export function fauxProvider(options: FauxOptions = {}): FauxProvider {
     const entry = queue.shift();
     if (entry === undefined) {
       stream.push({ type: "error", errorMessage: "no more faux responses" });
+      stream.end();
       return stream;
     }
     const produce = typeof entry === "function"
