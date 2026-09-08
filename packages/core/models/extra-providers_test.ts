@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
 import {
   builtinProvider,
@@ -128,14 +128,91 @@ Deno.test("ClinePass models use the cline-pass slug", () => {
   assertEquals(ids.includes("cline-pass/deepseek-v4-flash"), true);
 });
 
-Deno.test("reasoning models expose the default thinking levels", () => {
+Deno.test("reasoning models expose the levels models.dev documents", () => {
   const flash = clinepassProvider()
     .getModels()
     .find((m) => m.id === "cline-pass/deepseek-v4-flash")!;
-  // models.dev marks it as a reasoning model; without a provider-specific
-  // thinking map the SDK defaults apply (off..high).
-  assertEquals(getSupportedThinkingLevels(flash)[0], "off");
-  assertEquals(getSupportedThinkingLevels(flash).includes("high"), true);
+  // models.dev lists its reasoning_options (effort: none/low/medium/high/
+  // xhigh), so the model supports exactly those — off..xhigh, no max.
+  assertEquals(getSupportedThinkingLevels(flash), [
+    "off",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+  ]);
+});
+
+Deno.test("OpenCode Go models expose distinct per-model thinking levels", () => {
+  // Every reasoning model used to collapse to the same provider-default set
+  // (off/minimal/low/medium/high) because models.dev's per-model
+  // reasoning_options were never mapped into a thinkingLevelMap. Now each
+  // model's levels come from its own reasoning_options.
+  const go = opencodeGoProvider();
+  const levels = (id: string) => {
+    const m = go.getModels().find((x) => x.id === id)!;
+    return getSupportedThinkingLevels(m);
+  };
+
+  // Effort: low/high/max (no minimal/medium, off via "none" absent here).
+  assertEquals(levels("deepseek-v4-flash"), ["low", "high", "max"]);
+  // Effort: minimal/low/medium/high/xhigh (max off; thinking cannot be off).
+  assertEquals(levels("muse-spark-1.3-contributor"), [
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+  ]);
+  // Effort: low/medium/high only.
+  assertEquals(levels("grok-4.5"), ["low", "medium", "high"]);
+  // Effort: only max.
+  assertEquals(levels("kimi-k3"), ["max"]);
+  // Effort: low/high/max.
+  assertEquals(levels("glm-5.3"), ["low", "high", "max"]);
+
+  // At least two of these must actually differ (the original bug made them
+  // all identical).
+  const sets = new Set([
+    JSON.stringify(levels("deepseek-v4-flash")),
+    JSON.stringify(levels("muse-spark-1.3-contributor")),
+    JSON.stringify(levels("grok-4.5")),
+    JSON.stringify(levels("kimi-k3")),
+  ]);
+  assert(sets.size >= 3, "opencode-go models must expose distinct levels");
+});
+
+Deno.test("other providers derive per-model levels from reasoning_options", () => {
+  // The same mapping applies to every models.dev provider, not just
+  // OpenCode Go — verify a representative spread differs per model.
+  const openai = builtinProvider("openai")!;
+  const openaiLevels = (id: string) => {
+    const m = openai.getModels().find((x) => x.id === id)!;
+    return getSupportedThinkingLevels(m);
+  };
+  // gpt-5.2: none/low/medium/high/xhigh.
+  assertEquals(openaiLevels("gpt-5.2"), [
+    "off",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+  ]);
+  // gpt-5-pro: only high.
+  assertEquals(openaiLevels("gpt-5-pro"), ["high"]);
+  // o3: low/medium/high.
+  assertEquals(openaiLevels("o3"), ["low", "medium", "high"]);
+
+  // Anthropic: claude-opus-4-8 effort low/medium/high/xhigh/max.
+  const anthropic = builtinProvider("anthropic")!;
+  const opus48 = anthropic.getModels().find((m) => m.id === "claude-opus-4-8")!;
+  assertEquals(getSupportedThinkingLevels(opus48), [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
 });
 
 Deno.test("extra providers register in LumiscaCore and need a stored key", async () => {

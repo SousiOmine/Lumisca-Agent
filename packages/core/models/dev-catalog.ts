@@ -2,8 +2,15 @@ import snapshot from "@opencode-ai/models/snapshot";
 import type {
   Model as DevModel,
   Provider as DevProvider,
+  ReasoningOption,
 } from "@opencode-ai/models";
-import type { Api, Model, Provider } from "../ai/types.ts";
+import type {
+  Api,
+  Model,
+  ModelThinkingLevel,
+  Provider,
+  ThinkingLevelMap,
+} from "../ai/types.ts";
 import { buildProvider, envApiKeyAuth } from "./custom.ts";
 
 /**
@@ -101,6 +108,79 @@ function apiFor(
   }
 }
 
+/** Effort values a `{ type: "effort" }` reasoning option may list, as a
+ * map from the models.dev value to the equivalent Lumisca thinking level.
+ * "none" is the wire value for "thinking off". */
+const EFFORT_LEVEL: Record<string, ModelThinkingLevel> = {
+  none: "off",
+  minimal: "minimal",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "xhigh",
+  max: "max",
+};
+
+/** Every Lumisca thinking level, as the map's key space (the order does not
+ * matter — `getSupportedThinkingLevels` filters the shared order). */
+const ALL_LEVELS: readonly ModelThinkingLevel[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+/**
+ * Derive the per-model `thinkingLevelMap` from models.dev's
+ * `reasoning_options`, which list the *exact* set of reasoning values a
+ * model accepts:
+ * - effort → each listed effort value (including "none" = off) maps to its
+ *   Lumisca thinking level;
+ * - toggle → off is accepted (the model can switch thinking off);
+ * - budget_tokens → a discrete token budget, not a named effort level, so it
+ *   contributes nothing.
+ * Every level the model does not accept is mapped to `null` (unsupported) so
+ * `getSupportedThinkingLevels` returns exactly the accepted set instead of
+ * the shared provider defaults. A model with no recognized effort option
+ * (no reasoning_options, or only budget_tokens) yields no map, keeping the
+ * previous "provider defaults apply" behavior for those.
+ */
+function thinkingLevelMapFor(options: readonly ReasoningOption[] | undefined):
+  | ThinkingLevelMap
+  | undefined {
+  if (options === undefined || options.length === 0) return undefined;
+  const accepted = new Map<ModelThinkingLevel, string>();
+  let hasEffort = false;
+  for (const option of options) {
+    if (option.type === "effort") {
+      hasEffort = true;
+      for (const value of option.values) {
+        // values is ReasoningEffort[], which includes null (disabled).
+        if (value === null) {
+          accepted.set("off", "none");
+          continue;
+        }
+        const level = EFFORT_LEVEL[value];
+        if (level !== undefined) accepted.set(level, value);
+      }
+    } else if (option.type === "toggle") {
+      // "toggle" means thinking can be switched on/off, so off is accepted.
+      accepted.set("off", "off");
+    }
+    // budget_tokens: a token budget, not a named effort — contributes nothing.
+  }
+  if (!hasEffort) return undefined;
+  const map: ThinkingLevelMap = {};
+  for (const level of ALL_LEVELS) {
+    const wire = accepted.get(level);
+    map[level] = wire === undefined ? null : wire;
+  }
+  return map;
+}
+
 /** Build a Lumisca Model from a models.dev Model entry. */
 function toLumiscaModel(
   providerId: string,
@@ -130,6 +210,7 @@ function toLumiscaModel(
     contextWindow: m.limit?.context,
     maxTokens: m.limit?.output,
     headers: m.provider?.headers,
+    thinkingLevelMap: thinkingLevelMapFor(m.reasoning_options),
   };
 }
 
