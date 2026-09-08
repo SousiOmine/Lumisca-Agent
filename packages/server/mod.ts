@@ -1,7 +1,11 @@
 import { LumiscaCore, resolveSettingsPath } from "@lumisca/core";
 import { HttpBrowserBackend } from "@lumisca/core";
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
-import { consumeServerStartupEnvironment } from "./startup.ts";
+import {
+  consumeServerStartupEnvironment,
+  describeListenError,
+  parseServerPort,
+} from "./startup.ts";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8000;
@@ -82,7 +86,13 @@ if (configError) {
   Deno.exit(1);
 }
 
-const port = Number(startupEnv.LUMISCA_PORT ?? DEFAULT_PORT);
+let port: number;
+try {
+  port = parseServerPort(startupEnv.LUMISCA_PORT, DEFAULT_PORT);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  Deno.exit(1);
+}
 const dbPath = resolveDbPath();
 const settingsPath = resolveSettingsPath();
 const repoRoot = resolveRepoRoot();
@@ -90,13 +100,23 @@ const allowedHosts = resolveAllowedHosts();
 
 const core = LumiscaCore.open(dbPath, settingsPath);
 attachBrowserBackend(core);
-const server = startServer(core, port, {
-  repoRoot,
-  assetsFile: startupEnv.LUMISCA_ASSETS_FILE || undefined,
-  token,
-  hostname: host,
-  allowedHosts,
-});
+// A taken port (usually a leftover `deno task dev:server`) must fail with
+// guidance, not an `AddrInUse` stack trace. The DB is closed before exit
+// so no lock files linger for the next attempt.
+let server: Deno.HttpServer<Deno.NetAddr>;
+try {
+  server = startServer(core, port, {
+    repoRoot,
+    assetsFile: startupEnv.LUMISCA_ASSETS_FILE || undefined,
+    token,
+    hostname: host,
+    allowedHosts,
+  });
+} catch (error) {
+  console.error(describeListenError(host, port, error));
+  await core.close();
+  Deno.exit(1);
+}
 
 console.log(`Lumisca server listening on http://${host}:${port}`);
 console.log(`Database: ${dbPath}`);

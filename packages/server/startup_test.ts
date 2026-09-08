@@ -1,6 +1,9 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   consumeServerStartupEnvironment,
+  describeListenError,
+  isAddressInUseError,
+  parseServerPort,
   SERVER_STARTUP_ENV_KEYS,
 } from "./startup.ts";
 
@@ -45,6 +48,60 @@ Deno.test("server startup environment is consumed instead of inherited by tools"
   });
   assertEquals(deleted, Object.keys(captured));
   assertEquals(values, new Map([["LUMISCA_MODEL", "test-model"]]));
+});
+
+Deno.test("parseServerPort falls back when unset or blank", () => {
+  assertEquals(parseServerPort(undefined, 8000), 8000);
+  assertEquals(parseServerPort("", 8000), 8000);
+  assertEquals(parseServerPort("   ", 8000), 8000);
+});
+
+Deno.test("parseServerPort accepts valid ports", () => {
+  assertEquals(parseServerPort("8100", 8000), 8100);
+  assertEquals(parseServerPort("1", 8000), 1);
+  assertEquals(parseServerPort("65535", 8000), 65535);
+});
+
+Deno.test("parseServerPort rejects garbage and out-of-range values", () => {
+  for (const raw of ["abc", "0", "-1", "65536", "80.5", "80x"]) {
+    assertThrows(
+      () => parseServerPort(raw, 8000),
+      Error,
+      "LUMISCA_PORT",
+      `must reject ${JSON.stringify(raw)}`,
+    );
+  }
+});
+
+Deno.test("isAddressInUseError matches Deno's AddrInUse", () => {
+  assertEquals(isAddressInUseError(new Deno.errors.AddrInUse("taken")), true);
+  const shaped = new Error("taken");
+  shaped.name = "AddrInUse";
+  assertEquals(isAddressInUseError(shaped), true);
+  assertEquals(isAddressInUseError(new Error("boom")), false);
+  assertEquals(isAddressInUseError("AddrInUse"), false);
+  assertEquals(isAddressInUseError(undefined), false);
+});
+
+Deno.test("describeListenError guides away from an occupied port", () => {
+  const message = describeListenError(
+    "127.0.0.1",
+    8000,
+    new Deno.errors.AddrInUse("taken"),
+  );
+  assert(message.includes("8000"), "names the port");
+  assert(message.includes("netstat"), "tells how to find the holder");
+  assert(message.includes("LUMISCA_PORT"), "offers another port");
+});
+
+Deno.test("describeListenError reports other listen failures plainly", () => {
+  const message = describeListenError(
+    "127.0.0.1",
+    8000,
+    new Error("permission denied"),
+  );
+  assert(message.includes("8000"), "names the port");
+  assert(message.includes("permission denied"), "keeps the raw detail");
 });
 
 Deno.test("unset server startup variables are still removed", () => {
