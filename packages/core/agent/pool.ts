@@ -232,15 +232,15 @@ export class SessionPool {
    * server processes, and discard its todo plan. The persisted session
    * stays; openSession rebuilds it with fresh managers and an empty plan.
    * Await the returned promise when ordering matters (e.g. deleting the
-   * workspace folder afterwards): the MCP child processes are only
-   * guaranteed dead once it resolves. */
+   * workspace folder afterwards): the background kills and the MCP child
+   * processes are only guaranteed dead once it resolves. */
   async close(id: string): Promise<void> {
     const resources = this.sessions.get(id);
     if (!resources) return;
     resources.agent?.close();
-    resources.background?.killAll();
     resources.tasks?.close();
     this.sessions.delete(id);
+    await resources.background?.killAll();
     await resources.mcp?.manager.close();
   }
 
@@ -252,15 +252,16 @@ export class SessionPool {
 
   /** Close every agent, stop every background command, abort every
    * sub-agent, and tear down every MCP attachment (core shutdown).
-   * Resolves once every MCP child process is dead. */
+   * Resolves once every background kill has taken effect and every MCP
+   * child process is dead. */
   async closeAll(): Promise<void> {
     const all = [...this.sessions.values()];
     this.sessions.clear();
     for (const resources of all) {
       resources.agent?.close();
-      resources.background?.killAll();
       resources.tasks?.close();
     }
+    await Promise.all(all.map((resources) => resources.background?.killAll()));
     await Promise.all(all.map((resources) => resources.mcp?.manager.close()));
   }
 

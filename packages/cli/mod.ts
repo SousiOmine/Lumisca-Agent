@@ -145,14 +145,33 @@ async function main(): Promise<number> {
   const core = LumiscaCore.open(opts.dbPath);
   let browserBackend: Awaited<ReturnType<typeof attachBrowserBackend>>;
 
-  // Ctrl+C: close the database and abort live agents instead of dying
-  // mid-write (runRepl's finally would not run on SIGINT). The browser
-  // host dies with us anyway (it watches our stdin).
+  // Ctrl+C: stop background commands and MCP servers, close the database
+  // and abort live agents instead of dying mid-write (runRepl's finally
+  // would not run on SIGINT). Await the teardown before exiting so the
+  // kills actually reach the process trees — Deno.exit would otherwise
+  // cut the taskkill/exit-wait short and orphan them. The browser host
+  // dies with us anyway (it watches our stdin).
+  let sigintShuttingDown = false;
   Deno.addSignalListener("SIGINT", () => {
+    if (sigintShuttingDown) {
+      // Second Ctrl+C: the user insists on dying now; skip the wait.
+      Deno.exit(130);
+    }
+    sigintShuttingDown = true;
     console.log("\n終了します");
-    void browserBackend?.close();
-    core.close();
-    Deno.exit(130);
+    void (async () => {
+      try {
+        await browserBackend?.close();
+      } catch {
+        // best-effort
+      }
+      try {
+        await core.close();
+      } catch {
+        // best-effort
+      }
+      Deno.exit(130);
+    })();
   });
 
   try {

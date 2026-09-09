@@ -12,8 +12,10 @@ export interface WorkspaceServiceDeps {
   listSessions(workspaceId: string): SessionInfo[];
   /** Guard + mutate + rebuild, atomically w.r.t. streaming sessions. */
   applyChange(sessions: SessionInfo[], mutate: () => void): void;
-  /** Forget a session's live agent (workspace deletion). */
-  deleteSession(id: string): void;
+  /** Forget a session's live agent, stopping its background commands and
+   * MCP servers (workspace deletion). Awaited by the caller so the
+   * processes are dead before the workspace folders are touched. */
+  deleteSession(id: string): Promise<void>;
 }
 
 /** Workspace CRUD plus folder resolution. Extracted from LumiscaCore so
@@ -84,13 +86,13 @@ export class WorkspaceService {
     return this.repo.get(id)!;
   }
 
-  delete(id: string): void {
+  async delete(id: string): Promise<void> {
     const current = this.require(id);
     if (current.chat) {
       throw new CoreError("The chat workspace cannot be deleted", "forbidden");
     }
     for (const session of this.deps.listSessions(id)) {
-      this.deps.deleteSession(session.id);
+      await this.deps.deleteSession(session.id);
     }
     this.repo.delete(id);
   }

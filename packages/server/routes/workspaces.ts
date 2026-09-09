@@ -23,7 +23,7 @@ export interface WorkspaceApi {
     id: string,
     input: { name?: string; folders?: string[] },
   ): Promise<Workspace>;
-  deleteWorkspace(id: string): void;
+  deleteWorkspace(id: string): Promise<void>;
 }
 
 /** File listings are cached per workspace for a short TTL: the walk is the
@@ -88,8 +88,8 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
     return c.json(ws);
   });
 
-  app.delete("/workspaces/:id", (c) => {
-    core.deleteWorkspace(c.req.param("id"));
+  app.delete("/workspaces/:id", async (c) => {
+    await core.deleteWorkspace(c.req.param("id"));
     return c.json({ ok: true });
   });
 

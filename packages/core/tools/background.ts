@@ -330,19 +330,35 @@ export class BackgroundProcessManager {
     return { ok: true, alreadyExited: false, timedOut };
   }
 
-  /** Stop every running command (session close / app shutdown).
-   * Best-effort: the kills are issued but not awaited, so shutdown never
-   * blocks on a stuck process. */
-  killAll(): void {
-    for (const record of this.records.values()) {
-      if (record.info.state !== "running") continue;
+  /** Stop every running command (session close / app shutdown) and wait —
+   * bounded — for the kills to take effect, so the caller can order
+   * shutdown after it (a fire-and-forget kill races the process exit and
+   * orphans the tree on Windows, where taskkill must finish before the
+   * event loop is torn down). Resolves once every kill has been issued
+   * and each process's exit observed (at most KILL_WAIT_MS per command);
+   * stuck processes do not block shutdown forever. */
+  async killAll(): Promise<void> {
+    const targets = [...this.records.values()].filter(
+      (record) => record.info.state === "running",
+    );
+    for (const record of targets) {
       record.killedByUser = true;
       if (record.timer !== undefined) {
         clearTimeout(record.timer);
         record.timer = undefined;
       }
-      void killProcessTree(record.child);
     }
+    await Promise.all(
+      targets.map((record) => killProcessTree(record.child).catch(() => {})),
+    );
+    await Promise.all(
+      targets.map((record) =>
+        Promise.race([
+          record.exit.then(() => {}, () => {}),
+          new Promise((resolve) => setTimeout(resolve, KILL_WAIT_MS)),
+        ])
+      ),
+    );
   }
 
   /** Announce a newly spawned command to the panel (background_start).

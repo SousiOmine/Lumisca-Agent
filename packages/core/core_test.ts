@@ -967,7 +967,7 @@ Deno.test("chat workspace cannot be updated or deleted", async () => {
   const chatWorkspace = core.getWorkspace(session.workspaceId)!;
   assertEquals(chatWorkspace.chat, true);
 
-  assertThrows(
+  await assertRejects(
     () => core.deleteWorkspace(chatWorkspace.id),
     Error,
     "cannot be deleted",

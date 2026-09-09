@@ -265,7 +265,7 @@ Deno.test("async_bash start tool forwards env vars", async () => {
     assertEquals(done.reason, "exited");
     assert(done.tail.includes("hello-env"), `tail: ${done.tail}`);
   } finally {
-    manager.killAll();
+    await manager.killAll();
     await removeDirRetry(root);
   }
 });
@@ -309,10 +309,17 @@ Deno.test("killAll stops every running command", async () => {
     exitPromises.push(waitForExit(manager));
     await manager.start({ cwd: Deno.cwd(), command: longCommand });
   }
-  manager.killAll();
+  await manager.killAll();
   for (const promise of exitPromises) {
     assertEquals((await promise).reason, "killed");
   }
+  // The kills have taken effect by the time killAll resolves: no command
+  // may still be reported as running (a status check right after session
+  // close must not see a live process).
+  assert(
+    manager.list().every((info) => info.state !== "running"),
+    "killAll resolved while a command was still running",
+  );
 });
 
 Deno.test("the per-session concurrency limit is enforced", async () => {
@@ -329,7 +336,7 @@ Deno.test("the per-session concurrency limit is enforced", async () => {
     }
     assert(message.includes("Too many background commands"), message);
   } finally {
-    manager.killAll();
+    await manager.killAll();
   }
 });
 
@@ -353,7 +360,7 @@ Deno.test("finished commands free their slot for new starts", async () => {
     const first = manager.get("1");
     assertEquals(first?.state, "finished");
   } finally {
-    manager.killAll();
+    await manager.killAll();
   }
 });
 

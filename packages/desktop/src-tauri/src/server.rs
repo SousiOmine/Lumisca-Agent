@@ -571,14 +571,32 @@ fn browser_lab_env(app: &AppHandle) -> Option<(String, String)> {
 
 /// Kill the server AND everything it spawned (tool children would
 /// otherwise survive as orphans): taskkill /T on Windows, the whole
-/// process group on POSIX.
+/// process group on POSIX. The tree kill is waited for (bounded) before
+/// the server child itself is reaped, so the grandchildren are dead
+/// before this returns — a spawned-and-forgotten taskkill races app exit
+/// and orphans the tree.
 fn kill_process_tree(child: &mut Child) {
     #[cfg(windows)]
     {
         let pid = child.id();
+        // Wait for the tree kill to finish: the server's own shutdown
+        // (SIGTERM → core.close → taskkill for each background command)
+        // needs the tree gone before the process exits, and a fire-and-
+        // forget taskkill may die with us before it runs.
         let _ = background_command("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
-            .spawn();
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        // Give the OS a beat to reap the killed tree before reaping the
+        // server child itself (bounded: at most ~2s).
+        for _ in 0..20 {
+            match child.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                Err(_) => break,
+            }
+        }
     }
     #[cfg(unix)]
     {

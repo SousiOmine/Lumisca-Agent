@@ -236,11 +236,12 @@ export class LumiscaCore {
     return core;
   }
 
-  /** Shut the core down: close every session (killing their MCP server
-   * processes) and close the database. Resolves once every child
-   * process is dead, so callers that delete workspace folders afterwards
-   * must await it (on Windows a live child running with the folder as
-   * its working directory blocks deletion). */
+  /** Shut the core down: stop every session's background commands,
+   * close every session (killing their MCP server processes) and close
+   * the database. Resolves once every background kill has taken effect
+   * and every child process is dead, so callers that delete workspace
+   * folders afterwards must await it (on Windows a live child running
+   * with the folder as its working directory blocks deletion). */
   async close(): Promise<void> {
     await this.pool.closeAll();
     this.db.close();
@@ -431,8 +432,8 @@ export class LumiscaCore {
     return await this.workspaces.update(id, input);
   }
 
-  deleteWorkspace(id: string): void {
-    this.workspaces.delete(id);
+  deleteWorkspace(id: string): Promise<void> {
+    return this.workspaces.delete(id);
   }
 
   /** Resolve a model or throw `not_found` (single home for the

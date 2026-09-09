@@ -153,8 +153,8 @@ export interface SessionApi {
   listSessions(workspaceId?: string): SessionInfo[];
   createSession(input: CreateSessionInput): SessionInfo;
   openSession(id: string): SessionInfo;
-  closeSession(id: string): void;
-  deleteSession(id: string): void;
+  closeSession(id: string): Promise<void>;
+  deleteSession(id: string): Promise<void>;
   getAgent(id: string): SessionAgent | undefined;
   /** The model a new session would get, with the thinking control data the
    * draft tab renders (matches LumiscaCore.getDefaultModel). */
