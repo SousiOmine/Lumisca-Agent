@@ -1,6 +1,7 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { languageModelFor, sessionHeadersFor } from "./lang-model.ts";
 import { opencodeGoProvider } from "../models/dev-catalog.ts";
+import { reasoningForceOption } from "./stream.ts";
 import type { Api, Model } from "./types.ts";
 
 /** A plain first-party OpenAI model (no session affinity). */
@@ -94,4 +95,63 @@ Deno.test("OpenCode Go chat/anthropic models resolve to their declared transport
     modelId?: string;
   };
   assertEquals(anthropicLm.modelId, "minimax-m3");
+});
+
+Deno.test("reasoningForceOption forces unknown Responses-API models into reasoning mode", () => {
+  const go = opencodeGoProvider();
+  const muse = go.getModels().find((m) =>
+    m.id === "muse-spark-1.3-contributor"
+  )!;
+  // A reasoning hint is sent, so the SDK must be told this unknown model
+  // id is a reasoning model — otherwise the hint is dropped silently.
+  assertEquals(reasoningForceOption(muse, "xhigh"), {
+    openai: { forceReasoning: true },
+  });
+  // No hint, no option: non-thinking calls keep their previous shape.
+  assertEquals(reasoningForceOption(muse, undefined), undefined);
+  // Chat-surface models send reasoning_effort unconditionally and need
+  // no override.
+  const flash = go.getModels().find((m) => m.id === "deepseek-v4-flash")!;
+  assertEquals(reasoningForceOption(flash, "high"), undefined);
+  // Non-reasoning models never get the override, even on Responses.
+  const plain: Model<Api> = {
+    id: "plain",
+    name: "plain",
+    api: "openai-responses",
+    provider: "custom",
+    reasoning: false,
+  };
+  assertEquals(reasoningForceOption(plain, "high"), undefined);
+});
+
+Deno.test("muse-spark actually sends reasoning.effort on the wire", async () => {
+  // End-to-end through the real @ai-sdk/openai Responses model: the SDK
+  // classifies unknown model ids as non-reasoning and drops the hint, so
+  // the transport must attach forceReasoning (see reasoningForceOption).
+  const go = opencodeGoProvider();
+  const muse = go.getModels().find((m) =>
+    m.id === "muse-spark-1.3-contributor"
+  )!;
+  const lm = languageModelFor(muse, {
+    apiKey: "test-key",
+    source: "test",
+  }) as unknown as {
+    getArgs: (o: unknown) => Promise<{ args: Record<string, unknown> }>;
+  };
+  const prompt = [{ role: "user", content: [{ type: "text", text: "hi" }] }];
+  const without = await lm.getArgs({ prompt, reasoning: "xhigh" });
+  // Sanity: without the override the SDK drops the hint (the reported bug).
+  assertEquals(
+    (without.args as Record<string, unknown>).reasoning,
+    undefined,
+  );
+  const forced = await lm.getArgs({
+    prompt,
+    reasoning: "xhigh",
+    providerOptions: reasoningForceOption(muse, "xhigh"),
+  });
+  assertEquals((forced.args as Record<string, unknown>).reasoning, {
+    effort: "xhigh",
+    summary: "detailed",
+  });
 });

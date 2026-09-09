@@ -94,6 +94,11 @@ async function* runStream(
   // providers that do not support reasoning are unaffected.
   const reasoning = reasoningHint(model, context.thinkingLevel ?? "off");
   if (reasoning !== undefined) request.reasoning = reasoning;
+  // Responses-API models whose ids the SDK does not recognize (non-OpenAI
+  // gateways such as OpenCode Go) would otherwise have their reasoning
+  // hint dropped silently — see reasoningForceOption.
+  const forceOption = reasoningForceOption(model, reasoning);
+  if (forceOption !== undefined) request.providerOptions = forceOption;
   // Conversation affinity: providers that require a stable per-conversation
   // id (OpenCode Go's x-opencode-session) get it as a request header — the
   // SDK merges request headers over the provider factory's own headers.
@@ -297,6 +302,33 @@ function reasoningHint(
       string,
       string
     >)[level];
+}
+
+/**
+ * Provider options forcing the `@ai-sdk/openai` Responses model to treat
+ * a reasoning-capable model as a reasoning model.
+ *
+ * The SDK decides `isReasoningModel` purely from the model id (`o\d+` /
+ * `gpt-X` patterns), so third-party Responses-API models (OpenCode Go,
+ * custom gateways) are classified as non-reasoning and the `reasoning`
+ * hint above is dropped from the request body without a warning. Passing
+ * `forceReasoning: true` overrides that classification — the SDK's own
+ * escape hatch for exactly this case. Only set when a reasoning hint is
+ * actually sent, so non-thinking calls keep their previous shape.
+ */
+export function reasoningForceOption(
+  model: Model<Api>,
+  reasoning: string | undefined,
+): Record<string, Record<string, unknown>> | undefined {
+  if (reasoning === undefined) return undefined;
+  if (model.reasoning !== true) return undefined;
+  if (
+    model.api !== "openai-responses" && model.api !== "azure-openai-responses"
+  ) {
+    return undefined;
+  }
+  const provider = model.api === "azure-openai-responses" ? "azure" : "openai";
+  return { [provider]: { forceReasoning: true } };
 }
 
 /** An empty placeholder assistant message for the stream's start event. */

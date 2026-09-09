@@ -10,6 +10,7 @@ export {
   createStreamFn,
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
+  reasoningForceOption,
   retryOnRateLimitError,
   streamText,
   type StreamTransport,
