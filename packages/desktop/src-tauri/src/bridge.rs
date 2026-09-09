@@ -25,7 +25,9 @@ use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, Stat
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::server::{ensure_local_server, health_check, page_url};
+use crate::server::{
+    ensure_local_server, health_check, local_server_status, page_url, restart_local_server,
+};
 use crate::update::{
     check_for_updates, download_update, install_update, set_auto_update, update_status_json,
 };
@@ -251,6 +253,24 @@ pub(crate) fn handle_shell_request(
             }
         }
         "connect-local" => match connect_local_impl(app) {
+            Ok(url) => bridge_json(
+                StatusCode::OK,
+                serde_json::json!({ "ok": true, "url": url }),
+            ),
+            Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
+        },
+        // --- local server diagnostics ------------------------------------
+        //
+        // The page cannot tell "server crashed" apart from "server hung"
+        // on its own — both just stop answering fetches/WS — so the shell
+        // (which owns the child handle and captures its output) reports
+        // both. The connection-lost banner polls `server/status` and shows
+        // "再起動" + log copy-paste when the server is gone.
+        "server/status" => bridge_json(
+            StatusCode::OK,
+            serde_json::to_value(local_server_status(app)).unwrap(),
+        ),
+        "server/restart" => match restart_local_server(app) {
             Ok(url) => bridge_json(
                 StatusCode::OK,
                 serde_json::json!({ "ok": true, "url": url }),

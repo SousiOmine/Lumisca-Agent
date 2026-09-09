@@ -224,3 +224,29 @@ export const paneApi = {
     }),
   toggle: () => shellCall<PaneState>("pane/toggle"),
 };
+
+/** Local server liveness reported by the shell bridge (`server/status`).
+ * The page cannot tell "server crashed" apart from "server hung" on its
+ * own — both just stop answering — so the shell (which owns the child
+ * handle and captures its output) classifies it. `logTail` is the recent
+ * server output for copy-paste diagnosis (included while running too, so
+ * a hang can be diagnosed the same way as a crash). */
+export type ServerLiveness = "running" | "exited" | "none";
+
+export interface LocalServerStatus {
+  liveness: ServerLiveness;
+  port: number | null;
+  /** Process exit code when the child already exited (null = signaled). */
+  exitCode: number | null;
+  logTail: string;
+}
+
+/** Local server diagnostics through the shell bridge. `status` classifies
+ * the child (running / exited / none) with its captured output; `restart`
+ * kills the dead child, starts a fresh server and navigates to it (the
+ * connection-lost banner's "再起動" button). Plain browsers (no shell)
+ * reject both calls. */
+export const serverApi = {
+  status: () => shellCall<LocalServerStatus>("server/status"),
+  restart: () => shellCall<{ ok: boolean; url: string }>("server/restart"),
+};

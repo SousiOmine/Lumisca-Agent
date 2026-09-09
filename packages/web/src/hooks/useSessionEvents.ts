@@ -37,8 +37,15 @@ const RECONNECT_MAX_MS = 30_000;
 /** Session views plus the WebSocket event stream that feeds them:
  * reconnect with resync on drop, state sync while disconnected and on
  * tab-return, and per-view error recording. The returned setViews is
- * shared with the tab and session action logic. */
-export function useSessionEvents() {
+ * shared with the tab and session action logic. `onConnectionLost` fires
+ * on every WS close (the desktop health monitor uses it to arm its
+ * server-down banner); `onConnectionOpen` fires on every (re)connect. */
+export function useSessionEvents(
+  options: {
+    onConnectionLost?: () => void;
+    onConnectionOpen?: () => void;
+  } = {},
+) {
   const [views, setViews] = useState<Map<string, SessionView>>(new Map());
   const viewsRef = useRef(views);
   // Ref writes happen in an effect: writing during render breaks under
@@ -326,6 +333,9 @@ export function useSessionEvents() {
           // On close: clear stuck state and re-sync, then reconnect.
           if (disposed) return;
           connected = false;
+          // The server may be gone (not just the socket): arm the desktop
+          // health monitor so its banner can classify and offer restart.
+          options.onConnectionLost?.();
           startSyncTimer();
           resync();
           scheduleReconnect();
@@ -337,6 +347,7 @@ export function useSessionEvents() {
           connected = true;
           reconnectAttempts = 0;
           stopSyncTimer();
+          options.onConnectionOpen?.();
           resync();
         },
       );
@@ -349,6 +360,10 @@ export function useSessionEvents() {
       stopSyncTimer();
       document.removeEventListener("visibilitychange", onVisibility);
     };
+    // options.* are stable callbacks from the caller (App wires the health
+    // monitor's noteFailure once); re-subscribing the socket on every App
+    // render would flap the connection, so the effect stays mount-only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleEvent, resync, syncState]);
 
   return { views, setViews, setViewError };

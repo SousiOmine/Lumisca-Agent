@@ -245,7 +245,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     fed.close();
   });
 
-  app.get("/api/health", (c) => c.json({ ok: true }));
+  // `now` proves the event loop itself is alive (not just the listener
+  // accepting connections): the desktop UI uses it to tell a hung server
+  // apart from a healthy one.
+  app.get("/api/health", (c) => c.json({ ok: true, now: Date.now() }));
 
   // --- HTML page ------------------------------------------------------------
 

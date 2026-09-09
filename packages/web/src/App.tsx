@@ -5,6 +5,7 @@ import { splitTabKey } from "./tabs.ts";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
+import { useServerHealth } from "./hooks/useServerHealth.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { usePane } from "./hooks/usePane.ts";
@@ -22,6 +23,7 @@ import {
   SettingsModal,
 } from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
+import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 import { PaneHeader } from "./components/PaneHeader.tsx";
 
 export interface AppProps {
@@ -39,7 +41,14 @@ export function App({ initialData }: AppProps): ReactElement {
     handleWorkspaceChanged,
     deleteWorkspace,
   } = useWorkspaces(initialData);
-  const { views, setViews, setViewError } = useSessionEvents();
+  // Local server health (desktop only): the WS close + API failures arm
+  // it, the shell classifies (running/exited), and the banner offers
+  // restart + log copy-paste. Declared before useSessionEvents so its
+  // noteFailure can be wired as the connection-lost callback.
+  const serverHealth = useServerHealth(true);
+  const { views, setViews, setViewError } = useSessionEvents({
+    onConnectionLost: () => serverHealth.noteFailure(),
+  });
   const {
     tabs,
     setTabs,
@@ -140,6 +149,7 @@ export function App({ initialData }: AppProps): ReactElement {
       }
       <div className="app-body">
         <UpdateBanner update={update} />
+        <ServerDownBanner health={serverHealth} />
         {loadError && (
           <div className="msg">
             <div className="msg-body error-text">

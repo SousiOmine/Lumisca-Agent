@@ -4,11 +4,13 @@
 //! `crate::AppState` (defined in lib.rs); this module only touches it
 //! through the `AppHandle`.
 
+use std::collections::VecDeque;
 use std::ffi::OsStr;
-use std::io::{Read, Write};
+use std::fs::OpenOptions;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
@@ -29,6 +31,100 @@ const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// abandoned and a fresh one is tried. 3s covers a cold deno run; a
 /// healthy server answers in well under a second.
 const LOCAL_START_TIMEOUT: Duration = Duration::from_secs(3);
+/// Server log retention: the in-memory tail (surfaced to the UI for
+/// copy-paste) and the on-disk log file (kept for post-mortem).
+const SERVER_LOG_TAIL_LINES: usize = 500;
+const SERVER_LOG_FILE_LINES: usize = 2000;
+/// bytes of one captured server log line: a runaway tool log line must
+/// not balloon the ring buffer.
+const SERVER_LOG_LINE_MAX: usize = 4096;
+
+/// One captured line of the local server's combined stdout/stderr.
+#[derive(Clone)]
+pub(crate) struct ServerLogLine {
+    stream: &'static str,
+    text: String,
+}
+
+/// Ring buffer of the local server's recent output (stdout+stderr merged),
+/// plus the append-only log file path. The tail is what the UI offers for
+/// copy-paste when the server dies mid-session ("勝手に落ちる" reports);
+/// the file keeps a longer history for post-mortem. Created once per app
+/// run in setup (before the server starts), shared by the log-pump thread
+/// and the shell bridge.
+pub(crate) struct ServerLog {
+    lines: Mutex<VecDeque<ServerLogLine>>,
+    file: Mutex<Option<std::fs::File>>,
+}
+
+impl ServerLog {
+    pub(crate) fn new(app: &AppHandle) -> Self {
+        let file = server_log_path(app).and_then(|path| {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).ok()?;
+            }
+            OpenOptions::new().create(true).append(true).open(path).ok()
+        });
+        Self {
+            lines: Mutex::new(VecDeque::new()),
+            file: Mutex::new(file),
+        }
+    }
+
+    pub(crate) fn push(&self, stream: &'static str, text: String) {
+        {
+            let mut lines = self.lines.lock().unwrap_or_else(|e| e.into_inner());
+            lines.push_back(ServerLogLine {
+                stream,
+                text: text.clone(),
+            });
+            while lines.len() > SERVER_LOG_TAIL_LINES {
+                lines.pop_front();
+            }
+        }
+        if let Some(file) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+            let _ = writeln!(file, "[{stream}] {text}");
+            let _ = file.flush();
+        }
+    }
+
+    /// The recent output as plain text (oldest first), for the UI's
+    /// copy-paste. Each line is prefixed with its stream so stderr lines
+    /// (where Deno prints uncaught errors) stand out.
+    pub(crate) fn tail_text(&self) -> String {
+        let lines = self.lines.lock().unwrap_or_else(|e| e.into_inner());
+        let mut out = String::new();
+        for line in lines.iter() {
+            out.push_str(&format!("[{}] {}\n", line.stream, line.text));
+        }
+        out
+    }
+
+    pub(crate) fn clear(&self) {
+        self.lines.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
+fn server_log_path(app: &AppHandle) -> Option<PathBuf> {
+    Some(app_data_dir(app).join("server.log"))
+}
+
+/// Truncate the on-disk log to its last lines so it cannot grow without
+/// bound across app runs. Best-effort: a failure only leaves a longer file.
+pub(crate) fn trim_server_log_file(app: &AppHandle) {
+    let Some(path) = server_log_path(app) else {
+        return;
+    };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.len() <= SERVER_LOG_FILE_LINES {
+        return;
+    }
+    let kept = lines[lines.len() - SERVER_LOG_FILE_LINES..].join("\n");
+    let _ = std::fs::write(&path, kept + "\n");
+}
 
 /// A locally spawned server process.
 pub(crate) struct LocalServer {
@@ -37,6 +133,110 @@ pub(crate) struct LocalServer {
     pub(crate) port: u16,
     /// Per-instance auth token; doubles as the bridge key while local.
     pub(crate) token: String,
+}
+
+/// Liveness of the local server child, reported to the UI through the
+/// bridge (`server/status`): the page cannot tell "server crashed" apart
+/// from "server hung" on its own — both just stop answering — so the shell
+/// (which owns the child handle) classifies it.
+#[derive(serde::Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ServerLiveness {
+    /// The child process is alive.
+    Running,
+    /// The child exited (code + captured tail available for copy-paste).
+    Exited,
+    /// No local server is currently tracked (remote mode, or never started).
+    None,
+}
+
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LocalServerStatus {
+    pub(crate) liveness: ServerLiveness,
+    pub(crate) port: Option<u16>,
+    /// Process exit code when the child already exited (None = signaled).
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) log_tail: String,
+}
+
+/// Classify the tracked local server without blocking: `try_wait` reaps an
+/// exited child exactly once, so the status (and its exit code) is stable
+/// across polls.
+pub(crate) fn local_server_status(app: &AppHandle) -> LocalServerStatus {
+    let state = app.state::<AppState>();
+    let tail = state
+        .server_log
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .tail_text();
+    let mut guard = state.local.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(local) = guard.as_mut() else {
+        return LocalServerStatus {
+            liveness: ServerLiveness::None,
+            port: None,
+            exit_code: None,
+            log_tail: tail,
+        };
+    };
+    match local.child.try_wait() {
+        Ok(Some(status)) => LocalServerStatus {
+            liveness: ServerLiveness::Exited,
+            port: Some(local.port),
+            exit_code: status.code(),
+            log_tail: tail,
+        },
+        Ok(None) => LocalServerStatus {
+            liveness: ServerLiveness::Running,
+            port: Some(local.port),
+            exit_code: None,
+            // The tail is included while running too: when the server hangs
+            // (alive but not answering), this output is the only clue, and
+            // the UI offers it for copy-paste on its connection-lost banner.
+            log_tail: tail.clone(),
+        },
+        Err(_) => LocalServerStatus {
+            liveness: ServerLiveness::Running,
+            port: Some(local.port),
+            exit_code: None,
+            log_tail: tail.clone(),
+        },
+    }
+}
+
+/// Push one captured server output line into the shared log.
+fn push_server_log(app: &AppHandle, stream: &'static str, text: String) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .server_log
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(stream, text);
+    }
+}
+
+/// Clear the shared server log tail (a fresh start must not show the
+/// previous instance's output).
+fn clear_server_log(app: &AppHandle) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .server_log
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+}
+
+/// Read the shared server log tail as text (for the bridge).
+fn server_log_tail(app: &AppHandle) -> String {
+    app.try_state::<AppState>()
+        .map(|s| {
+            s.server_log
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .tail_text()
+        })
+        .unwrap_or_default()
 }
 
 /// Create a child process without letting console executables open a
@@ -230,7 +430,12 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
     let command = find_server_command(app)
         .ok_or_else(|| "Lumisca server not found. Build the project first.".to_string())?;
 
-    let child = match command {
+    // Capture the server's output: without piped stdout/stderr a mid-session
+    // crash leaves nothing to diagnose ("勝手に落ちる" reports). The pumps
+    // below tee every line into the in-memory tail (UI copy-paste) and the
+    // on-disk log file (post-mortem); the pipes must be drained or the
+    // child would block once their buffers fill.
+    let mut child = match command {
         ServerCommand::Compiled(bin) => {
             // Packaged build: prebuilt frontend assets sit next to the
             // binary in the resources dir.
@@ -247,6 +452,8 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                     .env("LUMISCA_BROWSER_TOKEN", browser_token);
             }
             command
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
                 .spawn()
                 .map_err(|e| format!("Failed to start Lumisca server: {e}"))?
         }
@@ -276,6 +483,7 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                     "--allow-env",
                     "--allow-run",
                     "--allow-sys",
+                    "--allow-ffi",
                 ])
                 .arg(&entry)
                 .env("LUMISCA_DB", db_path)
@@ -288,12 +496,67 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                     .env("LUMISCA_BROWSER_TOKEN", browser_token);
             }
             command
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
                 .spawn()
                 .map_err(|e| format!("Failed to start Lumisca server: {e}"))?
         }
     };
+    pump_server_output(app, child.stdout.take(), "stdout");
+    pump_server_stderr(app, child.stderr.take());
 
     Ok(child)
+}
+
+/// Drain one of the server child's pipes on a background thread, teeing
+/// every line into the shared ServerLog (in-memory tail + log file). Lines
+/// are split on \n and carriage returns stripped (console progress output);
+/// over-long lines are truncated so one runaway line cannot balloon the
+/// buffer. The thread ends when the pipe closes (child exit).
+fn pump_server_output(
+    app: &AppHandle,
+    pipe: Option<std::process::ChildStdout>,
+    stream: &'static str,
+) {
+    let Some(pipe) = pipe else { return };
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        pump_server_stream(&handle, pipe, stream);
+    });
+}
+
+fn pump_server_stderr(app: &AppHandle, pipe: Option<std::process::ChildStderr>) {
+    let Some(pipe) = pipe else { return };
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        pump_server_stream(&handle, pipe, "stderr");
+    });
+}
+
+fn pump_server_stream(handle: &AppHandle, pipe: impl Read + Send + 'static, stream: &'static str) {
+    let reader = BufReader::new(pipe);
+    // Buffer line-by-line (not read_to_string): the child keeps the
+    // pipe open for its whole life, so a read-to-end would never yield.
+    for chunk in reader.split(b'\n') {
+        let Ok(bytes) = chunk else { break };
+        // Strip a trailing \r (Windows console output) without touching
+        // the rest of the line.
+        let mut bytes = bytes;
+        if bytes.last() == Some(&b'\r') {
+            bytes.pop();
+        }
+        let mut text = String::from_utf8_lossy(&bytes).into_owned();
+        if text.len() > SERVER_LOG_LINE_MAX {
+            text.truncate(SERVER_LOG_LINE_MAX);
+            text.push_str("…[truncated]");
+        }
+        // try_state: the app may already be torn down when the last
+        // lines arrive (child exit races app exit).
+        if handle.try_state::<AppState>().is_none() {
+            break;
+        }
+        push_server_log(handle, stream, text);
+    }
 }
 
 /// The browser lab's RPC endpoint (URL + token) for the server child
@@ -367,9 +630,14 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
             kill_process_tree(&mut stale.child);
         }
     }
+    // A fresh start gets a fresh tail: the previous instance's output must
+    // not masquerade as the new one's when diagnosing a crash loop.
+    // (After the reuse check above, so a healthy reuse never wipes it.)
+    clear_server_log(app);
     let token = generate_token();
     let mut server_child: Option<Child> = None;
     let mut server_port: Option<u16> = None;
+    let mut last_detail = String::new();
     for attempt in 0..10 {
         let port = resolve_port();
         let mut child = start_server(app, port, &token)?;
@@ -378,21 +646,69 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
             server_port = Some(port);
             break;
         }
+        // Keep the failed attempt's tail: it is usually the actual reason
+        // (port clash, missing Deno, listen error) and would otherwise be
+        // cleared by the next attempt before anyone can read it.
+        last_detail = last_log_lines(&server_log_tail(app), 20);
         kill_process_tree(&mut child);
         if attempt == 9 {
-            return Err("Lumisca server did not become ready".into());
+            return Err(startup_error_message(&last_detail));
         }
         // Give the previous port a moment to be released.
         std::thread::sleep(Duration::from_millis(300));
     }
-    let port = server_port.ok_or("Lumisca server did not become ready")?;
-    let child = server_child.ok_or("Lumisca server did not become ready")?;
+    let port = server_port.ok_or_else(|| startup_error_message(&last_detail))?;
+    let child = server_child.ok_or_else(|| startup_error_message(&last_detail))?;
     *state.local.lock().unwrap_or_else(|e| e.into_inner()) = Some(LocalServer {
         child,
         port,
         token: token.clone(),
     });
     Ok(page_url(&format!("http://127.0.0.1:{port}"), &token))
+}
+
+/// Startup failure message: the generic "did not become ready" plus the
+/// failed attempt's captured output (usually the real cause — a listen
+/// error, a missing runtime) so the splash page can show it directly.
+fn startup_error_message(last_detail: &str) -> String {
+    const BASE: &str = "Lumisca server did not become ready";
+    let detail = last_detail.trim();
+    if detail.is_empty() {
+        return BASE.into();
+    }
+    format!("{BASE}\n\nサーバーログ:\n{detail}")
+}
+
+/// Last `n` lines of `text` (oldest first), for failure messages.
+fn last_log_lines(text: &str, n: usize) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let skip = lines.len().saturating_sub(n);
+    lines[skip..].join("\n")
+}
+
+/// Restart the local server after a mid-session death (crash or hang): drop
+/// the dead child and run the normal start path. The caller navigates to
+/// the returned page URL. Reported through the bridge (`server/restart`)
+/// so the UI can offer "再起動" on its connection-lost banner.
+pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
+    if let Some(mut stale) = app
+        .state::<AppState>()
+        .local
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+    {
+        kill_process_tree(&mut stale.child);
+    }
+    // Forget a remote display: the restart is explicitly about the local
+    // server, so the window must come back to it.
+    *app.state::<AppState>()
+        .last_remote
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
+    let url = ensure_local_server(app)?;
+    navigate_main(app, &url)?;
+    Ok(url)
 }
 
 /// Start the local server in the background and navigate the main window

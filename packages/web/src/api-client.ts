@@ -21,7 +21,17 @@ export async function request<T>(
   const headers = new Headers(init?.headers);
   headers.set("content-type", "application/json");
   if (token) headers.set("x-lumisca-token", token);
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  } catch (error) {
+    // Network-level failure (server down, not an HTTP error): tell the
+    // desktop health monitor so its banner can classify (crashed vs hung)
+    // and offer restart + log copy-paste. Plain browsers have no monitor
+    // (no shell), so the dispatch is a no-op there.
+    notifyServerFailure();
+    throw error;
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const message = body && typeof body.error === "string"
@@ -30,6 +40,29 @@ export async function request<T>(
     throw new Error(message);
   }
   return res.json() as Promise<T>;
+}
+
+/** Client-side server-failure listeners (the desktop health monitor
+ * registers one; see hooks/useServerHealth.ts). Dispatched on
+ * network-level fetch failures only — HTTP errors (4xx/5xx) mean the
+ * server answered, so they are not outages. */
+type ServerFailureListener = () => void;
+const serverFailureListeners = new Set<ServerFailureListener>();
+
+/** Register a server-failure listener; returns an unsubscribe function. */
+export function onServerFailure(listener: ServerFailureListener): () => void {
+  serverFailureListeners.add(listener);
+  return () => serverFailureListeners.delete(listener);
+}
+
+function notifyServerFailure(): void {
+  for (const listener of [...serverFailureListeners]) {
+    try {
+      listener();
+    } catch {
+      // A monitor must never break the API call that reported to it.
+    }
+  }
 }
 
 /** Federated request: `/api/fed/:peerId*` is one generic proxy of the local

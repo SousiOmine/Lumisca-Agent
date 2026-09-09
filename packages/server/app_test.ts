@@ -41,6 +41,11 @@ Deno.test("health and workspaces API", async () => {
   try {
     const health = await fetch(`${base}/api/health`);
     assertEquals(health.status, 200);
+    const healthBody = await health.json() as { ok: boolean; now: number };
+    assertEquals(healthBody.ok, true);
+    // The timestamp proves the event loop answered (liveness for hang
+    // detection), not just the TCP listener.
+    assertEquals(typeof healthBody.now, "number");
 
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
     const create = await json(base, "/api/workspaces", {

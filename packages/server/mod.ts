@@ -11,6 +11,24 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8000;
 const DEFAULT_DB = "lumisca.db";
 
+// A fire-and-forget promise that rejects without a handler would otherwise
+// terminate the whole server process (Deno exits on unhandled rejections),
+// leaving the desktop WebView frozen on a dead page with no explanation.
+// Log loudly and keep serving instead: the failure itself still surfaces as
+// a session_error on its own session, and the desktop shell captures this
+// output for copy-paste (see packages/desktop server.rs).
+globalThis.addEventListener("unhandledrejection", (event) => {
+  event.preventDefault();
+  const reason = (event as PromiseRejectionEvent).reason;
+  console.error(
+    `Lumisca: unhandled promise rejection: ${
+      reason instanceof Error
+        ? (reason.stack ?? reason.message)
+        : String(reason)
+    }`,
+  );
+});
+
 // Launcher-only configuration must be consumed before LumiscaCore creates
 // tools. Every command spawned afterwards inherits the cleaned environment,
 // not this server instance's port, database, token, or browser endpoint.
@@ -98,7 +116,17 @@ const settingsPath = resolveSettingsPath();
 const repoRoot = resolveRepoRoot();
 const allowedHosts = resolveAllowedHosts();
 
-const core = LumiscaCore.open(dbPath, settingsPath);
+let core: LumiscaCore;
+try {
+  core = LumiscaCore.open(dbPath, settingsPath);
+} catch (error) {
+  console.error(
+    `Lumisca: データベースを開けませんでした (${dbPath}): ${
+      error instanceof Error ? error.message : String(error)
+    }`,
+  );
+  Deno.exit(1);
+}
 attachBrowserBackend(core);
 // A taken port (usually a leftover `deno task dev:server`) must fail with
 // guidance, not an `AddrInUse` stack trace. The DB is closed before exit
