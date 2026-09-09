@@ -5,6 +5,8 @@ import type {
   Model,
   Provider,
 } from "../ai/types.ts";
+import { errorMessage } from "../errors.ts";
+import { parseJsonOrThrow } from "../shared/mod.ts";
 import { isRecord } from "../shared/fs-util.ts";
 
 /**
@@ -250,13 +252,19 @@ export function customProvidersFromModelsFile(): Provider[] {
   const path = Deno.env.get("LUMISCA_MODELS_FILE");
   if (!path) return [];
 
-  let parsed: unknown;
+  let text: string;
   try {
-    parsed = JSON.parse(Deno.readTextFileSync(path));
+    text = Deno.readTextFileSync(path);
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to load models.json: ${detail}\nFile: ${path}`);
+    throw new Error(
+      `Failed to load models.json: ${errorMessage(error)}\nFile: ${path}`,
+    );
   }
+  const parsed: unknown = parseJsonOrThrow(
+    text,
+    (detail) =>
+      new Error(`Failed to load models.json: ${detail}\nFile: ${path}`),
+  );
   if (!isModelsFileConfig(parsed)) {
     throw new Error(
       `Invalid models.json: expected {"providers": {...}}\nFile: ${path}`,

@@ -83,6 +83,10 @@ export interface CreateSessionInput {
  * A thin facade over focused services (settings guard, personalization,
  * saved prompts, workspaces, models, sessions, MCP): orchestration lives
  * here, domain logic lives there.
+ *
+ * Test seam: `overrides` replaces any collaborator (model manager, pool,
+ * MCP service, safety check, repos). Production paths pass nothing and get
+ * the default wiring below.
  */
 export class LumiscaCore {
   readonly db: LumiscaDb;
@@ -105,27 +109,42 @@ export class LumiscaCore {
   private browserBackend: BrowserBackend | undefined;
   private readonly listeners = new Set<(event: ClientEvent) => void>();
 
-  private constructor(db: LumiscaDb, settings: SettingsRepo) {
+  private constructor(
+    db: LumiscaDb,
+    settings: SettingsRepo,
+    overrides: {
+      models?: ModelManager;
+      personalization?: PersonalizationService;
+      savedPrompts?: SavedPromptsService;
+      sessions?: SessionRepo;
+      messages?: MessageRepo;
+      commandSafety?: CommandSafety;
+      pool?: SessionPool;
+      mcp?: McpService;
+      workspaces?: WorkspaceService;
+    } = {},
+  ) {
     this.db = db;
     this.settings = settings;
     this.credentials = createDbCredentialStore(this.settings);
-    this.models = new ModelManager(
-      this.credentials,
-      this.settings,
-    );
-    this.personalization = new PersonalizationService(this.settings);
-    this.savedPrompts = new SavedPromptsService(this.settings);
-    this.sessions = createSessionRepo(db);
-    this.messages = createMessageRepo(db);
+    this.models = overrides.models ??
+      new ModelManager(this.credentials, this.settings);
+    this.personalization = overrides.personalization ??
+      new PersonalizationService(this.settings);
+    this.savedPrompts = overrides.savedPrompts ??
+      new SavedPromptsService(this.settings);
+    this.sessions = overrides.sessions ?? createSessionRepo(db);
+    this.messages = overrides.messages ?? createMessageRepo(db);
     const streamFn = withProviderRetryDefaults(this.models.models.streamFn());
-    this.commandSafety = new CommandSafety({
-      getSetting: (key) => this.settings.get(key),
-      setSetting: (key, value) => this.settings.set(key, value),
-      getFastModel: () => this.getFastModel(),
-      streamFn,
-    });
-    this.pool = new SessionPool({
-      getModel: (provider, modelId) => this.models.getModel(provider, modelId),
+    this.commandSafety = overrides.commandSafety ??
+      new CommandSafety({
+        getSetting: (key) => this.settings.get(key),
+        setSetting: (key, value) => this.settings.set(key, value),
+        getFastModel: () => this.getFastModel(),
+        streamFn,
+      });
+    this.pool = overrides.pool ?? new SessionPool({
+      requireModel: (provider, modelId) => this.requireModel(provider, modelId),
       getImageAnalysisModel: () => this.getImageAnalysisModel(),
       getFastModel: () => this.getFastModel(),
       getFastModelInfo: () => this.getFastModelInfo(),
@@ -168,7 +187,7 @@ export class LumiscaCore {
       emit: (event) => this.emit(event),
       browser: () => this.browserBackend,
     });
-    this.mcp = new McpService({
+    this.mcp = overrides.mcp ?? new McpService({
       settings: this.settings,
       listSessions: (workspaceId) => this.sessions.list(workspaceId),
       agentMcpStatus: (sessionId) =>
@@ -177,12 +196,13 @@ export class LumiscaCore {
       applySessionChange: (sessions, mutate) =>
         this.pool.applyChange(sessions, mutate),
     });
-    this.workspaces = new WorkspaceService(createWorkspaceRepo(db), {
-      listSessions: (workspaceId) => this.sessions.list(workspaceId),
-      applyChange: (sessions, mutate) =>
-        this.pool.applyChange(sessions, mutate),
-      deleteSession: (id) => this.pool.delete(id),
-    });
+    this.workspaces = overrides.workspaces ??
+      new WorkspaceService(createWorkspaceRepo(db), {
+        listSessions: (workspaceId) => this.sessions.list(workspaceId),
+        applyChange: (sessions, mutate) =>
+          this.pool.applyChange(sessions, mutate),
+        deleteSession: (id) => this.pool.delete(id),
+      });
   }
 
   /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
@@ -413,6 +433,19 @@ export class LumiscaCore {
 
   deleteWorkspace(id: string): void {
     this.workspaces.delete(id);
+  }
+
+  /** Resolve a model or throw `not_found` (single home for the
+   * "Model not found" guard every model-taking path shares). */
+  private requireModel(provider: string, modelId: string): Model<Api> {
+    const model = this.models.getModel(provider, modelId);
+    if (!model) {
+      throw new CoreError(
+        `Model not found: ${provider}/${modelId}`,
+        "not_found",
+      );
+    }
+    return model;
   }
 
   /** The folder-less chat workspace ("simple chat" without a workspace),
@@ -689,13 +722,7 @@ export class LumiscaCore {
     if (!session) {
       throw new CoreError(`Session not found: ${id}`, "not_found");
     }
-    const model = this.models.getModel(provider, modelId);
-    if (!model) {
-      throw new CoreError(
-        `Model not found: ${provider}/${modelId}`,
-        "not_found",
-      );
-    }
+    this.requireModel(provider, modelId);
     this.pool.applyChange(
       [{ ...session, modelProvider: provider, modelId }],
       () => {
@@ -735,13 +762,7 @@ export class LumiscaCore {
         "invalid",
       );
     }
-    const model = this.models.getModel(providerId, modelId);
-    if (!model) {
-      throw new CoreError(
-        `Model not found: ${providerId}/${modelId}`,
-        "not_found",
-      );
-    }
+    this.requireModel(providerId, modelId);
     const effective = this.models.setThinkingLevel(providerId, modelId, level);
     for (const session of this.sessions.list()) {
       if (
@@ -939,13 +960,7 @@ export class LumiscaCore {
     modelId?: string,
   ): { provider: string; modelId: string } {
     if (provider && modelId) {
-      const model = this.models.getModel(provider, modelId);
-      if (!model) {
-        throw new CoreError(
-          `Model not found: ${provider}/${modelId}`,
-          "not_found",
-        );
-      }
+      this.requireModel(provider, modelId);
       return { provider, modelId };
     }
     const latest = this.sessions.list()[0];

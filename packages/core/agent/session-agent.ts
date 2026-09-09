@@ -12,12 +12,8 @@ import type {
 } from "../ai/types.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
-import {
-  isRetryableRateLimit,
-  MAX_RATE_LIMIT_RETRIES,
-  rateLimitRetryDelayMs,
-  sleepAbortable,
-} from "./llm-retry.ts";
+import { RetryManager } from "./retry-manager.ts";
+import { GoalRunner } from "./goal-runner.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
@@ -40,31 +36,18 @@ import type {
 import { formatBackgroundNotification } from "../tools/background.ts";
 import { notificationMessage } from "../tools/subagent-format.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
-import type {
-  NotificationMessage,
-  NotificationPayload,
-} from "../types/notification.ts";
+import type { NotificationPayload } from "../types/notification.ts";
 import { toLlmMessages } from "../types/notification.ts";
 import type { ModePrompt } from "../types/mode-message.ts";
 import { buildModeMessage } from "../types/mode-message.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 import type { GoalInfo } from "../shared/goal.ts";
-import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";
 import type { GoalStore } from "../goal/loop.ts";
-import { resolveMaxGoalIterations, runGoalLoop } from "../goal/loop.ts";
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
 const log = createLogger("session-agent");
-
-import {
-  buildRateLimitRetryNotification,
-  buildRetryNotification,
-  hasNoVisibleOutput,
-  isSilentErrorResponse,
-  MAX_EMPTY_RESPONSE_RETRIES,
-} from "./retry-policy.ts";
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -151,23 +134,12 @@ export class SessionAgent {
   /** Generates the session title from the first user message (null when
    * no fast model is configured). */
   private readonly titleGenerator: TitleGenerator | null;
-  /** The main model of this session (the judge fallback when no fast
-   * model is configured). */
-  private readonly mainModel: Model<Api>;
-  /** The fast model for goal judgements (undefined when unset: the main
-   * model judges instead). Shared with the title generator's model. */
-  private readonly fastModelForGoal: Model<Api> | undefined;
-  /** The stream function for goal judgements (same pipeline as titles). */
-  private readonly streamFnForGoal: StreamFn;
-  /** Session-bound goal persistence (null when the goal loop is disabled). */
-  private readonly goalStore: GoalStore | null;
-  /** Bumped to cancel a running goal loop (abort / rewind / explicit
-   * cancel). Compared by epoch like abortEpoch so a stop between two
-   * iterations stands the next judge/turn down. */
-  private goalEpoch = 0;
-  /** True while the goal loop runs; re-entrant prompts join instead of
-   * starting a second loop. */
-  private goalLoopRunning = false;
+  /** Owns the vacant-response / rate-limit retry state (budgets, parked
+   * restarts, abort epochs). */
+  private readonly retry: RetryManager;
+  /** Owns the autonomous goal loop (start / cancel / rewind-cancel /
+   * per-turn judging). Null when the goal loop is disabled. */
+  private readonly goals: GoalRunner | null;
   private readonly renameSession: (name: string) => void;
   /** Question hub backing the ask tool; rejects pending asks when the run
    * ends or the session closes (see rejectPendingAsks). */
@@ -183,43 +155,6 @@ export class SessionAgent {
   /** Set by close(): completion notifications of killed background
    * commands must not reach the discarded agent. */
   private closed = false;
-  /** Consecutive vacant responses (no text, no tool call) in the current
-   * exchange. Each one is retried up to MAX_EMPTY_RESPONSE_RETRIES — a
-   * mid-run vacancy via followUp (see handleTurnEnd), a silent error by
-   * restarting the run (see resumeAfterErrorRun); a response with output
-   * resets the count. Runs started from outside (a user prompt, an
-   * injected notification) reset it at their entry points. */
-  private emptyResponseRetries = 0;
-  /** The retry notification parked to restart a run after a silent-error
-   * turn killed it. Set by handleTurnEnd; consumed by resumeAfterErrorRun
-   * once the dead run has fully settled. Null when there is nothing to
-   * resume. */
-  private pendingErrorRetry: NotificationMessage | null = null;
-  /** Consecutive rate-limited (429) turns in the current exchange, retried
-   * with exponential backoff (see resumeAfterErrorRun). A separate budget
-   * from the vacant-response retries so a rate-limit storm cannot be cut
-   * short by the vacant cap, nor starve it; a turn with output or a new
-   * exchange resets it at their entry points. */
-  private rateLimitRetries = 0;
-  /** The retry notification parked to restart a run after a rate-limited
-   * turn. Set by handleTurnEnd; consumed by resumeAfterErrorRun (which
-   * backs off before re-prompting). Null when there is nothing to resume. */
-  private pendingRateLimitRetry: NotificationMessage | null = null;
-  /** Interrupts the backoff sleep of a rate-limit restart when the run is
-   * aborted or the session closes, so a user stop during the wait is not
-   * ignored. Independent of the agent's own abort signal (which is cleared
-   * between runs and would not fire while we wait outside a run). */
-  private readonly retryAbort = new AbortController();
-  /** Backoff sleep before a rate-limit restart (injectable for tests). */
-  private readonly rateLimitRetrySleep: (
-    ms: number,
-    signal?: AbortSignal,
-  ) => Promise<void>;
-  /** Bumped on every abort(); background work that spans multiple runs
-   * (the silent-error restart loop) compares epochs so a stop pressed
-   * between two attempts stands the restart down instead of firing one
-   * more request against the user's intent. */
-  private abortEpoch = 0;
   /** Title generation runs once per session, concurrently with the first
    * run; this guards against re-triggering (e.g. after a failed first run
    * that left savedCount at 0). */
@@ -244,11 +179,18 @@ export class SessionAgent {
       options.fastModel !== undefined && !options.disableTitleGeneration
         ? new TitleGenerator(options.fastModel, options.streamFn)
         : null;
-    this.mainModel = options.model;
-    this.fastModelForGoal = options.fastModel;
-    this.streamFnForGoal = options.streamFn;
-    this.goalStore = options.goalStore ?? null;
-    this.rateLimitRetrySleep = options.rateLimitRetrySleep ?? sleepAbortable;
+    this.retry = new RetryManager(options.rateLimitRetrySleep);
+    const goalStore = options.goalStore ?? null;
+    this.goals = goalStore === null ? null : new GoalRunner({
+      sessionId: options.sessionId,
+      goalStore,
+      getTranscript: () => this.messages,
+      getJudgeModel: () => options.fastModel ?? options.model,
+      streamFn: options.streamFn,
+      runTurn: (instruction) => this.runMainTurn(instruction),
+      emit: (event) => this.emit(event),
+      isClosed: () => this.closed,
+    });
     this.backgroundManager = options.backgroundManager ?? null;
     this.backgroundUnsubscribe = this.backgroundManager === null
       ? null
@@ -306,26 +248,17 @@ export class SessionAgent {
    * fresh exchange: they do not inherit the previous run's
    * vacant-response / rate-limit retry history. */
   private resetRetryState(): void {
-    this.emptyResponseRetries = 0;
-    this.rateLimitRetries = 0;
-    this.pendingRateLimitRetry = null;
+    this.retry.reset();
   }
 
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
+    const message = this.buildUserMessage(text, images);
+    this.maybeGenerateTitle(text);
+    this.announceMessage(message);
     // A user prompt starts a fresh exchange: it does not inherit the
     // previous run's vacant-response history.
     this.resetRetryState();
-    this.maybeGenerateTitle(text);
-    const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
-    if (images !== undefined && images.length > 0) content.push(...images);
-    const message: AgentMessage = {
-      role: "user",
-      content,
-      timestamp: Date.now(),
-    };
-    this.emit({ type: "message_start", sessionId: this.sessionId, message });
-    this.emit({ type: "message_end", sessionId: this.sessionId, message });
     try {
       await this.agent.prompt(message);
     } catch (error) {
@@ -380,8 +313,7 @@ export class SessionAgent {
     this.maybeGenerateTitle(mode ? mode.shortText : text);
     if (mode) {
       const message = buildModeMessage(mode, text, Date.now());
-      this.emit({ type: "message_start", sessionId: this.sessionId, message });
-      this.emit({ type: "message_end", sessionId: this.sessionId, message });
+      this.announceMessage(message);
       if (this.isStreaming) {
         this.agent.steer(message);
         return;
@@ -395,17 +327,8 @@ export class SessionAgent {
       return;
     }
     this.maybeGenerateTitle(text);
-    const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
-    if (images !== undefined && images.length > 0) {
-      content.push(...images);
-    }
-    const message: AgentMessage = {
-      role: "user",
-      content,
-      timestamp: Date.now(),
-    };
-    this.emit({ type: "message_start", sessionId: this.sessionId, message });
-    this.emit({ type: "message_end", sessionId: this.sessionId, message });
+    const message = this.buildUserMessage(text, images);
+    this.announceMessage(message);
     if (this.isStreaming) {
       this.agent.steer(message);
       return;
@@ -415,6 +338,24 @@ export class SessionAgent {
     // leaves the counter alone.
     this.resetRetryState();
     void this.startRun(message);
+  }
+
+  /** Build a user message from text + optional images (single home for the
+   * content assembly both prompt paths share). */
+  private buildUserMessage(
+    text: string,
+    images?: ImageContent[],
+  ): AgentMessage {
+    const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
+    if (images !== undefined && images.length > 0) content.push(...images);
+    return { role: "user", content, timestamp: Date.now() };
+  }
+
+  /** Announce a message to clients (synthetic message_start/end so it
+   * renders immediately). */
+  private announceMessage(message: AgentMessage): void {
+    this.emit({ type: "message_start", sessionId: this.sessionId, message });
+    this.emit({ type: "message_end", sessionId: this.sessionId, message });
   }
 
   /** Start a run that carries a pre-built message (a user prompt or a
@@ -550,20 +491,17 @@ export class SessionAgent {
 
   abort(): void {
     this.rejectPendingAsks();
-    this.retryAbort.abort();
-    this.abortEpoch++;
+    this.retry.abort();
     // An abort also stops the autonomous goal loop: the user must be able
     // to interrupt a running goal at any time. The goal is cleared so the
     // right-side panel disappears; a re-send restarts it.
-    // cancelGoal is used directly — it is small and the abort fast path
-    // does not need a separate method.
     this.cancelGoal();
     this.agent.abort();
   }
 
   /** The session's active goal, if any (for the right-side panel resync). */
   getGoal(): GoalInfo | undefined {
-    return this.goalStore?.loadGoal();
+    return this.goals?.getGoal();
   }
 
   /** Cancel the active goal without emitting a user-visible abort of the
@@ -571,59 +509,17 @@ export class SessionAgent {
    * goal runs. Also used by the abort fast path to stop the autonomous
    * goal loop. */
   cancelGoal(): void {
-    this.goalEpoch++;
-    if (this.goalStore?.loadGoal() === undefined) return;
-    const text = this.goalStore.clearGoal();
-    if (text === undefined) return;
-    this.emit({
-      type: "goal_done",
-      sessionId: this.sessionId,
-      text,
-      achieved: false,
-      reason: "ユーザーにより中断されました",
-    });
+    this.goals?.cancel("ユーザーにより中断されました");
   }
 
-  /** Start the autonomous goal when a `/goal` mode prompt arrives. The
-   * goal text is the mode's short text (the user-typed goal); the full
-   * prompt already runs as this turn. Emits `goal_start` for the panel. */
+  /** Start the autonomous goal when a `/goal` mode prompt arrives. */
   private startGoalIfNeeded(mode: ModePrompt): void {
-    if (mode.modeId !== "goal" || this.goalStore === null) return;
-    const text = mode.shortText.trim();
-    if (text.length === 0) return;
-    const maxIterations = resolveMaxGoalIterations(
-      DEFAULT_MAX_GOAL_ITERATIONS,
-    );
-    const goal = this.goalStore.saveGoal(text, maxIterations);
-    this.emit({ type: "goal_start", sessionId: this.sessionId, goal });
+    this.goals?.startIfNeeded(mode);
   }
 
-  /** Run the goal loop when a goal is active (after every completed run).
-   * Re-entrant prompts join the running loop instead of starting another.
-   * Each iteration judges with the fast model (main-model fallback) and
-   * injects the next prompt until done, capped, or cancelled. */
+  /** Run the goal loop when a goal is active (after every completed run). */
   private async maybeRunGoalLoop(): Promise<void> {
-    if (this.goalStore === null || this.goalLoopRunning || this.closed) return;
-    if (this.goalStore.loadGoal() === undefined) return;
-    this.goalLoopRunning = true;
-    const epoch = this.goalEpoch;
-    try {
-      await runGoalLoop({
-        sessionId: this.sessionId,
-        loadGoal: () => this.goalStore!.loadGoal(),
-        saveGoal: (text, max) => this.goalStore!.saveGoal(text, max),
-        updateGoal: (patch) => this.goalStore!.updateGoal(patch),
-        clearGoal: () => this.goalStore!.clearGoal(),
-        getTranscript: () => this.messages,
-        getJudgeModel: () => this.fastModelForGoal ?? this.mainModel,
-        streamFn: this.streamFnForGoal,
-        runTurn: (instruction) => this.runMainTurn(instruction),
-        emit: (event) => this.emit(event),
-        isCancelled: () => this.closed || this.goalEpoch !== epoch,
-      });
-    } finally {
-      this.goalLoopRunning = false;
-    }
+    await this.goals?.maybeRun();
   }
 
   /** Resolve a pending ask (the ask tool) with the user's answers, letting
@@ -726,41 +622,15 @@ export class SessionAgent {
     // A parked silent-error restart was never announced (no message
     // events, no transcript row) — dropping it here leaves no trace,
     // exactly like clearing the queues.
-    this.pendingErrorRetry = null;
-    this.pendingRateLimitRetry = null;
-    this.rateLimitRetries = 0;
+    this.retry.reset();
     // Rewinding away the goal's own mode message cancels the goal: the
     // declaration itself is gone, so the loop must not continue. Any other
     // rewind leaves the goal intact (the user only corrected a later turn).
-    this.cancelGoalWhenRewound(goalTimestamps, removed);
+    this.goals?.cancelWhenRewound(goalTimestamps, removed);
     this.emit({
       type: "messages_truncated",
       sessionId: this.sessionId,
       removed,
-    });
-  }
-
-  /** Cancel the goal when a rewind removed its declaration. Only a removed
-   * timestamp matching a goal mode message cancels; rewinding plan/review
-   * or plain user turns leaves the goal intact. */
-  private cancelGoalWhenRewound(
-    goalTimestamps: Set<number>,
-    removed: Array<{ role: string; timestamp: number }>,
-  ): void {
-    if (this.goalStore === null) return;
-    if (this.goalStore.loadGoal() === undefined) return;
-    if (goalTimestamps.size === 0) return;
-    const removedGoal = removed.some((m) => goalTimestamps.has(m.timestamp));
-    if (!removedGoal) return;
-    this.goalEpoch++;
-    const text = this.goalStore.clearGoal();
-    if (text === undefined) return;
-    this.emit({
-      type: "goal_done",
-      sessionId: this.sessionId,
-      text,
-      achieved: false,
-      reason: "巻き戻しにより中断されました",
     });
   }
 
@@ -774,9 +644,9 @@ export class SessionAgent {
     // Stop the goal loop without clearing the persisted goal: reopening
     // the session shows the goal again via the resync endpoint, but does
     // not auto-resume the loop.
-    this.goalEpoch++;
+    this.goals?.stopLoop();
     this.rejectPendingAsks();
-    this.retryAbort.abort();
+    this.retry.abort();
     this.agent.abort();
     this.backgroundUnsubscribe?.();
     this.taskHub?.setParentDelivery(null);
@@ -951,110 +821,26 @@ export class SessionAgent {
     });
   }
 
-  /** Retry an outputless assistant response. Three cases:
-   *  - a vacant normal stop (no error): retried in-run via followUp,
-   *    counting the vacant-response budget;
-   *  - a transient stream error (no output, e.g. deepseek cut off): the
-   *    run is parked (pendingErrorRetry) and restarted once it settles
-   *    (resumeAfterErrorRun);
-   *  - a provider rate-limit (429, no output): like the transient error but
-   *    on its own budget and with a backoff before the restart.
-   * Permanent failures (unconfigured provider, quota exhaustion, content
-   * filter) surface immediately — they can never recover. A response with
-   * output resets both retry counters (the run made progress); user-initiated
-   * stops (aborted) are never resurrected. Once a budget is hit the run ends. */
+  /** Retry an outputless assistant response. Classification lives in
+   * RetryManager; the agent only executes the decision (an in-run vacant
+   * retry via followUp, a parked restart consumed by resumeAfterErrorRun).
+   * Permanent failures surface immediately — they can never recover. */
   private handleTurnEnd(message: AgentMessage): void {
-    if (message.role !== "assistant") return;
-    const assistant = message as AssistantMessage;
-    if (!hasNoVisibleOutput(assistant)) {
-      // Any visible output resets both retry counters: the run made progress.
-      this.emptyResponseRetries = 0;
-      this.rateLimitRetries = 0;
-      return;
+    const decision = this.retry.classify(message, this.closed);
+    if (decision.action === "followUp") {
+      this.agent.followUp(decision.notification);
     }
-    if (assistant.stopReason === "aborted") return;
-    const rateLimit = isRetryableRateLimit(assistant);
-    const transientStreamError = isSilentErrorResponse(assistant);
-    if (!rateLimit && !transientStreamError) {
-      // Outputless but not retryable: a vacant normal stop retries in-run
-      // (followUp); a permanent error (unconfigured provider, etc.) surfaces.
-      if (assistant.stopReason === "error") return;
-      if (
-        this.closed || this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES
-      ) {
-        return;
-      }
-      this.emptyResponseRetries++;
-      this.agent.followUp(
-        buildRetryNotification(this.emptyResponseRetries),
-      );
-      return;
-    }
-    // Retryable outputless failure: rate-limit or transient stream error.
-    // Separate budgets so a long rate-limit storm is not cut short by the
-    // vacant-response cap, nor vice versa. The restart is parked and
-    // consumed once the dead run settles (resumeAfterErrorRun); the retry
-    // notification becomes its next prompt.
-    if (this.closed) return;
-    if (rateLimit) {
-      if (this.rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) return;
-      this.rateLimitRetries++;
-      this.pendingRateLimitRetry = buildRateLimitRetryNotification(
-        this.rateLimitRetries,
-      );
-      return;
-    }
-    // Transient stream error with no output (e.g. deepseek stream cut off).
-    if (this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES) return;
-    this.emptyResponseRetries++;
-    this.pendingErrorRetry = buildRetryNotification(this.emptyResponseRetries);
+    // "park" decisions are consumed by resumeAfterErrorRun once the dead
+    // run settles; "none" needs nothing.
   }
 
-  /** Restart a run that a silent-error turn killed (see handleTurnEnd):
-   * the parked retry notification becomes the next prompt once the dead
-   * run has fully settled, so both run callers — prompt() (CLI) and
-   * startRun() (web / injected notifications) — hold off reporting
-   * completion until the restart chain has finished. Each restarted run
-   * goes through the same handling, so repeated failures keep retrying up
-   * to the limit. When a stop lands between two attempts or another run
-   * takes over first (a user prompt racing the restart), the restart
-   * stands down: the failed turn's own error stays what the user sees. */
+  /** Restart a run that a silent-error turn killed: the parked retry
+   * notification becomes the next prompt once the dead run has fully
+   * settled, so both run callers — prompt() (CLI) and startRun() (web /
+   * injected notifications) — hold off reporting completion until the
+   * restart chain has finished. */
   private async resumeAfterErrorRun(): Promise<void> {
-    const epoch = this.abortEpoch;
-    while (
-      !this.closed && this.abortEpoch === epoch &&
-      (this.pendingErrorRetry !== null || this.pendingRateLimitRetry !== null)
-    ) {
-      // Rate-limit restarts back off before re-prompting (retrying
-      // immediately would re-hit the limit); silent-error restarts keep
-      // their historical immediate retry (no rate limit involved).
-      const isRateLimit = this.pendingRateLimitRetry !== null;
-      const message = isRateLimit
-        ? this.pendingRateLimitRetry!
-        : this.pendingErrorRetry!;
-      if (isRateLimit) {
-        this.pendingRateLimitRetry = null;
-      } else {
-        this.pendingErrorRetry = null;
-      }
-      if (isRateLimit) {
-        const delayMs = rateLimitRetryDelayMs(this.rateLimitRetries);
-        try {
-          await this.rateLimitRetrySleep(delayMs, this.retryAbort.signal);
-        } catch {
-          // Aborted during backoff: stand down, leave the error surfaced.
-          return;
-        }
-      }
-      try {
-        await this.agent.prompt(message);
-      } catch {
-        // The restart lost a race with another run (or the agent hit an
-        // unexpected state): drop the retry rather than fight the live
-        // run — the failed turn's error was already surfaced.
-        return;
-      }
-    }
+    await this.retry.resumeOnce(this.agent, this.closed);
   }
 
   /** Append only the messages added since the last save. */

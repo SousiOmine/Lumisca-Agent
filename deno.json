@@ -27,7 +27,6 @@
     "@std/jsonc": "jsr:@std/jsonc@^1.0.2",
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "ai": "npm:ai@7.0.93",
-    "ai/test": "npm:ai@7.0.93/test",
     "preact": "npm:preact@10.29.8",
     "preact/compat": "npm:preact@10.29.8/compat",
     "preact/compat/client": "npm:preact@10.29.8/compat/client",
@@ -45,7 +44,8 @@
     "@modelcontextprotocol/sdk/client/streamableHttp.js": "npm:@modelcontextprotocol/sdk@1.30.0/client/streamableHttp.js",
     "hono": "npm:hono@^4.13.7",
     "hono/cors": "npm:hono@^4.13.7/cors",
-    "hono/deno": "npm:hono@^4.13.7/deno"
+    "hono/deno": "npm:hono@^4.13.7/deno",
+    "hono/http-status": "npm:hono@^4.13.7/utils/http-status"
   },
   "fmt": {
     "exclude": [

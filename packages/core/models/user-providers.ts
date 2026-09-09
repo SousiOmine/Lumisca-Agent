@@ -1,6 +1,7 @@
 import type { ApiKeyAuth, Credential, Provider } from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import { CoreError } from "../errors.ts";
+import { safeJsonParse } from "../shared/mod.ts";
 import { isRecord } from "../shared/fs-util.ts";
 import { buildModel, buildProvider } from "./custom.ts";
 
@@ -281,19 +282,15 @@ export class UserProviderStore {
   constructor(private readonly settings: SettingsRepo) {}
 
   list(): UserProviderConfig[] {
-    const raw = this.settings.get(USER_PROVIDERS_KEY);
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter(
-        (c): c is UserProviderConfig =>
-          isRecord(c) && typeof c.id === "string" &&
-          typeof c.baseUrl === "string" && Array.isArray(c.models),
-      );
-    } catch {
-      return [];
-    }
+    const parsed = safeJsonParse<unknown[]>(
+      this.settings.get(USER_PROVIDERS_KEY),
+    );
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (c): c is UserProviderConfig =>
+        isRecord(c) && typeof c.id === "string" &&
+        typeof c.baseUrl === "string" && Array.isArray(c.models),
+    );
   }
 
   get(id: string): UserProviderConfig | undefined {

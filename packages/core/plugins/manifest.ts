@@ -1,5 +1,4 @@
 import { errorMessage } from "../errors.ts";
-
 /** Canonical identifier of the plugin manifest schema this client
  * implements (Agent Plugins 1.0.0). Clients must select validation rules
  * from a locally supported schema and never fetch schemas while loading. */

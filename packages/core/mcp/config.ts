@@ -1,5 +1,5 @@
 import { isAbsolute, join } from "node:path";
-import { errorMessage } from "../errors.ts";
+import { parseJsonOrThrow } from "../shared/mod.ts";
 import { serializeMcpServers } from "../shared/mod.ts";
 import type { McpServerStatus } from "./manager.ts";
 
@@ -106,14 +106,10 @@ function asStringArray(value: unknown, what: string): string[] {
 /** Parse `.mcp.json` content into normalized server configs. Throws
  * McpConfigError on invalid input. */
 export function parseMcpConfig(text: string, filePath: string): McpConfig {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch (error) {
-    throw new McpConfigError(
-      `${filePath} is not valid JSON: ${errorMessage(error)}`,
-    );
-  }
+  const raw: unknown = parseJsonOrThrow(
+    text,
+    (detail) => new McpConfigError(`${filePath} is not valid JSON: ${detail}`),
+  );
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new McpConfigError(`${filePath} must contain a JSON object`);
   }

@@ -1,5 +1,5 @@
 import { type Context, Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { ContentfulStatusCode } from "hono/http-status";
 import type { Workspace } from "@lumisca/core";
 import { errorMessage } from "@lumisca/core";
 import { AppError } from "./util.ts";

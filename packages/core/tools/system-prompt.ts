@@ -10,6 +10,24 @@ import { sessionSkills } from "./toolsets.ts";
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
 
+/** Headless suffix for the ask-the-user guideline (auto-answered asks). */
+function headlessSuffix(headless: boolean): string {
+  return headless
+    ? " (Headless: the ask tool is auto-answered with the " +
+      "recommended/first option — prefer making the best reasonable " +
+      "assumption and stating it.)"
+    : "";
+}
+
+/** Guidelines shared by the coding and chat prompts (single source so a
+ * wording change applies to both). */
+function sharedGuidelines(headless: boolean): string {
+  return `- Ask the user when a task is ambiguous.${headlessSuffix(headless)}
+- Prioritize correctness above all else.
+- Never fabricate tool or test results.
+- Do not silently narrow the requested scope.`;
+}
+
 /** System prompt describing the agent and its workspace boundaries.
  * `personalInstructions` (the machine-level AGENTS.md next to the settings
  * file) is appended at the very end, after project memory. `model` (the
@@ -65,14 +83,7 @@ Guidelines:
   up to date as you go; completing the current task advances automatically.
   The user watches your progress live in the UI.
 - After making changes, verify them (run tests, builds) when appropriate.
-- Ask the user when a task is ambiguous.${
-    headless
-      ? " (Headless: the ask tool is auto-answered with the " +
-        "recommended/first option — prefer making the best reasonable " +
-        "assumption and stating it.)"
-      : ""
-  }
-- Prioritize correctness above all else.
+${sharedGuidelines(headless)}
 - Write code with future maintainers in mind.
 - Avoid unnecessary allocations and computation.
 - Never discard changes the user has already made.
@@ -81,8 +92,6 @@ Guidelines:
   cutover: leave no old callers or compatibility shims behind.
 - Do not stop halfway: carry the work through until the deliverable is
   complete.
-- Never fabricate tool or test results.
-- Do not silently narrow the requested scope.
 - Do not hand in TODOs or placeholder implementations as finished work.
 - Do not ask the user for information you can obtain from your tools.
 ${memorySection}${skillsListingSection(skills)}${
@@ -143,18 +152,9 @@ machine. Answer questions, explain things, and help with text-based tasks.
 Images can be attached to prompts.${buildEnvironmentSection(model)}
 
 Guidelines:
-- Ask the user when a task is ambiguous.${
-    headless
-      ? " (Headless: the ask tool is auto-answered with the " +
-        "recommended/first option — prefer making the best reasonable " +
-        "assumption and stating it.)"
-      : ""
-  }
-- Prioritize correctness above all else.
+${sharedGuidelines(headless)}
 - Write answers with future readers in mind.
-- Never fabricate tool or test results.
 - Do not hand in placeholder content as finished work.
-- Do not silently narrow the requested scope.
 - Do not ask the user for information you can obtain yourself.${
     skillsListingSection(skills)
   }${personalInstructionsSection(personalInstructions)}

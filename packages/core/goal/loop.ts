@@ -45,6 +45,22 @@ export type GoalLoopOutcome =
   | { stopped: "error"; text: string; message: string }
   | { stopped: "none" };
 
+/** Clear the goal and emit `goal_done` (single home for the six
+ * end-of-goal paths: max iterations, judge error, unparseable verdict,
+ * achievement, user cancel, rewind cancel). */
+export function finishGoal(
+  store: Pick<GoalStore, "clearGoal">,
+  emit: (event: ClientEvent) => void,
+  sessionId: string,
+  fallbackText: string,
+  achieved: boolean,
+  reason: string,
+): string {
+  const text = store.clearGoal() ?? fallbackText;
+  emit({ type: "goal_done", sessionId, text, achieved, reason });
+  return text;
+}
+
 /**
  * The autonomous goal loop: after each main-agent run, the fast model
  * judges achievement and, when unachieved, writes the next turn's prompt.
@@ -67,14 +83,14 @@ export async function runGoalLoop(
     goal = deps.loadGoal();
     if (!goal) return { stopped: "cancelled" };
     if (goal.iteration >= goal.maxIterations) {
-      const text = deps.clearGoal() ?? goal.text;
-      deps.emit({
-        type: "goal_done",
-        sessionId: deps.sessionId,
-        text,
-        achieved: false,
-        reason: `最大反復回数（${goal.maxIterations}）に達したため停止しました`,
-      });
+      const text = finishGoal(
+        deps,
+        (event) => deps.emit(event),
+        deps.sessionId,
+        goal.text,
+        false,
+        `最大反復回数（${goal.maxIterations}）に達したため停止しました`,
+      );
       return { stopped: "max", text };
     }
 
@@ -101,49 +117,49 @@ export async function runGoalLoop(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const text = deps.clearGoal() ?? goal.text;
+      const text = finishGoal(
+        deps,
+        (event) => deps.emit(event),
+        deps.sessionId,
+        goal.text,
+        false,
+        `判定エラー: ${message}`,
+      );
       deps.emit({
         type: "session_error",
         sessionId: deps.sessionId,
         message: `ゴールの判定に失敗したため停止しました: ${message}`,
-      });
-      deps.emit({
-        type: "goal_done",
-        sessionId: deps.sessionId,
-        text,
-        achieved: false,
-        reason: `判定エラー: ${message}`,
       });
       return { stopped: "error", text, message };
     }
     if (deps.isCancelled()) return { stopped: "cancelled" };
     if (verdict === null) {
-      const text = deps.clearGoal() ?? goal.text;
       const message = "高速モデルの応答を解釈できませんでした";
+      const text = finishGoal(
+        deps,
+        (event) => deps.emit(event),
+        deps.sessionId,
+        goal.text,
+        false,
+        message,
+      );
       deps.emit({
         type: "session_error",
         sessionId: deps.sessionId,
         message: `ゴールの判定に失敗したため停止しました: ${message}`,
       });
-      deps.emit({
-        type: "goal_done",
-        sessionId: deps.sessionId,
-        text,
-        achieved: false,
-        reason: message,
-      });
       return { stopped: "error", text, message };
     }
 
     if (verdict.achieved) {
-      const text = deps.clearGoal() ?? goal.text;
-      deps.emit({
-        type: "goal_done",
-        sessionId: deps.sessionId,
-        text,
-        achieved: true,
-        reason: verdict.reason,
-      });
+      const text = finishGoal(
+        deps,
+        (event) => deps.emit(event),
+        deps.sessionId,
+        goal.text,
+        true,
+        verdict.reason,
+      );
       return { stopped: "achieved", text, reason: verdict.reason };
     }
 

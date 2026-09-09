@@ -217,6 +217,7 @@ export type { SavedPrompt } from "./shared/mod.ts";
 export {
   decodeUtf8,
   formatSessionName,
+  parseJsonOrThrow,
   safeJsonParse,
   withTimeout,
 } from "./shared/mod.ts";

@@ -49,10 +49,11 @@ export class ModelManager {
   constructor(
     credentials: CredentialStore,
     settings: SettingsRepo,
+    env: () => Record<string, string> = () => Deno.env.toObject(),
   ) {
     this.models = new LumiscaModels({
       credentials,
-      env: () => Deno.env.toObject(),
+      env,
     });
     this.settings = settings;
     this.credentials = credentials;

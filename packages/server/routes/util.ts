@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { ContentfulStatusCode } from "hono/http-status";
 import { CoreError, errorMessage } from "@lumisca/core";
 
 /** Hostnames that always mean "this machine". Shared by the Host guard and

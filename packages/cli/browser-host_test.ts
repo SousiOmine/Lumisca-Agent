@@ -1,9 +1,5 @@
 import { assertEquals, assertMatch } from "@std/assert";
-import {
-  type BrowserPreviewMode,
-  findBrowserHostBinary,
-  parseBrowserPreview,
-} from "./browser-host.ts";
+import { findBrowserHostBinary, parseBrowserPreview } from "./browser-host.ts";
 
 Deno.test("parseBrowserPreview defaults to auto", () => {
   assertEquals(parseBrowserPreview(undefined), "auto");
@@ -53,9 +49,4 @@ Deno.test("findBrowserHostBinary finds the repository build when present", () =>
   } finally {
     if (previous !== undefined) Deno.env.set("LUMISCA_BROWSER_HOST", previous);
   }
-});
-
-Deno.test("the mode type is a closed union", () => {
-  const modes: BrowserPreviewMode[] = ["auto", "always", "never"];
-  assertEquals(modes.length, 3);
 });

@@ -1,6 +1,6 @@
 import type { ClientEvent, ConnectionEntry } from "@lumisca/core";
 import { createLogger } from "@lumisca/core";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { ContentfulStatusCode } from "hono/http-status";
 import { AppError, LOOPBACK_HOSTS } from "./routes/util.ts";
 
 /** Error thrown when a peer cannot be reached or answers with an error;
