@@ -1,5 +1,5 @@
 {
   "name": "@lumisca/cli",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "exports": "./mod.ts"
 }
