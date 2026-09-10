@@ -8,14 +8,16 @@
 - 出所: npm パッケージ `@napi-rs/canvas-<platform>`（例:
   `@napi-rs/canvas-win32-x64-msvc`）に同梱の `icudtl.dat` を、
   ビルド時に無改変でコピーします
-  （`scripts/build-desktop-assets.ts` が各リリースランナー上で
+  （`scripts/build-desktop-assets.ts` が Windows リリースランナー上で
   そのプラットフォーム用のファイルを `server/icudtl.dat`
-  リソースとして配置）。
+  リソースとして配置。macOS/Linux 版パッケージにはデータファイルが
+  同梱されておらず、Skia バイナリに埋め込まれています）。
 - 内容: Skia（`@napi-rs/canvas` の描画バックエンド）が使用する
   ICU/Unicode ロケールデータ。PDF ページ画像化ツール
   （`pdf_read_pages` → `packages/core/pdf/tools.ts`）が Skia を
-  初期化するために必要です。欠けると Skia がプロセスを異常終了
-  させるため、フォールバックではなく必須リソースとして同梱します。
+  初期化するために Windows で必要です。欠けると Skia がプロセスを
+  異常終了させるため、フォールバックではなく必須リソースとして
+  同梱します。
 - 著作権表示（ファイル内に埋め込まれた原文のまま）:
 
   ```

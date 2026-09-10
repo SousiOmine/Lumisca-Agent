@@ -44,22 +44,37 @@ await Deno.mkdir(outDir, { recursive: true });
 await Deno.writeTextFile(outFile, JSON.stringify(manifest));
 
 // 3. Stage Skia's ICU data file for the `server/icudtl.dat` resource.
-// Each release runner copies its own platform's file, so every installer
-// carries the data its Skia binary expects.
-const icuSource = await findCanvasIcuDataFile(repoRoot);
-if (icuSource === undefined) {
-  console.warn(
-    "WARNING: icudtl.dat not found in the installed @napi-rs/canvas " +
-      "packages; the desktop build ships without PDF rendering support " +
-      "(the PDF tool refuses to load Skia instead of crashing the server).",
-  );
+// Windows-only: the @napi-rs/canvas Windows packages bundle `icudtl.dat`
+// (their Skia binary loads it from the library/executable directory),
+// while the macOS/Linux packages compile the ICU data into the `.node`
+// binding and ship no data file. The Windows release runner copies its
+// own platform's file, so the Windows installer carries the data its
+// Skia binary expects.
+if (Deno.build.os === "windows") {
+  const icuSource = await findCanvasIcuDataFile(repoRoot);
+  if (icuSource === undefined) {
+    console.warn(
+      "WARNING: icudtl.dat not found in the installed Windows " +
+        "@napi-rs/canvas packages; the desktop build ships without PDF " +
+        "rendering support (the PDF tool refuses to load Skia instead " +
+        "of crashing the server).",
+    );
+  } else {
+    const icuOut = join(outDir, "icudtl.dat");
+    await Deno.copyFile(icuSource, icuOut);
+    const { size } = await Deno.stat(icuOut);
+    console.log(
+      `ICU data staged at ${icuOut} (${size} bytes, from ${icuSource})`,
+    );
+  }
 } else {
-  const icuOut = join(outDir, "icudtl.dat");
-  await Deno.copyFile(icuSource, icuOut);
-  const { size } = await Deno.stat(icuOut);
-  console.log(
-    `ICU data staged at ${icuOut} (${size} bytes, from ${icuSource})`,
-  );
+  // macOS/Linux Skia embeds its ICU data; no file to ship. Drop any
+  // stale file a previous Windows run left in a shared checkout.
+  try {
+    await Deno.remove(join(outDir, "icudtl.dat"));
+  } catch {
+    // No stale file to clean; nothing to do.
+  }
 }
 
 // 4. Ensure the server binary slot exists. `tauri build` overwrites it with
@@ -75,41 +90,26 @@ try {
 } catch {
   await Deno.writeFile(exePath, new Uint8Array(0));
 }
-// The ICU data slot exists for the same reason (Tauri validates every
-// declared bundle resource at config-parse time), but a missing file must
-// stay missing: an empty icudtl.dat would satisfy the validator while
-// breaking Skia at runtime in a harder-to-diagnose way, so only a real
-// staged file is ever written.
-if (icuSource === undefined) {
-  try {
-    await Deno.remove(join(outDir, "icudtl.dat"));
-  } catch {
-    // No stale file to clean; nothing to do.
-  }
-}
 
 console.log(
   `Embedded assets written to ${outFile} (${appJsBytes} bytes of JS)`,
 );
 
-/** npm target triple whose ICU data file this host's Skia binary expects. */
+/**
+ * npm target triple whose ICU data file this host's Skia binary expects.
+ * Only the Windows packages bundle `icudtl.dat` (see the staging step
+ * above).
+ */
 function preferredCanvasTarget(): string {
-  const { os, arch } = Deno.build;
-  if (os === "windows") {
-    return arch === "aarch64" ? "win32-arm64-msvc" : "win32-x64-msvc";
-  }
-  if (os === "darwin") {
-    return arch === "aarch64" ? "darwin-arm64" : "darwin-x64";
-  }
-  return arch === "aarch64" ? "linux-arm64-gnu" : "linux-x64-gnu";
+  return Deno.build.arch === "aarch64" ? "win32-arm64-msvc" : "win32-x64-msvc";
 }
 
 /**
- * Locate `icudtl.dat` inside the installed `@napi-rs/canvas-<platform>`
- * packages. Both of Deno's node_modules layouts are searched (the
- * isolated `.deno` tree and the classic flat tree) without pinning a
- * canvas version. Returns undefined when no platform package is
- * installed.
+ * Locate the Windows `icudtl.dat` inside the installed
+ * `@napi-rs/canvas-<platform>` packages. Both of Deno's node_modules
+ * layouts are searched (the isolated `.deno` tree and the classic flat
+ * tree) without pinning a canvas version. Returns undefined when no
+ * platform package is installed.
  */
 async function findCanvasIcuDataFile(
   root: string,

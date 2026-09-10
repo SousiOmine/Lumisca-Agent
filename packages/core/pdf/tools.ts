@@ -108,10 +108,13 @@ function abortable<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
 /** The production renderer: unpdf (PDF.js) plus a lazily loaded canvas.
  * Stateless (a fresh document per call), so concurrent tool calls are
  * independent. Encrypted or malformed PDFs surface PDF.js's own errors
- * (PasswordException / InvalidPDFException). A missing Skia ICU data file
- * refuses with a clear error before Skia is touched: without it Skia
- * aborts the whole server process (fatal `check(fUnicode)` →
- * STATUS_ILLEGAL_INSTRUCTION), which no try/catch can contain. */
+ * (PasswordException / InvalidPDFException). On Windows, a missing Skia
+ * ICU data file refuses with a clear error before Skia is touched:
+ * without it the Windows Skia binary aborts the whole server process
+ * (fatal `check(fUnicode)` → STATUS_ILLEGAL_INSTRUCTION), which no
+ * try/catch can contain. macOS/Linux Skia binaries embed their ICU data
+ * (the @napi-rs/canvas platform packages ship no icudtl.dat there), so
+ * the check is Windows-only. */
 export function createUnpdfRenderer(options?: {
   /**
    * Override for tests (defaults to `findCanvasIcuDataFile`). The search
@@ -121,6 +124,10 @@ export function createUnpdfRenderer(options?: {
    */
   findIcuDataFile?: () => string | undefined;
 }): PdfRenderer {
+  // Windows Skia loads `icudtl.dat` from the library/executable
+  // directory at startup and aborts when it is missing; the other
+  // platforms compile the data into the binding and skip the guard.
+  const needsIcuDataFile = Deno.build.os === "windows";
   const findIcuDataFile = options?.findIcuDataFile ?? findCanvasIcuDataFile;
   return {
     async render(
@@ -149,8 +156,7 @@ export function createUnpdfRenderer(options?: {
           }); the host needs @napi-rs/canvas support (FFI)`,
         );
       }
-      const icuDataFile = findIcuDataFile();
-      if (icuDataFile === undefined) {
+      if (needsIcuDataFile && findIcuDataFile() === undefined) {
         throw new Error(
           "Cannot render PDF pages (Skia's ICU data file icudtl.dat was " +
             "not found next to the canvas native library or the server " +
@@ -226,8 +232,10 @@ const CANVAS_PLATFORM_SUFFIXES: readonly string[] = [
 
 /**
  * Locate Skia's ICU data file (`icudtl.dat`) without loading Skia itself.
- * The lookup must stay load-free: merely importing the platform package
- * would initialize Skia and abort the process when the file is missing —
+ * Windows-only: Windows Skia binaries load the data file (see
+ * createUnpdfRenderer), while macOS/Linux binaries embed it. The lookup
+ * must stay load-free: merely importing the platform package would
+ * initialize Skia and abort the process when the file is missing —
  * exactly what this guard exists to prevent.
  *
  * Order: (1) explicit `LUMISCA_ICU_DATA` override, (2) the `server/`

@@ -337,25 +337,32 @@ Deno.test("pdf tool fails fast on malformed and encrypted PDFs", async () => {
   }
 });
 
-Deno.test("pdf renderer finds the bundled ICU data file", () => {
-  // This host renders real PDFs (see the bundled-renderer test above),
-  // so the guard must locate the data file its Skia binary needs.
+Deno.test("pdf renderer requires the bundled ICU data file on Windows", {
+  ignore: Deno.build.os !== "windows",
+}, () => {
+  // Windows Skia loads icudtl.dat from the library/executable directory
+  // and aborts the whole process when it is missing, so the guard must
+  // locate the data file this host's Skia binary needs. macOS/Linux
+  // Skia embeds its ICU data and ships no data file — see
+  // createUnpdfRenderer.
   assert(
     findCanvasIcuDataFile() !== undefined,
     "expected icudtl.dat next to the canvas native binding",
   );
 });
 
-Deno.test("pdf renderer refuses to load Skia without its ICU data file", async () => {
+Deno.test("pdf renderer refuses to load Skia without its ICU data file", {
+  ignore: Deno.build.os !== "windows",
+}, async () => {
   const { root, folder } = await fixture();
   try {
     await Deno.copyFile(
       join(import.meta.dirname!, "testdata", "two-pages.pdf"),
       join(root, "doc.pdf"),
     );
-    // A missing icudtl.dat makes Skia abort the whole server process
-    // (fatal check → STATUS_ILLEGAL_INSTRUCTION), so the renderer must
-    // refuse with a clear tool error before touching Skia.
+    // A missing icudtl.dat makes Windows Skia abort the whole server
+    // process (fatal check → STATUS_ILLEGAL_INSTRUCTION), so the renderer
+    // must refuse with a clear tool error before touching Skia.
     const tools = createPdfTools({
       sandbox: new Sandbox([root]),
       renderer: createUnpdfRenderer({ findIcuDataFile: () => undefined }),
@@ -370,7 +377,9 @@ Deno.test("pdf renderer refuses to load Skia without its ICU data file", async (
   }
 });
 
-Deno.test("pdf renderer honors the LUMISCA_ICU_DATA override", async () => {
+Deno.test("pdf renderer honors the LUMISCA_ICU_DATA override", {
+  ignore: Deno.build.os !== "windows",
+}, async () => {
   const { root, folder } = await fixture();
   const previous = Deno.env.get("LUMISCA_ICU_DATA");
   try {
