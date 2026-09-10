@@ -1,6 +1,6 @@
 [package]
 name = "lumisca-desktop"
-version = "0.7.4"
+version = "0.7.5"
 description = "Lumisca Agent desktop shell"
 edition = "2021"
 
@@ -46,10 +46,10 @@ windows = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 # WinRT toasts under our own AppUserModelID with a click-to-focus handler
-# (notify.rs). Same windows 0.61 line the rest of the shell uses; also the
-# backend notify-rust (via tauri-plugin-notification) uses on other
-# platforms.
-tauri-winrt-notification = "0.7"
+# (notify.rs). 0.8 tracks the windows 0.62 line (newer than the 0.61 the
+# rest of the shell uses; the two coexist in the tree); the backend
+# notify-rust (via tauri-plugin-notification) is used on other platforms.
+tauri-winrt-notification = "0.8"
 # Direct WebView2 COM access for the browser lab's CDP screenshot and
 # (future) runtime/console/network events. Same version wry uses.
 webview2-com = "0.38"
