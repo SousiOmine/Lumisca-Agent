@@ -1,9 +1,14 @@
 /** Slash-command menu for the composer, derived from the core agent-mode
  * registry (AGENT_MODES). Adding a mode in core automatically adds its
  * menu entry here; the icon map below only needs a line per new mode id
- * (unknown ids fall back to a generic icon). Text-taking modes (those with
- * `buildPromptForText`, e.g. plan mode) execute with the composer text
- * typed after the command token (`/plan 依頼文`) as their subject. */
+ * (unknown ids fall back to a generic icon).
+ *
+ * The menu is a palette, not a sender: picking an entry only edits the
+ * composer text (see SlashCommand.kind). Text-taking modes (those with
+ * `buildPromptForText`, e.g. plan mode) are completed to `/id ` and the
+ * request typed after the token is wrapped into the mode prompt by the
+ * submit path (slashPromptFromText) — wherever the token sits, so
+ * `背景メモ /plan 履歴を追加` resolves like `/plan 履歴を追加`. */
 
 import type { ReactNode } from "preact/compat";
 import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
@@ -25,20 +30,34 @@ export interface SlashCommandItem {
   label: string;
   description?: string;
   icon?: (props: { size?: string | number; className?: string }) => ReactNode;
+  /** Text this entry drops into the composer when picked (saved prompts).
+   * Only read by `insert` commands. */
+  insertText?: string;
 }
 
-/** A slash command offered when the input starts with `/`. Commands with
+/** What picking the command does with the composer text. */
+export type SlashCommandKind =
+  /** Complete the input to `/id ` and close the menu: the request is typed
+   * after the token like normal text and wrapped into the mode prompt on
+   * submit (`/plan`, `/goal`). */
+  | "complete"
+  /** Insert the picked entry's `insertText` at the command position,
+   * keeping the text around it (saved prompts). */
+  | "insert"
+  /** Build the mode prompt from the selection and submit it. Only from the
+   * start of the input — that prompt replaces the whole message, so a
+   * command typed mid-text is left alone (mode palettes like `/review`). */
+  | "run";
+
+/** A slash command offered when `/` is typed at a word start. Commands with
  * `items` open a second level before executing; leaf commands execute
  * directly. */
 export interface SlashCommand extends SlashCommandItem {
   /** Subcommands shown after selecting this command (e.g. the review
    * target). Omitted → the command executes right away. */
   items?: SlashCommandItem[];
-  /** The command takes the user's own text as its subject: the text typed
-   * after the command token (`/plan <依頼文>`) is handed to onSelect so the
-   * parent can wrap it into the mode prompt. When set, the menu hints to
-   * type the request while it is still missing. */
-  requiresText?: boolean;
+  /** What picking the command does with the composer text. */
+  kind: SlashCommandKind;
 }
 
 type Icon = (
@@ -56,15 +75,16 @@ const MODE_ICONS: Record<string, Icon> = {
 
 const FALLBACK_ICON: Icon = IconCode;
 
-/** The menu shown when the input starts with `/`. A mode with
- * `buildPromptForText` is marked `requiresText`: its subject is the text
- * after the command token, so the menu instead hints to keep typing. */
+/** The menu offered for `/` at a word start. A mode with
+ * `buildPromptForText` is reusable anywhere in the input (`complete`); the
+ * others are mode palettes that can only replace a whole message
+ * (`run`). */
 export const slashCommands: SlashCommand[] = AGENT_MODES.map((mode) => ({
   id: mode.id,
   label: mode.label,
   description: mode.description,
   icon: MODE_ICONS[mode.id] ?? FALLBACK_ICON,
-  requiresText: mode.buildPromptForText !== undefined,
+  kind: mode.buildPromptForText === undefined ? "run" : "complete",
   items: mode.options.length > 0
     ? mode.options.map((option) => ({
       id: option.id,
@@ -86,6 +106,7 @@ export function buildSlashCommands(
     id: p.id,
     label: p.label,
     description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "..." : ""),
+    insertText: p.prompt,
   }));
   if (isChat) {
     // Chat mode: only saved prompts, no agent modes.
@@ -95,6 +116,7 @@ export function buildSlashCommands(
       label: "保存済みプロンプト",
       description: "登録済みのプロンプトを挿入",
       icon: IconMessage,
+      kind: "insert",
       items: promptItems,
     }];
   }
@@ -106,39 +128,20 @@ export function buildSlashCommands(
       label: "保存済みプロンプト",
       description: "登録済みのプロンプトを挿入",
       icon: IconMessage,
+      kind: "insert",
       items: promptItems,
     });
   }
   return commands;
 }
 
-/** Resolve a slash-command selection: returns the saved prompt to insert
- * when the /prompt submenu was used, or the mode prompt to submit for
- * agent modes. Returns null when the command is invalid. */
-export function resolveSlashCommand(
-  command: SlashCommand,
-  savedPrompts: SavedPrompt[],
-  item?: SlashCommandItem,
-  text?: string,
-):
-  | { savedPrompt: string }
-  | { modePrompt: { text: string; mode: ModePrompt } }
-  | null {
-  if (command.id === "prompt" && item) {
-    const saved = savedPrompts.find((p) => p.id === item.id);
-    if (saved) return { savedPrompt: saved.prompt };
-    return null;
-  }
-  const result = slashPrompt(command, item, text);
-  if (result !== null) return { modePrompt: result };
-  return null;
-}
-
 /** Build the user message + mode metadata a slash-command selection sends;
  * null when the selection does not resolve to a registered mode (defensive
- * — the menu only lists registered ones). Text-taking modes wrap the text
- * typed after the command token (the menu hands it over as `text`); with
- * no text nothing is sent (null), so the user keeps typing the request. */
+ * — the menu only lists registered ones). Text-taking modes take the user's
+ * own text as their subject (buildPromptForText); the composer completes
+ * those commands in place instead of picking them, so `text` only matters
+ * for a caller that hands the request over directly. Without it nothing is
+ * sent (null), so the user keeps typing the request. */
 export function slashPrompt(
   command: SlashCommand,
   item?: SlashCommandItem,
@@ -190,27 +193,53 @@ export function modeRewindText(modeId: string, shortText: string): string {
     : shortText;
 }
 
-/** Resolve composer text that itself starts with a text-taking command
- * token (`/plan 履歴機能を追加して`), used by submit paths that bypass the
- * menu (the send button, Ctrl+Enter). "needs-text" means the token is
- * present but the request is missing — nothing should be sent. Null when
- * the text is not a text-taking command line (a plain message, or a
- * command without text support such as review). */
+/** Resolve composer text that contains a text-taking command token
+ * (`/plan 履歴機能を追加して`), used by the submit paths (send button,
+ * Ctrl+Enter). The token may sit anywhere a word starts — `背景メモ /plan
+ * 履歴を追加` wraps too — and the request is everything the user wrote
+ * around it (the token removed, the two sides joined by a single space), so
+ * no text is silently dropped. "needs-text" means the token is present but
+ * the request is empty — nothing should be sent. Null when the text has no
+ * text-taking command (a plain message, or a command without text support
+ * such as review). */
 export function slashPromptFromText(text: string): TextCommandLine | null {
-  const match = /^(\/[^\s]+)(?:\s+([\s\S]+))?$/.exec(text.trim());
-  if (match === null) return null;
-  const mode = findAgentMode(match[1]!.slice(1));
-  if (mode?.buildPromptForText === undefined) return null;
-  const request = (match[2] ?? "").trim();
-  if (request.length === 0) return { kind: "needs-text" };
-  return {
-    kind: "wrap",
-    text: mode.buildPromptForText(request),
-    mode: {
-      modeId: mode.id,
-      optionId: "",
-      modeLabel: mode.modeLabel,
-      shortText: request,
-    },
-  };
+  // Word-start token: `/` at the start of the input or after whitespace,
+  // followed by the command name. The name stops at whitespace or another
+  // `/`, so a path like `/usr/local/bin` is not read as a command — the
+  // same boundary rule the slash menu detects with.
+  const token = /(?:^|\s)\/([^\s/]+)/g;
+  for (let m = token.exec(text); m !== null; m = token.exec(text)) {
+    const name = m[1]!;
+    const mode = findAgentMode(name);
+    if (mode?.buildPromptForText === undefined) continue;
+    const start = m.index + m[0].length - name.length - 1;
+    const request = joinRequest(
+      text.slice(0, start),
+      text.slice(start + name.length + 1),
+    );
+    if (request.length === 0) return { kind: "needs-text" };
+    return {
+      kind: "wrap",
+      text: mode.buildPromptForText(request),
+      mode: {
+        modeId: mode.id,
+        optionId: "",
+        modeLabel: mode.modeLabel,
+        shortText: request,
+      },
+    };
+  }
+  return null;
+}
+
+/** Join the text written around a command token into the mode's subject:
+ * each side trimmed, the two joined by a single space (the whitespace the
+ * token was surrounded with is gone with it). Newlines inside a side are
+ * kept as written. */
+function joinRequest(before: string, after: string): string {
+  const head = before.trim();
+  const tail = after.trim();
+  if (head.length === 0) return tail;
+  if (tail.length === 0) return head;
+  return `${head} ${tail}`;
 }

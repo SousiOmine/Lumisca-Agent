@@ -15,7 +15,7 @@ import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import {
   buildSlashCommands,
-  resolveSlashCommand,
+  slashPrompt,
   slashPromptFromText,
 } from "../slashCommands.ts";
 import {
@@ -292,14 +292,16 @@ export function NewSessionView(
     [isChat, savedPrompts],
   );
 
-  /** Start the session with the composer text, or an explicit message (slash
-   * commands build their own prompt). The draft is cleared by the App once
-   * the session started; on failure it stays so the user can retry.
-   * `mode` marks the message as a mode prompt (ModeMessage in the
-   * transcript). Composer text that starts with a text-taking command line
-   * (`/plan 依頼文`) is wrapped into that mode's prompt even when the
-   * slash menu was bypassed (send button, Ctrl+Enter); without the request
-   * text nothing is sent. */
+  /** Start the session with the composer text, or an explicit message. The
+   * draft is cleared by the App once the session started; on failure it
+   * stays so the user can retry. `mode` marks the message as a mode
+   * prompt (ModeMessage in the transcript).
+   *
+   * Composer text that contains a text-taking command token (`/plan
+   * 依頼文` — even mid-text: `背景メモ /plan 依頼文` wraps too) is turned
+   * into that mode's prompt on every submit path (send button, Ctrl+Enter,
+   * Enter — which the composer maps to a newline, not a submit); without
+   * the request text nothing is sent (the plan mode needs its subject). */
   const submit = async (message?: string, mode?: ModePrompt) => {
     let trimmed = (message ?? input).trim();
     if (
@@ -326,22 +328,17 @@ export function NewSessionView(
     }
   };
 
-  /** A slash command was chosen. Agent modes (existing commands) build
-   * their prompt and start the session; the /prompt submenu inserts the
-   * saved prompt text into the composer so the user can edit and send it.
-   * `text` is the composer text after the command token (empty for a bare
-   * `/command`); text-taking modes (e.g. plan) wrap it as their subject
-   * and are not sent while it is missing. */
+  /** A `run` command was picked at the start of the input (the composer
+   * handles completion and insertion itself — see Composer.applySlashPick).
+   * Agent modes (existing commands) build their prompt and start the
+   * session. */
   const handleSlashCommand = (
     command: SlashCommand,
     item?: SlashCommandItem,
-    text?: string,
   ) => {
-    const result = resolveSlashCommand(command, savedPrompts, item, text);
-    if (result && "savedPrompt" in result) {
-      onInputChange(result.savedPrompt);
-    } else if (result && "modePrompt" in result) {
-      void submit(result.modePrompt.text, result.modePrompt.mode);
+    const result = slashPrompt(command, item);
+    if (result !== null) {
+      void submit(result.text, result.mode);
     }
   };
 

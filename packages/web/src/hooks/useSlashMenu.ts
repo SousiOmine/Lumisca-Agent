@@ -9,13 +9,20 @@ import type { SlashCommand, SlashCommandItem } from "../slashCommands.ts";
 
 export type { SlashCommand, SlashCommandItem };
 
-/** An active `/` command: the caret is inside a query started by `/`. */
+/** An active `/` command: the caret sits inside a command token started by
+ * `/` (or, while a submenu is open, behind the token — see `rest`). The
+ * command may sit anywhere a word starts, not only at the input's start. */
 export interface SlashState {
   /** Index of the `/` character in the input. */
   start: number;
+  /** Index right after the command token (`/plan` → start + 5). The token
+   * covers `[start, end)`: the text a pick replaces. */
+  end: number;
+  /** Text from the `/` to the caret (the command name, filtered as it is
+   * typed). */
   query: string;
-  /** Text typed after the command token (`/plan 履歴機能を追加して` →
-   * "履歴機能を追加して"). Empty for a bare `/command`. */
+  /** Text between the token and the caret while a submenu is open
+   * (`/prompt test` → "test"), used as the subcommand filter. */
   rest: string;
   /** Active index in the currently shown list. */
   active: number;
@@ -23,23 +30,59 @@ export interface SlashState {
   submenu: SlashCommand | null;
 }
 
-/** Find a `/command` under the caret. The `/` must start the input (only
- * whitespace before it): a slash command replaces the whole message, so it
- * never triggers mid-text (typing `/` in prose stays literal). The text
- * after the command token (`/plan 依頼文`) is captured as `rest` — text-
- * taking commands (e.g. plan mode) use it as their subject. */
-function detectSlash(
+/** What `detectSlash` found: the token position and text of a match. */
+interface SlashMatch {
+  start: number;
+  end: number;
+  query: string;
+  rest: string;
+}
+
+/** Whitespace between a command and the text around it. `\s` includes the
+ * full-width space, so Japanese prose separates a command as expected. */
+const SPACE = /\s/;
+
+/** Find the `/command` token the caret points at. The `/` must start the
+ * input or follow whitespace, so paths (`src/foo`) and URLs
+ * (`https://example.com`) never open the menu — the palette is triggered
+ * deliberately, like `@` mentions need a word start. The caret must also
+ * sit inside the token: the menu is done as soon as the command is
+ * followed by a space (it completes or inserts, it does not embed itself
+ * into running text). Only while a submenu is open (allowRest) may the
+ * caret sit behind the token: the text in between is that submenu's filter
+ * (`/prompt test`).
+ *
+ * Exported for the unit tests; the hook wires it to typing and caret
+ * moves. */
+export function detectSlash(
   value: string,
   caret: number,
-): { start: number; query: string; rest: string } | null {
-  const before = value.slice(0, caret);
-  const match = /^(\s*)\/([^\s]*)(?:\s+([\s\S]*))?$/.exec(before);
-  if (!match || match[1] === undefined) return null;
-  return {
-    start: match[1].length,
-    query: match[2] ?? "",
-    rest: match[3] ?? "",
-  };
+  allowRest: boolean,
+): SlashMatch | null {
+  const at = Math.min(Math.max(caret, 0), value.length);
+  // The nearest token behind the caret wins (`/plan ... /re` detects
+  // `/re`).
+  for (let i = at - 1; i >= 0; i--) {
+    if (value[i] !== "/") continue;
+    const prev = value[i - 1];
+    if (prev !== undefined && !SPACE.test(prev)) continue;
+    // The command name ends at the first whitespace or `/`, so
+    // `/usr/local/bin` is one token named `usr`, never a command.
+    let end = i + 1;
+    while (
+      end < value.length && !SPACE.test(value[end]!) && value[end] !== "/"
+    ) {
+      end++;
+    }
+    if (at > end && !allowRest) return null;
+    return {
+      start: i,
+      end,
+      query: value.slice(i + 1, Math.min(at, end)),
+      rest: at > end ? value.slice(end, at) : "",
+    };
+  }
+  return null;
 }
 
 /** Commands matching the typed query (empty query → all). Matches the id or
@@ -80,19 +123,20 @@ export function isSlashCommand(
 /** Two-level slash-command menu state machine (a mode palette): detection
  * under the caret, query filtering, submenu navigation and keyboard
  * handling. The menu is generic — every caller passes its own command
- * list; selecting a leaf hands the choice to `onSelect`, which builds the
- * actual prompt and submits it. */
+ * list; picking a leaf hands the choice to `onSelect`, which edits the
+ * composer text (completion, insertion) or runs the mode. */
 export function useSlashMenu(options: {
   enabled: boolean;
   commands: SlashCommand[];
-  /** Handed the selection plus the text typed after the command token
-   * (`/plan 依頼文` → "依頼文"; empty for a bare `/command`). Text-taking
-   * commands (requiresText) use it as their subject; the others ignore
-   * it. */
+  /** A leaf entry was picked (click, Enter or Tab). `state` is the palette
+   * state the pick was made from — the `/command` token position and text —
+   * so the caller can complete or insert at the right place. Text-taking
+   * commands and saved prompts are applied to the text by the caller; mode
+   * palettes are submitted by it. */
   onSelect?: (
     command: SlashCommand,
-    item?: SlashCommandItem,
-    text?: string,
+    item: SlashCommandItem | undefined,
+    state: SlashState,
   ) => void;
 }): {
   slash: SlashState | null;
@@ -126,7 +170,10 @@ export function useSlashMenu(options: {
 
   const updateSlash = useCallback(
     (nextValue: string, caret: number): boolean => {
-      const det = enabled ? detectSlash(nextValue, caret) : null;
+      // An open submenu keeps following the caret behind its token (the
+      // filter text); everywhere else the caret must sit in the token.
+      const allowRest = slash !== null && slash.submenu !== null;
+      const det = enabled ? detectSlash(nextValue, caret, allowRest) : null;
       if (!det) return false;
       setSlash((prev) => {
         // Keep the submenu open while the user types the filter text
@@ -161,6 +208,7 @@ export function useSlashMenu(options: {
           }
           return {
             start: det.start,
+            end: det.end,
             query: det.query,
             rest: det.rest,
             active: 0,
@@ -169,13 +217,15 @@ export function useSlashMenu(options: {
         }
 
         if (
-          prev && prev.start === det.start && prev.query === det.query &&
-          prev.rest === det.rest && prev.submenu === null
+          prev && prev.start === det.start && prev.end === det.end &&
+          prev.query === det.query && prev.rest === det.rest &&
+          prev.submenu === null
         ) {
           return prev;
         }
         return {
           start: det.start,
+          end: det.end,
           query: det.query,
           rest: det.rest,
           active: 0,
@@ -184,7 +234,7 @@ export function useSlashMenu(options: {
       });
       return true;
     },
-    [enabled, commands],
+    [enabled, commands, slash],
   );
 
   const resetSlash = useCallback(() => {
@@ -193,8 +243,8 @@ export function useSlashMenu(options: {
 
   /** Execute the entry at `index` of the current level, or descend into
    * it when it is a command with subcommands. Execution hands the
-   * selection to the parent (onSelect), which builds the prompt and
-   * submits it. */
+   * selection (with the token it was made from) to the parent
+   * (onSelect), which edits the text or runs the mode. */
   const selectSlash = useCallback(
     (index: number) => {
       const current = slash;
@@ -209,9 +259,9 @@ export function useSlashMenu(options: {
       }
       setSlash(null);
       if (current.submenu === null) {
-        onSelect?.(entry as SlashCommand, undefined, current.rest);
+        onSelect?.(entry as SlashCommand, undefined, current);
       } else {
-        onSelect?.(current.submenu, entry, current.rest);
+        onSelect?.(current.submenu, entry, current);
       }
     },
     [slash, slashEntries, onSelect],

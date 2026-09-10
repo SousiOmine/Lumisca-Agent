@@ -22,7 +22,7 @@ import {
 } from "./Composer.tsx";
 import {
   buildSlashCommands,
-  resolveSlashCommand,
+  slashPrompt,
   slashPromptFromText,
 } from "../slashCommands.ts";
 import { QuestionPanel } from "./QuestionPanel.tsx";
@@ -179,22 +179,18 @@ export function ChatView(
     if (el) el.scrollTop = el.scrollHeight;
   };
 
-  /** A slash command was chosen. Agent modes (existing commands) build
-   * their prompt and send it like a regular submit (with mode metadata);
-   * the /prompt submenu inserts the saved prompt text into the composer so
-   * the user can edit and send it. `text` is the composer text after the
-   * command token (empty for a bare `/command`); text-taking modes (e.g.
-   * plan) wrap it as their subject and are not sent while it is missing. */
+  /** A `run` command was picked at the start of the input (the composer
+   * handles completion and insertion itself — see Composer.applySlashPick).
+   * Agent modes (existing commands) build their prompt and send it like a
+   * regular submit (with mode metadata). The composer text is cleared by
+   * the caller as with a regular submit. */
   const handleSlashCommand = (
     command: SlashCommand,
     item?: SlashCommandItem,
-    text?: string,
   ) => {
-    const result = resolveSlashCommand(command, savedPrompts, item, text);
-    if (result && "savedPrompt" in result) {
-      onInputChange(result.savedPrompt);
-    } else if (result && "modePrompt" in result) {
-      submit(result.modePrompt.text, result.modePrompt.mode);
+    const result = slashPrompt(command, item);
+    if (result !== null) {
+      submit(result.text, result.mode);
     }
   };
 

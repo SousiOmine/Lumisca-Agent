@@ -28,7 +28,11 @@ import { ModelPicker } from "./ModelPicker.tsx";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
 import { useMention } from "../hooks/useMention.ts";
-import { isSlashCommand, useSlashMenu } from "../hooks/useSlashMenu.ts";
+import {
+  isSlashCommand,
+  type SlashState,
+  useSlashMenu,
+} from "../hooks/useSlashMenu.ts";
 import type { SlashCommand, SlashCommandItem } from "../slashCommands.ts";
 export type { SlashCommand, SlashCommandItem };
 import type { ModelInfo, PendingImage, ThinkingLevel } from "../types.ts";
@@ -83,20 +87,19 @@ interface ComposerProps {
    * non-empty), in which case suggestions come from that machine. */
   mentionWorkspaceId?: string;
   mentionPeerId?: string;
-  /** When set, typing `/` at the start of the input opens a command menu
-   * above the textarea (a mode palette). Commands with `items` transition
-   * to a second level; selecting a leaf executes it via onSlashCommand.
-   * The menu is generic: every caller can pass its own command list. */
+  /** When set, typing `/` (at the start of the input or after whitespace,
+   * anywhere in the text) opens a command menu above the textarea (a mode
+   * palette). Commands with `items` transition to a second level first;
+   * picking a leaf applies its `kind` to the text here — completing a
+   * text-taking command (`/plan `) or inserting a saved prompt. The menu
+   * is generic: every caller can pass its own command list. */
   slashCommands?: SlashCommand[];
-  /** A slash command (or one of its subcommands) was chosen. The parent
-   * builds the actual prompt and submits it; the input is cleared by the
-   * parent as with a regular submit. `text` is the composer text typed
-   * after the command token (empty for a bare `/command`) — text-taking
-   * commands (requiresText) use it as their subject. */
+  /** A `run` command (or one of its subcommands) was picked at the start
+   * of the input: the parent builds the mode prompt and submits it. The
+   * other kinds never reach the parent (the text is edited here). */
   onSlashCommand?: (
     command: SlashCommand,
     item?: SlashCommandItem,
-    text?: string,
   ) => void;
   /** Images attached for the next send (data URLs). Dropped/pasted files
    * are appended here; the parent clears them after a successful submit. */
@@ -182,6 +185,61 @@ export function Composer({
     onChange,
     clearCaret,
   });
+  /** Replace the `/command` token the pick was made from with `text`,
+   * keeping the text around it: the palette edits the input in place
+   * instead of replacing the whole message. `trimAfter` drops the
+   * whitespace that followed the token, so completing to `/plan ` does not
+   * double the space it inserts. The caret lands right after the inserted
+   * text (the textarea keeps focus: the popover suppresses its own
+   * mousedown). */
+  const replaceSlashToken = useCallback(
+    (state: SlashState, text: string, trimAfter: boolean) => {
+      const ta = textareaRef.current;
+      const caret = ta?.selectionStart ?? state.end;
+      const before = value.slice(0, state.start);
+      let after = value.slice(Math.max(state.end, caret));
+      if (trimAfter) after = after.replace(/^\s+/, "");
+      onChange(before + text + after);
+      const caretAfter = before.length + text.length;
+      requestAnimationFrame(() => {
+        ta?.focus();
+        ta?.setSelectionRange(caretAfter, caretAfter);
+      });
+    },
+    [value, onChange],
+  );
+
+  /** Apply a slash entry picked by click, Enter or Tab. Text-taking
+   * commands (`/plan`, `/goal`) are completed to `/id ` and the menu
+   * closes: the request is typed after the token like normal input and
+   * wrapped into the mode prompt on submit (see ChatView/NewSessionView) —
+   * picking the command never sends by itself. Saved prompts are inserted
+   * where the command was typed. Mode palettes run through the parent, but
+   * only from the start of the input: their prompt replaces the whole
+   * message, so a command typed mid-text is left alone instead of
+   * discarding the text around it. */
+  const handleSlashSelect = useCallback(
+    (
+      command: SlashCommand,
+      item: SlashCommandItem | undefined,
+      state: SlashState,
+    ) => {
+      if (command.kind === "complete") {
+        replaceSlashToken(state, `/${command.id} `, true);
+        return;
+      }
+      if (command.kind === "insert") {
+        const insert = item?.insertText ?? command.insertText;
+        if (insert !== undefined) replaceSlashToken(state, insert, false);
+        return;
+      }
+      if (value.slice(0, state.start).trim() === "") {
+        onSlashCommand?.(command, item);
+      }
+    },
+    [value, replaceSlashToken, onSlashCommand],
+  );
+
   const {
     slash,
     setSlash,
@@ -193,50 +251,8 @@ export function Composer({
   } = useSlashMenu({
     enabled: slashEnabled,
     commands: slashCommands ?? [],
-    onSelect: onSlashCommand,
+    onSelect: handleSlashSelect,
   });
-
-  /** Complete a text-taking command (e.g. `/plan`) to `/id␣` so the user
-   * can keep typing its request. Without this the parent sends nothing
-   * while the text is missing, which left a bare `/` behind. */
-  const completeSlashTo = useCallback(
-    (command: SlashCommand) => {
-      const ta = textareaRef.current;
-      const caret = ta?.selectionStart ?? value.length;
-      const start = slash?.start ?? 0;
-      const before = value.slice(0, start);
-      const after = value.slice(caret).replace(/^\s*/, "");
-      const next = `${before}/${command.id} ${after}`;
-      onChange(next);
-      const caretAfter = before.length + command.id.length + 2;
-      // Re-evaluate so the menu filters to the completed command with its
-      // "keep typing" hint instead of closing.
-      updateSlash(next, caretAfter);
-      requestAnimationFrame(() => {
-        ta?.focus();
-        ta?.setSelectionRange(caretAfter, caretAfter);
-      });
-    },
-    [slash, value, onChange, updateSlash],
-  );
-
-  /** Select a slash entry, completing text-taking commands whose request
-   * is still missing instead of dropping the selection. */
-  const handleSlashPick = useCallback(
-    (index: number) => {
-      const entry = slashEntries[index];
-      if (
-        slash && slash.submenu === null && entry !== undefined &&
-        isSlashCommand(entry) && entry.requiresText === true &&
-        slash.rest.trim().length === 0
-      ) {
-        completeSlashTo(entry);
-        return;
-      }
-      selectSlash(index);
-    },
-    [slash, slashEntries, completeSlashTo, selectSlash],
-  );
 
   // Switching sessions (different workspace) must not leak a stale mention
   // or slash command.
@@ -313,24 +329,12 @@ export function Composer({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ctrl+Enter sends; plain Enter inserts a newline (while the slash menu
+    // is open it consumes Enter/Tab to pick the active entry instead).
     if (e.key === "Enter" && e.ctrlKey) {
       e.preventDefault();
       onSubmit();
       return;
-    }
-    // Text-taking commands without their request complete to `/id␣` on
-    // Enter/Tab instead of being dropped by the menu selection.
-    if ((e.key === "Enter" || e.key === "Tab") && slash !== null) {
-      const active = slashEntries[slash.active];
-      if (
-        slash.submenu === null && active !== undefined &&
-        isSlashCommand(active) && active.requiresText === true &&
-        slash.rest.trim().length === 0
-      ) {
-        e.preventDefault();
-        completeSlashTo(active);
-        return;
-      }
     }
     if (handleSlashKeyDown(e)) return;
     if (handleMentionKeyDown(e)) return;
@@ -476,7 +480,7 @@ export function Composer({
                     setSlash((prev) =>
                       prev ? { ...prev, active: index } : prev
                     )}
-                  onClick={() => handleSlashPick(index)}
+                  onClick={() => selectSlash(index)}
                 >
                   {item.icon && <item.icon size={14} className="slash-icon" />}
                   <span className="slash-item-text">
