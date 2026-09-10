@@ -23,10 +23,22 @@ import {
   UserProviderStore,
 } from "./user-providers.ts";
 import { extraProviders } from "./extra-providers.ts";
-import { loadCustomProviders } from "./custom.ts";
-import { builtinProviders } from "./dev-catalog.ts";
+import { buildProvider, loadCustomProviders } from "./custom.ts";
+import {
+  buildCatalogProviders,
+  builtinProviders,
+  DEV_PROVIDER_IDS,
+} from "./dev-catalog.ts";
+import {
+  type CatalogStatus,
+  resolveCatalogSource,
+  snapshotCatalog,
+} from "./catalog-source.ts";
 import { clampThinkingLevel } from "./thinking.ts";
 import { setApiKey } from "../settings/credentials.ts";
+import { createLogger } from "../log.ts";
+
+const log = createLogger("catalog");
 
 const ENABLED_PREFIX = "model_enabled:";
 const THINKING_PREFIX = "model_thinking:";
@@ -40,11 +52,15 @@ export class ModelManager {
    * LUMISCA_* env vars). Unlike the built-ins, these are explicit app
    * configuration — they count as "configured" even without a stored
    * credential. */
-  private readonly customProviderIds: ReadonlySet<string>;
+  private customProviderIds = new Set<string>();
   /** Ids of user-defined providers (the settings UI / CLI can add these at
    * runtime). Treated like the other custom providers for `isCustomProvider`. */
-  private readonly userProviderIds: Set<string>;
+  private userProviderIds = new Set<string>();
   private readonly userStore: UserProviderStore;
+  /** Where the active built-in catalog came from (live fetch, disk cache,
+   * or the bundled snapshot). Starts as the snapshot the constructor
+   * registered; every `refreshCatalog` replaces it. */
+  private catalogStatus: CatalogStatus;
 
   constructor(
     credentials: CredentialStore,
@@ -57,6 +73,7 @@ export class ModelManager {
     });
     this.settings = settings;
     this.credentials = credentials;
+    this.userStore = new UserProviderStore(settings);
     // ai-sdk built-in providers (OpenAI, Anthropic, Google, Mistral).
     for (const provider of builtinProviders()) {
       this.models.setProvider(provider);
@@ -66,6 +83,21 @@ export class ModelManager {
     for (const provider of extraProviders()) {
       this.models.setProvider(provider);
     }
+    this.applyCustomProviders();
+    const bundled = snapshotCatalog();
+    this.catalogStatus = {
+      source: "snapshot",
+      ...(bundled.generatedAt !== undefined
+        ? { generatedAt: bundled.generatedAt }
+        : {}),
+      lastCheckAt: Date.now(),
+    };
+  }
+
+  /** Register custom (models.json / env) and user-defined providers after
+   * the built-ins. Shared by the constructor and `refreshCatalog` so a
+   * catalog refresh never loses an intentional same-id override. */
+  private applyCustomProviders(): void {
     // Custom OpenAI-compatible providers (env vars / models.json) are
     // registered after the builtins. setProvider upserts by id, so:
     // - a models.json provider may intentionally replace a builtin
@@ -80,13 +112,177 @@ export class ModelManager {
     }
     // User-defined providers are loaded from the settings store and
     // registered after the other custom providers.
-    this.userStore = new UserProviderStore(settings);
     for (const config of this.userStore.list()) {
       customIds.add(config.id);
       this.models.setProvider(buildUserProvider(config));
     }
     this.customProviderIds = customIds;
     this.userProviderIds = new Set(this.userStore.ids());
+  }
+
+  /** Where the active built-in catalog came from (live fetch, disk cache,
+   * or the bundled snapshot). */
+  getCatalogStatus(): CatalogStatus {
+    return { ...this.catalogStatus };
+  }
+
+  /** Retired models kept alive for existing sessions: provider id → models
+   * by id. A model removed upstream stays resolvable (open/reopen/stream
+   * keep working) but is hidden from every listing surface — pickers,
+   * `getModels()`, and the default-model fallback never see it. New
+   * sessions cannot select it; only sessions created before its removal
+   * reference it. Filled by `refreshCatalog`, never by construction. */
+  private readonly retiredModels = new Map<string, Map<string, Model<Api>>>();
+
+  /** Resolve a model including retired ones (existing sessions only).
+   * Listings and new-session resolution must use `getModel`, never this. */
+  getModelWithRetired(
+    providerId: string,
+    modelId: string,
+  ): Model<Api> | undefined {
+    return this.models.getModel(providerId, modelId) ??
+      this.retiredModels.get(providerId)?.get(modelId);
+  }
+
+  /** Resolve a provider for existing sessions, including retired ones.
+   * Listings must use `getProvider`, never this. The retired stand-in
+   * carries no auth of its own: credential resolution still runs against
+   * the provider id (stored keys/env vars keep working), and when nothing
+   * resolves the stream fails with the usual not-configured error. */
+  getProviderWithRetired(providerId: string): Provider | undefined {
+    const live = this.models.getProvider(providerId);
+    if (live !== undefined) return live;
+    const retired = this.retiredModels.get(providerId);
+    if (retired === undefined || retired.size === 0) return undefined;
+    const models = [...retired.values()];
+    return buildProvider({
+      id: providerId,
+      name: models[0]!.provider,
+      auth: {
+        name: `${providerId} API key`,
+        resolve: () => Promise.resolve(undefined),
+      },
+      models,
+    });
+  }
+
+  /** Whether a retired model is still referenced (kept alive for existing
+   * sessions rather than listed). */
+  isRetiredModel(providerId: string, modelId: string): boolean {
+    return this.models.getModel(providerId, modelId) === undefined &&
+      this.retiredModels.get(providerId)?.has(modelId) === true;
+  }
+
+  /** Refresh the built-in catalog from models.dev (`live → cache →
+   * snapshot`), then re-apply custom/user providers so same-id overrides
+   * keep winning. Custom/user providers and their ids are untouched by the
+   * diff itself: only allow-listed ids are added/updated/removed. Stale
+   * custom entries (removed from models.json/env/user settings since the
+   * last apply) are unregistered, restoring the same-id built-in when the
+   * live catalog still carries it. Custom/user misconfiguration (an
+   * unreadable models.json, a partial env pair, an invalid stored user
+   * provider) never throws: the previous registry is kept and the failure
+   * is returned on the status (`error`). */
+  async refreshCatalog(
+    options: {
+      fetch?: typeof globalThis.fetch;
+      timeoutMs?: number;
+      baseUrl?: string;
+    } = {},
+  ): Promise<CatalogStatus> {
+    const { source, status } = await resolveCatalogSource({
+      settings: this.settings,
+      fetch: options.fetch,
+      timeoutMs: options.timeoutMs,
+      baseUrl: options.baseUrl,
+    });
+    const previousCustomIds = new Set([
+      ...this.customProviderIds,
+      ...this.userProviderIds,
+    ]);
+    const rebuilt = new Map(
+      buildCatalogProviders(source.providers).map((p) => [p.id, p] as const),
+    );
+    for (const id of DEV_PROVIDER_IDS) {
+      if (previousCustomIds.has(id)) {
+        continue;
+      }
+      const next = rebuilt.get(id);
+      const current = this.models.getProvider(id);
+      if (next !== undefined) {
+        if (current !== undefined) this.retireRemovedModels(current, next);
+        this.models.setProvider(next);
+      } else {
+        if (current !== undefined) {
+          this.retireProvider(current);
+          this.models.deleteProvider(id);
+        }
+      }
+    }
+    try {
+      this.applyCustomProviders();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.debug(`custom providers unreadable, keeping previous: ${message}`);
+      return {
+        ...status,
+        error: status.error === undefined
+          ? `custom providers unavailable: ${message}`
+          : `${status.error}; custom providers unavailable: ${message}`,
+      };
+    }
+    const freshCustomIds = new Set([
+      ...this.customProviderIds,
+      ...this.userProviderIds,
+    ]);
+    for (const id of previousCustomIds) {
+      if (freshCustomIds.has(id)) continue;
+      const current = this.models.getProvider(id);
+      if (current === undefined) continue;
+      const revived = rebuilt.get(id);
+      if (revived !== undefined) {
+        this.models.setProvider(revived);
+      } else {
+        this.retireProvider(current);
+        this.models.deleteProvider(id);
+      }
+    }
+    this.catalogStatus = status;
+    return this.getCatalogStatus();
+  }
+
+  /** Remember every model of a removed provider before it leaves the
+   * registry (see `retiredModels`). */
+  private retireProvider(provider: Provider): void {
+    if (provider.getModels().length === 0) return;
+    let kept = this.retiredModels.get(provider.id);
+    if (kept === undefined) {
+      kept = new Map();
+      this.retiredModels.set(provider.id, kept);
+    }
+    for (const model of provider.getModels()) kept.set(model.id, model);
+  }
+
+  /** Remember the models a provider update dropped (same provider id, model
+   * gone upstream). Models still present are refreshed out of the retired
+   * set so a re-added model resolves to its live form, not the tombstone. */
+  private retireRemovedModels(previous: Provider, next: Provider): void {
+    const liveIds = new Set(next.getModels().map((m) => m.id));
+    let kept = this.retiredModels.get(previous.id);
+    for (const model of previous.getModels()) {
+      if (liveIds.has(model.id)) {
+        kept?.delete(model.id);
+        continue;
+      }
+      if (kept === undefined) {
+        kept = new Map();
+        this.retiredModels.set(previous.id, kept);
+      }
+      kept.set(model.id, model);
+    }
+    if (kept !== undefined && kept.size === 0) {
+      this.retiredModels.delete(previous.id);
+    }
   }
 
   /** Whether the provider id comes from Lumisca's own custom-provider
@@ -129,7 +325,7 @@ export class ModelManager {
     this.userStore.upsert(parsed);
     this.models.setProvider(buildUserProvider(parsed));
     this.userProviderIds.add(parsed.id);
-    (this.customProviderIds as Set<string>).add(parsed.id);
+    this.customProviderIds.add(parsed.id);
     if (parsed.apiKey) {
       await setApiKey(this.credentials, parsed.id, parsed.apiKey);
     }
@@ -168,7 +364,7 @@ export class ModelManager {
     this.userStore.remove(id);
     this.models.deleteProvider(id);
     this.userProviderIds.delete(id);
-    (this.customProviderIds as Set<string>).delete(id);
+    this.customProviderIds.delete(id);
     await this.credentials.delete(id);
   }
 
@@ -196,6 +392,15 @@ export class ModelManager {
 
   getProvider(providerId: string): Provider | undefined {
     return this.models.getProvider(providerId);
+  }
+
+  /** The model for an existing session's prompt/build, including retired
+   * models (removed upstream, kept for existing sessions). */
+  getSessionModel(
+    providerId: string,
+    modelId: string,
+  ): Model<Api> | undefined {
+    return this.getModelWithRetired(providerId, modelId);
   }
 
   /** Run a provider-owned login flow (e.g. OAuth) and persist the returned
@@ -244,9 +449,11 @@ export class ModelManager {
   }
 
   /** The stored thinking level of a model, clamped to what it supports.
-   * "off" is the default when nothing is stored. */
+   * "off" is the default when nothing is stored. Retired models keep
+   * their own stored level (their tombstone carries the last live
+   * thinking map), so existing sessions stream with the same level. */
   getThinkingLevel(providerId: string, modelId: string): ThinkingLevel {
-    const model = this.getModel(providerId, modelId);
+    const model = this.getModelWithRetired(providerId, modelId);
     const stored = this.settings.get(
       `${THINKING_PREFIX}${providerId}:${modelId}`,
     );
@@ -255,13 +462,14 @@ export class ModelManager {
 
   /** Store a thinking level for a model. Unsupported levels are clamped to
    * the nearest supported one; "off" removes the entry (the default).
-   * Returns the level that will actually be used. */
+   * Returns the level that will actually be used. Retired models resolve
+   * through their tombstone so existing sessions can still tune them. */
   setThinkingLevel(
     providerId: string,
     modelId: string,
     level: ThinkingLevel,
   ): ThinkingLevel {
-    const model = this.getModel(providerId, modelId);
+    const model = this.getModelWithRetired(providerId, modelId);
     const effective = clampThinkingLevel(model, level);
     const key = `${THINKING_PREFIX}${providerId}:${modelId}`;
     if (effective === "off") {
@@ -290,3 +498,8 @@ export type {
   UserProviderInput,
   UserProviderSummary,
 } from "./user-providers.ts";
+export type {
+  CatalogSource,
+  CatalogSourceKind,
+  CatalogStatus,
+} from "./catalog-source.ts";

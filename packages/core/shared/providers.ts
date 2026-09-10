@@ -118,3 +118,14 @@ export interface ModelInfo {
   /** The thinking levels this model actually supports (at least ["off"]). */
   thinkingLevels?: ThinkingLevel[];
 }
+
+/** Where the active built-in model catalog came from. Mirrors the core's
+ * `CatalogStatus` so the server routes and the web UI share one shape. */
+export type CatalogSourceKind = "live" | "cache" | "snapshot";
+
+export interface CatalogStatus {
+  source: CatalogSourceKind;
+  generatedAt?: string;
+  lastCheckAt: number;
+  error?: string;
+}

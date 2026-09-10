@@ -1,5 +1,84 @@
+import { useState } from "preact/compat";
 import { IconPlus } from "@tabler/icons-preact";
-import { useProviders } from "../../providers.ts";
+import { api } from "../../api.ts";
+import { useAsyncEffect } from "../../hooks/useAsync.ts";
+import { errorText, useProviders } from "../../providers.ts";
+import type { CatalogStatus } from "../../types.ts";
+
+const CATALOG_SOURCE_LABEL: Record<CatalogStatus["source"], string> = {
+  live: "最新",
+  cache: "キャッシュ",
+  snapshot: "同梱版",
+};
+
+/** One-line catalog status with a manual refresh button. Shown at the top
+ * of the provider list: the model catalog now syncs from models.dev at
+ * startup (and on demand here), falling back to the cache/bundled
+ * snapshot when offline. */
+function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
+  const [status, setStatus] = useState<CatalogStatus | undefined>();
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  useAsyncEffect(async (isStale) => {
+    try {
+      const { status } = await api.catalogStatus();
+      if (!isStale()) setStatus(status);
+    } catch {
+      // Status is informational only; the provider list works without it.
+    }
+  }, []);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    setError(undefined);
+    try {
+      const { status } = await api.refreshCatalog();
+      setStatus(status);
+      if (status.error) setError(status.error);
+      onRefreshed();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const generated = status?.generatedAt !== undefined
+    ? ` (${status.generatedAt.slice(0, 10)})`
+    : "";
+  return (
+    <div className="faint-box">
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ flex: 1 }}>
+          モデルカタログ: {status
+            ? `${CATALOG_SOURCE_LABEL[status.source]}${generated}`
+            : "確認中…"}
+        </span>
+        <button
+          type="button"
+          className="btn small"
+          onClick={refresh}
+          disabled={refreshing}
+        >
+          {refreshing ? "更新中…" : "最新に更新"}
+        </button>
+      </div>
+      {error && (
+        <p className="settings-note" style={{ marginTop: 6 }}>
+          更新できませんでした: {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 /** Settings → provider list: configured first, then everything else.
  * User-defined providers are shown even when not yet configured, so they
@@ -11,7 +90,7 @@ export function ProviderList({
   onAdd: () => void;
   onOpen: (providerId: string) => void;
 }) {
-  const { providers } = useProviders();
+  const { providers, reload } = useProviders();
 
   const configured = providers.filter(
     (p) => p.configured !== false || p.userDefined,
@@ -22,6 +101,8 @@ export function ProviderList({
       <div className="modal-header">
         <h2>プロバイダー</h2>
       </div>
+
+      <CatalogStatusRow onRefreshed={reload} />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {configured.length === 0 && (

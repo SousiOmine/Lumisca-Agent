@@ -135,7 +135,11 @@ export class LumiscaCore {
       new SavedPromptsService(this.settings);
     this.sessions = overrides.sessions ?? createSessionRepo(db);
     this.messages = overrides.messages ?? createMessageRepo(db);
-    const streamFn = withProviderRetryDefaults(this.models.models.streamFn());
+    const streamFn = withProviderRetryDefaults(
+      this.models.models.streamFn((providerId) =>
+        this.models.getProviderWithRetired(providerId)
+      ),
+    );
     this.commandSafety = overrides.commandSafety ??
       new CommandSafety({
         getSetting: (key) => this.settings.get(key),
@@ -437,9 +441,13 @@ export class LumiscaCore {
   }
 
   /** Resolve a model or throw `not_found` (single home for the
-   * "Model not found" guard every model-taking path shares). */
+   * "Model not found" guard every model-taking path shares). Retired
+   * models (removed upstream, kept for existing sessions) still resolve
+   * here so those sessions keep opening; new-session pickers and
+   * `setSessionModel` validate through `getModel` instead and never see
+   * them. */
   private requireModel(provider: string, modelId: string): Model<Api> {
-    const model = this.models.getModel(provider, modelId);
+    const model = this.models.getModelWithRetired(provider, modelId);
     if (!model) {
       throw new CoreError(
         `Model not found: ${provider}/${modelId}`,
@@ -715,15 +723,21 @@ export class LumiscaCore {
     await agent.rewind(timestamp);
   }
 
-  /** Switch the model used by a session (persisted). Throws `conflict`
-   * while the session is streaming (rebuilding a live agent would orphan
-   * the running loop). */
+  /** Switch the model used by a session (persisted). Retired models
+   * (removed upstream, kept for existing sessions) cannot be newly
+   * selected. Throws `conflict` while the session is streaming (rebuilding
+   * a live agent would orphan the running loop). */
   setSessionModel(id: string, provider: string, modelId: string): void {
     const session = this.sessions.get(id);
     if (!session) {
       throw new CoreError(`Session not found: ${id}`, "not_found");
     }
-    this.requireModel(provider, modelId);
+    if (this.models.getModel(provider, modelId) === undefined) {
+      throw new CoreError(
+        `Model not found: ${provider}/${modelId}`,
+        "not_found",
+      );
+    }
     this.pool.applyChange(
       [{ ...session, modelProvider: provider, modelId }],
       () => {
@@ -908,6 +922,28 @@ export class LumiscaCore {
     return this.models.isUserProvider(id);
   }
 
+  // --- model catalog (models.dev live sync) -------------------------------
+
+  /** Where the active built-in model catalog came from (live fetch, disk
+   * cache, or the bundled snapshot). */
+  getModelCatalogStatus(): import("./models/mod.ts").CatalogStatus {
+    return this.models.getCatalogStatus();
+  }
+
+  /** Refresh the built-in model catalog from models.dev (`live → cache →
+   * snapshot`). Non-blocking by design: callers fire and forget at startup
+   * and await it from the manual refresh UI/API. Never throws — the
+   * resolved status (including `error`) is always returned. */
+  refreshModelCatalog(
+    options: {
+      fetch?: typeof globalThis.fetch;
+      timeoutMs?: number;
+      baseUrl?: string;
+    } = {},
+  ): Promise<import("./models/mod.ts").CatalogStatus> {
+    return this.models.refreshCatalog(options);
+  }
+
   // --- internals ----------------------------------------------------------
 
   private requireWorkspace(id: string): Workspace {
@@ -955,13 +991,23 @@ export class LumiscaCore {
   }
 
   /** Resolve the model for a new session: explicit choice, else the
-   * last-used model, else the first enabled model of the first provider. */
+   * last-used model, else the first enabled model of the first provider.
+   * Retired models (removed upstream, kept for existing sessions) are
+   * never selected for new sessions: an explicit retired choice and a
+   * last-used model that has since retired both fall through to the live
+   * fallback. */
   private resolveDefaultModel(
     provider?: string,
     modelId?: string,
   ): { provider: string; modelId: string } {
     if (provider && modelId) {
-      this.requireModel(provider, modelId);
+      const live = this.models.getModel(provider, modelId);
+      if (live === undefined) {
+        throw new CoreError(
+          `Model not found: ${provider}/${modelId}`,
+          "not_found",
+        );
+      }
       return { provider, modelId };
     }
     const latest = this.sessions.list()[0];
@@ -975,9 +1021,11 @@ export class LumiscaCore {
 
   /** Attach the session's model thinking level so the UI can render the
    * thinking control without an extra fetch, and the chat flag so the UI
-   * can render chat sessions (folder-less workspace) distinctly. */
+   * can render chat sessions (folder-less workspace) distinctly. Retired
+   * models (removed upstream, kept for existing sessions) still decorate
+   * from their tombstone, so those sessions keep their metadata. */
   private decorateSession(session: SessionInfo): SessionInfo {
-    const model = this.models.getModel(
+    const model = this.models.getSessionModel(
       session.modelProvider,
       session.modelId,
     );

@@ -245,6 +245,7 @@ export {
 export type { ThinkingLevel } from "./shared/mod.ts";
 export { THINKING_LEVEL_LABELS } from "./shared/mod.ts";
 export type { ModelInfo, ProviderInfo } from "./shared/mod.ts";
+export type { CatalogStatus } from "./shared/mod.ts";
 export {
   ALLOWED_OPENAI_APIS,
   type UserProviderConfig,

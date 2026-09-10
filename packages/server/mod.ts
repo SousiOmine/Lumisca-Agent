@@ -1,5 +1,5 @@
 import { LumiscaCore, resolveSettingsPath } from "@lumisca/core";
-import { HttpBrowserBackend } from "@lumisca/core";
+import { createLogger, HttpBrowserBackend } from "@lumisca/core";
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
 import {
   consumeServerStartupEnvironment,
@@ -128,6 +128,23 @@ try {
   Deno.exit(1);
 }
 attachBrowserBackend(core);
+// The model catalog starts as the bundled snapshot; refresh it in the
+// background so new models.dev entries appear without blocking startup
+// (or failing it when offline — the snapshot simply stays active).
+{
+  const log = createLogger("catalog");
+  void core.refreshModelCatalog()
+    .then((status) =>
+      log.debug(`model catalog refreshed from ${status.source}`)
+    )
+    .catch((error) =>
+      log.debug(
+        `model catalog refresh failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    );
+}
 // A taken port (usually a leftover `deno task dev:server`) must fail with
 // guidance, not an `AddrInUse` stack trace. The DB is closed before exit
 // so no lock files linger for the next attempt.

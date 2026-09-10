@@ -134,6 +134,13 @@ export function modelApi(peerId: string) {
       (providerId: string) => api.listModels(providerId),
       (p, providerId: string) => fed.listModels(p, providerId),
     ),
+    // The model catalog endpoints (/api/providers/catalog[/refresh]) are
+    // intentionally local-only: they pass through the generic federation
+    // proxy (`/api/fed/:peerId/*`) so a peer can be refreshed via
+    // fedRequest when needed, but the settings UI manages the catalog of
+    // the server it is served from and has no peer switcher.
+    catalogStatus: () => api.catalogStatus(),
+    refreshCatalog: () => api.refreshCatalog(),
     setThinkingLevel: peerRouted(
       peerId,
       (providerId: string, modelId: string, level: ThinkingLevel) =>

@@ -114,12 +114,17 @@ export class LumiscaModels {
 
   /** The StreamFn over this registry (cached). Requests for a provider with
    * a `customStream` (test doubles) route through it; everything else uses
-   * the Vercel AI SDK transport. */
-  streamFn(): StreamFn {
+   * the Vercel AI SDK transport. A retired-provider fallback resolves the
+   * credential against the provider id so stored keys/env vars keep
+   * working for existing sessions after an upstream removal. */
+  streamFn(
+    retiredProviderFor?: (providerId: string) => Provider | undefined,
+  ): StreamFn {
     if (this.cachedStreamFn === undefined) {
-      const vercelStream = createStreamFn(this.transport());
+      const vercelStream = createStreamFn(this.transport(retiredProviderFor));
       this.cachedStreamFn = (model, context, options) => {
-        const provider = this.providers.get(model.provider);
+        const provider = this.providers.get(model.provider) ??
+          retiredProviderFor?.(model.provider);
         if (provider?.customStream !== undefined) {
           return provider.customStream(model, context, options);
         }
@@ -129,10 +134,12 @@ export class LumiscaModels {
     return this.cachedStreamFn;
   }
 
-  private transport(): StreamTransport {
+  private transport(
+    retiredProviderFor?: (providerId: string) => Provider | undefined,
+  ): StreamTransport {
     return {
       languageModelFor: async (model) => {
-        const key = await this.resolveKey(model.provider);
+        const key = await this.resolveKey(model.provider, retiredProviderFor);
         if (key === undefined) return undefined;
         return languageModelFor(model, key);
       },
@@ -142,8 +149,10 @@ export class LumiscaModels {
   /** Resolve an API key for a provider (env var or stored credential). */
   private async resolveKey(
     providerId: string,
+    retiredProviderFor?: (providerId: string) => Provider | undefined,
   ): Promise<ResolvedApiKey | undefined> {
-    const provider = this.providers.get(providerId);
+    const provider = this.providers.get(providerId) ??
+      retiredProviderFor?.(providerId);
     if (provider === undefined) return undefined;
     const credential = await this.credentials?.read(providerId);
     const result = await provider.resolveCredential({

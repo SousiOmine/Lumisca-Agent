@@ -3,6 +3,7 @@ import type {
   AuthCheck,
   AuthInteraction,
   AuthType,
+  CatalogStatus,
   ModelInfo,
   Provider,
   ProviderAuthType,
@@ -67,6 +68,12 @@ export interface ProviderApi {
   ): Promise<UserProviderSummary>;
   /** Remove a user-defined OpenAI-compatible provider and its API key. */
   removeUserProvider(id: string): Promise<void>;
+  /** Where the active built-in model catalog came from (live fetch, disk
+   * cache, or the bundled snapshot). */
+  getModelCatalogStatus(): CatalogStatus;
+  /** Refresh the built-in model catalog from models.dev. Never throws —
+   * the resolved status (including `error`) is always returned. */
+  refreshModelCatalog(): Promise<CatalogStatus>;
 }
 
 export function providerRoutes(core: ProviderApi): Hono {
@@ -132,6 +139,24 @@ export function providerRoutes(core: ProviderApi): Hono {
       throw new AppError(`Provider not found: ${id}`, 404);
     }
     return c.json(core.listModelsDetailed(id));
+  });
+
+  // The built-in model catalog (models.dev live sync): static routes before
+  // the `:id` routes below so "catalog" never parses as a provider id.
+  app.get("/providers/catalog", (c) => {
+    const status = core.getModelCatalogStatus();
+    return c.json({
+      status,
+      providerCount: core.listProviders().length,
+    });
+  });
+
+  app.post("/providers/catalog/refresh", async (c) => {
+    const status = await core.refreshModelCatalog();
+    return c.json({
+      status,
+      providerCount: core.listProviders().length,
+    });
   });
 
   app.put("/providers/:id/models/:modelId", async (c) => {

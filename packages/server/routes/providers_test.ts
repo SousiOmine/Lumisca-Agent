@@ -2,6 +2,7 @@ import { assert, assertEquals } from "@std/assert";
 import type { AuthInteraction, AuthType, Provider } from "@lumisca/core";
 import type {
   AuthCheck,
+  CatalogStatus,
   ModelInfo,
   ProviderAuthType,
   ProviderLoginSnapshot,
@@ -70,6 +71,23 @@ class FakeProviderApi implements ProviderApi {
   }
   isUserProvider(): boolean {
     return false;
+  }
+  catalogStatus: CatalogStatus = {
+    source: "snapshot",
+    generatedAt: "2026-09-07T05:30:24.982Z",
+    lastCheckAt: 0,
+  };
+  refreshCalls = 0;
+  getModelCatalogStatus(): CatalogStatus {
+    return { ...this.catalogStatus };
+  }
+  refreshModelCatalog(): Promise<CatalogStatus> {
+    this.refreshCalls += 1;
+    this.catalogStatus = {
+      source: "live",
+      lastCheckAt: Date.now(),
+    };
+    return Promise.resolve(this.getModelCatalogStatus());
   }
   listUserProviders(): Promise<never[]> {
     return Promise.resolve([]);
@@ -351,4 +369,27 @@ Deno.test("logout removes the credential and invalidates the auth cache", async 
     list.find((p: { id: string }) => p.id === "openai-codex").configured,
     false,
   );
+});
+
+Deno.test("GET /providers/catalog reports the catalog status", async () => {
+  const app = makeApp(new FakeProviderApi());
+  const res = await app.request("/providers/catalog");
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.status.source, "snapshot");
+  assertEquals(body.status.generatedAt, "2026-09-07T05:30:24.982Z");
+  assertEquals(body.providerCount, 2);
+});
+
+Deno.test("POST /providers/catalog/refresh refreshes and reports", async () => {
+  const fake = new FakeProviderApi();
+  const app = makeApp(fake);
+  const res = await app.request("/providers/catalog/refresh", {
+    method: "POST",
+  });
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(fake.refreshCalls, 1);
+  assertEquals(body.status.source, "live");
+  assertEquals(body.providerCount, 2);
 });

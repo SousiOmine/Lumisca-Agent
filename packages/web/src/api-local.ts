@@ -2,6 +2,7 @@ import type {
   AgentMessage,
   AskAnswer,
   BackgroundCommandInfo,
+  CatalogStatus,
   ConnectionEntry,
   GoalInfo,
   McpInfo,
@@ -136,6 +137,18 @@ export const api = {
   listProviders: () => request<ProviderInfo[]>("/api/providers"),
   listModels: (providerId: string) =>
     request<ModelInfo[]>(`/api/providers/${providerId}/models`),
+  /** Built-in model catalog status (which source is active, when it was
+   * last checked). */
+  catalogStatus: () =>
+    request<{ status: CatalogStatus; providerCount: number }>(
+      "/api/providers/catalog",
+    ),
+  /** Refresh the built-in model catalog from models.dev. */
+  refreshCatalog: () =>
+    request<{ status: CatalogStatus; providerCount: number }>(
+      "/api/providers/catalog/refresh",
+      { method: "POST" },
+    ),
   setModelEnabled: (providerId: string, modelId: string, enabled: boolean) =>
     request<{ ok: boolean }>(
       `/api/providers/${providerId}/models/${encodeURIComponent(modelId)}`,

@@ -1,4 +1,4 @@
-import { LumiscaCore } from "@lumisca/core";
+import { createLogger, LumiscaCore } from "@lumisca/core";
 import { runRepl } from "./repl.ts";
 import { pickWorkspace, selectFromList, sessionLabel } from "./select.ts";
 import { createSession } from "./session.ts";
@@ -99,6 +99,22 @@ async function attachBrowserBackend(
   return backend;
 }
 
+/** Refresh the model catalog without blocking startup (or failing it
+ * when offline — the bundled snapshot simply stays active). */
+function refreshCatalogInBackground(core: LumiscaCore): void {
+  const log = createLogger("catalog");
+  void core.refreshModelCatalog()
+    .then((status) =>
+      log.debug(`model catalog refreshed from ${status.source}`)
+    )
+    .catch((error) =>
+      log.debug(
+        `model catalog refresh failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    );
+}
 /** The one-shot `lumisca run` path: parse args, execute the run, print
  * the result, and return the process exit code. The core is closed in the
  * finally block before the code leaves this function — exiting from inside
@@ -117,6 +133,11 @@ async function runCommand(args: string[]): Promise<number> {
     return 1;
   }
   const core = LumiscaCore.open(options.dbPath);
+  // No background catalog refresh here: the run resolves its model and
+  // creates the session immediately, so a refresh landing mid-resolve
+  // could delete the just-resolved model ("Model not found" for a run
+  // that would otherwise succeed). Interactive CLI and the server refresh
+  // in the background; the one-shot run stays on the startup catalog.
   let browserBackend: Awaited<ReturnType<typeof attachBrowserBackend>>;
   try {
     browserBackend = await attachBrowserBackend(core, options.browserPreview);
@@ -143,6 +164,7 @@ async function main(): Promise<number> {
   }
   const opts = parseArgs(args);
   const core = LumiscaCore.open(opts.dbPath);
+  refreshCatalogInBackground(core);
   let browserBackend: Awaited<ReturnType<typeof attachBrowserBackend>>;
 
   // Ctrl+C: stop background commands and MCP servers, close the database

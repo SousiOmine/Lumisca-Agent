@@ -2,6 +2,7 @@ import snapshot from "@opencode-ai/models/snapshot";
 import type {
   Model as DevModel,
   Provider as DevProvider,
+  ProviderMap,
   ReasoningOption,
 } from "@opencode-ai/models";
 import type {
@@ -214,39 +215,67 @@ function toLumiscaModel(
   };
 }
 
-/** Build a Lumisca Provider from a models.dev provider (allow-listed). */
+/** Build a Lumisca Provider from a models.dev provider (allow-listed).
+ * Tolerates upstream field drift: a missing `name` falls back to the
+ * provider id, a missing `env` to no env vars (stored credentials still
+ * resolve — only ambient env auth is lost for that entry). `npm` stays
+ * required for transport selection: without it the provider cannot be
+ * routed, so the entry is dropped instead of guessed. */
 function toLumiscaProvider(
   id: string,
   p: DevProvider,
-): Provider {
+): Provider | undefined {
+  if (typeof p.npm !== "string" || p.npm.length === 0) return undefined;
   const baseUrl = p.api ?? KNOWN_BASE_URLS[id];
   // Chat models produce text output; image/embedding models do not.
   const models = Object.values(p.models)
     .filter((m) => m.modalities?.output?.includes("text") !== false)
     .map((m) => toLumiscaModel(id, p.npm, baseUrl, m));
+  const name = typeof p.name === "string" && p.name.length > 0 ? p.name : id;
+  const env = Array.isArray(p.env)
+    ? p.env.filter((e): e is string => typeof e === "string")
+    : [];
   return buildProvider({
     id,
-    name: p.name,
+    name,
     baseUrl,
-    auth: envApiKeyAuth(`${p.name} API key`, p.env),
+    auth: envApiKeyAuth(`${name} API key`, env),
     models,
   });
 }
 
-/** A single models.dev provider (allow-listed) by id, or undefined. */
-export function builtinProvider(id: string): Provider | undefined {
-  const p = snapshot.providers[id];
+/** A single models.dev provider (allow-listed) by id, or undefined.
+ * `source` defaults to the bundled snapshot; live/cached catalogs pass
+ * their own provider map. */
+export function builtinProvider(
+  id: string,
+  source: ProviderMap = snapshot.providers,
+): Provider | undefined {
+  const p: DevProvider | undefined = source[id];
   if (p === undefined) return undefined;
   return toLumiscaProvider(id, p);
 }
 
 /** Every models.dev provider in the allow-list, freshly constructed. */
-export function builtinProviders(): Provider[] {
+export function builtinProviders(
+  source: ProviderMap = snapshot.providers,
+): Provider[] {
+  return buildCatalogProviders(source);
+}
+
+/** Build Lumisca providers from a models.dev provider map (live, cached,
+ * or the bundled snapshot). Only allow-listed providers are exposed; the
+ * mapping (text-output filter, api/transport selection) matches the
+ * snapshot path exactly so every source yields the same shapes.
+ * Providers without routing metadata (`npm`) are skipped — they cannot be
+ * served without guessing the transport. */
+export function buildCatalogProviders(source: ProviderMap): Provider[] {
   const out: Provider[] = [];
   for (const id of DEV_PROVIDER_IDS) {
-    const p = snapshot.providers[id];
+    const p: DevProvider | undefined = source[id];
     if (p === undefined) continue;
-    out.push(toLumiscaProvider(id, p));
+    const built = toLumiscaProvider(id, p);
+    if (built !== undefined) out.push(built);
   }
   return out;
 }
