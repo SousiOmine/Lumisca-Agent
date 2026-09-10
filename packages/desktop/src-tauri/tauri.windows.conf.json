@@ -10,7 +10,8 @@
       "icons/icon.png"
     ],
     "resources": {
-      "resources/server/lumisca-server.exe": "server/lumisca-server.exe"
+      "resources/server/lumisca-server.exe": "server/lumisca-server.exe",
+      "resources/server/icudtl.dat": "server/icudtl.dat"
     }
   }
 }

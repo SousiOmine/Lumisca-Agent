@@ -109,6 +109,7 @@ export {
   createPdfTools,
   createUnpdfRenderer,
   DEFAULT_PDF_DPI,
+  findCanvasIcuDataFile,
   MAX_PDF_PAGES_PER_CALL,
   PDF_TOOL_NAMES,
 } from "./pdf/tools.ts";

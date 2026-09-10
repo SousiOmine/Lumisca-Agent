@@ -10,7 +10,8 @@
       "icons/32x32.png"
     ],
     "resources": {
-      "resources/server/lumisca-server": "server/lumisca-server"
+      "resources/server/lumisca-server": "server/lumisca-server",
+      "resources/server/icudtl.dat": "server/icudtl.dat"
     }
   }
 }

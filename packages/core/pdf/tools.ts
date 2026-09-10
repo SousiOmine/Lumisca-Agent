@@ -11,8 +11,15 @@
  * @napi-rs/canvas — no Python, no poppler/mupdf binaries, no external
  * process. The canvas library loads lazily at render time (FFI), so a host
  * without a matching native binding fails the tool call with a clear
- * error instead of breaking server startup.
+ * error instead of breaking server startup. Skia's ICU data file
+ * (`icudtl.dat`) follows the same rule: the desktop installer ships it as
+ * a `server/` resource (see scripts/build-desktop-assets.ts), but when it
+ * cannot be found the tool refuses to load Skia with a clear error — a
+ * missing file makes Skia abort the whole server process with
+ * `STATUS_ILLEGAL_INSTRUCTION`, which no try/catch can contain.
  */
+import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import { getDocumentProxy, renderPageAsImage } from "unpdf";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
@@ -101,8 +108,20 @@ function abortable<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
 /** The production renderer: unpdf (PDF.js) plus a lazily loaded canvas.
  * Stateless (a fresh document per call), so concurrent tool calls are
  * independent. Encrypted or malformed PDFs surface PDF.js's own errors
- * (PasswordException / InvalidPDFException). */
-export function createUnpdfRenderer(): PdfRenderer {
+ * (PasswordException / InvalidPDFException). A missing Skia ICU data file
+ * refuses with a clear error before Skia is touched: without it Skia
+ * aborts the whole server process (fatal `check(fUnicode)` →
+ * STATUS_ILLEGAL_INSTRUCTION), which no try/catch can contain. */
+export function createUnpdfRenderer(options?: {
+  /**
+   * Override for tests (defaults to `findCanvasIcuDataFile`). The search
+   * itself must stay load-free — resolving a path never executes the
+   * native binding, while importing the platform package would
+   * initialize Skia and abort the process when the file is missing.
+   */
+  findIcuDataFile?: () => string | undefined;
+}): PdfRenderer {
+  const findIcuDataFile = options?.findIcuDataFile ?? findCanvasIcuDataFile;
   return {
     async render(
       pdfPath: string,
@@ -128,6 +147,15 @@ export function createUnpdfRenderer(): PdfRenderer {
           `Cannot render PDF pages (the canvas library failed to load: ${
             errorMessage(error)
           }); the host needs @napi-rs/canvas support (FFI)`,
+        );
+      }
+      const icuDataFile = findIcuDataFile();
+      if (icuDataFile === undefined) {
+        throw new Error(
+          "Cannot render PDF pages (Skia's ICU data file icudtl.dat was " +
+            "not found next to the canvas native library or the server " +
+            "binary; reinstall Lumisca to restore the server/icudtl.dat " +
+            "resource)",
         );
       }
       const scale = dpi / 72;
@@ -170,6 +198,112 @@ export function createUnpdfRenderer(): PdfRenderer {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Platform suffixes of the `@napi-rs/canvas-<platform>` npm packages
+ * (the optionalDependencies of @napi-rs/canvas plus the extra branches of
+ * its js-binding loader). Probed with require.resolve only — resolving a
+ * path never executes the native binding. */
+const CANVAS_PLATFORM_SUFFIXES: readonly string[] = [
+  "win32-x64-msvc",
+  "win32-x64-gnu",
+  "win32-ia32-msvc",
+  "win32-arm64-msvc",
+  "darwin-x64",
+  "darwin-arm64",
+  "darwin-universal",
+  "linux-x64-gnu",
+  "linux-x64-musl",
+  "linux-arm64-gnu",
+  "linux-arm64-musl",
+  "linux-arm-gnueabihf",
+  "linux-riscv64-gnu",
+  "android-arm64",
+  "android-arm-eabi",
+  "freebsd-x64",
+  "freebsd-arm64",
+];
+
+/**
+ * Locate Skia's ICU data file (`icudtl.dat`) without loading Skia itself.
+ * The lookup must stay load-free: merely importing the platform package
+ * would initialize Skia and abort the process when the file is missing —
+ * exactly what this guard exists to prevent.
+ *
+ * Order: (1) explicit `LUMISCA_ICU_DATA` override, (2) the `server/`
+ * resource directory shipped by the desktop installer (next to the
+ * deno-compiled binary), (3) next to an already-loaded canvas native
+ * binding, (4) next to any installed `@napi-rs/canvas-<platform>`
+ * package, resolved without loading it.
+ */
+export function findCanvasIcuDataFile(): string | undefined {
+  const override = (() => {
+    try {
+      return Deno.env.get("LUMISCA_ICU_DATA")?.trim() || undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  if (override) {
+    try {
+      if (Deno.statSync(override).isFile) return override;
+    } catch {
+      // A stale override must not crash the process; fall through to the
+      // normal search, which refuses cleanly when nothing is found.
+    }
+  }
+  for (const dir of canvasIcuSearchDirs()) {
+    const candidate = join(dir, "icudtl.dat");
+    try {
+      if (Deno.statSync(candidate).isFile) return candidate;
+    } catch {
+      // Not here; try the next directory.
+    }
+  }
+  return undefined;
+}
+
+function canvasIcuSearchDirs(): string[] {
+  const dirs: string[] = [];
+  // The deno-compiled server ships icudtl.dat next to its own binary
+  // (the `server/icudtl.dat` Tauri resource).
+  try {
+    dirs.push(dirname(Deno.execPath()));
+  } catch {
+    // execPath unavailable; the searches below may still match.
+  }
+  try {
+    const bindingRequire = createRequire(
+      import.meta.resolve("@napi-rs/canvas/js-binding.js"),
+    );
+    // Next to an already-loaded native binding (require.cache exposes
+    // the `.node` path once @napi-rs/canvas was imported earlier).
+    const cache = (bindingRequire as unknown as {
+      cache?: Record<string, unknown>;
+    }).cache;
+    if (cache) {
+      for (const path of Object.keys(cache)) {
+        if (path.endsWith(".node")) dirs.push(dirname(path));
+      }
+    }
+    // Next to any installed platform package. require.resolve only
+    // resolves the path — it never executes the native binding, so this
+    // stays safe even when the data file is missing.
+    for (const suffix of CANVAS_PLATFORM_SUFFIXES) {
+      try {
+        dirs.push(
+          dirname(
+            bindingRequire.resolve(`@napi-rs/canvas-${suffix}/package.json`),
+          ),
+        );
+      } catch {
+        // That platform's package is not installed; keep looking.
+      }
+    }
+  } catch {
+    // node resolution unavailable; fall through with what we have.
+  }
+  return [...new Set(dirs)];
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

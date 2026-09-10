@@ -9,7 +9,9 @@ import type { Workspace } from "../types/workspace.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
 import {
   createPdfTools,
+  createUnpdfRenderer,
   DEFAULT_PDF_DPI,
+  findCanvasIcuDataFile,
   MAX_PDF_PAGES_PER_CALL,
   PDF_TOOL_NAMES,
   type PdfRenderer,
@@ -331,6 +333,70 @@ Deno.test("pdf tool fails fast on malformed and encrypted PDFs", async () => {
       "password",
     );
   } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("pdf renderer finds the bundled ICU data file", () => {
+  // This host renders real PDFs (see the bundled-renderer test above),
+  // so the guard must locate the data file its Skia binary needs.
+  assert(
+    findCanvasIcuDataFile() !== undefined,
+    "expected icudtl.dat next to the canvas native binding",
+  );
+});
+
+Deno.test("pdf renderer refuses to load Skia without its ICU data file", async () => {
+  const { root, folder } = await fixture();
+  try {
+    await Deno.copyFile(
+      join(import.meta.dirname!, "testdata", "two-pages.pdf"),
+      join(root, "doc.pdf"),
+    );
+    // A missing icudtl.dat makes Skia abort the whole server process
+    // (fatal check → STATUS_ILLEGAL_INSTRUCTION), so the renderer must
+    // refuse with a clear tool error before touching Skia.
+    const tools = createPdfTools({
+      sandbox: new Sandbox([root]),
+      renderer: createUnpdfRenderer({ findIcuDataFile: () => undefined }),
+    });
+    await assertRejects(
+      () => tools[0]!.execute("id", { path: `${folder}/doc.pdf`, pages: [1] }),
+      Error,
+      "icudtl.dat",
+    );
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("pdf renderer honors the LUMISCA_ICU_DATA override", async () => {
+  const { root, folder } = await fixture();
+  const previous = Deno.env.get("LUMISCA_ICU_DATA");
+  try {
+    await Deno.copyFile(
+      join(import.meta.dirname!, "testdata", "two-pages.pdf"),
+      join(root, "doc.pdf"),
+    );
+    const real = findCanvasIcuDataFile();
+    assert(real !== undefined, "expected a bundled icudtl.dat on this host");
+    Deno.env.set("LUMISCA_ICU_DATA", real);
+    const tools = createPdfTools({ sandbox: new Sandbox([root]) });
+    const result = await tools[0]!.execute("id", {
+      path: `${folder}/doc.pdf`,
+      pages: [1],
+    });
+    assert(toolText(result).includes("pages 1 of 2"), toolText(result));
+  } finally {
+    if (previous === undefined) {
+      try {
+        Deno.env.delete("LUMISCA_ICU_DATA");
+      } catch {
+        // Already absent; nothing to restore.
+      }
+    } else {
+      Deno.env.set("LUMISCA_ICU_DATA", previous);
+    }
     await removeDirRetry(root);
   }
 });
