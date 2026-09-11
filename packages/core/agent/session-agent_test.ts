@@ -20,7 +20,7 @@ import {
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "./retry-policy.ts";
 import { SessionAgent } from "./session-agent.ts";
-import { MAX_RATE_LIMIT_RETRIES } from "./llm-retry.ts";
+import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
 
 /** A tool that succeeds immediately; a tool call keeps the loop going, so
  * a vacant response after a tool call exercises the counter reset. */

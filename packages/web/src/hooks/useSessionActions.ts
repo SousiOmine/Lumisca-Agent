@@ -111,15 +111,18 @@ export function useSessionActions(
     [setViewError],
   );
 
+  /** Abort the running exchange. The failure surfaces on the view (the
+   * banner above the composer): a silently ignored abort would leave the
+   * user pressing a button that does nothing. */
   const abort = useCallback((key: string) => {
-    sessionApi(key).abort().catch(console.error);
-  }, []);
+    sessionApi(key).abort().catch((error) => setViewError(key, error));
+  }, [setViewError]);
 
   /** Cancel the session's active goal (the goal panel's button). Errors
    * surface on the view; a missing goal is a no-op server-side. */
   const cancelGoal = useCallback((key: string) => {
-    sessionApi(key).cancelGoal().catch(console.error);
-  }, []);
+    sessionApi(key).cancelGoal().catch((error) => setViewError(key, error));
+  }, [setViewError]);
 
   /** Answer a pending ask (the ask tool): the answer is sent to the server
    * owning the session, which resolves the blocked run. Errors surface in
@@ -163,15 +166,16 @@ export function useSessionActions(
           return next;
         });
       } catch (error) {
-        console.error(error);
+        setViewError(key, error);
       }
     },
-    [setViews],
+    [setViews, setViewError],
   );
 
   /** The thinking level is a per-model setting on the owning server:
    * update the views of every open session on the same peer that uses
-   * that model so the control stays in sync. */
+   * that model so the control stays in sync. The failure surfaces on the
+   * active tab's view (the control belongs to the open session). */
   const changeThinkingLevel = useCallback(
     async (
       provider: string,
@@ -196,10 +200,10 @@ export function useSessionActions(
           )
         );
       } catch (error) {
-        console.error(error);
+        if (activeTab) setViewError(activeTab, error);
       }
     },
-    [activeTab, setViews],
+    [activeTab, setViews, setViewError],
   );
 
   return {

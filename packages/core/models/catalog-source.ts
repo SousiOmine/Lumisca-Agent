@@ -4,8 +4,9 @@ import snapshot, {
 import type { ProviderMap } from "@opencode-ai/models";
 import { join } from "node:path";
 import { createLogger } from "../log.ts";
+import { errorMessage } from "../errors.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
-import { isRecord } from "../shared/fs-util.ts";
+import { atomicWriteTextFileSync, isRecord } from "../fs.ts";
 import type { CatalogSourceKind, CatalogStatus } from "../shared/providers.ts";
 export type { CatalogSourceKind, CatalogStatus };
 
@@ -51,10 +52,6 @@ export function isProviderMap(value: unknown): value is ProviderMap {
   return true;
 }
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** Fetch the live provider catalog (`GET {baseUrl}/api.json`). Throws on
  * transport failure, non-2xx status, malformed JSON, or shape mismatch —
  * callers decide the fallback (see `resolveCatalogSource`). */
@@ -78,7 +75,7 @@ export async function fetchLiveCatalog(
   try {
     res = await fetchFn(url, signal !== undefined ? { signal } : undefined);
   } catch (error) {
-    throw new Error(`models.dev fetch failed: ${errorText(error)}`);
+    throw new Error(`models.dev fetch failed: ${errorMessage(error)}`);
   }
   if (!res.ok) {
     try {
@@ -92,7 +89,7 @@ export async function fetchLiveCatalog(
   try {
     parsed = await res.json();
   } catch (error) {
-    throw new Error(`models.dev returned invalid JSON: ${errorText(error)}`);
+    throw new Error(`models.dev returned invalid JSON: ${errorMessage(error)}`);
   }
   if (!isProviderMap(parsed)) {
     throw new Error("models.dev returned an unexpected catalog shape");
@@ -123,7 +120,7 @@ export function loadCachedCatalog(
     text = Deno.readTextFileSync(cachedPath(dir));
   } catch (error) {
     if (!(error instanceof Deno.errors.NotFound)) {
-      log.debug(`cached catalog unreadable: ${errorText(error)}`);
+      log.debug(`cached catalog unreadable: ${errorMessage(error)}`);
     }
     return undefined;
   }
@@ -131,7 +128,7 @@ export function loadCachedCatalog(
   try {
     parsed = JSON.parse(text) as unknown;
   } catch (error) {
-    log.debug(`cached catalog is not JSON: ${errorText(error)}`);
+    log.debug(`cached catalog is not JSON: ${errorMessage(error)}`);
     return undefined;
   }
   if (!isRecord(parsed) || !isProviderMap(parsed.providers)) {
@@ -164,21 +161,11 @@ export function saveCachedCatalog(
     providers: source.providers,
   };
   try {
-    Deno.mkdirSync(dir, { recursive: true });
-    const path = cachedPath(dir);
-    const tmp = `${path}.tmp`;
-    try {
-      Deno.writeTextFileSync(tmp, JSON.stringify(payload), { mode: 0o600 });
-      Deno.renameSync(tmp, path);
-    } finally {
-      try {
-        Deno.removeSync(tmp);
-      } catch {
-        // Already renamed into place.
-      }
-    }
+    atomicWriteTextFileSync(cachedPath(dir), JSON.stringify(payload), {
+      mode: 0o600,
+    });
   } catch (error) {
-    log.debug(`cached catalog write failed: ${errorText(error)}`);
+    log.debug(`cached catalog write failed: ${errorMessage(error)}`);
   }
 }
 
@@ -220,7 +207,7 @@ export async function resolveCatalogSource(
       },
     };
   } catch (error) {
-    const message = errorText(error);
+    const message = errorMessage(error);
     log.debug(`live catalog unavailable: ${message}`);
     const cached = loadCachedCatalog(options.settings.dir());
     if (cached !== undefined) {

@@ -436,9 +436,16 @@ export type StreamEvent =
   }
   | { type: "done"; message: AssistantMessage; [k: string]: unknown };
 
+/**
+ * The stream one LLM turn yields: an async-iterable of assistant-message
+ * events. Consumers (the agent runtime, `streamText`) only ever for-await
+ * it, so the push/end surface is optional here — the real transport returns
+ * a bare async generator. Producers that need to push events synchronously
+ * use {@link PushableAssistantMessageEventStream} from event-stream.ts.
+ */
 export type AssistantMessageEventStream = AsyncIterable<StreamEvent> & {
   push?(event: StreamEvent): void;
-  end?(message: AssistantMessage): void;
+  end?(message?: AssistantMessage): void;
 };
 
 export interface StreamRequest {
@@ -446,14 +453,6 @@ export interface StreamRequest {
   messages: LlmMessage[];
   tools?: AgentTool[];
   thinkingLevel?: ModelThinkingLevel;
-}
-
-/** The request context of one LLM turn (the shape tests and callers pass as
- * the second argument to a StreamFn). */
-export interface Context {
-  systemPrompt?: string;
-  messages: LlmMessage[];
-  tools?: AgentTool[];
 }
 
 export interface StreamOptions {

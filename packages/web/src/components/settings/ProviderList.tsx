@@ -104,7 +104,7 @@ export function ProviderList({
 
       <CatalogStatusRow onRefreshed={reload} />
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="stack-8">
         {configured.length === 0 && (
           <div className="faint-box">
             まだありません。下の「プロバイダーを追加」から始めてください。

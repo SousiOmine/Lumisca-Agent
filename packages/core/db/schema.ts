@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS messages (
   timestamp INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_id);
 `;
 
 /** Ordered schema migrations. Index i brings the DB from user_version i to
@@ -72,7 +73,18 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec("ALTER TABLE sessions ADD COLUMN goal_status TEXT");
     db.exec("ALTER TABLE sessions ADD COLUMN goal_last_reason TEXT");
   },
+  // Session listing filters by workspace (`listByWorkspace`); without this
+  // index every list is a full table scan.
+  (db) =>
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_id)",
+    ),
 ];
+
+/** The `user_version` a fully migrated database carries: one per migration
+ * applied. Exposed so tests assert the invariant ("the stamp matches the
+ * migration list") instead of a literal that every new migration breaks. */
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** Apply pending migrations, tracked via PRAGMA user_version. */
 export function migrate(db: DatabaseSync): void {

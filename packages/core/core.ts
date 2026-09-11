@@ -10,7 +10,6 @@ import {
 import { resolveSettingsPath } from "./settings/path.ts";
 import {
   type ConnectionEntry,
-  CONNECTIONS_KEY,
   parseConnections,
 } from "./settings/connections.ts";
 import { assertNotProtected, filterExposedSettings } from "./settings/guard.ts";
@@ -41,10 +40,8 @@ import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
 import type { CommandApproval } from "./shared/mod.ts";
 import type { BackgroundCommandInfo } from "./tools/background.ts";
 import {
-  FAST_MODEL_KEY,
+  CONNECTIONS_KEY,
   formatSessionName,
-  IMAGE_MODEL_KEY,
-  parseModelPreference,
   type SavedPrompt,
 } from "./shared/mod.ts";
 import { CoreError } from "./errors.ts";
@@ -144,14 +141,14 @@ export class LumiscaCore {
       new CommandSafety({
         getSetting: (key) => this.settings.get(key),
         setSetting: (key, value) => this.settings.set(key, value),
-        getFastModel: () => this.getFastModel(),
+        getFastModel: () => this.models.getFastModel(),
         streamFn,
       });
     this.pool = overrides.pool ?? new SessionPool({
       requireModel: (provider, modelId) => this.requireModel(provider, modelId),
-      getImageAnalysisModel: () => this.getImageAnalysisModel(),
-      getFastModel: () => this.getFastModel(),
-      getFastModelInfo: () => this.getFastModelInfo(),
+      getImageAnalysisModel: () => this.models.getImageAnalysisModel(),
+      getFastModel: () => this.models.getFastModel(),
+      getFastModelInfo: () => this.models.getFastModelInfo(),
       renameSession: (id, name) => this.setSessionName(id, name),
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
@@ -495,36 +492,6 @@ export class LumiscaCore {
   }
 
   // --- sessions -----------------------------------------------------------
-
-  /** The configured image-analysis model (the `model_image` setting), or
-   * undefined when unset or the model is no longer in the catalog. It
-   * interprets images as text for sessions whose main model cannot see
-   * them (see agent/image-analysis.ts). */
-  getImageAnalysisModel(): Model<Api> | undefined {
-    const pref = parseModelPreference(this.settings.get(IMAGE_MODEL_KEY));
-    if (pref === undefined) return undefined;
-    return this.models.getModel(pref.provider, pref.modelId);
-  }
-
-  /** The configured fast model (the `model_fast` setting), or undefined
-   * when unset or the model is no longer in the catalog. It generates
-   * session titles from the first user message (see agent/title-generation.ts). */
-  getFastModel(): Model<Api> | undefined {
-    return this.getFastModelInfo()?.model;
-  }
-
-  /** The configured fast model with its provider/model ids, or undefined
-   * when unset or the model is no longer in the catalog. Sub-agents (the
-   * task tool) run on this model, with its stored thinking level. */
-  getFastModelInfo():
-    | { provider: string; modelId: string; model: Model<Api> }
-    | undefined {
-    const pref = parseModelPreference(this.settings.get(FAST_MODEL_KEY));
-    if (pref === undefined) return undefined;
-    const model = this.models.getModel(pref.provider, pref.modelId);
-    if (model === undefined) return undefined;
-    return { provider: pref.provider, modelId: pref.modelId, model };
-  }
 
   /** The model a new session would get: the last used model, or the first
    * enabled model. Null when no model can be resolved. Includes the model's

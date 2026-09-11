@@ -32,7 +32,9 @@ export interface AppProps {
 }
 
 export function App({ initialData }: AppProps): ReactElement {
-  const { theme, setTheme } = useTheme(initialData?.theme ?? "dark");
+  const { theme, setTheme, error: themeError } = useTheme(
+    initialData?.theme ?? "dark",
+  );
   const {
     workspaces,
     peers,
@@ -222,12 +224,14 @@ export function App({ initialData }: AppProps): ReactElement {
       {pane.visible && pane.content !== null && (
         <PaneHeader
           content={pane.content}
+          error={pane.error}
           onHide={() => pane.setVisible(false)}
         />
       )}
       {settingsCategory !== null && (
         <SettingsModal
           theme={theme}
+          themeError={themeError}
           onThemeChange={setTheme}
           update={update}
           notifyEnabled={notifyEnabled}

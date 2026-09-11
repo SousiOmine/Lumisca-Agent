@@ -12,6 +12,7 @@ import type {
   Provider,
   ThinkingLevelMap,
 } from "../ai/types.ts";
+import { THINKING_LEVEL_ORDER } from "../shared/providers.ts";
 import { buildProvider, envApiKeyAuth } from "./custom.ts";
 
 /**
@@ -124,15 +125,7 @@ const EFFORT_LEVEL: Record<string, ModelThinkingLevel> = {
 
 /** Every Lumisca thinking level, as the map's key space (the order does not
  * matter — `getSupportedThinkingLevels` filters the shared order). */
-const ALL_LEVELS: readonly ModelThinkingLevel[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
+const ALL_LEVELS: readonly ModelThinkingLevel[] = THINKING_LEVEL_ORDER;
 
 /**
  * Derive the per-model `thinkingLevelMap` from models.dev's

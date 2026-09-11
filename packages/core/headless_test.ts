@@ -1,10 +1,10 @@
 import { assertEquals } from "@std/assert";
 import {
-  type Context,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
+  type StreamRequest,
 } from "@lumisca/core";
 import { type ClientEvent, LumiscaCore } from "./mod.ts";
 import { FAST_MODEL_KEY, serializeModelPreference } from "./shared/mod.ts";
@@ -221,7 +221,7 @@ Deno.test("headless session skips title generation even with a fast model", asyn
 
   const captured: string[] = [];
   faux.setResponses([
-    (_context: Context, _options: unknown, _state: unknown, model: {
+    (_context: StreamRequest, _options: unknown, _state: unknown, model: {
       id: string;
     }) => {
       captured.push(model.id);

@@ -2,6 +2,9 @@ import type { ThemeSetting } from "../../types.ts";
 
 interface AppearancePanelProps {
   theme: ThemeSetting;
+  /** Persist failure of the theme setting; the select already rolled back
+   * to the stored value, so this only explains why. */
+  error: string | null;
   onThemeChange: (theme: ThemeSetting) => void;
 }
 
@@ -14,7 +17,7 @@ const THEME_OPTIONS: { value: ThemeSetting; label: string }[] = [
 /** Settings → 外観. Theme is applied to <html data-theme> immediately and
  * persisted to the server settings, so it survives reloads. */
 export function AppearancePanel(
-  { theme, onThemeChange }: AppearancePanelProps,
+  { theme, error, onThemeChange }: AppearancePanelProps,
 ) {
   return (
     <div className="settings-pane">
@@ -32,6 +35,11 @@ export function AppearancePanel(
           ))}
         </select>
       </div>
+      {error && (
+        <p className="error-text" role="alert">
+          テーマを保存できませんでした: {error}
+        </p>
+      )}
     </div>
   );
 }

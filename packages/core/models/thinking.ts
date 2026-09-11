@@ -1,11 +1,5 @@
 import { THINKING_LEVEL_ORDER, type ThinkingLevel } from "../shared/mod.ts";
 
-/** All levels in pi-ai's order (weakest to strongest, "off" first).
- * Alias of the shared `THINKING_LEVEL_ORDER` so the order has a single
- * source of truth (the web slider sorts with the shared constant). */
-export const ALL_THINKING_LEVELS: readonly ThinkingLevel[] =
-  THINKING_LEVEL_ORDER;
-
 /** Structural subset of pi-ai's Model: everything the level helpers need. */
 export interface ThinkingModel {
   reasoning?: boolean;
@@ -14,7 +8,7 @@ export interface ThinkingModel {
 
 export function isThinkingLevel(value: unknown): value is ThinkingLevel {
   return typeof value === "string" &&
-    (ALL_THINKING_LEVELS as readonly string[]).includes(value);
+    (THINKING_LEVEL_ORDER as readonly string[]).includes(value);
 }
 
 /**
@@ -29,7 +23,7 @@ export function getSupportedThinkingLevels(
   model: ThinkingModel | undefined,
 ): ThinkingLevel[] {
   if (!model?.reasoning) return ["off"];
-  return ALL_THINKING_LEVELS.filter((level) => {
+  return THINKING_LEVEL_ORDER.filter((level) => {
     const mapped = model.thinkingLevelMap?.[level];
     if (mapped === null) return false;
     if (level === "xhigh" || level === "max") return mapped !== undefined;
@@ -50,14 +44,14 @@ export function clampThinkingLevel(
 ): ThinkingLevel {
   const available = getSupportedThinkingLevels(model);
   if (available.includes(level)) return level;
-  const requestedIndex = ALL_THINKING_LEVELS.indexOf(level);
+  const requestedIndex = THINKING_LEVEL_ORDER.indexOf(level);
   if (requestedIndex === -1) return available[available.length - 1] ?? "off";
-  for (let i = requestedIndex; i < ALL_THINKING_LEVELS.length; i++) {
-    const candidate = ALL_THINKING_LEVELS[i]!;
+  for (let i = requestedIndex; i < THINKING_LEVEL_ORDER.length; i++) {
+    const candidate = THINKING_LEVEL_ORDER[i]!;
     if (available.includes(candidate)) return candidate;
   }
   for (let i = requestedIndex - 1; i >= 0; i--) {
-    const candidate = ALL_THINKING_LEVELS[i]!;
+    const candidate = THINKING_LEVEL_ORDER[i]!;
     if (available.includes(candidate)) return candidate;
   }
   return "off";

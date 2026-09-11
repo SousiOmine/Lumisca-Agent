@@ -1,9 +1,12 @@
 import { relative } from "node:path";
-import type { Sandbox } from "../workspace/sandbox.ts";
 import { BUILD_ARTIFACT_DIRS, walkEntries } from "../workspace/walk.ts";
 import { errorMessage } from "../errors.ts";
 import { TOOL_GLOB, TOOL_GREP } from "../shared/mod.ts";
-import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
+import {
+  type GitignoreMatcher,
+  globToRegExp,
+  loadCachedGitignore,
+} from "./gitignore.ts";
 import {
   boolean,
   integer,
@@ -14,13 +17,7 @@ import {
 } from "./schema.ts";
 import { truncate, truncatedNote } from "./truncate.ts";
 import { requireResolved } from "./resolve.ts";
-
-/** Re-exported so existing importers (tests) keep importing from here. */
-export { globToRegExp };
-
-interface FsToolContext {
-  sandbox: Sandbox;
-}
+import type { FsToolContext } from "./context.ts";
 
 /** Files larger than this are skipped by grep (avoid loading huge files). */
 const MAX_GREP_FILE_SIZE = 8 * 1024 * 1024;
@@ -115,7 +112,7 @@ export function createGrepTool(
 
       const gitignore = params.gitignore === false
         ? undefined
-        : await GitignoreMatcher.load(ctx.sandbox.roots);
+        : await loadCachedGitignore(ctx.sandbox);
       const maxResults = Math.min(params.max_results ?? 200, 1000);
 
       const lines: string[] = [];
@@ -304,7 +301,7 @@ export function createGlobTool(
       }
       const gitignore = params.gitignore === false
         ? undefined
-        : await GitignoreMatcher.load(ctx.sandbox.roots);
+        : await loadCachedGitignore(ctx.sandbox);
       const maxResults = Math.min(params.max_results ?? 500, 2000);
       const walk = (root: string) =>
         walkFiles(root, {

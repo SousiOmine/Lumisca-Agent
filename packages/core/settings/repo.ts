@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseJsonc, SettingsFileError } from "./jsonc.ts";
+import { atomicWriteTextFileSync } from "../fs.ts";
 export { THEME_KEY } from "../shared/mod.ts";
 
 export interface SettingsRepo {
@@ -37,22 +38,11 @@ export function createFileSettingsRepo(path: string): SettingsRepo {
   const data = loadFile(path);
 
   const save = () => {
-    Deno.mkdirSync(dirname(path), { recursive: true });
-    const tmp = `${path}.tmp`;
-    try {
-      Deno.writeTextFileSync(
-        tmp,
-        `${JSON.stringify(Object.fromEntries(data), null, 2)}\n`,
-        { mode: 0o600 },
-      );
-      Deno.renameSync(tmp, path);
-    } finally {
-      try {
-        Deno.removeSync(tmp);
-      } catch {
-        // Already renamed into place.
-      }
-    }
+    atomicWriteTextFileSync(
+      path,
+      `${JSON.stringify(Object.fromEntries(data), null, 2)}\n`,
+      { mode: 0o600 },
+    );
   };
 
   return {

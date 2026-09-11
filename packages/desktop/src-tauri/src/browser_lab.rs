@@ -57,39 +57,25 @@ use std::time::Duration;
 
 // Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
 // `open` on every platform; only the CDP calls themselves are Windows-only.
+use lumisca_browser_rpc::cdp;
 use lumisca_browser_rpc::emulation;
 use lumisca_browser_rpc::eval::{
     driver, probe_method_of, to_js_literal, EVAL_TIMEOUT, WAIT_HEADROOM,
 };
-#[cfg(windows)]
-use lumisca_browser_rpc::limits;
 use lumisca_browser_rpc::server::RpcHandler;
 use lumisca_browser_rpc::{error_codes, methods, policy, probe, RpcError};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
 
+use crate::pane;
 use crate::AppState;
 
 /// Label of the lab window. Deliberately NOT covered by any capability
 /// file, so the lab page can never call Tauri IPC (see the module docs).
 pub const LAB_WINDOW_LABEL: &str = "browser-lab";
-/// The lab is overlaid on the app's main window (see tauri.conf.json).
-const MAIN_WINDOW_LABEL: &str = "main";
+
 /// The lumisca:// shell bridge must never be reachable from the lab.
 const BLOCKED_SCHEMES: [&str; 1] = ["lumisca:"];
-/// Pane width in logical pixels. Must match `--pane-width`
-/// in packages/web/src/styles/tokens.css (the Preact UI reserves this space).
-/// The pane itself is content-agnostic: today it hosts the browser lab,
-/// later surfaces can reuse the same dock.
-const PANE_WIDTH: f64 = 460.0;
-/// Height of the pane's header strip (rendered by the Preact UI in the
-/// main window) in logical pixels. The pane window is positioned BELOW
-/// this strip so the header never overlaps it. Must match
-/// `--pane-header-height` in packages/web/src/styles/tokens.css.
-const PANE_HEADER_HEIGHT: f64 = 36.0;
-/// Height of the app's title bar in logical pixels. Must match
-/// `--tab-height` in packages/web/src/styles/tokens.css (the pane starts below it).
-const APP_TITLEBAR_HEIGHT: f64 = 40.0;
 
 /// How long the page gets to answer a CDP method call.
 const CDP_TIMEOUT: Duration = Duration::from_secs(8);
@@ -213,124 +199,6 @@ impl RpcHandler for LabHandler {
     }
 }
 
-/// Position and size the lab window so it overlays the main window's
-/// client area as the right-side pane: below the title bar and the
-/// pane's header strip (both rendered by the main window's webview),
-/// `PANE_WIDTH` wide, down to the bottom edge. Coordinates are
-/// logical (tauri's set_position/set_size take logical values); the
-/// main window's inner position/size are physical, converted here.
-fn place_pane(pane: &WebviewWindow, main: &WebviewWindow) {
-    let scale = main.scale_factor().unwrap_or(1.0);
-    let inner_pos = main.inner_position().unwrap_or_default();
-    let inner_size = main.inner_size().unwrap_or_default();
-    let top = APP_TITLEBAR_HEIGHT + PANE_HEADER_HEIGHT;
-    let x = (inner_pos.x as f64 + inner_size.width as f64) / scale - PANE_WIDTH;
-    let y = inner_pos.y as f64 / scale + top;
-    let height = (inner_size.height as f64 / scale - top).max(0.0);
-    let _ = pane.set_position(tauri::LogicalPosition::new(x, y));
-    let _ = pane.set_size(tauri::LogicalSize::new(PANE_WIDTH, height));
-}
-
-/// The lab window's logical (CSS-pixel) size — the surface the emulated
-/// viewport must fit into. Coordinates are physical in tauri's
-/// inner_size; scale_factor converts (the pane overlays the main window,
-/// so both share one monitor). Windows-only: the emulation that consumes
-/// it does not exist elsewhere.
-#[cfg(windows)]
-fn pane_size(pane: &WebviewWindow) -> (f64, f64) {
-    let factor = pane.scale_factor().unwrap_or(1.0);
-    let size = pane.inner_size().unwrap_or_default();
-    (size.width as f64 / factor, size.height as f64 / factor)
-}
-
-/// Bring the lab window above the main window without activating it.
-/// Only meaningful on Windows (the z-order of a child window cannot be
-/// raised on other platforms; macOS keeps the lab window key when
-/// clicked, Linux is X11-dependent — the pane still overlays correctly
-/// in the common cases).
-#[cfg(windows)]
-fn raise_pane(pane: &WebviewWindow) {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        SetWindowPos, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    };
-    if let Ok(hwnd) = pane.hwnd() {
-        unsafe {
-            let _ = SetWindowPos(
-                hwnd,
-                Some(HWND_TOP),
-                0,
-                0,
-                0,
-                0,
-                SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
-            );
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn raise_pane(_pane: &WebviewWindow) {}
-
-/// Pin the lab pane to the main window's virtual desktop (Windows).
-///
-/// The pane is owned by the main window (see `ensure_window`), which
-/// binds it to the owner's virtual desktop in the shell's tracking —
-/// the real fix for the pane lingering on other desktops after a
-/// switch. This function enforces that binding explicitly: it asks the
-/// shell (`IVirtualDesktopManager`) which desktop the main window lives
-/// on and moves the pane there. It runs right after creation, on every
-/// open, whenever the pane is shown, and on every sync, so a desktop
-/// switch at any point in the pane's life cannot leave it behind (task
-/// view would otherwise show the borderless pane on every desktop).
-/// Moving a window that is already there is a no-op, and any failure
-/// (no virtual desktop support, a window destroyed meanwhile) only
-/// skips the move.
-#[cfg(windows)]
-fn match_main_desktop(pane: &WebviewWindow, main: &WebviewWindow) {
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
-        COINIT_APARTMENTTHREADED,
-    };
-    use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
-
-    // ensure_window runs on the RPC thread, which is not COM-initialized:
-    // initialize this thread's apartment and release it again below
-    // (S_OK = we initialized it; S_FALSE = it was already initialized in
-    // the same mode, e.g. sync() on the app's main thread, and is not
-    // ours to release; anything else skips the move entirely).
-    let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-    if init.is_err() {
-        return;
-    }
-    let must_uninit = init.0 == 0;
-    let (Ok(pane_hwnd), Ok(main_hwnd)) = (pane.hwnd(), main.hwnd()) else {
-        if must_uninit {
-            unsafe { CoUninitialize() };
-        }
-        return;
-    };
-    // The manager is dropped before CoUninitialize below: releasing the
-    // COM interface after the apartment went away would be a use-after-
-    // uninit.
-    if let Ok(manager) = unsafe {
-        CoCreateInstance::<_, IVirtualDesktopManager>(
-            &VirtualDesktopManager,
-            None,
-            CLSCTX_INPROC_SERVER,
-        )
-    } {
-        if let Ok(desktop) = unsafe { manager.GetWindowDesktopId(main_hwnd) } {
-            let _ = unsafe { manager.MoveWindowToDesktop(pane_hwnd, &desktop) };
-        }
-    }
-    if must_uninit {
-        unsafe { CoUninitialize() };
-    }
-}
-
-#[cfg(not(windows))]
-fn match_main_desktop(_pane: &WebviewWindow, _main: &WebviewWindow) {}
-
 impl LabCore {
     /// Create the lab window on demand (idempotent per call — this IS
     /// open()'s job), or navigate the existing one. Runs on the RPC
@@ -341,9 +209,7 @@ impl LabCore {
     fn ensure_window(&self, url: &str, visible: bool) -> Result<WebviewWindow, RpcError> {
         let parsed =
             url::Url::parse(url).map_err(|e| RpcError::invalid(format!("URL が不正です: {e}")))?;
-        let main = self
-            .app
-            .get_webview_window(MAIN_WINDOW_LABEL)
+        let main = pane::main_window(&self.app)
             .ok_or_else(|| RpcError::internal("main ウィンドウがありません"))?;
         // Self-heal: if the manager no longer knows the lab (destroyed
         // outside close(), e.g. after a WebView2 crash), forget the stale
@@ -358,8 +224,8 @@ impl LabCore {
             .clone()
         {
             let _ = window.navigate(parsed);
-            place_pane(&window, &main);
-            match_main_desktop(&window, &main);
+            pane::place(&window, &main);
+            pane::match_main_desktop(&window, &main);
             self.apply_visibility(&window, visible)?;
             *self.visible.lock().unwrap_or_else(|e| e.into_inner()) = visible;
             return Ok(window);
@@ -407,9 +273,9 @@ impl LabCore {
         // Pin before the first show: the window is created hidden, so a
         // desktop switch mid-creation can never flash the borderless
         // pane on the wrong desktop.
-        place_pane(&window, &main);
-        match_main_desktop(&window, &main);
-        raise_pane(&window);
+        pane::place(&window, &main);
+        pane::match_main_desktop(&window, &main);
+        pane::raise(&window);
         self.apply_visibility(&window, visible)?;
         *self.window.lock().unwrap_or_else(|e| e.into_inner()) = Some(window.clone());
         *self.visible.lock().unwrap_or_else(|e| e.into_inner()) = visible;
@@ -430,8 +296,8 @@ impl LabCore {
             // to the main window's desktop, but re-asserting it costs
             // nothing and covers a main window that moved to another
             // desktop while the pane was hidden.
-            if let Some(main) = self.app.get_webview_window(MAIN_WINDOW_LABEL) {
-                match_main_desktop(window, &main);
+            if let Some(main) = pane::main_window(&self.app) {
+                pane::match_main_desktop(window, &main);
             }
             Ok(())
         } else {
@@ -455,18 +321,18 @@ impl LabCore {
         else {
             return;
         };
-        let Some(main) = self.app.get_webview_window(MAIN_WINDOW_LABEL) else {
+        let Some(main) = pane::main_window(&self.app) else {
             return;
         };
-        place_pane(&pane, &main);
-        match_main_desktop(&pane, &main);
+        pane::place(&pane, &main);
+        pane::match_main_desktop(&pane, &main);
         self.reapply_emulation(&pane);
         // Only raise when the main window holds focus: raising while
         // another app is active would float the lab over that app, and
         // raising while the lab itself is focused is unnecessary (it is
         // already on top by virtue of being the active window).
         if main.is_focused().unwrap_or(false) {
-            raise_pane(&pane);
+            pane::raise(&pane);
         }
     }
 
@@ -481,7 +347,7 @@ impl LabCore {
             Some(vp) => vp,
             None => return,
         };
-        let (area_w, area_h) = pane_size(pane);
+        let (area_w, area_h) = pane::size(pane);
         let scale = emulation::fit_scale(width, height, area_w, area_h);
         if *self.applied_scale.lock().unwrap_or_else(|e| e.into_inner()) == Some(scale) {
             return;
@@ -548,17 +414,14 @@ impl LabCore {
             .unwrap_or_else(|e| e.into_inner())
             .clone()
         {
-            let _ = if visible {
-                window.show()
-            } else {
-                window.hide()
-            };
-            // Same re-pin as apply_visibility: showing the pane (here
-            // from the header) re-asserts the main window's desktop.
-            if visible {
-                if let Some(main) = self.app.get_webview_window(MAIN_WINDOW_LABEL) {
-                    match_main_desktop(&window, &main);
-                }
+            // One show/hide path: apply_visibility owns the re-pin and the
+            // error messages. A failure is reported to the caller (the web
+            // UI shows it) instead of being dropped, which would leave the
+            // toggle looking stuck.
+            if let Err(error) = self.apply_visibility(&window, visible) {
+                let mut state = self.state_json();
+                state["error"] = json!(error.message);
+                return state;
             }
             *self.visible.lock().unwrap_or_else(|e| e.into_inner()) = visible;
         }
@@ -622,7 +485,7 @@ impl LabHandler {
                 Some(vp) => vp,
                 None => return Ok(()),
             };
-            let (area_w, area_h) = pane_size(window);
+            let (area_w, area_h) = pane::size(window);
             let scale = emulation::fit_scale(width, height, area_w, area_h);
             let params = emulation::device_metrics_params(width, height, scale);
             self.cdp_call_sync(
@@ -768,28 +631,9 @@ impl LabHandler {
     ) -> Result<Value, RpcError> {
         let probe_call = format!("return p.wait({});", to_js_literal(params));
         let expression = driver(&probe_call);
-        let cdp_params = json!({
-            "expression": expression,
-            "awaitPromise": true,
-            "returnByValue": true,
-        });
+        let cdp_params = cdp::evaluate_params(&expression);
         let answer = self.cdp_call_sync(window, "Runtime.evaluate", &cdp_params, timeout)?;
-        if let Some(details) = answer.pointer("/result/exceptionDetails") {
-            let text = details
-                .pointer("/exception/text")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown exception");
-            return Err(RpcError::new(
-                error_codes::PROBE_ERROR,
-                format!("プローブ例外: {text}"),
-            ));
-        }
-        // WebView2 returns the DevTools reply without the envelope:
-        // {"result": {"type": "object", "value": {...}}}.
-        answer
-            .pointer("/result/value")
-            .cloned()
-            .ok_or_else(|| RpcError::new(error_codes::PROBE_ERROR, "CDP の応答形式が不正です"))
+        cdp::evaluate_value(&answer)
     }
 
     /// Screenshot: WebView2 CDP on Windows; explicit unsupported error
@@ -826,44 +670,10 @@ impl LabHandler {
             .unwrap_or("png");
         let quality = params.get("quality").and_then(Value::as_u64);
         let viewport = *self.core.viewport.lock().unwrap_or_else(|e| e.into_inner());
-        let cdp_params = match viewport {
-            Some((width, height)) => {
-                emulation::capture_screenshot_params(width, height, format, quality)
-            }
-            None => match format {
-                "png" => json!({ "format": "png", "fromSurface": true }),
-                "jpeg" => json!({
-                    "format": "jpeg",
-                    "quality": quality.unwrap_or(80).clamp(1, 100),
-                    "fromSurface": true,
-                }),
-                other => {
-                    return Err(RpcError::invalid(format!(
-                        "不明な format: {other} (png / jpeg)"
-                    )));
-                }
-            },
-        };
+        let cdp_params = cdp::screenshot_params(format, quality, viewport)?;
         let answer =
             self.cdp_call_sync(window, "Page.captureScreenshot", &cdp_params, CDP_TIMEOUT)?;
-        let data = answer.get("data").and_then(Value::as_str).ok_or_else(|| {
-            RpcError::new(error_codes::ACTION_FAILED, "CDP は画像を返しませんでした")
-        })?;
-        if data.len() > limits::MAX_SCREENSHOT_BYTES {
-            return Err(RpcError::too_large(format!(
-                "スクリーンショットが大きすぎます ({} bytes)",
-                data.len()
-            )));
-        }
-        let mut result = json!({
-            "mimeType": if format == "png" { "image/png" } else { "image/jpeg" },
-            "data": data,
-        });
-        if let Some((width, height)) = viewport {
-            result["width"] = json!(width);
-            result["height"] = json!(height);
-        }
-        Ok(result)
+        cdp::screenshot_result(format, viewport, &answer)
     }
 
     /// One CDP method call with a bounded wait. WebView2's controller and

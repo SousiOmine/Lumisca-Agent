@@ -9,6 +9,8 @@ interface PaneHeaderProps {
   /** Hide the pane. The hosted surface keeps running (the agent's
    * tools keep working in the background). */
   onHide: () => void;
+  /** Why the last show/hide failed, if it did. */
+  error?: string;
 }
 
 /** The header strip of the docked pane (the right-side panel hosting
@@ -16,7 +18,7 @@ interface PaneHeaderProps {
  * by the app's own webview directly ABOVE the native pane window (which
  * starts below this strip), so it never overlaps it and stays fully
  * clickable. */
-export function PaneHeader({ content, onHide }: PaneHeaderProps) {
+export function PaneHeader({ content, onHide, error }: PaneHeaderProps) {
   return (
     <div className="pane-header">
       <span className="pane-icon" aria-hidden="true">
@@ -25,6 +27,11 @@ export function PaneHeader({ content, onHide }: PaneHeaderProps) {
       {content.label !== null && (
         <span className="pane-label" title={content.label}>
           {content.label}
+        </span>
+      )}
+      {error !== undefined && (
+        <span className="pane-error error-text" role="alert" title={error}>
+          ペインを操作できません
         </span>
       )}
       <button

@@ -5,9 +5,20 @@ import type { Workspace } from "../types/workspace.ts";
 // ---- errors ---------------------------------------------------------------
 
 /** Human-readable message of any thrown value. Shared by the core, the
- * server layer, the CLI, and the web UI so the pattern never varies. */
+ * server layer, the CLI, and the web UI so the rendering never varies.
+ *
+ * Cross-realm errors (thrown inside a `vm` context, e.g. the eval tool's
+ * sandbox) are not `instanceof Error` here, so their `message` is read
+ * structurally; anything else falls back to `String()`, which keeps the
+ * value's own `toString` (the previous behavior). */
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error !== null) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.length > 0) return message;
+  }
+  return String(error);
 }
 
 // ---- json -----------------------------------------------------------------

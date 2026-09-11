@@ -36,12 +36,16 @@ import {
 } from "./catalog-source.ts";
 import { clampThinkingLevel } from "./thinking.ts";
 import { setApiKey } from "../settings/credentials.ts";
+import {
+  FAST_MODEL_KEY,
+  IMAGE_MODEL_KEY,
+  MODEL_ENABLED_PREFIX,
+  MODEL_THINKING_PREFIX,
+  parseModelPreference,
+} from "../shared/settings-keys.ts";
 import { createLogger } from "../log.ts";
 
 const log = createLogger("catalog");
-
-const ENABLED_PREFIX = "model_enabled:";
-const THINKING_PREFIX = "model_thinking:";
 
 /** Owns the Lumisca model registry and resolves providers/models. */
 export class ModelManager {
@@ -142,6 +146,37 @@ export class ModelManager {
   ): Model<Api> | undefined {
     return this.models.getModel(providerId, modelId) ??
       this.retiredModels.get(providerId)?.get(modelId);
+  }
+
+  /** The configured image-analysis model (the `model_image` setting), or
+   * undefined when unset or the model is no longer in the catalog. It
+   * interprets images as text for sessions whose main model cannot see
+   * them (see agent/image-analysis.ts). */
+  getImageAnalysisModel(): Model<Api> | undefined {
+    const pref = parseModelPreference(this.settings.get(IMAGE_MODEL_KEY));
+    if (pref === undefined) return undefined;
+    return this.getModel(pref.provider, pref.modelId);
+  }
+
+  /** The configured fast model (the `model_fast` setting), or undefined
+   * when unset or the model is no longer in the catalog. It generates
+   * session titles from the first user message (see
+   * agent/title-generation.ts) and runs sub-agents. */
+  getFastModel(): Model<Api> | undefined {
+    return this.getFastModelInfo()?.model;
+  }
+
+  /** The configured fast model with its provider/model ids, or undefined
+   * when unset or the model is no longer in the catalog. Sub-agents (the
+   * task tool) run on this model, with its stored thinking level. */
+  getFastModelInfo():
+    | { provider: string; modelId: string; model: Model<Api> }
+    | undefined {
+    const pref = parseModelPreference(this.settings.get(FAST_MODEL_KEY));
+    if (pref === undefined) return undefined;
+    const model = this.getModel(pref.provider, pref.modelId);
+    if (model === undefined) return undefined;
+    return { provider: pref.provider, modelId: pref.modelId, model };
   }
 
   /** Resolve a provider for existing sessions, including retired ones.
@@ -435,7 +470,7 @@ export class ModelManager {
   /** Enable or disable a model for the UI. Disabled models are hidden
    * from model pickers. Enabled is the default (nothing stored). */
   setModelEnabled(providerId: string, modelId: string, enabled: boolean): void {
-    const key = `${ENABLED_PREFIX}${providerId}:${modelId}`;
+    const key = `${MODEL_ENABLED_PREFIX}${providerId}:${modelId}`;
     if (enabled) {
       this.settings.delete(key);
     } else {
@@ -444,7 +479,9 @@ export class ModelManager {
   }
 
   isModelEnabled(providerId: string, modelId: string): boolean {
-    return this.settings.get(`${ENABLED_PREFIX}${providerId}:${modelId}`) !==
+    return this.settings.get(
+      `${MODEL_ENABLED_PREFIX}${providerId}:${modelId}`,
+    ) !==
       "0";
   }
 
@@ -455,7 +492,7 @@ export class ModelManager {
   getThinkingLevel(providerId: string, modelId: string): ThinkingLevel {
     const model = this.getModelWithRetired(providerId, modelId);
     const stored = this.settings.get(
-      `${THINKING_PREFIX}${providerId}:${modelId}`,
+      `${MODEL_THINKING_PREFIX}${providerId}:${modelId}`,
     );
     return clampThinkingLevel(model, stored as ThinkingLevel ?? "off");
   }
@@ -471,7 +508,7 @@ export class ModelManager {
   ): ThinkingLevel {
     const model = this.getModelWithRetired(providerId, modelId);
     const effective = clampThinkingLevel(model, level);
-    const key = `${THINKING_PREFIX}${providerId}:${modelId}`;
+    const key = `${MODEL_THINKING_PREFIX}${providerId}:${modelId}`;
     if (effective === "off") {
       this.settings.delete(key);
     } else {

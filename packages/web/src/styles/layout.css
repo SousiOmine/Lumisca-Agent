@@ -88,3 +88,11 @@
   background: var(--surface-3);
   color: var(--text);
 }
+
+/* Show/hide failure of the pane: the pane stays where it was, so the
+ * header says why instead of the toggle looking stuck. */
+.pane-error {
+  flex: none;
+  font-size: 11px;
+  white-space: nowrap;
+}

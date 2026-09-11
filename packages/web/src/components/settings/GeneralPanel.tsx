@@ -3,6 +3,8 @@ import type { UpdateStatus } from "../../shell.ts";
 interface GeneralPanelProps {
   /** null = desktop shell unreachable (plain browser). */
   status: UpdateStatus | null;
+  /** Last shell-bridge failure, if any (the status may be stale). */
+  bridgeError: string | null;
   onSetAuto: (enabled: boolean) => void;
   onCheck: () => void;
   onDownload: () => void;
@@ -24,6 +26,7 @@ function formatBytes(bytes: number | null): string {
 export function GeneralPanel(
   {
     status,
+    bridgeError,
     onSetAuto,
     onCheck,
     onDownload,
@@ -156,6 +159,11 @@ export function GeneralPanel(
         </p>
       )}
       {status.error && <div className="error-text">{status.error}</div>}
+      {bridgeError && (
+        <div className="error-text" role="alert">
+          デスクトップシェルと通信できません: {bridgeError}
+        </div>
+      )}
 
       <div className="update-item">
         <div className="update-info">

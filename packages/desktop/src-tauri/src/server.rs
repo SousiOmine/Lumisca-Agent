@@ -4,9 +4,7 @@
 //! `crate::AppState` (defined in lib.rs); this module only touches it
 //! through the `AppHandle`.
 
-use std::collections::VecDeque;
 use std::ffi::OsStr;
-use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -15,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
+use crate::server_log;
 use crate::window::navigate_main;
 use crate::{AppState, StartupStatus, StartupTask};
 
@@ -31,100 +30,6 @@ const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// abandoned and a fresh one is tried. 3s covers a cold deno run; a
 /// healthy server answers in well under a second.
 const LOCAL_START_TIMEOUT: Duration = Duration::from_secs(3);
-/// Server log retention: the in-memory tail (surfaced to the UI for
-/// copy-paste) and the on-disk log file (kept for post-mortem).
-const SERVER_LOG_TAIL_LINES: usize = 500;
-const SERVER_LOG_FILE_LINES: usize = 2000;
-/// bytes of one captured server log line: a runaway tool log line must
-/// not balloon the ring buffer.
-const SERVER_LOG_LINE_MAX: usize = 4096;
-
-/// One captured line of the local server's combined stdout/stderr.
-#[derive(Clone)]
-pub(crate) struct ServerLogLine {
-    stream: &'static str,
-    text: String,
-}
-
-/// Ring buffer of the local server's recent output (stdout+stderr merged),
-/// plus the append-only log file path. The tail is what the UI offers for
-/// copy-paste when the server dies mid-session ("勝手に落ちる" reports);
-/// the file keeps a longer history for post-mortem. Created once per app
-/// run in setup (before the server starts), shared by the log-pump thread
-/// and the shell bridge.
-pub(crate) struct ServerLog {
-    lines: Mutex<VecDeque<ServerLogLine>>,
-    file: Mutex<Option<std::fs::File>>,
-}
-
-impl ServerLog {
-    pub(crate) fn new(app: &AppHandle) -> Self {
-        let file = server_log_path(app).and_then(|path| {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).ok()?;
-            }
-            OpenOptions::new().create(true).append(true).open(path).ok()
-        });
-        Self {
-            lines: Mutex::new(VecDeque::new()),
-            file: Mutex::new(file),
-        }
-    }
-
-    pub(crate) fn push(&self, stream: &'static str, text: String) {
-        {
-            let mut lines = self.lines.lock().unwrap_or_else(|e| e.into_inner());
-            lines.push_back(ServerLogLine {
-                stream,
-                text: text.clone(),
-            });
-            while lines.len() > SERVER_LOG_TAIL_LINES {
-                lines.pop_front();
-            }
-        }
-        if let Some(file) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            let _ = writeln!(file, "[{stream}] {text}");
-            let _ = file.flush();
-        }
-    }
-
-    /// The recent output as plain text (oldest first), for the UI's
-    /// copy-paste. Each line is prefixed with its stream so stderr lines
-    /// (where Deno prints uncaught errors) stand out.
-    pub(crate) fn tail_text(&self) -> String {
-        let lines = self.lines.lock().unwrap_or_else(|e| e.into_inner());
-        let mut out = String::new();
-        for line in lines.iter() {
-            out.push_str(&format!("[{}] {}\n", line.stream, line.text));
-        }
-        out
-    }
-
-    pub(crate) fn clear(&self) {
-        self.lines.lock().unwrap_or_else(|e| e.into_inner()).clear();
-    }
-}
-
-fn server_log_path(app: &AppHandle) -> Option<PathBuf> {
-    Some(app_data_dir(app).join("server.log"))
-}
-
-/// Truncate the on-disk log to its last lines so it cannot grow without
-/// bound across app runs. Best-effort: a failure only leaves a longer file.
-pub(crate) fn trim_server_log_file(app: &AppHandle) {
-    let Some(path) = server_log_path(app) else {
-        return;
-    };
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return;
-    };
-    let lines: Vec<&str> = content.lines().collect();
-    if lines.len() <= SERVER_LOG_FILE_LINES {
-        return;
-    }
-    let kept = lines[lines.len() - SERVER_LOG_FILE_LINES..].join("\n");
-    let _ = std::fs::write(&path, kept + "\n");
-}
 
 /// A locally spawned server process.
 pub(crate) struct LocalServer {
@@ -202,41 +107,6 @@ pub(crate) fn local_server_status(app: &AppHandle) -> LocalServerStatus {
             log_tail: tail.clone(),
         },
     }
-}
-
-/// Push one captured server output line into the shared log.
-fn push_server_log(app: &AppHandle, stream: &'static str, text: String) {
-    if let Some(state) = app.try_state::<AppState>() {
-        state
-            .server_log
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(stream, text);
-    }
-}
-
-/// Clear the shared server log tail (a fresh start must not show the
-/// previous instance's output).
-fn clear_server_log(app: &AppHandle) {
-    if let Some(state) = app.try_state::<AppState>() {
-        state
-            .server_log
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
-    }
-}
-
-/// Read the shared server log tail as text (for the bridge).
-fn server_log_tail(app: &AppHandle) -> String {
-    app.try_state::<AppState>()
-        .map(|s| {
-            s.server_log
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .tail_text()
-        })
-        .unwrap_or_default()
 }
 
 /// Create a child process without letting console executables open a
@@ -545,17 +415,13 @@ fn pump_server_stream(handle: &AppHandle, pipe: impl Read + Send + 'static, stre
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
         }
-        let mut text = String::from_utf8_lossy(&bytes).into_owned();
-        if text.len() > SERVER_LOG_LINE_MAX {
-            text.truncate(SERVER_LOG_LINE_MAX);
-            text.push_str("…[truncated]");
-        }
+        let text = server_log::truncate_line(String::from_utf8_lossy(&bytes).into_owned());
         // try_state: the app may already be torn down when the last
         // lines arrive (child exit races app exit).
         if handle.try_state::<AppState>().is_none() {
             break;
         }
-        push_server_log(handle, stream, text);
+        server_log::push(handle, stream, text);
     }
 }
 
@@ -635,7 +501,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
     let stored = state
         .local
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .as_ref()
         .map(|l| (l.port, l.token.clone()));
     if let Some((port, token)) = stored {
@@ -651,7 +517,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
     // A fresh start gets a fresh tail: the previous instance's output must
     // not masquerade as the new one's when diagnosing a crash loop.
     // (After the reuse check above, so a healthy reuse never wipes it.)
-    clear_server_log(app);
+    server_log::clear(app);
     let token = generate_token();
     let mut server_child: Option<Child> = None;
     let mut server_port: Option<u16> = None;
@@ -667,7 +533,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         // Keep the failed attempt's tail: it is usually the actual reason
         // (port clash, missing Deno, listen error) and would otherwise be
         // cleared by the next attempt before anyone can read it.
-        last_detail = last_log_lines(&server_log_tail(app), 20);
+        last_detail = last_log_lines(&server_log::tail(app), 20);
         kill_process_tree(&mut child);
         if attempt == 9 {
             return Err(startup_error_message(&last_detail));
@@ -763,7 +629,7 @@ pub(crate) fn start_local_server_async(app: &AppHandle) {
                     .state::<AppState>()
                     .last_remote
                     .lock()
-                    .unwrap()
+                    .unwrap_or_else(|e| e.into_inner())
                     .is_some();
                 if !remote {
                     let _ = navigate_main(&inside, &url);

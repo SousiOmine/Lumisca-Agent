@@ -8,11 +8,11 @@ import {
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "./retry-policy.ts";
 import {
-  isRetryableRateLimit,
   MAX_RATE_LIMIT_RETRIES,
   rateLimitRetryDelayMs,
   sleepAbortable,
-} from "./llm-retry.ts";
+} from "../ai/rate-limit.ts";
+import { isRetryableRateLimit } from "./llm-retry.ts";
 import type { NotificationMessage } from "../types/notification.ts";
 
 /** Outcome of classifying one assistant turn for retry. */

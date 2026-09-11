@@ -1,13 +1,23 @@
+/**
+ * The web package's single import site for domain types.
+ *
+ * The canonical definitions live in `@lumisca/core`; the list below is the
+ * one place they are re-exported, so web modules never import the core
+ * barrel directly (which would also drag in runtime modules). Local
+ * declarations reference them through the `core` namespace below, so the
+ * list is not repeated.
+ */
+import type * as core from "@lumisca/core";
 import type { Message, ToolCall } from "@lumisca/core";
 
 /** Shared domain types; single source of truth in packages/core. */
-import type {
+export type {
   AgentMessage,
   AskAnswer,
   AskQuestion,
   BackgroundCommandInfo,
   CatalogStatus,
-  ClientEvent as CoreClientEvent,
+  ClientEvent,
   ConnectionEntry,
   GoalInfo,
   McpInfo,
@@ -38,51 +48,13 @@ import type {
   Workspace,
   WorkspaceFileEntry,
 } from "@lumisca/core";
-export type {
-  AgentMessage,
-  AskAnswer,
-  AskQuestion,
-  BackgroundCommandInfo,
-  CatalogStatus,
-  ConnectionEntry,
-  GoalInfo,
-  McpInfo,
-  McpServerInfo,
-  ModelInfo,
-  ModeMessage,
-  ModePrompt,
-  NotificationKind,
-  NotificationMessage,
-  NotificationStatus,
-  ProviderAuthType,
-  ProviderInfo,
-  ProviderLoginEvent,
-  ProviderLoginPrompt,
-  ProviderLoginSnapshot,
-  SavedPrompt,
-  SessionInfo,
-  SubagentStatus,
-  SubagentType,
-  TaskInfo,
-  ThemeSetting,
-  ThinkingLevel,
-  TodoPhase,
-  TodoStatus,
-  TodoTask,
-  UserProviderInput,
-  UserProviderSummary,
-  Workspace,
-  WorkspaceFileEntry,
-};
-
-export type ClientEvent = CoreClientEvent;
 
 /** A workspace as shown in the federated workspace picker: which peer owns
  * it ("" = this server) and how that peer is named. */
 export interface FederatedWorkspace {
   peerId: string;
   peerName: string;
-  workspace: Workspace;
+  workspace: core.Workspace;
 }
 
 /** Peer reachability, reported alongside the merged workspace list. */
@@ -118,7 +90,7 @@ export type { InitialData } from "@lumisca/core/shared";
  * tied to the tool call that asked them. */
 export interface PendingQuestion {
   toolCallId: string;
-  questions: AskQuestion[];
+  questions: core.AskQuestion[];
 }
 
 /** One sub-agent task (the `task` tool) as shown in the tasks panel. The
@@ -126,9 +98,9 @@ export interface PendingQuestion {
  * task runs, and seeded from the resync snapshot's tail. */
 export interface TaskView {
   agentId: string;
-  subagentType: SubagentType;
+  subagentType: core.SubagentType;
   description: string;
-  status: SubagentStatus;
+  status: core.SubagentStatus;
   liveText: string;
 }
 
@@ -136,14 +108,14 @@ export interface TaskView {
  * panel: the command's info plus the live output text accumulated from
  * `background_delta` events while it runs (the resync snapshot seeds the
  * tail only at completion). */
-export interface BackgroundView extends BackgroundCommandInfo {
+export interface BackgroundView extends core.BackgroundCommandInfo {
   liveText: string;
 }
 
 /** Live state of one open session tab. */
 export interface SessionView {
-  info: SessionInfo;
-  messages: AgentMessage[];
+  info: core.SessionInfo;
+  messages: core.AgentMessage[];
   streamingText: string;
   runningTools: Map<string, string>; // toolCallId -> toolName
   /** Questions the agent asked (ask tool) that are still waiting for the
@@ -152,7 +124,7 @@ export interface SessionView {
   pendingQuestions: PendingQuestion[];
   /** The session's todo plan (todo tool), shown in the progress panel.
    * Replaced wholesale by every `todo` event. */
-  todos: TodoPhase[];
+  todos: core.TodoPhase[];
   /** The session's sub-agent tasks (task tool), shown in the tasks panel.
    * Added by `task_start`, fed by `task_delta`, settled by `task_end`; the
    * resync replaces the list from the server snapshot. */
@@ -165,7 +137,7 @@ export interface SessionView {
   /** The session's active goal (`/goal` mode), shown in the right-side
    * goal panel. Set by `goal_start`/`goal_progress`, cleared by
    * `goal_done`; the resync replaces it from the server snapshot. */
-  goal?: GoalInfo;
+  goal?: core.GoalInfo;
   /** Keys (role:timestamp) of messages deleted by rewind. Kept so a later
    * resync (merge is append-only) cannot resurrect them. */
   removed: Set<string>;
@@ -180,8 +152,8 @@ export interface SessionView {
 
 /** Fresh view state for a newly opened session tab. */
 export function emptyView(
-  info: SessionInfo,
-  messages: AgentMessage[] = [],
+  info: core.SessionInfo,
+  messages: core.AgentMessage[] = [],
 ): SessionView {
   return {
     info,

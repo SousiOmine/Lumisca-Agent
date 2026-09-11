@@ -55,12 +55,6 @@ export class McpConfigError extends Error {
 /** The `.mcp.json` file at the workspace root (Claude Code compatible). */
 export const MCP_CONFIG_FILE = ".mcp.json";
 
-/** Settings-table key holding the app-level (global) MCP configuration.
- * The value is the same `.mcp.json` format; it applies to every workspace
- * and is merged with each workspace's own `.mcp.json` (workspace wins on
- * name collisions). */
-export const APP_MCP_SETTINGS_KEY = "mcp_servers";
-
 /** Virtual file path used when parsing the app-level config. */
 export const APP_MCP_SOURCE = "app settings";
 

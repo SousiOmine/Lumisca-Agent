@@ -155,7 +155,7 @@ export function ConnectionList() {
 
       {desktop === null && <p className="settings-note">読み込み中…</p>}
       {desktop !== null && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="stack-8">
           <p className="settings-note">
             {desktop
               ? state?.mode === "remote"
@@ -167,16 +167,7 @@ export function ConnectionList() {
           {error && <p className="error-text">{error}</p>}
 
           {desktop && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 10px",
-                background: "var(--surface-2)",
-                borderRadius: 8,
-              }}
-            >
+            <div className="setting-card">
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 600 }}>
                   ローカルサーバー
@@ -206,8 +197,7 @@ export function ConnectionList() {
               busy={busy}
               onProbe={desktop
                 ? (url, token) => bridgeTest(url, token)
-                : (url) =>
-                  probe(url)}
+                : (url) => probe(url)}
               onChange={(patch) => update(server.id, patch)}
               onConnect={() => connect(server)}
               onSave={() => save(server)}

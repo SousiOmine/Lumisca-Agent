@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { readIfExists } from "../shared/fs-util.ts";
+import { readIfExists } from "../fs.ts";
 
 /** Combined project memory budget (matches Codex's project_doc_max_bytes). */
 const MAX_MEMORY_BYTES = 32 * 1024;

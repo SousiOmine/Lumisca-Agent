@@ -88,7 +88,7 @@ function ModelRowEditor({
         value={row.name}
         onChange={(e) => set({ name: e.currentTarget.value })}
       />
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="stack-6">
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input
             type="checkbox"

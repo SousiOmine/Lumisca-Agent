@@ -3,8 +3,8 @@ import { fauxAssistantMessage } from "@lumisca/core";
 import type {
   Api,
   AssistantMessageEventStream,
-  Context,
   Model,
+  StreamRequest,
 } from "@lumisca/core";
 import type { StreamFn } from "@lumisca/core";
 import { cleanTitle, TitleGenerator } from "./title-generation.ts";
@@ -20,10 +20,10 @@ function fakeModel(): Model<Api> {
 function fakeStreamFn(
   text: string,
   options: { fail?: boolean } = {},
-  onCall?: (context: Context) => void,
+  onCall?: (StreamRequest: StreamRequest) => void,
 ): StreamFn {
-  return (_model, context) => {
-    onCall?.(context);
+  return (_model, StreamRequest) => {
+    onCall?.(StreamRequest);
     const events = (async function* () {
       if (options.fail) {
         yield {
@@ -53,7 +53,7 @@ Deno.test("cleanTitle strips quotes, collapses whitespace, caps at 30 chars", ()
 });
 
 Deno.test("generateTitle returns the cleaned model output", async () => {
-  const calls: Context[] = [];
+  const calls: StreamRequest[] = [];
   const generator = new TitleGenerator(
     fakeModel(),
     fakeStreamFn('"Fix login bug"', {}, (c) => calls.push(c)),

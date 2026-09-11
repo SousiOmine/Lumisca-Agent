@@ -18,12 +18,13 @@ use std::time::Duration;
 
 // Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
 // `open` on every platform; only the CDP calls themselves are Windows-only.
+use lumisca_browser_rpc::cdp;
 use lumisca_browser_rpc::emulation;
 use lumisca_browser_rpc::eval::{
     driver, probe_method_of, to_js_literal, EVAL_TIMEOUT, WAIT_HEADROOM,
 };
 use lumisca_browser_rpc::server::RpcHandler;
-use lumisca_browser_rpc::{error_codes, limits, methods, policy, probe, RpcError, RpcServer};
+use lumisca_browser_rpc::{error_codes, methods, policy, probe, RpcError, RpcServer};
 use serde_json::{json, Value};
 use tao::event::{Event, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
@@ -497,24 +498,7 @@ impl Host {
             .unwrap_or("png");
         let quality = params.get("quality").and_then(Value::as_u64);
         let viewport = self.viewport;
-        let cdp_params = match viewport {
-            Some((width, height)) => {
-                emulation::capture_screenshot_params(width, height, format, quality)
-            }
-            None => match format {
-                "png" => json!({ "format": "png", "fromSurface": true }),
-                "jpeg" => json!({
-                    "format": "jpeg",
-                    "quality": quality.unwrap_or(80).clamp(1, 100),
-                    "fromSurface": true,
-                }),
-                other => {
-                    return Err(RpcError::invalid(format!(
-                        "不明な format: {other} (png / jpeg)"
-                    )));
-                }
-            },
-        };
+        let cdp_params = cdp::screenshot_params(format, quality, viewport)?;
         let format = format.to_string();
         cdp_call_async(
             webview,
@@ -522,26 +506,7 @@ impl Host {
             &cdp_params,
             reply,
             EVAL_TIMEOUT,
-            move |answer| {
-                let data = answer.get("data").and_then(Value::as_str).ok_or_else(|| {
-                    RpcError::new(error_codes::ACTION_FAILED, "CDP は画像を返しませんでした")
-                })?;
-                if data.len() > limits::MAX_SCREENSHOT_BYTES {
-                    return Err(RpcError::too_large(format!(
-                        "スクリーンショットが大きすぎます ({} bytes)",
-                        data.len()
-                    )));
-                }
-                let mut result = json!({
-                    "mimeType": if format == "png" { "image/png" } else { "image/jpeg" },
-                    "data": data,
-                });
-                if let Some((width, height)) = viewport {
-                    result["width"] = json!(width);
-                    result["height"] = json!(height);
-                }
-                Ok(result)
-            },
+            move |answer| cdp::screenshot_result(&format, viewport, &answer),
         )
     }
 
@@ -564,40 +529,16 @@ impl Host {
         })?;
         let probe_call = format!("return p.wait({args});", args = to_js_literal(params));
         let expression = driver(&probe_call);
-        let timeout_ms = params
-            .get("timeoutMs")
-            .and_then(Value::as_u64)
-            .unwrap_or(10_000);
         // The in-page wait deadline governs; the host adds headroom.
-        let timeout = Duration::from_millis(timeout_ms) + WAIT_HEADROOM;
-        let cdp_params = json!({
-            "expression": expression,
-            "awaitPromise": true,
-            "returnByValue": true,
-        });
+        let timeout = Duration::from_millis(cdp::wait_timeout_ms(params)) + WAIT_HEADROOM;
+        let cdp_params = cdp::evaluate_params(&expression);
         cdp_call_async(
             webview,
             "Runtime.evaluate",
             &cdp_params,
             reply,
             timeout,
-            |result| {
-                if let Some(details) = result.pointer("/result/exceptionDetails") {
-                    let text = details
-                        .pointer("/exception/text")
-                        .and_then(Value::as_str)
-                        .unwrap_or("unknown exception");
-                    return Err(RpcError::new(
-                        error_codes::PROBE_ERROR,
-                        format!("プローブ例外: {text}"),
-                    ));
-                }
-                // WebView2 returns the DevTools reply without the envelope:
-                // {"result": {"type": "object", "value": {...}}}.
-                result.pointer("/result/value").cloned().ok_or_else(|| {
-                    RpcError::new(error_codes::PROBE_ERROR, "CDP の応答形式が不正です")
-                })
-            },
+            |result| cdp::evaluate_value(&result),
         )
     }
 }

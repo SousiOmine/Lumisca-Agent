@@ -129,7 +129,7 @@ export function McpList() {
         <h2>MCP サーバー</h2>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="stack-8">
         {error && <p className="error-text">{error}</p>}
         {loading && <p className="settings-note">読み込み中…</p>}
         {!loading && config && config.servers.length === 0 && (
@@ -139,27 +139,10 @@ export function McpList() {
         )}
         {!loading &&
           config?.servers.map((s) => (
-            <div
-              key={s.name}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 10px",
-                background: "var(--surface-2)",
-                borderRadius: 8,
-              }}
-            >
+            <div key={s.name} className="setting-card">
               <button
                 type="button"
-                className="btn"
-                style={{
-                  flex: 1,
-                  textAlign: "left",
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                }}
+                className="btn setting-card-open"
                 onClick={() => setEditing(s)}
               >
                 <span style={{ flex: 1 }}>

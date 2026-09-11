@@ -3,11 +3,11 @@ import type { AgentEvent, StreamFn } from "../ai/types.ts";
 import type { Api, AssistantMessage, Model } from "../ai/types.ts";
 import { CoreError } from "../errors.ts";
 import {
-  isRetryableRateLimit,
   MAX_RATE_LIMIT_RETRIES,
   rateLimitRetryDelayMs,
   sleepAbortable,
-} from "../agent/llm-retry.ts";
+} from "../ai/rate-limit.ts";
+import { isRetryableRateLimit } from "../agent/llm-retry.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import {
   addToolsToAgent,

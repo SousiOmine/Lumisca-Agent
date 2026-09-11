@@ -2,7 +2,8 @@ import type { ApiKeyAuth, Credential, Provider } from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import { CoreError } from "../errors.ts";
 import { safeJsonParse } from "../shared/mod.ts";
-import { isRecord } from "../shared/fs-util.ts";
+import { USER_PROVIDERS_KEY } from "../shared/mod.ts";
+import { isRecord } from "../fs.ts";
 import { buildModel, buildProvider } from "./custom.ts";
 
 /**
@@ -17,9 +18,6 @@ import { buildModel, buildProvider } from "./custom.ts";
  * provider id. The provider's ApiKeyAuth resolves it from there, so the
  * existing auth / configured checks apply unchanged.
  */
-
-/** Settings-table key holding the array of user provider configs. */
-export const USER_PROVIDERS_KEY = "user_providers";
 
 /** APIs a user-defined OpenAI-compatible provider may use. Restricted to
  * the OpenAI-compatible surface (not the proprietary Anthropic / Google /

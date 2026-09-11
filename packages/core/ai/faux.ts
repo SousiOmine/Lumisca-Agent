@@ -13,13 +13,13 @@ import type {
   Api,
   AssistantMessage,
   AssistantMessageContent,
-  Context,
   Model,
   ModelThinkingLevel,
   Provider,
   StopReason,
   StreamFn,
   StreamOptions,
+  StreamRequest,
   TextContent,
   ThinkingContent,
   ThinkingLevelMap,
@@ -74,7 +74,7 @@ export function fauxAssistantMessage(
 export type FauxResponse =
   | AssistantMessage
   | ((
-    context: Context,
+    context: StreamRequest,
     options: StreamOptions & { reasoning?: ModelThinkingLevel },
     state: unknown,
     model: Model<Api>,

@@ -6,8 +6,8 @@ import {
 import type {
   Api,
   AssistantMessageEventStream,
-  Context,
   Model,
+  StreamRequest,
 } from "@lumisca/core";
 import type { AgentMessage, StreamFn } from "@lumisca/core";
 import { AskHub } from "../tools/ask.ts";
@@ -62,7 +62,7 @@ function mixedStream(
   mainResponses: string[],
   judgeReplies: string[],
 ): StreamFn {
-  return ((_model: Model<Api>, request: Context) => {
+  return ((_model: Model<Api>, request: StreamRequest) => {
     const systemPrompt = request?.systemPrompt ?? "";
     if (systemPrompt.includes("goal judge")) {
       const text = judgeReplies.shift() ?? "";

@@ -45,6 +45,13 @@ jobs:
       - name: Type check
         run: deno task check
 
+      # The version lives in eight manifests (five deno.json, package.json,
+      # tauri.conf.json, Cargo.toml). The release workflow pins them to the
+      # tag; checking them on every change catches a half-done bump at the
+      # PR instead of at the tag.
+      - name: Version consistency
+        run: deno task check:versions
+
       - name: Test
         run: deno task test
 
@@ -149,6 +156,10 @@ jobs:
 
       - name: Compile
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      # The shell carries unit tests (log truncation, port resolution).
+      - name: Test
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Compile server binary
         # Full `npm run build:server` needs the denort download; verify the

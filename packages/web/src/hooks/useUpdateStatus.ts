@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "preact/compat";
+import { errorMessage as errorText } from "@lumisca/core/shared";
 import { shellAvailable, updateApi, type UpdateStatus } from "../shell.ts";
 
 /** Poll interval while a check/download is in flight (progress bar) vs
@@ -14,6 +15,11 @@ export interface UpdateControls {
   check: () => void;
   download: () => void;
   install: () => void;
+  /** Last bridge failure ("check the desktop shell"), null when the last
+   * call succeeded. Shown in the settings' general panel: a silently
+   * ignored failure would leave the update state frozen with no
+   * explanation. */
+  error: string | null;
 }
 
 /** Desktop auto-update state. Polls the shell bridge; single instance in
@@ -22,6 +28,7 @@ export interface UpdateControls {
  * shell, where the bridge is unreachable. */
 export function useUpdateStatus(active: boolean): UpdateControls {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
   const fastPollUntilRef = useRef(0);
   const [pollGeneration, setPollGeneration] = useState(0);
@@ -42,9 +49,13 @@ export function useUpdateStatus(active: boolean): UpdateControls {
         const next = await updateApi.status();
         if (cancelled) return;
         setStatus(next);
+        setError(null);
         busyRef.current = next.checking || next.downloading;
-      } catch {
-        // Bridge unreachable; try again on the next interval.
+      } catch (failure) {
+        // Bridge unreachable or the shell refused: keep the last status
+        // but say why it may be stale, then retry on the next interval.
+        if (cancelled) return;
+        setError(errorText(failure));
       }
       if (cancelled) return;
       const pollFast = busyRef.current || Date.now() < fastPollUntilRef.current;
@@ -69,13 +80,17 @@ export function useUpdateStatus(active: boolean): UpdateControls {
     setPollGeneration((generation) => generation + 1);
     try {
       setStatus(await action());
-    } catch {
-      // The poll loop keeps the displayed state in sync.
+      setError(null);
+    } catch (failure) {
+      // The poll loop keeps the displayed state in sync; the message is
+      // for the user, not for the console.
+      setError(errorText(failure));
     }
   };
 
   return {
     status,
+    error,
     setAuto: (enabled: boolean) => run(() => updateApi.setAuto(enabled)),
     check: () => run(() => updateApi.check()),
     download: () => run(() => updateApi.download()),

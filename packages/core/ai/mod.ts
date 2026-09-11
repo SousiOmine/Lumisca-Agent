@@ -3,18 +3,21 @@
  * pi-agent-core). The rest of the app imports types and helpers from here.
  */
 export {
-  type AssistantMessageEventStream,
   createAssistantMessageEventStream,
+  type PushableAssistantMessageEventStream,
 } from "./event-stream.ts";
+export type { AssistantMessageEventStream } from "./types.ts";
 export {
   createStreamFn,
-  isRetryableRateLimitError,
-  type RateLimitRetryOptions,
   reasoningForceOption,
-  retryOnRateLimitError,
   streamText,
   type StreamTransport,
 } from "./stream.ts";
+export {
+  isRetryableRateLimitError,
+  type RateLimitRetryOptions,
+  retryOnRateLimitError,
+} from "./rate-limit.ts";
 export { languageModelFor, type ResolvedApiKey } from "./lang-model.ts";
 export { Agent, type AgentDefaults, type AgentInit } from "./agent.ts";
 export { LumiscaModels, type LumiscaModelsOptions } from "./models.ts";

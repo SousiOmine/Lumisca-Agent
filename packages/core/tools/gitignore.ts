@@ -82,7 +82,6 @@ export class GitignoreMatcher {
     }
     return new GitignoreMatcher(rulesByRoot);
   }
-
   /** True when `relPath` (relative to `walkRoot`) is ignored. `walkRoot`
    * may be a workspace root or any directory inside it (the tools pass the
    * resolved `path` argument) — the owning root's rules are found by
@@ -100,6 +99,53 @@ export class GitignoreMatcher {
     }
     return false;
   }
+}
+
+/** Cache entry of {@link loadCachedGitignore}. */
+interface CachedGitignore {
+  /** `mtimeMs:size` per root's `.gitignore` ("-" when absent), in root
+   * order: a mismatch means the file changed and the rules are re-read. */
+  stamp: string;
+  matcher: GitignoreMatcher;
+}
+
+const gitignoreCache = new WeakMap<object, CachedGitignore>();
+
+/** Fingerprint each root's `.gitignore` without reading its contents. */
+async function gitignoreStamp(roots: string[]): Promise<string> {
+  const parts: string[] = [];
+  for (const root of roots) {
+    try {
+      const stat = await Deno.stat(join(root, ".gitignore"));
+      parts.push(`${stat.mtime?.getTime() ?? 0}:${stat.size}`);
+    } catch {
+      // Absent (or unreadable): distinguishes "no file" from any content.
+      parts.push("-");
+    }
+  }
+  return parts.join("|");
+}
+
+/**
+ * The `.gitignore` matcher for one sandbox, cached until a `.gitignore`
+ * actually changes.
+ *
+ * grep and glob run on every turn and each used to re-read and re-parse
+ * every root's `.gitignore`. The entry is validated with a `stat` per root
+ * (a fraction of the read+parse cost) so an edit made in the editor still
+ * takes effect on the next search. Keyed weakly by the sandbox, which is
+ * immutable for the session's lifetime, so a closed session's entry is
+ * collected.
+ */
+export async function loadCachedGitignore(
+  sandbox: { roots: string[] },
+): Promise<GitignoreMatcher> {
+  const stamp = await gitignoreStamp(sandbox.roots);
+  const cached = gitignoreCache.get(sandbox);
+  if (cached !== undefined && cached.stamp === stamp) return cached.matcher;
+  const matcher = await GitignoreMatcher.load(sandbox.roots);
+  gitignoreCache.set(sandbox, { stamp, matcher });
+  return matcher;
 }
 
 function applyRules(

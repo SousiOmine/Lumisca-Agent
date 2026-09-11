@@ -149,8 +149,13 @@ export class SessionPool {
   private readonly sessions = new Map<string, SessionResources>();
   private readonly factory: AgentFactory;
 
-  constructor(private readonly deps: SessionPoolDeps) {
-    this.factory = new AgentFactory(deps);
+  constructor(
+    private readonly deps: SessionPoolDeps,
+    /** Agent construction seam (tests inject a fake; production leaves it
+     * to the real factory). */
+    factory?: AgentFactory,
+  ) {
+    this.factory = factory ?? new AgentFactory(deps);
   }
 
   get(id: string): SessionAgent | undefined {

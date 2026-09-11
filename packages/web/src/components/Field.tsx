@@ -10,7 +10,7 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div className="stack-4">
       <p className="settings-note">{label}</p>
       {children}
     </div>

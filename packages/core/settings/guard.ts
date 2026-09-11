@@ -1,7 +1,9 @@
 import { CoreError } from "../errors.ts";
-import { APP_MCP_SETTINGS_KEY } from "../mcp/config.ts";
-import { COMMAND_SAFETY_APPROVALS_KEY } from "../shared/mod.ts";
-import { CONNECTIONS_KEY } from "./connections.ts";
+import {
+  APP_MCP_SETTINGS_KEY,
+  COMMAND_SAFETY_APPROVALS_KEY,
+  CONNECTIONS_KEY,
+} from "../shared/mod.ts";
 import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
 
 /** The protected-key category of a settings key, or undefined when the

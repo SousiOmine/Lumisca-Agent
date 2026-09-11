@@ -4,7 +4,7 @@ import { isWithinRealpath } from "../plugins/mcp.ts";
 import {
   readIfExists,
   resolveGlobalDirs as resolveGlobalDirsBase,
-} from "../shared/fs-util.ts";
+} from "../fs.ts";
 import { parseSkillFrontmatter } from "./frontmatter.ts";
 
 /** Directory holding skills inside a repository level or in the home

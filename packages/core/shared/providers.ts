@@ -27,7 +27,7 @@ export const THINKING_LEVEL_LABELS: Record<ThinkingLevel, string> = {
 
 /** Thinking levels weakest-first ("off" first). Single source of truth for
  * the strength order; the web slider sorts supported levels with this, and
- * `models/thinking.ts` derives `ALL_THINKING_LEVELS` from it. */
+ * `models/thinking.ts` sorts with it. */
 export const THINKING_LEVEL_ORDER: readonly ThinkingLevel[] = [
   "off",
   "minimal",

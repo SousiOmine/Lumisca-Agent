@@ -31,6 +31,8 @@ import type { ThemeSetting } from "../types.ts";
 
 interface SettingsModalProps {
   theme: ThemeSetting;
+  /** Persist failure of the theme setting (shown in the appearance panel). */
+  themeError: string | null;
   onThemeChange: (theme: ThemeSetting) => void;
   update: UpdateControls;
   /** Background agent-event notifications (desktop only). */
@@ -102,6 +104,7 @@ const CATEGORIES: {
 
 export function SettingsModal({
   theme,
+  themeError,
   onThemeChange,
   update,
   notifyEnabled,
@@ -163,6 +166,7 @@ export function SettingsModal({
           {category === "general" && (
             <GeneralPanel
               status={update.status}
+              bridgeError={update.error}
               onSetAuto={update.setAuto}
               onCheck={update.check}
               onDownload={update.download}
@@ -246,6 +250,7 @@ export function SettingsModal({
           {category === "appearance" && (
             <AppearancePanel
               theme={theme}
+              error={themeError}
               onThemeChange={onThemeChange}
             />
           )}

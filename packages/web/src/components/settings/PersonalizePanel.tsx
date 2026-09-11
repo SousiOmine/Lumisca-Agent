@@ -87,7 +87,8 @@ export function PersonalizePanel() {
 
   // --- Saved prompts -----------------------------------------------------
 
-  const { prompts, reload: loadPrompts } = useSavedPrompts();
+  const { prompts, error: promptsLoadError, reload: loadPrompts } =
+    useSavedPrompts();
   const [editingPrompt, setEditingPrompt] = useState<SavedPrompt | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [promptsError, setPromptsError] = useState<string | null>(null);
@@ -181,7 +182,12 @@ export function PersonalizePanel() {
         <p className="settings-note">
           <code>/prompt</code> から呼び出せるプロンプト スニペットを登録します。
         </p>
-        {promptsError && <p className="error-text">{promptsError}</p>}
+        {(promptsError ?? promptsLoadError) && (
+          <p className="error-text" role="alert">
+            {promptsError ??
+              `プロンプトを読み込めませんでした: ${promptsLoadError}`}
+          </p>
+        )}
 
         {prompts.length === 0 && !showAddForm && (
           <p className="settings-note" style={{ fontStyle: "italic" }}>

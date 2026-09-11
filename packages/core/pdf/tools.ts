@@ -21,6 +21,8 @@
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import { getDocumentProxy, renderPageAsImage } from "unpdf";
+import { errorMessage } from "../errors.ts";
+import { bytesToBase64 } from "../base64.ts";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
 import {
@@ -202,10 +204,6 @@ export function createUnpdfRenderer(options?: {
   };
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** Platform suffixes of the `@napi-rs/canvas-<platform>` npm packages
  * (the optionalDependencies of @napi-rs/canvas plus the extra branches of
  * its js-binding loader). Probed with require.resolve only — resolving a
@@ -312,12 +310,6 @@ function canvasIcuSearchDirs(): string[] {
     // node resolution unavailable; fall through with what we have.
   }
   return [...new Set(dirs)];
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
 
 const pdfReadPagesSchema = object({

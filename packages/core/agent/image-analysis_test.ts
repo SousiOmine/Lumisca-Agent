@@ -3,9 +3,9 @@ import { fauxAssistantMessage } from "@lumisca/core";
 import type {
   Api,
   AssistantMessageEventStream,
-  Context,
   ImageContent,
   Model,
+  StreamRequest,
   TextContent,
 } from "@lumisca/core";
 import type { StreamFn } from "@lumisca/core";
@@ -33,10 +33,10 @@ function fakeModel(): Model<Api> {
 function fakeStreamFn(
   text: string,
   options: { fail?: boolean } = {},
-  onCall?: (context: Context) => void,
+  onCall?: (StreamRequest: StreamRequest) => void,
 ): StreamFn {
-  return (_model, context) => {
-    onCall?.(context);
+  return (_model, StreamRequest) => {
+    onCall?.(StreamRequest);
     const events = (async function* () {
       if (options.fail) {
         yield {
@@ -58,7 +58,7 @@ function fakeStreamFn(
 }
 
 Deno.test("analyzeContent replaces image blocks with analysis text", async () => {
-  const calls: Context[] = [];
+  const calls: StreamRequest[] = [];
   const analyzer = new ImageAnalyzer(
     fakeModel(),
     fakeStreamFn("DESC", {}, (c) => calls.push(c)),

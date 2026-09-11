@@ -210,6 +210,9 @@ export interface PaneState {
   visible: boolean;
   /** The content currently hosted in the pane, or null while empty. */
   content: PaneContent | null;
+  /** Why the last show/hide failed, if it did: the shell reports the OS
+   * error instead of leaving the toggle looking stuck. */
+  error?: string;
 }
 
 /** Docked pane controls. `state` is polled by the UI — the pane also

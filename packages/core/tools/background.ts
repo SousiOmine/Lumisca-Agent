@@ -104,7 +104,8 @@ export function trimIncompleteUtf8(bytes: Uint8Array): Uint8Array {
   return start - 1 + len <= bytes.length ? bytes : bytes.slice(0, start - 1);
 }
 
-export function formatDuration(ms: number): string {
+/** Format a duration for a human (e.g. "1m 5s"). */
+function formatDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);

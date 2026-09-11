@@ -105,29 +105,11 @@ jobs:
 
       # The tag version must match every place the app version lives;
       # a mismatch would publish a release whose updater manifest points
-      # at the wrong version.
+      # at the wrong version. The checker is shared with ci.yml so both
+      # workflows agree on what "the version" means. (The job's
+      # working-directory is packages/desktop, hence the ../../ prefix.)
       - name: Check version consistency
-        shell: bash
-        run: |
-          TAG="${{ github.ref_name }}"
-          EXPECTED="${TAG#v}"
-          CONF=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          CARGO=$(grep -m1 '^version' src-tauri/Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          NPCKG=$(node -p "require('./package.json').version")
-          DNJSON=$(node -e "const t=require('fs').readFileSync('deno.json','utf8');const m=t.match(/\"version\":\s*\"([^\"]+)\"/);console.log(m?m[1]:'')")
-          echo "tag=$EXPECTED conf=$CONF cargo=$CARGO npm=$NPCKG deno=$DNJSON"
-          FAIL=""
-          for pair in "conf:$CONF" "cargo:$CARGO" "npm package.json:$NPCKG" "deno.json:$DNJSON"; do
-            NAME="${pair%%:*}"; VAL="${pair#*:}"
-            if [ "$VAL" != "$EXPECTED" ]; then
-              echo "::error::$NAME version $VAL != tag $EXPECTED"
-              FAIL=1
-            fi
-          done
-          if [ -n "$FAIL" ]; then
-            echo "::error::Version mismatch — tag $TAG expects $EXPECTED; update every manifest before tagging."
-            exit 1
-          fi
+        run: deno run --allow-read ../../scripts/check-versions.ts "${{ github.ref_name }}"
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v1

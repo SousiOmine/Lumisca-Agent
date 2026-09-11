@@ -13,7 +13,9 @@ use tauri::{Manager, WindowEvent};
 pub mod bridge;
 pub mod browser_lab;
 pub mod notify;
+pub mod pane;
 pub mod server;
+pub mod server_log;
 pub mod update;
 pub mod window;
 
@@ -46,7 +48,7 @@ pub(crate) struct AppState {
     local: Mutex<Option<server::LocalServer>>,
     /// The spawned local server's captured output (in-memory tail +
     /// on-disk log), for crash diagnosis from the UI.
-    server_log: Mutex<server::ServerLog>,
+    server_log: Mutex<server_log::ServerLog>,
     /// The last remote server the user switched to (url, token) — the
     /// "current display" reported by the bridge state.
     last_remote: Mutex<Option<(String, String)>>,
@@ -90,7 +92,7 @@ pub fn run() {
             };
             app.manage(AppState {
                 local: Mutex::new(None),
-                server_log: Mutex::new(server::ServerLog::new(&handle)),
+                server_log: Mutex::new(server_log::ServerLog::new(&handle)),
                 last_remote: Mutex::new(None),
                 update: Mutex::new(update::UpdateState::new(settings.auto_update)),
                 pending: Mutex::new(None),
@@ -99,7 +101,7 @@ pub fn run() {
                 browser_lab: Mutex::new(lab),
             });
             // Keep only the recent on-disk server log across runs.
-            server::trim_server_log_file(&handle);
+            server_log::trim_log_file(&handle);
 
             // Register the updater's `on_before_exit` hook exactly once
             // and keep the built updater for every future check (see

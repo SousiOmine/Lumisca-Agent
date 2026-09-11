@@ -13,7 +13,13 @@ import {
   tool,
 } from "ai";
 import type { LanguageModel, LanguageModelUsage } from "ai";
+import { errorMessage } from "../errors.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
+import {
+  isRetryableRateLimitError,
+  type RateLimitRetryOptions,
+  retryOnRateLimitError,
+} from "./rate-limit.ts";
 import type {
   AgentTool,
   Api,
@@ -172,7 +178,7 @@ async function* runStream(
             toolName: String(p.toolName ?? ""),
             content: [{
               type: "text" as const,
-              text: errorText(p.error),
+              text: errorMessage(p.error),
             }],
             isError: true,
           };
@@ -424,17 +430,6 @@ function outputText(output: unknown): string {
   return String(output);
 }
 
-/** Render an SDK tool `error` as the transcript/display text. */
-function errorText(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
-
 /** Convert Lumisca LLM messages to Vercel CoreMessage[] (v7 format). */
 function toCoreMessages(messages: LlmMessage[]): unknown[] {
   const out: unknown[] = [];
@@ -595,110 +590,4 @@ export async function streamText(
     signal: options?.signal,
     ...retryOpts,
   });
-}
-
-// ---- rate-limit retry (mirrors the app's existing policy) ------------------
-
-export interface RateLimitRetryOptions {
-  maxRetries?: number;
-  signal?: AbortSignal;
-  maxRetryDelayMs?: number;
-  onRetry?: (attempt: number, maxRetries: number, delayMs: number) => void;
-  /** Backoff sleep (injectable for tests); defaults to sleepAbortable. */
-  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-}
-
-export const MAX_RATE_LIMIT_RETRIES = 5;
-export const RATE_LIMIT_BASE_DELAY_MS = 2000;
-export const RATE_LIMIT_MAX_DELAY_MS = 60_000;
-
-const NON_RETRYABLE_PATTERN = buildPattern([
-  "insufficient_quota",
-  "out of budget",
-  "quota exceeded",
-  "billing",
-  "GoUsageLimitError",
-  "FreeUsageLimitError",
-  "Monthly usage limit reached",
-  "available balance",
-]);
-const RETRYABLE_PATTERN = buildPattern([
-  "rate.?limit",
-  "rate_limit_exceeded",
-  "too many requests",
-  "\\b429\\b",
-]);
-
-function buildPattern(patterns: string[]): RegExp {
-  return new RegExp(patterns.join("|"), "i");
-}
-
-export function isRetryableRateLimitError(error: unknown): boolean {
-  if (!(error instanceof Error) || !error.message) return false;
-  if (NON_RETRYABLE_PATTERN.test(error.message)) return false;
-  return RETRYABLE_PATTERN.test(error.message);
-}
-
-export function rateLimitRetryDelayMs(attempt: number): number {
-  return Math.round(
-    Math.min(
-      RATE_LIMIT_BASE_DELAY_MS * 2 ** (attempt - 1),
-      RATE_LIMIT_MAX_DELAY_MS,
-    ) * (1 - Math.random() * 0.25),
-  );
-}
-
-/** Error thrown when the backoff sleep is aborted, so callers can normalize
- * an abort during backoff to their own terminal/aborted state. */
-export class RetryAbortError extends Error {
-  constructor() {
-    super("Aborted during rate-limit retry backoff");
-    this.name = "RetryAbortError";
-  }
-}
-
-/** Sleep that rejects with RetryAbortError when `signal` fires. */
-export function sleepAbortable(
-  ms: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (ms <= 0) return Promise.resolve();
-  if (signal?.aborted) return Promise.reject(new RetryAbortError());
-  return new Promise<void>((resolve, reject) => {
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(new RetryAbortError());
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-export async function retryOnRateLimitError<T>(
-  attempt: () => Promise<T>,
-  isRetryable: (error: unknown) => boolean,
-  opts: RateLimitRetryOptions = {},
-): Promise<T> {
-  const maxRetries = opts.maxRetries ?? MAX_RATE_LIMIT_RETRIES;
-  const sleepFn = opts.sleep ?? sleepAbortable;
-  let lastError: unknown;
-  for (let n = 0;; n++) {
-    try {
-      return await attempt();
-    } catch (error) {
-      if (opts.signal?.aborted) throw new RetryAbortError();
-      if (n >= maxRetries || !isRetryable(error)) throw error;
-      lastError = error;
-      const delayMs = rateLimitRetryDelayMs(n + 1);
-      opts.onRetry?.(n + 1, maxRetries, delayMs);
-      try {
-        await sleepFn(delayMs, opts.signal);
-      } catch {
-        throw lastError;
-      }
-    }
-  }
 }

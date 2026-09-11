@@ -1,6 +1,12 @@
 /** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db / pi imports), bundled into the browser client. */
 import { safeJsonParse } from "./misc.ts";
 
+/*
+ * Every settings-table key lives in this module: it is the single source of
+ * truth for the key space, so a key can never drift between the module that
+ * writes it and the module that reads or guards it.
+ */
+
 /** Settings-table key for the UI theme. */
 export const THEME_KEY = "theme";
 
@@ -26,6 +32,26 @@ export const COMMAND_SAFETY_APPROVALS_KEY = "command_safety_approvals";
 /** Settings-table key for saved prompts: a JSON array of SavedPrompt
  * entries that can be inserted via the `/prompt` slash menu. */
 export const SAVED_PROMPTS_KEY = "saved_prompts";
+
+/** Settings-table key holding the app-level MCP server config (JSON). It may
+ * contain secrets (env vars, headers), so it is protected from the generic
+ * settings surface. */
+export const APP_MCP_SETTINGS_KEY = "mcp_servers";
+
+/** Settings-table key holding the server-side connection registry. It
+ * contains tokens, so it is protected from the generic settings surface. */
+export const CONNECTIONS_KEY = "connections";
+
+/** Settings-table key holding the array of user provider configs (JSON). */
+export const USER_PROVIDERS_KEY = "user_providers";
+
+/** Prefix of the per-model enablement key (`model_enabled:<provider>:<model>`);
+ * the value is "1" for enabled, absent for the default. */
+export const MODEL_ENABLED_PREFIX = "model_enabled:";
+
+/** Prefix of the per-model thinking-level key
+ * (`model_thinking:<provider>:<model>`). */
+export const MODEL_THINKING_PREFIX = "model_thinking:";
 
 /** A saved prompt registered by the user: `id` is the short identifier for
  * the slash command lookup (e.g. "translate"), `label` is the display name

@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { CoreError, errorMessage } from "../errors.ts";
+import { atomicWriteTextFileSync } from "../fs.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import {
-  APP_MCP_SETTINGS_KEY,
   APP_MCP_SOURCE,
   loadMcpConfig,
   MCP_CONFIG_FILE,
@@ -13,6 +13,7 @@ import {
   type McpInfo,
   parseMcpConfig,
 } from "./config.ts";
+import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
 import type { McpServerStatus } from "./manager.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
 
@@ -140,9 +141,7 @@ export class McpService {
     this.deps.applySessionChange(sessions, () => {
       // Atomic write: a temp file + rename keeps the config valid even if
       // the process dies halfway.
-      const tmp = join(root, `.${MCP_CONFIG_FILE}.tmp-${crypto.randomUUID()}`);
-      Deno.writeTextFileSync(tmp, text);
-      Deno.renameSync(tmp, filePath);
+      atomicWriteTextFileSync(filePath, text);
     });
     return this.getMcpInfo(workspaceId);
   }

@@ -10,10 +10,6 @@ export interface ConnectionEntry {
   token: string;
 }
 
-/** Settings-table key holding the server-side connection registry. It
- * contains tokens, so it is protected from the generic settings surface. */
-export const CONNECTIONS_KEY = "connections";
-
 function isConnectionEntry(value: unknown): value is ConnectionEntry {
   if (typeof value !== "object" || value === null) return false;
   const e = value as Record<string, unknown>;

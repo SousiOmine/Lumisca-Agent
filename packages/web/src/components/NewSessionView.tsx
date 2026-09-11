@@ -147,6 +147,11 @@ export function NewSessionView(
   // --- saved prompts (shared hook so the menu refreshes after the settings
   // panel mutates the list) ----------------------------------------------
   const { prompts: savedPrompts } = useSavedPrompts();
+  /** Why the default model could not be resolved; shown above the picker so
+   * the empty selection is explained instead of silently staying blank. */
+  const [defaultModelError, setDefaultModelError] = useState<string | null>(
+    null,
+  );
 
   // Show the last used model (the one a session without an explicit model
   // would get) right away instead of leaving the picker to choose on click.
@@ -156,6 +161,7 @@ export function NewSessionView(
     try {
       const m = await api.getDefaultModel();
       if (isStale()) return;
+      setDefaultModelError(null);
       if (m && !modelTouched.current) {
         setModel({
           provider: m.provider,
@@ -164,8 +170,10 @@ export function NewSessionView(
           thinkingLevels: m.thinkingLevels,
         });
       }
-    } catch {
-      // Non-critical: the picker stays on its default.
+    } catch (error) {
+      // Non-critical for starting a session (the server resolves its own
+      // default), but the user must know why the picker is empty.
+      if (!isStale()) setDefaultModelError(errorText(error));
     }
   }, []);
 
@@ -410,6 +418,11 @@ export function NewSessionView(
                 />
               </label>
             </div>
+            {defaultModelError && (
+              <div className="error-text" role="alert">
+                既定のモデルを取得できませんでした: {defaultModelError}
+              </div>
+            )}
             <Composer
               value={input}
               onChange={onInputChange}

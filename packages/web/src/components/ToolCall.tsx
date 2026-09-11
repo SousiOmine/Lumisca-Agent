@@ -1,4 +1,3 @@
-import { useState } from "preact/compat";
 import {
   IconBrain,
   IconCheck,
@@ -37,6 +36,7 @@ import {
 } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
 import { ContentImages } from "./ContentImages.tsx";
+import { useExpandableRow } from "../hooks/useExpandableRow.ts";
 
 /** Map tool names to compact icons. */
 function toolIcon(name: string) {
@@ -250,7 +250,7 @@ interface ToolCallProps {
 }
 
 export function ToolCall({ toolCall, result, running }: ToolCallProps) {
-  const [open, setOpen] = useState(false);
+  const { open, triggerProps } = useExpandableRow();
 
   const state = result
     ? result.isError ? "error" : "done"
@@ -269,7 +269,7 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
     <div className="tool-timeline">
       <div
         className={`tool-line${open ? " open" : ""}`}
-        onClick={() => setOpen((o) => !o)}
+        {...triggerProps}
       >
         <span className="tool-line-chevron">
           <IconChevronRight size={12} />

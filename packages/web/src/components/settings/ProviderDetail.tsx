@@ -255,7 +255,7 @@ export function ProviderDetail({
         return (
           <div
             key={index}
-            style={{ display: "flex", flexDirection: "column", gap: 6 }}
+            className="stack-6"
           >
             <p className="settings-note">確認コード</p>
             <div className="login-code">{event.userCode}</div>
@@ -284,7 +284,7 @@ export function ProviderDetail({
         return (
           <div
             key={index}
-            style={{ display: "flex", flexDirection: "column", gap: 6 }}
+            className="stack-6"
           >
             <button
               type="button"
@@ -311,7 +311,7 @@ export function ProviderDetail({
       return (
         <div
           key={prompt.id}
-          style={{ display: "flex", flexDirection: "column", gap: 6 }}
+          className="stack-6"
         >
           <p className="settings-note">{prompt.message}</p>
           {prompt.options.map((option) => (
@@ -381,10 +381,10 @@ export function ProviderDetail({
           )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="stack-8">
         {isOAuth
           ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="stack-8">
               <p className="settings-note">
                 OAuth ログイン(サブスクリプション契約)
               </p>

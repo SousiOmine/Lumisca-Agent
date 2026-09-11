@@ -6,6 +6,7 @@
  * (or with --browser-preview=always at CLI startup). It is killed on
  * close (browser_close / CLI exit) and never survives the CLI.
  */
+import { join } from "node:path";
 import { HttpBrowserBackend, LazyBrowserBackend } from "@lumisca/core";
 import type { BrowserBackend } from "@lumisca/core";
 import { decodeUtf8, withTimeout } from "@lumisca/core/shared";
@@ -50,9 +51,15 @@ export function findBrowserHostBinary(): string | undefined {
   const here = import.meta.dirname;
   if (here !== undefined) {
     // packages/cli → packages/browser-host
-    const packagesDir = `${here}/..`;
+    const packagesDir = join(here, "..");
     for (const profile of ["release", "debug"]) {
-      const candidate = `${packagesDir}/browser-host/target/${profile}/${name}`;
+      const candidate = join(
+        packagesDir,
+        "browser-host",
+        "target",
+        profile,
+        name,
+      );
       try {
         Deno.statSync(candidate);
         return candidate;
@@ -62,11 +69,11 @@ export function findBrowserHostBinary(): string | undefined {
     }
   }
   for (
-    const dir of (Deno.env.get("PATH") ?? "").split(";").filter((d) =>
-      d.length > 0
-    )
+    const dir of (Deno.env.get("PATH") ?? "")
+      .split(Deno.build.os === "windows" ? ";" : ":")
+      .filter((d) => d.length > 0)
   ) {
-    const candidate = `${dir}\\${name}`;
+    const candidate = join(dir, name);
     try {
       Deno.statSync(candidate);
       return candidate;

@@ -1,4 +1,3 @@
-import { useState } from "preact/compat";
 import {
   IconBrain,
   IconCheck,
@@ -8,6 +7,7 @@ import {
   IconTerminal2,
 } from "@tabler/icons-preact";
 import type { NotificationMessage } from "../types.ts";
+import { useExpandableRow } from "../hooks/useExpandableRow.ts";
 
 /** Icon for the notification kind. */
 function kindIcon(kind: NotificationMessage["kind"]) {
@@ -35,8 +35,8 @@ function displayTitle(title: string): string {
  * call — never as a user message. The detail body (output tail / task
  * result / message text) expands on click. */
 export function NotificationRow({ message }: { message: NotificationMessage }) {
-  const [open, setOpen] = useState(false);
   const expandable = message.body.length > 0;
+  const { open, triggerProps } = useExpandableRow(expandable);
 
   return (
     <div className="notification-timeline">
@@ -44,9 +44,7 @@ export function NotificationRow({ message }: { message: NotificationMessage }) {
         className={`notification-line${open ? " open" : ""}${
           expandable ? "" : " static"
         }`}
-        onClick={() => {
-          if (expandable) setOpen((o) => !o);
-        }}
+        {...triggerProps}
       >
         {expandable && (
           <span className="notification-line-chevron">

@@ -25,7 +25,7 @@ export const MAX_SEARCH_DESCRIPTION_CHARS = 1500;
 const MAX_PARAMETER_SCHEMA_CHARS = 8192;
 
 /** Cap for the browse listing (empty query), which is only an overview. */
-export const MAX_BROWSE_LISTING_CHARS = 8192;
+const MAX_BROWSE_LISTING_CHARS = 8192;
 
 /** One tool as reported by a search: enough for the model to decide
  * whether to call it and how to build its arguments. */
@@ -34,13 +34,6 @@ export interface ToolSearchEntry {
   label: string;
   /** Description truncated to MAX_SEARCH_DESCRIPTION_CHARS. */
   description: string;
-}
-
-/** A group of the browse listing: tools sharing a label prefix (MCP labels
- * are "server: tool", so the groups are servers). */
-export interface ToolGroup {
-  group: string;
-  names: string[];
 }
 
 /** Resolves the session's current tool registry. The search/call tools
@@ -67,7 +60,10 @@ function score(tool: Tool, terms: string[]): number {
   return score;
 }
 
-function truncate(text: string, max: number): string {
+/** Cut `text` down to its head for display, appending a marker. Deliberately
+ * separate from `truncate` in ./truncate.ts, which keeps the TAIL for tool
+ * output — a search description is only useful from the start. */
+function truncateHead(text: string, max: number): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max)}\n… (truncated)`;
 }
@@ -161,7 +157,7 @@ export class ToolRegistry {
     }
     let out = lines.join("\n");
     if (out.length > MAX_BROWSE_LISTING_CHARS) {
-      out = `${out.slice(0, MAX_BROWSE_LISTING_CHARS)}\n… (truncated)`;
+      out = truncateHead(out, MAX_BROWSE_LISTING_CHARS);
     }
     return out;
   }
@@ -177,7 +173,7 @@ export class ToolRegistry {
     return {
       name: tool.name,
       label: tool.label,
-      description: truncate(
+      description: truncateHead(
         tool.description + parameterSchemaText(tool.parameters),
         MAX_SEARCH_DESCRIPTION_CHARS,
       ),

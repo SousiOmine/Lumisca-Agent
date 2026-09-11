@@ -3,6 +3,8 @@ export { LumiscaDb } from "./db/mod.ts";
 export { CoreError, errorMessage } from "./errors.ts";
 export { createLogger } from "./log.ts";
 export type { Logger, LogLevel } from "./log.ts";
+export { refreshCatalogInBackground } from "./models/catalog-refresh.ts";
+export type { CatalogRefresher } from "./models/catalog-refresh.ts";
 export { Sandbox } from "./workspace/sandbox.ts";
 export {
   fileExists,
@@ -25,10 +27,11 @@ export type { ModeMessage, ModePrompt } from "./types/mode-message.ts";
 export { Agent, type AgentDefaults, type AgentInit } from "./ai/agent.ts";
 export { LumiscaModels, type LumiscaModelsOptions } from "./ai/models.ts";
 export { languageModelFor } from "./ai/lang-model.ts";
-export {
-  type AssistantMessageEventStream,
-  createAssistantMessageEventStream,
-} from "./ai/event-stream.ts";
+export { createAssistantMessageEventStream } from "./ai/event-stream.ts";
+export type {
+  AssistantMessageEventStream,
+  PushableAssistantMessageEventStream,
+} from "./ai/mod.ts";
 export {
   fauxAssistantMessage,
   type FauxProvider,
@@ -42,11 +45,11 @@ export type {
   AgentMessage,
   AgentTool,
   AssistantMessage,
-  Context,
   ImageContent,
   Message,
   ModelCompat,
   StreamFn,
+  StreamRequest,
   TextContent,
   ThinkingContent,
   ThinkingLevelMap,
@@ -234,7 +237,7 @@ export {
   serializeSavedPrompts,
 } from "./shared/mod.ts";
 export { resolveSettingsPath } from "./settings/path.ts";
-export { CONNECTIONS_KEY } from "./settings/connections.ts";
+export { CONNECTIONS_KEY } from "./shared/settings-keys.ts";
 export type { ConnectionEntry } from "./settings/connections.ts";
 export { formatModelMeta } from "./models/meta.ts";
 export {

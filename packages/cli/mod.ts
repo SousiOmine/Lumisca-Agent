@@ -1,4 +1,4 @@
-import { createLogger, LumiscaCore } from "@lumisca/core";
+import { LumiscaCore, refreshCatalogInBackground } from "@lumisca/core";
 import { runRepl } from "./repl.ts";
 import { pickWorkspace, selectFromList, sessionLabel } from "./select.ts";
 import { createSession } from "./session.ts";
@@ -99,22 +99,6 @@ async function attachBrowserBackend(
   return backend;
 }
 
-/** Refresh the model catalog without blocking startup (or failing it
- * when offline — the bundled snapshot simply stays active). */
-function refreshCatalogInBackground(core: LumiscaCore): void {
-  const log = createLogger("catalog");
-  void core.refreshModelCatalog()
-    .then((status) =>
-      log.debug(`model catalog refreshed from ${status.source}`)
-    )
-    .catch((error) =>
-      log.debug(
-        `model catalog refresh failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      )
-    );
-}
 /** The one-shot `lumisca run` path: parse args, execute the run, print
  * the result, and return the process exit code. The core is closed in the
  * finally block before the code leaves this function — exiting from inside

@@ -7,7 +7,7 @@ import type {
 } from "../ai/types.ts";
 import { errorMessage } from "../errors.ts";
 import { parseJsonOrThrow } from "../shared/mod.ts";
-import { isRecord } from "../shared/fs-util.ts";
+import { isRecord } from "../fs.ts";
 
 /**
  * Custom OpenAI-compatible providers for headless/agent use.

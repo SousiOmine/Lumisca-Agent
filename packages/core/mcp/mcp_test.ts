@@ -2,12 +2,12 @@ import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { errorMessage } from "../errors.ts";
 import {
-  APP_MCP_SETTINGS_KEY,
   loadMcpConfig,
   McpConfigError,
   parseMcpConfig,
   serializeMcpConfig,
 } from "./config.ts";
+import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
 import { McpManager } from "./manager.ts";
 import { createMcpTools, sanitizeServerName } from "./tools.ts";
 import { McpService } from "./service.ts";

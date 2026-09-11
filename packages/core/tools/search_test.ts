@@ -2,9 +2,9 @@ import { basename, join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { errorMessage } from "../errors.ts";
-import { GitignoreMatcher } from "./gitignore.ts";
+import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
 import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";
-import { createGlobTool, createGrepTool, globToRegExp } from "./search.ts";
+import { createGlobTool, createGrepTool } from "./search.ts";
 
 function makeTools(root: string) {
   const sandbox = new Sandbox([root]);
@@ -382,6 +382,28 @@ Deno.test("glob respects .gitignore by default and gitignore: false includes the
     );
     assertEquals(noHiddenNoIgnore.details?.count, 3);
     assertEquals(toolText(noHiddenNoIgnore).includes("node_modules"), true);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("glob re-reads .gitignore after the file changes", async () => {
+  const root = await fixture();
+  try {
+    const { glob } = makeTools(root);
+    const before = await glob.execute("1", { pattern: "**/*.js" }, undefined);
+    assertEquals(toolText(before).includes("b.js"), true);
+
+    // The matcher is cached per sandbox; an edited .gitignore must still
+    // take effect on the next search (the stamp changes).
+    await Deno.writeTextFile(join(root, ".gitignore"), "*.js\n");
+    const after = await glob.execute("1", { pattern: "**/*.js" }, undefined);
+    assertEquals(after.details?.count, 0);
+
+    // Removing the rule brings the file back.
+    await Deno.writeTextFile(join(root, ".gitignore"), "\n");
+    const restored = await glob.execute("1", { pattern: "**/*.js" }, undefined);
+    assertEquals(toolText(restored).includes("b.js"), true);
   } finally {
     await removeDirRetry(root);
   }

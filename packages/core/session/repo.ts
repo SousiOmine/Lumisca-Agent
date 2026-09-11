@@ -116,6 +116,14 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         goal_status = NULL, goal_last_reason = NULL, updated_at = ?
     WHERE id = ?
   `);
+  // Prepared once here (not per call): updateGoal runs on every goal-loop
+  // iteration, and DatabaseSync.prepare re-parses the statement each time.
+  const updateGoalStmt = db.db.prepare(`
+    UPDATE sessions
+    SET goal_iteration = ?, goal_max_iterations = ?,
+        goal_status = ?, goal_last_reason = ?, updated_at = ?
+    WHERE id = ?
+  `);
 
   return {
     create(input): SessionRecord {
@@ -206,12 +214,7 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
             ? { lastReason: current.goal_last_reason }
             : {})),
       };
-      db.db.prepare(`
-        UPDATE sessions
-        SET goal_iteration = ?, goal_max_iterations = ?,
-            goal_status = ?, goal_last_reason = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
+      updateGoalStmt.run(
         next.iteration,
         next.maxIterations,
         next.status,

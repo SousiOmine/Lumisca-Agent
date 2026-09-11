@@ -3,16 +3,26 @@
  * the small event-stream contract the agent runtime and the tests use.
  * The agent runtime consumes the stream (for-await); tests push events
  * synchronously and end() the stream with the final AssistantMessage.
+ *
+ * The push/end surface is required here (unlike the consumer-side
+ * {@link AssistantMessageEventStream} in types.ts): this is what a producer
+ * drives.
  */
-import type { AssistantMessage, StreamEvent } from "./types.ts";
+import type {
+  AssistantMessage,
+  AssistantMessageEventStream,
+  StreamEvent,
+} from "./types.ts";
 
-export type AssistantMessageEventStream = AsyncIterable<StreamEvent> & {
-  push(event: StreamEvent): void;
-  end(message?: AssistantMessage): void;
-};
+export type PushableAssistantMessageEventStream =
+  & AssistantMessageEventStream
+  & {
+    push(event: StreamEvent): void;
+    end(message?: AssistantMessage): void;
+  };
 
 /** Create an empty pushable assistant-message event stream. */
-export function createAssistantMessageEventStream(): AssistantMessageEventStream {
+export function createAssistantMessageEventStream(): PushableAssistantMessageEventStream {
   const queue: StreamEvent[] = [];
   const waiters: Array<(value: IteratorResult<StreamEvent>) => void> = [];
   let ended = false;

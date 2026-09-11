@@ -2,16 +2,17 @@ import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import {
-  type Context,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
+  type StreamRequest,
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import type { AgentMessage, BrowserBackend, ClientEvent } from "./mod.ts";
 import { LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
+import { SCHEMA_VERSION } from "./db/schema.ts";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
@@ -22,6 +23,7 @@ import {
   TOOL_SEARCH,
 } from "./shared/mod.ts";
 import { MCP_TOOLS_PROMPT_NOTE } from "./mcp/tools.ts";
+import { bytesToBase64 } from "./base64.ts";
 import { makeRealTempDir, MINI_PNG, removeDirRetry } from "./test-utils.ts";
 
 function setup() {
@@ -745,7 +747,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db1.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    6,
+    SCHEMA_VERSION,
   );
   db1.close();
 
@@ -754,7 +756,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   assertEquals(
     (db2.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    6,
+    SCHEMA_VERSION,
   );
   db2.close();
 
@@ -831,7 +833,7 @@ Deno.test("migration drops the legacy settings table", async () => {
   assertEquals(
     (db.db.prepare("PRAGMA user_version").get() as { user_version: number })
       .user_version,
-    6,
+    SCHEMA_VERSION,
   );
   db.close();
 
@@ -1839,12 +1841,6 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
 
 // --- image analysis model (画像分析モデル) --------------------------------
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
 /** A text-only main model plus a vision-capable analysis model on one
  * provider; the analysis model is selected through the model_image setting
  * (see ModelPreferencePanel in the web UI). */
@@ -1885,15 +1881,15 @@ function makeImageAnalysisResponses(
   return script.map(
     (step) =>
     (
-      context: Context,
+      StreamRequest: StreamRequest,
       _options: unknown,
       _state: unknown,
       model: { id: string },
     ) => {
       const call: CapturedCall = {
         model: model.id,
-        systemPrompt: context.systemPrompt,
-        messages: context.messages as CapturedCall["messages"],
+        systemPrompt: StreamRequest.systemPrompt,
+        messages: StreamRequest.messages as CapturedCall["messages"],
       };
       captured.push(call);
       return step(call);

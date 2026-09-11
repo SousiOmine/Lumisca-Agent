@@ -2,12 +2,12 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   type Api,
   type AssistantMessageEventStream,
-  type Context,
   fauxAssistantMessage,
   type Model,
+  type StreamRequest,
 } from "@lumisca/core";
 import type { StreamFn } from "@lumisca/core";
-import { RATE_LIMIT_BASE_DELAY_MS, RetryAbortError } from "./llm-retry.ts";
+import { RATE_LIMIT_BASE_DELAY_MS, RetryAbortError } from "../ai/rate-limit.ts";
 import { streamText } from "../ai/stream.ts";
 
 function fakeModel(): Model<Api> {
@@ -20,7 +20,7 @@ function fakeStreamFn(
   outcomes: Array<{ fail?: string }>,
 ): StreamFn {
   let i = 0;
-  return (_model, _context: Context) => {
+  return (_model, _context: StreamRequest) => {
     const out = outcomes[i++] ?? {};
     const events = (async function* () {
       if (out.fail) {

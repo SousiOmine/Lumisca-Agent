@@ -1,5 +1,4 @@
 import { extname, join } from "node:path";
-import type { Sandbox } from "../workspace/sandbox.ts";
 import {
   decodeUtf8,
   diffLineCounts,
@@ -16,10 +15,8 @@ import {
   truncatedNote,
 } from "./truncate.ts";
 import { requireResolved } from "./resolve.ts";
-
-interface FsToolContext {
-  sandbox: Sandbox;
-}
+import { bytesToBase64 } from "../base64.ts";
+import type { FsToolContext } from "./context.ts";
 
 /** Raster image extensions read as image content blocks (vision models see
  * the pixels). Vector images (SVG) are XML and stay on the text path. */
@@ -38,12 +35,6 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 /** Line count suggested by the "file continues" note for a next chunk. */
 const SUGGESTED_RANGE_LINES = 2000;
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
 
 function fileInfoLine(entry: Deno.DirEntry): string {
   if (entry.isDirectory) return `${entry.name}/`;
