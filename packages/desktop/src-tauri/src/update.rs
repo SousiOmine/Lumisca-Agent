@@ -343,9 +343,9 @@ pub(crate) async fn download_update(app: AppHandle) {
 /// macOS/Linux: `install` only replaces the bundle on disk and returns,
 /// leaving the old process running — the plugin never relaunches by itself
 /// there (and its `on_before_exit` hook is Windows-only, so it is not
-/// registered). This function therefore shuts the services down and
-/// restarts the app explicitly; without it the user keeps seeing the old
-/// version until they quit and reopen the app manually.
+/// registered). {@link restart_after_install} therefore shuts the services
+/// down and restarts the app explicitly; without it the user keeps seeing
+/// the old version until they quit and reopen the app manually.
 pub(crate) fn install_update(app: AppHandle) {
     std::thread::spawn(move || {
         let pending = app
@@ -360,23 +360,37 @@ pub(crate) fn install_update(app: AppHandle) {
             st.error = Some("インストールできる更新がありません。".into());
             return;
         };
-        if let Err(e) = pending.update.install(&pending.bytes) {
-            *app.state::<AppState>()
-                .pending
-                .lock()
-                .unwrap_or_else(|e| e.into_inner()) = Some(pending);
-            let state = app.state::<AppState>();
-            let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
-            st.error = Some(format!("インストールに失敗しました: {e}"));
-            return;
-        }
-        // On Windows the call above never returns on success: `install`
-        // exits the process after launching the installer, which relaunches
-        // the app itself.
-        #[cfg(not(windows))]
-        {
-            shutdown_services(&app);
-            app.restart();
+        match pending.update.install(&pending.bytes) {
+            Ok(()) => restart_after_install(&app),
+            Err(e) => {
+                // The update was not applied: hand the pending payload back
+                // so the user can retry without re-downloading it.
+                *app.state::<AppState>()
+                    .pending
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Some(pending);
+                let state = app.state::<AppState>();
+                let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
+                st.error = Some(format!("インストールに失敗しました: {e}"));
+            }
         }
     });
+}
+
+/// What a successful `install` leaves to do.
+///
+/// Windows: nothing — `install` exits the process after launching the
+/// installer, which relaunches the app itself, so this arm is unreachable
+/// in practice.
+///
+/// macOS/Linux: the plugin only replaced the bundle on disk, so shut the
+/// services down (the server child and the browser lab) before restarting,
+/// or the new instance would fight the old one for the port and database.
+#[cfg(windows)]
+fn restart_after_install(_app: &AppHandle) {}
+
+#[cfg(not(windows))]
+fn restart_after_install(app: &AppHandle) {
+    shutdown_services(app);
+    app.restart();
 }

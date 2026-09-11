@@ -55,9 +55,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
-// Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
-// `open` on every platform; only the CDP calls themselves are Windows-only.
+// Windows only: the CDP transport is WebView2's DevTools Protocol.
+#[cfg(windows)]
 use lumisca_browser_rpc::cdp;
+// Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
+// `open` on every platform, and the eval driver serves every platform's
+// observe/act.
 use lumisca_browser_rpc::emulation;
 use lumisca_browser_rpc::eval::{
     driver, probe_method_of, to_js_literal, EVAL_TIMEOUT, WAIT_HEADROOM,
@@ -77,7 +80,9 @@ pub const LAB_WINDOW_LABEL: &str = "browser-lab";
 /// The lumisca:// shell bridge must never be reachable from the lab.
 const BLOCKED_SCHEMES: [&str; 1] = ["lumisca:"];
 
-/// How long the page gets to answer a CDP method call.
+/// How long the page gets to answer a CDP method call (Windows only: the
+/// CDP transport is WebView2's).
+#[cfg(windows)]
 const CDP_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// Shared lab state: the live window (None while closed) and the eval
@@ -100,6 +105,8 @@ struct LabCore {
     viewport: Mutex<Option<(u32, u32)>>,
     /// Fit scale of the last applied emulation. Reapplied only when it
     /// changes, so window-move/focus events do not re-run CDP calls.
+    /// Windows only: the emulation it caches is a CDP feature.
+    #[cfg(windows)]
     applied_scale: Mutex<Option<f64>>,
     /// One eval at a time (the protocol is strict request/response per
     /// host; a second call while one is in flight is refused, never
@@ -133,6 +140,7 @@ impl BrowserLab {
             window: Mutex::new(None),
             visible: Mutex::new(false),
             viewport: Mutex::new(None),
+            #[cfg(windows)]
             applied_scale: Mutex::new(None),
             busy: Mutex::new(()),
             pending: Arc::new(Mutex::new(HashMap::new())),

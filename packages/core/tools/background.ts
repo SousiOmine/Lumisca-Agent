@@ -44,6 +44,12 @@ export const BACKGROUND_TAIL_LIMIT = 8 * 1024;
 const FINAL_FLUSH_GRACE_MS = 250;
 /** Upper bound for kill() to wait for the process to actually die. */
 const KILL_WAIT_MS = 3000;
+/** Upper bound for a kill to SETTLE: the process death (KILL_WAIT_MS) plus
+ * the final output flush that precedes the state transition. Waiting for
+ * the death alone would resolve kill()/killAll() while the record still
+ * reports "running", so a status check right after a kill would see a live
+ * process. */
+const KILL_SETTLE_WAIT_MS = KILL_WAIT_MS + FINAL_FLUSH_GRACE_MS;
 
 export type BackgroundCommandState = "running" | "finished" | "killed";
 export type BackgroundCommandReason = "exited" | "killed" | "timeout";
@@ -76,13 +82,24 @@ interface RunningRecord {
   info: BackgroundCommandInfo;
   child: Deno.ChildProcess;
   buffer: Uint8Array;
-  /** Resolves when the process exits (child.status); kill() awaits it to
-   * confirm the death. */
-  exit: Promise<Deno.CommandStatus>;
+  /** Resolves when the record left the running set: finalize() ran and
+   * flipped the state. The process exit alone is NOT enough — finalize
+   * waits for the final output flush first — so kill()/killAll() await
+   * this to guarantee that a status check afterwards reports the kill. */
+  settled: Promise<void>;
+  /** Settles {@link settled}; finalize() calls it exactly once. */
+  markSettled: () => void;
   finalized: boolean;
   killedByUser: boolean;
   killedByTimeout: boolean;
   timer?: ReturnType<typeof setTimeout>;
+}
+
+/** A deferred settled signal for one record: the promise kill()/killAll()
+ * wait on, and the resolver finalize() fires exactly once. */
+function settleSignal(): Pick<RunningRecord, "settled" | "markSettled"> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  return { settled: promise, markSettled: resolve };
 }
 
 /** Drop trailing bytes that begin an incomplete UTF-8 sequence, so slicing
@@ -230,7 +247,7 @@ export class BackgroundProcessManager {
       info,
       child,
       buffer: new Uint8Array(0),
-      exit: child.status,
+      ...settleSignal(),
       finalized: false,
       killedByUser: false,
       killedByTimeout: false,
@@ -295,11 +312,11 @@ export class BackgroundProcessManager {
   }
 
   /** Stop a command (whole process tree) and wait — bounded — for it to
-   * actually die, so the caller's result reflects reality (a status check
-   * right after a successful kill must not see a still-running process).
-   * On Windows the taskkill is awaited first, so the kill has reached the
-   * whole tree before the shell's own exit is awaited. Unknown ids throw;
-   * killing an already-finished command is a no-op. */
+   * actually settle, so the caller's result reflects reality (a status
+   * check right after a successful kill must not see a still-running
+   * process). On Windows the taskkill is awaited first, so the kill has
+   * reached the whole tree. Unknown ids throw; killing an already-finished
+   * command is a no-op. */
   async kill(
     commandId: string,
   ): Promise<{ ok: true; alreadyExited: boolean; timedOut: boolean }> {
@@ -322,22 +339,18 @@ export class BackgroundProcessManager {
       record.timer = undefined;
     }
     await killProcessTree(record.child);
-    const timedOut = await Promise.race([
-      record.exit.then(() => false, () => false),
-      new Promise<boolean>((resolve) =>
-        setTimeout(() => resolve(true), KILL_WAIT_MS)
-      ),
-    ]);
+    const timedOut = !(await this.awaitSettled(record, KILL_SETTLE_WAIT_MS));
     return { ok: true, alreadyExited: false, timedOut };
   }
 
   /** Stop every running command (session close / app shutdown) and wait —
-   * bounded — for the kills to take effect, so the caller can order
-   * shutdown after it (a fire-and-forget kill races the process exit and
-   * orphans the tree on Windows, where taskkill must finish before the
-   * event loop is torn down). Resolves once every kill has been issued
-   * and each process's exit observed (at most KILL_WAIT_MS per command);
-   * stuck processes do not block shutdown forever. */
+   * bounded — for each kill to settle, so the caller can order shutdown
+   * after it: once this resolves, no command is reported as running. (A
+   * fire-and-forget kill races the process exit and orphans the tree on
+   * Windows, where taskkill must finish before the event loop is torn
+   * down; on POSIX it also leaves a window where the record still says
+   * "running" after the signal was sent.) The wait is bounded per command,
+   * so stuck processes do not block shutdown forever. */
   async killAll(): Promise<void> {
     const targets = [...this.records.values()].filter(
       (record) => record.info.state === "running",
@@ -353,13 +366,24 @@ export class BackgroundProcessManager {
       targets.map((record) => killProcessTree(record.child).catch(() => {})),
     );
     await Promise.all(
-      targets.map((record) =>
-        Promise.race([
-          record.exit.then(() => {}, () => {}),
-          new Promise((resolve) => setTimeout(resolve, KILL_WAIT_MS)),
-        ])
-      ),
+      targets.map((record) => this.awaitSettled(record, KILL_SETTLE_WAIT_MS)),
     );
+  }
+
+  /** Wait (bounded) until the record left the running set, i.e. finalize()
+   * flipped its state. The process exit alone is not enough: finalize waits
+   * for the final output flush first, so a status check between the two
+   * would still report "running". Returns false when the bound elapsed. */
+  private async awaitSettled(
+    record: RunningRecord,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    return await Promise.race([
+      record.settled.then(() => true),
+      new Promise<boolean>((resolve) =>
+        setTimeout(() => resolve(false), timeoutMs)
+      ),
+    ]);
   }
 
   /** Announce a newly spawned command to the panel (background_start).
@@ -445,6 +469,10 @@ export class BackgroundProcessManager {
     record.info.state = reason === "exited" ? "finished" : "killed";
     record.info.finishedAt = Date.now();
     record.info.exitCode = status.code ?? undefined;
+    // The record has left the running set: release the kill()/killAll()
+    // waiters (before the tail decode below, which is not part of the
+    // state transition).
+    record.markSettled();
     // The command no longer occupies a concurrency slot; keep only a
     // bounded summary for status/list/tail queries. The output tail is
     // decoded below and stored on the summary.
@@ -652,8 +680,8 @@ export function createAsyncBashTools(
       const text = alreadyExited
         ? `Background command #${params.id} was already finished; nothing to kill.`
         : timedOut
-        ? `Kill requested for background command #${params.id}, but the process did not exit within ${
-          KILL_WAIT_MS / 1000
+        ? `Kill requested for background command #${params.id}, but the process did not settle within ${
+          KILL_SETTLE_WAIT_MS / 1000
         }s.`
         : `Killed background command #${params.id}.`;
       return {
