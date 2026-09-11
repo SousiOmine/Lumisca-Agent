@@ -333,10 +333,19 @@ pub(crate) async fn download_update(app: AppHandle) {
     }
 }
 
-/// Install the downloaded update. On Windows this launches the NSIS
-/// installer and exits the process (the installer relaunches the app). The
-/// updater's `on_before_exit` hook stops the local server only after the
-/// installer is ready to launch, so an earlier failure leaves the UI alive.
+/// Install the downloaded update.
+///
+/// Windows: `install` launches the NSIS installer and exits the process
+/// (the installer relaunches the app). The updater's `on_before_exit` hook
+/// stops the local server only after the installer is ready to launch, so
+/// an earlier failure leaves the UI alive.
+///
+/// macOS/Linux: `install` only replaces the bundle on disk and returns,
+/// leaving the old process running — the plugin never relaunches by itself
+/// there (and its `on_before_exit` hook is Windows-only, so it is not
+/// registered). This function therefore shuts the services down and
+/// restarts the app explicitly; without it the user keeps seeing the old
+/// version until they quit and reopen the app manually.
 pub(crate) fn install_update(app: AppHandle) {
     std::thread::spawn(move || {
         let pending = app
@@ -359,7 +368,15 @@ pub(crate) fn install_update(app: AppHandle) {
             let state = app.state::<AppState>();
             let mut st = state.update.lock().unwrap_or_else(|e| e.into_inner());
             st.error = Some(format!("インストールに失敗しました: {e}"));
+            return;
         }
-        // On success the installer is running and this process has exited.
+        // On Windows the call above never returns on success: `install`
+        // exits the process after launching the installer, which relaunches
+        // the app itself.
+        #[cfg(not(windows))]
+        {
+            shutdown_services(&app);
+            app.restart();
+        }
     });
 }
