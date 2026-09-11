@@ -5,7 +5,7 @@ import type { Workspace } from "../types/workspace.ts";
 // ---- errors ---------------------------------------------------------------
 
 /** Human-readable message of any thrown value. Shared by the core, the
- * server layer, the CLI, and the web UI so the rendering never varies.
+ * server layer, and the web UI so the rendering never varies.
  *
  * Cross-realm errors (thrown inside a `vm` context, e.g. the eval tool's
  * sandbox) are not `instanceof Error` here, so their `message` is read
@@ -58,25 +58,21 @@ export function parseJsonOrThrow<T>(
 
 /** Decode UTF-8 bytes (TextDecoder is available in browsers and Deno, so
  * this stays frontend-safe). Single home for the `new TextDecoder()`
- * pattern scattered across tools and the CLI. */
+ * pattern scattered across tools and the client. */
 export function decodeUtf8(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }
-/** Display name for a newly created session. One format shared by the core
- * (web sessions, `"Session ..."`) and the CLI (`run` sessions, `"Run ..."`)
- * so session names never drift between frontends. */
-export function formatSessionName(
-  date: Date = new Date(),
-  prefix = "Session",
-): string {
-  return `${prefix} ${date.toLocaleString()}`;
+/** Display name for a newly created session ("Session <date>"), shown
+ * until the title generator replaces it. */
+export function formatSessionName(date: Date = new Date()): string {
+  return `Session ${date.toLocaleString()}`;
 }
 
 // ---- models ---------------------------------------------------------------
 
 /** "123K ctx" style model metadata for pickers and lists.
  * Text-only: the web UI renders a Tabler icon for reasoning models next to
- * this, and the CLI appends its own terminal marker (see cli/select.ts). */
+ * this. */
 export function formatModelMeta(contextWindow?: number): string {
   const parts: string[] = [];
   if (contextWindow) parts.push(`${Math.round(contextWindow / 1024)}K ctx`);
@@ -99,7 +95,7 @@ export interface InitialData {
 
 /** Race a promise against a timeout: resolves with the promise's value, or
  * with `fallback` when `ms` elapses first. Shared by the web shell bridge
- * and the CLI browser host so the timeout pattern lives once. */
+ * and the desktop notifications so the timeout pattern lives once. */
 export function withTimeout<T>(
   promise: Promise<T>,
   ms: number,

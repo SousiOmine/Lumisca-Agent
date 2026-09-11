@@ -1,9 +1,10 @@
 /**
  * Assert that every manifest carrying the app version agrees.
  *
- * The version lives in eight files (the five workspace `deno.json`s, the
- * desktop `package.json`, `tauri.conf.json` and `Cargo.toml`) because each
- * toolchain reads its own manifest. This script is the single checker, run
+ * The version lives in seven files (three workspace `deno.json`s, the
+ * desktop `deno.json`, the desktop `package.json`, `tauri.conf.json` and
+ * `Cargo.toml`) because each toolchain reads its own manifest. This script
+ * is the single checker, run
  * by CI on every change and by the release workflow against the pushed tag,
  * so a mismatch is caught before a release is published.
  *
@@ -46,7 +47,6 @@ const MANIFESTS: Manifest[] = [
   { path: REFERENCE, read: jsonVersion },
   { path: "packages/core/deno.json", read: jsonVersion },
   { path: "packages/server/deno.json", read: jsonVersion },
-  { path: "packages/cli/deno.json", read: jsonVersion },
   { path: "packages/web/deno.json", read: jsonVersion },
   { path: "packages/desktop/deno.json", read: jsonVersion },
   { path: "packages/desktop/package.json", read: jsonVersion },

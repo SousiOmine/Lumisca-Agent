@@ -1,4 +1,4 @@
-import { removeDirRetry } from "../test-utils.ts";
+import { promptSession, removeDirRetry } from "../test-utils.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
 import type { StreamFn } from "@lumisca/core";
@@ -719,7 +719,7 @@ Deno.test("a task runs in the background and its completion reaches the parent",
       fauxAssistantMessage("Launched."),
       fauxAssistantMessage("The task finished."),
     ]);
-    await core.prompt(session.id, "Do the research in the background");
+    await promptSession(core, session.id, "Do the research in the background");
 
     const agent = core.getAgent(session.id)!;
     await waitFor(
@@ -790,7 +790,7 @@ Deno.test("a waiting task_output receives the result and suppresses the notifica
       ]),
       fauxAssistantMessage("Got the result."),
     ]);
-    await core.prompt(session.id, "Do the research and wait for it");
+    await promptSession(core, session.id, "Do the research and wait for it");
 
     const agent = core.getAgent(session.id)!;
     await waitFor(
@@ -837,7 +837,7 @@ Deno.test("sub-agents survive a session rebuild and remain listed", async () => 
       fauxAssistantMessage("Answer: 42"),
       fauxAssistantMessage("Launched."),
     ]);
-    await core.prompt(session.id, "Start research in the background");
+    await promptSession(core, session.id, "Start research in the background");
     await waitFor(
       () => core.getTasks(session.id).some((t) => t.status === "finished"),
       "the task to finish",

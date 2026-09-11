@@ -27,7 +27,7 @@ export const TOOL_SEARCH = "tool_search";
  * point for tools whose definitions stay out of the LLM context. */
 export const TOOL_CALL = "tool_call";
 /** Browser-lab tools (the built-in WebView debugger; present only when a
- * BrowserBackend is available — Desktop and CLI). */
+ * BrowserBackend is available — the desktop shell). */
 export const TOOL_BROWSER_OPEN = "browser_open";
 export const TOOL_BROWSER_OBSERVE = "browser_observe";
 export const TOOL_BROWSER_ACT = "browser_act";

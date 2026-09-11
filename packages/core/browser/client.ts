@@ -1,8 +1,7 @@
 /**
  * HttpBrowserBackend: a BrowserBackend speaking the lumisca-browser RPC
  * protocol to a local host (the Desktop's in-shell Browser Lab IPC
- * endpoint, or the CLI's lumisca-browser-host process) over HTTP on
- * 127.0.0.1 with a per-run random token.
+ * endpoint) over HTTP on 127.0.0.1 with a per-run random token.
  *
  * No fallbacks live here: if the host is unreachable, unauthorised, or
  * returns an unexpected reply, the caller gets a BrowserBackendError —

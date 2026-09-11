@@ -6,8 +6,9 @@
  * uncached input tokens. Older rows (or test doubles) may report the
  * provider's split instead (`{ inputTokens, inputTokenDetails:
  * { noCacheTokens, cacheReadTokens, cacheWriteTokens } }`), so the helpers
- * below accept both shapes. This interface keeps the shared module pi-free
- * so the web bundle and the CLI share one implementation. */
+ * below accept both shapes. This interface keeps the shared module
+ * dependency-free so the web bundle and the server share one
+ * implementation. */
 export interface ContextUsageLike {
   /** Uncached input tokens (app shape). */
   input?: number | null;
@@ -180,7 +181,7 @@ export function formatPercent1(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`;
 }
 
-/** One-line CLI rendering: "301.2K/1M (30.1%) · Avg cache hit 92.4%".
+/** One-line rendering: "301.2K/1M (30.1%) · Avg cache hit 92.4%".
  * Segments without data are omitted ("301.2K" alone when the window is
  * unknown, "" when the session has no usage yet). */
 export function formatContextUsageLine(

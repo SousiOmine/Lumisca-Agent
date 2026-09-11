@@ -18,5 +18,5 @@ export class CoreError extends Error {
 }
 
 /** Human-readable message of any thrown value (defined in shared/mod.ts so the
- * CLI and web UI reuse the same helper). */
+ * server and web UI reuse the same helper). */
 export { errorMessage } from "./shared/mod.ts";

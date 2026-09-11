@@ -1,11 +1,10 @@
-//! CDP request/response pieces shared by the two Windows hosts.
+//! CDP request/response pieces for the browser-lab host.
 //!
-//! Both hosts drive WebView2's DevTools Protocol, but over different
-//! vehicles: the desktop lab calls it synchronously from a blocking RPC
-//! thread (`with_webview` + channel), while the CLI host drives the tao
-//! event loop with a callback. The *vehicles* must stay separate; the
-//! request parameters, the response unwrapping and the error shapes must
-//! not — a fix in one host would otherwise silently miss the other.
+//! The desktop lab drives WebView2's DevTools Protocol synchronously from a
+//! blocking RPC thread (`with_webview` + channel). Keeping the request
+//! parameters, the response unwrapping and the error shapes here (rather
+//! than inline in the host) means the pane's own call sites cannot drift
+//! apart from each other.
 //!
 //! Everything here is pure: build a params object, or interpret a reply.
 

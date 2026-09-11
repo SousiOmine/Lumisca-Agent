@@ -48,7 +48,7 @@ Deno.test("read passes raster images to the model as image blocks", async () => 
       (c) => c.charCodeAt(0),
     );
     assertEquals(decoded, MINI_PNG);
-    // A text note keeps the image visible in text-only UIs (CLI).
+    // A text note keeps the image visible in text-only UIs.
     const text = toolText(result);
     assert(text.includes("[image: pic.png"), `note missing: ${text}`);
   } finally {

@@ -7,9 +7,9 @@ import { isRecord } from "../fs.ts";
 import { buildModel, buildProvider } from "./custom.ts";
 
 /**
- * User-defined OpenAI-compatible providers, added from the settings UI
- * (and the CLI). Unlike the headless env-var / models.json custom
- * providers (custom.ts), these live in the Lumisca settings store and can
+ * User-defined OpenAI-compatible providers, added from the settings UI.
+ * Unlike the headless env-var / models.json custom providers (custom.ts),
+ * these live in the Lumisca settings store and can
  * be created, edited and removed at runtime — the "add as many OpenAI-
  * compatible providers as you like" feature.
  *

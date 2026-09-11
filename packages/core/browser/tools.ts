@@ -1,8 +1,8 @@
 /**
  * The browser tool family: browser_open / browser_observe / browser_act /
  * browser_wait / browser_screenshot / browser_close. Identical schemas and
- * behavior for Desktop and CLI — both pass a BrowserBackend; the tools
- * never know which host backs it.
+ * behavior for every host — the tools take a BrowserBackend and never know
+ * which one backs it.
  *
  * The tools are never preloaded into the LLM context: the session pool
  * seeds them into the session's tool registry (discoverable via
@@ -630,10 +630,9 @@ function createBrowserCloseTool(
     name: TOOL_BROWSER_CLOSE,
     label: "Browser Close",
     description:
-      "Close the browser: destroy the debug WebView (Desktop) or stop " +
-      "the browser host process (CLI), releasing every subscription and " +
-      "the view. Idempotent — closing an already-closed browser is a " +
-      "no-op. browser_open starts a fresh one afterwards.",
+      "Close the browser: destroy the debug WebView, releasing every " +
+      "subscription and the view. Idempotent — closing an already-closed " +
+      "browser is a no-op. browser_open starts a fresh one afterwards.",
     parameters: closeSchema,
     execute: async (_id, _params, signal): Promise<ToolResult> => {
       await requireBackend(resolveBackend).close(signal);

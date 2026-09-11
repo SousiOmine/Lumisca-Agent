@@ -69,16 +69,11 @@ export class AgentFactory {
     messages: AgentMessage[],
     resources: SessionResources,
     isCurrentAttachment: (attachment: McpAttachment) => boolean,
-    options: { headless?: boolean } = {},
   ): SessionAgent {
     const model = this.deps.requireModel(
       session.modelProvider,
       session.modelId,
     );
-    // A new open records the current headless flag (an explicit headless
-    // open sets it, a plain reopen clears it). Recorded only after the
-    // model check above so a failed open leaves no stale state behind.
-    resources.headless = options.headless ?? false;
 
     // One shared MCP attachment per session: its server processes serve
     // every agent of the session (the main agent and the sub-agents) and
@@ -193,10 +188,7 @@ export class AgentFactory {
     }
     // One hub per open agent: it holds the questions of the live run, so a
     // rebuild (which closes the old agent first) starts with a clean slate.
-    // Headless runs auto-answer every ask (recommended/first option).
-    const askHub = new AskHub(session.id, (event) => this.deps.emit(event), {
-      autoAnswer: options.headless ?? false,
-    });
+    const askHub = new AskHub(session.id, (event) => this.deps.emit(event));
     // Reuse the session's todo hub when one exists (agent rebuild): the
     // plan is the session's progress, not the agent's, so it must survive.
     // Created on first open; discarded when the session closes.
@@ -306,7 +298,6 @@ export class AgentFactory {
       toolRegistry: registry,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
-      disableTitleGeneration: options.headless ?? false,
       renameSession: (name) => this.deps.renameSession(session.id, name),
       goalStore: {
         loadGoal: () => this.deps.loadGoal(session.id),

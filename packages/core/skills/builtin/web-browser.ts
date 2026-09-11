@@ -54,10 +54,9 @@ the user "the browser is not available in this session".
   sites.
 - No external browser is launched; the page renders in Lumisca's own
   WebView.
-- In the desktop app the user can see it too. In the CLI the backend
-  starts on the first browser tool use (disabled with
-  --browser-preview never). A standalone server without a browser host
-  cannot use it.
+- In the desktop app the user can see it too. In a standalone server
+  started without a browser host the backend is absent, so the browser
+  tools are unavailable.
 
 ## Standard workflow
 

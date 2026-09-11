@@ -91,10 +91,10 @@ export interface AgentRuntime {
   loadMergedMcp(workspace: Workspace): { config: McpConfig; errors: string[] };
   /** Forward an agent event to every frontend listener. */
   emit(event: ClientEvent): void;
-  /** The session's browser-lab backend (Desktop WebView host / CLI browser
-   * host), or undefined when no browser surface is available — the agent
-   * then gets no browser tools. A getter so a backend attached after the
-   * pool was built (CLI lazy start) still reaches new agents. */
+  /** The session's browser-lab backend (Desktop WebView host), or
+   * undefined when no browser surface is available — the agent then gets
+   * no browser tools. A getter so a backend attached after the pool was
+   * built still reaches new agents. */
   browser?: () => BrowserBackend | undefined;
 }
 
@@ -133,10 +133,6 @@ export interface SessionResources {
    * starts). Lets non-WebSocket clients learn about failures of
    * fire-and-forget prompts. */
   lastError?: string;
-  /** Whether the session is open with `headless: true` (the CLI `run` path).
-   * Not persisted, but must survive agent rebuilds. Set on every open()
-   * (a plain reopen clears it). */
-  headless: boolean;
 }
 
 /**
@@ -203,30 +199,19 @@ export class SessionPool {
   /** Build the agent of a session (replacing any existing one) and keep it
    * in memory. MCP tools attach asynchronously — they spawn server
    * processes — and errors are reported via session_error events, never
-   * thrown here.
-   *
-   * `headless` (the CLI `run` path) changes the session's interaction with
-   * the user: the ask tool auto-answers with the recommended/first option
-   * instead of blocking, and title generation is skipped (no one sees it).
-   * The flag is a runtime property of the open agent, not persisted — a
-   * headless session reopened through the normal paths behaves like any
-   * other session. */
+   * thrown here. */
   open(
     session: SessionInfo,
     workspace: Workspace,
     messages: AgentMessage[],
-    options: { headless?: boolean } = {},
   ): SessionAgent {
-    const resources: SessionResources = this.sessions.get(session.id) ?? {
-      headless: false,
-    };
+    const resources: SessionResources = this.sessions.get(session.id) ?? {};
     const agent = this.factory.open(
       session,
       workspace,
       messages,
       resources,
       (attachment) => this.sessions.get(session.id)?.mcp === attachment,
-      options,
     );
     this.sessions.set(session.id, resources);
     return agent;
@@ -297,9 +282,8 @@ export class SessionPool {
     const current = resources.agent;
     const workspace = this.deps.requireWorkspace(session.workspaceId);
     const messages = current.messages;
-    const headless = resources.headless;
     current.close(); // also releases the old agent's MCP servers
-    this.open(session, workspace, messages, { headless });
+    this.open(session, workspace, messages);
   }
 
   /** Refuse configuration changes while any listed session is streaming,

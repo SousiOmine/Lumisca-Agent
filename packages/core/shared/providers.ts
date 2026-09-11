@@ -14,7 +14,7 @@ export type ThinkingLevel =
   | "max";
 
 /** User-facing labels for the thinking levels. Shared by the web UI and
- * the CLI so the level names stay consistent. */
+ * the core so the level names stay consistent. */
 export const THINKING_LEVEL_LABELS: Record<ThinkingLevel, string> = {
   off: "Off",
   minimal: "Minimal",

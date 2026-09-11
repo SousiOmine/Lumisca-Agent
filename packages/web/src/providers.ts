@@ -266,5 +266,5 @@ export function filterByQuery<T extends { id: string; name?: string }>(
 }
 
 /** Human-readable error string, used across every async UI surface (the
- * canonical helper lives in the core, shared with the CLI). */
+ * canonical helper lives in the core). */
 export { errorText };

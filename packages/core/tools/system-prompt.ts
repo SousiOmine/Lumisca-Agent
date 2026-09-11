@@ -10,19 +10,10 @@ import { sessionSkills } from "./toolsets.ts";
 /** Personalization budget (same cap as project memory). */
 const MAX_PERSONALIZATION_BYTES = 32 * 1024;
 
-/** Headless suffix for the ask-the-user guideline (auto-answered asks). */
-function headlessSuffix(headless: boolean): string {
-  return headless
-    ? " (Headless: the ask tool is auto-answered with the " +
-      "recommended/first option — prefer making the best reasonable " +
-      "assumption and stating it.)"
-    : "";
-}
-
 /** Guidelines shared by the coding and chat prompts (single source so a
  * wording change applies to both). */
-function sharedGuidelines(headless: boolean): string {
-  return `- Ask the user when a task is ambiguous.${headlessSuffix(headless)}
+function sharedGuidelines(): string {
+  return `- Ask the user when a task is ambiguous.
 - Prioritize correctness above all else.
 - Never fabricate tool or test results.
 - Do not silently narrow the requested scope.`;
@@ -32,18 +23,15 @@ function sharedGuidelines(headless: boolean): string {
  * `personalInstructions` (the machine-level AGENTS.md next to the settings
  * file) is appended at the very end, after project memory. `model` (the
  * session's model, when known) appears in the environment section between
- * the workspace folders and the guidelines. `headless` swaps the
- * ask-the-user guideline for the headless variant (asks are auto-answered
- * with the recommended/first option, so the model should prefer making a
- * reasonable assumption). `browserAvailable` (whether the session has a
- * browser backend attached) gates the built-in web-browser skill's
- * presence in the <available_skills> listing; callers that know the
- * backend state must pass it, the default (false) never advertises. */
+ * the workspace folders and the guidelines. `browserAvailable` (whether
+ * the session has a browser backend attached) gates the built-in
+ * web-browser skill's presence in the <available_skills> listing; callers
+ * that know the backend state must pass it, the default (false) never
+ * advertises. */
 export function buildSystemPrompt(
   workspace: Workspace,
   personalInstructions?: string,
   model?: EnvironmentModel,
-  headless = false,
   browserAvailable = false,
 ): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
@@ -83,7 +71,7 @@ Guidelines:
   up to date as you go; completing the current task advances automatically.
   The user watches your progress live in the UI.
 - After making changes, verify them (run tests, builds) when appropriate.
-${sharedGuidelines(headless)}
+${sharedGuidelines()}
 - Write code with future maintainers in mind.
 - Avoid unnecessary allocations and computation.
 - Never discard changes the user has already made.
@@ -133,14 +121,12 @@ function personalInstructionsSection(
  * ask / todo / global skills / MCP. There are no background commands and
  * no sub-agents, so the prompt never mentions their notifications.
  * `personalInstructions` (the machine-level AGENTS.md) is appended at the
- * very end; `model` appears in the environment section; `headless` swaps
- * the ask-the-user guideline for the headless variant like
- * buildSystemPrompt does; `browserAvailable` gates the built-in
- * web-browser skill like buildSystemPrompt does. */
+ * very end; `model` appears in the environment section;
+ * `browserAvailable` gates the built-in web-browser skill like
+ * buildSystemPrompt does. */
 export function buildChatSystemPrompt(
   personalInstructions?: string,
   model?: EnvironmentModel,
-  headless = false,
   browserAvailable = false,
 ): string {
   const skills = sessionSkills([], { browserAvailable });
@@ -152,7 +138,7 @@ machine. Answer questions, explain things, and help with text-based tasks.
 Images can be attached to prompts.${buildEnvironmentSection(model)}
 
 Guidelines:
-${sharedGuidelines(headless)}
+${sharedGuidelines()}
 - Write answers with future readers in mind.
 - Do not hand in placeholder content as finished work.
 - Do not ask the user for information you can obtain yourself.${

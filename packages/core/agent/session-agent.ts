@@ -70,10 +70,6 @@ export interface SessionAgentOptions {
    * Undefined in tests and sessions without goal support: the goal loop
    * is then disabled and goal mode behaves like a plain prompt. */
   goalStore?: GoalStore;
-  /** Skip title generation even when a fast model is configured. Headless
-   * runs (CLI `run`, harness use) must not fire an extra LLM request per
-   * session — the title is never seen by anyone. */
-  disableTitleGeneration?: boolean;
   /** Background-command manager backing the async_bash tools. Its
    * completion events are injected into the agent loop as notifications
    * (see notifyBackgroundCommand). */
@@ -175,10 +171,9 @@ export class SessionAgent {
         !(options.model.input ?? []).includes("image")
       ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
       : null;
-    this.titleGenerator =
-      options.fastModel !== undefined && !options.disableTitleGeneration
-        ? new TitleGenerator(options.fastModel, options.streamFn)
-        : null;
+    this.titleGenerator = options.fastModel !== undefined
+      ? new TitleGenerator(options.fastModel, options.streamFn)
+      : null;
     this.retry = new RetryManager(options.rateLimitRetrySleep);
     const goalStore = options.goalStore ?? null;
     this.goals = goalStore === null ? null : new GoalRunner({
@@ -240,9 +235,9 @@ export class SessionAgent {
    * (base64, passed through to vision-capable models; pi omits them for
    * text-only models). Waits for MCP tools to attach first (they spawn
    * server processes asynchronously). Failures are reported via the
-   * `session_error` event, never through the returned promise — callers
-   * (HTTP fire-and-forget, CLI) all listen on events, so awaiting here only
-   * means "the run finished". */
+   * `session_error` event, never through the returned promise — the
+   * fire-and-forget HTTP path listens on events instead, so awaiting here
+   * only means "the run finished". */
   /** Reset the retry state for a fresh exchange. A user prompt, a
    * notification that starts its own run, or a goal-loop turn all start a
    * fresh exchange: they do not inherit the previous run's
@@ -275,7 +270,7 @@ export class SessionAgent {
   /** Kick off title generation on the first prompt of a fresh session (no
    * history): it runs concurrently with the run and replaces the
    * provisional "Session <date>" name once ready. Shared by every prompt
-   * path (CLI `prompt` and the web/HTTP `promptWhileRunning`) — missing
+   * path (the awaited `prompt` and the web/HTTP `promptWhileRunning`) — missing
    * this would leave web sessions with their provisional name forever.
    * Guarded so it triggers at most once per session, even after a failed
    * first run that left savedCount at 0. */
@@ -804,8 +799,8 @@ export class SessionAgent {
 
   /** Surface a model-stream failure to the user. An assistant message that
    * ended with stopReason "error" carries the provider's error text, but
-   * neither the web UI nor the CLI renders it from the message itself —
-   * the empty content leaves a silent run. The retry mechanism is
+   * the web UI does not render it from the message itself: the empty
+   * content leaves a silent run. The retry mechanism is
    * unaffected: a transient failure still parks its retry (handleTurnEnd),
    * and the error banner clears when the restarted run starts
    * (agent_start). */
@@ -853,9 +848,9 @@ export class SessionAgent {
 
   /** Restart a run that a silent-error turn killed: the parked retry
    * notification becomes the next prompt once the dead run has fully
-   * settled, so both run callers — prompt() (CLI) and startRun() (web /
-   * injected notifications) — hold off reporting completion until the
-   * restart chain has finished. */
+   * settled, so both run callers — prompt() (an awaited run) and startRun()
+   * (web / injected notifications) — hold off reporting completion until
+   * the restart chain has finished. */
   private async resumeAfterErrorRun(): Promise<void> {
     await this.retry.resumeOnce(this.agent, this.closed);
   }

@@ -1771,7 +1771,22 @@ Deno.test("todo API returns the session's current plan", async () => {
       ]),
       fauxAssistantMessage("planned"),
     ]);
-    await core.prompt(session.id, "Plan the work");
+    // Drive the run through the real HTTP path: the prompt endpoint is
+    // fire-and-forget, so subscribe before sending and await agent_end.
+    const finished = new Promise<void>((resolve) => {
+      const unsubscribe = core.subscribe((event) => {
+        if (event.type === "agent_end" && event.sessionId === session.id) {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+    const prompted = await json(base, `/api/sessions/${session.id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "Plan the work" }),
+    });
+    assertEquals(prompted.status, 200);
+    await finished;
 
     const res = await json(base, `/api/sessions/${session.id}/todo`);
     const { todos } = await res.json() as { todos: TodoPhase[] };

@@ -1,7 +1,7 @@
 /**
  * BrowserBackend: the interface the agent's browser tools talk to, plus
  * every protocol/domain type shared between the backend implementations
- * (Desktop WebView host, CLI browser host) and the tool layer.
+ * (the Desktop WebView host) and the tool layer.
  *
  * The backend abstracts "an OS-standard WebView controlled over a local
  * authenticated channel". Hosts receive these operations, run a shared
@@ -19,11 +19,10 @@ export interface OpenOptions {
    * policy.ts); anything else is rejected before reaching a host. */
   url: string;
   /** Viewport size in CSS pixels (default 800×600). The page LAYS OUT at
-   * this size (media queries, innerWidth, …); hosts scale the rendering
-   * to fit their window/pane — the CLI sizes its window to the viewport,
-   * the Desktop pane emulates and scales to fit. On macOS/Linux the
-   * Desktop WebView cannot emulate (WebKit has no such API) and the pane
-   * size acts as the viewport. */
+   * this size (media queries, innerWidth, …); the host scales the
+   * rendering to fit its pane — the Desktop pane emulates and scales to
+   * fit. On macOS/Linux the Desktop WebView cannot emulate (WebKit has no
+   * such API) and the pane size acts as the viewport. */
   width?: number;
   height?: number;
   /** Whether the lab window is shown. Default true. */
@@ -213,10 +212,10 @@ export interface ImageResult {
 // --- backend ---------------------------------------------------------------
 
 /**
- * A controllable browser-ish surface backed by an OS-standard WebView.
- * Desktop: a debug WebView docked as a pane inside the Tauri shell. CLI:
- * the lumisca-browser-host process. Both are driven over the same local
- * authenticated RPC protocol, so one tool layer serves both.
+ * A controllable browser-ish surface backed by an OS-standard WebView:
+ * a debug WebView docked as a pane inside the Tauri shell. Hosts are
+ * driven over the same local authenticated RPC protocol, so the tool
+ * layer never knows which one backs it.
  */
 export interface BrowserBackend {
   open(options: OpenOptions, signal?: AbortSignal): Promise<PageInfo>;
@@ -291,8 +290,8 @@ export interface RpcFailure {
 
 export type RpcResponse = RpcSuccess | RpcFailure;
 
-/** RPC error codes (stable across hosts; the client maps them to errors
- * without inventing new ones). */
+/** RPC error codes (stable; the client maps them to errors without
+ * inventing new ones). */
 export const RPC_ERROR_NOT_OPEN = "not_open";
 export const RPC_ERROR_REF_NOT_FOUND = "ref_not_found";
 export const RPC_ERROR_PROBE_MISSING = "probe_missing";
@@ -318,7 +317,7 @@ export const MAX_RPC_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
 
 /** Header carrying the per-run random token, and the method/path of the
- * RPC endpoint. Shared by the Deno client and both Rust hosts. */
+ * RPC endpoint. Shared by the Deno client and the Rust host. */
 export const RPC_TOKEN_HEADER = "x-lumisca-browser-token";
 export const RPC_PATH = "/rpc";
 

@@ -4,7 +4,7 @@
 //  - Deno/TypeScript: `import { PROBE_SOURCE } from "./probe.js"` — the
 //    module export below. `deno compile` bundles it statically, so the
 //    compiled server binary carries the probe with no disk dependency.
-//  - Rust hosts (desktop, browser-host): `include_str!` on this file, then
+//  - Rust host (desktop): `include_str!` on this file, then
 //    extract the text between the opening "String.raw" + back-tick and the
 //    closing back-tick (browser-rpc). String.raw keeps backslashes
 //    verbatim, so the extracted text is exactly the JavaScript injected

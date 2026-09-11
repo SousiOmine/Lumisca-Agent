@@ -1,13 +1,11 @@
-//! lumisca-browser-rpc: protocol pieces shared by the two browser-lab
-//! hosts — the Desktop shell (packages/desktop/src-tauri) and the CLI
-//! browser host (packages/browser-host).
+//! lumisca-browser-rpc: protocol pieces for the browser-lab host — the
+//! desktop shell's WebView pane (packages/desktop/src-tauri).
 //!
-//! Both hosts serve the SAME RPC protocol to the Deno side (see
+//! The host serves the RPC protocol to the Deno side (see
 //! packages/core/browser/types.ts): POST /rpc with a random-token header,
 //! JSON bodies, strict size limits, explicit errors — no fallbacks. This
 //! crate provides the probe extraction, the URL policy (defense in depth —
-//! the Deno tools enforce it first), and a minimal HTTP/1.1 server so the
-//! hosts share one implementation instead of drifting.
+//! the Deno tools enforce it first), and a minimal HTTP/1.1 server.
 
 pub mod cdp;
 pub mod emulation;

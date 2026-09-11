@@ -8,7 +8,7 @@ import type {
 } from "../shared/mod.ts";
 import type { SessionInfo } from "./session.ts";
 
-/** Events emitted by the core and forwarded to any client (WebSocket, CLI). */
+/** Events emitted by the core and forwarded to any client (WebSocket, HTTP). */
 export type ClientEvent =
   | { type: "session_created"; session: SessionInfo }
   | { type: "agent_start"; sessionId: string }

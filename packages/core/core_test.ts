@@ -24,7 +24,12 @@ import {
 } from "./shared/mod.ts";
 import { MCP_TOOLS_PROMPT_NOTE } from "./mcp/tools.ts";
 import { bytesToBase64 } from "./base64.ts";
-import { makeRealTempDir, MINI_PNG, removeDirRetry } from "./test-utils.ts";
+import {
+  makeRealTempDir,
+  MINI_PNG,
+  promptSession,
+  removeDirRetry,
+} from "./test-utils.ts";
 
 function setup() {
   const faux = fauxProvider();
@@ -83,7 +88,7 @@ Deno.test("session prompt persists messages and restores them", async () => {
   });
 
   faux.setResponses([fauxAssistantMessage("Hello from faux!")]);
-  await core.prompt(session.id, "Hi");
+  await promptSession(core, session.id, "Hi");
 
   const agent = core.getAgent(session.id);
   assertEquals(agent !== undefined, true);
@@ -152,7 +157,7 @@ Deno.test("tools block file access outside the workspace", async () => {
     ]),
     fauxAssistantMessage("Done."),
   ]);
-  await core.prompt(session.id, "Read that file");
+  await promptSession(core, session.id, "Read that file");
 
   const messages = core.getAgent(session.id)!.messages;
   const toolResults = messages.filter((m) => m.role === "toolResult");
@@ -173,7 +178,7 @@ Deno.test("tools block file access outside the workspace", async () => {
     ]),
     fauxAssistantMessage("Read it."),
   ]);
-  await core.prompt(session.id, "Read inside.txt");
+  await promptSession(core, session.id, "Read inside.txt");
   const messages2 = core.getAgent(session.id)!.messages;
   const tr2 = messages2.filter((m) => m.role === "toolResult").at(-1) as {
     isError: boolean;
@@ -363,8 +368,8 @@ Deno.test("rewind deletes a user message and everything after it", async () => {
     fauxAssistantMessage("first reply"),
     fauxAssistantMessage("second reply"),
   ]);
-  await core.prompt(session.id, "one");
-  await core.prompt(session.id, "two");
+  await promptSession(core, session.id, "one");
+  await promptSession(core, session.id, "two");
 
   const agent = core.getAgent(session.id)!;
   assertEquals(agent.messages.length, 4);
@@ -435,12 +440,12 @@ Deno.test("rewind mid-history keeps earlier turns and persists without duplicate
     fauxAssistantMessage("first reply"),
     fauxAssistantMessage("second reply"),
   ]);
-  await core.prompt(session.id, "one");
+  await promptSession(core, session.id, "one");
   // Distinct user-message timestamps (the rewind target is matched by
   // role + timestamp; the faux provider can finish a turn within one
   // millisecond).
   await new Promise((resolve) => setTimeout(resolve, 10));
-  await core.prompt(session.id, "two");
+  await promptSession(core, session.id, "two");
 
   const events: string[] = [];
   core.subscribe((event) => {
@@ -464,7 +469,7 @@ Deno.test("rewind mid-history keeps earlier turns and persists without duplicate
   // A new prompt after the rewind persists without duplicates or the
   // deleted turn coming back.
   faux.setResponses([fauxAssistantMessage("redo reply")]);
-  await core.prompt(session.id, "one (fixed)");
+  await promptSession(core, session.id, "one (fixed)");
   core.closeSession(session.id);
   core.openSession(session.id);
   const restored = core.getAgent(session.id)!.messages;
@@ -581,7 +586,7 @@ Deno.test("rewind of a queued steer drops it without resurrecting it", async () 
 
   // A later prompt must not resurrect the queued "fix".
   faux.setResponses([fauxAssistantMessage("redo reply")]);
-  await core.prompt(session.id, "fresh");
+  await promptSession(core, session.id, "fresh");
   core.closeSession(session.id);
   core.openSession(session.id);
   const restored = core.getAgent(session.id)!.messages;
@@ -601,7 +606,7 @@ Deno.test("rewind with an unknown timestamp throws not_found", async () => {
   });
 
   faux.setResponses([fauxAssistantMessage("reply")]);
-  await core.prompt(session.id, "hello");
+  await promptSession(core, session.id, "hello");
 
   await assertRejects(
     () => core.rewind(session.id, 1),
@@ -922,7 +927,7 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
 
   // The chat session runs like any other.
   faux.setResponses([fauxAssistantMessage("hello from chat")]);
-  await core.prompt(session.id, "Hi");
+  await promptSession(core, session.id, "Hi");
   const messages = core.getAgent(session.id)!.messages;
   assertEquals(messages.length, 2);
   assertEquals(
@@ -1121,7 +1126,7 @@ Deno.test("thinking level reaches the provider stream options", async () => {
       return fauxAssistantMessage("ok");
     },
   ]);
-  await core.prompt(session.id, "hi");
+  await promptSession(core, session.id, "hi");
   assertEquals(receivedReasoning, "high");
 
   // A second run picks up a level change without rebuilding the agent.
@@ -1133,7 +1138,7 @@ Deno.test("thinking level reaches the provider stream options", async () => {
       return fauxAssistantMessage("ok");
     },
   ]);
-  await core.prompt(session.id, "again");
+  await promptSession(core, session.id, "again");
   assertEquals(receivedReasoning, undefined);
 
   core.close();
@@ -1183,7 +1188,7 @@ Deno.test("thinking level change while streaming applies from the next run witho
       return fauxAssistantMessage("ok");
     },
   ]);
-  await core.prompt(session.id, "again");
+  await promptSession(core, session.id, "again");
   assertEquals(secondReasoning, "high");
   core.close();
 });
@@ -1362,7 +1367,7 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
       ]),
       fauxAssistantMessage("Done."),
     ]);
-    await core.prompt(session.id, "Echo hi");
+    await promptSession(core, session.id, "Echo hi");
 
     const messages = core.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
@@ -1518,7 +1523,7 @@ Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
       ]),
       fauxAssistantMessage("Done."),
     ]);
-    await core.prompt(session.id, "List the available tools");
+    await promptSession(core, session.id, "List the available tools");
     const browse = core.getAgent(session.id)!.messages
       .filter((m) => m.role === "toolResult")
       .at(-1) as { content: Array<{ type: string; text: string }> };
@@ -1585,7 +1590,7 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
       ]),
       fauxAssistantMessage("Done."),
     ]);
-    await core.prompt(session.id, "Echo first");
+    await promptSession(core, session.id, "Echo first");
 
     const messages = core.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
@@ -1700,7 +1705,7 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
       ]),
       fauxAssistantMessage("Done."),
     ]);
-    await core.prompt(session.id, "Open the app in the browser");
+    await promptSession(core, session.id, "Open the app in the browser");
 
     assertEquals(backend.opens.length, 1);
     assertEquals(backend.opens[0]!.url, "http://127.0.0.1:5173/");
@@ -1753,7 +1758,7 @@ Deno.test("pdf tool is seeded into the session registry via tool_search", async 
       ]),
       fauxAssistantMessage("Done."),
     ]);
-    await core.prompt(session.id, "What PDF tools exist?");
+    await promptSession(core, session.id, "What PDF tools exist?");
 
     const messages = core.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
@@ -1913,7 +1918,7 @@ Deno.test("text-only model: user images are analyzed and passed as text", async 
     () => fauxAssistantMessage("done"),
   ]));
 
-  await core.prompt(session.id, "what is this?", [{
+  await promptSession(core, session.id, "what is this?", [{
     type: "image",
     data: bytesToBase64(MINI_PNG),
     mimeType: "image/png",
@@ -1970,7 +1975,7 @@ Deno.test("text-only model: read tool images are analyzed and passed as text", a
     () => fauxAssistantMessage("done"),
   ]));
 
-  await core.prompt(session.id, "read pic.png");
+  await promptSession(core, session.id, "read pic.png");
 
   assertEquals(captured.length, 3);
   assertEquals(captured[0]!.model, "text-only");
@@ -2036,7 +2041,7 @@ Deno.test("fast model: first prompt auto-generates the session title", async () 
     () => fauxAssistantMessage("Hello!"),
   ]));
 
-  await core.prompt(session.id, "Please fix the login bug");
+  await promptSession(core, session.id, "Please fix the login bug");
 
   // The title call used the fast model and the first message text.
   assertEquals(captured.length, 2);
@@ -2100,7 +2105,7 @@ Deno.test("no fast model: session keeps its provisional name", async () => {
   });
 
   faux.setResponses([fauxAssistantMessage("ok")]);
-  await core.prompt(session.id, "hello");
+  await promptSession(core, session.id, "hello");
 
   assertEquals(core.getSession(session.id)!.name, session.name);
   assertEquals(session.name.startsWith("Session "), true);
@@ -2125,13 +2130,13 @@ Deno.test("reopened session with history does not regenerate the title", async (
     () => fauxAssistantMessage("second reply"),
   ]));
 
-  await core.prompt(session.id, "first message");
+  await promptSession(core, session.id, "first message");
   assertEquals(core.getSession(session.id)!.name, "Title A");
 
   // Reopen with history and prompt again: no new title generation.
   core.closeSession(session.id);
   await core.openSession(session.id);
-  await core.prompt(session.id, "second message");
+  await promptSession(core, session.id, "second message");
 
   assertEquals(core.getSession(session.id)!.name, "Title A");
   assertEquals(captured.length, 3); // title + first run + second run only
@@ -2187,7 +2192,7 @@ Deno.test("ask tool blocks the run until the user answers, then continues", asyn
   const unsubscribe = core.subscribe((event) => events.push(event));
 
   // The run blocks on the ask tool until the answer arrives.
-  const run = core.prompt(session.id, "Which language should I use?");
+  const run = promptSession(core, session.id, "Which language should I use?");
   const question = await waitForQuestion(core, session.id);
   assertEquals(question.toolCallId.length > 0, true);
   core.answerQuestion(question.sessionId, question.toolCallId, [
@@ -2242,7 +2247,7 @@ Deno.test("todo tool plans, updates, and auto-advances the plan", async () => {
 
   const events: ClientEvent[] = [];
   const unsubscribe = core.subscribe((event) => events.push(event));
-  await core.prompt(session.id, "Plan and track the work");
+  await promptSession(core, session.id, "Plan and track the work");
 
   // Every mutation emitted a `todo` snapshot event for this session.
   const todoEvents = events.filter(
@@ -2306,7 +2311,7 @@ Deno.test("rewind while a question is pending aborts the run cleanly", async () 
     fauxAssistantMessage("Great choice!"),
   ]);
 
-  const run = core.prompt(session.id, "Which language should I use?");
+  const run = promptSession(core, session.id, "Which language should I use?");
   const question = await waitForQuestion(core, session.id);
 
   // Rewind must not hang on the blocked run: the pending ask is rejected

@@ -1,6 +1,5 @@
-//! Shared eval driver utilities used by both browser-lab hosts
-//! (browser-host and desktop) to drive the in-page probe through
-//! `eval_with_callback` / `ExecuteScript`.
+//! Shared eval driver utilities used by the browser-lab host to drive the
+//! in-page probe through `eval_with_callback` / `ExecuteScript`.
 
 use serde_json::Value;
 

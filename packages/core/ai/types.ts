@@ -375,7 +375,7 @@ export type AuthPrompt =
   };
 
 /** A login-flow notice (device code, auth URL, info, progress). Common
- * Fields are typed for the CLI/server bus; provider-specific extras ride
+ * Fields are typed for the server bus; provider-specific extras ride
  * the index signature. */
 export type AuthNotice = {
   type: string;
@@ -390,7 +390,7 @@ export type AuthNotice = {
   [key: string]: unknown;
 };
 
-/** Alias kept for the server/CLI login bridges. */
+/** Alias kept for the server login bridge. */
 export type AuthEvent = AuthNotice;
 
 /** Bridges one login flow to whoever drives the UI. */

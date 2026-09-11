@@ -57,7 +57,7 @@ export class ModelManager {
    * configuration — they count as "configured" even without a stored
    * credential. */
   private customProviderIds = new Set<string>();
-  /** Ids of user-defined providers (the settings UI / CLI can add these at
+  /** Ids of user-defined providers (the settings UI can add these at
    * runtime). Treated like the other custom providers for `isCustomProvider`. */
   private userProviderIds = new Set<string>();
   private readonly userStore: UserProviderStore;
@@ -327,7 +327,7 @@ export class ModelManager {
     return this.customProviderIds.has(providerId);
   }
 
-  /** Whether the provider was added by the user (the settings UI / CLI)
+  /** Whether the provider was added by the user (the settings UI)
    * rather than built in or from the env/models.json custom config. */
   isUserProvider(providerId: string): boolean {
     return this.userProviderIds.has(providerId);

@@ -7,9 +7,8 @@
 | `core/` | 基盤：SessionAgent／SessionPool(AgentFactory)／ModelManager／MCP／ツール群／SQLite／スキル・プラグイン | 外部のみ |
 | `server/` | Hono製バックエンド（REST＋WS＋federationプロキシ＋esbuildバンドル） | `core` |
 | `web/` | Preact SPA（`api-client`／`api-local`／`api-federation`／`api-routing` 分割） | `core/shared`＋`core/modes` のみ |
-| `cli/` | Deno製CLI（REPL／run／select／browser-host） | `core` |
 | `desktop/` | Tauri v2シェル（npm＋Deno併用） | `server` を子プロセス起動 |
-| `browser-host/`＋`browser-rpc/` | Rust製WebViewホスト＋共通RPC | — |
+| `browser-rpc/` | Rust製ブラウザラボRPC（プローブ抽出／URLポリシー／HTTPサーバー） | — |
 
 `core` は他のパッケージに依存しない。`web` が `core` から取るのは
 **純関数のみ**（`shared/`＝フロント安全ヘルパー、`modes/`＝プロンプト生成）で、
@@ -35,12 +34,12 @@
 - `@napi-rs/canvas` はPDF描画専用（動的import、要 `--allow-ffi`）。
 - `preact/compat` はweb全体のReact互換層として使用中。削除不可。
 - `ai/test` は未使用のため削除済み。
-- `browser-rpc/cdp.rs` は両WebViewホストが共有するCDPパラメータ生成／応答解釈（同期呼び出しとイベントループ呼び出しという「vehicle」だけがホストごとに違う）。
+- `browser-rpc/cdp.rs` はデスクトップのブラウザラボが使うCDPパラメータ生成／応答解釈（`browser_lab.rs` の同期呼び出しから切り離し、解釈を一箇所に保つ）。
 - `desktop/src-tauri/pane.rs` はドックペインのジオメトリとOS依存の配置（z-order、仮想デスクトップ固定）。
 
 ## バージョン
 
-アプリのバージョンは8つのマニフェスト（`packages/*/deno.json` ×5、
-`desktop/package.json`、`tauri.conf.json`、`Cargo.toml`）に載る。
+アプリのバージョンは7つのマニフェスト（`packages/{core,server,web}/deno.json`、
+`desktop/deno.json`、`desktop/package.json`、`tauri.conf.json`、`Cargo.toml`）に載る。
 `scripts/check-versions.ts` が唯一の検査実装で、`ci.yml`（変更のたび）と
 `release.yml`（タグ）の両方がこれを呼ぶ。

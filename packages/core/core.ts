@@ -68,15 +68,10 @@ export interface CreateSessionInput {
   /** Omitted → the last-used model (or the first enabled model) is used. */
   modelProvider?: string;
   modelId?: string;
-  /** Headless run (the CLI `run` command, harness use): the ask tool
-   * auto-answers with the recommended/first option and title generation
-   * is skipped. The flag shapes the open agent only; it is not persisted
-   * with the session. */
-  headless?: boolean;
 }
 
 /**
- * Root object shared by every frontend (web server, CLI, desktop).
+ * Root object shared by every frontend (web server, desktop).
  * A thin facade over focused services (settings guard, personalization,
  * saved prompts, workspaces, models, sessions, MCP): orchestration lives
  * here, domain logic lives there.
@@ -99,10 +94,9 @@ export class LumiscaCore {
   private readonly pool: SessionPool;
   private readonly mcp: McpService;
   private readonly commandSafety: CommandSafety;
-  /** Browser-lab backend (Desktop WebView host / CLI browser host), or
+  /** Browser-lab backend (Desktop WebView host), or
    * undefined in plain server mode — the agent then gets no browser
-   * tools. Attached by the frontends (server/mod.ts, cli/mod.ts) before
-   * sessions open. */
+   * tools. Attached by the server (server/mod.ts) before sessions open. */
   private browserBackend: BrowserBackend | undefined;
   private readonly listeners = new Set<(event: ClientEvent) => void>();
 
@@ -153,12 +147,7 @@ export class LumiscaCore {
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
       buildGeneratedPrompt: (workspace, model, browserAvailable) =>
-        this.buildGeneratedPrompt(
-          workspace,
-          model,
-          undefined,
-          browserAvailable,
-        ),
+        this.buildGeneratedPrompt(workspace, model, browserAvailable),
       updateSystemPrompt: (id, systemPrompt) =>
         this.sessions.updateSystemPrompt(id, systemPrompt),
       streamFn,
@@ -254,9 +243,8 @@ export class LumiscaCore {
    * seeded browser tools resolve the backend at execute time, so a
    * replacement applies to open sessions too; a detach fails their next
    * browser call with a clear error and removes the tools from sessions
-   * rebuilt from now on. The desktop shell passes its IPC endpoint, the
-   * CLI passes a lazy host starter, plain server mode passes nothing (no
-   * browser tools). */
+   * rebuilt from now on. The desktop shell passes its IPC endpoint; plain
+   * server mode passes nothing (no browser tools). */
   setBrowserBackend(backend: BrowserBackend | undefined): void {
     this.browserBackend = backend;
   }
@@ -412,7 +400,7 @@ export class LumiscaCore {
 
   /** The user-facing workspace list. The folder-less chat workspace is an
    * internal singleton (created on first chat session): it is excluded so
-   * every client — web UI, CLI, API consumers, federated peers — only sees
+   * every client — web UI, API consumers, federated peers — only sees
    * workspaces they can actually manage. Chat sessions are started without
    * a workspaceId instead of by picking this workspace. */
   listWorkspaces(): Workspace[] {
@@ -528,14 +516,12 @@ export class LumiscaCore {
     const model = this.resolveDefaultModel(input.modelProvider, input.modelId);
     // Generated prompts are snapshotted here, at creation time (workspace
     // AGENTS.md + environment + personalization included), and stored with
-    // the session: later edits to either AGENTS.md must not affect it.
-    // Headless sessions get the headless guidance variant. The built-in
-    // web-browser skill is included only when a browser backend is
+    // the session: later edits to either AGENTS.md must not affect it. The
+    // built-in web-browser skill is included only when a browser backend is
     // attached (browser tools are discoverable only then).
     const systemPrompt = this.buildGeneratedPrompt(
       workspace,
       model,
-      input.headless ?? false,
       this.browserBackend !== undefined,
     );
     const session = this.sessions.create({
@@ -545,9 +531,7 @@ export class LumiscaCore {
       modelId: model.modelId,
       systemPrompt,
     });
-    this.pool.open(session, workspace, [], {
-      headless: input.headless ?? false,
-    });
+    this.pool.open(session, workspace, []);
     // The event carries the decorated session (chat flag etc.), the same
     // shape every other SessionInfo consumer sees — never the raw row.
     const decorated = this.decorateSession(session);
@@ -658,17 +642,6 @@ export class LumiscaCore {
     agent.promptWhileRunning(text, images, mode);
   }
 
-  /** Await the prompt (CLI). Errors are reported via session_error events. */
-  async prompt(
-    id: string,
-    text: string,
-    images?: ImageContent[],
-  ): Promise<void> {
-    const agent = this.pool.require(id);
-    this.sessions.touch(id);
-    await agent.prompt(text, images);
-  }
-
   abort(id: string): void {
     this.pool.require(id).abort();
   }
@@ -758,7 +731,8 @@ export class LumiscaCore {
 
   // --- model enablement ----------------------------------------------------
 
-  /** Providers with their models; the UI and CLI use this to render pickers. */
+  /** Providers with their models; the settings UI uses this to render
+   * pickers. */
   listProviders(): readonly Provider[] {
     return this.models.getProviders();
   }
@@ -883,7 +857,7 @@ export class LumiscaCore {
     await this.models.removeUserProvider(id);
   }
 
-  /** Whether the provider was added by the user (the settings UI / CLI)
+  /** Whether the provider was added by the user (the settings UI)
    * rather than built in or from the env/models.json custom config. */
   isUserProvider(id: string): boolean {
     return this.models.isUserProvider(id);
@@ -922,15 +896,13 @@ export class LumiscaCore {
    * personalization (machine AGENTS.md, appended last). Chat workspaces
    * (folder-less, "simple chat") get the chat variant instead — no
    * workspace framing, matching their tool set. `model` fills in the
-   * environment section's model line. `headless` selects the headless
-   * guidance variant (auto-answered asks). `browserAvailable` gates the
+   * environment section's model line. `browserAvailable` gates the
    * built-in web-browser skill in the prompt's <available_skills>
    * listing: only sessions with a browser backend attached (which can
    * actually run the browser tools) get it. */
   private buildGeneratedPrompt(
     workspace: Workspace,
     model?: { provider: string; modelId: string },
-    headless = false,
     browserAvailable = false,
   ): string {
     const resolved = model
@@ -941,20 +913,9 @@ export class LumiscaCore {
       : undefined;
     const personal = this.personalization.load();
     if (workspace.chat) {
-      return buildChatSystemPrompt(
-        personal,
-        resolved,
-        headless,
-        browserAvailable,
-      );
+      return buildChatSystemPrompt(personal, resolved, browserAvailable);
     }
-    return buildSystemPrompt(
-      workspace,
-      personal,
-      resolved,
-      headless,
-      browserAvailable,
-    );
+    return buildSystemPrompt(workspace, personal, resolved, browserAvailable);
   }
 
   /** Resolve the model for a new session: explicit choice, else the

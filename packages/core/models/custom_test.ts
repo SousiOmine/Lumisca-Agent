@@ -327,7 +327,6 @@ Deno.test("LumiscaCore.open registers the custom provider from env", async () =>
         workspaceId: ws.id,
         modelProvider: CUSTOM_PROVIDER_ID,
         modelId: "deepseek-chat",
-        headless: true,
       });
       assertEquals(session.modelProvider, CUSTOM_PROVIDER_ID);
       assertEquals(session.modelId, "deepseek-chat");

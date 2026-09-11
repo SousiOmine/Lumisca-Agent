@@ -58,10 +58,6 @@ export async function shellCall<T>(
   return body as T;
 }
 
-/** Race a probe against a timeout (the shell bridge may be unreachable —
- * a slow DNS failure must not stall the UI). Uses the shared core helper
- * so the CLI browser host and the web shell share one timeout pattern. */
-
 /** Whether the desktop shell bridge is reachable (false in browsers).
  * Bounded by a timeout so a slow DNS failure does not stall the UI. */
 export function shellAvailable(): Promise<boolean> {

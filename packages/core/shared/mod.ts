@@ -1,6 +1,6 @@
 /**
  * Frontend-safe shared helpers: pure functions and constants used by the
- * web UI, the CLI, and the server. This module must stay free of
+ * web UI, the server, and the core. This module must stay free of
  * runtime dependencies (no db / pi imports) because esbuild bundles it
  * into the browser client; the web package imports it via
  * `@lumisca/core/shared`.

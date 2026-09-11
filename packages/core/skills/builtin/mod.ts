@@ -19,9 +19,9 @@ import { webBrowserSkill } from "./web-browser.ts";
 
 /** Runtime capabilities a session may or may not have. */
 export interface BuiltinContext {
-  /** Whether a browser backend is attached to the session (Desktop WebView
-   * host, CLI browser host, or a server started by the desktop shell).
-   * The web-browser skill is included only when true. */
+  /** Whether a browser backend is attached to the session (the Desktop
+   * WebView host of a server started by the desktop shell). The
+   * web-browser skill is included only when true. */
   browser: boolean;
 }
 

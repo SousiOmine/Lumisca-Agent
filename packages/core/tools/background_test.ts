@@ -19,7 +19,7 @@ import type { ClientEvent } from "../types/event.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { LumiscaCore } from "../mod.ts";
 import { decodeUtf8 } from "../shared/mod.ts";
-import { removeDirRetry, toolText } from "../test-utils.ts";
+import { promptSession, removeDirRetry, toolText } from "../test-utils.ts";
 
 /** Cross-platform commands. The Windows shell has no sleep; ping is the
  * classic stand-in. */
@@ -607,7 +607,7 @@ Deno.test("background completion is injected into the agent loop", async () => {
       fauxAssistantMessage("Server started."),
       fauxAssistantMessage("The background command finished."),
     ]);
-    await core.prompt(session.id, "Start a background server");
+    await promptSession(core, session.id, "Start a background server");
 
     const agent = core.getAgent(session.id)!;
     await waitForMessage(
@@ -644,7 +644,7 @@ Deno.test("background commands survive a session rebuild", async () => {
       ]),
       fauxAssistantMessage("Started."),
     ]);
-    await core.prompt(session.id, "Start a long command");
+    await promptSession(core, session.id, "Start a long command");
     const agent = core.getAgent(session.id)!;
     await waitForMessage(
       agent,
@@ -662,7 +662,7 @@ Deno.test("background commands survive a session rebuild", async () => {
       fauxAssistantMessage([fauxToolCall("async_bash_status", {})]),
       fauxAssistantMessage("Status checked."),
     ]);
-    await core.prompt(session.id, "Check background commands");
+    await promptSession(core, session.id, "Check background commands");
     await waitForMessage(
       rebuilt,
       (text) => text.includes("#1") && text.includes("running"),
@@ -676,7 +676,7 @@ Deno.test("background commands survive a session rebuild", async () => {
       fauxAssistantMessage([fauxToolCall("async_bash_kill", { id: "1" })]),
       fauxAssistantMessage("Killed."),
     ]);
-    await core.prompt(session.id, "Stop the command");
+    await promptSession(core, session.id, "Stop the command");
     await waitForMessage(rebuilt, (text) => text === "Killed.");
 
     // Poll the status until the command shows killed (finalize runs a beat
@@ -687,7 +687,7 @@ Deno.test("background commands survive a session rebuild", async () => {
         fauxAssistantMessage([fauxToolCall("async_bash_status", { id: "1" })]),
         fauxAssistantMessage("Checked."),
       ]);
-      await core.prompt(session.id, "Check the command again");
+      await promptSession(core, session.id, "Check the command again");
       killed = rebuilt.messages.some((m) =>
         messageText(m).includes("Background command #1: killed")
       );

@@ -123,7 +123,6 @@ export type {
 } from "./pdf/tools.ts";
 export { formatSnapshot } from "./browser/tools.ts";
 export { HttpBrowserBackend } from "./browser/client.ts";
-export { LazyBrowserBackend } from "./browser/lazy.ts";
 export { checkBrowserUrl, requireAllowedUrl } from "./browser/policy.ts";
 export { PROBE_SOURCE } from "./browser/probe.ts";
 export type {

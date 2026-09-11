@@ -6,6 +6,9 @@
  * production code or the browser bundle.
  */
 import { realpathSync } from "node:fs";
+import { CoreError } from "./errors.ts";
+import type { LumiscaCore } from "./core.ts";
+import type { ImageContent } from "./ai/types.ts";
 
 /** Minimal 1x1 transparent PNG (67 bytes), e.g. for image-attachment and
  * binary-file tests. */
@@ -133,4 +136,26 @@ export async function withTempDir<T>(
   } finally {
     await removeDirRetry(root);
   }
+}
+
+/** Prompt an open session and await the run's completion.
+ *
+ * Production prompts are fire-and-forget (the server's prompt endpoint
+ * returns immediately and the run reports through events), but a test
+ * needs to know when the transcript has settled before asserting on it.
+ * Wrapping the open agent's `prompt()` keeps that wait in one place
+ * instead of spreading event subscriptions across every test. The session
+ * must be open: prompting a closed one is a test bug, so it throws.
+ * `images` (base64) mirror the HTTP path's image attachments. */
+export async function promptSession(
+  core: LumiscaCore,
+  sessionId: string,
+  text: string,
+  images?: ImageContent[],
+): Promise<void> {
+  const agent = core.getAgent(sessionId);
+  if (agent === undefined) {
+    throw new CoreError(`Session is not open: ${sessionId}`, "not_found");
+  }
+  await agent.prompt(text, images);
 }

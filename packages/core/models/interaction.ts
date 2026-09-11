@@ -1,5 +1,5 @@
 /**
- * Login-flow helpers shared by the server bridge and the CLI.
+ * Login-flow helpers for the server bridge.
  *
  * Lumisca runs on Deno, where only the device-code OAuth flows of the
  * pi-ai SDK work (browser-callback flows depend on Node's http/crypto).

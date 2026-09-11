@@ -47,7 +47,6 @@ Deno.test("coding prompt lists the web-browser skill only with a browser backend
     workspace,
     undefined,
     undefined,
-    false,
     true,
   );
   assert(withBrowser.includes("<available_skills>"));
@@ -57,7 +56,7 @@ Deno.test("coding prompt lists the web-browser skill only with a browser backend
 });
 
 Deno.test("chat prompt lists the web-browser skill only with a browser backend", () => {
-  const withBrowser = buildChatSystemPrompt(undefined, undefined, false, true);
+  const withBrowser = buildChatSystemPrompt(undefined, undefined, true);
   assert(withBrowser.includes("<available_skills>"));
   assert(withBrowser.includes("- web-browser:"));
   const without = buildChatSystemPrompt();
@@ -69,7 +68,6 @@ Deno.test("built-in skills are listed after user skills in the coding prompt", (
     workspace,
     undefined,
     undefined,
-    false,
     true,
   );
   // The built-in line uses the built-in description, one line per skill.
