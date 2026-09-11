@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # The repository's default branch is `master` (the workflow used to
+    # name `main`, which does not exist — so CI only ran on pull requests
+    # and direct pushes went unverified).
+    branches: [master]
   pull_request:
 
 jobs:
