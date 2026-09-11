@@ -12,10 +12,14 @@ function liveProviders(): ProviderMap {
   assert(openai !== undefined);
   const firstId = Object.keys(openai.models)[0]!;
   const first = openai.models[firstId]!;
+  // The added model must be one the catalog exposes: models.dev's first
+  // openai entry is an image model, which the agent filter drops.
   openai.models["brand-new-test-model"] = {
     ...structuredClone(first),
     id: "brand-new-test-model",
     name: "Brand New Test Model",
+    tool_call: true,
+    modalities: { input: ["text"], output: ["text"] },
   };
   // "mistral" is dropped upstream: refresh must delete it locally.
   delete base["mistral"];

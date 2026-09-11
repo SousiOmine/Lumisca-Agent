@@ -22,8 +22,10 @@ import { buildProvider, envApiKeyAuth } from "./custom.ts";
  * Lumisca's Provider/Model shapes — the actual LLM calls go through the
  * Vercel AI SDK (see ai/lang-model.ts), which the app owns.
  *
- * The allow-list keeps the model picker focused; models.dev still supplies
- * every provider/model's ids, names, limits, modalities and reasoning flag.
+ * The provider allow-list and the agent-model filter (tool calling + text
+ * output — see `isAgentModel`) keep the pickers focused; models.dev still
+ * supplies every provider/model's ids, names, limits, modalities and
+ * reasoning flag.
  *
  * models.dev's provider-level `npm` names the @ai-sdk/* package a provider's
  * models are served through. Gateways such as OpenCode Go / Zen override it
@@ -175,6 +177,20 @@ function thinkingLevelMapFor(options: readonly ReasoningOption[] | undefined):
   return map;
 }
 
+/** Whether a models.dev model can serve as a Lumisca session model — the
+ * only kind the pickers list. The agent loop drives every action through
+ * tools, so a model without tool/function calling is unusable however well
+ * it chats: embedding, transcription, prompt-guard and the older
+ * completions-only models are the usual suspects. Text output is required
+ * on top: an image/audio-only model has no reply to render. */
+function isAgentModel(m: DevModel): boolean {
+  if (m.tool_call !== true) return false;
+  // The output rule is unchanged from before the tool-calling gate: a
+  // model whose output modalities models.dev does not publish stays
+  // eligible, one known to lack text does not.
+  return m.modalities?.output?.includes("text") !== false;
+}
+
 /** Build a Lumisca Model from a models.dev Model entry. */
 function toLumiscaModel(
   providerId: string,
@@ -208,7 +224,8 @@ function toLumiscaModel(
   };
 }
 
-/** Build a Lumisca Provider from a models.dev provider (allow-listed).
+/** Build a Lumisca Provider from a models.dev provider (allow-listed),
+ * exposing only the provider's agent models (`isAgentModel`).
  * Tolerates upstream field drift: a missing `name` falls back to the
  * provider id, a missing `env` to no env vars (stored credentials still
  * resolve — only ambient env auth is lost for that entry). `npm` stays
@@ -220,9 +237,8 @@ function toLumiscaProvider(
 ): Provider | undefined {
   if (typeof p.npm !== "string" || p.npm.length === 0) return undefined;
   const baseUrl = p.api ?? KNOWN_BASE_URLS[id];
-  // Chat models produce text output; image/embedding models do not.
   const models = Object.values(p.models)
-    .filter((m) => m.modalities?.output?.includes("text") !== false)
+    .filter(isAgentModel)
     .map((m) => toLumiscaModel(id, p.npm, baseUrl, m));
   const name = typeof p.name === "string" && p.name.length > 0 ? p.name : id;
   const env = Array.isArray(p.env)
@@ -257,11 +273,11 @@ export function builtinProviders(
 }
 
 /** Build Lumisca providers from a models.dev provider map (live, cached,
- * or the bundled snapshot). Only allow-listed providers are exposed; the
- * mapping (text-output filter, api/transport selection) matches the
- * snapshot path exactly so every source yields the same shapes.
- * Providers without routing metadata (`npm`) are skipped — they cannot be
- * served without guessing the transport. */
+ * or the bundled snapshot). Only allow-listed providers are exposed, and
+ * only their agent models (`isAgentModel`); the mapping (api/transport
+ * selection) matches the snapshot path exactly so every source yields the
+ * same shapes. Providers without routing metadata (`npm`) are skipped —
+ * they cannot be served without guessing the transport. */
 export function buildCatalogProviders(source: ProviderMap): Provider[] {
   const out: Provider[] = [];
   for (const id of DEV_PROVIDER_IDS) {
