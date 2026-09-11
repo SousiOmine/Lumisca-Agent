@@ -392,11 +392,34 @@ Deno.test("a new user prompt resets the silent-error retry count", async () => {
   );
 });
 
-Deno.test("an error turn with visible output is not restarted", async () => {
+Deno.test("a transient error turn with visible output continues the run", async () => {
   const agent = makeAgent(streamSequence([
     fauxAssistantMessage([fauxText("partial answer")], {
       stopReason: "error",
       errorMessage: "connection reset",
+    }),
+    fauxAssistantMessage("continued answer"),
+  ]));
+  await agent.prompt("hello");
+
+  // The partial answer stays in the transcript and the run resumes with a
+  // "continue" instruction instead of dying with the transport.
+  const notifications = retryNotifications(agent.messages);
+  assertEquals(notifications.length, 1);
+  assertEquals(notifications[0]!.title.includes("cut off"), true);
+  const last = agent.messages.at(-1) as AssistantMessage;
+  assertEquals(last.stopReason, "stop");
+  assertEquals(
+    (last.content[0] as TextContent).text,
+    "continued answer",
+  );
+});
+
+Deno.test("a permanent error turn with visible output is not restarted", async () => {
+  const agent = makeAgent(streamSequence([
+    fauxAssistantMessage([fauxText("partial answer")], {
+      stopReason: "error",
+      errorMessage: "invalid api key",
     }),
     fauxAssistantMessage("never produced"),
   ]));
@@ -552,12 +575,15 @@ Deno.test("an error turn with partial output still surfaces session_error", asyn
         stopReason: "error",
         errorMessage: "connection reset",
       }),
+      fauxAssistantMessage("recovered"),
     ]),
     [],
     onEvent,
   );
   await agent.prompt("hello");
 
+  // The failure is reported even though the run then resumes from the
+  // partial answer (the banner clears on the restarted run's agent_start).
   assertEquals(errors, ["connection reset"]);
 });
 

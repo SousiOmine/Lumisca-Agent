@@ -14,6 +14,8 @@ import {
 } from "ai";
 import type { LanguageModel, LanguageModelUsage } from "ai";
 import { errorMessage } from "../errors.ts";
+import { createLogger } from "../log.ts";
+import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
 import {
   isRetryableRateLimitError,
@@ -39,6 +41,8 @@ import type {
 export interface StreamTransport {
   languageModelFor(model: Model<Api>): Promise<LanguageModel | undefined>;
 }
+
+const log = createLogger("ai");
 
 /** The reason text used when a provider is not configured. */
 const NOT_CONFIGURED = (providerId: string) =>
@@ -88,6 +92,13 @@ async function* runStream(
       : {}),
     ...(context.tools !== undefined && context.tools.length > 0
       ? { tools: toExecutableToolSet(context.tools, options?.signal) }
+      : {}),
+    // The model's documented output cap (models.dev `limit.output`). Without
+    // it the stream length is bounded only by the provider/gateway, and a
+    // response cut off at that limit arrives as an opaque mid-stream
+    // failure; sending the cap lets the model finish its turn instead.
+    ...(model.maxTokens !== undefined && model.maxTokens > 0
+      ? { maxOutputTokens: model.maxTokens }
       : {}),
     // Exactly one LLM turn per StreamFn call: the SDK executes this turn's
     // tool calls (via the execute functions above); the Agent's outer loop
@@ -203,12 +214,19 @@ async function* runStream(
           break;
         }
         case "error": {
-          const message = p.error instanceof Error
-            ? p.error.message
-            : typeof p.error === "string"
-            ? p.error
-            : "The model stream produced an error";
-          yield { type: "error", errorMessage: message };
+          const failed = describeFailedCall(p.error);
+          // Debug level: the same text reaches the transcript (and the
+          // session logger) through the error event, so the raw transport
+          // line only matters when tracing the SDK itself.
+          log.debug(`stream failed: ${failureText(failed)}`);
+          yield {
+            type: "error",
+            errorMessage: failed.message,
+            ...(failed.detail !== undefined
+              ? { errorDetail: failed.detail }
+              : {}),
+            ...(failed.retryable === true ? { errorRetryable: true } : {}),
+          };
           return;
         }
         default:
@@ -216,8 +234,14 @@ async function* runStream(
       }
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    yield { type: "error", errorMessage: message };
+    const failed = describeFailedCall(error);
+    log.debug(`stream threw: ${failureText(failed)}`);
+    yield {
+      type: "error",
+      errorMessage: failed.message,
+      ...(failed.detail !== undefined ? { errorDetail: failed.detail } : {}),
+      ...(failed.retryable === true ? { errorRetryable: true } : {}),
+    };
     return;
   }
 

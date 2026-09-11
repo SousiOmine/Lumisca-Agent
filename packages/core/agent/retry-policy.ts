@@ -32,13 +32,26 @@ export function isVacantResponse(message: AssistantMessage): boolean {
 
 /** Error-message signatures of transient transport failures: streams cut
  * off mid-flight (the observed "Stream ended without finish_reason"),
- * connection resets, provider-side blips. Only these qualify for
- * automatic restarts — a silent PERMANENT failure (unconfigured or
- * unauthorized provider, content filter, context overflow) has no chance
- * of recovering, so it must surface immediately instead of burning
- * through the retry limit. */
+ * connection resets, provider-side blips, and the AI SDK's own wrapper for
+ * a body read that failed after a 2xx response ("Failed to process
+ * successful response" / "Invalid JSON response" — the real cause lives in
+ * the SDK's `APICallError.cause`, which the transport renders into the
+ * message). Only these qualify for automatic restarts — a silent
+ * PERMANENT failure (unconfigured or unauthorized provider, content
+ * filter, context overflow) has no chance of recovering, so it must
+ * surface immediately instead of burning through the retry limit. */
 const TRANSIENT_STREAM_ERROR_PATTERN =
-  /without finish_reason|finish_reason: network_error|fetch failed|network|socket hang up|connection|terminated|premature close|timed out|\b(?:500|502|503|504|529)\b|overloaded/i;
+  /without finish_reason|finish_reason: network_error|failed to process successful response|invalid json response|fetch failed|network|socket hang up|connection|terminated|premature close|timed out|\b(?:500|502|503|504|529)\b|overloaded/i;
+
+/** True when an error-stopped response failed for a transport reason that
+ * may recover. The provider's own flag (`APICallError.isRetryable`, carried
+ * as `message.errorRetryable`) decides first; the wording is the fallback
+ * for failures the provider did not classify. */
+export function isTransientStreamError(message: AssistantMessage): boolean {
+  if (message.stopReason !== "error") return false;
+  if (message.errorRetryable === true) return true;
+  return TRANSIENT_STREAM_ERROR_PATTERN.test(message.errorMessage ?? "");
+}
 
 /** True when the stream died before the model produced anything: an
  * error-stopped response with zero output (thinking alone doesn't count —
@@ -48,9 +61,22 @@ const TRANSIENT_STREAM_ERROR_PATTERN =
  * itself once it settles (see handleTurnEnd / resumeAfterErrorRun). An
  * unknown error message is conservatively treated as permanent. */
 export function isSilentErrorResponse(message: AssistantMessage): boolean {
-  if (message.stopReason !== "error") return false;
-  if (!hasNoVisibleOutput(message)) return false;
-  return TRANSIENT_STREAM_ERROR_PATTERN.test(message.errorMessage ?? "");
+  return isTransientStreamError(message) && hasNoVisibleOutput(message);
+}
+
+/** The notification queued to continue a response the transport cut off
+ * mid-stream. The partial text is already in the transcript, so the model
+ * is told to resume rather than repeat. */
+export function buildInterruptedRetryNotification(
+  attempt: number,
+): NotificationMessage {
+  return notificationMessage({
+    kind: "retry",
+    title: `Previous response was cut off (retry ${attempt})`,
+    body: "Your previous response was interrupted by a transport failure. " +
+      "Continue from where it stopped — do not repeat what you already wrote.",
+    status: "neutral",
+  });
 }
 
 /** The notification queued to retry a vacant response. The text is

@@ -130,6 +130,84 @@ Deno.test("eval exposes Deno and fetch deliberately, but not node globals", asyn
   );
 });
 
+Deno.test("eval provides the web globals real snippets need", async () => {
+  const tool = makeEval();
+  // The snippet runs in a vm context: only what the sandbox lists exists.
+  // Missing TextEncoder/AbortController/setInterval used to fail ordinary
+  // code with "is not defined" (see the eval sandbox docs in eval.ts).
+  const probes = [
+    "typeof TextEncoder",
+    "typeof TextDecoder",
+    "typeof atob",
+    "typeof btoa",
+    "typeof crypto?.randomUUID",
+    "typeof AbortController",
+    "typeof AbortSignal",
+    "typeof setTimeout",
+    "typeof setInterval",
+    "typeof clearInterval",
+    "typeof structuredClone",
+    "typeof performance?.now",
+    "typeof Request",
+    "typeof Response",
+    "typeof FormData",
+    "typeof Blob",
+    "typeof ReadableStream",
+    "typeof WebSocket",
+    "typeof process",
+    "typeof require",
+    "typeof Buffer",
+  ];
+  const result = await tool.execute(
+    "1",
+    { code: `[${probes.join(",")}].join("+")` },
+    undefined,
+  );
+  // 18 web globals present, the three node internals absent.
+  assertEquals(
+    toolText(result),
+    "[result]\n'" + "function+".repeat(17) +
+      "function+undefined+undefined+undefined'",
+  );
+});
+
+Deno.test("eval can decode, hash and abort with the web globals", async () => {
+  const tool = makeEval();
+  const decoded = await tool.execute(
+    "1",
+    {
+      code:
+        "new TextDecoder().decode(new TextEncoder().encode('hello')) + '|' + btoa('hi')",
+    },
+    undefined,
+  );
+  assertEquals(toolText(decoded), "[result]\n'hello|aGk='");
+
+  // AbortController + fetch: the abort must reach the host fetch, which is
+  // why exposing it matters (a fetch without a signal cannot time out).
+  const aborted = await tool.execute(
+    "1",
+    {
+      code: "const c = new AbortController(); c.abort(); " +
+        "try { await fetch('http://127.0.0.1:1/', { signal: c.signal }); " +
+        "console.log('resolved') } catch (e) { " +
+        "console.log('rejected:' + (e.name === 'AbortError' || e.name === 'DOMException')) }",
+    },
+    undefined,
+  );
+  assertEquals(toolText(aborted), "[output]\nrejected:true");
+});
+
+Deno.test("eval exposes crypto for ids and random values", async () => {
+  const tool = makeEval();
+  const result = await tool.execute(
+    "1",
+    { code: "crypto.randomUUID().length" },
+    undefined,
+  );
+  assertEquals(toolText(result), "[result]\n36");
+});
+
 Deno.test("eval state is isolated per tool instance", async () => {
   const a = makeEval();
   const b = makeEval();

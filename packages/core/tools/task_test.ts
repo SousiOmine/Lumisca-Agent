@@ -180,6 +180,109 @@ Deno.test("sub-agent retries a rate-limited turn then succeeds", async () => {
   assertEquals(end?.status, "finished");
 });
 
+/** A stream function that drops its first call mid-response (after partial
+ * text), then continues — the shape observed when a gateway cut a long
+ * sub-agent report. Records each call's request so the continuation prompt
+ * can be asserted. */
+function interruptedThenOk(): { streamFn: StreamFn; requests: unknown[][] } {
+  const requests: unknown[][] = [];
+  let calls = 0;
+  const streamFn: StreamFn = (_model, context) => {
+    requests.push(context.messages as unknown[]);
+    const stream = createAssistantMessageEventStream();
+    if (calls++ < 1) {
+      stream.push({ type: "start", partial: fauxAssistantMessage("") });
+      stream.push({
+        type: "text_delta",
+        delta: "partial report body",
+        partial: fauxAssistantMessage("partial report body"),
+      });
+      stream.push({
+        type: "error",
+        errorMessage: "Failed to process successful response",
+        errorDetail:
+          "status 200; cause Error: error reading a body from connection",
+      });
+      stream.end();
+      return stream;
+    }
+    stream.push({ type: "start", partial: fauxAssistantMessage("") });
+    stream.push({
+      type: "text_delta",
+      delta: "continued report",
+      partial: fauxAssistantMessage("continued report"),
+    });
+    stream.end(fauxAssistantMessage("partial report body continued report"));
+    return stream;
+  };
+  return { streamFn, requests };
+}
+
+Deno.test("sub-agent continues after a transport cut instead of dying", async () => {
+  const { streamFn, requests } = interruptedThenOk();
+  const { hub } = makeHub(streamFn);
+  hub.spawn("session-1", 0, "explore", "desc", "prompt");
+  await waitFor(() => hub.list()[0]?.status === "finished", "task finish");
+  assertEquals(hub.list()[0]?.status, "finished");
+  // The retry kept the partial answer and asked the model to resume.
+  assertEquals(requests.length, 2);
+  const second = JSON.stringify(requests[1]);
+  assertEquals(second.includes("partial report body"), true);
+  assertEquals(second.includes("cut off"), true);
+  assertEquals(second.includes("Continue from where it stopped"), true);
+});
+
+Deno.test("a permanent sub-agent failure is not retried", async () => {
+  let calls = 0;
+  const streamFn: StreamFn = () => {
+    calls++;
+    const stream = createAssistantMessageEventStream();
+    stream.push({ type: "start", partial: fauxAssistantMessage("") });
+    stream.push({
+      type: "error",
+      errorMessage: "Provider is not configured: openai",
+    });
+    stream.end();
+    return stream;
+  };
+  const { hub } = makeHub(streamFn);
+  hub.spawn("session-1", 0, "explore", "desc", "prompt");
+  await waitFor(() => hub.list()[0]?.status === "failed", "task failure");
+  assertEquals(hub.list()[0]?.status, "failed");
+  assertEquals(calls, 1);
+});
+
+Deno.test("a failed sub-agent's notification keeps its partial output", async () => {
+  const streamFn: StreamFn = () => {
+    const stream = createAssistantMessageEventStream();
+    stream.push({ type: "start", partial: fauxAssistantMessage("") });
+    stream.push({
+      type: "text_delta",
+      delta: "found the route table",
+      partial: fauxAssistantMessage("found the route table"),
+    });
+    stream.push({
+      type: "error",
+      errorMessage: "invalid api key",
+    });
+    stream.end();
+    return stream;
+  };
+  const delivered: Array<{ title: string; body: string }> = [];
+  const { hub } = makeHub(streamFn);
+  hub.setParentDelivery({
+    isActive: () => true,
+    deliver: (payload) =>
+      delivered.push({ title: payload.title, body: payload.body }),
+  });
+  hub.spawn("session-1", 0, "explore", "desc", "prompt");
+  await waitFor(() => hub.list()[0]?.status === "failed", "task failure");
+  await waitFor(() => delivered.length > 0, "notification");
+  assertEquals(delivered[0]!.title.includes("failed"), true);
+  assertEquals(delivered[0]!.body.includes("invalid api key"), true);
+  assertEquals(delivered[0]!.body.includes("found the route table"), true);
+});
+
 /** Concatenate the text blocks of a message (works on the agent's message
  * union, which mixes content-carrying and non-content variants). */
 function messageText(message: unknown): string {

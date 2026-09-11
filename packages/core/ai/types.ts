@@ -124,6 +124,10 @@ export interface AssistantMessage {
   usage: Usage;
   stopReason: StopReason;
   errorMessage?: string;
+  /** True when the provider marked the failure retryable (the AI SDK's
+   * `APICallError.isRetryable`). Persisted with the message so a post-mortem
+   * can tell a transient cut from a permanent rejection. */
+  errorRetryable?: boolean;
   rawStopReason?: string;
   timestamp: number;
 }
@@ -411,7 +415,18 @@ export type StreamEvent =
   | { type: "text_delta"; delta: string; [k: string]: unknown }
   | { type: "thinking_delta"; delta: string; [k: string]: unknown }
   | { type: "toolcall_delta"; delta: string; [k: string]: unknown }
-  | { type: "error"; errorMessage?: string; [k: string]: unknown }
+  | {
+    type: "error";
+    errorMessage?: string;
+    /** Non-message detail of the failure (HTTP status, URL, body, cause
+     * chain — see ai/error-detail.ts). The agent renders it beside the
+     * message so a failure is diagnosable without debug logging. */
+    errorDetail?: string;
+    /** The provider marked the failure retryable (APICallError.isRetryable).
+     * The retry policy prefers this over matching the message text. */
+    errorRetryable?: boolean;
+    [k: string]: unknown;
+  }
   | {
     type: "toolcall_start";
     toolCallId: string;

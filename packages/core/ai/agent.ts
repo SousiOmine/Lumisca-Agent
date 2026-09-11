@@ -280,6 +280,7 @@ export class Agent {
     let candidate: AssistantMessage | undefined;
     let final: AssistantMessage | undefined;
     let errorMessage: string | undefined;
+    let errorRetryable = false;
     let text = "";
     let thinking = "";
     const executedIds = new Set<string>();
@@ -321,9 +322,20 @@ export class Agent {
       } else if (event.type === "error") {
         const ev = event as {
           errorMessage?: string;
+          errorDetail?: string;
+          errorRetryable?: boolean;
           error?: { errorMessage?: string };
         };
-        errorMessage = ev.errorMessage ?? ev.error?.errorMessage;
+        const base = ev.errorMessage ?? ev.error?.errorMessage;
+        // Keep the transport's detail with the message: the transcript (and
+        // therefore the DB, the UI banner and the session log) then says
+        // *why* the call failed, not just that it did.
+        errorMessage = base === undefined
+          ? undefined
+          : ev.errorDetail === undefined
+          ? base
+          : `${base} (${ev.errorDetail})`;
+        if (ev.errorRetryable === true) errorRetryable = true;
       } else if (event.type === "toolcall_start") {
         // The SDK is executing this tool call: only the start event is
         // emitted here — the SDK runs the tool and a toolcall_result event
@@ -368,7 +380,7 @@ export class Agent {
     }
 
     if (errorMessage !== undefined) {
-      final = errorAssistant(model, errorMessage);
+      final = errorAssistant(model, errorMessage, errorRetryable);
     } else if (final === undefined && candidate !== undefined) {
       // Test faux streams that only emit start(partial) + end.
       final = { ...candidate, timestamp: Date.now() };
@@ -492,6 +504,7 @@ function placeholderAssistant(model: Model<Api>): AssistantMessage {
 function errorAssistant(
   model: Model<Api>,
   errorMessage: string,
+  errorRetryable = false,
 ): AssistantMessage {
   return {
     role: "assistant",
@@ -502,6 +515,7 @@ function errorAssistant(
     usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     stopReason: "error",
     errorMessage,
+    ...(errorRetryable ? { errorRetryable: true } : {}),
     timestamp: Date.now(),
   };
 }

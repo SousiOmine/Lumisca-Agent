@@ -49,6 +49,10 @@ export function fauxAssistantMessage(
   opts: {
     stopReason?: StopReason;
     errorMessage?: string;
+    /** Marks the error as provider-retryable (the AI SDK's
+     * `APICallError.isRetryable`), so a test can exercise the retry policy's
+     * flag branch without a real transport. */
+    errorRetryable?: boolean;
     timestamp?: number;
     usage?: Usage;
   } = {},
@@ -65,6 +69,7 @@ export function fauxAssistantMessage(
     usage: opts.usage ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     stopReason: opts.stopReason ?? "stop",
     errorMessage: opts.errorMessage,
+    ...(opts.errorRetryable === true ? { errorRetryable: true } : {}),
     timestamp: opts.timestamp ?? Date.now(),
   };
 }

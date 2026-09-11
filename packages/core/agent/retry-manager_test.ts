@@ -204,6 +204,78 @@ Deno.test("resumeOnce is a no-op without a parked restart", async () => {
   assertEquals(agent.prompts.length, 0);
 });
 
+Deno.test("classify: a cut-off response parks a continuation", () => {
+  const retries = new RetryManager(instantSleep);
+  // The turn produced text and was then cut by a transport failure.
+  const interrupted = fauxAssistantMessage([fauxText("partial answer")], {
+    stopReason: "error",
+    errorMessage: "Failed to process successful response",
+  }) as AgentMessage;
+
+  const decision = retries.classify(interrupted, false);
+  assertEquals(decision.action, "park");
+  assertEquals(retries.hasPendingRestart, true);
+  // The continuation must tell the model to resume, not to repeat.
+  assertEquals(
+    decision.action === "park"
+      ? decision.notification.title.includes("cut off")
+      : false,
+    true,
+  );
+});
+
+Deno.test("classify: a permanent error with output is not retried", () => {
+  const retries = new RetryManager(instantSleep);
+  const rejected = fauxAssistantMessage([fauxText("partial answer")], {
+    stopReason: "error",
+    errorMessage: "invalid api key",
+  }) as AgentMessage;
+  assertEquals(retries.classify(rejected, false), { action: "none" });
+  assertEquals(retries.hasPendingRestart, false);
+});
+
+Deno.test("classify: a normal answer is progress, not an interruption", () => {
+  const retries = new RetryManager(instantSleep);
+  assertEquals(retries.classify(withText("done"), false), { action: "none" });
+});
+
+Deno.test("classify: the interruption budget is bounded", () => {
+  const retries = new RetryManager(instantSleep);
+  const interrupted = () =>
+    fauxAssistantMessage([fauxText("partial")], {
+      stopReason: "error",
+      errorMessage: "Failed to process successful response",
+    }) as AgentMessage;
+  for (let attempt = 1; attempt <= MAX_EMPTY_RESPONSE_RETRIES; attempt++) {
+    assertEquals(retries.classify(interrupted(), false).action, "park");
+  }
+  // A provider that keeps dropping long streams must not loop forever.
+  assertEquals(retries.classify(interrupted(), false), { action: "none" });
+});
+
+Deno.test("classify: a closed session never parks an interruption", () => {
+  const retries = new RetryManager(instantSleep);
+  const interrupted = fauxAssistantMessage([fauxText("partial")], {
+    stopReason: "error",
+    errorMessage: "Failed to process successful response",
+  }) as AgentMessage;
+  assertEquals(retries.classify(interrupted, true), { action: "none" });
+});
+
+Deno.test("reset clears a parked interruption", () => {
+  const retries = new RetryManager(instantSleep);
+  retries.classify(
+    fauxAssistantMessage([fauxText("partial")], {
+      stopReason: "error",
+      errorMessage: "Failed to process successful response",
+    }) as AgentMessage,
+    false,
+  );
+  assertEquals(retries.hasPendingRestart, true);
+  retries.reset();
+  assertEquals(retries.hasPendingRestart, false);
+});
+
 Deno.test("reset clears the budgets and the parked restarts", () => {
   const retries = new RetryManager(instantSleep);
   retries.classify(fauxAssistantMessage(""), false);

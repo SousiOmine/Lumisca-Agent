@@ -1,7 +1,13 @@
 import { Agent } from "../ai/agent.ts";
-import type { AgentEvent, StreamFn } from "../ai/types.ts";
+import type { AgentEvent, AgentMessage, StreamFn } from "../ai/types.ts";
 import type { Api, AssistantMessage, Model } from "../ai/types.ts";
-import { CoreError } from "../errors.ts";
+import { CoreError, errorMessage } from "../errors.ts";
+import {
+  buildInterruptedRetryNotification,
+  buildRetryNotification,
+  hasNoVisibleOutput,
+  isTransientStreamError,
+} from "../agent/retry-policy.ts";
 import {
   MAX_RATE_LIMIT_RETRIES,
   rateLimitRetryDelayMs,
@@ -403,56 +409,92 @@ export class TaskHub {
     return this.info(id);
   }
 
-  /** Run a sub-agent to completion, retrying rate-limited (429) turns with
-   * exponential backoff. The first attempt uses the spawn prompt; a rate-limit
-   * failure drops the empty error turn and continues from the same prompt (no
-   * duplicate user message), backing off before each retry up to
-   * MAX_RATE_LIMIT_RETRIES times. Any other outcome — success, a non-rate
-   * error, an abort, or the exhausted budget — settles the sub-agent once. */
+  /** Run a sub-agent to completion, retrying the two recoverable failures
+   * with exponential backoff (bounded by MAX_RATE_LIMIT_RETRIES each):
+   *
+   * - a rate-limited (429) turn drops the empty error turn and re-runs the
+   *   same prompt (no duplicate user message),
+   * - a transient transport failure (a stream cut mid-flight) continues the
+   *   conversation: the partial answer stays in the transcript, and the
+   *   retry asks the model to resume — repeating work would waste the
+   *   tokens already spent, and dropping the turn would discard a long
+   *   investigation.
+   *
+   * Any other outcome — success, a permanent error, an abort, or the
+   * exhausted budget — settles the sub-agent once. */
   private async runSubagent(
     sub: Subagent,
     agent: Agent,
     prompt: string,
   ): Promise<void> {
     let first = true;
-    for (let attempt = 1; attempt <= MAX_RATE_LIMIT_RETRIES + 1; attempt++) {
+    /** Prompt for the next attempt; undefined → re-run the transcript. */
+    let nextPrompt: AgentMessage | undefined;
+    let rateLimitAttempt = 0;
+    let transportAttempt = 0;
+
+    for (;;) {
       if (sub.agent === null || this.closed) return;
       try {
         if (first) {
           await agent.prompt(prompt);
           first = false;
+        } else if (nextPrompt !== undefined) {
+          await agent.prompt(nextPrompt);
         } else {
           await agent.continue();
         }
-      } catch {
-        // The agent rejected (a race with another run): settle as failed.
-        this.finalize(sub, "failed", "Sub-agent run was interrupted");
+      } catch (error) {
+        // The agent rejected (a race with another run): settle as failed
+        // with the reason instead of a generic string.
+        this.finalize(
+          sub,
+          "failed",
+          `Sub-agent run failed to start: ${errorMessage(error)}`,
+        );
         return;
       }
       if (sub.agent === null || this.closed) return;
       const last = sub.agent.state.messages.at(-1) as
         | AssistantMessage
         | undefined;
-      const rateLimited = last !== undefined &&
-        last.role === "assistant" &&
-        isRetryableRateLimit(last);
-      if (!rateLimited) break;
-      if (attempt >= MAX_RATE_LIMIT_RETRIES + 1) break;
-      // Drop the failed error turn so the continuation re-uses the prompt.
-      const messages = sub.agent.state.messages;
-      if (messages.length > 0 && messages.at(-1)!.role === "assistant") {
-        sub.agent.state.messages = messages.slice(0, -1);
+      if (last === undefined || last.role !== "assistant") break;
+
+      if (isRetryableRateLimit(last)) {
+        if (rateLimitAttempt >= MAX_RATE_LIMIT_RETRIES) break;
+        rateLimitAttempt++;
+        // Drop the failed error turn so the continuation re-uses the prompt.
+        const messages = sub.agent.state.messages;
+        if (messages.length > 0 && messages.at(-1)!.role === "assistant") {
+          sub.agent.state.messages = messages.slice(0, -1);
+        }
+        nextPrompt = undefined;
+        if (
+          !(await this.backoff(sub, rateLimitRetryDelayMs(rateLimitAttempt)))
+        ) {
+          this.finalize(sub, "failed", sub.agent.state.errorMessage);
+          return;
+        }
+        continue;
       }
-      try {
-        await sleepAbortable(rateLimitRetryDelayMs(attempt), sub.abort.signal);
-      } catch {
-        // Aborted during backoff (session closed / killed): leave the error
-        // surfaced and settle.
-        this.finalize(sub, "failed", sub.agent.state.errorMessage);
-        return;
+
+      if (isTransientStreamError(last)) {
+        if (transportAttempt >= MAX_RATE_LIMIT_RETRIES) break;
+        transportAttempt++;
+        nextPrompt = hasNoVisibleOutput(last)
+          ? buildRetryNotification(transportAttempt)
+          : buildInterruptedRetryNotification(transportAttempt);
+        if (
+          !(await this.backoff(sub, rateLimitRetryDelayMs(transportAttempt)))
+        ) {
+          this.finalize(sub, "failed", sub.agent.state.errorMessage);
+          return;
+        }
+        continue;
       }
-      if (sub.agent === null || this.closed) return;
+      break;
     }
+
     const last = sub.agent?.state.messages.at(-1) as
       | AssistantMessage
       | undefined;
@@ -462,6 +504,17 @@ export class TaskHub {
       last?.stopReason === "error" ? "failed" : "finished",
       sub.agent?.state.errorMessage,
     );
+  }
+
+  /** Sleep before a retry. False when the wait was aborted (session closed
+   * or the sub-agent killed), so the caller settles instead of retrying. */
+  private async backoff(sub: Subagent, ms: number): Promise<boolean> {
+    try {
+      await sleepAbortable(ms, sub.abort.signal);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Resolve a sub-agent by id, or throw with the list of known ids. */

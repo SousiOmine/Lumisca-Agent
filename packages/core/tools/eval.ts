@@ -83,9 +83,12 @@ function hasAwait(code: string): boolean {
  * calls. Top-level `var`/`let`/`const` and function declarations persist;
  * re-declaring a `let`/`const` name in a later call throws.
  *
- * The sandbox is deliberately NOT an isolation boundary: the host `Deno`
- * namespace, `fetch` and related web globals are exposed, so `eval` has
- * the same access as `bash` (files, network, processes, env). */
+ * The sandbox is deliberately NOT a security boundary: the host `Deno`
+ * namespace, `fetch` and the standard web globals are exposed, so `eval`
+ * has the same *permissions* as `bash` (files, network, processes, env).
+ * It is still a separate vm context, so only the globals listed in
+ * `newSandbox` exist in addition to the ECMAScript built-ins — node
+ * internals (`process`, `require`, `Buffer`) are absent on purpose. */
 class EvalSession {
   private sandbox: Record<string, unknown>;
   private context: Context;
@@ -113,16 +116,39 @@ class EvalSession {
       this.output.push(line);
     };
     return {
-      // Same trust level as bash: full host access. Web globals for
-      // network work (fetch returns host Responses, so .json()/.text()
-      // work on them).
+      // Same permission level as bash: full host access. The snippet runs in
+      // a vm context, so only what is listed here exists — V8 provides the
+      // ECMAScript built-ins, nothing else. The web globals below are
+      // deliberately complete enough for real work: `fetch` is useless
+      // without AbortController, and binary/text handling is impossible
+      // without TextEncoder/TextDecoder (their absence used to fail
+      // perfectly ordinary snippets). Node internals (process, require,
+      // Buffer) stay out on purpose.
       Deno,
       fetch,
+      Request,
+      Response,
+      Headers,
+      FormData,
+      Blob,
+      ReadableStream,
       URL,
       URLSearchParams,
-      Headers,
+      WebSocket,
+      AbortController,
+      AbortSignal,
+      TextEncoder,
+      TextDecoder,
+      atob,
+      btoa,
+      crypto,
+      structuredClone,
+      performance,
+      queueMicrotask,
       setTimeout,
       clearTimeout,
+      setInterval,
+      clearInterval,
       console: { log: emit, info: emit, warn: emit, error: emit },
     };
   }
@@ -232,8 +258,10 @@ export function createEvalTool(
       "not returned) and declare persistent state with `globalThis`. " +
       "The completion value of plain code (awaited when it is a promise) " +
       "and console output are returned. The snippet runs in the server " +
-      "process with the same access as bash — files (Deno.*), network " +
-      "(fetch), processes and env are available; it is not a sandbox. " +
+      "process with the same permissions as bash (files, network, " +
+      "processes, env) and gets Deno, fetch, AbortController, " +
+      "TextEncoder/TextDecoder, crypto, timers and the other standard web " +
+      "globals; node internals (process, require, Buffer) are absent. " +
       "`reset` clears the state; `timeout` is in milliseconds.",
     parameters: evalSchema,
     execute: async (_id, params): Promise<ToolResult> => {

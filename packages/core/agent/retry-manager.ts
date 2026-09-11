@@ -1,10 +1,12 @@
 import type { Agent } from "../ai/agent.ts";
 import type { AgentMessage, AssistantMessage } from "../ai/types.ts";
 import {
+  buildInterruptedRetryNotification,
   buildRateLimitRetryNotification,
   buildRetryNotification,
   hasNoVisibleOutput,
   isSilentErrorResponse,
+  isTransientStreamError,
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "./retry-policy.ts";
 import {
@@ -37,6 +39,12 @@ export class RetryManager {
    * retries so a rate-limit storm cannot be cut short by the vacant cap,
    * nor starve it. */
   private rateLimitRetries = 0;
+  /** Consecutive responses the transport cut off AFTER they produced
+   * output, restarted with a "continue from where it stopped"
+   * instruction. Bounded like the other budgets so a provider that keeps
+   * dropping long streams cannot loop forever (each restart re-sends the
+   * whole conversation, so an unbounded chain would burn quota). */
+  private interruptedRetries = 0;
   /** The retry notification parked to restart a run after a silent-error
    * turn killed it. Consumed by resumeOnce the dead run has settled. */
   private pendingErrorRetry: NotificationMessage | null = null;
@@ -73,6 +81,7 @@ export class RetryManager {
   reset(): void {
     this.emptyResponseRetries = 0;
     this.rateLimitRetries = 0;
+    this.interruptedRetries = 0;
     this.pendingErrorRetry = null;
     this.pendingRateLimitRetry = null;
   }
@@ -100,9 +109,24 @@ export class RetryManager {
     if (message.role !== "assistant") return { action: "none" };
     const assistant = message as AssistantMessage;
     if (!hasNoVisibleOutput(assistant)) {
-      // Any visible output resets both retry counters: progress was made.
+      // The response produced output. A transport cut after partial text is
+      // still worth continuing from where it stopped — the partial answer
+      // stays in the transcript, so the restart resumes instead of
+      // repeating. Anything else is real progress and resets the budgets.
+      if (
+        !closed && isTransientStreamError(assistant) &&
+        this.interruptedRetries < MAX_EMPTY_RESPONSE_RETRIES
+      ) {
+        this.interruptedRetries++;
+        const notification = buildInterruptedRetryNotification(
+          this.interruptedRetries,
+        );
+        this.pendingErrorRetry = notification;
+        return { action: "park", notification, rateLimit: false };
+      }
       this.emptyResponseRetries = 0;
       this.rateLimitRetries = 0;
+      this.interruptedRetries = 0;
       return { action: "none" };
     }
     if (assistant.stopReason === "aborted") return { action: "none" };

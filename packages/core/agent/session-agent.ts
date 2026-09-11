@@ -824,7 +824,10 @@ export class SessionAgent {
   /** Retry an outputless assistant response. Classification lives in
    * RetryManager; the agent only executes the decision (an in-run vacant
    * retry via followUp, a parked restart consumed by resumeAfterErrorRun).
-   * Permanent failures surface immediately — they can never recover. */
+   * Permanent failures surface immediately — they can never recover. A
+   * transient failure that cut a response off *after* it produced output
+   * also parks a restart, which asks the model to continue from where it
+   * stopped instead of repeating the answer. */
   private handleTurnEnd(message: AgentMessage): void {
     const decision = this.retry.classify(message, this.closed);
     if (decision.action === "followUp") {
@@ -832,6 +835,20 @@ export class SessionAgent {
     }
     // "park" decisions are consumed by resumeAfterErrorRun once the dead
     // run settles; "none" needs nothing.
+    if (
+      message.role === "assistant" &&
+      (message as AssistantMessage).stopReason === "error"
+    ) {
+      // A run that dies leaves a trace: the desktop shell captures the
+      // server's output for copy-paste, and these failures used to be
+      // invisible outside the transcript. A recoverable failure (a restart
+      // is parked) stays at debug so a retry storm cannot flood the log.
+      const text = (message as AssistantMessage).errorMessage ??
+        "unknown error";
+      const line = `session ${this.sessionId}: model call failed: ${text}`;
+      if (decision.action === "park") log.debug(`${line} (retrying)`);
+      else log.warn(line);
+    }
   }
 
   /** Restart a run that a silent-error turn killed: the parked retry
