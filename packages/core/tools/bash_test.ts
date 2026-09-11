@@ -102,9 +102,11 @@ Deno.test({
       );
       // The code page number must be visible — `chcp` prints a localized
       // label ("Active code page: 932" / "現在のコード ページ: 932"), so
-      // only the number itself is asserted, never the label text.
+      // only the number itself is asserted, never the label text. Real code
+      // pages are 3 to 5 digits (932 = Shift_JIS, 65001 = UTF-8), and CI
+      // runs Windows with the UTF-8 page, so 3 digits alone is too narrow.
       assert(
-        /(^|\D)\d{3}(\D|$)/.test(text),
+        /(^|\D)\d{3,5}(\D|$)/.test(text),
         `code page missing: ${text}`,
       );
     } finally {

@@ -157,5 +157,10 @@ jobs:
 
       - name: Compile server binary
         # Full `npm run build:server` needs the denort download; verify the
-        # packaged server entry compiles standalone instead.
-        run: deno check ../../packages/server/mod.ts
+        # packaged server entry compiles standalone instead. Run from the
+        # repository root: packages/desktop is deliberately NOT a workspace
+        # member (AGENTS.md — a member would make `deno compile` embed
+        # src-tauri/target), so its own directory lacks the root's
+        # nodeModulesDir: auto resolution for npm deps like @types/node.
+        run: deno check packages/server/mod.ts
+        working-directory: ${{ github.workspace }}
