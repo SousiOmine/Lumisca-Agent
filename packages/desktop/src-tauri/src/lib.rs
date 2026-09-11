@@ -138,8 +138,22 @@ pub fn run() {
         })
         // The settings UI (served by the local or remote server) drives
         // the local server and UI switching through this bridge.
-        .register_uri_scheme_protocol("lumisca", |ctx, request| {
-            bridge::handle_shell_request(ctx.app_handle(), request)
+        //
+        // Requests are answered from a blocking worker, never inline:
+        // several actions wait for a long time by design (`pick-folder`
+        // opens a modal that waits for the user; `connect-local` polls for
+        // up to 30s), and the webview invokes this handler on the MAIN
+        // thread on macOS. Blocking there stops the main run loop, which
+        // the folder picker's sheet needs to deliver its completion — the
+        // picker then shows but can never be answered, freezing the app.
+        // wry's async responder is documented to be resolved from any
+        // thread, so the request runs on the blocking pool and the
+        // response is sent from there when the action completes.
+        .register_asynchronous_uri_scheme_protocol("lumisca", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(bridge::handle_shell_request(&app, request));
+            });
         })
         .on_window_event(|window, event| {
             match event {

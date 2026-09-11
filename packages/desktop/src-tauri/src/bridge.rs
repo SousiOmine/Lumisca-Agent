@@ -421,6 +421,13 @@ pub(crate) fn handle_shell_request(
         }
         // Open the OS folder picker; the picked path is on THIS machine,
         // so the frontend only offers this for local workspaces.
+        //
+        // `blocking_pick_folder` blocks the CALLING thread until the user
+        // answers, so this must not run on the main thread: on macOS the
+        // picker is a sheet whose completion arrives through the main run
+        // loop, and a blocked main thread would freeze it unanswered. The
+        // bridge registration in lib.rs answers every request from a
+        // blocking worker precisely so this stays off the main thread.
         "pick-folder" => {
             let picked = match app.get_webview_window("main") {
                 Some(win) => win
