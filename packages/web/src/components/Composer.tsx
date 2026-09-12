@@ -369,7 +369,7 @@ export function Composer({
               <button
                 type="button"
                 className="input-image-remove"
-                title="画像を削除"
+                title="添付画像を削除"
                 onClick={() =>
                   onImagesChange?.(images.filter((_, i) => i !== index))}
               >
@@ -413,11 +413,11 @@ export function Composer({
               : { left: caretPos.x, top: `calc(${caretPos.y}px + 20px)` }}
           >
             {mention.loading && mention.items.length === 0
-              ? <div className="mention-status">読み込み中...</div>
+              ? <div className="mention-status">読み込み中…</div>
               : mention.items.length === 0
               ? (
                 <div className="mention-status">
-                  一致するファイルがありません
+                  一致するファイルが見つかりません
                 </div>
               )
               : (
@@ -465,7 +465,7 @@ export function Composer({
               </div>
             )}
             {slashEntries.length === 0
-              ? <div className="slash-status">一致するコマンドがありません</div>
+              ? <div className="slash-status">該当するコマンドがありません</div>
               : slashEntries.map((item, index) => (
                 <button
                   key={item.id}
@@ -504,7 +504,7 @@ export function Composer({
         {hideModelSwitch
           ? (
             <span className="settings-note" style={{ alignSelf: "center" }}>
-              接続先サーバーの既定モデルを使用します
+              接続先サーバーで設定されたデフォルトモデルを使用します
             </span>
           )
           : (
@@ -516,7 +516,7 @@ export function Composer({
                   setShowModelPicker((o) => !o);
                   setShowCtx(false);
                 }}
-                title="モデル・思考強度を選択"
+                title="モデル・推論強度の選択"
               >
                 <span
                   className="live-dot"
@@ -591,8 +591,8 @@ export function Composer({
               type="button"
               className="btn danger"
               onClick={onAbort}
-              aria-label="中断"
-              title="中断"
+              aria-label="処理を停止"
+              title="処理を停止"
             >
               <IconPlayerStop size={14} />
             </button>

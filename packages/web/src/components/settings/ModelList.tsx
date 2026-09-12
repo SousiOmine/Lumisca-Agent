@@ -75,21 +75,21 @@ export function ModelList() {
   return (
     <>
       <div className="modal-header">
-        <h2>モデル</h2>
+        <h2>モデル設定</h2>
       </div>
 
       <input
-        placeholder="モデルを検索..."
+        placeholder="モデルを検索…"
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
       />
 
-      {loading && <div className="faint-box">読み込み中...</div>}
+      {loading && <div className="faint-box">読み込み中…</div>}
 
       {!loading && filtered.length === 0 && (
         <div className="faint-box">
           {configured.length === 0
-            ? "設定済みプロバイダーがありません。プロバイダー設定からAPIキーを設定してください。"
+            ? "利用可能なプロバイダーが未設定です。「APIプロバイダー」からAPIキーを登録してください。"
             : "該当するモデルがありません"}
         </div>
       )}

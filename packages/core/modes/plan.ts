@@ -52,8 +52,9 @@ ${PLAN_RULES}`;
 export const planMode: AgentMode = {
   id: "plan",
   label: "プラン",
-  modeLabel: "プランモード",
-  description: "実装計画を立案します（許可するまで編集しません）",
+  modeLabel: "プラン作成モード",
+  description:
+    "作業計画を立案します（ユーザーの承認があるまでファイル編集は行いません）",
   options: [],
   // Text-taking mode: the request arrives via buildPromptForText; a plain
   // buildPrompt call has no request, so it falls back to asking the user.

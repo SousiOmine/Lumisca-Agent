@@ -91,7 +91,7 @@ export class GoalRunner {
       this.deps.sessionId,
       goal.text,
       false,
-      "巻き戻しにより中断されました",
+      "操作の取り消し（巻き戻し）が行われたため、処理を中断しました",
     );
   }
 

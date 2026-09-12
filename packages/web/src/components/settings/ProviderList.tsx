@@ -99,7 +99,7 @@ export function ProviderList({
   return (
     <>
       <div className="modal-header">
-        <h2>プロバイダー</h2>
+        <h2>APIプロバイダー</h2>
       </div>
 
       <CatalogStatusRow onRefreshed={reload} />
@@ -107,7 +107,7 @@ export function ProviderList({
       <div className="stack-8">
         {configured.length === 0 && (
           <div className="faint-box">
-            まだありません。下の「プロバイダーを追加」から始めてください。
+            登録されたプロバイダーがありません。「プロバイダーを追加」ボタンから設定してください。
           </div>
         )}
         {configured.map((p) => (

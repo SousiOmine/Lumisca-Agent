@@ -69,7 +69,7 @@ function ModelRowEditor({
     <div className="user-provider-card">
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <input
-          placeholder="モデルID (例: gpt-4o)"
+          placeholder="モデルID（例: gpt-4o）"
           value={row.id}
           onChange={(e) => set({ id: e.currentTarget.value })}
           style={{ flex: 1 }}
@@ -108,14 +108,14 @@ function ModelRowEditor({
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <input
-          placeholder="コンテキストウィンドウ (トークン)"
+          placeholder="コンテキストウィンドウ（トークン）"
           value={row.contextWindow}
           inputMode="numeric"
           onChange={(e) => set({ contextWindow: e.currentTarget.value })}
           style={{ flex: 1 }}
         />
         <input
-          placeholder="最大出力 (トークン)"
+          placeholder="最大出力（トークン）"
           value={row.maxTokens}
           inputMode="numeric"
           onChange={(e) => set({ maxTokens: e.currentTarget.value })}
@@ -345,7 +345,7 @@ export function AddUserProviderForm({
           />
           <p className="settings-note">
             {idEditable
-              ? "モデル指定で使う識別子 (例: home-vllm/gpt-4o)。英数字・. _ - のみ"
+              ? "モデル指定で使う識別子（例: home-vllm/gpt-4o）。英数字・. _ - のみ"
               : "編集時は変更できません"}
           </p>
         </label>
@@ -358,7 +358,7 @@ export function AddUserProviderForm({
             onChange={(e) => setBaseUrl(e.currentTarget.value)}
           />
           <p className="settings-note">
-            OpenAI 互換エンドポイントの基底 URL (通常は /v1 まで)
+            OpenAI 互換エンドポイントの基底 URL（通常は /v1 まで）
           </p>
         </label>
 
@@ -376,7 +376,7 @@ export function AddUserProviderForm({
         </label>
 
         <label className="field">
-          <span>APIキー {mode === "edit" && "(空白で維持)"}</span>
+          <span>APIキー {mode === "edit" && "（空白で維持）"}</span>
           <input
             type="password"
             placeholder={initial?.hasApiKey ? "設定済み（上書き）" : "APIキー"}

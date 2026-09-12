@@ -171,7 +171,7 @@ Deno.test("cancelGoal clears the goal with a cancel event", () => {
     reason: string;
   };
   assertEquals(done.achieved, false);
-  assertEquals(done.reason.includes("中断"), true);
+  assertEquals(done.reason.includes("中止"), true);
 });
 
 Deno.test("abort clears an active goal", () => {

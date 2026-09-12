@@ -115,8 +115,10 @@ export function TitleBar({
             type="button"
             className={`titlebar-btn${paneOpen ? " active" : ""}`}
             onClick={onTogglePane}
-            title={paneVisible ? "ペインを隠す" : "ペインを表示"}
-            aria-label={paneVisible ? "ペインを隠す" : "ペインを表示"}
+            title={paneVisible ? "サイドパネルを閉じる" : "サイドパネルを表示"}
+            aria-label={paneVisible
+              ? "サイドパネルを閉じる"
+              : "サイドパネルを表示"}
           >
             {paneIcon(paneKind ?? "", 15)}
             {
@@ -148,8 +150,8 @@ export function TitleBar({
           type="button"
           className="titlebar-btn"
           onClick={() => windowApi.toggleMaximize()}
-          title={maximized ? "元に戻す" : "最大化"}
-          aria-label={maximized ? "元に戻す" : "最大化"}
+          title={maximized ? "元のサイズに戻す" : "最大化"}
+          aria-label={maximized ? "元のサイズに戻す" : "最大化"}
         >
           {maximized ? <IconCopy size={13} /> : <IconSquare size={12} />}
         </button>

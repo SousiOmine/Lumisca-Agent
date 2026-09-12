@@ -273,11 +273,11 @@ impl LabCore {
         // elsewhere the pane stays a fully independent window.
         #[cfg(windows)]
         let builder = builder.owner(&main).map_err(|e| {
-            RpcError::internal(format!("ブラウザペインをメイン窓に紐づけられません: {e}"))
+            RpcError::internal(format!("ブラウザパネルをメインウィンドウに紐づけられません: {e}"))
         })?;
         let window = builder
             .build()
-            .map_err(|e| RpcError::internal(format!("ブラウザペインを作成できません: {e}")))?;
+            .map_err(|e| RpcError::internal(format!("ブラウザパネルを作成できません: {e}")))?;
         // Pin before the first show: the window is created hidden, so a
         // desktop switch mid-creation can never flash the borderless
         // pane on the wrong desktop.
@@ -299,7 +299,7 @@ impl LabCore {
         if visible {
             window
                 .show()
-                .map_err(|e| RpcError::internal(format!("ブラウザペインを表示できません: {e}")))?;
+                .map_err(|e| RpcError::internal(format!("ブラウザパネルを表示できません: {e}")))?;
             // Re-pin on every show: the pane is owned (and thus bound)
             // to the main window's desktop, but re-asserting it costs
             // nothing and covers a main window that moved to another
@@ -311,7 +311,7 @@ impl LabCore {
         } else {
             window
                 .hide()
-                .map_err(|e| RpcError::internal(format!("ブラウザペインを隠せません: {e}")))
+                .map_err(|e| RpcError::internal(format!("ブラウザパネルを閉じられません: {e}")))
         }
     }
 
@@ -528,7 +528,7 @@ impl LabHandler {
         let _busy = self.core.busy.try_lock().map_err(|_| {
             RpcError::new(
                 error_codes::TIMEOUT,
-                "ブラウザは前の操作を処理中です (ページが応答しない可能性があります)",
+                "ブラウザは前の操作を処理中です（ページが応答しない可能性があります）",
             )
         })?;
         let req_id = self.core.next_req.fetch_add(1, Ordering::Relaxed);
@@ -560,7 +560,7 @@ impl LabHandler {
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(&req_id);
             return Err(RpcError::not_open(format!(
-                "ブラウザペインが利用できません: {e}"
+                "ブラウザパネルが利用できません: {e}"
             )));
         }
 
@@ -571,7 +571,7 @@ impl LabHandler {
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(&req_id);
             RpcError::timeout(format!(
-                "ページが {method} に応答しませんでした ({timeout:?})"
+                "ページが {method} に応答しませんでした（{timeout:?}）"
             ))
         })?;
         self.parse_eval_result(&result)
@@ -619,7 +619,7 @@ impl LabHandler {
                     error_codes::WAIT_UNSUPPORTED,
                     concat!(
                         "このプラットフォームの WebView は eval の Promise 解決に",
-                        "対応していません (wait は Windows/macOS のみ)。",
+                        "対応していません（wait は Windows/macOS のみ）。",
                     ),
                 )),
             }
@@ -659,7 +659,7 @@ impl LabHandler {
                 error_codes::SCREENSHOT_UNSUPPORTED,
                 concat!(
                     "このプラットフォームの WebView スクリーンショットは未実装です ",
-                    "(Windows の WebView2 CDP のみ対応)",
+                    "（Windows の WebView2 CDP のみ対応）",
                 ),
             ))
         }
@@ -739,7 +739,7 @@ impl LabHandler {
         let answer = rx
             .recv_timeout(timeout)
             .map_err(|_| {
-                RpcError::timeout(format!("CDP の応答がタイムアウトしました ({timeout:?})"))
+                RpcError::timeout(format!("CDP の応答がタイムアウトしました（{timeout:?}）"))
             })?
             .map_err(|e| {
                 RpcError::new(
@@ -790,7 +790,7 @@ impl LabHandler {
             .unwrap_or_else(|e| e.into_inner())
             .clone()
             .ok_or_else(|| {
-                RpcError::not_open("ブラウザは開いていません (先に browser_open を呼んでください)")
+                RpcError::not_open("ブラウザは開いていません（先に browser_open を呼んでください）")
             })
     }
 }

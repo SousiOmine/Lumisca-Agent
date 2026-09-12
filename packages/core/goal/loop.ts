@@ -89,7 +89,7 @@ export async function runGoalLoop(
         deps.sessionId,
         goal.text,
         false,
-        `最大反復回数（${goal.maxIterations}）に達したため停止しました`,
+        `反復実行の上限回数（${goal.maxIterations}回）に達したため、安全のため処理を停止しました`,
       );
       return { stopped: "max", text };
     }

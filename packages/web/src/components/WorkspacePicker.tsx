@@ -55,10 +55,12 @@ export function WorkspacePicker({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={selected ? selected.workspace.name : "ワークスペースを選択"}
+        title={selected ? selected.workspace.name : "ワークスペースの選択"}
       >
         <span className="workspace-picker-name">
-          {selected ? selected.workspace.name : "(ワークスペースがありません)"}
+          {selected
+            ? selected.workspace.name
+            : "ワークスペースが登録されていません"}
         </span>
         <span className={`workspace-picker-chevron${open ? " open" : ""}`}>
           <IconChevronDown size={15} />
@@ -69,7 +71,7 @@ export function WorkspacePicker({
         <div className="workspace-popover" role="listbox">
           {selectable.length === 0 && (
             <div className="workspace-popover-empty">
-              ワークスペースがありません
+              ワークスペースが登録されていません
             </div>
           )}
           {chat && (
@@ -90,7 +92,9 @@ export function WorkspacePicker({
               <span className="workspace-option-icon">
                 <IconMessage size={14} />
               </span>
-              <span className="workspace-option-name">チャット</span>
+              <span className="workspace-option-name">
+                通常チャット（ワークスペースなし）
+              </span>
             </div>
           )}
           {workspaces.map((fws) => {
@@ -118,14 +122,14 @@ export function WorkspacePicker({
                   {fws.workspace.name}
                 </span>
                 <span className="workspace-option-meta">
-                  {fws.workspace.folders.length} フォルダ
+                  {fws.workspace.folders.length} 件のフォルダー
                 </span>
                 <span className="workspace-option-actions">
                   <button
                     type="button"
                     className="icon-btn"
                     title="編集"
-                    aria-label={`${fws.workspace.name} を編集`}
+                    aria-label={`「${fws.workspace.name}」を編集`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setOpen(false);
@@ -138,7 +142,7 @@ export function WorkspacePicker({
                     type="button"
                     className="icon-btn"
                     title="削除"
-                    aria-label={`${fws.workspace.name} を削除`}
+                    aria-label={`「${fws.workspace.name}」を削除`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setOpen(false);
@@ -160,7 +164,7 @@ export function WorkspacePicker({
             }}
           >
             <IconPlus size={14} />
-            <span>新しいワークスペースを作成</span>
+            <span>ワークスペースの新規作成</span>
           </button>
         </div>
       )}

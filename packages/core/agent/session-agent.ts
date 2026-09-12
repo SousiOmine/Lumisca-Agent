@@ -576,7 +576,7 @@ export class SessionAgent {
    * goal runs. Also used by the abort fast path to stop the autonomous
    * goal loop. */
   cancelGoal(): void {
-    this.goals?.cancel("ユーザーにより中断されました");
+    this.goals?.cancel("ユーザー操作により処理を中止しました");
   }
 
   /** Start the autonomous goal when a `/goal` mode prompt arrives. */

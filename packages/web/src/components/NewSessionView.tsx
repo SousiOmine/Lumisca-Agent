@@ -85,7 +85,7 @@ function chatEntry(peerId: string): FederatedWorkspace {
     peerName: "",
     workspace: {
       id: CHAT_ENTRY_ID,
-      name: "チャット",
+      name: "通常チャット（ワークスペースなし）",
       folders: [],
       createdAt: 0,
       chat: true,
@@ -409,7 +409,7 @@ export function NewSessionView(
                 />
               </label>
               <label className="new-session-select">
-                <span>マシン</span>
+                <span>接続先サーバー</span>
                 <PeerPicker
                   peers={peers}
                   workspaces={workspaces}
@@ -420,13 +420,13 @@ export function NewSessionView(
             </div>
             {defaultModelError && (
               <div className="error-text" role="alert">
-                既定のモデルを取得できませんでした: {defaultModelError}
+                デフォルトのモデルを取得できませんでした: {defaultModelError}
               </div>
             )}
             <Composer
               value={input}
               onChange={onInputChange}
-              placeholder="タスクを入力して開始..."
+              placeholder="依頼するタスクを入力してください…"
               autoFocus
               large
               model={model}
@@ -443,7 +443,7 @@ export function NewSessionView(
               thinkingLevel={model?.thinkingLevel}
               thinkingLevels={model?.thinkingLevels}
               onThinkingLevelChange={changeThinkingLevel}
-              submitLabel={busy ? "作成中..." : "開始"}
+              submitLabel={busy ? "作成中…" : "開始"}
               submitIcon={IconArrowUp}
               submitIconOnly
               submitDisabled={busy || (!input.trim() && images.length === 0) ||
@@ -464,7 +464,7 @@ export function NewSessionView(
             {error && <div className="error-text">{error}</div>}
             <div className="new-session-recent">
               <div className="new-session-recent-header">
-                <h3>最近のセッション</h3>
+                <h3>最近使ったセッション</h3>
               </div>
               <RecentSessionsList
                 items={recent.items}

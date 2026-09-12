@@ -52,7 +52,7 @@ export function WorkspaceModal(
     if (added) {
       setFolders((prev) => (prev.includes(path) ? prev : [...prev, path]));
       // 新規作成で名前が未入力のとき、最初のフォルダ名をワークスペース名に
-      // 代入する(名前欄は後から編集可能)。
+      // 代入する（名前欄は後から編集可能）。
       if (!editing && !name.trim()) {
         const base = path.split(/[\\/]/).filter(Boolean).at(-1);
         if (base) setName(base);
@@ -130,14 +130,16 @@ export function WorkspaceModal(
         )
         : (
           <>
-            <h2>{editing ? "ワークスペースを編集" : "新しいワークスペース"}</h2>
+            <h2>
+              {editing ? "ワークスペースの編集" : "ワークスペースの新規作成"}
+            </h2>
 
             <p className="settings-note">
-              対象サーバー: {peerId === "" ? "このサーバー" : peerName}
+              接続先サーバー: {peerId === "" ? "ローカルサーバー" : peerName}
             </p>
 
             <label>
-              名前
+              ワークスペース名
               <input
                 placeholder="例: プロジェクトA"
                 value={name}
@@ -146,7 +148,7 @@ export function WorkspaceModal(
             </label>
 
             <label>
-              フォルダ
+              対象フォルダー
               <div className="folder-picker">
                 <button
                   type="button"
@@ -155,7 +157,7 @@ export function WorkspaceModal(
                   disabled={picking}
                 >
                   <IconPlus size={14} />
-                  {picking ? "選択中..." : "フォルダを選択"}
+                  {picking ? "選択中…" : "フォルダーを選択"}
                 </button>
               </div>
             </label>
@@ -180,8 +182,8 @@ export function WorkspaceModal(
             )}
 
             <p className="settings-note">
-              複数のフォルダをまとめた単位でセッションを作成できます。
-              AIのファイル操作はここで指定したフォルダ内に制限されます。
+              {"関連する複数のフォルダーをまとめて、作業環境（ワークスペース）を作成します。" +
+                "AIによるファイルの読み書きやコマンド実行は、指定したフォルダー内に限定されます。"}
             </p>
 
             {error && <div className="error-text">{error}</div>}
@@ -207,7 +209,7 @@ export function WorkspaceModal(
                 onClick={save}
                 disabled={busy || !name.trim() || folders.length === 0}
               >
-                {busy ? "保存中..." : editing ? "保存" : "作成"}
+                {busy ? "保存中…" : editing ? "保存" : "作成"}
               </button>
             </div>
           </>

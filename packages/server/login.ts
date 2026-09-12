@@ -206,7 +206,7 @@ const RATE_LIMIT_RE =
  * through unchanged. */
 export function friendlyLoginError(message: string): string {
   if (RATE_LIMIT_RE.test(message)) {
-    return "OpenAI側のレート制限またはBot検出により、認証に失敗しました。";
+    return "認証元の利用制限（レートリミット）またはアクセス検証により、ログインできませんでした。時間をおいて再度お試しください。";
   }
   return message;
 }

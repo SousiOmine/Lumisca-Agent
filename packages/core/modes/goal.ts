@@ -36,7 +36,7 @@ export const goalMode: AgentMode = {
   id: "goal",
   label: "ゴール",
   modeLabel: "ゴールモード",
-  description: "ゴールを宣言し、達成まで自律的に反復します",
+  description: "目標を設定し、達成するまでAIが自律的に作業を継続します",
   options: [],
   // Text-taking mode: the goal arrives via buildPromptForText; a plain
   // buildPrompt call has no goal, so it falls back to asking the user.

@@ -22,10 +22,10 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
   const hung = server?.liveness === "running";
   const headline = crashed
     ? `ローカルサーバーが終了しました${
-      server?.exitCode != null ? ` (exit code ${server.exitCode})` : ""
+      server?.exitCode != null ? `（終了コード: ${server.exitCode}）` : ""
     }`
     : hung
-    ? "ローカルサーバーが応答しません (ハングの可能性)"
+    ? "ローカルサーバーから応答がありません（応答停止の可能性）"
     : "ローカルサーバーに接続できません";
   const logTail = server?.logTail?.trim() ?? "";
 
@@ -35,7 +35,7 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
       server?.port != null ? `port: ${server.port}` : "",
       server?.exitCode != null ? `exit code: ${server.exitCode}` : "",
       "",
-      logTail || "(サーバーログは空です)",
+      logTail || "サーバーログはありません",
     ].filter((line, i) => i < 3 || line !== "").join("\n");
     try {
       await navigator.clipboard.writeText(body);
@@ -51,7 +51,7 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
       <IconAlertTriangle size={16} className="server-down-icon" />
       <div className="server-down-body">
         <span className="server-down-text">
-          {headline}。作業内容は保存されています。サーバーを再起動すると続けられます。
+          {headline}。作業データは保持されています。サーバーを再起動すると作業を再開できます。
         </span>
         {health.restartError && (
           <span className="error-text server-down-error">
@@ -59,7 +59,9 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
           </span>
         )}
         {showLog && (
-          <pre className="server-down-log">{logTail || "(サーバーログは空です)"}</pre>
+          <pre className="server-down-log">
+            {logTail || "サーバーログはありません"}
+          </pre>
         )}
       </div>
       <div className="server-down-actions">
@@ -77,7 +79,7 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
           onClick={() => setShowLog((v) => !v)}
           aria-expanded={showLog}
         >
-          {showLog ? "ログを隠す" : "ログを表示"}
+          {showLog ? "ログを非表示" : "ログを表示"}
         </button>
         <button
           type="button"
@@ -86,7 +88,7 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
           title="サーバーログをクリップボードにコピー"
         >
           {copied ? <IconCheck size={14} /> : <IconClipboard size={14} />}
-          ログをコピー
+          ログをクリップボードにコピー
         </button>
         <button
           type="button"

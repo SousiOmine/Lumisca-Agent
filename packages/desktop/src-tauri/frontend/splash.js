@@ -50,7 +50,7 @@ titlebar.addEventListener("dblclick", (e) => {
 function setMaximized(maximized) {
   maxIcon.classList.toggle("hidden", maximized);
   restoreIcon.classList.toggle("hidden", !maximized);
-  maxBtn.title = maximized ? "元に戻す" : "最大化";
+  maxBtn.title = maximized ? "元のサイズに戻す" : "最大化";
 }
 
 async function poll() {

@@ -36,10 +36,10 @@ export function ContextUsageTrigger({
       className={`ctx-meter${open ? " open" : ""}`}
       onClick={onToggle}
       title={formatContextUsageLine(summary, contextWindow) ||
-        "コンテキスト使用量"}
+        "コンテキスト消費量（トークン）"}
       aria-expanded={open}
       aria-haspopup="dialog"
-      aria-label={`コンテキスト使用量: ${
+      aria-label={`コンテキスト消費量（トークン）: ${
         formatContextUsageLine(summary, contextWindow) || label
       }`}
     >
@@ -66,9 +66,13 @@ export function ContextUsageCard({
     ? 0
     : Math.min(100, Math.max(0, ratio * 100));
   return (
-    <div className="ctx-popover" role="dialog" aria-label="コンテキスト使用量">
+    <div
+      className="ctx-popover"
+      role="dialog"
+      aria-label="コンテキスト消費量（トークン）"
+    >
       <div className="ctx-row">
-        <span>コンテキストウィンドウ</span>
+        <span>コンテキスト上限</span>
         <span className="mono">{headRight}</span>
       </div>
       {ratio !== undefined && (
@@ -78,7 +82,7 @@ export function ContextUsageCard({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(barPercent * 10) / 10}
-          aria-label={`コンテキスト使用率 ${formatPercent1(ratio)}`}
+          aria-label={`コンテキスト使用率: ${formatPercent1(ratio)}`}
         >
           <div
             className={`ctx-bar-fill${ratio >= 0.8 ? " warn" : ""}`}
@@ -87,7 +91,7 @@ export function ContextUsageCard({
         </div>
       )}
       <div className="ctx-row">
-        <span>キャッシュヒット率</span>
+        <span>プロンプトキャッシュ率</span>
         <span className="mono">
           {summary.averageCacheHitRate === undefined
             ? "—"

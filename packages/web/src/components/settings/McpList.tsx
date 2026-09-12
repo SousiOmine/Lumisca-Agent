@@ -70,7 +70,7 @@ export function McpList() {
         if (configKey(current.servers) !== configKey(baseline.servers)) {
           if (
             !globalThis.confirm(
-              "MCP設定が外部で変更されています。上書き保存しますか？",
+              "MCPの設定ファイルが外部で更新されています。現在の内容で上書き保存してもよろしいですか？",
             )
           ) {
             return false;
@@ -126,7 +126,7 @@ export function McpList() {
   return (
     <>
       <div className="modal-header">
-        <h2>MCP サーバー</h2>
+        <h2>MCPサーバー</h2>
       </div>
 
       <div className="stack-8">
@@ -134,7 +134,7 @@ export function McpList() {
         {loading && <p className="settings-note">読み込み中…</p>}
         {!loading && config && config.servers.length === 0 && (
           <div className="faint-box">
-            MCPサーバーはまだありません。下の「サーバーを追加」から始めてください。
+            MCPサーバーが登録されていません。下の「サーバーを追加」から設定してください。
           </div>
         )}
         {!loading &&

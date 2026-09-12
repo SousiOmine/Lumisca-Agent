@@ -42,14 +42,14 @@ const ROWS: ModelPrefRow[] = [
     key: FAST_MODEL_KEY,
     label: "高速モデル",
     description:
-      "エージェント本体とは別に、高速で安価な補助処理（サブエージェントの実行など）に使うモデル。",
+      "タスク本体とは別に、高速・低コストな補助処理（要約・サブタスクなど）で使用するモデルです。",
     thinking: true,
   },
   {
     key: IMAGE_MODEL_KEY,
     label: "画像分析モデル",
     description:
-      "画像認識に対応していないモデルの代わりに、画像の解釈を担当するモデル。",
+      "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデルです。",
     imageOnly: true,
     thinking: true,
   },
@@ -231,7 +231,7 @@ export function ModelPreferencePanel(
             </div>
             <div className="model-pref-value">
               {!loaded && !loadError
-                ? <span className="model-pref-unset">読み込み中...</span>
+                ? <span className="model-pref-unset">読み込み中…</span>
                 : value
                 ? (
                   <>

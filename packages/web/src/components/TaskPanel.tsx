@@ -21,7 +21,7 @@ export function TaskPanel({ tasks }: { tasks: TaskView[] }) {
       <button
         type="button"
         className="task-panel-header"
-        title={collapsed ? "展開" : "折りたたみ"}
+        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconUsers size={14} />

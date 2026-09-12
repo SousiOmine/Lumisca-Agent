@@ -42,16 +42,19 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
   if (!actionable || dismissed) return null;
 
   const canRestart = restartPending && status?.restartMode !== "none";
+  // The server installs the files and takes effect at the next start; the
+  // desktop shell bundles the restart with the install, so only it has to
+  // warn about the app going down.
+  const readyText =
+    `新しいバージョン（v${status?.latestVersion}）にアップデートできます。`;
   const text = restartPending
-    ? `Lumisca v${status?.appliedVersion} を適用しました。` +
+    ? `Lumisca v${status?.appliedVersion} をダウンロードしました。` +
       (canRestart
-        ? "再起動すると有効になります（実行中のセッションは中断されます）。"
-        : "次回の起動で有効になります (LUMISCA_UPDATE_RESTART=none)。")
+        ? "アプリを再起動すると適用されます（※実行中のセッションは停止します）。"
+        : "次回の起動で適用されます（LUMISCA_UPDATE_RESTART=none）。")
     : server
-    ? `Lumisca v${status?.latestVersion} のアップデートをインストールできます。` +
-      "次回の起動で有効になります。"
-    : `Lumisca v${status?.latestVersion} のアップデートが準備できました。` +
-      "インストールするとアプリが再起動します。";
+    ? readyText
+    : readyText + "インストールするとアプリが再起動します。";
 
   return (
     <div className="update-banner">
@@ -60,20 +63,20 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
       {restartPending
         ? canRestart && (
           <button type="button" className="btn push" onClick={update.restart}>
-            再起動
+            今すぐ再起動
           </button>
         )
         : (
           <button type="button" className="btn push" onClick={update.install}>
-            インストール
+            今すぐインストール
           </button>
         )}
       <button
         type="button"
         className="btn"
         onClick={() => setDismissed(true)}
-        title="閉じる"
-        aria-label="閉じる"
+        title="後で閉じる"
+        aria-label="後で閉じる"
       >
         <IconX size={14} />
       </button>

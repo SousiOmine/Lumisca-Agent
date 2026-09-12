@@ -31,15 +31,15 @@ export function PaneHeader({ content, onHide, error }: PaneHeaderProps) {
       )}
       {error !== undefined && (
         <span className="pane-error error-text" role="alert" title={error}>
-          ペインを操作できません
+          このパネルは現在操作できません
         </span>
       )}
       <button
         type="button"
         className="pane-hide"
         onClick={onHide}
-        title="ペインを隠す"
-        aria-label="ペインを隠す"
+        title="パネルを閉じる"
+        aria-label="パネルを閉じる"
       >
         <IconArrowBarToRight size={15} />
       </button>

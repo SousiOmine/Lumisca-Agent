@@ -128,7 +128,10 @@ export function ConnectionList() {
         signal: controller.signal,
       });
       clearTimeout(timer);
-      return { ok: true, text: "到達OK (トークンは接続時に検証されます)" };
+      return {
+        ok: true,
+        text: "疎通確認に成功しました（認証トークンは接続時に検証されます）",
+      };
     } catch {
       return { ok: false, text: `サーバーに到達できません: ${url}` };
     }
@@ -161,7 +164,7 @@ export function ConnectionList() {
               ? state?.mode === "remote"
                 ? `現在の表示: ${state.url ?? ""}`
                 : "現在の表示: ローカルサーバー"
-              : `現在の表示: このサーバー (${location.origin})`}
+              : `現在の表示: このサーバー（${location.origin}）`}
           </p>
 
           {error && <p className="error-text">{error}</p>}
@@ -176,7 +179,7 @@ export function ConnectionList() {
                   )}
                 </span>
                 <p className="settings-note">
-                  このPCで起動したサーバーのUIを表示します
+                  ローカル（このPC）で稼働しているサーバーに接続します
                 </p>
               </div>
               <button
@@ -268,7 +271,7 @@ function ServerCard({
       }}
     >
       <span style={{ fontWeight: 600 }}>
-        {server.name || "(無名)"}
+        {server.name || "（無名）"}
       </span>
       <Field label="名前">
         <input
@@ -285,7 +288,7 @@ function ServerCard({
           spellcheck={false}
         />
       </Field>
-      <Field label="トークン (LUMISCA_TOKEN と同じ値)">
+      <Field label="トークン（LUMISCA_TOKEN と同じ値）">
         <input
           type="password"
           value={server.token}

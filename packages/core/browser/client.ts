@@ -204,7 +204,7 @@ export class HttpBrowserBackend implements BrowserBackend {
     if (response.status === 401) {
       throw new BrowserBackendError(
         "auth",
-        "browser host がトークンを拒否しました (認証情報の不一致)",
+        "ブラウザ連携機能への接続に失敗しました（認証情報が一致しません）",
       );
     }
     if (response.status === 413) {

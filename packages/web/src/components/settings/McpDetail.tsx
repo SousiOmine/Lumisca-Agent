@@ -130,7 +130,7 @@ export function McpDetail({
             onChange={(e) => setType(e.currentTarget.value as "stdio" | "http")}
             style={fullWidth}
           >
-            <option value="stdio">stdio (子プロセス)</option>
+            <option value="stdio">stdio（子プロセス）</option>
             <option value="http">HTTP (streamable)</option>
           </select>
         </Field>
@@ -146,7 +146,7 @@ export function McpDetail({
                   style={fullWidth}
                 />
               </Field>
-              <Field label="引数 (1行に1つ)">
+              <Field label="引数（1行に1つ）">
                 <textarea
                   rows={3}
                   value={args}
@@ -155,7 +155,7 @@ export function McpDetail({
                   style={{ ...fullWidth, fontFamily: "monospace" }}
                 />
               </Field>
-              <Field label="作業ディレクトリ (省略可)">
+              <Field label="作業ディレクトリ（省略可）">
                 <input
                   value={cwd}
                   onChange={(e) => setCwd(e.currentTarget.value)}
@@ -176,7 +176,7 @@ export function McpDetail({
             </Field>
           )}
 
-        <Field label="環境変数 (key=value、1行に1つ、${VAR} 展開可)">
+        <Field label="環境変数（key=value、1行に1つ、${VAR} 展開可）">
           <textarea
             rows={3}
             value={env}
@@ -187,7 +187,7 @@ export function McpDetail({
         </Field>
 
         {type === "http" && (
-          <Field label="HTTPヘッダー (key=value、1行に1つ)">
+          <Field label="HTTPヘッダー（key=value、1行に1つ）">
             <textarea
               rows={3}
               value={headers}

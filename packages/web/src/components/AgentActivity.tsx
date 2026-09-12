@@ -43,8 +43,8 @@ export function AgentActivity({
 
   const elapsed = Math.max(0, (endedAt ?? Date.now()) - startedAt);
   const label = running
-    ? `${formatElapsed(elapsed)}間作業しています`
-    : `${formatElapsed(elapsed)}間作業しました`;
+    ? `作業中（経過時間: ${formatElapsed(elapsed)}）`
+    : `作業完了（所要時間: ${formatElapsed(elapsed)}）`;
 
   return (
     <button

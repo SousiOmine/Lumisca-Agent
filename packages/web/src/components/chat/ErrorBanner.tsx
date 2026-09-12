@@ -22,7 +22,7 @@ export function ErrorBanner({ text }: { text: string }) {
       className="msg error-banner"
       role="button"
       tabIndex={0}
-      title="クリックでコピー"
+      title="クリックしてエラー内容をコピー"
       aria-label="エラーをクリップボードにコピー"
       onClick={() => void handleCopy()}
       onKeyDown={(e) => {

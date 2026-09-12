@@ -105,7 +105,7 @@ export function buildSlashCommands(
   const promptItems: SlashCommandItem[] = savedPrompts.map((p) => ({
     id: p.id,
     label: p.label,
-    description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "..." : ""),
+    description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "…" : ""),
     insertText: p.prompt,
   }));
   if (isChat) {
@@ -114,7 +114,7 @@ export function buildSlashCommands(
     return [{
       id: "prompt",
       label: "保存済みプロンプト",
-      description: "登録済みのプロンプトを挿入",
+      description: "保存したプロンプトテンプレートを挿入",
       icon: IconMessage,
       kind: "insert",
       items: promptItems,
@@ -126,7 +126,7 @@ export function buildSlashCommands(
     commands.push({
       id: "prompt",
       label: "保存済みプロンプト",
-      description: "登録済みのプロンプトを挿入",
+      description: "保存したプロンプトテンプレートを挿入",
       icon: IconMessage,
       kind: "insert",
       items: promptItems,

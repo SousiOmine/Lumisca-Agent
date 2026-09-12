@@ -27,7 +27,7 @@ Deno.test("slashPrompt: text-taking mode wraps the trailing text", () => {
   assertEquals(result !== null, true);
   assertEquals(result!.mode.modeId, "plan");
   assertEquals(result!.mode.optionId, "");
-  assertEquals(result!.mode.modeLabel, "プランモード");
+  assertEquals(result!.mode.modeLabel, "プラン作成モード");
   assertEquals(result!.mode.shortText, "履歴機能を追加して");
   assertEquals(result!.text.includes("履歴機能を追加して"), true);
   assertEquals(result!.text.includes("実装計画を立案"), true);

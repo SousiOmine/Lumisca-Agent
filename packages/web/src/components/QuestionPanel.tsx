@@ -174,8 +174,8 @@ function QuestionCard({
             <input
               type="text"
               className="question-free-input"
-              placeholder="自由入力（選択肢にない場合はこちらに入力）"
-              aria-label={`${q.question}への自由入力`}
+              placeholder="選択肢にない回答はこちらに入力してください"
+              aria-label={`「${q.question}」への回答`}
               value={custom}
               onChange={(e) => editCustom(q.id, e.currentTarget.value, multi)}
             />
@@ -191,7 +191,7 @@ function QuestionCard({
             !allAnswered(pending.questions, selections, customs)}
         >
           <IconSend size={13} />
-          {submitting ? "送信中..." : "回答を送信"}
+          {submitting ? "送信中…" : "回答を送信"}
         </button>
         {error && <span className="question-error">{error}</span>}
       </div>

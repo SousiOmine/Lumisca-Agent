@@ -17,14 +17,14 @@ export function GoalPanel(
   const [collapsed, setCollapsed] = useState(false);
   if (goal === undefined) return null;
   const summary = `${goal.iteration}/${goal.maxIterations}${
-    goal.status === "judging" ? " · 判定中" : ""
+    goal.status === "judging" ? " · 進捗を判定中…" : ""
   }`;
   return (
     <div className={`goal-panel${collapsed ? " collapsed" : ""}`}>
       <button
         type="button"
         className="goal-panel-header"
-        title={collapsed ? "展開" : "折りたたみ"}
+        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconTarget size={14} />
@@ -45,14 +45,14 @@ export function GoalPanel(
           <button
             type="button"
             className="goal-cancel"
-            title="ゴールを中断する"
+            title="ゴール実行を中止する"
             onClick={(e) => {
               e.stopPropagation();
               onCancel();
             }}
           >
             <IconX size={12} />
-            <span>中断</span>
+            <span>中止</span>
           </button>
         </div>
       )}

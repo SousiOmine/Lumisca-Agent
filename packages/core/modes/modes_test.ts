@@ -100,7 +100,7 @@ Deno.test("REVIEW_TARGET_LABELS covers both targets", () => {
 Deno.test("plan mode: takes the request text and has no options", () => {
   assertEquals(planMode.options.length, 0);
   assertEquals(planMode.buildPromptForText !== undefined, true);
-  assertEquals(planMode.modeLabel, "プランモード");
+  assertEquals(planMode.modeLabel, "プラン作成モード");
 });
 
 Deno.test("plan prompt: embeds the request and the internal rules", () => {

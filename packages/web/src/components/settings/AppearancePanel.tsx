@@ -11,7 +11,7 @@ interface AppearancePanelProps {
 const THEME_OPTIONS: { value: ThemeSetting; label: string }[] = [
   { value: "light", label: "ライト" },
   { value: "dark", label: "ダーク" },
-  { value: "system", label: "システム" },
+  { value: "system", label: "システム設定に連動" },
 ];
 
 /** Settings → 外観. Theme is applied to <html data-theme> immediately and
@@ -22,11 +22,11 @@ export function AppearancePanel(
   return (
     <div className="settings-pane">
       <div className="appearance-item">
-        <span className="appearance-label">テーマ</span>
+        <span className="appearance-label">テーマ設定</span>
         <select
           value={theme}
           onChange={(e) => onThemeChange(e.currentTarget.value as ThemeSetting)}
-          aria-label="テーマ"
+          aria-label="テーマ設定"
         >
           {THEME_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -37,7 +37,7 @@ export function AppearancePanel(
       </div>
       {error && (
         <p className="error-text" role="alert">
-          テーマを保存できませんでした: {error}
+          テーマ設定を保存できませんでした: {error}
         </p>
       )}
     </div>

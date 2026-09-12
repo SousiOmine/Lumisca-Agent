@@ -31,7 +31,7 @@ interface AppMenuProps {
  * styles/tokens.css and PANE_WIDTH in browser_lab.rs. */
 const PANE_WIDTH = 460;
 
-/** Hamburger app menu (新しいタブ / 過去のセッション / 設定 / 終了). Shown
+/** Hamburger app menu (新しいタブ / セッション履歴 / 設定 / 終了). Shown
  * in the desktop title bar next to the window controls, and at the right
  * end of the tab bar in a plain browser. */
 export function AppMenu({
@@ -104,7 +104,7 @@ export function AppMenu({
             }}
           >
             <IconHistory size={14} />
-            <span>過去のセッション</span>
+            <span>セッション履歴</span>
           </button>
           <div className="app-menu-sep" role="separator" />
           <button

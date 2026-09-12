@@ -51,7 +51,7 @@ export function FolderBrowser({
 
   useAsyncEffect(async (isStale) => {
     if (path === null) return;
-    // Ignore responses for a path we navigated away from (rapid 上へ clicks).
+    // Ignore responses for a path we navigated away from (rapid 上の階層へ clicks).
     setError(undefined);
     try {
       const r = await fsBrowse(path);
@@ -80,12 +80,12 @@ export function FolderBrowser({
           <button type="button" className="btn" onClick={onBack}>
             <IconArrowLeft size={14} /> 戻る
           </button>
-          <h2>フォルダを選択</h2>
+          <h2>フォルダーの選択</h2>
         </div>
         <p className="settings-note">
           {peerId === ""
-            ? "このサーバーの場所を選択してください"
-            : `${peerName} (${peerId}) の場所を選択してください`}
+            ? "参照先フォルダーを選択してください"
+            : `「${peerName} (${peerId})」のフォルダーを選択してください`}
         </p>
         <div className="model-list" style={{ maxHeight: 320 }}>
           {roots.map((r) => (
@@ -107,7 +107,7 @@ export function FolderBrowser({
             <div
               style={{ padding: 8, fontSize: 12, color: "var(--text-faint)" }}
             >
-              場所が見つかりません
+              指定されたフォルダーが見つかりません
             </div>
           )}
         </div>
@@ -121,7 +121,7 @@ export function FolderBrowser({
         <button type="button" className="btn" onClick={onBack}>
           <IconArrowLeft size={14} /> 戻る
         </button>
-        <h2>フォルダを選択</h2>
+        <h2>フォルダーの選択</h2>
       </div>
       <div className="browse-path mono">{path}</div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -132,11 +132,11 @@ export function FolderBrowser({
           disabled={!parent}
         >
           <IconArrowUp size={14} />
-          上へ
+          上の階層へ
         </button>
         <button type="button" className="btn" onClick={() => go(null)}>
           <IconDeviceDesktop size={14} />
-          場所を選び直す
+          フォルダーを選び直す
         </button>
       </div>
       <div className="model-list" style={{ maxHeight: 280 }}>
@@ -157,7 +157,7 @@ export function FolderBrowser({
         ))}
         {entries.length === 0 && (
           <div style={{ padding: 8, fontSize: 12, color: "var(--text-faint)" }}>
-            (サブフォルダはありません)
+            サブフォルダーはありません
           </div>
         )}
       </div>
@@ -171,7 +171,7 @@ export function FolderBrowser({
           className="btn primary"
           onClick={() => onAdd(path)}
         >
-          このフォルダを追加
+          このフォルダーを選択
         </button>
       </div>
     </>

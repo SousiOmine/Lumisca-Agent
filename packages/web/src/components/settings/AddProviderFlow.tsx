@@ -33,7 +33,7 @@ export function AddProviderFlow({
         追加するプロバイダーを選択してください
       </p>
       <input
-        placeholder="プロバイダーを検索..."
+        placeholder="プロバイダーを検索…"
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
       />

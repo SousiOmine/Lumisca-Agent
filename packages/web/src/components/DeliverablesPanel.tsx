@@ -93,7 +93,7 @@ export function DeliverablesPanel(
       <button
         type="button"
         className="deliverables-panel-header"
-        title={collapsed ? "展開" : "折りたたみ"}
+        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconFile size={14} />

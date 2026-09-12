@@ -128,15 +128,14 @@ export function ModelPicker({
         ? (
           <div className="error-text">
             {error.phase === "providers"
-              ? "プロバイダー一覧を取得できませんでした(サーバーに接続できません)"
+              ? "プロバイダー一覧を取得できませんでした（サーバーに接続できません）"
               : "モデル一覧を取得できませんでした"}
           </div>
         )
         : providers.length === 0
         ? (
           <div className="settings-note" style={{ padding: 6 }}>
-            設定済みのプロバイダーがありません。
-            設定画面からAPIキーを登録してください。
+            利用可能なプロバイダーが未設定です。設定画面でAPIキーを登録してください。
           </div>
         )
         : (
@@ -176,11 +175,11 @@ export function ModelPicker({
             <div className="mp-models">
               <input
                 className="mp-model-search"
-                placeholder="モデルを検索..."
+                placeholder="モデルを検索…"
                 value={search}
                 onChange={(e) => setSearch(e.currentTarget.value)}
               />
-              {loading && <div className="mp-loading">読み込み中...</div>}
+              {loading && <div className="mp-loading">読み込み中…</div>}
               <div className="mp-model-list">
                 {visible.slice(0, 200).map((m) => (
                   <button
@@ -197,8 +196,8 @@ export function ModelPicker({
                       {m.reasoning && (
                         <IconBrain
                           size={12}
-                          title="思考モデル"
-                          aria-label="思考モデル"
+                          title="推論モデル（Reasoning）"
+                          aria-label="推論モデル（Reasoning）"
                         />
                       )}
                     </span>
@@ -210,10 +209,10 @@ export function ModelPicker({
                 {visible.length === 0 && !loading && (
                   <div className="mp-empty">
                     {imageOnly && models.length > 0
-                      ? "画像対応モデルがありません"
+                      ? "画像認識に対応したモデルがありません"
                       : enabledOnly && models.length > 0
-                      ? "有効なモデルがありません(設定でモデルを有効にしてください)"
-                      : "該当するモデルがありません"}
+                      ? "利用可能なモデルがありません（設定画面でモデルを有効化してください）"
+                      : "条件に一致するモデルがありません"}
                   </div>
                 )}
               </div>
@@ -229,7 +228,9 @@ export function ModelPicker({
               {showThinkingSlider
                 ? (
                   <>
-                    <div className="mp-thinking-head">思考強度</div>
+                    <div className="mp-thinking-head">
+                      推論強度（思考レベル）
+                    </div>
                     <ThinkingLevelSlider
                       value={resolvedValue}
                       levels={resolvedLevels}

@@ -89,7 +89,7 @@ export function ThinkingLevelSlider({
           <input
             type="range"
             className="tls-range"
-            aria-label="思考強度"
+            aria-label="推論強度（思考レベル）"
             aria-valuetext={THINKING_LEVEL_LABELS[shownLevel]}
             min={0}
             max={max}

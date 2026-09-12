@@ -109,7 +109,7 @@ export function TabBar({
         const runningTool = view?.runningTools.values().next().value as
           | string
           | undefined;
-        const name = view?.info.name ?? "新規セッション";
+        const name = view?.info.name ?? "新しいセッション";
         return (
           <div
             key={id}
@@ -118,9 +118,9 @@ export function TabBar({
             className={`tab${isActive ? " active" : ""}`}
             onClick={() => onSelect(id)}
             onContextMenu={(e) => openMenu(id, e)}
-            title={view?.info.modelId ?? "新規セッション"}
+            title={view?.info.modelId ?? "新しいセッション"}
           >
-            {isRunning && <span className="live-dot" aria-label="実行中" />}
+            {isRunning && <span className="live-dot" aria-label="処理中" />}
             <span className="tab-name">{name}</span>
             {isRunning && runningTool && (
               <span className="tab-badge">{runningTool}</span>
@@ -133,7 +133,7 @@ export function TabBar({
                 onClose(id);
               }}
               title="タブを閉じる"
-              aria-label={`${name} を閉じる`}
+              aria-label={`「${name}」を閉じる`}
             >
               <IconX size={13} />
             </button>
@@ -205,7 +205,7 @@ export function TabBar({
             onMouseEnter={() => setSubmenuOpen(true)}
             onMouseLeave={() => setSubmenuOpen(false)}
           >
-            <span>複数のタブを閉じる</span>
+            <span>他のタブを閉じる</span>
             <IconChevronRight size={14} />
             <div
               ref={submenuRef}
@@ -247,7 +247,7 @@ export function TabBar({
                   onCloseOthers(menu.tabId);
                 }}
               >
-                他のタブをすべて閉じる
+                これ以外のタブをすべて閉じる
               </button>
             </div>
           </div>

@@ -137,7 +137,8 @@ Deno.test("consumeDone reports completion exactly once", async () => {
 
 Deno.test("friendlyLoginError rewrites OpenAI-side throttling, keeps others", () => {
   const friendly =
-    "OpenAI側のレート制限またはBot検出により、認証に失敗しました。";
+    "認証元の利用制限（レートリミット）またはアクセス検証により、ログインできませんでした。" +
+    "時間をおいて再度お試しください。";
   assertEquals(
     friendlyLoginError(
       "OpenAI Codex device auth failed with status 429: " +

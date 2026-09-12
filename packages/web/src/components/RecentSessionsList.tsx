@@ -31,8 +31,8 @@ function relativeTime(timestamp: number): string {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** The closed-session list shared by the "過去のセッション" modal and the
- * "最近のセッション" section of the new-session screen. Clicking a row
+/** The closed-session list shared by the "セッション履歴" modal and the
+ * "最近使ったセッション" section of the new-session screen. Clicking a row
  * reopens that session in a tab. */
 export function RecentSessionsList({
   items,
@@ -58,10 +58,10 @@ export function RecentSessionsList({
             type="button"
             className="btn small"
             onClick={onReload}
-            title="再読み込み"
+            title="更新"
           >
             <IconRefresh size={13} />
-            再読み込み
+            更新
           </button>
         )}
       </div>
@@ -69,11 +69,11 @@ export function RecentSessionsList({
   }
 
   if (loading && items.length === 0) {
-    return <div className="recent-empty">読み込み中...</div>;
+    return <div className="recent-empty">読み込み中…</div>;
   }
 
   if (visible.length === 0) {
-    return <div className="recent-empty">最近のセッションはありません</div>;
+    return <div className="recent-empty">履歴はありません</div>;
   }
 
   return (
@@ -86,7 +86,7 @@ export function RecentSessionsList({
             type="button"
             className="recent-item"
             onClick={() => onSelect(key)}
-            title={`${name} をタブで開く`}
+            title={`「${name}」を新しいタブで開く`}
           >
             <span className="recent-item-body">
               <span className="recent-item-name">{name}</span>

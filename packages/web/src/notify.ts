@@ -65,7 +65,7 @@ export function buildAgentEndNotification(sessionName: string): {
 } {
   return {
     title: "Lumisca",
-    body: `「${sessionLabel(sessionName)}」の応答が完了しました`,
+    body: `「${sessionLabel(sessionName)}」の処理が完了しました`,
   };
 }
 

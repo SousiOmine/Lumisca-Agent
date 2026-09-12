@@ -52,8 +52,7 @@ export function GeneralPanel(
     return (
       <div className="settings-pane">
         <p className="settings-note">
-          このページでは自動アップデートを利用できません。パッケージ済みの
-          サーバー、またはデスクトップアプリから利用してください。
+          この環境では自動アップデートを利用できません。デスクトップアプリまたは正規パッケージからご利用ください。
         </p>
       </div>
     );
@@ -67,7 +66,7 @@ export function GeneralPanel(
   const restartPending = server && status.restartPending === true;
   const canRestart = restartPending && status.restartMode !== "none";
   const statusText = status.checking
-    ? "更新を確認中..."
+    ? "アップデートを確認中…"
     : restartPending
     ? `v${status.appliedVersion} を適用しました。${
       canRestart
@@ -103,8 +102,8 @@ export function GeneralPanel(
               <span className="update-label">自動アップデート</span>
               <span className="update-desc">
                 {server
-                  ? "起動時と定期的に新しいバージョンをチェックし、自動でダウンロード・適用します。次回の起動で新しいバージョンが有効になります。"
-                  : "起動時と定期的に新しいバージョンをチェックし、自動でダウンロードします。"}
+                  ? "アプリ起動時および定期的に更新を確認し、バックグラウンドで最新版をダウンロードします。次回起動時に自動適用されます。"
+                  : "アプリ起動時および定期的に更新を確認し、バックグラウンドで最新版をダウンロードします。"}
               </span>
             </div>
             <label className="toggle-switch">
@@ -123,8 +122,8 @@ export function GeneralPanel(
               <div className="update-info">
                 <span className="update-label">適用時に自動で再起動</span>
                 <span className="update-desc">
-                  無人のサーバー向け。オフの場合は次回の起動で新しいバージョンが有効になります
-                  （実行中のセッションは再起動で中断されます）。
+                  常時稼働サーバー向けの設定です。無効にした場合は次回起動時に反映されます
+                  （※再起動時は実行中のセッションが停止します）。
                 </span>
               </div>
               <label className="toggle-switch">
@@ -230,8 +229,7 @@ export function GeneralPanel(
           )}
           {restartPending && status.restartMode === "none" && (
             <p className="settings-note">
-              このサーバーは自動再起動が無効です (LUMISCA_UPDATE_RESTART=none)。
-              監視側で再起動してください。
+              このサーバーは自動再起動が無効です（LUMISCA_UPDATE_RESTART=none）。監視側で再起動してください。
             </p>
           )}
         </>

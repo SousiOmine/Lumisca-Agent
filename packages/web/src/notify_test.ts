@@ -27,7 +27,7 @@ Deno.test("buildAgentEndNotification mentions the session", () => {
 Deno.test("buildAgentEndNotification truncates long names", () => {
   const { body } = buildAgentEndNotification("あ".repeat(100));
   assertEquals(
-    Array.from(body).length <= 60 + "「」の応答が完了しました".length,
+    Array.from(body).length <= 60 + "「」の処理が完了しました".length,
     true,
   );
   assert(!body.includes("あ".repeat(61)), "name is cut at 60 chars");
@@ -51,7 +51,7 @@ Deno.test("buildQuestionNotification falls back to the question text", () => {
 
 Deno.test("buildQuestionNotification handles no questions", () => {
   const { body } = buildQuestionNotification("S", []);
-  assert(body.includes("質問"), `body still says question: ${body}`);
+  assert(body.includes("質問"), `body still asks for input: ${body}`);
 });
 
 Deno.test("shouldNotifyFromState matrix", () => {

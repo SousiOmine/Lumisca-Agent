@@ -72,7 +72,7 @@ export function useWorkspaces(initialData?: InitialData) {
   const deleteWorkspace = useCallback(async (fws: FederatedWorkspace) => {
     if (
       !globalThis.confirm(
-        `ワークスペース「${fws.workspace.name}」を削除しますか？`,
+        `ワークスペース「${fws.workspace.name}」を削除してもよろしいですか？`,
       )
     ) {
       return;

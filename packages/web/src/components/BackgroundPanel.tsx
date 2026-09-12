@@ -21,7 +21,7 @@ export function BackgroundPanel({ commands }: { commands: BackgroundView[] }) {
       <button
         type="button"
         className="background-panel-header"
-        title={collapsed ? "展開" : "折りたたみ"}
+        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconTerminal size={14} />

@@ -33,7 +33,7 @@ export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
       <button
         type="button"
         className="todo-panel-header"
-        title={collapsed ? "展開" : "折りたたみ"}
+        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconListCheck size={14} />

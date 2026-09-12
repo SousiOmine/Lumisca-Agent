@@ -11,7 +11,7 @@ interface RecentSessionsModalProps {
   onClose: () => void;
 }
 
-/** The "過去のセッション" modal (opened from the app menu): every closed
+/** The "セッション履歴" modal (opened from the app menu): every closed
  * session of this server and the federated peers, reopened on click. */
 export function RecentSessionsModal({
   openKeys,
@@ -22,7 +22,7 @@ export function RecentSessionsModal({
   return (
     <Modal onClose={onClose}>
       <div className="modal-header">
-        <h2>過去のセッション</h2>
+        <h2>セッション履歴</h2>
         <button
           type="button"
           className="icon-btn push"

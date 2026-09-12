@@ -90,7 +90,7 @@ export function CommandSafetyPanel() {
     <div className="settings-pane">
       <div
         className="update-item"
-        title="bash / eval の実行前に、高速モデルがコマンドの安全性を自動判定します。安全と判定されたコマンドは承認リストに記録され、次回からは判定なしで実行されます。危険と判定されたコマンドのほか、判定できなかったコマンド（判定が失敗・タイムアウトした場合）も実行されず、停止理由がエージェントに返されます。"
+        title="シェルコマンド（bash等）の実行前に、AIが危険な操作を含んでいないか安全性を自動で検証します。安全と判定されたコマンドは承認リストに記録され、次回からは判定なしで実行されます。危険と判定されたコマンドのほか、判定できなかったコマンド（判定が失敗・タイムアウトした場合）も実行されず、停止理由がエージェントに返されます。"
       >
         <div className="update-info">
           <span className="update-label">コマンド安全チェック</span>
@@ -112,8 +112,8 @@ export function CommandSafetyPanel() {
 
       {!fastModelSet && (
         <p className="settings-warning">
-          高速モデルが未設定のため、チェックを有効にすると判定できないコマンドが
-          すべてブロックされます。「モデル」の「高速モデル」から設定してください。
+          {"【重要】高速モデルが未設定です。このまま有効にすると、すべてのコマンドが安全確認不可として実行拒否されます。" +
+            "先に「モデル設定」より「高速モデル」を指定してください。"}
         </p>
       )}
 
@@ -134,7 +134,7 @@ export function CommandSafetyPanel() {
         {approvals.length === 0
           ? (
             <p className="settings-note">
-              {loaded ? "承認済みのコマンドはありません。" : "読み込み中..."}
+              {loaded ? "承認済みのコマンドはありません" : "読み込み中…"}
             </p>
           )
           : (

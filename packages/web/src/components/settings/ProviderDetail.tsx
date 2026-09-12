@@ -276,7 +276,7 @@ export function ProviderDetail({
               </button>
             </div>
             <p className="settings-note">
-              開いた画面でコードを入力して認証を承認してください。
+              表示された認証画面で上記の確認コードを入力し、連携を承認してください。
             </p>
           </div>
         );
@@ -386,7 +386,7 @@ export function ProviderDetail({
           ? (
             <div className="stack-8">
               <p className="settings-note">
-                OAuth ログイン(サブスクリプション契約)
+                OAuth ログイン（サブスクリプション契約）
               </p>
 
               {auth.configured && (
@@ -454,7 +454,7 @@ export function ProviderDetail({
                 <input
                   type="password"
                   placeholder={auth.configured
-                    ? "新しいAPIキー(上書き)"
+                    ? "新しいAPIキー（上書き）"
                     : "APIキーを入力"}
                   value={key}
                   onChange={(e) => setKey(e.currentTarget.value)}

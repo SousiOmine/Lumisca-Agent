@@ -80,21 +80,21 @@ const CATEGORIES: {
   },
   {
     id: "personalize",
-    label: "パーソナライズ",
+    label: "カスタマイズ",
     icon: <IconUser size={18} />,
   },
   { id: "servers", label: "接続先サーバー", icon: <IconWorld size={18} /> },
   {
     id: "providers",
-    label: "プロバイダー",
+    label: "APIプロバイダー",
     icon: <IconPlugConnected size={18} />,
   },
   {
     id: "models",
-    label: "モデル",
+    label: "モデル設定",
     icon: <IconBrain size={18} />,
   },
-  { id: "mcp", label: "MCP サーバー", icon: <IconServer size={18} /> },
+  { id: "mcp", label: "MCPサーバー", icon: <IconServer size={18} /> },
   {
     id: "security",
     label: "セキュリティ",

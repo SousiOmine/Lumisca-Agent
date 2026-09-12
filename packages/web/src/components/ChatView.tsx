@@ -292,14 +292,12 @@ export function ChatView(
                 {view.info.chat
                   ? (
                     <p>
-                      メッセージを入力してください。ワークスペースを使わない
-                      シンプルチャットです。
+                      メッセージを入力してください。フォルダー連携を行わないシンプルなチャットです。
                     </p>
                   )
                   : (
                     <p>
-                      タスクを入力してください。ファイルの読み書きとシェルコマンドを
-                      ワークスペース内で実行します。
+                      作業内容（タスク）を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律して進めます。
                     </p>
                   )}
               </div>
@@ -334,7 +332,7 @@ export function ChatView(
         <Composer
           value={input}
           onChange={onInputChange}
-          placeholder="タスクを入力..."
+          placeholder="指示・メッセージを入力してください…"
           onKeyDown={onKeyDown}
           model={{
             provider: view.info.modelProvider,

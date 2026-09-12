@@ -150,7 +150,7 @@ export function PersonalizePanel() {
         />
         {error && <p className="error-text">{error}</p>}
         <div className="settings-actions">
-          {saving && <span className="settings-note">保存中...</span>}
+          {saving && <span className="settings-note">保存中…</span>}
           {!saving && saved && (
             <span className="settings-saved">保存しました</span>
           )}
@@ -180,7 +180,8 @@ export function PersonalizePanel() {
           </button>
         </div>
         <p className="settings-note">
-          <code>/prompt</code> から呼び出せるプロンプト スニペットを登録します。
+          <code>/prompt</code>{" "}
+          コマンドで素早く呼び出せる定型文（プロンプト）を登録します。
         </p>
         {(promptsError ?? promptsLoadError) && (
           <p className="error-text" role="alert">
@@ -191,7 +192,7 @@ export function PersonalizePanel() {
 
         {prompts.length === 0 && !showAddForm && (
           <p className="settings-note" style={{ fontStyle: "italic" }}>
-            保存済みプロンプトはまだありません。「追加」ボタンから追加してください。
+            保存されたプロンプトはありません。右上の「追加」ボタンから登録してください。
           </p>
         )}
 
@@ -284,7 +285,7 @@ function PromptEditForm({
     }
     if (!/^[a-zA-Z0-9._-]+$/.test(trimmedId)) {
       setError(
-        "識別子は英数字・. _ - のみ使用できます",
+        "識別子に使用できる文字は半角英数字および記号「.」「_」「-」のみです",
       );
       return;
     }

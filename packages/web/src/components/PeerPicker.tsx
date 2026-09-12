@@ -12,7 +12,8 @@ interface PeerPickerProps {
 }
 
 /** Dropdown for selecting the target machine (peer). Shows the local server
- * as "このPC" and each connected remote peer with a reachability dot. */
+ * as "ローカル（このPC）" and each connected remote peer with a reachability
+ * dot. */
 export function PeerPicker({
   peers,
   workspaces,
@@ -35,7 +36,7 @@ export function PeerPicker({
   const peerMap = new Map(peers.map((p) => [p.id, p]));
 
   const displayName = (peerId: string): string => {
-    if (peerId === "") return "このPC";
+    if (peerId === "") return "ローカル（このPC）";
     return peerMap.get(peerId)?.name ?? peerId;
   };
 

@@ -559,7 +559,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
                 ),
             );
             return Err(format!(
-                "ローカルサーバーは起動していますが応答しません (pid {pid}, port {port})。ページ上部のバナーの「サーバーを再起動」、またはアプリの再起動で復帰できます。"
+                "ローカルサーバーが応答していません（PID: {pid}, Port: {port}）。上部バナーの「サーバーを再起動」をクリックするか、アプリを再起動してください。"
             ));
         }
         server_log::note(

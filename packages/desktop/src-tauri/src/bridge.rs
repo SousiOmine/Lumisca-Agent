@@ -152,7 +152,7 @@ fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
                     .lock()
                     .unwrap_or_else(|e| e.into_inner()) = None;
                 return Err(
-                    "ローカルサーバーの起動がタイムアウトしました。しばらく待ってからもう一度お試しください。"
+                    "サーバーの起動待機時間が超過しました。しばらく時間をおいてから再度お試しください。"
                         .into(),
                 );
             }
@@ -433,12 +433,12 @@ pub(crate) fn handle_shell_request(
                 Some(win) => win
                     .dialog()
                     .file()
-                    .set_title("フォルダを選択")
+                    .set_title("フォルダーの選択")
                     .blocking_pick_folder(),
                 None => app
                     .dialog()
                     .file()
-                    .set_title("フォルダを選択")
+                    .set_title("フォルダーの選択")
                     .blocking_pick_folder(),
             };
             let path = picked
