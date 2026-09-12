@@ -30,6 +30,11 @@ const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// abandoned and a fresh one is tried. 3s covers a cold deno run; a
 /// healthy server answers in well under a second.
 const LOCAL_START_TIMEOUT: Duration = Duration::from_secs(3);
+/// Second, longer health budget for a child that is still alive after
+/// missing the first one (see `ensure_local_server`): long enough for a
+/// server busy inside a long synchronous step, short enough to keep the
+/// settings UI responsive.
+const HEALTH_RECHECK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A locally spawned server process.
 pub(crate) struct LocalServer {
@@ -476,8 +481,12 @@ fn kill_process_tree(child: &mut Child) {
 }
 
 /// Kill and drop the running local server, if any. Used when the main
-/// window is destroyed and by the updater's exit hook.
-pub(crate) fn stop_local_server(app: &AppHandle) {
+/// window is destroyed and by the updater's exit hook. The stop is a hard
+/// tree kill (there is no console to send a signal to on Windows), so the
+/// server prints nothing of its own and leaves its database un-checkpointed
+/// — `reason` is what the captured log gets instead, so a post-mortem can
+/// tell this apart from a crash.
+pub(crate) fn stop_local_server(app: &AppHandle, reason: &str) {
     if let Some(mut local) = app
         .state::<AppState>()
         .local
@@ -485,6 +494,14 @@ pub(crate) fn stop_local_server(app: &AppHandle) {
         .unwrap_or_else(|e| e.into_inner())
         .take()
     {
+        server_log::note(
+            app,
+            format!(
+                "Stopping the local server (pid {}, port {}): {reason}. The whole process tree is killed.",
+                local.child.id(),
+                local.port
+            ),
+        );
         kill_process_tree(&mut local.child);
     }
 }
@@ -503,13 +520,50 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .as_ref()
-        .map(|l| (l.port, l.token.clone()));
-    if let Some((port, token)) = stored {
+        .map(|l| (l.port, l.token.clone(), l.child.id()));
+    if let Some((port, token, pid)) = stored {
         if health_check("127.0.0.1", port, Some(&token), LOCAL_START_TIMEOUT) {
             return Ok(page_url(&format!("http://127.0.0.1:{port}"), &token));
         }
-        // The stored server is dead (or never started): drop it and fall
-        // through to a fresh start.
+        // A missed health check does NOT mean a dead process: a server that
+        // is busy inside a long synchronous step (a large database write, a
+        // loaded machine) can miss the 3s budget while it is healthy and
+        // mid-run, and killing it here would destroy the user's in-flight
+        // work. Only a child that has really exited is replaced silently; a
+        // live one is re-checked with a longer budget and then reported
+        // instead of killed — the banner's "サーバーを再起動" is the
+        // explicit way to force a hung server down.
+        let alive = {
+            let mut guard = state.local.lock().unwrap_or_else(|e| e.into_inner());
+            match guard.as_mut() {
+                Some(local) => matches!(local.child.try_wait(), Ok(None)),
+                None => false,
+            }
+        };
+        if alive {
+            if health_check("127.0.0.1", port, Some(&token), HEALTH_RECHECK_TIMEOUT) {
+                return Ok(page_url(&format!("http://127.0.0.1:{port}"), &token));
+            }
+            server_log::note(
+                app,
+                format!(
+                    "The local server (pid {pid}, port {port}) is alive but did not answer /api/health in {}s + {}s; left running.",
+                    LOCAL_START_TIMEOUT.as_secs(),
+                    HEALTH_RECHECK_TIMEOUT.as_secs()
+                ),
+            );
+            return Err(format!(
+                "ローカルサーバーは起動していますが応答しません (pid {pid}, port {port})。ページ上部のバナーの「サーバーを再起動」、またはアプリの再起動で復帰できます。"
+            ));
+        }
+        server_log::note(
+            app,
+            format!(
+                "The stored local server (pid {pid}, port {port}) has exited; starting a fresh one."
+            ),
+        );
+        // The child is gone (or never started): drop it and reap its tree —
+        // tool processes it spawned can outlive it.
         if let Some(mut stale) = state.local.lock().unwrap_or_else(|e| e.into_inner()).take() {
             kill_process_tree(&mut stale.child);
         }
@@ -534,6 +588,14 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         // (port clash, missing Deno, listen error) and would otherwise be
         // cleared by the next attempt before anyone can read it.
         last_detail = last_log_lines(&server_log::tail(app), 20);
+        server_log::note(
+            app,
+            format!(
+                "Start attempt {} on port {port} did not answer /api/health in {}s; killing it.",
+                attempt + 1,
+                LOCAL_START_TIMEOUT.as_secs()
+            ),
+        );
         kill_process_tree(&mut child);
         if attempt == 9 {
             return Err(startup_error_message(&last_detail));
@@ -575,6 +637,7 @@ fn last_log_lines(text: &str, n: usize) -> String {
 /// the returned page URL. Reported through the bridge (`server/restart`)
 /// so the UI can offer "再起動" on its connection-lost banner.
 pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
+    server_log::note(app, "Restart requested from the page banner.");
     if let Some(mut stale) = app
         .state::<AppState>()
         .local
@@ -582,6 +645,14 @@ pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
         .unwrap_or_else(|e| e.into_inner())
         .take()
     {
+        server_log::note(
+            app,
+            format!(
+                "Killing the stored local server (pid {}, port {}) for the restart.",
+                stale.child.id(),
+                stale.port
+            ),
+        );
         kill_process_tree(&mut stale.child);
     }
     // Forget a remote display: the restart is explicitly about the local

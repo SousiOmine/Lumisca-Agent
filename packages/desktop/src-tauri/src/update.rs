@@ -102,7 +102,7 @@ fn build_updater(app: &AppHandle) -> Result<Updater, String> {
             // Stop the local server and the browser lab only now: the
             // updater runs this hook right before the installer launches,
             // so an earlier failure leaves the UI alive.
-            shutdown_services(&cleanup_app);
+            shutdown_services(&cleanup_app, "the updater is launching the installer");
             cleanup_app.cleanup_before_exit();
         })
         .build()
@@ -391,6 +391,6 @@ fn restart_after_install(_app: &AppHandle) {}
 
 #[cfg(not(windows))]
 fn restart_after_install(app: &AppHandle) {
-    shutdown_services(app);
+    shutdown_services(app, "restarting after an update was installed");
     app.restart();
 }

@@ -100,8 +100,19 @@ pub fn run() {
                 startup_task: Mutex::new(None),
                 browser_lab: Mutex::new(lab),
             });
-            // Keep only the recent on-disk server log across runs.
+            // Keep only the recent on-disk server log across runs, then mark
+            // this run's boundary in it: the file is append-only and spans
+            // app runs, so a timestamped header line is what separates one
+            // run from the next in a post-mortem.
             server_log::trim_log_file(&handle);
+            server_log::note(
+                &handle,
+                format!(
+                    "Lumisca desktop shell started (version {}, pid {})",
+                    app.package_info().version,
+                    std::process::id()
+                ),
+            );
 
             // Register the updater's `on_before_exit` hook exactly once
             // and keep the built updater for every future check (see
@@ -180,7 +191,10 @@ pub fn run() {
                     if window.label() == "main"
                         && window.app_handle().try_state::<AppState>().is_some()
                     {
-                        shutdown_services(window.app_handle());
+                        shutdown_services(
+                            window.app_handle(),
+                            "the main window was destroyed (app exit)",
+                        );
                     }
                 }
                 _ => {}
@@ -193,7 +207,9 @@ pub fn run() {
 /// Stop every spawned service on app exit: the local server process and
 /// the browser lab (its WebView and RPC listener). Idempotent — called
 /// from the main window's Destroyed event and the updater's exit hook.
-pub(crate) fn shutdown_services(app: &tauri::AppHandle) {
-    server::stop_local_server(app);
+/// `reason` is recorded in the captured server log, which is the only
+/// trace a hard-killed server leaves behind.
+pub(crate) fn shutdown_services(app: &tauri::AppHandle, reason: &str) {
+    server::stop_local_server(app, reason);
     browser_lab::shutdown(app);
 }

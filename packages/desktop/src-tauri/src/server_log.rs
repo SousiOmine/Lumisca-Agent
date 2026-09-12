@@ -6,6 +6,15 @@
 //! the UI's copy-paste tail (short, always current) and an append-only file
 //! for post-mortem (long, survives the app run).
 //!
+//! Every line is stamped with the local wall clock at capture time (see
+//! `local_time_stamp`) and records the stream it arrived on. The shell's
+//! own actions — starting, restarting, stopping the server, a missed health
+//! check — are captured too, as `[shell]` lines (`note`), so a post-mortem
+//! can tell "the server was stopped deliberately" apart from "the server
+//! died on its own": the two look identical in the server's own output,
+//! which is what a previous investigation of a mid-session death got stuck
+//! on.
+//!
 //! Split from `server.rs` so process management and log retention evolve
 //! independently; both read the same `AppState.server_log` slot.
 
@@ -26,19 +35,14 @@ const SERVER_LOG_FILE_LINES: usize = 2000;
 /// balloon the ring buffer.
 const SERVER_LOG_LINE_MAX: usize = 4096;
 
-/// One captured line of the local server's combined stdout/stderr.
-#[derive(Clone)]
-pub(crate) struct ServerLogLine {
-    stream: &'static str,
-    text: String,
-}
-
 /// Ring buffer of the local server's recent output (stdout+stderr merged),
 /// plus the append-only log file path. Created once per app run in setup
 /// (before the server starts), shared by the log-pump thread and the shell
-/// bridge.
+/// bridge. Lines are stored already rendered (see `format_line`): the
+/// timestamp is taken when the line is captured, not when it is read, so
+/// the tail the UI shows can never drift from the file.
 pub(crate) struct ServerLog {
-    lines: Mutex<VecDeque<ServerLogLine>>,
+    lines: Mutex<VecDeque<String>>,
     file: Mutex<Option<std::fs::File>>,
 }
 
@@ -57,30 +61,30 @@ impl ServerLog {
     }
 
     pub(crate) fn push(&self, stream: &'static str, text: String) {
+        let line = format_line(&local_time_stamp(), stream, &text);
         {
             let mut lines = self.lines.lock().unwrap_or_else(|e| e.into_inner());
-            lines.push_back(ServerLogLine {
-                stream,
-                text: text.clone(),
-            });
+            lines.push_back(line.clone());
             while lines.len() > SERVER_LOG_TAIL_LINES {
                 lines.pop_front();
             }
         }
         if let Some(file) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            let _ = writeln!(file, "[{stream}] {text}");
+            let _ = writeln!(file, "{line}");
             let _ = file.flush();
         }
     }
 
     /// The recent output as plain text (oldest first), for the UI's
-    /// copy-paste. Each line is prefixed with its stream so stderr lines
-    /// (where Deno prints uncaught errors) stand out.
+    /// copy-paste. Identical to the on-disk log: each line carries its
+    /// timestamp and stream, so stderr lines (where Deno prints uncaught
+    /// errors) and the shell's own notes stand out.
     pub(crate) fn tail_text(&self) -> String {
         let lines = self.lines.lock().unwrap_or_else(|e| e.into_inner());
         let mut out = String::new();
         for line in lines.iter() {
-            out.push_str(&format!("[{}] {}\n", line.stream, line.text));
+            out.push_str(line);
+            out.push('\n');
         }
         out
     }
@@ -105,6 +109,55 @@ pub(crate) fn truncate_line(text: String) -> String {
         end -= 1;
     }
     format!("{}… (truncated)", &text[..end])
+}
+
+/// Render one captured line: timestamp first (what a post-mortem needs
+/// before anything else), then the stream it arrived on. The tail the UI
+/// copies and the on-disk log use the same rendering, so a pasted tail can
+/// be matched against the file line by line.
+pub(crate) fn format_line(time: &str, stream: &str, text: &str) -> String {
+    format!("[{time}] [{stream}] {text}")
+}
+
+/// The local wall clock as `MM-DD HH:MM:SS.mmm`.
+///
+/// `std` has no local-time API, and this log is read by humans after the
+/// fact — a UTC stamp would be actively misleading (09:00 UTC is 18:00 in
+/// JST, which shifts every correlation with the event log). The platform
+/// clock is therefore read directly: `GetLocalTime` on Windows,
+/// `localtime_r` on POSIX. Both crates are already dependencies of the
+/// shell (`windows` on Windows, `libc` elsewhere), so no new dependency is
+/// pulled in for a diagnostic prefix.
+pub(crate) fn local_time_stamp() -> String {
+    #[cfg(windows)]
+    {
+        // SAFETY: GetLocalTime takes no arguments and cannot fail.
+        let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+        format!(
+            "{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+            t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, t.wMilliseconds
+        )
+    }
+    #[cfg(unix)]
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let seconds = now.as_secs() as libc::time_t;
+        let mut broken_down: libc::tm = unsafe { std::mem::zeroed() };
+        // SAFETY: localtime_r writes into `broken_down` and keeps no
+        // reference to it.
+        unsafe { libc::localtime_r(&seconds, &mut broken_down) };
+        format!(
+            "{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+            broken_down.tm_mon + 1,
+            broken_down.tm_mday,
+            broken_down.tm_hour,
+            broken_down.tm_min,
+            broken_down.tm_sec,
+            now.subsec_millis()
+        )
+    }
 }
 
 fn server_log_path(app: &AppHandle) -> Option<PathBuf> {
@@ -137,6 +190,16 @@ pub(crate) fn push(app: &AppHandle, stream: &'static str, text: String) {
             .unwrap_or_else(|e| e.into_inner())
             .push(stream, text);
     }
+}
+
+/// Record a shell-side action in the captured log, under the `shell` stream.
+///
+/// The server's own output cannot explain why it stopped producing any: a
+/// hard kill (the shell's tree kill on app exit, a restart) and a crash
+/// both end the same way, with the last line and nothing after it. These
+/// notes are what makes the difference readable after the fact.
+pub(crate) fn note(app: &AppHandle, text: impl Into<String>) {
+    push(app, "shell", text.into());
 }
 
 /// Clear the shared server log tail (a fresh start must not show the
@@ -189,5 +252,35 @@ mod tests {
         // A split would have panicked in String::truncate.
         assert!(cut.starts_with('あ'));
         assert!(cut.ends_with("… (truncated)"));
+    }
+
+    #[test]
+    fn format_line_leads_with_the_timestamp_and_stream() {
+        assert_eq!(
+            format_line("09-12 08:18:16.123", "shell", "starting the server"),
+            "[09-12 08:18:16.123] [shell] starting the server"
+        );
+    }
+
+    #[test]
+    fn local_time_stamp_has_a_stable_shape() {
+        // A shape check, not a value check: the fields must line up at the
+        // documented offsets (MM-DD HH:MM:SS.mmm), so a paste into a grep or
+        // a timestamp parser keeps working whatever the clock says.
+        let stamp = local_time_stamp();
+        assert_eq!(stamp.len(), 18, "{stamp}");
+        let byte = |i: usize| stamp.as_bytes()[i];
+        let digit_at = |i: usize| byte(i).is_ascii_digit();
+        assert!(digit_at(0) && digit_at(1), "{stamp}");
+        assert_eq!(byte(2), b'-', "{stamp}");
+        assert!(digit_at(3) && digit_at(4), "{stamp}");
+        assert_eq!(byte(5), b' ', "{stamp}");
+        assert!(digit_at(6) && digit_at(7), "{stamp}");
+        assert_eq!(byte(8), b':', "{stamp}");
+        assert!(digit_at(9) && digit_at(10), "{stamp}");
+        assert_eq!(byte(11), b':', "{stamp}");
+        assert!(digit_at(12) && digit_at(13), "{stamp}");
+        assert_eq!(byte(14), b'.', "{stamp}");
+        assert!(digit_at(15) && digit_at(16) && digit_at(17), "{stamp}");
     }
 }
