@@ -289,9 +289,9 @@ function stepUsage(
   step: { usage?: LanguageModelUsage } | undefined,
 ): Usage {
   const usage = streamedUsage ?? step?.usage;
-  const input = typeof usage?.inputTokens === "number" ? usage.inputTokens : 0;
   const cacheRead = usage?.inputTokenDetails?.cacheReadTokens ?? 0;
   const cacheWrite = usage?.inputTokenDetails?.cacheWriteTokens ?? 0;
+  const input = uncachedInputTokens(usage, cacheRead, cacheWrite);
   const output = typeof usage?.outputTokens === "number"
     ? usage.outputTokens
     : 0;
@@ -306,6 +306,28 @@ function stepUsage(
       ? { total: usage.totalTokens }
       : {}),
   };
+}
+
+/** Prompt tokens that were served by neither the cache nor a cache write,
+ * i.e. the app's `Usage.input` (see ai/types.ts).
+ *
+ * The AI SDK's `inputTokens` is the *whole* prompt with the cached part
+ * included (`noCache + cacheRead + cacheWrite`), so storing it as `input`
+ * double-counts every cached token: the context meter read ~2x the real
+ * prompt and its cache hit rate collapsed to `cacheRead / (prompt +
+ * cacheRead)`. The split is the provider's own; only the aggregate it
+ * derives from is arithmetic (`noCache = total - cacheRead - cacheWrite`). */
+function uncachedInputTokens(
+  usage: LanguageModelUsage | undefined,
+  cacheRead: number,
+  cacheWrite: number,
+): number {
+  const split = usage?.inputTokenDetails?.noCacheTokens;
+  if (typeof split === "number") return split;
+  const prompt = usage?.inputTokens;
+  return typeof prompt === "number"
+    ? Math.max(0, prompt - cacheRead - cacheWrite)
+    : 0;
 }
 
 /** Map a Lumisca thinking level to a Vercel reasoning hint (best effort).

@@ -38,12 +38,15 @@ Deno.test("parseModelPreference returns undefined for unset/empty/malformed", ()
   );
 });
 
-Deno.test("contextTokensOf sums input/cacheRead/cacheWrite", () => {
+Deno.test("contextTokensOf sums the prompt's uncached and cached parts", () => {
   assertEquals(
     contextTokensOf({ input: 1000, cacheRead: 2000, cacheWrite: 500 }),
     3500,
   );
   assertEquals(contextTokensOf({ input: 1000 }), 1000);
+  assertEquals(contextTokensOf({ cacheRead: 1000 }), 1000);
+  assertEquals(contextTokensOf({ input: 0 }), 0);
+  assertEquals(contextTokensOf({}), 0);
   assertEquals(contextTokensOf(undefined), 0);
   assertEquals(contextTokensOf(null), 0);
   // Non-finite and negative values never reduce the count.
@@ -51,36 +54,6 @@ Deno.test("contextTokensOf sums input/cacheRead/cacheWrite", () => {
     contextTokensOf({ input: NaN, cacheRead: -50, cacheWrite: Infinity }),
     0,
   );
-});
-
-Deno.test("contextTokensOf reads the provider (Vercel) usage shape", () => {
-  // inputTokens is the full prompt (cached reads included): the total is
-  // taken directly, never re-summed from the split parts.
-  assertEquals(
-    contextTokensOf({
-      inputTokens: 301200,
-      inputTokenDetails: {
-        noCacheTokens: 1200,
-        cacheReadTokens: 300000,
-        cacheWriteTokens: 0,
-      },
-    }),
-    301200,
-  );
-  // Without an aggregate the split parts are summed.
-  assertEquals(
-    contextTokensOf({
-      inputTokenDetails: {
-        noCacheTokens: 500,
-        cacheReadTokens: 9500,
-        cacheWriteTokens: 0,
-      },
-    }),
-    10000,
-  );
-  // Clean misses / malformed values count as 0.
-  assertEquals(contextTokensOf({ inputTokens: 0 }), 0);
-  assertEquals(contextTokensOf({}), 0);
 });
 
 Deno.test("summarizeContextUsage takes the latest turn and averages cache hits", () => {
@@ -107,31 +80,6 @@ Deno.test("summarizeContextUsage takes the latest turn and averages cache hits",
   );
 });
 
-Deno.test("summarizeContextUsage reads the provider (Vercel) usage shape", () => {
-  const summary = summarizeContextUsage([
-    {
-      role: "assistant",
-      usage: {
-        inputTokens: 301200,
-        inputTokenDetails: { noCacheTokens: 1200, cacheReadTokens: 300000 },
-      },
-    },
-    {
-      role: "assistant",
-      usage: {
-        inputTokens: 501000,
-        inputTokenDetails: { noCacheTokens: 1000, cacheReadTokens: 500000 },
-      },
-    },
-  ]);
-  assertEquals(summary.turns, 2);
-  assertEquals(summary.currentTokens, 501000);
-  assertEquals(summary.currentCacheRead, 500000);
-  assertEquals(summary.totalTokens, 802200);
-  assertEquals(summary.totalCacheRead, 800000);
-  assertEquals(summary.averageCacheHitRate, 800000 / 802200);
-});
-
 Deno.test("summarizeContextUsage ignores rows without usage", () => {
   const summary = summarizeContextUsage([
     { role: "user" },
@@ -141,6 +89,23 @@ Deno.test("summarizeContextUsage ignores rows without usage", () => {
   assertEquals(summary.currentTokens, undefined);
   assertEquals(summary.averageCacheHitRate, undefined);
   assertEquals(formatContextUsageLine(summary, 1_000_000), "");
+});
+
+Deno.test("summarizeContextUsage skips turns that reported no tokens", () => {
+  // The placeholder an aborted/failed call leaves behind reports zeros:
+  // it carries no context, so it must not reset the meter to 0.
+  const empty = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const summary = summarizeContextUsage([
+    { role: "assistant", usage: { input: 1200, cacheRead: 300000 } },
+    { role: "assistant", usage: empty },
+  ]);
+  assertEquals(summary.turns, 1);
+  assertEquals(summary.currentTokens, 301200);
+  assertEquals(summary.currentCacheRead, 300000);
+  assertEquals(
+    formatContextUsageLine(summary, 1_000_000),
+    "301.2K/1M (30.1%) · Avg cache hit 99.6%",
+  );
 });
 
 Deno.test("contextUsageRatio is undefined without current tokens or window", () => {

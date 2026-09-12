@@ -804,6 +804,17 @@ Deno.test("migration drops the legacy settings table", async () => {
   legacy.exec(
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
   );
+  // The base schema created `messages` before user_version 2, so a real
+  // database at this version has it (the context-usage migration reads it).
+  legacy.exec(
+    `CREATE TABLE messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      timestamp INTEGER NOT NULL
+    )`,
+  );
   legacy.exec("PRAGMA user_version = 2");
   legacy.close();
 

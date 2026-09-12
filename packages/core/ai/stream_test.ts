@@ -1,4 +1,5 @@
 import { assertEquals } from "@std/assert";
+import { summarizeContextUsage } from "../shared/mod.ts";
 import type { Api, Model, StreamRequest } from "./types.ts";
 import { createStreamFn, type StreamTransport } from "./stream.ts";
 
@@ -87,10 +88,29 @@ Deno.test("the transport carries the provider usage into the assistant message",
       total?: number;
     };
   };
-  assertEquals(message.usage.input, 301200);
+  // `input` is the uncached prompt, not the provider's whole prompt: the
+  // cached reads are reported separately (input + cacheRead = 301200) and
+  // counting them inside `input` as well inflated the context meter.
+  assertEquals(message.usage.input, 1200);
   assertEquals(message.usage.cacheRead, 300000);
   assertEquals(message.usage.cacheWrite, 0);
   assertEquals(message.usage.output, 456);
+});
+
+Deno.test("the transport usage feeds the context meter without double counting", async () => {
+  const events = await runStream(
+    v2Parts({
+      inputTokens: 301200,
+      outputTokens: 456,
+      cachedInputTokens: 300000,
+    }),
+  );
+  const done = events.find((e) => e.type === "done")!;
+  const summary = summarizeContextUsage([done.message as never]);
+  // The card reads the prompt the model received (301.2K) and the share of
+  // it that came from the cache (300000/301200 = 99.6%).
+  assertEquals(summary.currentTokens, 301200);
+  assertEquals(summary.averageCacheHitRate, 300000 / 301200);
 });
 
 Deno.test("the transport falls back to the step usage when the stream carried none", async () => {
@@ -126,7 +146,8 @@ Deno.test("a stream error still reports the usage the provider already consumed"
   const message = done.message as {
     usage: { input: number; cacheRead: number };
   };
-  assertEquals(message.usage.input, 777);
+  // 777 is the provider's whole prompt, 500 of it cached.
+  assertEquals(message.usage.input, 277);
   assertEquals(message.usage.cacheRead, 500);
 });
 

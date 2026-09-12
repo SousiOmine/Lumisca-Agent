@@ -76,15 +76,21 @@ export type AssistantMessageContent =
 // ---- usage / cost ----------------------------------------------------------
 
 export interface Usage {
+  /** Prompt tokens that neither hit the prompt cache nor were written to
+   * it. A prompt is `input + cacheRead + cacheWrite` tokens wide — the
+   * three parts are reported (and priced) separately by the provider. */
   input: number;
   output: number;
+  /** Prompt tokens the provider served from its prompt cache. */
   cacheRead: number;
+  /** Prompt tokens the provider wrote into its prompt cache. */
   cacheWrite: number;
   cacheWrite1h?: number;
   reasoningTokens?: number;
   /** Financial cost of the usage, when the provider reports/derives it. */
   cost?: number;
-  /** Total tokens (input + output), when the caller computes it. */
+  /** Total tokens of the turn as the provider reports them
+   * (prompt + completion), when they are known. */
   total?: number;
 }
 

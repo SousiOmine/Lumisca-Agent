@@ -24,6 +24,7 @@
 - `tools/system-prompt.ts`：coding／chatプロンプトは `sharedGuidelines` を共有。
 - `tools/gitignore.ts`：`loadCachedGitignore(sandbox)` が `.gitignore` の解析結果をSandbox単位でキャッシュする（stamp不一致＝ファイル変更で再読込）。
 - `shared/`：フロント安全ヘルパー（esbuildでwebバンドルに取込）。`misc.ts` は errors／json／text／models／bootstrap／async の節分け。
+- `shared/context-usage.ts`：コンテキストメーターの唯一の計算実装。`Usage.input` は**未キャッシュ**のプロンプト入力で、1ターンのプロンプトは `input + cacheRead + cacheWrite`（`ai/types.ts` の契約。ここを混同するとメーターが2倍に膨らむ）。
 - `settings/keys.ts` 相当：**設定キーの単一情報源は `shared/settings-keys.ts`**（`APP_MCP_SETTINGS_KEY` 等もここ）。テーマ等のUIキーも同じファイル。
 - `fs.ts`：`readIfExists` / `resolveGlobalDirs` / `isRecord` / `atomicWriteTextFileSync`（バックエンド専用。`shared/` は Deno API を持ち込まないためここに置く）。
 - `base64.ts`：`bytesToBase64`（画像読取・PDF描画の共有）。

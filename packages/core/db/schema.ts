@@ -79,6 +79,34 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     db.exec(
       "CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_id)",
     ),
+  // Context accounting: assistant rows used to store the provider's whole
+  // prompt in `usage.input`, while `usage.input` means the *uncached*
+  // prompt tokens (the cached part is `usage.cacheRead`/`cacheWrite`).
+  // Every cached token was counted twice, so the context meter read ~2x the
+  // real prompt and the cache hit rate looked halved. Those rows are the
+  // ones whose stored `total` is exactly `input + output` (the transport's
+  // own prompt + completion); dropping the cached parts from `input`
+  // restores the uncached count in place.
+  (db) =>
+    db.exec(`
+      UPDATE messages
+      SET content = json_set(
+        content,
+        '$.message.usage.input',
+        max(
+          0,
+          json_extract(content, '$.message.usage.input') -
+            json_extract(content, '$.message.usage.cacheRead') -
+            json_extract(content, '$.message.usage.cacheWrite')
+        )
+      )
+      WHERE role = 'assistant'
+        AND json_extract(content, '$.message.usage.total') =
+          json_extract(content, '$.message.usage.input') +
+          json_extract(content, '$.message.usage.output')
+        AND (json_extract(content, '$.message.usage.cacheRead') > 0
+          OR json_extract(content, '$.message.usage.cacheWrite') > 0)
+    `),
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration
