@@ -10,6 +10,16 @@ name: Release
 # pipeline. Both distributions carry the same version, so a tag ships them
 # together.
 #
+# The standalone server updates itself from this release: each server
+# package is signed with the same key as the desktop artifacts and published
+# next to `latest-server-<target>.json`, the manifest a running server
+# fetches through the `releases/latest/download/` shortcut (which only ever
+# resolves once the release is published, so a draft can never be offered as
+# an update). The signature and the package layout are re-verified with the
+# updater's own implementation before upload
+# (scripts/check-server-archive.ts) — a release that would break updates
+# fails in CI instead of on a user's machine.
+#
 # macOS note: CI builds are unsigned. An unsigned app runs when opened
 # manually, but Gatekeeper blocks it after download and the in-app updater
 # cannot install unsigned updates. For production macOS distribution, set
@@ -140,6 +150,16 @@ jobs:
     # build embeds (scripts/build-server.ts is the single build path), zipped
     # with the `assets.json` it serves the UI from. No Tauri, no installer —
     # unpack and run.
+    #
+    # Each package is signed with the same key as the desktop artifacts and
+    # published next to its own update manifest
+    # (`latest-server-<target>.json`, written by
+    # scripts/build-server-manifest.ts). The running server checks that
+    # manifest shortly after startup and every six hours
+    # (UPDATE_CHECK_INTERVAL_MS), and installs the package only if its
+    # signature verifies (packages/server/update/), so a package that fails
+    # to extract or verify must not reach a release: the check step below
+    # runs the updater's own verifier and extractor on the real artifact.
     needs: create-release
     strategy:
       fail-fast: false
@@ -167,6 +187,12 @@ jobs:
         with:
           deno-version: v2.x
 
+      # The Tauri CLI signs the packages (the same minisign key the desktop
+      # updater uses); `npx` fetches it without needing a package.json.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+
       # Stages assets.json (+ icudtl.dat on Windows) and compiles the server
       # with the shared build path (packages/desktop runs the same script
       # for its bundled binary).
@@ -174,7 +200,8 @@ jobs:
         run: deno task build:server
 
       # Runs the produced binary like a user would: no LUMISCA_ASSETS_FILE,
-      # then fetch the page and its assets.
+      # then fetch the page and its assets (and check that the binary reports
+      # the version it was built as, and that its update endpoints answer).
       - name: Smoke test packaged server
         run: deno task smoke:server
 
@@ -191,6 +218,7 @@ jobs:
           mkdir -p "dist/server/release/${NAME}"
           cp "$STAGE/lumisca-server" "$STAGE/assets.json" "dist/server/release/${NAME}/"
           tar -C dist/server/release -czf "dist/server/${NAME}.tar.gz" "$NAME"
+          echo "ARCHIVE=dist/server/${NAME}.tar.gz" >> "$GITHUB_ENV"
           ls -l "dist/server/${NAME}.tar.gz"
 
       - name: Package (Windows)
@@ -203,7 +231,37 @@ jobs:
           New-Item -ItemType Directory -Force -Path "dist/server/release/$name" | Out-Null
           Copy-Item "$stage/lumisca-server.exe", "$stage/assets.json", "$stage/icudtl.dat" "dist/server/release/$name/"
           Compress-Archive -Path "dist/server/release/$name" -DestinationPath "dist/server/$name.zip" -Force
+          "ARCHIVE=dist/server/$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Get-Item "dist/server/$name.zip" | Select-Object Name, Length
+
+      # Signs the package with the release key (TAURI_SIGNING_PRIVATE_KEY) —
+      # the same identity the desktop updater verifies, so there is one key
+      # to rotate, not two. A missing key fails here on purpose: publishing
+      # an unsigned package would silently stop every server from updating.
+      - name: Sign the package
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          npx --yes @tauri-apps/cli@2 signer sign "$ARCHIVE"
+          ls -l "$ARCHIVE.sig"
+
+      # Verify the real artifact with the updater's own implementation
+      # (signature + container + contents) before it can be published.
+      - name: Verify the package installs as an update
+        run: |
+          deno run --allow-read --allow-write scripts/check-server-archive.ts \
+            --archive "$ARCHIVE" --signature "$ARCHIVE.sig" \
+            --stage "dist/server/stage/${{ matrix.stage }}"
+
+      - name: Write the update manifest
+        run: |
+          deno run --allow-read --allow-write scripts/build-server-manifest.ts \
+            --archive "$ARCHIVE" --signature "$ARCHIVE.sig" \
+            --tag "${{ github.ref_name }}" --target "${{ matrix.stage }}" \
+            --out "dist/server/latest-server-${{ matrix.stage }}.json"
+          cat "dist/server/latest-server-${{ matrix.stage }}.json"
 
       # `--clobber` keeps a rerun of the workflow idempotent. Drafts are
       # addressed by tag; the release itself was created by create-release.
@@ -213,4 +271,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ github.ref_name }}" \
-            dist/server/lumisca-server-*-${{ matrix.platform }}.* --clobber
+            "$ARCHIVE" "$ARCHIVE.sig" \
+            "dist/server/latest-server-${{ matrix.stage }}.json" --clobber

@@ -1,4 +1,5 @@
 import { withTimeout } from "@lumisca/core/shared";
+import { request } from "./api-client.ts";
 
 /** Bridge to the desktop shell. The settings UI is served by the
  * (possibly remote) server, so it cannot call Tauri commands; instead it
@@ -92,7 +93,11 @@ export async function pickFolder(): Promise<string | null> {
   return res.path;
 }
 
-/** Auto-update state reported by the shell bridge (`update/status`). */
+/** Auto-update state of the app the page belongs to. Two producers share
+ * this shape: the desktop shell bridge (`update/status`) and the standalone
+ * server's own updater (`/api/update/status`). The fields only one of them
+ * can fill are optional, and `hooks/useUpdateStatus.ts` reports which one
+ * answered. */
 export interface UpdateStatus {
   /** 自動アップデートが有効か (設定の永続値)。 */
   autoUpdate: boolean;
@@ -113,6 +118,21 @@ export interface UpdateStatus {
   error: string | null;
   /** 現在実行中のアプリバージョン。 */
   currentVersion: string;
+  /** サーバー単体のアップデーターのみ: この構成で自己更新できるか。 */
+  supported?: boolean;
+  /** サーバー単体のアップデーターのみ: できない理由 (supported が false のとき)。 */
+  unsupportedReason?: string | null;
+  /** サーバー単体のアップデーターのみ: 適用済みのファイルが実行中プロセス
+   * と異なるバージョンか (再起動で有効になる)。 */
+  restartPending?: boolean;
+  /** サーバー単体のアップデーターのみ: 適用済みバージョン。 */
+  appliedVersion?: string | null;
+  /** サーバー単体のアップデーターのみ: 再起動の可否 ("none" は監視側に任せる)。 */
+  restartMode?: "self" | "none";
+  /** サーバー単体のアップデーターのみ: 適用後に自動で再起動するか。 */
+  autoRestart?: boolean;
+  /** サーバー単体のアップデーターのみ: 再起動処理中 (この応答の後に落ちる)。 */
+  restarting?: boolean;
 }
 
 /** Quit the desktop application. No-op (rejected) in a plain browser. */
@@ -180,6 +200,33 @@ export const updateApi = {
   download: () => shellCall<UpdateStatus>("update/download"),
   install: () => shellCall<UpdateStatus>("update/install"),
 };
+
+/**
+ * Auto-update actions of the standalone server hosting this page
+ * (`/api/update/*`, see packages/server/routes/update.ts). Used when the
+ * page runs outside the desktop shell: the server then owns its own files,
+ * while in the desktop the shell's updater owns the app (and the server is
+ * just one of its resources). Both answer the same status shape, so the UI
+ * keeps a single implementation.
+ */
+export const serverUpdateApi = {
+  status: () => serverUpdate<UpdateStatus>("status"),
+  setAuto: (enabled: boolean) =>
+    serverUpdate<UpdateStatus>("set-auto", { enabled }),
+  setAutoRestart: (enabled: boolean) =>
+    serverUpdate<UpdateStatus>("set-auto-restart", { enabled }),
+  check: () => serverUpdate<UpdateStatus>("check"),
+  download: () => serverUpdate<UpdateStatus>("download"),
+  install: () => serverUpdate<UpdateStatus>("install"),
+  restart: () => serverUpdate<UpdateStatus>("restart"),
+};
+
+function serverUpdate<T>(action: string, body?: unknown): Promise<T> {
+  return request<T>(`/api/update/${action}`, {
+    method: body === undefined ? "GET" : "POST",
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
 
 /** Docked pane content reported by the shell bridge (`pane/state`). The
  * pane is the right-side panel hosting a native surface inside the app

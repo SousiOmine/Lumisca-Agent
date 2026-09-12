@@ -29,6 +29,19 @@ export const COMMAND_SAFETY_ENABLED_KEY = "command_safety_enabled";
  * approval entries that were judged safe once and now skip the check. */
 export const COMMAND_SAFETY_APPROVALS_KEY = "command_safety_approvals";
 
+/** Settings-table key for the standalone server's automatic updates: the
+ * periodic check, the download, and applying a verified package (the new
+ * version takes effect at the next start). "1" = on (the default),
+ * "0" = off. The desktop shell keeps its own copy of this flag in its
+ * settings file, because the page it shows may be served by a remote
+ * server. */
+export const UPDATE_AUTO_KEY = "update_auto";
+
+/** Settings-table key for restarting automatically once an update is
+ * applied. "1" = on, unset (or any other value) = off (the default): the
+ * user restarts, which is the only moment live agent sessions are cut. */
+export const UPDATE_AUTO_RESTART_KEY = "update_auto_restart";
+
 /** Settings-table key for saved prompts: a JSON array of SavedPrompt
  * entries that can be inserted via the `/prompt` slash menu. */
 export const SAVED_PROMPTS_KEY = "saved_prompts";

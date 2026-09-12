@@ -1,12 +1,13 @@
 /**
  * Assert that every manifest carrying the app version agrees.
  *
- * The version lives in seven files (three workspace `deno.json`s, the
- * desktop `deno.json`, the desktop `package.json`, `tauri.conf.json` and
- * `Cargo.toml`) because each toolchain reads its own manifest. This script
- * is the single checker, run
- * by CI on every change and by the release workflow against the pushed tag,
- * so a mismatch is caught before a release is published.
+ * The version lives in eight files (three workspace `deno.json`s, the
+ * desktop `deno.json`, the desktop `package.json`, `tauri.conf.json`,
+ * `Cargo.toml`, and `packages/server/version.ts` — the constant a packaged
+ * server reads at runtime, since the compiled binary has no manifests)
+ * because each toolchain reads its own manifest. This script is the single
+ * checker, run by CI on every change and by the release workflow against
+ * the pushed tag, so a mismatch is caught before a release is published.
  *
  * Usage:
  *   deno run --allow-read scripts/check-versions.ts [expected]
@@ -41,12 +42,18 @@ function cargoVersion(text: string): string | undefined {
   return text.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
 }
 
+/** `SERVER_VERSION = "x"` in the server's runtime version constant. */
+function serverVersion(text: string): string | undefined {
+  return text.match(/SERVER_VERSION\s*=\s*"([^"]+)"/)?.[1];
+}
+
 const REFERENCE = "packages/desktop/src-tauri/tauri.conf.json";
 
 const MANIFESTS: Manifest[] = [
   { path: REFERENCE, read: jsonVersion },
   { path: "packages/core/deno.json", read: jsonVersion },
   { path: "packages/server/deno.json", read: jsonVersion },
+  { path: "packages/server/version.ts", read: serverVersion },
   { path: "packages/web/deno.json", read: jsonVersion },
   { path: "packages/desktop/deno.json", read: jsonVersion },
   { path: "packages/desktop/package.json", read: jsonVersion },

@@ -11,10 +11,19 @@
  *
  * Without `--bin` the staged release build of this host is used
  * (dist/server/stage/<deno target>/lumisca-server[.exe]).
+ *
+ * The package is COPIED to a temporary directory and started from there: a
+ * packaged server owns its installation and checks for updates in the
+ * background, so running the artifact in place could let it apply a release
+ * into the build output (silently replacing the files the release steps
+ * afterwards verify). Running from a copy also matches what a user does with
+ * the downloaded package.
  */
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SERVER_STARTUP_ENV_KEYS } from "../packages/server/startup.ts";
+import { installedFileNames } from "../packages/server/update/install.ts";
+import { SERVER_VERSION } from "../packages/server/version.ts";
 
 // This script lives in scripts/; the repo root is one level up.
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -116,13 +125,15 @@ async function stop(child: Deno.ChildProcess, status: Promise<unknown>) {
   }
 }
 
-const binary = parseArgs(Deno.args);
+const sourceBinary = parseArgs(Deno.args);
 try {
-  if (!(await Deno.stat(binary)).isFile) {
-    usage(`not a file: ${binary}`);
+  if (!(await Deno.stat(sourceBinary)).isFile) {
+    usage(`not a file: ${sourceBinary}`);
   }
 } catch {
-  usage(`server binary not found: ${binary} (run deno task build:server)`);
+  usage(
+    `server binary not found: ${sourceBinary} (run deno task build:server)`,
+  );
 }
 
 const failures: string[] = [];
@@ -135,6 +146,36 @@ const port = freePort();
 const base = `http://127.0.0.1:${port}`;
 const workDir = await Deno.makeTempDir({ prefix: "lumisca-smoke-" });
 
+/** Copy the package (binary + the files the release layout defines, see
+ * installedFileNames) out of the build directory, so the started server
+ * cannot replace the artifacts this run is checking. Returns the copied
+ * binary's path. */
+async function copyPackage(source: string, targetDir: string): Promise<string> {
+  await Deno.mkdir(targetDir, { recursive: true });
+  let copied = 0;
+  for (const name of installedFileNames(source)) {
+    const from = join(dirname(source), name);
+    try {
+      await Deno.copyFile(from, join(targetDir, name));
+      copied++;
+    } catch {
+      // Optional files (icudtl.dat is Windows-only): the sidecar's absence
+      // is what the packaged server must tolerate, so the copy tolerates it
+      // too.
+    }
+  }
+  if (copied === 0) {
+    usage(
+      `no package files next to ${source} (looked for ${
+        installedFileNames(source).join(", ")
+      })`,
+    );
+  }
+  return join(targetDir, basename(source));
+}
+
+const binary = await copyPackage(sourceBinary, join(workDir, "package"));
+
 // Deno.Command inherits the parent environment and `env` only adds to /
 // overrides it, so a LUMISCA_ASSETS_FILE (or any other startup value) in the
 // caller's environment would leak into the child and defeat this check:
@@ -146,10 +187,29 @@ for (const key of SERVER_STARTUP_ENV_KEYS) delete childEnv[key];
 childEnv.LUMISCA_PORT = String(port);
 childEnv.LUMISCA_DB = join(workDir, "smoke.db");
 
+// The updater's self-check: it runs a staged binary with `--version` and
+// compares the answer with the manifest before replacing anything, so a
+// package whose binary cannot report its version is not installable.
+const versionProbe = await new Deno.Command(binary, {
+  args: ["--version"],
+  clearEnv: true,
+  stdin: "null",
+  stdout: "piped",
+  stderr: "piped",
+}).output();
+const reportedVersion = new TextDecoder().decode(versionProbe.stdout).trim();
+check(
+  "--version reports the built version",
+  versionProbe.success && reportedVersion === SERVER_VERSION,
+  `status ${versionProbe.code}, "${reportedVersion}"`,
+);
+
 console.log(`Starting ${binary} on ${base}`);
 const child = new Deno.Command(binary, {
   // Run from the directory the package was extracted into, like a user
-  // following the release notes would.
+  // following the release notes would — a temporary copy, so the running
+  // server's own background update check can only ever touch that copy
+  // (see copyPackage above).
   cwd: dirname(binary),
   env: childEnv,
   clearEnv: true,
@@ -217,6 +277,21 @@ try {
       "GET /assets/initial-data.js serves the bootstrap data",
       data.status === 200 && dataText.includes("__INITIAL_DATA__"),
       `status ${data.status}`,
+    );
+
+    // A packaged server (this binary) owns its installation and answers the
+    // updater endpoints; the UI reads them when the page is not inside the
+    // desktop shell.
+    const update = await fetch(`${base}/api/update/status`);
+    const updateBody = await update.json().catch(() => null) as
+      | { supported?: boolean; currentVersion?: string; target?: string }
+      | null;
+    check(
+      "/api/update/status offers self-updating",
+      update.status === 200 && updateBody?.supported === true &&
+        updateBody.currentVersion === SERVER_VERSION &&
+        updateBody.target === Deno.build.target,
+      `status ${update.status}, ${JSON.stringify(updateBody)}`,
     );
 
     const favicon = await fetch(`${base}/favicon.png`);

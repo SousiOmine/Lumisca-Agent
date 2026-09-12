@@ -4,8 +4,13 @@ import {
   defaultAssetsFile,
   describeListenError,
   isAddressInUseError,
+  isDesktopManaged,
+  parsePortWaitMs,
   parseServerPort,
+  parseUpdateRestartMode,
+  PORT_WAIT_ENV_KEY,
   SERVER_STARTUP_ENV_KEYS,
+  updateSupport,
 } from "./startup.ts";
 
 Deno.test("server startup environment is consumed instead of inherited by tools", () => {
@@ -20,6 +25,10 @@ Deno.test("server startup environment is consumed instead of inherited by tools"
     ["LUMISCA_HOST", "127.0.0.1"],
     ["LUMISCA_PORT", "42000"],
     ["LUMISCA_ASSETS_FILE", "C:/assets.json"],
+    ["LUMISCA_DESKTOP", "1"],
+    ["LUMISCA_UPDATE_MANIFEST", "https://example.com/latest-server.json"],
+    ["LUMISCA_UPDATE_RESTART", "none"],
+    ["LUMISCA_PORT_WAIT_MS", "15000"],
     // Model configuration belongs to the user's development environment,
     // not to the hosting server instance, so it must remain inheritable.
     ["LUMISCA_MODEL", "test-model"],
@@ -46,9 +55,67 @@ Deno.test("server startup environment is consumed instead of inherited by tools"
     LUMISCA_HOST: "127.0.0.1",
     LUMISCA_PORT: "42000",
     LUMISCA_ASSETS_FILE: "C:/assets.json",
+    LUMISCA_DESKTOP: "1",
+    LUMISCA_UPDATE_MANIFEST: "https://example.com/latest-server.json",
+    LUMISCA_UPDATE_RESTART: "none",
+    [PORT_WAIT_ENV_KEY]: "15000",
   });
   assertEquals(deleted, Object.keys(captured));
   assertEquals(values, new Map([["LUMISCA_MODEL", "test-model"]]));
+});
+
+Deno.test("desktop mode and update switches are read strictly", () => {
+  assertEquals(isDesktopManaged("1"), true);
+  assertEquals(isDesktopManaged("true"), true);
+  assertEquals(isDesktopManaged("0"), false);
+  assertEquals(isDesktopManaged(undefined), false);
+
+  // Only the updater's successor sets the bind-retry budget; an invalid
+  // value means "fail fast like any other launch".
+  assertEquals(parsePortWaitMs("15000"), 15_000);
+  assertEquals(parsePortWaitMs(undefined), 0);
+  assertEquals(parsePortWaitMs(""), 0);
+  assertEquals(parsePortWaitMs("soon"), 0);
+  assertEquals(parsePortWaitMs("-5"), 0);
+  assertEquals(parsePortWaitMs("999999999"), 5 * 60 * 1000, "bounded");
+
+  // An unrecognized restart mode keeps the default (restart in place)
+  // rather than silently never restarting.
+  assertEquals(parseUpdateRestartMode(undefined), "self");
+  assertEquals(parseUpdateRestartMode("self"), "self");
+  assertEquals(parseUpdateRestartMode("none"), "none");
+  assertEquals(parseUpdateRestartMode("NONE"), "none");
+  assertEquals(parseUpdateRestartMode("false"), "self");
+});
+
+Deno.test("the update decision names the reason for every unsupported launch", () => {
+  // Only a packaged server outside the desktop shell may replace its own
+  // files. The composition root registers no update endpoints in the other
+  // cases, so this decision is what decides whether /api/update/* exists at
+  // all — hence the reasons (shown in the startup log).
+  assertEquals(updateSupport({ desktopManaged: false, standalone: true }), {
+    enabled: true,
+  });
+
+  const development = updateSupport({
+    desktopManaged: false,
+    standalone: false,
+  });
+  assertEquals(development.enabled, false);
+  assertEquals(development.reason?.includes("deno run"), true);
+
+  // The desktop shell owns the copy inside the app bundle: its own updater
+  // replaces it, and the server must not fight it.
+  const managed = updateSupport({ desktopManaged: true, standalone: true });
+  assertEquals(managed.enabled, false);
+  assertEquals(managed.reason?.includes("デスクトップ"), true);
+
+  // A desktop-managed development run reports the desktop reason: the user
+  // launched an app, not a repository checkout.
+  assertEquals(
+    updateSupport({ desktopManaged: true, standalone: false }).reason,
+    managed.reason,
+  );
 });
 
 Deno.test("parseServerPort falls back when unset or blank", () => {

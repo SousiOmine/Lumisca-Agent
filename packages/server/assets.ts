@@ -108,6 +108,9 @@ export class Assets {
   private appJsPromise: Promise<string> | null = null;
   private cssCache: string | null = null;
   private faviconCache: Uint8Array | null = null;
+  /** Memoized embedded manifest (undefined = not read yet, or the last read
+   * failed and the next request may try again). */
+  private manifestCache: AssetsManifest | undefined = undefined;
 
   constructor(
     private readonly repoRoot: string,
@@ -118,14 +121,28 @@ export class Assets {
   /** Packaged builds (deno compile, no repository layout) serve the
    * prebuilt assets from the manifest staged beside the binary
    * (scripts/build-server.ts), or from the path given by
-   * LUMISCA_ASSETS_FILE (the desktop shell passes its resource copy). */
+   * LUMISCA_ASSETS_FILE (the desktop shell passes its resource copy).
+   *
+   * Read once per process: the manifest is ~350 KB and never changes while
+   * the server runs — and after an update the *new* manifest must not start
+   * leaking into the still-running old server (the updater replaces it in
+   * place; see packages/server/update/install.ts), which would pair a new
+   * UI with an old API. A read that FAILS is not memoized (the real
+   * manifest may be mid-replace, or the desktop bundle not unpacked yet):
+   * the next request retries, like the sibling caches, so a transient
+   * failure cannot leave the process unable to serve its UI until it is
+   * restarted. */
   private embedded(name: keyof AssetsManifest): string | undefined {
     if (!this.assetsFile) return undefined;
-    try {
-      return readAssetsManifest(this.assetsFile)[name];
-    } catch {
-      return undefined;
+    if (this.manifestCache === undefined) {
+      try {
+        this.manifestCache = readAssetsManifest(this.assetsFile);
+      } catch {
+        // Retried on the next request (see above).
+        return undefined;
+      }
     }
+    return this.manifestCache?.[name];
   }
 
   private hasWebSources(): boolean {

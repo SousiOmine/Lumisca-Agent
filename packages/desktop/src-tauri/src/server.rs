@@ -22,6 +22,10 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 const DEFAULT_PORT: u16 = 8000;
 const SERVER_PORT_ENV: &str = "LUMISCA_PORT";
+/// Marks the server child as shell-managed: its binary lives inside the app
+/// bundle, which this app's own updater replaces, so the server must not try
+/// to update itself (see packages/server/mod.ts).
+const SERVER_DESKTOP_ENV: &str = "LUMISCA_DESKTOP";
 /// Poll interval while waiting for the local server to come up (the
 /// compiled server answers in ~0.3s; a fast poll keeps the switch to the
 /// app page snappy).
@@ -320,6 +324,7 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .env("LUMISCA_DB", &db_path)
                 .env("LUMISCA_PORT", port.to_string())
                 .env("LUMISCA_TOKEN", token)
+                .env(SERVER_DESKTOP_ENV, "1")
                 .env("LUMISCA_ASSETS_FILE", assets_file);
             if let Some((url, browser_token)) = browser_lab_env(app) {
                 command
@@ -364,7 +369,8 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .env("LUMISCA_DB", db_path)
                 .env("LUMISCA_PORT", port.to_string())
                 .env("LUMISCA_REPO_ROOT", repo_root)
-                .env("LUMISCA_TOKEN", token);
+                .env("LUMISCA_TOKEN", token)
+                .env(SERVER_DESKTOP_ENV, "1");
             if let Some((url, browser_token)) = browser_lab_env(app) {
                 command
                     .env("LUMISCA_BROWSER_IPC_URL", url)

@@ -24,6 +24,26 @@ Deno.test("packaged assets use the startup-captured manifest path", async () => 
   }
 });
 
+Deno.test("a manifest read that fails is retried instead of poisoning the process", async () => {
+  const root = await Deno.makeTempDir();
+  const manifestPath = join(root, "assets.json");
+  try {
+    // The packaged startup path: the manifest appears only after the first
+    // request (a half-finished update, an unpacking installer) — the process
+    // must serve its UI once it is there, not stay broken until a restart.
+    const assets = new Assets(root, join(root, "cache"), manifestPath);
+    await assertRejects(() => assets.getAppJs());
+
+    await Deno.writeTextFile(
+      manifestPath,
+      JSON.stringify({ "app.js": "console.log('late');" }),
+    );
+    assertEquals(await assets.getAppJs(), "console.log('late');");
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
 async function writeStylesEntry(
   root: string,
   entry: string,

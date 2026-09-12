@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import {
   HttpBrowserBackend,
   LumiscaCore,
@@ -9,12 +10,26 @@ import {
   consumeServerStartupEnvironment,
   defaultAssetsFile,
   describeListenError,
+  DESKTOP_ENV_KEY,
+  isAddressInUseError,
+  isDesktopManaged,
+  parsePortWaitMs,
   parseServerPort,
+  parseUpdateRestartMode,
+  PORT_WAIT_ENV_KEY,
+  UPDATE_MANIFEST_ENV_KEY,
+  UPDATE_RESTART_ENV_KEY,
+  updateSupport,
 } from "./startup.ts";
+import { UpdateService } from "./update/service.ts";
+import { SERVER_VERSION } from "./version.ts";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8000;
 const DEFAULT_DB = "lumisca.db";
+/** Retry cadence while waiting for an occupied port (the updater's
+ * successor). */
+const PORT_RETRY_INTERVAL_MS = 250;
 
 // A fire-and-forget promise that rejects without a handler would otherwise
 // terminate the whole server process (Deno exits on unhandled rejections),
@@ -33,6 +48,15 @@ globalThis.addEventListener("unhandledrejection", (event) => {
     }`,
   );
 });
+
+// `--version` answers the updater's self-check (packages/server/update/
+// install.ts runs the staged binary with it before replacing anything) and
+// any "which build is this?" support question. Handled before the
+// environment is consumed so it reads nothing and starts nothing.
+if (Deno.args.includes("--version")) {
+  console.log(SERVER_VERSION);
+  Deno.exit(0);
+}
 
 // Launcher-only configuration must be consumed before LumiscaCore creates
 // tools. Every command spawned afterwards inherits the cleaned environment,
@@ -116,6 +140,10 @@ try {
   console.error(error instanceof Error ? error.message : String(error));
   Deno.exit(1);
 }
+// Only the updater's successor sets this: it starts before its predecessor
+// has released the port (and Windows keeps TIME_WAIT sockets on it), so it
+// retries the bind instead of failing a healthy machine.
+const portWaitMs = parsePortWaitMs(startupEnv[PORT_WAIT_ENV_KEY]);
 const dbPath = resolveDbPath();
 const settingsPath = resolveSettingsPath();
 const repoRoot = resolveRepoRoot();
@@ -143,20 +171,80 @@ attachBrowserBackend(core);
 // background so new models.dev entries appear without blocking startup
 // (or failing it when offline — the snapshot simply stays active).
 refreshCatalogInBackground(core);
+
+// The updater of this installation. `server` is filled in below (the
+// restart path needs to release the listener before its successor starts,
+// and the listener does not exist yet).
+let server: Deno.HttpServer<Deno.NetAddr> | undefined;
+const support = updateSupport({
+  desktopManaged: isDesktopManaged(startupEnv[DESKTOP_ENV_KEY]),
+  standalone: Deno.build.standalone,
+});
+// No updater object when this installation cannot update itself: without it
+// the `/api/update/*` routes are not registered at all (see app.ts), so a
+// development server answers 404 and the UI shows no update controls —
+// instead of reporting an updater whose whole purpose is disabled here.
+const update = support.enabled
+  ? new UpdateService({
+    environment: {
+      installDir: dirname(Deno.execPath()),
+      execPath: Deno.execPath(),
+    },
+    settings: core,
+    // The successor must start exactly like this process did, so the launch
+    // configuration captured at startup is replayed for it.
+    startupEnv,
+    cwd: Deno.cwd(),
+    manifestUrl: startupEnv[UPDATE_MANIFEST_ENV_KEY] || undefined,
+    restartMode: parseUpdateRestartMode(startupEnv[UPDATE_RESTART_ENV_KEY]),
+    shutdown: async () => {
+      if (server !== undefined) {
+        // Stop accepting first (the successor binds the same port), then let
+        // the core close its children and its database before the successor
+        // opens the same database file.
+        disposeServer(server);
+        server.shutdown();
+      }
+      await core.close();
+    },
+  })
+  : undefined;
+
 // A taken port (usually a leftover `deno task dev:server`) must fail with
 // guidance, not an `AddrInUse` stack trace. The DB is closed before exit
 // so no lock files linger for the next attempt.
-let server: Deno.HttpServer<Deno.NetAddr>;
-try {
-  server = startServer(core, port, {
-    repoRoot,
-    assetsFile,
-    token,
-    hostname: host,
-    allowedHosts,
-  });
-} catch (error) {
-  console.error(describeListenError(host, port, error));
+let listenError: unknown;
+let attempts = 0;
+const listenDeadline = Date.now() + portWaitMs;
+for (;;) {
+  attempts++;
+  try {
+    server = startServer(core, port, {
+      repoRoot,
+      assetsFile,
+      token,
+      hostname: host,
+      allowedHosts,
+      update,
+    });
+    break;
+  } catch (error) {
+    listenError = error;
+    if (
+      !isAddressInUseError(error) || Date.now() >= listenDeadline
+    ) {
+      break;
+    }
+    // The previous instance is still on the way out; wait for it instead of
+    // starting on another port (the page's URL must stay stable).
+    await new Promise((resolve) => setTimeout(resolve, PORT_RETRY_INTERVAL_MS));
+  }
+}
+if (server === undefined) {
+  console.error(
+    (portWaitMs > 0 ? `(${attempts} 回試行) ` : "") +
+      describeListenError(host, port, listenError),
+  );
   await core.close();
   Deno.exit(1);
 }
@@ -167,13 +255,28 @@ console.log(`Settings: ${settingsPath}`);
 console.log(
   `Frontend assets: ${assetsFile ?? `${repoRoot} (repository sources)`}`,
 );
+if (update !== undefined) {
+  console.log(
+    `Auto-update: v${SERVER_VERSION} (${update.manifestUrl})` +
+      (update.status().restartMode === "none"
+        ? " — restart left to the operator (LUMISCA_UPDATE_RESTART=none)"
+        : ""),
+  );
+} else {
+  console.log(`Auto-update: disabled — ${support.reason}`);
+}
 if (token) console.log("Token authentication enabled");
 if (allowedHosts.length > 0) {
   console.log(`Allowed hosts: ${allowedHosts.join(", ")}`);
 }
 
+// Periodic update check (absent when this installation cannot update
+// itself), plus the cleanup of leftovers from a previous update.
+update?.start();
+
 const shutdown = async () => {
   console.log("\nShutting down...");
+  update?.dispose();
   disposeServer(server);
   server.shutdown();
   await core.close();

@@ -1,41 +1,73 @@
 import { useEffect, useRef, useState } from "preact/compat";
-import { IconDownload, IconX } from "@tabler/icons-preact";
+import { IconDownload, IconRefresh, IconX } from "@tabler/icons-preact";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 
-/** The "update ready" strip under the title bar (desktop only; renders
- * nothing while the shell is unreachable). Owns its dismissed state:
- * a new update finishing its download (ready false → true) re-shows it,
- * but a poll that keeps the ready flag set does not. */
+/** The "update ready" strip under the title bar (renders nothing when no
+ * updater has something to install). Owns its dismissed state: a new
+ * update finishing its download (ready false → true), or an applied update
+ * waiting for its restart, re-shows it — but a poll that keeps the same
+ * state does not.
+ *
+ * Two shapes share the strip: the desktop shell installs and restarts the
+ * app in one step, while a standalone server installs the files first and
+ * takes effect at the next start (the restart is its own decision). */
 export function UpdateBanner({ update }: { update: UpdateControls }) {
   const [dismissed, setDismissed] = useState(false);
-  // Re-show the banner when a new update finishes downloading (the ready
-  // flag toggles false -> true), but not on every poll while it stays
-  // ready.
-  const updateReadyRef = useRef(false);
+  const status = update.status;
+  const server = update.source === "server";
+  const restartPending = server && status?.restartPending === true;
+  const ready = status?.ready === true && !restartPending;
+  const actionable = ready || restartPending;
+
+  // Re-show the banner when the state moves on (a finished download, an
+  // applied update), but not on every poll that keeps it there.
+  const previousRef = useRef<string | null>(null);
   useEffect(() => {
-    const ready = update.status?.ready ?? false;
-    if (ready && !updateReadyRef.current) {
+    const current = !actionable
+      ? null
+      : restartPending
+      ? `restart:${status?.appliedVersion}`
+      : `ready:${status?.latestVersion}`;
+    if (current !== null && current !== previousRef.current) {
       setDismissed(false);
     }
-    updateReadyRef.current = ready;
-  }, [update.status?.ready]);
+    previousRef.current = current;
+  }, [
+    actionable,
+    restartPending,
+    status?.appliedVersion,
+    status?.latestVersion,
+  ]);
 
-  if (!update.status?.ready || dismissed) return null;
+  if (!actionable || dismissed) return null;
+
+  const canRestart = restartPending && status?.restartMode !== "none";
+  const text = restartPending
+    ? `Lumisca v${status?.appliedVersion} を適用しました。` +
+      (canRestart
+        ? "再起動すると有効になります（実行中のセッションは中断されます）。"
+        : "次回の起動で有効になります (LUMISCA_UPDATE_RESTART=none)。")
+    : server
+    ? `Lumisca v${status?.latestVersion} のアップデートをインストールできます。` +
+      "次回の起動で有効になります。"
+    : `Lumisca v${status?.latestVersion} のアップデートが準備できました。` +
+      "インストールするとアプリが再起動します。";
 
   return (
     <div className="update-banner">
-      <IconDownload size={16} />
-      <span className="update-banner-text">
-        Lumisca v{update.status.latestVersion}{" "}
-        のアップデートが準備できました。インストールするとアプリが再起動します。
-      </span>
-      <button
-        type="button"
-        className="btn push"
-        onClick={update.install}
-      >
-        インストール
-      </button>
+      {restartPending ? <IconRefresh size={16} /> : <IconDownload size={16} />}
+      <span className="update-banner-text">{text}</span>
+      {restartPending
+        ? canRestart && (
+          <button type="button" className="btn push" onClick={update.restart}>
+            再起動
+          </button>
+        )
+        : (
+          <button type="button" className="btn push" onClick={update.install}>
+            インストール
+          </button>
+        )}
       <button
         type="button"
         className="btn"

@@ -166,11 +166,14 @@ export function SettingsModal({
           {category === "general" && (
             <GeneralPanel
               status={update.status}
+              source={update.source}
               bridgeError={update.error}
               onSetAuto={update.setAuto}
+              onSetAutoRestart={update.setAutoRestart}
               onCheck={update.check}
               onDownload={update.download}
               onInstall={update.install}
+              onRestart={update.restart}
               notifyEnabled={notifyEnabled}
               onNotifyEnabledChange={onNotifyEnabledChange}
             />

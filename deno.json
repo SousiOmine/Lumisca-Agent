@@ -24,6 +24,8 @@
     "@opencode-ai/models/snapshot": "npm:@opencode-ai/models@0.0.67/snapshot",
     "@std/jsonc": "jsr:@std/jsonc@^1.0.2",
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
+    "@std/tar": "jsr:@std/tar@^0.1.10",
+    "@noble/hashes/blake2.js": "jsr:@noble/hashes@^2.0.1/blake2.js",
     "ai": "npm:ai@7.0.97",
     "preact": "npm:preact@10.29.8",
     "preact/compat": "npm:preact@10.29.8/compat",

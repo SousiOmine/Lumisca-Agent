@@ -79,8 +79,9 @@ export function App({ initialData }: AppProps): ReactElement {
     setNotifyEnabled(enabled);
     setNotifyEnabledState(enabled);
   };
-  // Auto-update state (desktop only); polled here and shared with the
-  // settings panel and the update banner below.
+  // Auto-update state (the desktop shell's updater, or the standalone
+  // server's when this page runs outside the shell); polled here and shared
+  // with the settings panel and the update banner below.
   const update = useUpdateStatus(true);
   const {
     startSession,
@@ -140,7 +141,7 @@ export function App({ initialData }: AppProps): ReactElement {
           onNew={openDraftTab}
           onOpenRecent={() => setShowRecent(true)}
           onOpenSettings={() => setSettingsCategory("general")}
-          isDesktop={update.status !== null}
+          isDesktop={update.source === "shell"}
           onQuit={quit}
         />
       </TitleBar>

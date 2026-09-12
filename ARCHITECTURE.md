@@ -5,7 +5,7 @@
 | パッケージ | 役割 | 依存 |
 |---|---|---|
 | `core/` | 基盤：SessionAgent／SessionPool(AgentFactory)／ModelManager／MCP／ツール群／SQLite／スキル・プラグイン | 外部のみ |
-| `server/` | Hono製バックエンド（REST＋WS＋federationプロキシ＋esbuildバンドル） | `core` |
+| `server/` | Hono製バックエンド（REST＋WS＋federationプロキシ＋esbuildバンドル＋自己更新） | `core` |
 | `web/` | Preact SPA（`api-client`／`api-local`／`api-federation`／`api-routing` 分割） | `core/shared`＋`core/modes` のみ |
 | `desktop/` | Tauri v2シェル（npm＋Deno併用） | `server` を子プロセス起動 |
 | `browser-rpc/` | Rust製ブラウザラボRPC（プローブ抽出／URLポリシー／HTTPサーバー） | — |
@@ -29,7 +29,7 @@
 - `tools/gitignore.ts`：`loadCachedGitignore(sandbox)` が `.gitignore` の解析結果をSandbox単位でキャッシュする（stamp不一致＝ファイル変更で再読込）。
 - `shared/`：フロント安全ヘルパー（esbuildでwebバンドルに取込）。`misc.ts` は errors／json／text／models／bootstrap／async の節分け。
 - `shared/context-usage.ts`：コンテキストメーターの唯一の計算実装。`Usage.input` は**未キャッシュ**のプロンプト入力で、1ターンのプロンプトは `input + cacheRead + cacheWrite`（`ai/types.ts` の契約。ここを混同するとメーターが2倍に膨らむ）。
-- `settings/keys.ts` 相当：**設定キーの単一情報源は `shared/settings-keys.ts`**（`APP_MCP_SETTINGS_KEY` 等もここ）。テーマ等のUIキーも同じファイル。
+- `settings/keys.ts` 相当：**設定キーの単一情報源は `shared/settings-keys.ts`**（`APP_MCP_SETTINGS_KEY` 等もここ）。テーマ等のUIキー、サーバー単体の自動アップデート設定（`UPDATE_AUTO_KEY` / `UPDATE_AUTO_RESTART_KEY`）も同じファイル。
 - `fs.ts`：`readIfExists` / `resolveGlobalDirs` / `isRecord` / `atomicWriteTextFileSync`（バックエンド専用。`shared/` は Deno API を持ち込まないためここに置く）。
 - `base64.ts`：`bytesToBase64`（画像読取・PDF描画の共有）。
 
@@ -44,7 +44,9 @@
 
 ## バージョン
 
-アプリのバージョンは7つのマニフェスト（`packages/{core,server,web}/deno.json`、
-`desktop/deno.json`、`desktop/package.json`、`tauri.conf.json`、`Cargo.toml`）に載る。
-`scripts/check-versions.ts` が唯一の検査実装で、`ci.yml`（変更のたび）と
-`release.yml`（タグ）の両方がこれを呼ぶ。
+アプリのバージョンは8つのマニフェスト（`packages/{core,server,web}/deno.json`、
+`desktop/deno.json`、`desktop/package.json`、`tauri.conf.json`、`Cargo.toml`、
+`packages/server/version.ts`）に載る。最後の1つは `deno compile` 済みサーバーが
+実行時に読む定数で（バイナリはリポジトリのマニフェストを持たない）、
+自動アップデートの比較対象になる。`scripts/check-versions.ts` が唯一の検査実装で、
+`ci.yml`（変更のたび）と `release.yml`（タグ）の両方がこれを呼ぶ。

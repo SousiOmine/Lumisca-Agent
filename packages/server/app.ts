@@ -19,6 +19,7 @@ import { settingRoutes } from "./routes/settings.ts";
 import { mcpRoutes } from "./routes/mcp.ts";
 import { connectionRoutes } from "./routes/connections.ts";
 import { federationRoutes } from "./routes/federation.ts";
+import { type UpdateApi, updateRoutes } from "./routes/update.ts";
 import { FederationClient } from "./federation.ts";
 import { isLoopbackHost, jsonError, LOOPBACK_HOSTS } from "./routes/util.ts";
 export { isLoopbackHost } from "./routes/util.ts";
@@ -44,6 +45,13 @@ export interface AppOptions {
    * casual local processes. Used by the desktop shell so only its own
    * spawned server instance answers. */
   token?: string;
+  /** Auto-update controller of this installation, or `undefined` when this
+   * instance must not update itself. The composition root (mod.ts) passes
+   * it only for a packaged server outside the desktop shell (see
+   * startup.updateSupport); with `undefined` the `/api/update/*` routes are
+   * not registered at all, so a development server answers 404 and the UI
+   * shows no update controls. */
+  update?: UpdateApi;
   /** Mutable holder for this server's origin (http://host:port), filled
    * by startServer's onListen — the real port is only known after the
    * listener binds (port 0 = ephemeral). The federation client reads it
@@ -355,6 +363,11 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", settingRoutes(core));
   app.route("/api", connectionRoutes(core, () => fed.restart()));
   app.route("/api", federationRoutes(core, fed));
+  // Auto-update of the standalone server (absent in development, where the
+  // routes are not registered at all and the UI gets a 404 → no controls).
+  if (options.update !== undefined) {
+    app.route("/api", updateRoutes(options.update));
+  }
 
   // --- websocket event stream ------------------------------------------------
 
