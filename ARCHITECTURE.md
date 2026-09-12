@@ -15,6 +15,10 @@
 どちらも esbuild / Vite の alias で解決される（`server/bundle.ts`、
 `web/vite.config.ts`）。型だけの `@lumisca/core` import は実行時に消える。
 
+## web内部
+
+- `modelCatalog.ts`：プロバイダー／モデルカタログの**共有ストア**（peer単位）。設定のモデル一覧・モデルピッカー・チャットビューはここだけを読み、再マウント（設定ダイアログの開き直し、タブ切替）でも取り直さない。したがって**変更は必ずストアへ書き戻す**（`applyModelEnabled`。トグルUIは `providers.ts` の `setModelEnabled` を通す）。コンポーネントローカルに持つと、その変更はコンポーネントと共に消える。
+
 ## core内部
 
 - `LumiscaCore`：薄いファサード＋コンポジションルート（コンストラクタで全協調者を束縛、テスト時は差替可）。

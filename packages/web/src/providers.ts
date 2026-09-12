@@ -6,9 +6,9 @@ import {
 } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
 import { api, modelApi } from "./api.ts";
+import { modelCatalog, type PeerCatalogState } from "./modelCatalog.ts";
 import { splitTabKey } from "./tabs.ts";
 import type {
-  ModelInfo,
   ProviderInfo,
   SessionView,
   ThinkingLevel,
@@ -62,150 +62,55 @@ export function useUserProviders(): {
   };
 }
 
-/** Error of a useProviderModels fetch, tagged with the phase that failed
- * so callers can phrase their messages. */
-export interface ProviderModelsError {
-  phase: "providers" | "models";
-  message: string;
-}
-
-export interface UseProviderModelsResult {
-  /** Every provider of the peer ("" = this server), configured or not;
-   * callers filter with `configured !== false` when they only want
-   * authenticated ones. */
-  providers: ProviderInfo[];
-  /** Models of every provider, keyed by provider id; fetched in one batch
-   * (empty until the fetch settles). */
-  modelsByProvider: ReadonlyMap<string, ModelInfo[]>;
-  /** True while providers/models are being fetched. */
-  loading: boolean;
-  /** Fetch failure (providers or models); null when the last fetch
-   * succeeded. */
-  error: ProviderModelsError | null;
+/** One peer's catalog ("" = this server) plus a reload trigger. */
+export type UseProviderModelsResult = PeerCatalogState & {
   /** Re-fetch providers and models. */
   reload: () => void;
-}
-
-/** One peer's provider/model snapshot plus its subscribers. */
-interface PeerModelsEntry {
-  state: PeerModelsState;
-  listeners: Set<() => void>;
-  /** True once a fetch settled (success or failure). */
-  loaded: boolean;
-  /** True while a fetch is in flight. */
-  fetching: boolean;
-  /** Fetch generation: a response from a superseded fetch is dropped. */
-  generation: number;
-}
-
-interface PeerModelsState {
-  providers: ProviderInfo[];
-  modelsByProvider: ReadonlyMap<string, ModelInfo[]>;
-  loading: boolean;
-  error: ProviderModelsError | null;
-}
-
-/** Peers are few and long-lived, so entries are never evicted. */
-const peerModels = new Map<string, PeerModelsEntry>();
-
-function peerModelsEntry(peerId: string): PeerModelsEntry {
-  let entry = peerModels.get(peerId);
-  if (entry === undefined) {
-    entry = {
-      state: {
-        providers: [],
-        modelsByProvider: new Map(),
-        loading: true,
-        error: null,
-      },
-      listeners: new Set(),
-      loaded: false,
-      fetching: false,
-      generation: 0,
-    };
-    peerModels.set(peerId, entry);
-  }
-  return entry;
-}
-
-function publish(peerId: string, state: PeerModelsState): void {
-  const entry = peerModelsEntry(peerId);
-  entry.state = state;
-  // Copy first: a listener may unsubscribe while we notify.
-  for (const listener of [...entry.listeners]) listener();
-}
-
-async function fetchPeerModels(peerId: string): Promise<void> {
-  const entry = peerModelsEntry(peerId);
-  const generation = ++entry.generation;
-  entry.fetching = true;
-  // Already loading with no error to clear: publishing an equal-content
-  // object would only cost an extra render.
-  if (!entry.state.loading || entry.state.error !== null) {
-    publish(peerId, { ...entry.state, loading: true, error: null });
-  }
-
-  /** Publish the outcome, unless a newer fetch superseded this one. */
-  const settle = (patch: Partial<PeerModelsState>): void => {
-    if (generation !== entry.generation) return;
-    entry.fetching = false;
-    entry.loaded = true;
-    publish(peerId, { ...entry.state, loading: false, error: null, ...patch });
-  };
-
-  try {
-    const providers = await modelApi(peerId).listProviders();
-    if (generation !== entry.generation) return;
-    if (providers.length === 0) {
-      settle({ providers, modelsByProvider: new Map() });
-      return;
-    }
-    let modelsByProvider: ReadonlyMap<string, ModelInfo[]>;
-    try {
-      const fetched = await Promise.all(
-        providers.map(async (p) =>
-          [p.id, await modelApi(peerId).listModels(p.id)] as const
-        ),
-      );
-      modelsByProvider = new Map(fetched);
-    } catch (e) {
-      // Providers are known; only the model list failed.
-      settle({
-        providers,
-        error: { phase: "models", message: errorText(e) },
-      });
-      return;
-    }
-    settle({ providers, modelsByProvider });
-  } catch (e) {
-    settle({ error: { phase: "providers", message: errorText(e) } });
-  }
-}
+};
 
 /** Providers → models of a peer ("" = this server) with a stale guard
  * (only the latest fetch may write state), loading/error, and reload.
  * Shared by the model picker, the settings model list and the model
  * preference panel so the fetch bookkeeping never varies.
  *
- * The state lives in a module-level store keyed by peer: the chat view and
- * the model picker inside its composer both mount this hook for the same
- * peer, and each tab switch remounts the chat view, so a per-mount fetch
- * would re-request the same catalog several times per page load. */
+ * The state lives in the catalog store keyed by peer (see modelCatalog.ts):
+ * the chat view and the model picker inside its composer both mount this
+ * hook for the same peer, and each tab switch remounts the chat view, so a
+ * per-mount fetch would re-request the same catalog several times per page
+ * load. */
 export function useProviderModels(peerId = ""): UseProviderModelsResult {
-  const entry = peerModelsEntry(peerId);
-  const subscribe = useCallback((listener: () => void) => {
-    entry.listeners.add(listener);
-    // The first subscriber loads the peer; later ones reuse the result.
-    if (!entry.loaded && !entry.fetching) void fetchPeerModels(peerId);
-    return () => {
-      entry.listeners.delete(listener);
-    };
-  }, [peerId, entry]);
-  const state = useSyncExternalStore(subscribe, () => entry.state);
+  const subscribe = useCallback(
+    (listener: () => void) => modelCatalog.subscribe(peerId, listener),
+    [peerId],
+  );
+  const state = useSyncExternalStore(
+    subscribe,
+    () => modelCatalog.state(peerId),
+  );
   const reload = useCallback(() => {
-    void fetchPeerModels(peerId);
+    void modelCatalog.reload(peerId);
   }, [peerId]);
   return { ...state, reload };
+}
+
+/** Persist a model's enabled flag (an app setting of this server: the
+ * settings UI has no peer switcher) and apply it to the catalog store, so
+ * the settings list and every model picker follow at once — and still show
+ * it when they remount, since they read the store rather than a per-mount
+ * copy. The store is patched optimistically and reverted when the save
+ * fails, so a failed toggle never sticks. */
+export async function setModelEnabled(
+  providerId: string,
+  modelId: string,
+  enabled: boolean,
+): Promise<void> {
+  modelCatalog.applyModelEnabled("", providerId, modelId, enabled);
+  try {
+    await api.setModelEnabled(providerId, modelId, enabled);
+  } catch (error) {
+    modelCatalog.applyModelEnabled("", providerId, modelId, !enabled);
+    throw error;
+  }
 }
 
 /** Set the thinking level of a model on the peer that owns the session

@@ -1,7 +1,11 @@
 import { useMemo, useState } from "preact/compat";
 import { IconChevronRight, IconPlugConnected } from "@tabler/icons-preact";
-import { api } from "../../api.ts";
-import { filterByQuery, useProviderModels } from "../../providers.ts";
+import {
+  errorText,
+  filterByQuery,
+  setModelEnabled,
+  useProviderModels,
+} from "../../providers.ts";
 import type { ModelInfo } from "../../types.ts";
 
 interface ProviderModels {
@@ -15,11 +19,7 @@ export function ModelList() {
   const { providers, modelsByProvider, loading, error } = useProviderModels();
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  // Optimistic toggle overlay, keyed by "providerId/modelId": the checked
-  // value while a toggle is in flight, reverted on failure.
-  const [pendingToggles, setPendingToggles] = useState<
-    Record<string, boolean>
-  >({});
+  const [saveError, setSaveError] = useState<string | undefined>();
 
   const configured = useMemo(
     () => providers.filter((p) => p.configured !== false),
@@ -39,25 +39,22 @@ export function ModelList() {
     [configured, modelsByProvider],
   );
 
+  /** Persist a toggle. The helper writes the new value to the catalog store
+   * before the request (and reverts it on failure), so the switch, the group
+   * count and the model pickers all follow one source of truth — and the
+   * value survives this list remounting (reopening the settings dialog). */
   const toggleModel = async (
     providerId: string,
     modelId: string,
     enabled: boolean,
   ) => {
-    const key = `${providerId}/${modelId}`;
-    setPendingToggles((prev) => ({ ...prev, [key]: enabled }));
+    setSaveError(undefined);
     try {
-      await api.setModelEnabled(providerId, modelId, enabled);
-    } catch {
-      // Revert on error
-      setPendingToggles((prev) => ({ ...prev, [key]: !enabled }));
+      await setModelEnabled(providerId, modelId, enabled);
+    } catch (e) {
+      setSaveError(errorText(e));
     }
   };
-
-  /** Effective enabled state: the pending toggle while one is in flight
-   * (reverted on failure), otherwise the fetched value. */
-  const isEnabled = (pm: ProviderModels, m: ModelInfo): boolean =>
-    pendingToggles[`${pm.providerId}/${m.id}`] ?? m.enabled !== false;
 
   const toggleExpand = (providerId: string) => {
     setExpanded((prev) => ({ ...prev, [providerId]: !prev[providerId] }));
@@ -100,7 +97,8 @@ export function ModelList() {
       <div className="model-groups">
         {filtered.map((pm) => {
           const isExpanded = expanded[pm.providerId] ?? false;
-          const enabledCount = pm.models.filter((m) => isEnabled(pm, m))
+          // Enabled is the default; only a disabled model carries the flag.
+          const enabledCount = pm.models.filter((m) => m.enabled !== false)
             .length;
 
           return (
@@ -132,7 +130,7 @@ export function ModelList() {
                       <label className="toggle-switch">
                         <input
                           type="checkbox"
-                          checked={isEnabled(pm, m)}
+                          checked={m.enabled !== false}
                           onChange={(e) =>
                             toggleModel(
                               pm.providerId,
@@ -152,6 +150,9 @@ export function ModelList() {
       </div>
 
       {error && <div className="error-text">{error.message}</div>}
+      {saveError && (
+        <div className="error-text">保存に失敗しました: {saveError}</div>
+      )}
     </>
   );
 }
