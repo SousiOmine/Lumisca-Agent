@@ -30,7 +30,21 @@ jobs:
 
       # node_modules cache: deno.json's imports drive the install, so the
       # lockfile-free install is keyed on deno.json + deno.lock.
+      #
+      # Windows is excluded on purpose. Deno's nodeModulesDir layout links
+      # every package through a *junction*
+      # (node_modules/sucrase -> node_modules/.deno/sucrase@x/node_modules/
+      # sucrase), and Node resolves through it to the real path, which is
+      # how a package finds its own dependencies in .deno/. actions/cache's
+      # tar round-trip does not preserve junctions: the restored tree has
+      # plain directory copies, so the real path is no longer inside .deno/
+      # and resolution fails ("Cannot find module 'ts-interface-checker'" —
+      # the eval tool's TypeScript stripping). macOS/Linux use symlinks,
+      # which tar does preserve, so they keep the cache. The Deno
+      # dependency cache above still spares Windows the re-download; only
+      # the linking reruns (measured: ~1.5 min).
       - name: Cache node_modules
+        if: runner.os != 'Windows'
         uses: actions/cache@v4
         with:
           path: node_modules
