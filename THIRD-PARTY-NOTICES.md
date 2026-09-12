@@ -3,14 +3,15 @@
 このファイルは、Lumisca-Agent の配布物にそのままの形で含まれる
 サードパーティ製ファイルを記録します。
 
-## Skia ICU データ (`server/icudtl.dat`)
+## Skia ICU データ (`icudtl.dat`)
 
 - 出所: npm パッケージ `@napi-rs/canvas-<platform>`（例:
   `@napi-rs/canvas-win32-x64-msvc`）に同梱の `icudtl.dat` を、
   ビルド時に無改変でコピーします
-  （`scripts/build-desktop-assets.ts` が Windows リリースランナー上で
-  そのプラットフォーム用のファイルを `server/icudtl.dat`
-  リソースとして配置。macOS/Linux 版パッケージにはデータファイルが
+  （`scripts/build-server.ts` が Windows のビルド時に
+  そのプラットフォーム用のファイルを、サーバーバイナリの隣
+  （デスクトップ版では `server/icudtl.dat` リソース）へ配置。
+  macOS/Linux 版パッケージにはデータファイルが
   同梱されておらず、Skia バイナリに埋め込まれています）。
 - 内容: Skia（`@napi-rs/canvas` の描画バックエンド）が使用する
   ICU/Unicode ロケールデータ。PDF ページ画像化ツール

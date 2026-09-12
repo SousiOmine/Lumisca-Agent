@@ -7,6 +7,7 @@ import {
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
 import {
   consumeServerStartupEnvironment,
+  defaultAssetsFile,
   describeListenError,
   parseServerPort,
 } from "./startup.ts";
@@ -119,6 +120,12 @@ const dbPath = resolveDbPath();
 const settingsPath = resolveSettingsPath();
 const repoRoot = resolveRepoRoot();
 const allowedHosts = resolveAllowedHosts();
+// Explicit LUMISCA_ASSETS_FILE (the desktop shell passes the resource path)
+// wins; otherwise a packaged release uses the manifest staged next to its
+// own binary (scripts/build-server.ts), so it runs without configuration.
+// (`||` so a blank value counts as unset, like every other startup value.)
+const assetsFile = startupEnv.LUMISCA_ASSETS_FILE ||
+  defaultAssetsFile(Deno.execPath());
 
 let core: LumiscaCore;
 try {
@@ -143,7 +150,7 @@ let server: Deno.HttpServer<Deno.NetAddr>;
 try {
   server = startServer(core, port, {
     repoRoot,
-    assetsFile: startupEnv.LUMISCA_ASSETS_FILE || undefined,
+    assetsFile,
     token,
     hostname: host,
     allowedHosts,
@@ -157,6 +164,9 @@ try {
 console.log(`Lumisca server listening on http://${host}:${port}`);
 console.log(`Database: ${dbPath}`);
 console.log(`Settings: ${settingsPath}`);
+console.log(
+  `Frontend assets: ${assetsFile ?? `${repoRoot} (repository sources)`}`,
+);
 if (token) console.log("Token authentication enabled");
 if (allowedHosts.length > 0) {
   console.log(`Allowed hosts: ${allowedHosts.join(", ")}`);

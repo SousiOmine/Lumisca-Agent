@@ -1,11 +1,14 @@
 name: Release
 
-# Pushing a `vX.Y.Z` tag builds the desktop app on every supported OS and
-# creates a draft GitHub Release. Review the draft on GitHub and publish
-# it — new users download the installer for their platform from there, and
-# the updater artifacts (`.sig` + `latest.json`, one per platform) are
-# included so the in-app updater can be enabled later without changing the
-# build pipeline.
+# Pushing a `vX.Y.Z` tag builds the desktop app and the standalone server
+# (the same compiled server without the desktop shell) on every supported
+# platform, and creates a draft GitHub Release. Review the draft on GitHub
+# and publish it — desktop users download the installer for their platform,
+# server users the `lumisca-server-<version>-<platform>` archive, and the
+# updater artifacts (`.sig` + `latest.json`, one per platform) are included
+# so the in-app updater can be enabled later without changing the build
+# pipeline. Both distributions carry the same version, so a tag ships them
+# together.
 #
 # macOS note: CI builds are unsigned. An unsigned app runs when opened
 # manually, but Gatekeeper blocks it after download and the in-app updater
@@ -14,8 +17,10 @@ name: Release
 # notarizes the artifacts.
 #
 # Operation notes (learned from v0.6.1):
-# - Do NOT publish the draft release until all three matrix jobs are green.
-#   Publishing early freezes a partial `latest.json` (updater manifest).
+# - Do NOT publish the draft release until all matrix jobs (three desktop
+#   bundles + the two server packages) are green. Publishing early freezes
+#   a partial `latest.json` (updater manifest) and offers a release whose
+#   server archives are still missing.
 # - The draft release is created exactly once by the `create-release` job
 #   and the matrix jobs upload into it via `releaseId`. Letting every
 #   matrix job get-or-create the release by tag races and produces two
@@ -129,3 +134,83 @@ jobs:
           generateReleaseNotes: true
           args: --bundles ${{ matrix.bundles }}
           updaterJsonPreferNsis: true
+
+  build-server:
+    # The server-only distribution: the same compiled server the desktop
+    # build embeds (scripts/build-server.ts is the single build path), zipped
+    # with the `assets.json` it serves the UI from. No Tauri, no installer —
+    # unpack and run.
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # glibc 2.35: a binary built on ubuntu-24.04 would refuse to start
+          # on Debian 12 / Ubuntu 22.04 (the binary needs the build host's
+          # libc at least). If this label is retired, switch to ubuntu-24.04
+          # and accept glibc 2.39+ on the target.
+          - os: ubuntu-22.04
+            platform: linux-x64
+            # `deno compile` output directory for this runner
+            # (Deno.build.target); also the release archive's payload.
+            stage: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            platform: windows-x64
+            stage: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # Stages assets.json (+ icudtl.dat on Windows) and compiles the server
+      # with the shared build path (packages/desktop runs the same script
+      # for its bundled binary).
+      - name: Build packaged server
+        run: deno task build:server
+
+      # Runs the produced binary like a user would: no LUMISCA_ASSETS_FILE,
+      # then fetch the page and its assets.
+      - name: Smoke test packaged server
+        run: deno task smoke:server
+
+      # The archive carries a single top-level directory
+      # (lumisca-server-<version>-<platform>/) so unpacking never scatters
+      # files into the user's current directory.
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NAME="lumisca-server-${VERSION}-${{ matrix.platform }}"
+          STAGE="dist/server/stage/${{ matrix.stage }}"
+          mkdir -p "dist/server/release/${NAME}"
+          cp "$STAGE/lumisca-server" "$STAGE/assets.json" "dist/server/release/${NAME}/"
+          tar -C dist/server/release -czf "dist/server/${NAME}.tar.gz" "$NAME"
+          ls -l "dist/server/${NAME}.tar.gz"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $name = "lumisca-server-${version}-${{ matrix.platform }}"
+          $stage = "dist/server/stage/${{ matrix.stage }}"
+          New-Item -ItemType Directory -Force -Path "dist/server/release/$name" | Out-Null
+          Copy-Item "$stage/lumisca-server.exe", "$stage/assets.json", "$stage/icudtl.dat" "dist/server/release/$name/"
+          Compress-Archive -Path "dist/server/release/$name" -DestinationPath "dist/server/$name.zip" -Force
+          Get-Item "dist/server/$name.zip" | Select-Object Name, Length
+
+      # `--clobber` keeps a rerun of the workflow idempotent. Drafts are
+      # addressed by tag; the release itself was created by create-release.
+      - name: Upload to the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist/server/lumisca-server-*-${{ matrix.platform }}.* --clobber

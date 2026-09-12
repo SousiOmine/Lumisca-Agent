@@ -12,11 +12,11 @@
  * process. The canvas library loads lazily at render time (FFI), so a host
  * without a matching native binding fails the tool call with a clear
  * error instead of breaking server startup. Skia's ICU data file
- * (`icudtl.dat`) follows the same rule: the desktop installer ships it as
- * a `server/` resource (see scripts/build-desktop-assets.ts), but when it
- * cannot be found the tool refuses to load Skia with a clear error — a
- * missing file makes Skia abort the whole server process with
- * `STATUS_ILLEGAL_INSTRUCTION`, which no try/catch can contain.
+ * (`icudtl.dat`) follows the same rule: a packaged server ships it beside
+ * the binary (see scripts/build-server.ts), but when it cannot be found the
+ * tool refuses to load Skia with a clear error — a missing file makes Skia
+ * abort the whole server process with `STATUS_ILLEGAL_INSTRUCTION`, which no
+ * try/catch can contain.
  */
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";

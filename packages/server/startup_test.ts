@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   consumeServerStartupEnvironment,
+  defaultAssetsFile,
   describeListenError,
   isAddressInUseError,
   parseServerPort,
@@ -81,6 +82,33 @@ Deno.test("isAddressInUseError matches Deno's AddrInUse", () => {
   assertEquals(isAddressInUseError(new Error("boom")), false);
   assertEquals(isAddressInUseError("AddrInUse"), false);
   assertEquals(isAddressInUseError(undefined), false);
+});
+
+Deno.test("defaultAssetsFile picks up the manifest staged next to the binary", () => {
+  const execPath = Deno.build.os === "windows"
+    ? "C:\\opt\\lumisca\\lumisca-server.exe"
+    : "/opt/lumisca/lumisca-server";
+  const beside = Deno.build.os === "windows"
+    ? "C:\\opt\\lumisca\\assets.json"
+    : "/opt/lumisca/assets.json";
+  const seen: string[] = [];
+  const resolved = defaultAssetsFile(execPath, (path) => {
+    seen.push(path);
+    return path === beside;
+  });
+
+  assertEquals(resolved, beside);
+  assertEquals(seen, [beside], "only the sibling manifest is probed");
+});
+
+Deno.test("defaultAssetsFile leaves development servers on the repository sources", () => {
+  // `deno run` has no assets.json beside the runtime binary.
+  assertEquals(
+    defaultAssetsFile("/usr/local/bin/deno", () => false),
+    undefined,
+  );
+  // An unreadable path is "not there", not a crash.
+  assertEquals(defaultAssetsFile("/usr/local/bin/deno"), undefined);
 });
 
 Deno.test("describeListenError guides away from an occupied port", () => {

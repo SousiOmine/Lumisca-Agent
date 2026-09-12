@@ -170,11 +170,48 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Compile server binary
-        # Full `npm run build:server` needs the denort download; verify the
-        # packaged server entry compiles standalone instead. Run from the
-        # repository root: packages/desktop is deliberately NOT a workspace
-        # member (AGENTS.md — a member would make `deno compile` embed
-        # src-tauri/target), so its own directory lacks the root's
-        # nodeModulesDir: auto resolution for npm deps like @types/node.
+        # The full `deno compile` (with its denort download) runs in the
+        # server-package job below; here the entry must still type-check on
+        # its own. Run from the repository root: packages/desktop is
+        # deliberately NOT a workspace member (AGENTS.md — a member would
+        # make `deno compile` embed src-tauri/target), so its own directory
+        # lacks the root's nodeModulesDir: auto resolution for npm deps like
+        # @types/node.
         run: deno check packages/server/mod.ts
         working-directory: ${{ github.workspace }}
+
+  server-package:
+    # The server-only distribution (compiled server + assets.json, no Tauri
+    # shell) is what users without the desktop app run: build it and start it
+    # on every platform we ship it for, on every change. The release workflow
+    # runs the same two tasks, so a broken package fails here instead of at a
+    # pushed tag. Linux matches release.yml's ubuntu-22.04 (glibc floor).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+
+      # `deno compile` embeds node_modules, so the same cache the `check`
+      # job uses applies here. Windows is excluded for the same reason: the
+      # tar round-trip turns Deno's junctions into plain directories and
+      # breaks module resolution.
+      - name: Cache node_modules
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('deno.json', 'deno.lock') }}
+
+      - name: Build packaged server
+        run: deno task build:server
+
+      - name: Smoke test packaged server
+        run: deno task smoke:server

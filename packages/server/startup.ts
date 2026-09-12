@@ -1,3 +1,5 @@
+import { dirname, join } from "node:path";
+
 export const SERVER_STARTUP_ENV_KEYS = [
   "LUMISCA_DB",
   "LUMISCA_HOME",
@@ -66,6 +68,34 @@ export function parseServerPort(
 export function isAddressInUseError(error: unknown): boolean {
   return error instanceof Deno.errors.AddrInUse ||
     (error instanceof Error && error.name === "AddrInUse");
+}
+
+/** True when `path` is an existing file (a missing or unreadable path is
+ * simply "not there"). */
+function isFile(path: string): boolean {
+  try {
+    return Deno.statSync(path).isFile;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Frontend asset manifest of a packaged server: `scripts/build-server.ts`
+ * stages `assets.json` next to the compiled binary, so an unpacked server
+ * release serves the UI with no configuration (the desktop shell passes
+ * the same path as LUMISCA_ASSETS_FILE). `execPath` is Deno.execPath():
+ * a `deno run` server (development) has no manifest next to the runtime,
+ * so the repository sources stay authoritative there.
+ *
+ * Returns undefined when no manifest sits beside the executable.
+ */
+export function defaultAssetsFile(
+  execPath: string,
+  fileExists: (path: string) => boolean = isFile,
+): string | undefined {
+  const candidate = join(dirname(execPath), "assets.json");
+  return fileExists(candidate) ? candidate : undefined;
 }
 
 /** Human-readable startup failure for a listen error. An occupied port
