@@ -8,6 +8,7 @@ import {
 } from "@lumisca/core";
 import type { Api, AssistantMessage, Model, TextContent } from "@lumisca/core";
 import type { AgentMessage, StreamFn } from "@lumisca/core";
+import { contentText } from "../shared/mod.ts";
 import type { StreamOptions } from "../ai/types.ts";
 import { AskHub } from "../tools/ask.ts";
 import { object, type Tool } from "../tools/schema.ts";
@@ -90,6 +91,69 @@ function retryNotifications(
     (m): m is NotificationMessage =>
       m.role === "notification" && m.kind === "retry",
   );
+}
+
+/** Poll until `condition` holds (throws on timeout so a missed delivery
+ * fails the test instead of hanging it). */
+async function waitFor(
+  condition: () => boolean,
+  what: string,
+  timeoutMs = 2000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+/**
+ * A stream function shaped like the real transport around aborts: a call
+ * with an already-aborted signal fails immediately (the provider never
+ * starts), and the FIRST call holds its response until the signal fires
+ * (a provider that ends the stream when the client cancels). Later calls
+ * answer immediately. The faux provider ignores signals, so this is what
+ * exercises the abort/rewind paths.
+ */
+function abortAwareStreamFn(answers: string[]): {
+  streamFn: StreamFn;
+  calls: () => number;
+} {
+  let calls = 0;
+  const streamFn: StreamFn = (_model, _context, options) => {
+    const stream = createAssistantMessageEventStream();
+    if (options?.signal?.aborted === true) {
+      stream.push({
+        type: "error",
+        errorMessage: "The signal has been aborted",
+      });
+      stream.end();
+      return stream;
+    }
+    const index = calls++;
+    const message = fauxAssistantMessage(answers[index] ?? "answer");
+    const finish = () => {
+      stream.push({ type: "start", partial: message });
+      stream.end(message);
+    };
+    if (index === 0) {
+      options?.signal?.addEventListener("abort", finish, { once: true });
+    } else {
+      finish();
+    }
+    return stream;
+  };
+  return { streamFn, calls: () => calls };
+}
+
+/** Text of every transcript message that carries content (the tests use
+ * text-only messages). */
+function textsOf(messages: AgentMessage[]): string[] {
+  return messages
+    .filter(
+      (m): m is Extract<AgentMessage, { content: unknown }> => "content" in m,
+    )
+    .map((m) => contentText(m.content as never));
 }
 
 Deno.test("stream calls carry the session id (conversation affinity)", async () => {
@@ -603,4 +667,59 @@ Deno.test("successful, vacant, and aborted turns emit no session_error", async (
   await agent.prompt("hello");
 
   assertEquals(errors, []);
+});
+
+Deno.test("a run after a stop still reaches the model", async () => {
+  // The reported failure: stop (or a rewind) while the agent works, then
+  // send again — the session silently stopped running because every later
+  // call carried the aborted signal.
+  const { streamFn, calls } = abortAwareStreamFn(["held", "after the stop"]);
+  const agent = makeAgent(streamFn);
+
+  agent.promptWhileRunning("go");
+  await waitFor(() => calls() === 1, "the first model call");
+  agent.abort();
+  await agent.waitForIdle();
+
+  agent.promptWhileRunning("again");
+  await waitFor(() => calls() === 2, "the model call after the stop");
+  assertEquals(textsOf(agent.messages).at(-1), "after the stop");
+});
+
+Deno.test("a resend while the rewind runs starts after the truncation", async () => {
+  // The reported flow: rewind during a run, edit the restored text, send.
+  // The resend must not be swallowed by the aborting run (its queue is
+  // dropped) nor started before the truncation (which would delete it).
+  const { streamFn, calls } = abortAwareStreamFn([
+    "first answer",
+    "fixed answer",
+  ]);
+  const events: ClientEvent[] = [];
+  const userTimestamps: number[] = [];
+  const agent = makeAgent(streamFn, [], (event) => {
+    events.push(event);
+    if (event.type === "message_end" && event.message.role === "user") {
+      userTimestamps.push(event.message.timestamp);
+    }
+  });
+
+  agent.promptWhileRunning("go");
+  await waitFor(() => calls() === 1, "the first model call");
+
+  const rewind = agent.rewind(userTimestamps[0]!);
+  agent.promptWhileRunning("go (fixed)");
+  await rewind;
+
+  await waitFor(
+    () => agent.messages.at(-1)?.role === "assistant",
+    "the resend's answer",
+  );
+  assertEquals(calls(), 2);
+  // Only the resent turn survives: the rewound one (and the aborted run's
+  // artifacts) are gone, and no error was reported.
+  assertEquals(textsOf(agent.messages), ["go (fixed)", "fixed answer"]);
+  assertEquals(
+    events.filter((e) => e.type === "session_error"),
+    [],
+  );
 });

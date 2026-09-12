@@ -127,6 +127,13 @@ async function* runStream(
   let text = "";
   let thinking = "";
   let streamedUsage: LanguageModelUsage | undefined;
+  /** True while this call is being cancelled by OUR signal (the session
+   * agent's abort / rewind). The turn must then still end as an ordinary
+   * assistant message with stopReason "aborted": an exception escaping this
+   * generator rejects the run's promise, which the callers (rewind's
+   * waitForIdle, the session's run wrappers) treat as a run failure instead
+   * of a clean abort. */
+  let aborted = options?.signal?.aborted === true;
   try {
     // fullStream yields every part (text/reasoning deltas, tool calls and
     // tool results) in the order they happen, so tool_execution_start
@@ -213,20 +220,22 @@ async function* runStream(
           }
           break;
         }
+        case "abort": {
+          // The stream was cancelled. Only OUR signal (stop / rewind) makes
+          // it a user abort: a cancel from elsewhere (a gateway timeout, an
+          // internal SDK deadline) must surface as a failure below instead of
+          // ending the turn as if the user had stopped it.
+          aborted = options?.signal?.aborted === true;
+          break;
+        }
         case "error": {
-          const failed = describeFailedCall(p.error);
           // Debug level: the same text reaches the transcript (and the
           // session logger) through the error event, so the raw transport
           // line only matters when tracing the SDK itself.
-          log.debug(`stream failed: ${failureText(failed)}`);
-          yield {
-            type: "error",
-            errorMessage: failed.message,
-            ...(failed.detail !== undefined
-              ? { errorDetail: failed.detail }
-              : {}),
-            ...(failed.retryable === true ? { errorRetryable: true } : {}),
-          };
+          log.debug(
+            `stream failed: ${failureText(describeFailedCall(p.error))}`,
+          );
+          yield errorEventFor(p.error);
           return;
         }
         default:
@@ -234,21 +243,23 @@ async function* runStream(
       }
     }
   } catch (error) {
-    const failed = describeFailedCall(error);
-    log.debug(`stream threw: ${failureText(failed)}`);
-    yield {
-      type: "error",
-      errorMessage: failed.message,
-      ...(failed.detail !== undefined ? { errorDetail: failed.detail } : {}),
-      ...(failed.retryable === true ? { errorRetryable: true } : {}),
-    };
-    return;
+    if (isCallerAbort(error, options?.signal)) {
+      // An aborted provider call can reject the iteration instead of ending
+      // it with an `abort` part; both mean the same thing.
+      aborted = true;
+    } else {
+      log.debug(`stream threw: ${failureText(describeFailedCall(error))}`);
+      yield errorEventFor(error);
+      return;
+    }
   }
 
   // Single-step run: the (only) step carries this turn's text, tool calls
   // (already executed by the SDK — see the tool-result parts above) and
-  // finish reason for the Agent's event bridge.
-  const steps = (await result.steps) as unknown as Array<{
+  // finish reason for the Agent's event bridge. An aborted stream leaves
+  // `result.steps` rejected (AbortError): the deltas received before the
+  // abort are all there is, and the turn ends as an aborted message below.
+  let steps: Array<{
     text?: string;
     reasoningText?: string;
     usage?: LanguageModelUsage;
@@ -260,7 +271,24 @@ async function* runStream(
       /** Pre-v7 field name (kept as a fallback for test doubles). */
       args?: unknown;
     }>;
-  }>;
+  }> = [];
+  try {
+    steps = (await result.steps) as unknown as typeof steps;
+  } catch (error) {
+    if (isCallerAbort(error, options?.signal)) {
+      // The cancellation of this call, seen through the step result.
+      aborted = true;
+    } else if (!aborted) {
+      // A step result the SDK could not produce for another reason: report
+      // it as a failed turn instead of throwing out of the generator (the
+      // caller awaits this stream, not the SDK's promise).
+      log.debug(
+        `step result failed: ${failureText(describeFailedCall(error))}`,
+      );
+      yield errorEventFor(error);
+      return;
+    }
+  }
   const lastStep = steps.at(-1);
   // Prefer the streamed text (fullStream already delivered every delta);
   // fall back to the step text when the stream carried none (e.g. a cached
@@ -277,7 +305,51 @@ async function* runStream(
     finalThinking,
     finalUsage,
   );
-  yield { type: "done", message };
+  // An aborted turn is a real turn: the retry policy skips it (stopReason
+  // "aborted"), the UI renders whatever arrived before the stop, and the
+  // rewind's truncation removes it with the rest of the aborted exchange.
+  yield {
+    type: "done",
+    message: aborted ? { ...message, stopReason: "aborted" } : message,
+  };
+}
+
+/** Whether a stream failure is this call's own cancellation: OUR abort signal
+ * fired (the session's stop / rewind).
+ *
+ * The deciding factor is the signal, not the error's name. An `AbortError`
+ * name alone would swallow real failures — a `TimeoutError` from
+ * `AbortSignal.timeout` (which the SDK merges into the request signal for its
+ * own deadlines) and a provider-side cancel look exactly like a user stop —
+ * while a genuine cancellation does not always arrive with that name (a fetch
+ * aborted at the socket level rejects with a `TypeError`). */
+function isCallerAbort(
+  _error: unknown,
+  signal: AbortSignal | undefined,
+): boolean {
+  return signal?.aborted === true;
+}
+
+/** `name` of a thrown value ("" for anything without one). */
+function errorName(error: unknown): string {
+  const name = (error as { name?: unknown } | null | undefined)?.name;
+  return typeof name === "string" ? name : "";
+}
+
+/** The error event for a failed call: the provider's message plus its detail,
+ * and the retryability flag the retry policy reads. A timeout is retryable
+ * even when the provider did not say so — the request may simply have taken
+ * too long — while an unflagged permanent failure stays permanent. */
+function errorEventFor(error: unknown): StreamEvent {
+  const failed = describeFailedCall(error);
+  return {
+    type: "error",
+    errorMessage: failed.message,
+    ...(failed.detail !== undefined ? { errorDetail: failed.detail } : {}),
+    ...(failed.retryable === true || errorName(error) === "TimeoutError"
+      ? { errorRetryable: true }
+      : {}),
+  };
 }
 
 /** Read the step usage. Prefer the streamed (`finish-step`) usage so a

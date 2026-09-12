@@ -68,7 +68,11 @@ export class Agent {
     messages: AgentMessage[],
   ) => unknown[] | Promise<unknown[]>;
   private readonly listeners = new Set<(event: AgentEvent) => void>();
-  private readonly abortController = new AbortController();
+  /** Signal of the CURRENT run. Recreated at every run start: an
+   * AbortSignal is one-way, so a single long-lived controller would keep
+   * every later run aborted (the model call then never leaves the
+   * machine) — the session would silently stop working after one abort. */
+  private abortController = new AbortController();
   private readonly steerQueue: AgentMessage[] = [];
   private running: Promise<void> = Promise.resolve();
   private runningInner = false;
@@ -96,6 +100,14 @@ export class Agent {
     return this.state.isStreaming;
   }
 
+  /** True while the current run is unwinding from abort(): no further turn
+   * of it will be taken, and its queues are dropped when it settles. Callers
+   * that would otherwise steer a message into it must let it start its own
+   * run instead (see prompt). */
+  get isAborting(): boolean {
+    return this.abortRequested;
+  }
+
   get messages(): AgentMessage[] {
     return this.state.messages;
   }
@@ -117,13 +129,23 @@ export class Agent {
   }
 
   /** Run a prompt: a string (+images) becomes a user message; a pre-built
-   * AgentMessage (notification/mode/user) is used as-is. If a run is already
-   * active the message is steered to the next turn boundary. */
+   * AgentMessage (notification/mode/user) is used as-is.
+   *
+   * A healthy run takes the message at its next turn boundary (steer). A run
+   * that is unwinding from an abort never does — its queues are dropped when
+   * it settles (the rewind path), so a message queued into it would vanish
+   * without a trace. Such a prompt waits for that run to settle and then gets
+   * its own run. */
   async prompt(
     input: string | AgentMessage,
     images?: ImageContent[],
   ): Promise<void> {
     const message = normalizeInput(input, images);
+    if (this.runningInner && this.abortRequested) {
+      // An abort ends the run: the rejection (if any) belongs to that run's
+      // own caller, never to this message.
+      await this.running.catch(() => {});
+    }
     if (this.runningInner) {
       this.steerQueue.push(message);
       return;
@@ -139,13 +161,18 @@ export class Agent {
   }
 
   /** Inject a message into a running exchange at its next turn boundary; an
-   * idle agent processes it immediately. */
+   * idle agent (or one whose run is unwinding — see prompt) processes it
+   * immediately. Fire-and-forget by contract: the run reports its own
+   * progress and failures through the event stream. */
   steer(message: AgentMessage): void {
-    if (this.runningInner) {
+    if (this.runningInner && !this.abortRequested) {
       this.steerQueue.push(message);
       return;
     }
-    this.startRun(message);
+    // The caller has no channel for a rejection here (notifications, sub-agent
+    // deliveries), and a floating rejection would only surface as an unhandled
+    // promise rejection — the run's own failure reporting covers it.
+    void this.prompt(message).catch(() => {});
   }
 
   /** Inject a retry/continue instruction in-run (a follow-up user message). */
@@ -164,6 +191,9 @@ export class Agent {
     this.abortRequested = false;
   }
 
+  /** Await the end of the run that is currently active (resolves
+   * immediately when none is): the rewind path settles the aborted run
+   * before truncating the transcript. */
   async waitForIdle(): Promise<void> {
     await this.running;
   }
@@ -181,6 +211,9 @@ export class Agent {
 
   private async __run(first?: AgentMessage): Promise<void> {
     if (this.runningInner) return;
+    // A fresh signal for this run: the previous run's abort must never reach
+    // into it (see the abortController field).
+    this.abortController = new AbortController();
     this.runningInner = true;
     this.state.isStreaming = true;
     this.abortRequested = false;

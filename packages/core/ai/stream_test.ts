@@ -162,3 +162,133 @@ Deno.test("missing usage stays zero (the app's placeholder shape)", async () => 
   const usage = (done.message as { usage: { input: number } }).usage;
   assertEquals(usage.input, 0);
 });
+
+/** A model whose stream stays open until the abort signal fires, then ends
+ * (what the SDK's provider pipeline does for a cancelled request). The
+ * SDK rejects `result.steps` for such a stream, which used to throw out of
+ * the transport and reject the whole run. */
+function fakeHeldLanguageModel() {
+  return {
+    specificationVersion: "v2",
+    provider: "fake",
+    modelId: "m",
+    supportedUrls: {},
+    doGenerate: () => {
+      throw new Error("not used");
+    },
+    doStream: ({ abortSignal }: { abortSignal?: AbortSignal }) => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "text-start", id: "t1" });
+          controller.enqueue({
+            type: "text-delta",
+            id: "t1",
+            delta: "partial answer",
+          });
+          controller.enqueue({ type: "text-end", id: "t1" });
+          const close = () => {
+            try {
+              controller.close();
+            } catch {
+              // already closed
+            }
+          };
+          if (abortSignal?.aborted === true) close();
+          else abortSignal?.addEventListener("abort", close, { once: true });
+        },
+      }),
+      request: {},
+      response: {},
+    }),
+  };
+}
+
+Deno.test("an aborted stream ends the turn as an aborted assistant message (never throws)", async () => {
+  const model: Model<Api> = { id: "m", name: "m" } as unknown as Model<Api>;
+  const streamFn = createStreamFn(transportFor(fakeHeldLanguageModel()));
+  const controller = new AbortController();
+  const request: StreamRequest = {
+    messages: [{ role: "user", content: "hi" }],
+  };
+
+  const events: Array<{ type: string } & Record<string, unknown>> = [];
+  let aborted = false;
+  for await (
+    const event of streamFn(model, request, { signal: controller.signal })
+  ) {
+    events.push(event as never);
+    // Abort mid-stream: the run's promise must still settle normally, so
+    // the session agent's rewind (waitForIdle) and the following prompt can
+    // proceed.
+    if (event.type === "text_delta" && !aborted) {
+      aborted = true;
+      controller.abort();
+    }
+  }
+
+  assertEquals(events.some((e) => e.type === "error"), false);
+  const done = events.at(-1)!;
+  assertEquals(done.type, "done");
+  const message = done.message as {
+    stopReason: string;
+    content: Array<{ type: string; text?: string }>;
+  };
+  assertEquals(message.stopReason, "aborted");
+  // The output the provider already delivered stays in the transcript.
+  assertEquals(
+    message.content.map((b) => b.text).join(""),
+    "partial answer",
+  );
+});
+
+/** A model whose stream fails with a TimeoutError (what `AbortSignal.timeout`
+ * raises; the SDK merges one into the request signal for its own deadlines)
+ * while the CALLER's signal is untouched. */
+function fakeTimingOutLanguageModel() {
+  return {
+    specificationVersion: "v2",
+    provider: "fake",
+    modelId: "m",
+    supportedUrls: {},
+    doGenerate: () => {
+      throw new Error("not used");
+    },
+    doStream: () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.error(
+            new DOMException(
+              "The operation was aborted due to timeout",
+              "TimeoutError",
+            ),
+          );
+        },
+      }),
+      request: {},
+      response: {},
+    }),
+  };
+}
+
+Deno.test("a timeout that is not the caller's abort surfaces as an error turn", async () => {
+  // TimeoutError and AbortError look alike; only the caller's aborted signal
+  // makes a failure a user stop. A timeout must stay visible (and retryable)
+  // instead of ending the turn as if the user had pressed stop.
+  const model: Model<Api> = { id: "m", name: "m" } as unknown as Model<Api>;
+  const streamFn = createStreamFn(transportFor(fakeTimingOutLanguageModel()));
+  const events: Array<{ type: string } & Record<string, unknown>> = [];
+  for await (
+    const event of streamFn(
+      model,
+      { messages: [{ role: "user", content: "hi" }] },
+      { signal: new AbortController().signal },
+    )
+  ) {
+    events.push(event as never);
+  }
+
+  const failure = events.find((e) => e.type === "error")!;
+  assertEquals(failure !== undefined, true);
+  assertEquals(events.some((e) => e.type === "done"), false);
+  assertEquals(failure.errorRetryable, true);
+});

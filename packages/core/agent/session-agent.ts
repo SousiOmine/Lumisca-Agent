@@ -130,6 +130,12 @@ export class SessionAgent {
   /** Generates the session title from the first user message (null when
    * no fast model is configured). */
   private readonly titleGenerator: TitleGenerator | null;
+  /** The rewind currently running (abort + truncation), if any. Prompts
+   * delivered while it runs wait for it: the truncation removes everything
+   * from the rewound message onward, so a run started in between would have
+   * its messages deleted again (and a steer into the dying run would be
+   * dropped with the queues). */
+  private rewindInFlight: Promise<void> | null = null;
   /** Owns the vacant-response / rate-limit retry state (budgets, parked
    * restarts, abort epochs). */
   private readonly retry: RetryManager;
@@ -248,6 +254,7 @@ export class SessionAgent {
 
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
+    await this.awaitRewind();
     const message = this.buildUserMessage(text, images);
     this.maybeGenerateTitle(text);
     this.announceMessage(message);
@@ -290,6 +297,11 @@ export class SessionAgent {
    * so it is processed after the current turn (tool executions included)
    * completes; an idle agent starts a fresh run.
    *
+   * Two states never take a steer, because the message would be dropped
+   * instead of queued for a later turn (see deliverPrompt): a run that is
+   * unwinding from an abort (the rewind button, the stop button) and an
+   * in-flight rewind, whose truncation would delete the message again.
+   *
    * The message is announced immediately (synthetic message_start/end
    * events) so clients render it right away. When the loop drains it, it
    * re-emits the same events for the same message (identical role +
@@ -306,10 +318,29 @@ export class SessionAgent {
     mode?: ModePrompt,
   ): void {
     this.maybeGenerateTitle(mode ? mode.shortText : text);
-    if (mode) {
-      const message = buildModeMessage(mode, text, Date.now());
-      this.announceMessage(message);
-      if (this.isStreaming) {
+    const message = mode
+      ? buildModeMessage(mode, text, Date.now())
+      : this.buildUserMessage(text, images);
+    this.announceMessage(message);
+    void this.deliverPrompt(message, mode);
+  }
+
+  /** Deliver an announced prompt to the agent loop: a healthy run takes it
+   * as a steer (next turn boundary); otherwise it gets its own run — after
+   * an in-flight rewind finished, so its messages are not truncated away
+   * and the dying run cannot swallow the steer. Always resolves: the run
+   * reports its own progress and failures through events. */
+  private async deliverPrompt(
+    message: AgentMessage,
+    mode?: ModePrompt,
+  ): Promise<void> {
+    try {
+      // Skipped entirely when no rewind runs: the steer decision below then
+      // stays in the caller's task (no microtask window for an abort to slip
+      // between the check and the delivery).
+      if (this.rewindInFlight !== null) await this.awaitRewind();
+      if (this.closed) return;
+      if (this.isStreaming && !this.agent.isAborting) {
         this.agent.steer(message);
         return;
       }
@@ -317,22 +348,17 @@ export class SessionAgent {
       // (same contract as prompt()); a steer joins the current run and
       // leaves the counter alone.
       this.resetRetryState();
-      this.startGoalIfNeeded(mode);
-      void this.startRun(message);
-      return;
+      if (mode !== undefined) this.startGoalIfNeeded(mode);
+      await this.startRun(message);
+    } catch (error) {
+      // startRun reports its own failures; this guard only exists so a
+      // fire-and-forget delivery can never become an unhandled rejection.
+      this.emit({
+        type: "session_error",
+        sessionId: this.sessionId,
+        message: errorMessage(error),
+      });
     }
-    this.maybeGenerateTitle(text);
-    const message = this.buildUserMessage(text, images);
-    this.announceMessage(message);
-    if (this.isStreaming) {
-      this.agent.steer(message);
-      return;
-    }
-    // Starting a run from user input resets the vacant-response history
-    // (same contract as prompt()); a steer joins the current run and
-    // leaves the counter alone.
-    this.resetRetryState();
-    void this.startRun(message);
   }
 
   /** Build a user message from text + optional images (single home for the
@@ -355,17 +381,24 @@ export class SessionAgent {
 
   /** Start a run that carries a pre-built message (a user prompt or a
    * notification). MCP attachment may still be in flight (a prompt sent
-   * right after session creation), so wait for it; if a run started
-   * concurrently, the prompt fails and the message is steered into that
-   * run instead (it is then processed at that run's next turn boundary).
-   * A silent-error restart parked during the run is resumed afterwards,
-   * then the goal loop (when active) judges and continues. */
+   * right after session creation), so wait for it; a message for a run that
+   * is already active is queued by the agent itself (see Agent.prompt). A
+   * silent-error restart parked during the run is resumed afterwards, then
+   * the goal loop (when active) judges and continues.
+   *
+   * A run that dies with an exception (no turn to report) surfaces as a
+   * session_error: re-delivering the message would duplicate it in the
+   * transcript, and a message that was aborted must stay aborted. */
   private async startRun(message: AgentMessage): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
     try {
       await this.agent.prompt(message);
-    } catch {
-      this.agent.steer(message);
+    } catch (error) {
+      this.emit({
+        type: "session_error",
+        sessionId: this.sessionId,
+        message: errorMessage(error),
+      });
     }
     await this.resumeAfterErrorRun();
     await this.maybeRunGoalLoop();
@@ -429,23 +462,10 @@ export class SessionAgent {
     // transcript without re-emitting — see Agent.append).
     this.emit({ type: "message_start", sessionId: this.sessionId, message });
     this.emit({ type: "message_end", sessionId: this.sessionId, message });
-    if (this.isStreaming) {
-      this.agent.steer(message);
-      return;
-    }
-    // A notification that starts its own run begins a fresh exchange:
-    // reset the vacant-response history (same contract as prompt()).
-    this.resetRetryState();
-    if (!this.mcpReadyDone) {
-      // MCP attachment may still be in flight (a very fast command); wait
-      // for it, then re-check — a user prompt may have started meanwhile.
-      void this.mcpReady.then(() => {
-        this.resetRetryState();
-        void this.startRun(message);
-      });
-      return;
-    }
-    void this.startRun(message);
+    // Same delivery contract as a user prompt: a notification that starts
+    // its own run begins a fresh exchange (resetRetryState) and waits for
+    // MCP attachment inside startRun; a steer joins the current run.
+    void this.deliverPrompt(message);
   }
 
   /** Convert the transcript for the LLM: notification messages become
@@ -540,11 +560,15 @@ export class SessionAgent {
    * corrected prompt (the rewound text is restored to the composer).
    *
    * While a run is active it is aborted first and the drain is awaited, so
-   * the run's artifacts (e.g. the empty failure message pi pushes on
-   * abort) are part of the removed suffix rather than left dangling. The
+   * the run's artifacts (e.g. the assistant message an aborted turn leaves
+   * behind) are part of the removed suffix rather than left dangling. The
    * steering/follow-up queues are cleared as well: queued prompts were
    * already announced to clients (synthetic message events) but are not in
    * the transcript yet, so they must not resurface on the next run.
+   *
+   * Prompts that arrive while the rewind runs (a user re-sending right
+   * after clicking the button) wait for it — see deliverPrompt — so they
+   * cannot be swallowed by the dying run or truncated away with it.
    *
    * Truncation is positional (the target's exact index), matching the
    * database row order, so messages sharing a millisecond with the target
@@ -553,12 +577,38 @@ export class SessionAgent {
    * aborted run's artifacts follow it); any other unknown timestamp
    * throws not_found. */
   async rewind(timestamp: number): Promise<void> {
+    // Registered before the first await: a prompt delivered from here on
+    // waits for the truncation (deliverPrompt → awaitRewind).
+    const work = this.runRewind(timestamp);
+    this.rewindInFlight = work;
+    try {
+      await work;
+    } finally {
+      if (this.rewindInFlight === work) this.rewindInFlight = null;
+    }
+  }
+
+  /** Wait for an in-flight rewind, if any. Resolves immediately otherwise;
+   * a rewind that failed (not_found) is already settled, so its own caller
+   * saw the error and the wait just continues. */
+  private async awaitRewind(): Promise<void> {
+    // The loop covers a rewind started while this awaited the previous one.
+    while (this.rewindInFlight !== null) {
+      await this.rewindInFlight.catch(() => {});
+    }
+  }
+
+  private async runRewind(timestamp: number): Promise<void> {
     if (this.isStreaming) {
       // Rejects pending asks first (via abort), so a run waiting on the
       // user's answer unwinds immediately — waitForIdle below would hang
       // until the ask tool's promise settles otherwise.
       this.abort();
-      await this.agent.waitForIdle();
+      // An aborted run normally ends as a turn (stopReason "aborted"); a run
+      // that died with an exception instead must not block the truncation —
+      // its failure belongs to whoever started it, and the rewind owns the
+      // transcript from here on.
+      await this.agent.waitForIdle().catch(() => {});
     }
     const messages = this.agent.state.messages;
     const index = messages.findIndex(
