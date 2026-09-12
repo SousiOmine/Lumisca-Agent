@@ -225,10 +225,13 @@ export function createReadFileTool(
       "Read a file's contents as text. Append a line range to the path to " +
       "read only those lines: `src/main.ts:50-100` (inclusive), " +
       "`src/main.ts:50+20` (50 lines starting at 50), or " +
-      "`src/main.ts:5-16,960-973` (multiple ranges). Large files are read " +
-      "in chunks; the output is truncated to the last 64KB. Raster images " +
+      "`src/main.ts:5-16,960-973` (multiple ranges). Raster images " +
       "(PNG/JPEG/GIF/WebP/BMP, up to 10MB) are passed to the model as images " +
-      "when read in full.",
+      "when read in full. A whole-file read returns at most 512KB: a cut " +
+      "read ends with `[output truncated to the last 65536 bytes]`, and a " +
+      "file that continues past the read ends with `[file continues; read " +
+      "with <path>:<line>+2000]`. A ranged read ends with `[end of file: N " +
+      "lines]` when it reached the last line.",
     parameters: readSchema,
     execute: async (_id, params, _signal) => {
       const { path, spec, ranges } = splitRangeSuffix(params.path);
@@ -325,7 +328,9 @@ export function createWriteFileTool(
     name: TOOL_WRITE,
     label: "Write File",
     description:
-      "Create or overwrite a file with the given text content. Parent directories are created automatically.",
+      "Create or overwrite a file with the given text content. Parent " +
+      "directories are created automatically. Overwriting keeps the " +
+      "existing file's line-ending style (CRLF stays CRLF).",
     parameters: writeSchema,
     execute: async (_id, params) => {
       const filePath = await requireResolved(ctx.sandbox, params.path);
@@ -401,10 +406,14 @@ export function createEditFileTool(
     name: TOOL_EDIT,
     label: "Edit File",
     description:
-      "Replace the first occurrence of `old_string` with `new_string` in a file. " +
-      "`old_string` must appear at least once; line endings (CRLF vs LF) are " +
+      "Replace the first occurrence of `old_string` with `new_string` in a " +
+      "file. `old_string` must appear at least once, else the call fails " +
+      "with `old_string not found in <path>`; line endings (CRLF vs LF) are " +
       "matched leniently and the replacement keeps the file's existing " +
-      "line-ending style.",
+      "line-ending style. When `old_string` is ambiguous it is replaced " +
+      "once and the result carries `[warning: old_string appeared N times; " +
+      "only the first was replaced]`; pass a longer, unique `old_string` " +
+      "when that is not what you want.",
     parameters: editSchema,
     execute: async (_id, params) => {
       const filePath = await requireResolved(ctx.sandbox, params.path);
@@ -503,7 +512,10 @@ export function createListDirTool(
   return {
     name: TOOL_LIST_DIR,
     label: "List Directory",
-    description: "List the contents of a directory within the workspace.",
+    description:
+      "List the contents of a directory within the workspace, sorted by " +
+      "name (directories carry a trailing `/`). A listing cut by the output " +
+      "cap ends with `[listing truncated to the last 65536 bytes]`.",
     parameters: listDirSchema,
     execute: async (_id, params) => {
       const dirPath = await requireResolved(ctx.sandbox, params.path);

@@ -11,6 +11,8 @@ import type { McpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { ToolRegistry } from "../tools/registry.ts";
+import { createSkillCatalogProvider } from "../skills/catalog.ts";
+import { createInstructionsProvider } from "../memory/instructions.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import {
@@ -267,19 +269,38 @@ export class AgentFactory {
         safety: this.deps.commandSafety,
         browserAvailable,
       });
-    // The system prompt is a per-session snapshot taken at creation
-    // (custom prompts are stored verbatim). Only legacy sessions without a
-    // stored prompt (created before snapshots) rebuild once — and the
-    // rebuilt prompt is persisted right away so subsequent opens stay
-    // frozen against AGENTS.md edits.
+    // The system prompt is generated once per session, from the tool set
+    // the session actually has (its guidelines are keyed on the preloaded
+    // tools — see tools/prompt-sections.ts) and persisted as a snapshot:
+    // the prompt is the session's identity, never a mirror of the files on
+    // disk (workspace instructions are dynamic context instead, see
+    // contextProviders below).
     let systemPrompt = session.systemPrompt;
     if (systemPrompt === undefined) {
-      systemPrompt = this.deps.buildGeneratedPrompt(workspace, {
-        provider: session.modelProvider,
-        modelId: session.modelId,
-      }, browserAvailable);
+      systemPrompt = this.deps.buildGeneratedPrompt(
+        workspace,
+        {
+          provider: session.modelProvider,
+          modelId: session.modelId,
+        },
+        tools.map((tool) => tool.name),
+      );
       this.deps.updateSystemPrompt(session.id, systemPrompt);
     }
+    // Dynamic context (skill catalog, workspace instructions) is published
+    // as transcript messages when it changes, so an edit reaches an open
+    // session and the prompt above stays stable.
+    const contextProviders = [
+      createSkillCatalogProvider({
+        folders: workspace.folders,
+        browserAvailable,
+        globalDirs: this.deps.globalSkillDirs,
+      }),
+      createInstructionsProvider({
+        folders: workspace.folders,
+        personal: this.deps.personalInstructions,
+      }),
+    ];
     const agent = new SessionAgentImpl({
       sessionId: session.id,
       systemPrompt,
@@ -296,6 +317,7 @@ export class AgentFactory {
       askHub,
       taskHub: tasks,
       toolRegistry: registry,
+      contextProviders,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
       renameSession: (name) => this.deps.renameSession(session.id, name),

@@ -38,6 +38,8 @@ import { notificationMessage } from "../tools/subagent-format.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import { toLlmMessages } from "../types/notification.ts";
+import type { ContextProvider } from "./context-providers.ts";
+import { contextMessage } from "./context-providers.ts";
 import type { ModePrompt } from "../types/mode-message.ts";
 import { buildModeMessage } from "../types/mode-message.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
@@ -93,6 +95,11 @@ export interface SessionAgentOptions {
    * definitions stay small and stable. Omitted → no discoverable tools
    * (the pair is not built). */
   toolRegistry?: ToolRegistry;
+  /** Dynamic context providers (skill catalog, workspace instructions).
+   * Their updates are published as durable `context` messages before a run
+   * starts, and republished only when the value changed (see
+   * publishContexts). Omitted → no dynamic context. */
+  contextProviders?: ContextProvider[];
 }
 
 /**
@@ -154,6 +161,10 @@ export class SessionAgent {
    * built for this session). */
   private readonly backgroundManager: BackgroundProcessManager | null;
   private readonly backgroundUnsubscribe: (() => void) | null;
+  /** Dynamic context providers (skill catalog, workspace instructions):
+   * their pending updates are published as transcript messages before each
+   * run (see publishContexts). */
+  private readonly contextProviders: readonly ContextProvider[];
   /** Set by close(): completion notifications of killed background
    * commands must not reach the discarded agent. */
   private closed = false;
@@ -216,7 +227,45 @@ export class SessionAgent {
       sessionId: options.sessionId,
       convertToLlm: (messages) => this.convertToLlm(messages),
     });
+    this.contextProviders = options.contextProviders ?? [];
+    this.rebaseContexts(this.agent.state.messages);
     this.agent.subscribe((event) => this.handleEvent(event));
+  }
+
+  /** Re-anchor every context provider to the transcript it just received:
+   * the restored history already carries the last publication of each
+   * provider, so a reopened session must neither republish an unchanged
+   * value nor lose track of what the model has already seen. Called on
+   * construction and after a rewind truncated the history. */
+  private rebaseContexts(messages: readonly AgentMessage[]): void {
+    if (this.contextProviders.length === 0) return;
+    const last = new Map<string, unknown>();
+    for (const message of messages) {
+      if (message.role === "context") last.set(message.provider, message.state);
+    }
+    for (const provider of this.contextProviders) {
+      provider.rebase(last.get(provider.name));
+    }
+  }
+
+  /** Publish the pending dynamic-context updates (skill catalog, workspace
+   * instructions) as transcript messages. Runs before a run starts, so the
+   * model sees the current value in the run's first request; the messages
+   * are announced to clients like any other injected message, and they are
+   * appended to the transcript without starting a run of their own. */
+  private publishContexts(): void {
+    if (this.closed) return;
+    for (const provider of this.contextProviders) {
+      for (const update of provider.next()) {
+        const message = contextMessage(
+          provider.name,
+          update,
+          Date.now(),
+        );
+        this.agent.appendMessage(message);
+        this.announceMessage(message);
+      }
+    }
   }
 
   get isStreaming(): boolean {
@@ -256,6 +305,7 @@ export class SessionAgent {
     if (!this.mcpReadyDone) await this.mcpReady;
     await this.awaitRewind();
     const message = this.buildUserMessage(text, images);
+    this.publishContexts();
     this.maybeGenerateTitle(text);
     this.announceMessage(message);
     // A user prompt starts a fresh exchange: it does not inherit the
@@ -321,6 +371,7 @@ export class SessionAgent {
     const message = mode
       ? buildModeMessage(mode, text, Date.now())
       : this.buildUserMessage(text, images);
+    this.publishContexts();
     this.announceMessage(message);
     void this.deliverPrompt(message, mode);
   }
@@ -410,6 +461,7 @@ export class SessionAgent {
    * recurse into the loop. */
   private async runMainTurn(instruction: string): Promise<void> {
     this.resetRetryState();
+    this.publishContexts();
     try {
       await this.agent.prompt(instruction);
     } catch (error) {
@@ -672,6 +724,10 @@ export class SessionAgent {
     // declaration itself is gone, so the loop must not continue. Any other
     // rewind leaves the goal intact (the user only corrected a later turn).
     this.goals?.cancelWhenRewound(goalTimestamps, removed);
+    // The truncation may have removed the context publications that went
+    // with the rewound messages: re-anchor, so a provider whose snapshot is
+    // no longer in history publishes it again before the next run.
+    this.rebaseContexts(this.agent.state.messages);
     this.emit({
       type: "messages_truncated",
       sessionId: this.sessionId,

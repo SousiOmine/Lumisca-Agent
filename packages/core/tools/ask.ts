@@ -160,16 +160,13 @@ export function createAskTool(hub: AskHub): Tool<typeof askSchema> {
     name: TOOL_ASK,
     label: "Ask",
     description:
-      "Ask the user one or more questions and get their answers. Use this " +
-      "when you need input only the user can provide — preferences, " +
-      "choices, or confirmation — and the task genuinely depends on it. " +
-      "The user answers in the UI (a panel appears above the chat input); " +
-      "the run waits for the answer. Every question offers predefined " +
-      "options (use `multi: true` when several may apply, `recommended` to " +
-      "preselect one). A free-text field is always shown alongside the " +
-      "options, so the user can type any answer — never add your own " +
-      '"Other" option. Do not use this for information you can obtain from ' +
-      "your own tools.",
+      "Ask the user one or more questions and block until they answer (or " +
+      "the run is aborted). The user answers in the UI (a panel appears " +
+      "above the chat input); the selected option labels and/or the " +
+      "free-text input come back as the result. Every question offers " +
+      "predefined options (use `multi: true` when several may apply, " +
+      "`recommended` to preselect one) and a free-text field is always " +
+      'shown alongside them, so do not add your own "Other" option.',
     parameters: askSchema,
     execute: async (toolCallId, params, _signal): Promise<ToolResult> => {
       const questions = params.questions;

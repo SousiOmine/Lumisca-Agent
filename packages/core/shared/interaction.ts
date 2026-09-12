@@ -29,8 +29,9 @@ export interface AskAnswer {
   values: string[];
 }
 
-/** State of one todo task (the `todo` tool). `in_progress` is the current
- * task of the plan; at most one task carries it at a time. */
+/** State of one todo task (the `todo` tool). `in_progress` marks work the
+ * agent is doing now; several tasks may carry it when work genuinely runs in
+ * parallel. */
 export type TodoStatus =
   | "pending"
   | "in_progress"
@@ -38,8 +39,9 @@ export type TodoStatus =
   | "abandoned"
   | "blocked";
 
-/** One task of a todo phase. `id` is stable within the session and
- * assigned by the server when the plan is set (e.g. `t1`, `t2`). */
+/** One task of a todo phase. `id` is stable within the session and assigned
+ * by the server when the plan is set (e.g. `t1`, `t2`); a task keeps its id
+ * across plan replacements while its phase and name stay the same. */
 export interface TodoTask {
   id: string;
   name: string;

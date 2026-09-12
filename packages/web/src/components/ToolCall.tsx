@@ -5,6 +5,7 @@ import {
   IconCode,
   IconEdit,
   IconFile,
+  IconFileCheck,
   IconFolder,
   IconLoader,
   IconLoader2,
@@ -28,6 +29,7 @@ import {
   TOOL_GLOB,
   TOOL_GREP,
   TOOL_LIST_DIR,
+  TOOL_PRESENT,
   TOOL_READ,
   TOOL_SEND_MESSAGE,
   TOOL_TASK,
@@ -84,6 +86,9 @@ function toolIcon(name: string) {
     // code evaluation
     case TOOL_EVAL:
       return <IconCode size={13} />;
+    // present deliverables
+    case TOOL_PRESENT:
+      return <IconFileCheck size={13} />;
     // asking the user a question
     case TOOL_ASK:
       return <IconMessageQuestion size={13} />;
@@ -192,6 +197,19 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
           typeof args.summary === "string" ? truncate(args.summary, 40) : ""
         }`
         : "";
+    // present deliverables
+    case TOOL_PRESENT: {
+      const files = Array.isArray(args.files)
+        ? args.files as Array<{ path?: unknown }>
+        : [];
+      if (files.length === 0) return "";
+      if (files.length === 1) {
+        return typeof files[0]!.path === "string"
+          ? shortPath(files[0]!.path as string)
+          : "";
+      }
+      return `${files.length} files`;
+    }
     // task list
     case "TodoWrite":
       return "update task list";

@@ -249,11 +249,20 @@ export class Agent {
     }
   }
 
-  /** Append a user/mode/notification message to the transcript. The caller
-   * (session agent) announces these to clients; the agent only emits
-   * assistant message events (in step). */
+  /** Append a user/mode/notification/context message to the transcript.
+   * The caller (session agent) announces these to clients; the agent only
+   * emits assistant message events (in step). Context snapshots are
+   * appended this way outside of a run (see SessionAgent.publishContexts):
+   * they are history for the next LLM call, not a reason to start one. */
   private append(message: AgentMessage): void {
     this.state.messages.push(message);
+  }
+
+  /** Append a message to the transcript without starting a run. Used by
+   * the session agent for context snapshots (skill catalog, workspace
+   * instructions), which must be in history before the run they precede. */
+  appendMessage(message: AgentMessage): void {
+    this.append(message);
   }
 
   /** One exchange: each step() is a single LLM turn whose tool calls the

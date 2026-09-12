@@ -1765,8 +1765,10 @@ Deno.test("todo API returns the session's current plan", async () => {
     faux.setResponses([
       fauxAssistantMessage([
         fauxToolCall("todo", {
-          action: "plan",
-          phases: [{ name: "実装", tasks: ["調査する", "実装する"] }],
+          phases: [{
+            name: "実装",
+            tasks: [{ name: "調査する" }, { name: "実装する" }],
+          }],
         }),
       ]),
       fauxAssistantMessage("planned"),

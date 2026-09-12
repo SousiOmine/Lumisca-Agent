@@ -581,20 +581,13 @@ export function createAsyncBashTools(
     name: TOOL_ASYNC_BASH,
     label: "Async Bash",
     description:
-      "Start a shell command in the background and return immediately; the " +
-      "command keeps running after this run ends. Use for long-running " +
-      "work: dev servers, watchers, downloads. `cwd` is required and must " +
-      "be a workspace folder name or an absolute path. Check progress with " +
-      "async_bash_status, stop the command with async_bash_kill. You are " +
-      "notified when it finishes (a user message starting with " +
-      '"[Background command ...]"). Aborting this run does NOT stop the ' +
-      "command. On Windows, commands run in PowerShell (PowerShell 7 if " +
-      "installed, else Windows PowerShell; systems without PowerShell fall " +
-      "back to Git Bash or cmd.exe): use `$env:VAR` for environment " +
-      "variables, `;` to separate commands, `2>&1` to merge stderr into " +
-      "stdout; `&&` is only available with PowerShell 7. cmd-style aliases " +
-      "(`cd`, `dir`, `type`, `copy`) work. On macOS/Linux, commands run in " +
-      "/bin/sh.",
+      "Start a shell command in the background and return a command id " +
+      "immediately. `cwd` is required and must be a workspace folder name or " +
+      "an absolute path; `timeout` is in seconds (omit it for no timeout). " +
+      "The command keeps running after the tool call returns, and an abort " +
+      "of the run does not stop it. The result reports the id, the pid and " +
+      "the resolved cwd. On Windows the command runs in PowerShell, " +
+      "elsewhere in /bin/sh (same dialect notes as bash).",
     parameters: startSchema,
     execute: async (_id, params) => {
       const cwd = await requireResolved(sandbox, params.cwd);
@@ -615,9 +608,7 @@ export function createAsyncBashTools(
         content: [{
           type: "text",
           text: `Started background command #${commandId} (pid ${pid}) in ` +
-            `${cwd}: ${params.command}\nIt keeps running after ` +
-            "this run; check it with async_bash_status, stop it with " +
-            "async_bash_kill.",
+            `${cwd}: ${params.command}`,
         }],
         details: { commandId, pid, cwd },
       };
@@ -628,10 +619,12 @@ export function createAsyncBashTools(
     name: TOOL_ASYNC_BASH_STATUS,
     label: "Async Bash Status",
     description:
-      "Check the status of background commands started with async_bash. " +
-      "With `id`, returns the command's state (running/finished/killed), " +
-      "exit code, duration and the tail of its output. Without `id`, lists " +
-      "every background command of this session.",
+      "Report the state of background commands started with async_bash. " +
+      "With `id`, the result is the command's state (`running (pid N) for " +
+      "Ns`, `finished after Ns (exit code N)`, or `killed`) followed by the " +
+      "tail of its output; an unknown id fails with `Unknown background " +
+      "command: <id>`. Without `id`, every command of the session is listed " +
+      "one per line as `#id  state  duration  command (cwd: …)`.",
     parameters: statusSchema,
     execute: async (_id, params) => {
       if (params.id === undefined) {
@@ -671,9 +664,12 @@ export function createAsyncBashTools(
     name: TOOL_ASYNC_BASH_KILL,
     label: "Async Bash Kill",
     description:
-      "Force-stop a background command (its whole process tree). Safe to " +
-      "call on an already-finished command (no-op). Use the `commandId` " +
-      "returned by async_bash.",
+      "Stop a background command and its whole process tree. The result " +
+      "reports which of the three cases happened: `Killed background " +
+      "command #N.`, `Background command #N was already finished; nothing " +
+      "to kill.`, or `Kill requested for background command #N, but the " +
+      "process did not settle within Ns.` (the last one means the kill was " +
+      "sent but the process tree has not confirmed its exit yet).",
     parameters: killSchema,
     execute: async (_id, params) => {
       const { alreadyExited, timedOut } = await manager.kill(params.id);

@@ -10,13 +10,15 @@ import {
   type ToolResult,
 } from "../tools/schema.ts";
 import { loadSkillContent, type SkillDef } from "./discover.ts";
+import { MAX_SKILL_FILE_BYTES } from "./discover.ts";
 
 const skillSchema: SchemaObject<{
   name: SchemaString;
   read_followup: SchemaOptional<SchemaString>;
 }> = object({
   name: string(
-    "Name of the skill to load, from the <available_skills> listing in the system prompt (or the list in this tool's description).",
+    "Exact skill name from the session skill catalog (the " +
+      "<available_skills> listing published as a skill catalog message).",
   ),
   read_followup: optional(
     string(
@@ -25,11 +27,7 @@ const skillSchema: SchemaObject<{
   ),
 });
 
-/** Cap on skill names embedded in the tool description so the description
- * stays small even with many skills installed. */
-const MAX_DESCRIBED_SKILLS = 20;
-
-/** Load a skill's instructions on demand. The system prompt only lists
+/** Load a skill's instructions on demand. The session skill catalog lists
  * name + description; the full SKILL.md (and optionally one file from the
  * skill directory) is read when the agent actually uses the skill. */
 export function createSkillTool(
@@ -37,26 +35,24 @@ export function createSkillTool(
 ): Tool<typeof skillSchema> {
   const byName = new Map(ctx.skills.map((s) => [s.name, s]));
   const names = ctx.skills.map((s) => s.name);
-  const listed = names.length <= MAX_DESCRIBED_SKILLS
-    ? names.join(", ")
-    : `${names.slice(0, MAX_DESCRIBED_SKILLS).join(", ")} … and ${
-      names.length - MAX_DESCRIBED_SKILLS
-    } more`;
+  const known = names.length === 0 ? "(none)" : names.join(", ");
   return {
     name: TOOL_SKILL,
     label: "Skill",
     description:
-      `Load a reusable skill: its SKILL.md instructions plus, optionally, one file ` +
-      `from the skill directory (read_followup). Call this when a task matches an ` +
-      `available skill. Available skills: ${listed || "(none)"}`,
+      "Load one skill: its SKILL.md instructions plus, optionally, one " +
+      "file from the skill directory (`read_followup`). The result is the " +
+      "file's text, truncated with a `… (file truncated at N bytes)` note " +
+      `when it exceeds ${MAX_SKILL_FILE_BYTES} bytes. An unknown name ` +
+      `fails with \`Unknown skill "<name>"\` followed by the skill names ` +
+      "that exist. The session skill catalog lists every available skill " +
+      "with its description.",
     parameters: skillSchema,
     execute: (_id, params): Promise<ToolResult> => {
       const skill = byName.get(params.name);
       if (skill === undefined) {
         throw new Error(
-          `Unknown skill "${params.name}". Available skills: ${
-            listed || "(none)"
-          }`,
+          `Unknown skill "${params.name}". Available skills: ${known}`,
         );
       }
       const text = loadSkillContent(skill, params.read_followup);

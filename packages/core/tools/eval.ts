@@ -249,20 +249,22 @@ export function createEvalTool(
     name: TOOL_EVAL,
     label: "Eval",
     description:
-      "Evaluate a JavaScript/TypeScript snippet in a persistent REPL. " +
-      "Top-level `var`, `let`, `const` and function declarations persist " +
-      "between calls; re-declaring a `let`/`const` name in a later call " +
-      "throws (use `var` for mutable state, or `reset` to start over). " +
-      "Code with top-level `await` runs in an async wrapper — in such " +
-      "calls print results with `console.log` (the completion value is " +
-      "not returned) and declare persistent state with `globalThis`. " +
-      "The completion value of plain code (awaited when it is a promise) " +
-      "and console output are returned. The snippet runs in the server " +
-      "process with the same permissions as bash (files, network, " +
-      "processes, env) and gets Deno, fetch, AbortController, " +
-      "TextEncoder/TextDecoder, crypto, timers and the other standard web " +
-      "globals; node internals (process, require, Buffer) are absent. " +
-      "`reset` clears the state; `timeout` is in milliseconds.",
+      "Evaluate a JavaScript/TypeScript snippet in a persistent REPL and " +
+      "return its completion value (a promise is awaited) plus anything it " +
+      "logged. Top-level `var`, `let`, `const` and function declarations " +
+      "persist between calls; re-declaring a `let`/`const` name in a later " +
+      "call fails (use `var` for mutable state, or `reset` to start over). " +
+      "Code with top-level `await` runs in an async wrapper: there the " +
+      "completion value is not returned, so print results with " +
+      "`console.log` and declare persistent state with `globalThis`. The " +
+      "snippet runs in the server process with the same permissions as bash " +
+      "(files, network, processes, env) and gets Deno, fetch, " +
+      "AbortController, TextEncoder/TextDecoder, crypto, timers and the " +
+      "other standard web globals; node internals (process, require, " +
+      "Buffer) are absent. `reset` clears the REPL state, and `timeout` is " +
+      "in milliseconds. A failure of the snippet itself is a result, not a " +
+      "tool error: it comes back as `[error]` followed by the message, and " +
+      "the session state survives for the next call.",
     parameters: evalSchema,
     execute: async (_id, params): Promise<ToolResult> => {
       const run = async (): Promise<ToolResult> => {

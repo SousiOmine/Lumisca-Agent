@@ -53,9 +53,13 @@ export function createBashTool(
     name: TOOL_BASH,
     label: "Bash",
     description:
-      "Execute a shell command in the workspace. `cwd` is required and must be " +
-      "a workspace folder name or an absolute path. Output is limited to the last 64KB. " +
-      "Use for build, test, git, and other commands. `timeout` is in seconds. " +
+      "Execute a shell command in the workspace and return its output. " +
+      "`cwd` is required and must be a workspace folder name or an absolute " +
+      "path; `timeout` is in seconds (the default is 120, and the command is " +
+      "killed on expiry). Every result ends with `[exit code: N]`; a killed " +
+      "command reports the exit code of the kill. stdout and stderr are " +
+      "capped separately — a cut stream ends with `[stdout truncated to the " +
+      "last 65536 bytes]` / `[stderr truncated to the last 65536 bytes]`. " +
       "On Windows, commands run in PowerShell (PowerShell 7 if installed, " +
       "else Windows PowerShell; systems without PowerShell fall back to " +
       "Git Bash or cmd.exe): use `$env:VAR` for environment variables, `;` " +

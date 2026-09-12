@@ -100,3 +100,42 @@ Deno.test("buildTurns: retry notifications are skipped entirely", () => {
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.responses.length, 1);
 });
+
+Deno.test("buildTurns: context snapshots join the turn they precede", () => {
+  const context = (timestamp: number): AgentMessage => ({
+    role: "context",
+    provider: "skills",
+    title: "Skills (1 available)",
+    body: "<available_skills>\n- demo: A demo skill.\n</available_skills>",
+    timestamp,
+  });
+
+  // A fresh session publishes its context before the first prompt: the
+  // snapshot must render inside that turn, never vanish (it has no turn of
+  // its own).
+  const leading = buildTurns([
+    context(1),
+    user(2),
+    assistant(3),
+  ]);
+  assertEquals(leading.length, 1);
+  assertEquals(leading[0]!.user.role, "user");
+  assertEquals(leading[0]!.responses.map((m) => m.role), [
+    "context",
+    "assistant",
+  ]);
+
+  // A later snapshot lands in the turn that is already open.
+  const between = buildTurns([
+    user(1),
+    assistant(2),
+    context(3),
+    assistant(4),
+  ]);
+  assertEquals(between.length, 1);
+  assertEquals(between[0]!.responses.map((m) => m.role), [
+    "assistant",
+    "context",
+    "assistant",
+  ]);
+});

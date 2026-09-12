@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { readIfExists } from "../fs.ts";
 
 /** Combined project memory budget (matches Codex's project_doc_max_bytes). */
-const MAX_MEMORY_BYTES = 32 * 1024;
+export const MAX_MEMORY_BYTES = 32 * 1024;
 
 /** How many levels to walk up when looking for the repository root. */
 const MAX_REPO_LEVELS = 10;
@@ -42,16 +42,31 @@ export function repoChain(folder: string): string[] {
   return chain;
 }
 
+/** One instruction file as loaded from disk. */
+export interface MemoryFile {
+  /** Absolute path of the instruction file. */
+  path: string;
+  content: string;
+}
+
+/** The model-facing heading of one instruction file, used both to render a
+ * workspace instruction baseline and to budget it. */
+export function instructionHeading(path: string): string {
+  return `Instructions from: ${path}`;
+}
+
 /**
- * Load project memory (AGENTS.md / AGENTS.override.md) for a set of
- * workspace folders. For each folder, the repository root is located (via
- * `.git`), then every AGENTS.md from the root down to the folder is read;
- * an AGENTS.override.md in a directory replaces the AGENTS.md there.
- * Files are concatenated with `# <path>` headers, capped at 32 KB total.
+ * Load the workspace instruction files (AGENTS.md / AGENTS.override.md) for
+ * a set of workspace folders, root-first. For each folder the repository
+ * root is located (via `.git`), then every AGENTS.md from the root down to
+ * the folder is read; an AGENTS.override.md in a directory replaces the
+ * AGENTS.md beside it. The list is capped so the rendered instruction block
+ * stays within MAX_MEMORY_BYTES: the file that crosses the cap is truncated
+ * and ends the list.
  */
-export function loadProjectMemory(folders: string[]): string {
+export function loadProjectMemoryFiles(folders: string[]): MemoryFile[] {
   const seen = new Set<string>();
-  const parts: string[] = [];
+  const files: MemoryFile[] = [];
   let budget = MAX_MEMORY_BYTES;
 
   for (const folder of folders) {
@@ -66,22 +81,18 @@ export function loadProjectMemory(folders: string[]): string {
       if (seen.has(path)) continue;
       seen.add(path);
 
-      if (content.length > budget) {
-        parts.push(`# ${path}\n\n${content.slice(0, budget)}`);
-        budget = 0;
-      } else {
-        parts.push(`# ${path}\n\n${content}`);
-        budget -= content.length;
+      // Headings and separators count against the cap so the rendered
+      // block never exceeds it, however many files are merged.
+      const overhead = instructionHeading(path).length + 4;
+      const room = budget - overhead;
+      if (room <= 0) return files;
+      if (content.length > room) {
+        files.push({ path, content: content.slice(0, room) });
+        return files;
       }
-      if (budget <= 0) break;
+      files.push({ path, content });
+      budget -= overhead + content.length;
     }
-    if (budget <= 0) break;
   }
-
-  // Headers and separators also consume budget; clamp so the total never
-  // exceeds the cap regardless of how many files were merged.
-  const joined = parts.join("\n\n");
-  return joined.length <= MAX_MEMORY_BYTES
-    ? joined
-    : joined.slice(0, MAX_MEMORY_BYTES);
+  return files;
 }

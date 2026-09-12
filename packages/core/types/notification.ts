@@ -51,11 +51,11 @@ export function notificationText(
     : notification.title;
 }
 
-/** Convert agent messages to LLM messages: notification messages become
- * user messages carrying notificationText, mode messages become user
- * messages carrying the full prompt text (so the LLM sees the full
- * mode prompt), everything else passes the standard role filter (the
- * same one pi applies by default). */
+/** Convert agent messages to LLM messages: notification and context
+ * messages become user messages (carrying notificationText / the context
+ * body), mode messages become user messages carrying the full prompt text
+ * (so the LLM sees the full mode prompt), everything else passes the
+ * standard role filter (the same one pi applies by default). */
 export function toLlmMessages(messages: AgentMessage[]): Message[] {
   const out: Message[] = [];
   for (const message of messages) {
@@ -63,6 +63,14 @@ export function toLlmMessages(messages: AgentMessage[]): Message[] {
       out.push({
         role: "user",
         content: [{ type: "text", text: notificationText(message) }],
+        timestamp: message.timestamp,
+      });
+      continue;
+    }
+    if (message.role === "context") {
+      out.push({
+        role: "user",
+        content: [{ type: "text", text: message.body }],
         timestamp: message.timestamp,
       });
       continue;

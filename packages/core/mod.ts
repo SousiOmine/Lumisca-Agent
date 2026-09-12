@@ -23,6 +23,10 @@ export type {
   NotificationPayload,
   NotificationStatus,
 } from "./types/notification.ts";
+export type {
+  ContextProvider,
+  ContextUpdate,
+} from "./agent/context-providers.ts";
 export type { ModeMessage, ModePrompt } from "./types/mode-message.ts";
 export { Agent, type AgentDefaults, type AgentInit } from "./ai/agent.ts";
 export { LumiscaModels, type LumiscaModelsOptions } from "./ai/models.ts";
@@ -45,6 +49,7 @@ export type {
   AgentMessage,
   AgentTool,
   AssistantMessage,
+  ContextMessage,
   ImageContent,
   Message,
   ModelCompat,

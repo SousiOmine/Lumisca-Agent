@@ -34,9 +34,11 @@ export function createToolCallTool(
     name: TOOL_CALL,
     label: "Tool Call",
     description:
-      "Execute a tool found with tool_search, by its exact name. Pass the " +
-      "arguments the search result described. Unknown names fail — search " +
-      "first. The result is prefixed with the tool name.",
+      "Execute a tool found with tool_search, by its exact name, with the " +
+      "arguments its search result describes. The result is prefixed with " +
+      "`[<tool name>]` so the output stays attributed. An unknown name " +
+      "fails with `Unknown tool <name>. Use tool_search to find available " +
+      "tools.`",
     parameters: toolCallSchema,
     async execute(toolCallId, params, signal): Promise<ToolResult> {
       const result = await getRegistry().call(

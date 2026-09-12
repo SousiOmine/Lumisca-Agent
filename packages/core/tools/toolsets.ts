@@ -11,6 +11,7 @@ import { createAsyncBashTools } from "./background.ts";
 import type { BackgroundProcessManager } from "./background.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import { createEvalTool } from "./eval.ts";
+import { createPresentTool } from "./present.ts";
 import type { Tool } from "./schema.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
@@ -31,10 +32,12 @@ import type { CommandSafety } from "../safety/command-safety.ts";
  * advertised when a browser backend is attached to the session, so a
  * session that can never run browser tools does not point the agent at
  * them. Undefined → the browser skill is not advertised (callers that
- * know the backend state must say so). */
+ * know the backend state must say so). `globalDirs` overrides the global
+ * skills directory (~/.agents/skills); tests pass a fixture directory so
+ * they never read the developer's own skills. */
 export function sessionSkills(
   folders: string[],
-  options: { browserAvailable?: boolean } = {},
+  options: { browserAvailable?: boolean; globalDirs?: string[] } = {},
 ): SkillDef[] {
   const plugins = discoverPlugins(folders);
   return discoverSkills(folders, {
@@ -42,6 +45,7 @@ export function sessionSkills(
     builtinSkills: builtinSkills({
       browser: options.browserAvailable === true,
     }),
+    globalDirs: options.globalDirs,
   });
 }
 
@@ -115,6 +119,7 @@ export function createCodingTools(
       })
       : []),
     createEvalTool({ safety: options.safety }),
+    createPresentTool({ sandbox }),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
         browserAvailable: options.browserAvailable,

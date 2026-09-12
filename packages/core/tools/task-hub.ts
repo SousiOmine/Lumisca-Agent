@@ -362,7 +362,7 @@ export class TaskHub {
       id,
       parentId,
       type,
-      canDelegate,
+      tools.map((tool) => tool.name),
     );
     const systemPrompt = searchable.length > 0
       ? appendMcpToolsNote(basePrompt)

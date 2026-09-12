@@ -429,6 +429,116 @@
   text-decoration: line-through;
 }
 
+/* The session's deliverables (the present tool), stacked under the todo
+ * panel. A rounded card that follows the theme tokens; hidden by the
+ * component while the list is empty. */
+.deliverables-panel {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px var(--shadow);
+  overflow: hidden;
+  font-size: 12px;
+  animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+.deliverables-panel-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.deliverables-panel-header:hover {
+  background: var(--accent-soft);
+}
+
+.deliverables-panel-title {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.deliverables-panel-summary {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.deliverables-panel-body {
+  border-top: 1px solid var(--border);
+  max-height: min(50vh, 360px);
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deliverable-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deliverable-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  text-align: left;
+  min-width: 0;
+}
+
+.deliverable-path:hover {
+  text-decoration: underline;
+}
+
+.deliverable-path-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.deliverable-copy-icon {
+  flex: none;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.deliverable-path:hover .deliverable-copy-icon {
+  opacity: 1;
+}
+
+.deliverable-copied {
+  flex: none;
+  color: var(--ok);
+  opacity: 1;
+}
+
+.deliverable-description {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 /* ---- agent questions (ask tool) ------------------------------------------ */
 
 .question-panel {

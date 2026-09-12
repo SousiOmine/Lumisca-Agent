@@ -22,10 +22,10 @@
 ## core内部
 
 - `LumiscaCore`：薄いファサード＋コンポジションルート（コンストラクタで全協調者を束縛、テスト時は差替可）。
-- `agent/`：`SessionAgent`（プロンプト・タイトル・MCP・通知）＋ `RetryManager`（空応答／429リトライ）＋ `GoalRunner`（自律ゴールループ）＋ `AgentFactory`（配線）＋ `SessionPool`（ライフサイクル）。
+- `agent/`：`SessionAgent`（プロンプト・タイトル・MCP・通知）＋ `RetryManager`（空応答／429リトライ）＋ `GoalRunner`（自律ゴールループ）＋ `AgentFactory`（配線）＋ `SessionPool`（ライフサイクル）。`agent/context-providers.ts` の**動的コンテキスト**（スキルカタログ・AGENTS.md）はプロンプトではなく `context` メッセージとして履歴に積み、値が変わったときだけ再発行する（DSHの`PromptContext`相当）。
 - `ai/rate-limit.ts`：429判定・バックオフ・リトライループの唯一の実装（トランスポート／セッション／サブエージェントが共有）。`agent/llm-retry.ts` はそこへ委譲するassistantメッセージ版。
 - `goal/loop.ts`：`runGoalLoop`＋`finishGoal`（全終了パス統一）。
-- `tools/system-prompt.ts`：coding／chatプロンプトは `sharedGuidelines` を共有。
+- `tools/prompt-sections.ts`：システムプロンプトのガイドライン節。各節は `requires`（必要なツール名）を持ち、**そのセッションが実際に持つツールの節だけ**が描画される。ツールの `description` は「1コールの契約＋失敗マーカー」、横断的な振る舞い規範はここ、という分担（`tools/system-prompt.ts` は組み立てだけ）。
 - `tools/gitignore.ts`：`loadCachedGitignore(sandbox)` が `.gitignore` の解析結果をSandbox単位でキャッシュする（stamp不一致＝ファイル変更で再読込）。
 - `shared/`：フロント安全ヘルパー（esbuildでwebバンドルに取込）。`misc.ts` は errors／json／text／models／bootstrap／async の節分け。
 - `shared/context-usage.ts`：コンテキストメーターの唯一の計算実装。`Usage.input` は**未キャッシュ**のプロンプト入力で、1ターンのプロンプトは `input + cacheRead + cacheWrite`（`ai/types.ts` の契約。ここを混同するとメーターが2倍に膨らむ）。

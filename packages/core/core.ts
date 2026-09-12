@@ -98,6 +98,10 @@ export class LumiscaCore {
    * undefined in plain server mode — the agent then gets no browser
    * tools. Attached by the server (server/mod.ts) before sessions open. */
   private browserBackend: BrowserBackend | undefined;
+  /** Global skills directory override (see SessionPoolDeps): tests pass an
+   * empty list so a fixture's skill catalog never depends on the machine
+   * the tests run on. */
+  private readonly globalSkillDirs: string[] | undefined;
   private readonly listeners = new Set<(event: ClientEvent) => void>();
 
   private constructor(
@@ -113,8 +117,10 @@ export class LumiscaCore {
       pool?: SessionPool;
       mcp?: McpService;
       workspaces?: WorkspaceService;
+      globalSkillDirs?: string[];
     } = {},
   ) {
+    this.globalSkillDirs = overrides.globalSkillDirs;
     this.db = db;
     this.settings = settings;
     this.credentials = createDbCredentialStore(this.settings);
@@ -146,8 +152,12 @@ export class LumiscaCore {
       renameSession: (id, name) => this.setSessionName(id, name),
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
-      buildGeneratedPrompt: (workspace, model, browserAvailable) =>
-        this.buildGeneratedPrompt(workspace, model, browserAvailable),
+      buildGeneratedPrompt: (workspace, model, tools) =>
+        this.buildGeneratedPrompt(workspace, model, tools),
+      personalInstructions: () => {
+        const personal = this.personalization.get();
+        return personal.path === "" ? undefined : personal;
+      },
       updateSystemPrompt: (id, systemPrompt) =>
         this.sessions.updateSystemPrompt(id, systemPrompt),
       streamFn,
@@ -176,6 +186,7 @@ export class LumiscaCore {
       requireWorkspace: (id) => this.requireWorkspace(id),
       emit: (event) => this.emit(event),
       browser: () => this.browserBackend,
+      globalSkillDirs: this.globalSkillDirs,
     });
     this.mcp = overrides.mcp ?? new McpService({
       settings: this.settings,
@@ -214,11 +225,16 @@ export class LumiscaCore {
     );
   }
 
-  /** Test-only: in-memory core with extra providers (e.g. the faux provider). */
+  /** Test-only: in-memory core with extra providers (e.g. the faux
+   * provider). Global skill discovery is disabled: a test's skill catalog
+   * must come from its own fixture, never from the machine running it (the
+   * developer's `~/.agents/skills` would otherwise change what the model
+   * sees). */
   static forTesting(extraProviders: Provider[] = []): LumiscaCore {
     const core = new LumiscaCore(
       LumiscaDb.openInMemory(),
       createInMemorySettingsRepo(),
+      { globalSkillDirs: [] },
     );
     for (const provider of extraProviders) {
       core.models.models.setProvider(provider);
@@ -514,27 +530,22 @@ export class LumiscaCore {
       ? this.requireWorkspace(input.workspaceId)
       : this.getOrCreateChatWorkspace();
     const model = this.resolveDefaultModel(input.modelProvider, input.modelId);
-    // Generated prompts are snapshotted here, at creation time (workspace
-    // AGENTS.md + environment + personalization included), and stored with
-    // the session: later edits to either AGENTS.md must not affect it. The
-    // built-in web-browser skill is included only when a browser backend is
-    // attached (browser tools are discoverable only then).
-    const systemPrompt = this.buildGeneratedPrompt(
-      workspace,
-      model,
-      this.browserBackend !== undefined,
-    );
+    // The system prompt is generated (and persisted) when the session is
+    // opened below: it depends on the tool set the session actually gets,
+    // which only the agent factory knows.
     const session = this.sessions.create({
       workspaceId: workspace.id,
       name: input.name ?? formatSessionName(),
       modelProvider: model.provider,
       modelId: model.modelId,
-      systemPrompt,
     });
     this.pool.open(session, workspace, []);
     // The event carries the decorated session (chat flag etc.), the same
     // shape every other SessionInfo consumer sees — never the raw row.
-    const decorated = this.decorateSession(session);
+    // Re-read it: opening generated and persisted the system prompt.
+    const decorated = this.decorateSession(
+      this.sessions.get(session.id) ?? session,
+    );
     this.emit({ type: "session_created", session: decorated });
     return decorated;
   }
@@ -891,19 +902,20 @@ export class LumiscaCore {
     return this.workspaces.require(id);
   }
 
-  /** The full generated system prompt for a workspace: base prompt +
-   * environment section + project memory (workspace AGENTS.md) +
-   * personalization (machine AGENTS.md, appended last). Chat workspaces
-   * (folder-less, "simple chat") get the chat variant instead — no
-   * workspace framing, matching their tool set. `model` fills in the
-   * environment section's model line. `browserAvailable` gates the
-   * built-in web-browser skill in the prompt's <available_skills>
-   * listing: only sessions with a browser backend attached (which can
-   * actually run the browser tools) get it. */
+  /** The generated system prompt for a workspace: who the agent is, the
+   * folders it may touch, the machine it runs on, and the guidelines of the
+   * tools it has. Chat workspaces (folder-less, "simple chat") get the chat
+   * variant instead — no workspace framing, matching their tool set.
+   * `model` fills in the environment section's model line; `tools` are the
+   * session's preloaded tool names, which decide which guideline sections
+   * render. Workspace instructions (AGENTS.md) and the machine-level
+   * personal instructions are NOT part of this string: they are published
+   * as dynamic context messages (see agent/context-providers), so an edit
+   * reaches a session that is already open. */
   private buildGeneratedPrompt(
     workspace: Workspace,
     model?: { provider: string; modelId: string },
-    browserAvailable = false,
+    tools: readonly string[] = [],
   ): string {
     const resolved = model
       ? {
@@ -911,11 +923,9 @@ export class LumiscaCore {
         name: this.models.getModel(model.provider, model.modelId)?.name,
       }
       : undefined;
-    const personal = this.personalization.load();
-    if (workspace.chat) {
-      return buildChatSystemPrompt(personal, resolved, browserAvailable);
-    }
-    return buildSystemPrompt(workspace, personal, resolved, browserAvailable);
+    return workspace.chat
+      ? buildChatSystemPrompt({ tools, model: resolved })
+      : buildSystemPrompt(workspace, { tools, model: resolved });
   }
 
   /** Resolve the model for a new session: explicit choice, else the

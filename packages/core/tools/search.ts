@@ -88,12 +88,13 @@ export function createGrepTool(
   return {
     name: TOOL_GREP,
     label: "Grep",
-    description:
-      "Search file contents within the workspace using a regular expression. " +
-      "Files matched by .gitignore are skipped; set `gitignore` to false to " +
-      "search them too. Matches are returned as path:line: text. Binary " +
-      "files, files larger than 8MB, and build-artifact/VCS directories " +
-      "(.git, dist, build, target, ...) are skipped.",
+    description: "Search file contents within the workspace using a regular " +
+      "expression. Files matched by .gitignore are skipped; set `gitignore` " +
+      "to false to search them too. Matches are returned as path:line: " +
+      "text. Binary files, files larger than 8MB, and build-artifact/VCS " +
+      "directories (.git, dist, build, target, ...) are skipped. Results are " +
+      "capped: a capped result ends with `[maximum of N matches reached]` " +
+      "and/or `[matches truncated to the last 65536 bytes]`.",
     parameters: grepSchema,
     execute: async (_id, params) => {
       if (params.pattern.length > MAX_GREP_PATTERN_CHARS) {
@@ -279,11 +280,13 @@ export function createGlobTool(
     name: TOOL_GLOB,
     label: "Glob",
     description:
-      "Find files by path pattern within the workspace. Supports `**`, `*`, `?` and `{a,b}`. " +
-      "Files matched by .gitignore are skipped; set `gitignore` to false to " +
-      "search them too. Hidden files are searched; set `hidden` to false to " +
-      "skip them. Build-artifact/VCS directories (.git, dist, build, " +
-      "target, ...) are always skipped.",
+      "Find files by path pattern within the workspace. Supports `**`, `*`, " +
+      "`?` and `{a,b}`. Files matched by .gitignore are skipped; set " +
+      "`gitignore` to false to search them too. Hidden files are searched; " +
+      "set `hidden` to false to skip them. Build-artifact/VCS directories " +
+      "(.git, dist, build, target, ...) are always skipped. Results are " +
+      "capped: a capped result ends with `[maximum of N paths reached]` " +
+      "and/or `[paths truncated to the last 65536 bytes]`.",
     parameters: globSchema,
     execute: async (_id, params) => {
       if (params.pattern.length > MAX_GLOB_PATTERN_CHARS) {

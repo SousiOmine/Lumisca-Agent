@@ -43,11 +43,13 @@ export function createTaskTool(
     name: TOOL_TASK,
     label: "Task",
     description:
-      "Start a sub-agent that works on one job in the background while you " +
-      "continue with other work. Returns immediately with the agent id. " +
-      'The result arrives later as a "[Task ...]" notification; use ' +
-      "task_output to check progress, or wait: true when your next step " +
-      "depends on the result. Reach a running sub-agent with send_message.",
+      "Start a sub-agent on one self-contained job and return its agent id " +
+      "immediately; the sub-agent runs in the background and does not see " +
+      "this conversation, so the prompt must carry every fact it needs. " +
+      "The result reports the agent id and the description. The sub-agent's " +
+      "outcome arrives later as a `[Task <id> ...]` notification; " +
+      "`task_output` reports it on demand. `subagent_type` is `general` " +
+      "(full coding tool set) or `explore` (read-only investigation).",
     parameters: taskSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       if (
@@ -107,9 +109,13 @@ export function createTaskOutputTool(
     name: TOOL_TASK_OUTPUT,
     label: "Task Output",
     description:
-      "Check a sub-agent started with task: its status and, when finished, " +
-      "its final report; while running, the tail of its live response. " +
-      "Use wait: true to block until it finishes.",
+      "Report one sub-agent started with the task tool: its status, and " +
+      "either its final report (once settled) or the tail of its live " +
+      "response (while running). `wait: true` blocks until the agent " +
+      "settles or `timeout_sec` elapses. A report that ends inside a " +
+      "tool-call block carries a `[warning]` that it never executed " +
+      "completely; a failed run keeps whatever it produced under " +
+      "`[partial output before the failure]`.",
     parameters: taskOutputSchema,
     async execute(_toolCallId, params, signal): Promise<ToolResult> {
       const timeoutSec = params.timeout_sec ?? 30;
@@ -149,11 +155,12 @@ export function createSendMessageTool(
     name: TOOL_SEND_MESSAGE,
     label: "Send Message",
     description:
-      "Send a message to another agent (the main agent or a sub-agent " +
-      'started with task). The recipient sees it as a "[Message from ' +
-      '...]" notification on its next step. Use "parent" as the id to ' +
-      "reach the agent that started this one. This only delivers the " +
-      "message; replies arrive as messages from the other side.",
+      "Send a message to another agent of this session (the main agent or a " +
+      "sub-agent started with the task tool). `to` is the agent id, or " +
+      '"parent" to reach the agent that started this one. The recipient ' +
+      'sees it as a "[Message from ...]" notification on its next step. ' +
+      "The call only delivers the message and reports the recipient; any " +
+      "answer arrives separately as a message from the other side.",
     parameters: sendMessageSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       const { deliveredTo } = hub.sendMessage(

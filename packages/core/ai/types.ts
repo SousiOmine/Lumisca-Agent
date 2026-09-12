@@ -164,14 +164,15 @@ export interface LlmMessage {
 
 // ---- agent message (the transcript, incl. Lumisca extras) --------------------
 
-/** The Lumisca transcript message: the pi-ai union plus the mode and
- * notification roles the agent loop injects. */
+/** The Lumisca transcript message: the pi-ai union plus the mode,
+ * notification and context roles the agent loop injects. */
 export type AgentMessage =
   | UserMessage
   | AssistantMessage
   | ToolResultMessage
   | ModeMessage
-  | NotificationMessage;
+  | NotificationMessage
+  | ContextMessage;
 
 export interface ModeMessage {
   role: "mode";
@@ -191,6 +192,31 @@ export interface NotificationMessage {
   title: string;
   body: string;
   status: "success" | "error" | "neutral";
+  timestamp: number;
+}
+
+/**
+ * A durable snapshot of dynamic context (agent/context-providers): the
+ * session's skill catalog, or the workspace instruction files. It is
+ * appended to the transcript when the underlying context changes — and only
+ * then — so the model always works from the current value while the system
+ * prompt stays free of per-session data (the DeepSeek Harness's
+ * `PromptContext`; see toLlmMessages for the model-facing text).
+ */
+export interface ContextMessage {
+  role: "context";
+  /** Provider that published it ("skills", "instructions"). */
+  provider: string;
+  /** Head line: the UI row label (the body carries the framing the model
+   * reads, so the title never has to be model-facing prose). */
+  title: string;
+  /** Model-facing text. */
+  body: string;
+  /** Provider-specific snapshot state, handed back to the provider's
+   * `rebase()` when the transcript is re-read (session reopen, rewind) so a
+   * reopened session neither republishes an unchanged value nor loses track
+   * of what the history already carries. */
+  state?: unknown;
   timestamp: number;
 }
 

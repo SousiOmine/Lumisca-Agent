@@ -24,18 +24,25 @@ export type { ConversationTurnData } from "./types.ts";
  * the run ends. */
 export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   const turns: ConversationTurnData[] = [];
+  // Context snapshots published before the session's first prompt belong to
+  // that first turn: they are part of the run it started, not a turn of
+  // their own.
+  let pending: AgentMessage[] = [];
   for (const message of messages) {
     if (message.role === "user" || message.role === "mode") {
-      turns.push({ user: message, responses: [] });
+      turns.push({ user: message, responses: pending });
+      pending = [];
       continue;
     }
     if (message.role === "notification") {
       if (message.kind === "retry") continue;
-      turns.push({ user: message, responses: [] });
+      turns.push({ user: message, responses: pending });
+      pending = [];
       continue;
     }
     const current = turns.at(-1);
     if (current) current.responses.push(message);
+    else pending.push(message);
   }
   return turns;
 }

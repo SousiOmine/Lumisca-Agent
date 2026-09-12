@@ -19,6 +19,7 @@ export type {
   CatalogStatus,
   ClientEvent,
   ConnectionEntry,
+  ContextMessage,
   GoalInfo,
   McpInfo,
   McpServerInfo,

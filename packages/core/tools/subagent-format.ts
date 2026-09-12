@@ -6,52 +6,33 @@ import type {
 } from "../types/notification.ts";
 import type { SubagentType, TaskInfo } from "../shared/mod.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
+import {
+  EXPLORE_SUBAGENT_SECTIONS,
+  GENERAL_SUBAGENT_SECTIONS,
+  renderPromptSections,
+} from "./prompt-sections.ts";
 
-/** The system prompt of one sub-agent. Teaches the notification prefixes so
- * injected messages are never mistaken for user input, and the agent ids so
- * send_message can address the right agent. */
+/** The system prompt of one sub-agent: its identity (ids and role, which
+ * only the caller knows) plus the guidelines of its kind, pruned to the
+ * tools it actually has (see prompt-sections). */
 export function subagentSystemPrompt(
   agentId: string,
   parentId: string,
   type: SubagentType,
-  canDelegate: boolean,
+  tools: readonly string[],
 ): string {
   const role = type === "explore" ? "research" : "coding";
-  const lines = [
-    `You are a ${role} sub-agent of Lumisca, started by agent ${parentId} ` +
-    `to handle one piece of work. Your own id is ${agentId}.`,
-    `Work on the assigned task and answer with a complete final report as ` +
-    `your last message.`,
-    `- A message starting with "[Message from ...]" is a message from ` +
-    `another agent, not from the user: answer it with send_message or ` +
-    `fold it into your work.`,
-    `- If you need input mid-task, send a message to ${parentId} with ` +
-    `send_message. You cannot ask the user directly.`,
-  ];
-  if (type === "explore") {
-    lines.push(
-      `- You are read-only: investigate with read/grep/glob/list_dir/skill ` +
-        `and report findings with file references (path:line). Never modify ` +
-        `files or run commands.`,
-      `- Be thorough before concluding: the parent agent relies on your ` +
-        `report.`,
-    );
-  } else {
-    if (canDelegate) {
-      lines.push(
-        `- You can delegate independent work to further sub-agents with the ` +
-          `task tool: they start in the background, so keep working while ` +
-          `they run. Their completion arrives as a "[Task ...]" ` +
-          `notification, or use task_output (wait: true) when your next ` +
-          `step depends on the result.`,
-      );
-    }
-    lines.push(
-      `- Make the final report self-contained: what you did, what you ` +
-        `found, and what remains open.`,
-    );
-  }
-  return lines.join("\n");
+  const sections = type === "explore"
+    ? EXPLORE_SUBAGENT_SECTIONS
+    : GENERAL_SUBAGENT_SECTIONS;
+  return `You are a ${role} sub-agent of Lumisca, started by agent ${parentId} ` +
+    `to handle one piece of work. Your own id is ${agentId}.
+Work on the assigned task and answer with a complete final report as your last message.
+If you need input mid-task, send a message to ${parentId} with send_message. You cannot ask the user directly.
+
+Guidelines:
+${renderPromptSections(sections, tools)}
+`;
 }
 
 /** The text of the final assistant message of a finished sub-agent run. */

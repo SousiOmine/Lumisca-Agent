@@ -45,19 +45,22 @@ export interface SessionPersistence {
   messageRepo: MessageRepo;
   /** Persist a new session title and notify clients. */
   renameSession(id: string, name: string): void;
-  /** Full generated system prompt for a workspace (project memory +
-   * personalization included); used only for legacy sessions that predate
-   * prompt snapshots. `model` fills in the environment section.
-   * `browserAvailable` gates the built-in web-browser skill in the
-   * prompt's <available_skills> listing, like the snapshot path in
-   * LumiscaCore.createSession. */
+  /** Full generated system prompt for a workspace; used once per session,
+   * the first time it is opened (the stored snapshot is reused
+   * afterwards). `model` fills in the environment section, `tools` are the
+   * session's preloaded tool names — the guidelines render only the
+   * sections whose tools the session has. */
   buildGeneratedPrompt(
     workspace: Workspace,
     model?: { provider: string; modelId: string },
-    browserAvailable?: boolean,
+    tools?: readonly string[],
   ): string;
   /** Persist a rebuilt system prompt (legacy-session migration). */
   updateSystemPrompt(id: string, systemPrompt: string): void;
+  /** The machine-level AGENTS.md (path + current content), or undefined
+   * when none is configured: published as dynamic context together with
+   * the workspace instruction files. */
+  personalInstructions?: () => { path: string; content: string } | undefined;
   /** Session-bound goal persistence (the sessions table). The pool binds
    * these to one session when building its agent; the agent's loop calls
    * them to persist progress shown in the right-side panel. */
@@ -96,6 +99,10 @@ export interface AgentRuntime {
    * no browser tools. A getter so a backend attached after the pool was
    * built still reaches new agents. */
   browser?: () => BrowserBackend | undefined;
+  /** Global skills directory override (default ~/.agents/skills).
+   * LumiscaCore.forTesting passes an empty list, so a test's skill catalog
+   * is built from its own fixture only. */
+  globalSkillDirs?: string[];
 }
 
 /** Everything the pool needs to build and manage agents, injected by

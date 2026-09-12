@@ -59,6 +59,23 @@ function textsOf(messages: AgentMessage[]): string[] {
     .map((m) => (m.content[0] as { text: string }).text);
 }
 
+/** The context messages (dynamic context snapshots) a session published
+ * for one provider, in transcript order. */
+function contextMessages(
+  agent: { messages: AgentMessage[] },
+  provider: string,
+): Array<Extract<AgentMessage, { role: "context" }>> {
+  return agent.messages.filter(
+    (m): m is Extract<AgentMessage, { role: "context" }> =>
+      m.role === "context" && m.provider === provider,
+  );
+}
+
+/** The instruction context messages of a session (AGENTS.md + personal). */
+function instructionsMessages(agent: { messages: AgentMessage[] }) {
+  return contextMessages(agent, "instructions");
+}
+
 Deno.test("workspace creation resolves folders and rejects missing ones", async () => {
   const { core } = setup();
   const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
@@ -1204,8 +1221,8 @@ Deno.test("thinking level change while streaming applies from the next run witho
   core.close();
 });
 
-Deno.test("generated system prompt is snapshotted at creation, not rebuilt on reopen", async () => {
-  const { core, faux: _faux, providerId, modelId } = setup();
+Deno.test("workspace instructions are context messages, not prompt text, and edits reach an open session", async () => {
+  const { core, faux, providerId, modelId } = setup();
   const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
   await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 2.\n");
   const ws = await core.createWorkspace("ws", [root]);
@@ -1216,34 +1233,75 @@ Deno.test("generated system prompt is snapshotted at creation, not rebuilt on re
     modelId,
   });
   const agent = core.getAgent(session.id)!;
-  assertEquals(agent.agent.state.systemPrompt.includes("Use Deno 2."), true);
+  const prompt = agent.agent.state.systemPrompt;
+  assertEquals(
+    prompt.includes("Use Deno 2."),
+    false,
+    "AGENTS.md must not be baked into the prompt",
+  );
+  assertEquals(prompt.includes("Project memory"), false);
 
-  // Editing AGENTS.md must NOT affect the existing session: the prompt is
-  // a snapshot taken at creation and reused verbatim on reopen.
+  // The first run publishes the instruction baseline as a context message,
+  // before the user message it belongs to.
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "first");
+  const published = instructionsMessages(agent);
+  assertEquals(published.length, 1);
+  assert(
+    published[0]!.body.includes("Use Deno 2."),
+    `baseline must carry the file: ${published[0]!.body}`,
+  );
+  assert(published[0]!.title.startsWith("Workspace instructions"));
+  const firstUser = agent.messages.findIndex((m) => m.role === "user");
+  assert(
+    agent.messages.findIndex((m) => m.role === "context") < firstUser,
+    "the context message must precede the run's user message",
+  );
+
+  // An edit reaches the open session: the next run publishes only the change.
   await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 3.\n");
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "second");
+  const updated = instructionsMessages(agent);
+  assertEquals(updated.length, 2);
+  assert(
+    updated[1]!.body.includes("Use Deno 3."),
+    `the update must carry the new content: ${updated[1]!.body}`,
+  );
+  assert(updated[1]!.title.startsWith("Instructions updated"));
+  assertEquals(
+    agent.agent.state.systemPrompt,
+    prompt,
+    "the instructions never touch the prompt snapshot",
+  );
+
+  // Reopening keeps the stored prompt and does not republish an unchanged
+  // instruction file.
   core.closeSession(session.id);
   await core.openSession(session.id);
   const reopened = core.getAgent(session.id)!;
+  assertEquals(reopened.agent.state.systemPrompt, prompt);
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "third");
   assertEquals(
-    reopened.agent.state.systemPrompt.includes("Use Deno 2."),
-    true,
-    "the creation-time snapshot must be kept on reopen",
-  );
-  assertEquals(
-    reopened.agent.state.systemPrompt.includes("Use Deno 3."),
-    false,
-    "AGENTS.md edits must not reach existing sessions",
+    instructionsMessages(reopened).length,
+    2,
+    "an unchanged instruction file must not be republished on reopen",
   );
 
-  // A session created after the edit picks up the new content.
+  // A session created after the edit starts from the current content.
   const fresh = core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  assertEquals(
-    core.getAgent(fresh.id)!.agent.state.systemPrompt.includes("Use Deno 3."),
-    true,
+  const freshAgent = core.getAgent(fresh.id)!;
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, fresh.id, "hello");
+  const freshBaseline = instructionsMessages(freshAgent);
+  assertEquals(freshBaseline.length, 1);
+  assert(
+    freshBaseline[0]!.body.includes("Use Deno 3."),
     "new sessions must read the current AGENTS.md",
   );
 
@@ -1251,7 +1309,7 @@ Deno.test("generated system prompt is snapshotted at creation, not rebuilt on re
   await removeDirRetry(root);
 });
 
-Deno.test("personalization (machine AGENTS.md) is appended last and frozen per session", async () => {
+Deno.test("personalization (machine AGENTS.md) is published with the workspace instructions", async () => {
   const faux = fauxProvider();
   const dir = await Deno.makeTempDir({ prefix: "lumisca-core-" });
   const core = LumiscaCore.open(
@@ -1275,34 +1333,52 @@ Deno.test("personalization (machine AGENTS.md) is appended last and frozen per s
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
   });
-  const prompt = core.getAgent(session.id)!.agent.state.systemPrompt;
-  assertEquals(prompt.includes("Workspace memory."), true);
-  assertEquals(prompt.includes("Answer in Japanese."), true);
+  const agent = core.getAgent(session.id)!;
+  const prompt = agent.agent.state.systemPrompt;
   assertEquals(
-    prompt.indexOf("Answer in Japanese.") > prompt.indexOf("Workspace memory."),
+    prompt.includes("Workspace memory."),
+    false,
+    "workspace instructions are dynamic context, not prompt text",
+  );
+  assertEquals(prompt.includes("Answer in Japanese."), false);
+
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "first");
+  const baseline = instructionsMessages(agent);
+  assertEquals(baseline.length, 1, "one baseline covers both files");
+  assert(baseline[0]!.body.includes("Workspace memory."));
+  assert(
+    baseline[0]!.body.includes("Answer in Japanese."),
+    "the personal file rides along with the workspace instructions",
+  );
+  assertEquals(
+    baseline[0]!.body.indexOf("Answer in Japanese.") >
+      baseline[0]!.body.indexOf("Workspace memory."),
     true,
-    "personalization must be appended after project memory",
+    "personalization must follow project memory",
   );
 
-  // Changing the file must not affect the existing session...
+  // An edit to the personal file reaches the open session...
   await Deno.writeTextFile(agentFile, "Answer in English.\n");
-  core.closeSession(session.id);
-  await core.openSession(session.id);
-  const reopenedPrompt = core.getAgent(session.id)!.agent.state.systemPrompt;
-  assertEquals(reopenedPrompt.includes("Answer in Japanese."), true);
-  assertEquals(reopenedPrompt.includes("Answer in English."), false);
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "second");
+  const updated = instructionsMessages(agent);
+  assertEquals(updated.length, 2);
+  assert(updated[1]!.body.includes("Answer in English."));
 
-  // ...but a new session picks it up.
+  // ...and a new session starts from the current content.
   const fresh = core.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
   });
-  assertEquals(
-    core.getAgent(fresh.id)!.agent.state.systemPrompt.includes(
-      "Answer in English.",
-    ),
-    true,
+  const freshAgent = core.getAgent(fresh.id)!;
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, fresh.id, "hello");
+  const freshBaseline = instructionsMessages(freshAgent);
+  assertEquals(freshBaseline.length, 1);
+  assert(
+    freshBaseline[0]!.body.includes("Answer in English."),
     "new sessions must read the current personalization",
   );
 
@@ -1692,12 +1768,13 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
       true,
       "system prompt must teach on-demand tool loading",
     );
-    // The built-in web-browser skill is advertised in the snapshot when a
-    // browser backend is attached at session creation.
+    // The built-in web-browser skill is advertised in the session's skill
+    // catalog (a context message published before the first run), not in
+    // the system prompt.
     assertEquals(
-      agent.agent.state.systemPrompt.includes("- web-browser:"),
-      true,
-      "the built-in web-browser skill must be listed with a backend attached",
+      agent.agent.state.systemPrompt.includes("web-browser"),
+      false,
+      "the prompt must stay free of per-session skill data",
     );
 
     // The model searches for the tool, then calls it through tool_call;
@@ -1717,6 +1794,20 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
       fauxAssistantMessage("Done."),
     ]);
     await promptSession(core, session.id, "Open the app in the browser");
+
+    // The skill catalog went in before the user message and lists the
+    // built-in browser skill.
+    const catalog = core.getAgent(session.id)!.messages.find(
+      (m) => m.role === "context" && m.provider === "skills",
+    );
+    assert(
+      catalog !== undefined && catalog.role === "context",
+      "expected a skill catalog message",
+    );
+    assert(
+      catalog.body.includes("- web-browser:"),
+      "the built-in web-browser skill must be listed with a backend attached",
+    );
 
     assertEquals(backend.opens.length, 1);
     assertEquals(backend.opens[0]!.url, "http://127.0.0.1:5173/");
@@ -2226,7 +2317,7 @@ Deno.test("ask tool blocks the run until the user answers, then continues", asyn
   core.close();
 });
 
-Deno.test("todo tool plans, updates, and auto-advances the plan", async () => {
+Deno.test("todo tool records the whole plan and replaces it on the next call", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const session = core.createSession({
@@ -2238,19 +2329,24 @@ Deno.test("todo tool plans, updates, and auto-advances the plan", async () => {
   faux.setResponses([
     fauxAssistantMessage([
       fauxToolCall("todo", {
-        action: "plan",
         phases: [{
           name: "実装",
-          tasks: ["調査する", "実装する", "テストする"],
+          tasks: [{ name: "調査する" }, { name: "実装する" }, {
+            name: "テストする",
+          }],
         }],
       }),
     ]),
     fauxAssistantMessage([
       fauxToolCall("todo", {
-        action: "update",
-        phase: "p1",
-        task: "t1",
-        status: "completed",
+        phases: [{
+          name: "実装",
+          tasks: [
+            { name: "調査する", status: "completed" },
+            { name: "実装する", status: "in_progress" },
+            { name: "テストする" },
+          ],
+        }],
       }),
     ]),
     fauxAssistantMessage("finished!"),
@@ -2260,7 +2356,7 @@ Deno.test("todo tool plans, updates, and auto-advances the plan", async () => {
   const unsubscribe = core.subscribe((event) => events.push(event));
   await promptSession(core, session.id, "Plan and track the work");
 
-  // Every mutation emitted a `todo` snapshot event for this session.
+  // Every call emitted a `todo` snapshot event for this session.
   const todoEvents = events.filter(
     (e): e is Extract<ClientEvent, { type: "todo" }> => e.type === "todo",
   );
@@ -2271,7 +2367,7 @@ Deno.test("todo tool plans, updates, and auto-advances the plan", async () => {
     ["実装する", "pending"],
     ["テストする", "pending"],
   ]);
-  // Completing the current task auto-advanced to the next pending one.
+  // The second call sent the whole plan again, with the new statuses.
   const updated = todoEvents.at(-1)!.todos[0]!.tasks.map((t) => [
     t.name,
     t.status,
@@ -2282,17 +2378,13 @@ Deno.test("todo tool plans, updates, and auto-advances the plan", async () => {
     ["テストする", "pending"],
   ]);
 
-  // The run saw the plan in the tool results and continued normally.
+  // The results report the counts back to the agent.
   const messages = core.getAgent(session.id)!.messages;
   const toolResults = messages.filter((m) => m.role === "toolResult");
   assertEquals(toolResults.length, 2);
   const firstResult = (toolResults[0] as { content: Array<{ text: string }> })
     .content[0]!.text;
-  assertEquals(
-    firstResult,
-    "Todo (1 phase, 3 tasks):\n[実装]\n" +
-      "  [ ] 調査する (pending)\n  [ ] 実装する (pending)\n  [ ] テストする (pending)",
-  );
+  assertEquals(firstResult, "Updated todo list: 3 pending.");
   const last = messages.at(-1) as { content: Array<{ text: string }> };
   assertEquals(last.content[0]!.text, "finished!");
 

@@ -30,10 +30,11 @@ export function createToolSearchTool(
     label: "Tool Search",
     description:
       "Find tools that are not preloaded into this session's context " +
-      "(MCP tools, extensions, the browser lab). Returns matching tools " +
-      "with their names, argument schemas and descriptions — then " +
-      "execute one with tool_call. Omit the query to list every " +
-      "available tool (names only).",
+      "(MCP tools, extensions, the browser lab) and return their names, " +
+      "argument schemas and descriptions; execute one with tool_call. " +
+      "Omitting the query lists every available tool by name. A query that " +
+      'matches nothing answers with `No tools match "<query>"` followed ' +
+      "by that listing, so a miss still shows what exists.",
     parameters: toolSearchSchema,
     execute: (
       _toolCallId,
