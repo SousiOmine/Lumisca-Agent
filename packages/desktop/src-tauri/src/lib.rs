@@ -7,7 +7,7 @@
 //! (the `lumisca://` protocol), [`update`] (auto-update), [`window`]
 //! (window navigation and the Win32 drag hack).
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::{Manager, WindowEvent};
 
 pub mod bridge;
@@ -18,6 +18,23 @@ pub mod server;
 pub mod server_log;
 pub mod update;
 pub mod window;
+
+/// Lock a `Mutex`, recovering the guard when the lock is poisoned.
+///
+/// Every lock in this shell guards plain state (window handles, child
+/// processes, progress counters) whose invariants do not span a panic, and a
+/// panic inside a Tauri command leaves the UI with no answer at all —
+/// recovering is strictly better than aborting. One implementation, so the
+/// policy cannot drift between call sites.
+pub(crate) trait LockRecover<T> {
+    fn lock_recover(&self) -> MutexGuard<'_, T>;
+}
+
+impl<T> LockRecover<T> for Mutex<T> {
+    fn lock_recover(&self) -> MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
 
 /// Result slot of the background local-server startup: the thread fills it
 /// with the page URL once the server answers `/api/health`.

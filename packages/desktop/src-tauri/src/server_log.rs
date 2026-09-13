@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
-use crate::AppState;
+use crate::{AppState, LockRecover};
 
 /// Lines kept in the in-memory tail surfaced to the UI.
 const SERVER_LOG_TAIL_LINES: usize = 500;
@@ -63,13 +63,13 @@ impl ServerLog {
     pub(crate) fn push(&self, stream: &'static str, text: String) {
         let line = format_line(&local_time_stamp(), stream, &text);
         {
-            let mut lines = self.lines.lock().unwrap_or_else(|e| e.into_inner());
+            let mut lines = self.lines.lock_recover();
             lines.push_back(line.clone());
             while lines.len() > SERVER_LOG_TAIL_LINES {
                 lines.pop_front();
             }
         }
-        if let Some(file) = self.file.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        if let Some(file) = self.file.lock_recover().as_mut() {
             let _ = writeln!(file, "{line}");
             let _ = file.flush();
         }
@@ -80,7 +80,7 @@ impl ServerLog {
     /// timestamp and stream, so stderr lines (where Deno prints uncaught
     /// errors) and the shell's own notes stand out.
     pub(crate) fn tail_text(&self) -> String {
-        let lines = self.lines.lock().unwrap_or_else(|e| e.into_inner());
+        let lines = self.lines.lock_recover();
         let mut out = String::new();
         for line in lines.iter() {
             out.push_str(line);
@@ -90,7 +90,7 @@ impl ServerLog {
     }
 
     pub(crate) fn clear(&self) {
-        self.lines.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.lines.lock_recover().clear();
     }
 }
 
@@ -184,11 +184,7 @@ pub(crate) fn trim_log_file(app: &AppHandle) {
 /// Push one captured server output line into the shared log.
 pub(crate) fn push(app: &AppHandle, stream: &'static str, text: String) {
     if let Some(state) = app.try_state::<AppState>() {
-        state
-            .server_log
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(stream, text);
+        state.server_log.lock_recover().push(stream, text);
     }
 }
 
@@ -206,23 +202,14 @@ pub(crate) fn note(app: &AppHandle, text: impl Into<String>) {
 /// previous instance's output).
 pub(crate) fn clear(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
-        state
-            .server_log
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
+        state.server_log.lock_recover().clear();
     }
 }
 
 /// Read the shared server log tail as text (for the bridge).
 pub(crate) fn tail(app: &AppHandle) -> String {
     app.try_state::<AppState>()
-        .map(|s| {
-            s.server_log
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .tail_text()
-        })
+        .map(|s| s.server_log.lock_recover().tail_text())
         .unwrap_or_default()
 }
 

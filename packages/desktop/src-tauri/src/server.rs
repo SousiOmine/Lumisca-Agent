@@ -15,7 +15,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::server_log;
 use crate::window::navigate_main;
-use crate::{AppState, StartupStatus, StartupTask};
+use crate::{AppState, LockRecover, StartupStatus, StartupTask};
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -79,12 +79,8 @@ pub(crate) struct LocalServerStatus {
 /// across polls.
 pub(crate) fn local_server_status(app: &AppHandle) -> LocalServerStatus {
     let state = app.state::<AppState>();
-    let tail = state
-        .server_log
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .tail_text();
-    let mut guard = state.local.lock().unwrap_or_else(|e| e.into_inner());
+    let tail = state.server_log.lock_recover().tail_text();
+    let mut guard = state.local.lock_recover();
     let Some(local) = guard.as_mut() else {
         return LocalServerStatus {
             liveness: ServerLiveness::None,
@@ -441,7 +437,7 @@ fn pump_server_stream(handle: &AppHandle, pipe: impl Read + Send + 'static, stre
 /// environment (and the agent no browser tools).
 fn browser_lab_env(app: &AppHandle) -> Option<(String, String)> {
     let state = app.state::<AppState>();
-    let guard = state.browser_lab.lock().unwrap_or_else(|e| e.into_inner());
+    let guard = state.browser_lab.lock_recover();
     let lab = guard.as_ref()?;
     Some(lab.endpoint())
 }
@@ -493,13 +489,7 @@ fn kill_process_tree(child: &mut Child) {
 /// — `reason` is what the captured log gets instead, so a post-mortem can
 /// tell this apart from a crash.
 pub(crate) fn stop_local_server(app: &AppHandle, reason: &str) {
-    if let Some(mut local) = app
-        .state::<AppState>()
-        .local
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .take()
-    {
+    if let Some(mut local) = app.state::<AppState>().local.lock_recover().take() {
         server_log::note(
             app,
             format!(
@@ -523,8 +513,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
     // run (different token -> 401).
     let stored = state
         .local
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .lock_recover()
         .as_ref()
         .map(|l| (l.port, l.token.clone(), l.child.id()));
     if let Some((port, token, pid)) = stored {
@@ -540,7 +529,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         // instead of killed — the banner's "サーバーを再起動" is the
         // explicit way to force a hung server down.
         let alive = {
-            let mut guard = state.local.lock().unwrap_or_else(|e| e.into_inner());
+            let mut guard = state.local.lock_recover();
             match guard.as_mut() {
                 Some(local) => matches!(local.child.try_wait(), Ok(None)),
                 None => false,
@@ -570,7 +559,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         );
         // The child is gone (or never started): drop it and reap its tree —
         // tool processes it spawned can outlive it.
-        if let Some(mut stale) = state.local.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        if let Some(mut stale) = state.local.lock_recover().take() {
             kill_process_tree(&mut stale.child);
         }
     }
@@ -611,7 +600,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
     }
     let port = server_port.ok_or_else(|| startup_error_message(&last_detail))?;
     let child = server_child.ok_or_else(|| startup_error_message(&last_detail))?;
-    *state.local.lock().unwrap_or_else(|e| e.into_inner()) = Some(LocalServer {
+    *state.local.lock_recover() = Some(LocalServer {
         child,
         port,
         token: token.clone(),
@@ -644,13 +633,7 @@ fn last_log_lines(text: &str, n: usize) -> String {
 /// so the UI can offer "再起動" on its connection-lost banner.
 pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
     server_log::note(app, "Restart requested from the page banner.");
-    if let Some(mut stale) = app
-        .state::<AppState>()
-        .local
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .take()
-    {
+    if let Some(mut stale) = app.state::<AppState>().local.lock_recover().take() {
         server_log::note(
             app,
             format!(
@@ -663,10 +646,7 @@ pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
     }
     // Forget a remote display: the restart is explicitly about the local
     // server, so the window must come back to it.
-    *app.state::<AppState>()
-        .last_remote
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = None;
+    *app.state::<AppState>().last_remote.lock_recover() = None;
     let url = ensure_local_server(app)?;
     navigate_main(app, &url)?;
     Ok(url)
@@ -678,10 +658,7 @@ pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
 /// progress ("starting" → "ready"/"error") for the splash to poll.
 pub(crate) fn start_local_server_async(app: &AppHandle) {
     let shared: StartupTask = Arc::new(Mutex::new(None));
-    *app.state::<AppState>()
-        .startup_task
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = Some(shared.clone());
+    *app.state::<AppState>().startup_task.lock_recover() = Some(shared.clone());
     let handle = app.clone();
     std::thread::spawn(move || {
         let result = ensure_local_server(&handle);
@@ -691,10 +668,9 @@ pub(crate) fn start_local_server_async(app: &AppHandle) {
         };
         {
             let state = handle.state::<AppState>();
-            *shared.lock().unwrap_or_else(|e| e.into_inner()) = Some(result.clone());
-            *state.startup_task.lock().unwrap_or_else(|e| e.into_inner()) = None;
-            *state.startup.lock().unwrap_or_else(|e| e.into_inner()) =
-                StartupStatus::new(status, error);
+            *shared.lock_recover() = Some(result.clone());
+            *state.startup_task.lock_recover() = None;
+            *state.startup.lock_recover() = StartupStatus::new(status, error);
         }
         if let Ok(url) = result {
             let handle = handle.clone();
@@ -705,8 +681,7 @@ pub(crate) fn start_local_server_async(app: &AppHandle) {
                 let remote = inside
                     .state::<AppState>()
                     .last_remote
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
+                    .lock_recover()
                     .is_some();
                 if !remote {
                     let _ = navigate_main(&inside, &url);

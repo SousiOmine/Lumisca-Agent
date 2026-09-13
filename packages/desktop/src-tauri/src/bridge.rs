@@ -32,7 +32,7 @@ use crate::update::{
     check_for_updates, download_update, install_update, set_auto_update, update_status_json,
 };
 use crate::window::navigate_main;
-use crate::{browser_lab, notify, AppState};
+use crate::{browser_lab, notify, AppState, LockRecover};
 
 /// JSON body of a lumisca://shell/* bridge response.
 type BridgeResponse = HttpResponse<Vec<u8>>;
@@ -66,19 +66,13 @@ fn current_connection_token(app: &AppHandle) -> Option<String> {
     let state = app.state::<AppState>();
     let remote = state
         .last_remote
-        .lock()
-        .unwrap()
+        .lock_recover()
         .as_ref()
         .map(|(_, t)| t.clone());
     if remote.is_some() {
         return remote;
     }
-    let local = state
-        .local
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|l| l.token.clone());
+    let local = state.local.lock_recover().as_ref().map(|l| l.token.clone());
     local
 }
 
@@ -119,10 +113,8 @@ fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String
         return Err(format!("サーバーに接続できません: {url}"));
     }
     let page = page_url(url, token);
-    *app.state::<AppState>()
-        .last_remote
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = Some((url.to_string(), token.to_string()));
+    *app.state::<AppState>().last_remote.lock_recover() =
+        Some((url.to_string(), token.to_string()));
     navigate_main(app, &page)?;
     Ok(page)
 }
@@ -130,16 +122,11 @@ fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String
 fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
     // If the background startup is still running, wait for its result
     // instead of spawning a second server instance.
-    let pending = app
-        .state::<AppState>()
-        .startup_task
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone();
+    let pending = app.state::<AppState>().startup_task.lock_recover().clone();
     if let Some(shared) = pending {
         let deadline = Instant::now() + CONNECT_LOCAL_WAIT_TIMEOUT;
         loop {
-            if let Some(result) = shared.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+            if let Some(result) = shared.lock_recover().clone() {
                 return result;
             }
             if Instant::now() >= deadline {
@@ -147,10 +134,7 @@ fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
                 // panicked and never filled the slot). Forget it so the
                 // next attempt starts a server directly instead of waiting
                 // again.
-                *app.state::<AppState>()
-                    .startup_task
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner()) = None;
+                *app.state::<AppState>().startup_task.lock_recover() = None;
                 return Err(
                     "サーバーの起動待機時間が超過しました。しばらく時間をおいてから再度お試しください。"
                         .into(),
@@ -160,10 +144,7 @@ fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
         }
     }
     let url = ensure_local_server(app)?;
-    *app.state::<AppState>()
-        .last_remote
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = None;
+    *app.state::<AppState>().last_remote.lock_recover() = None;
     navigate_main(app, &url)?;
     Ok(url)
 }
@@ -200,13 +181,8 @@ pub(crate) fn handle_shell_request(
     match action.as_str() {
         "state" => {
             let state = app.state::<AppState>();
-            let startup = state.startup.lock().unwrap_or_else(|e| e.into_inner());
-            let mode = if state
-                .last_remote
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .is_some()
-            {
+            let startup = state.startup.lock_recover();
+            let mode = if state.last_remote.lock_recover().is_some() {
                 "remote"
             } else {
                 "local"
@@ -214,15 +190,13 @@ pub(crate) fn handle_shell_request(
             let url = if mode == "remote" {
                 state
                     .last_remote
-                    .lock()
-                    .unwrap()
+                    .lock_recover()
                     .as_ref()
                     .map(|(u, t)| page_url(u, t))
             } else {
                 state
                     .local
-                    .lock()
-                    .unwrap()
+                    .lock_recover()
                     .as_ref()
                     .map(|l| page_url(&format!("http://127.0.0.1:{}", l.port), &l.token))
             };
