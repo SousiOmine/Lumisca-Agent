@@ -25,22 +25,27 @@
  * throwaway signing key); the release workflow leaves it out so every
  * published package is checked against the key servers actually carry.
  */
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import {
   type ArchiveFormat,
   extractArchive,
 } from "../packages/server/update/archive.ts";
 import { verifyFileSignature } from "../packages/server/update/verify.ts";
+import {
+  absolutePath,
+  createChecker,
+  parseOptions,
+  reportUsage,
+} from "./lib.ts";
 
 function usage(message?: string): never {
-  const stream = message === undefined ? console.log : console.error;
-  if (message !== undefined) console.error(`check-server-archive: ${message}`);
-  stream(
-    "usage: deno run --allow-read --allow-write scripts/check-server-archive.ts " +
+  reportUsage(
+    "check-server-archive",
+    "deno run --allow-read --allow-write scripts/check-server-archive.ts " +
       "--archive <path> --signature <path> --stage <dir> [--bin <name>] " +
       "[--public-key <base64>]",
+    message,
   );
-  Deno.exit(message === undefined ? 0 : 1);
 }
 
 interface Options {
@@ -52,37 +57,20 @@ interface Options {
 }
 
 function parseArgs(args: readonly string[]): Options {
-  const values = new Map<string, string>();
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
-    if (arg === "--help" || arg === "-h") usage();
-    if (!arg.startsWith("--")) usage(`unknown argument: ${arg}`);
-    const value = args[i + 1];
-    if (value === undefined || value.startsWith("--")) {
-      usage(`${arg} needs a value`);
-    }
-    values.set(arg.slice(2), value);
-    i++;
-  }
+  const values = parseOptions(args, usage);
   for (const key of ["archive", "signature", "stage"] as const) {
     if (!values.has(key)) usage(`--${key} is required`);
   }
-  const absolute = (path: string) =>
-    isAbsolute(path) ? path : resolve(Deno.cwd(), path);
   return {
-    archive: absolute(values.get("archive")!),
-    signature: absolute(values.get("signature")!),
-    stage: absolute(values.get("stage")!),
+    archive: absolutePath(values.get("archive")!),
+    signature: absolutePath(values.get("signature")!),
+    stage: absolutePath(values.get("stage")!),
     bin: values.get("bin"),
     publicKey: values.get("public-key"),
   };
 }
 
-const failures: string[] = [];
-function check(name: string, ok: boolean, detail = ""): void {
-  console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
-  if (!ok) failures.push(name);
-}
+const { check, failures } = createChecker();
 
 const options = parseArgs(Deno.args);
 const archiveName = basename(options.archive);

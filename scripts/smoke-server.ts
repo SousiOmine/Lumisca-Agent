@@ -19,14 +19,17 @@
  * afterwards verify). Running from a copy also matches what a user does with
  * the downloaded package.
  */
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, dirname, join } from "node:path";
 import { SERVER_STARTUP_ENV_KEYS } from "../packages/server/startup.ts";
 import { installedFileNames } from "../packages/server/update/install.ts";
 import { SERVER_VERSION } from "../packages/server/version.ts";
-
-// This script lives in scripts/; the repo root is one level up.
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+import {
+  absolutePath,
+  binaryName,
+  createChecker,
+  repoRoot,
+  reportUsage,
+} from "./lib.ts";
 
 /** How long the server may take to answer /api/health (a cold packaged
  * server answers in well under a second; the budget covers a busy runner). */
@@ -36,16 +39,11 @@ const POLL_INTERVAL_MS = 250;
 const SHUTDOWN_TIMEOUT_MS = 5_000;
 
 function usage(message?: string): never {
-  const stream = message === undefined ? console.log : console.error;
-  if (message !== undefined) console.error(`smoke-server: ${message}`);
-  stream(
-    "usage: deno run --allow-all scripts/smoke-server.ts [--bin <path>]",
+  reportUsage(
+    "smoke-server",
+    "deno run --allow-all scripts/smoke-server.ts [--bin <path>]",
+    message,
   );
-  Deno.exit(message === undefined ? 0 : 1);
-}
-
-function binaryName(): string {
-  return Deno.build.os === "windows" ? "lumisca-server.exe" : "lumisca-server";
 }
 
 /** Staged release build for this host (see scripts/build-server.ts). */
@@ -78,7 +76,7 @@ function parseArgs(args: readonly string[]): string {
     }
   }
   if (bin === undefined) return defaultBinary();
-  return isAbsolute(bin) ? bin : resolve(Deno.cwd(), bin);
+  return absolutePath(bin);
 }
 
 const delay = (ms: number) => new Promise((done) => setTimeout(done, ms));
@@ -153,11 +151,7 @@ try {
   );
 }
 
-const failures: string[] = [];
-function check(name: string, ok: boolean, detail = "") {
-  console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
-  if (!ok) failures.push(name);
-}
+const { check, failures } = createChecker();
 
 const port = freePort();
 const base = `http://127.0.0.1:${port}`;

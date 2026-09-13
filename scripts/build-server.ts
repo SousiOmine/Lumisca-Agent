@@ -26,11 +26,8 @@
  * disagree about what an asset is.
  */
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { buildAssetsManifest } from "../packages/server/assets.ts";
-
-// This script lives in scripts/; the repo root is one level up.
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+import { binaryName, repoRoot, reportUsage } from "./lib.ts";
 
 /**
  * Permissions embedded into the compiled server. `deno compile` bakes them
@@ -57,13 +54,11 @@ interface Options {
 }
 
 function usage(message?: string): never {
-  const stream = message === undefined ? console.log : console.error;
-  if (message !== undefined) console.error(`build-server: ${message}`);
-  stream(
-    "usage: deno run --allow-all scripts/build-server.ts " +
-      "[--out <dir>] [--no-compile]",
+  reportUsage(
+    "build-server",
+    "deno run --allow-all scripts/build-server.ts [--out <dir>] [--no-compile]",
+    message,
   );
-  Deno.exit(message === undefined ? 0 : 1);
 }
 
 /** Where a standalone server package is staged by default: one directory
@@ -101,12 +96,6 @@ function parseArgs(args: readonly string[]): Options {
     ? out
     : resolve(Deno.cwd(), out);
   return { outDir, compile };
-}
-
-/** Name of the server binary for this platform (`deno compile` and the
- * desktop shell both expect the `.exe` suffix on Windows). */
-function binaryName(): string {
-  return Deno.build.os === "windows" ? "lumisca-server.exe" : "lumisca-server";
 }
 
 async function exists(path: string): Promise<boolean> {

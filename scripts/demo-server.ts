@@ -14,7 +14,6 @@
  * matching tool; anything else answers with markdown.
  */
 import { basename } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   type AssistantMessage,
   contentText,
@@ -27,6 +26,7 @@ import {
 } from "../packages/core/mod.ts";
 import { TOOL_BASH, TOOL_READ } from "../packages/core/shared/mod.ts";
 import { startServer } from "../packages/server/app.ts";
+import { repoRoot } from "./lib.ts";
 
 function parsePort(raw: string | undefined): number {
   if (raw === undefined) return 8000;
@@ -38,10 +38,6 @@ function parsePort(raw: string | undefined): number {
 }
 
 const PORT = parsePort(Deno.args[0]);
-/** This script lives in scripts/; the repository root is one level up.
- * The server resolves the web assets from here, so the demo also works
- * when the script is started from another working directory. */
-const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 /** Tool arguments are workspace-relative: the sandbox addresses a folder
  * by its directory name (`<folder>/<path>`), and `bash` takes the folder
  * as its required `cwd`. */

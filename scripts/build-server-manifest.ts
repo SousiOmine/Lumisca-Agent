@@ -20,7 +20,7 @@
  * `tauri signer sign` prints), so a manifest can be written without a `.sig`
  * file on disk.
  */
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   archiveAssetName,
   manifestAssetName,
@@ -28,16 +28,16 @@ import {
   releaseAssetUrl,
   releaseTargetFor,
 } from "../packages/server/update/release.ts";
+import { absolutePath, parseOptions, reportUsage } from "./lib.ts";
 
 function usage(message?: string): never {
-  const stream = message === undefined ? console.log : console.error;
-  if (message !== undefined) console.error(`build-server-manifest: ${message}`);
-  stream(
-    "usage: deno run --allow-read --allow-write scripts/build-server-manifest.ts " +
+  reportUsage(
+    "build-server-manifest",
+    "deno run --allow-read --allow-write scripts/build-server-manifest.ts " +
       "--archive <path> --signature <path|base64> --tag <vX.Y.Z> " +
       "--target <deno target> [--out <path>]",
+    message,
   );
-  Deno.exit(message === undefined ? 0 : 1);
 }
 
 interface Options {
@@ -49,30 +49,17 @@ interface Options {
 }
 
 function parseArgs(args: readonly string[]): Options {
-  const values = new Map<string, string>();
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
-    if (arg === "--help" || arg === "-h") usage();
-    if (!arg.startsWith("--")) usage(`unknown argument: ${arg}`);
-    const value = args[i + 1];
-    if (value === undefined || value.startsWith("--")) {
-      usage(`${arg} needs a value`);
-    }
-    values.set(arg.slice(2), value);
-    i++;
-  }
+  const values = parseOptions(args, usage);
   const required = ["archive", "signature", "tag", "target"] as const;
   for (const key of required) {
     if (!values.has(key)) usage(`--${key} is required`);
   }
-  const absolute = (path: string) =>
-    isAbsolute(path) ? path : resolve(Deno.cwd(), path);
   return {
-    archive: absolute(values.get("archive")!),
+    archive: absolutePath(values.get("archive")!),
     signature: values.get("signature")!,
     tag: values.get("tag")!,
     target: values.get("target")!,
-    out: values.has("out") ? absolute(values.get("out")!) : undefined,
+    out: values.has("out") ? absolutePath(values.get("out")!) : undefined,
   };
 }
 
@@ -102,9 +89,7 @@ if (assetName !== expected) {
 
 const resolvedSignature = await (async (): Promise<string> => {
   if (options.signature.includes("/") || options.signature.includes("\\")) {
-    const path = isAbsolute(options.signature)
-      ? options.signature
-      : resolve(Deno.cwd(), options.signature);
+    const path = absolutePath(options.signature);
     try {
       return (await Deno.readTextFile(path)).trim();
     } catch (error) {

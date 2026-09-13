@@ -19,11 +19,7 @@
  * Exits 1 and prints `::error::` annotations on any mismatch.
  */
 import { join } from "node:path";
-
-const repoRoot = new URL("..", import.meta.url).pathname.replace(
-  /^\/([A-Za-z]:)/,
-  "$1",
-);
+import { repoRoot } from "./lib.ts";
 
 interface Manifest {
   /** Path relative to the repository root. */
