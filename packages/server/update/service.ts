@@ -15,6 +15,7 @@
  * running server, a network, or a self-replacing binary.
  */
 import { UPDATE_AUTO_KEY, UPDATE_AUTO_RESTART_KEY } from "@lumisca/core/shared";
+import type { UpdateRestartMode } from "../startup.ts";
 import { SERVER_VERSION } from "../version.ts";
 import {
   applyStagedUpdate,
@@ -51,8 +52,9 @@ const SUCCESSOR_PORT_WAIT_MS = 15_000;
  * not hold the state machine forever. */
 const CHECK_TIMEOUT_MS = 30_000;
 
-/** How an update is activated (see startup.parseUpdateRestartMode). */
-export type UpdateRestartMode = "self" | "none";
+/** How an update is activated (see startup.parseUpdateRestartMode: the single
+ * definition of the modes, and of their `LUMISCA_UPDATE_RESTART` spelling). */
+export type { UpdateRestartMode };
 
 /** What the updater reports to the UI (also the shape of
  * `/api/update/status`). */
@@ -501,18 +503,33 @@ export class UpdateService {
     return Promise.resolve(this.status());
   }
 
+  /**
+   * Restart into the installed version, in the way this installation's launch
+   * contract says (startup.parseUpdateRestartMode):
+   *
+   * - `self`: hand over to a successor process this one spawns.
+   * - `supervisor`: exit cleanly and let the process supervisor (systemd, via
+   *   the unit's `Restart=always`) start the new binary. Spawning a successor
+   *   here would fight the supervisor: it lives in the same cgroup, so its own
+   *   restart logic would race a process the supervisor is about to start.
+   * - `none`: refuse (the operator restarts it).
+   */
   async #performRestart(): Promise<void> {
     try {
       await this.#options.shutdown?.();
-      (this.#options.spawnSuccessor ?? startSuccessor)({
-        execPath: this.#environment.execPath,
-        cwd: this.#options.cwd,
-        env: successorEnvironment(
-          this.#options.startupEnv,
-          this.#options.successorPortWaitMs ?? SUCCESSOR_PORT_WAIT_MS,
-        ),
-      });
-      // The successor owns the port from here on; this process is done.
+      if (this.#restartMode === "self") {
+        (this.#options.spawnSuccessor ?? startSuccessor)({
+          execPath: this.#environment.execPath,
+          cwd: this.#options.cwd,
+          env: successorEnvironment(
+            this.#options.startupEnv,
+            this.#options.successorPortWaitMs ?? SUCCESSOR_PORT_WAIT_MS,
+          ),
+        });
+      }
+      // The successor (or the supervisor) owns the port from here on; this
+      // process is done. Exit 0 either way: a supervisor's restart policy
+      // reacts to a clean stop, and the new version is already on disk.
       (this.#options.exit ?? Deno.exit)(0);
     } catch (error) {
       this.#patch({ restarting: false });

@@ -5,6 +5,7 @@ import {
   describeListenError,
   isAddressInUseError,
   isDesktopManaged,
+  parsePortValue,
   parsePortWaitMs,
   parseServerPort,
   parseUpdateRestartMode,
@@ -85,6 +86,9 @@ Deno.test("desktop mode and update switches are read strictly", () => {
   assertEquals(parseUpdateRestartMode("self"), "self");
   assertEquals(parseUpdateRestartMode("none"), "none");
   assertEquals(parseUpdateRestartMode("NONE"), "none");
+  // The service unit's mode: exit and let systemd start the new binary.
+  assertEquals(parseUpdateRestartMode("supervisor"), "supervisor");
+  assertEquals(parseUpdateRestartMode(" Supervisor "), "supervisor");
   assertEquals(parseUpdateRestartMode("false"), "self");
 });
 
@@ -131,6 +135,14 @@ Deno.test("parseServerPort accepts valid ports", () => {
 });
 
 Deno.test("parseServerPort rejects garbage and out-of-range values", () => {
+  // The service command validates `--port` with the same parser as
+  // LUMISCA_PORT, so the accepted range is one definition, not two.
+  assertEquals(parsePortValue("8100"), 8100);
+  assertEquals(parsePortValue(" 8100 "), 8100);
+  assertThrows(() => parsePortValue("0"), Error, "LUMISCA_PORT");
+  assertThrows(() => parsePortValue("65536"), Error, "LUMISCA_PORT");
+  assertThrows(() => parsePortValue(""), Error, "LUMISCA_PORT");
+  assertThrows(() => parsePortValue("abc"), Error, "LUMISCA_PORT");
   for (const raw of ["abc", "0", "-1", "65536", "80.5", "80x"]) {
     assertThrows(
       () => parseServerPort(raw, 8000),

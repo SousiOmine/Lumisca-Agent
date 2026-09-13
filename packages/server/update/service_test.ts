@@ -73,7 +73,7 @@ interface Harness {
 interface HarnessOptions {
   fixture: { publicKey: string; fetch: typeof fetch };
   settings?: Record<string, string>;
-  restartMode?: "self" | "none";
+  restartMode?: "self" | "supervisor" | "none";
   currentVersion?: string;
   versionCheck?: () => Promise<string>;
   overrides?: Partial<UpdateServiceOptions>;
@@ -254,6 +254,28 @@ Deno.test("a supervised installation is not restarted by the server", async () =
     // The update itself is applied: only the restart is skipped.
     assertEquals(status.restartPending, true);
     assertEquals(await Deno.readTextFile(join(dir, BINARY)), `binary-${NEXT}`);
+  });
+});
+
+Deno.test("under a supervisor the server exits and lets systemd start the new binary", async () => {
+  await withTempDir("lumisca-service-", async (dir) => {
+    await seedInstall(dir);
+    const fixture = await packageFixture();
+    const test = harness(dir, { fixture, restartMode: "supervisor" });
+    await test.service.check(true);
+    assertEquals(test.service.status().restartMode, "supervisor");
+
+    const status = await test.service.restart();
+    assertEquals(status.restarting, true);
+    await waitFor(() => test.exitCodes.length > 0);
+
+    // No successor is spawned: the new binary is already on disk, and the
+    // unit's Restart=always brings it up. Spawning here would race the
+    // supervisor in the same cgroup.
+    assertEquals(test.events, ["shutdown", "exit"]);
+    assertEquals(test.successors, []);
+    // A clean stop is what a supervisor's restart policy reacts to.
+    assertEquals(test.exitCodes, [0]);
   });
 });
 

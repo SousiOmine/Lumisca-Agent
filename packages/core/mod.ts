@@ -240,7 +240,7 @@ export {
   SAVED_PROMPTS_KEY,
   serializeSavedPrompts,
 } from "./shared/mod.ts";
-export { resolveSettingsPath } from "./settings/path.ts";
+export { resolveSettingsPath, SETTINGS_DIR_NAME } from "./settings/path.ts";
 export { CONNECTIONS_KEY } from "./shared/settings-keys.ts";
 export type { ConnectionEntry } from "./settings/connections.ts";
 export { formatModelMeta } from "./models/meta.ts";

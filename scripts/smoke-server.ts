@@ -93,6 +93,23 @@ function freePort(): number {
   return port;
 }
 
+/**
+ * The environment the `service` subcommand is checked with: the values a real
+ * operator has and the command legitimately reads (the rendered unit carries
+ * their paths), and nothing else — a LUMISCA_* value in the caller's
+ * environment must not leak into the check.
+ */
+function serviceEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (
+    const key of ["HOME", "USER", "USERPROFILE", "USERNAME"] as const
+  ) {
+    const value = Deno.env.get(key);
+    if (value !== undefined) env[key] = value;
+  }
+  return env;
+}
+
 /** Stop the server and wait for it: SIGTERM on POSIX (the server shuts
  * down gracefully), a tree kill on Windows (it has no signal handling
  * there, and tool processes must not outlive it). */
@@ -302,6 +319,48 @@ try {
       `status ${favicon.status}`,
     );
     await favicon.body?.cancel();
+
+    // The systemd unit template is a text import inlined by `deno compile`,
+    // so it must be inside the packaged binary: a build that dropped it would
+    // ship a server whose `service install` cannot produce a unit. `config`
+    // is the verb that only composes and prints (it never touches systemd),
+    // which makes it the checkable half of the feature on every platform.
+    const config = await new Deno.Command(binary, {
+      args: ["service", "config", "--defaults"],
+      env: serviceEnv(),
+      clearEnv: true,
+      stdin: "null",
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    const composed = new TextDecoder().decode(config.stdout);
+    check(
+      "service config renders the embedded unit template",
+      config.success &&
+        composed.includes("ExecStart=") &&
+        composed.includes("Restart=always") &&
+        composed.includes("EnvironmentFile=") &&
+        composed.includes("WantedBy=default.target"),
+      `status ${config.code}`,
+    );
+
+    // Outside Linux the residency feature must refuse, not half-install.
+    if (Deno.build.os !== "linux") {
+      const refused = await new Deno.Command(binary, {
+        args: ["service", "install"],
+        env: serviceEnv(),
+        clearEnv: true,
+        stdin: "null",
+        stdout: "piped",
+        stderr: "piped",
+      }).output();
+      const complaint = new TextDecoder().decode(refused.stderr);
+      check(
+        "service install refuses a platform without systemd",
+        refused.code === 2 && complaint.includes("Linux のみ対応"),
+        `status ${refused.code}`,
+      );
+    }
   }
 } finally {
   await stop(child, statusPromise);

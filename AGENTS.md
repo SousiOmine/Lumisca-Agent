@@ -15,9 +15,29 @@ LLMの接続にはVercel AI SDK(`ai` + `@ai-sdk/*`プロバイダー)を使用�
 
 - 配布レイアウト・URL・バージョン比較の単一情報源は `packages/server/update/release.ts`。CI側(`scripts/build-server-manifest.ts`)もここを読むので、片側にしか無いURLや名前は作れない。
 - サーバーの自己更新は「パッケージ済み(`Deno.build.standalone`)」かつ「デスクトップ管理下でない(`LUMISCA_DESKTOP` 未設定)」ときだけ有効。デスクトップが起動するサーバーはアプリバンドル内のバイナリなので、シェル側の更新に任せる。
-- 適用は実行中プロセスに影響しない(ファイルを差し替えるだけで、新しいバージョンは次回起動から)。再起動だけがユーザー操作で、`LUMISCA_UPDATE_RESTART=none` なら監視側に任せる。
+- 適用は実行中プロセスに影響しない(ファイルを差し替えるだけで、新しいバージョンは次回起動から)。再起動の方法は `LUMISCA_UPDATE_RESTART` が決める: `self`(既定。後継プロセスを spawn)、`supervisor`(自分は `exit(0)` し、systemd などの監視側に新バイナリを起動させる。ユニットはこれを設定する)、`none`(再起動しない)。
 - リリース時は `scripts/check-server-archive.ts` が**実物のアーカイブ**を更新機構自身の検証器・展開器で検査する(署名・コンテナ・stageディレクトリとの一致)。ここが落ちるリリースは、ユーザー環境で更新が壊れる。
 - 手元での通し確認は `.lumisca-update/` を消してから `LUMISCA_UPDATE_MANIFEST=<URL> deno task server`(開発実行では無効)ではなく、パッケージ済みバイナリに対して行う。
+
+## Linux 常駐（systemd ユーザーユニット）
+
+パッケージ済みサーバーは、自分自身を systemd の**ユーザーユニット**として常駐させられる（`packages/server/systemd/`）。root では動かさない（エージェントは任意の bash を実行するため、所有者権限で動かすのが前提）。
+
+```bash
+./lumisca-server service config            # 書き込む内容を確認（何も変更しない）
+./lumisca-server service install           # 導入 → 有効化 → 起動 → linger 確認
+./lumisca-server service status            # 稼働・自動起動・ドリフト・接続先
+./lumisca-server service uninstall         # 停止してユニットを削除（設定とDBは残す）
+```
+
+- **生成物**: `<config home>/systemd/user/lumisca.service`（systemd が読む場所）と `<config home>/lumisca-agent/service.env`（0600。`EnvironmentFile=` が指す設定層）。`config home` は `XDG_CONFIG_HOME` か `~/.config`。
+- **既定は loopback**（`127.0.0.1:8000`）。外から使うときは `--host` を明示し、クライアントが使う名前/IP を `--allowed-hosts` で必ず渡す（Host ガードは伝えられていないホスト名を 403 にする）。例: `--host 100.64.0.5 --allowed-hosts 100.64.0.5,homeserver`
+- **トークン**は初回に生成し、以後の install では `service.env` の値を引き継ぐ（引き継ぎ元はこのファイルなので、手で編集した値も次の install で保持される。値を消したいときは行を消す）。`service config` は伏せ字で表示する。
+- **起動時の自動起動**には `loginctl enable-linger <user>` が必要。install が試行し、失敗したら実行すべきコマンドを出して非0で終わる（linger が無効だと「ログイン時起動」になり、要件を満たさない）。
+- **install の前提**: Linux / パッケージ済みバイナリ / `LUMISCA_DESKTOP` 未設定 / インストール先が書き込み可能 / ポートが空き（ユニットが active のときは自分のポートなので検査しない）。すべて前処理で確認し、失敗時は何も書かない。
+- **更新との連携**: ユニットは `LUMISCA_UPDATE_RESTART=supervisor` を設定する。更新を適用するとサーバーは shutdown → `exit(0)` し、unit の `Restart=always` が新バイナリを起動する（サーバー自身は後継プロセスを spawn しない。同一 cgroup で監視側と競合するため）。
+- **ログと調査**: `journalctl --user -u lumisca -f`。`service status` は「ユニットが現在のバイナリのテンプレートと一致しない（＝更新後に再インストールが必要）」ことも報告する。
+- 非 Linux では `install` / `status` / `uninstall` は exit 2 で拒否する（`config` はパッケージ済みであればどこでも動く）。
 
 ## 障害調査
 
@@ -28,3 +48,5 @@ LLMの接続にはVercel AI SDK(`ai` + `@ai-sdk/*`プロバイダー)を使用�
 - ハング: `[shell] ... alive but did not answer /api/health ... left running` が出る。シェルは生きているサーバーを kill しない(`ensure_local_server`)。強制再起動はページのバナー、または `server/restart` 経由
 
 **エージェント自身が動いているプロセスは kill しない**(`deno` / `lumisca-server` を名前で一括停止すると、検証用に起動したサーバーと一緒に自分自身も止まる。停止は `async_bash_kill` か個別 pid の指定で行う)。
+
+systemd 常駐で動いているサーバー（上記「Linux 常駐」）は journald に出る: `journalctl --user -u lumisca -n 100`。`SIGTERM` の受信、drain のタイムアウト（5秒）、`Restart=always` による再起動はここで区別できる。ユニットの状態と生成物の一致は `./lumisca-server service status` が報告する。

@@ -8,6 +8,8 @@ import {
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
 import {
   consumeServerStartupEnvironment,
+  DEFAULT_HOST,
+  DEFAULT_PORT,
   defaultAssetsFile,
   describeListenError,
   DESKTOP_ENV_KEY,
@@ -21,11 +23,11 @@ import {
   UPDATE_RESTART_ENV_KEY,
   updateSupport,
 } from "./startup.ts";
+import { createShutdown } from "./shutdown.ts";
+import { runServiceCommand } from "./systemd/mod.ts";
 import { UpdateService } from "./update/service.ts";
 import { SERVER_VERSION } from "./version.ts";
 
-const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 8000;
 const DEFAULT_DB = "lumisca.db";
 /** Retry cadence while waiting for an occupied port (the updater's
  * successor). */
@@ -56,6 +58,51 @@ globalThis.addEventListener("unhandledrejection", (event) => {
 if (Deno.args.includes("--version")) {
   console.log(SERVER_VERSION);
   Deno.exit(0);
+}
+
+/** The launcher's own command surface (the server's first argument). */
+const LAUNCHER_USAGE = [
+  "使い方:",
+  "  lumisca-server                      サーバーを起動します",
+  "  lumisca-server service <サブコマンド>  systemd ユーザーユニットを管理します",
+  "",
+  "詳細: lumisca-server service --help",
+].join("\n");
+
+// The launcher's own commands, handled before the environment is consumed:
+// `service` installs and inspects the systemd user unit (systemd/mod.ts).
+// Every other argument is a usage error — silently starting a server for a
+// mistyped flag or an option meant for a subcommand would be a running
+// service nobody asked for. The desktop shell spawns this binary with no
+// arguments, so the strict surface costs it nothing.
+const launcherCommand = Deno.args[0];
+if (launcherCommand === "--help" || launcherCommand === "-h") {
+  console.log(LAUNCHER_USAGE);
+  Deno.exit(0);
+}
+if (launcherCommand !== undefined && launcherCommand !== "service") {
+  console.error(`lumisca-server: 不明な引数です: ${Deno.args.join(" ")}\n`);
+  console.error(LAUNCHER_USAGE);
+  Deno.exit(2);
+}
+
+if (launcherCommand === "service") {
+  // The exit code is the only report a script sees, and the global
+  // unhandled-rejection handler above is deliberately forgiving (it exists so
+  // a long-running server keeps serving). A launcher command must not inherit
+  // that: an unexpected rejection here exits 1 instead of quietly reporting
+  // success (the smoke test caught exactly that shape when the machine could
+  // not be resolved).
+  try {
+    Deno.exit(await runServiceCommand(Deno.args.slice(1)));
+  } catch (error) {
+    console.error(
+      `lumisca-server service: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    Deno.exit(1);
+  }
 }
 
 // Launcher-only configuration must be consumed before LumiscaCore creates
@@ -274,13 +321,20 @@ if (allowedHosts.length > 0) {
 // itself), plus the cleanup of leftovers from a previous update.
 update?.start();
 
-const shutdown = async () => {
-  console.log("\nShutting down...");
-  update?.dispose();
-  disposeServer(server);
-  server.shutdown();
-  await core.close();
-  Deno.exit(0);
-};
-Deno.addSignalListener("SIGINT", shutdown);
-Deno.addSignalListener("SIGTERM", shutdown);
+// The stop contract of a supervised server (shutdown.ts): SIGTERM is
+// systemd's ordinary stop request and exits 0, SIGINT reports 130, the drain
+// is bounded, and a second signal skips the rest of it.
+const shutdown = createShutdown({
+  dispose: async () => {
+    console.log("\nShutting down...");
+    update?.dispose();
+    disposeServer(server);
+    server.shutdown();
+    await core.close();
+  },
+  exit: (code) => Deno.exit(code),
+  onSignal: (signal) => console.log(`${signal} を受信しました`),
+  onError: (message) => console.error(`Lumisca: ${message}`),
+});
+Deno.addSignalListener("SIGINT", () => shutdown("SIGINT"));
+Deno.addSignalListener("SIGTERM", () => shutdown("SIGTERM"));

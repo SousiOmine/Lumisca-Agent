@@ -18,9 +18,19 @@ export const DESKTOP_ENV_KEY = "LUMISCA_DESKTOP";
 export const UPDATE_MANIFEST_ENV_KEY = "LUMISCA_UPDATE_MANIFEST";
 
 /** Environment key selecting how an applied update is activated:
- * `self` (default) restarts in place, `none` leaves the restart to the
- * operator (or to the process supervisor). */
+ * `self` (default) restarts in place, `supervisor` exits and lets the
+ * process supervisor (systemd) start the new binary, `none` leaves the
+ * restart to the operator. */
 export const UPDATE_RESTART_ENV_KEY = "LUMISCA_UPDATE_RESTART";
+
+/** Default bind address: loopback only. Exposing the server is an explicit
+ * decision — LUMISCA_HOST plus the authorities clients will use
+ * (LUMISCA_ALLOWED_HOSTS) and a token — and `service install --host` is the
+ * documented way to make it (packages/server/systemd/). */
+export const DEFAULT_HOST = "127.0.0.1";
+
+/** Default port. Shared by the launcher and the service command's `--port`. */
+export const DEFAULT_PORT = 8000;
 
 export const SERVER_STARTUP_ENV_KEYS = [
   "LUMISCA_DB",
@@ -73,6 +83,18 @@ export function consumeServerStartupEnvironment(
   return values;
 }
 
+/** Parse a TCP port value (1〜65535). Throws with a human-readable message;
+ * shared by the launcher's LUMISCA_PORT and the service command's `--port`. */
+export function parsePortValue(raw: string): number {
+  const port = Number(raw.trim());
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(
+      `LUMISCA_PORT が不正です: "${raw}" (1〜65535 の整数を指定してください)`,
+    );
+  }
+  return port;
+}
+
 /** Parse LUMISCA_PORT into a valid TCP port. Empty/unset → `fallback`.
  * Throws with a human-readable message for non-integers and out-of-range
  * values (the caller reports it and exits before touching the database). */
@@ -81,13 +103,7 @@ export function parseServerPort(
   fallback: number,
 ): number {
   if (raw === undefined || raw.trim() === "") return fallback;
-  const port = Number(raw);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(
-      `LUMISCA_PORT が不正です: "${raw}" (1〜65535 の整数を指定してください)`,
-    );
-  }
-  return port;
+  return parsePortValue(raw);
 }
 
 /** True when a listen failure means "someone else holds this port". */
@@ -153,12 +169,15 @@ export function parsePortWaitMs(raw: string | undefined): number {
 
 /** How an applied update is activated; an unrecognized value keeps the
  * default (restart in place) rather than silently never restarting. */
-export type UpdateRestartMode = "self" | "none";
+export type UpdateRestartMode = "self" | "supervisor" | "none";
 
 export function parseUpdateRestartMode(
   raw: string | undefined,
 ): UpdateRestartMode {
-  return raw?.trim().toLowerCase() === "none" ? "none" : "self";
+  const value = raw?.trim().toLowerCase();
+  if (value === "none") return "none";
+  if (value === "supervisor") return "supervisor";
+  return "self";
 }
 
 /** True when `path` is an existing file (a missing or unreadable path is

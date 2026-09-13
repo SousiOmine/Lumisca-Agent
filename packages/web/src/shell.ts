@@ -127,8 +127,9 @@ export interface UpdateStatus {
   restartPending?: boolean;
   /** サーバー単体のアップデーターのみ: 適用済みバージョン。 */
   appliedVersion?: string | null;
-  /** サーバー単体のアップデーターのみ: 再起動の可否 ("none" は監視側に任せる)。 */
-  restartMode?: "self" | "none";
+  /** サーバー単体のアップデーターのみ: 再起動の可否 ("none" は監視側に任せる、
+   * "supervisor" は監視プロセス (systemd) が新しいバイナリを起動する)。 */
+  restartMode?: "self" | "none" | "supervisor";
   /** サーバー単体のアップデーターのみ: 適用後に自動で再起動するか。 */
   autoRestart?: boolean;
   /** サーバー単体のアップデーターのみ: 再起動処理中 (この応答の後に落ちる)。 */

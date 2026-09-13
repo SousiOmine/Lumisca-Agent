@@ -47,11 +47,15 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
   // warn about the app going down.
   const readyText =
     `新しいバージョン（v${status?.latestVersion}）にアップデートできます。`;
+  const restartText = status?.restartMode === "supervisor"
+    ? "再起動すると適用されます（※実行中のセッションは停止します）。" +
+      "systemd が新しいバージョンで起動します。"
+    : canRestart
+    ? "アプリを再起動すると適用されます（※実行中のセッションは停止します）。"
+    : "次回の起動で適用されます（LUMISCA_UPDATE_RESTART=none）。";
   const text = restartPending
     ? `Lumisca v${status?.appliedVersion} をダウンロードしました。` +
-      (canRestart
-        ? "アプリを再起動すると適用されます（※実行中のセッションは停止します）。"
-        : "次回の起動で適用されます（LUMISCA_UPDATE_RESTART=none）。")
+      restartText
     : server
     ? readyText
     : readyText + "インストールするとアプリが再起動します。";

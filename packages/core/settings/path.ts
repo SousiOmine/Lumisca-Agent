@@ -1,6 +1,9 @@
 import { join } from "node:path";
 
-const SETTINGS_DIR = "lumisca-agent";
+/** Directory (under the config home) holding this application's settings.
+ * Shared with the service definition, which lives beside the settings file it
+ * belongs to (packages/server/systemd/plan.ts). */
+export const SETTINGS_DIR_NAME = "lumisca-agent";
 const SETTINGS_FILE = "settings.jsonc";
 
 /** Location of the settings file: $XDG_CONFIG_HOME/lumisca-agent/settings.jsonc
@@ -9,7 +12,7 @@ const SETTINGS_FILE = "settings.jsonc";
 export function resolveSettingsPath(): string {
   const configHome = Deno.env.get("XDG_CONFIG_HOME") ??
     join(homeDir(), ".config");
-  return join(configHome, SETTINGS_DIR, SETTINGS_FILE);
+  return join(configHome, SETTINGS_DIR_NAME, SETTINGS_FILE);
 }
 
 function homeDir(): string {

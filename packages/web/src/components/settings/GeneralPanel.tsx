@@ -70,7 +70,9 @@ export function GeneralPanel(
     : restartPending
     ? `v${status.appliedVersion} を適用しました。${
       canRestart
-        ? "再起動すると有効になります。"
+        ? status.restartMode === "supervisor"
+          ? "再起動すると有効になります（systemd が新しいバージョンで起動します）。"
+          : "再起動すると有効になります。"
         : "次回の起動で有効になります。"
     }`
     : status.ready
