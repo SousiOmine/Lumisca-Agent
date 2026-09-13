@@ -1,4 +1,5 @@
 import { assertEquals } from "@std/assert";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { summarizeContextUsage } from "../shared/mod.ts";
 import type { Api, Model, StreamRequest } from "./types.ts";
 import { createStreamFn, type StreamTransport } from "./stream.ts";
@@ -291,4 +292,108 @@ Deno.test("a timeout that is not the caller's abort surfaces as an error turn", 
   assertEquals(failure !== undefined, true);
   assertEquals(events.some((e) => e.type === "done"), false);
   assertEquals(failure.errorRetryable, true);
+});
+
+Deno.test("interleaved reasoning is passed back as reasoning_content", async () => {
+  let sentBody: Record<string, unknown> | undefined;
+  const provider = createOpenAICompatible({
+    name: "reasoning-replay-test",
+    apiKey: "test-key",
+    baseURL: "https://example.invalid/v1",
+    fetch: (_input, init) => {
+      sentBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const messages = sentBody.messages as Array<Record<string, unknown>>;
+      const missingReasoning = messages.some((message) =>
+        message.role === "assistant" &&
+        typeof message.reasoning_content !== "string"
+      );
+      if (missingReasoning) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                type: "invalid_request_error",
+                code: "invalid_request_error",
+                message:
+                  "The `reasoning_content` in the thinking mode must be passed back to the API.",
+              },
+            }),
+            {
+              status: 400,
+              headers: { "content-type": "application/json" },
+            },
+          ),
+        );
+      }
+      const chunks = [
+        {
+          id: "chatcmpl-test",
+          object: "chat.completion.chunk",
+          created: 0,
+          model: "reasoning-model",
+          choices: [{
+            index: 0,
+            delta: { role: "assistant", content: "continued" },
+            finish_reason: null,
+          }],
+        },
+        {
+          id: "chatcmpl-test",
+          object: "chat.completion.chunk",
+          created: 0,
+          model: "reasoning-model",
+          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+        },
+      ];
+      return Promise.resolve(
+        new Response(
+          `${
+            chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")
+          }data: [DONE]\n\n`,
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+      );
+    },
+  });
+  const model: Model<Api> = {
+    id: "reasoning-model",
+    name: "Reasoning model",
+    api: "openai-completions",
+    provider: "reasoning-replay-test",
+    reasoning: true,
+    compat: { requiresReasoningContentOnAssistantMessages: true },
+  };
+  const streamFn = createStreamFn(
+    transportFor(provider.chatModel(model.id)),
+  );
+  const request: StreamRequest = {
+    thinkingLevel: "high",
+    messages: [
+      { role: "user", content: "first" },
+      { role: "assistant", content: "legacy answer" },
+      { role: "user", content: "second" },
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "prior reasoning" },
+          { type: "text", text: "first answer" },
+        ],
+      },
+      { role: "user", content: "continue" },
+    ],
+  };
+
+  const events = [];
+  for await (const event of streamFn(model, request, undefined)) {
+    events.push(event);
+  }
+
+  const messages = sentBody?.messages as Array<Record<string, unknown>>;
+  const assistants = messages.filter((message) => message.role === "assistant");
+  assertEquals(assistants[0]?.content, "legacy answer");
+  assertEquals(assistants[0]?.reasoning_content, "");
+  assertEquals(assistants[1]?.content, "first answer");
+  assertEquals(assistants[1]?.reasoning_content, "prior reasoning");
+  assertEquals(events.some((event) => event.type === "error"), false);
+  assertEquals(events.at(-1)?.type, "done");
 });

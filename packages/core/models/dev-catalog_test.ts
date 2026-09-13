@@ -91,6 +91,20 @@ Deno.test("catalog still drops models that cannot answer in text", () => {
   );
 });
 
+Deno.test("catalog preserves reasoning_content replay requirements", () => {
+  const providers = buildCatalogProviders(catalogWith([{
+    id: "interleaved-reasoner",
+    tool_call: true,
+    reasoning: true,
+    interleaved: { field: "reasoning_content" },
+  }]));
+  const model = providers[0]!.getModels()[0]!;
+
+  assertEquals(model.compat, {
+    requiresReasoningContentOnAssistantMessages: true,
+  });
+});
+
 Deno.test("every listed snapshot model declares tool calling", () => {
   for (const id of DEV_PROVIDER_IDS) {
     const source = snapshot.providers[id];

@@ -87,7 +87,7 @@ async function* runStream(
   const outputCap = outputCapFor(model, options);
   const request: Record<string, unknown> = {
     model: languageModel,
-    messages: toCoreMessages(context.messages),
+    messages: toCoreMessages(model, context.messages),
     ...(context.systemPrompt !== undefined
       ? { system: context.systemPrompt }
       : {}),
@@ -564,8 +564,10 @@ function outputText(output: unknown): string {
 }
 
 /** Convert Lumisca LLM messages to Vercel CoreMessage[] (v7 format). */
-function toCoreMessages(messages: LlmMessage[]): unknown[] {
+function toCoreMessages(model: Model<Api>, messages: LlmMessage[]): unknown[] {
   const out: unknown[] = [];
+  const requiresReasoningContent =
+    model.compat?.requiresReasoningContentOnAssistantMessages === true;
   for (const message of messages) {
     if (message.role === "toolResult") {
       // Tool results: Vercel v7 expects role "tool" with ToolResultPart[]
@@ -594,14 +596,27 @@ function toCoreMessages(messages: LlmMessage[]): unknown[] {
       continue;
     }
     if (typeof message.content === "string") {
-      out.push({ role: message.role, content: message.content });
+      out.push({
+        role: message.role,
+        content: message.content,
+        ...(message.role === "assistant" && requiresReasoningContent
+          ? { providerOptions: emptyReasoningContentOption() }
+          : {}),
+      });
       continue;
     }
-    // Build content parts: text + images (user), text + tool-calls (assistant)
+    // Build content parts: text + images (user), reasoning + text + tool-calls
+    // (assistant). Models whose metadata requires reasoning_content must get
+    // every prior thinking block back unchanged so interleaved tool use can
+    // continue on the next request.
     const parts: unknown[] = [];
+    let hasReasoningContent = false;
     for (const block of message.content) {
       if (block.type === "text") {
         parts.push({ type: "text", text: block.text });
+      } else if (block.type === "thinking" && requiresReasoningContent) {
+        parts.push({ type: "reasoning", text: block.thinking });
+        hasReasoningContent ||= block.thinking.length > 0;
       } else if (block.type === "image") {
         parts.push({
           type: "image",
@@ -626,12 +641,23 @@ function toCoreMessages(messages: LlmMessage[]): unknown[] {
       out.push({
         role: "assistant",
         content: parts.length > 0 ? parts : "",
+        ...(requiresReasoningContent && !hasReasoningContent
+          ? { providerOptions: emptyReasoningContentOption() }
+          : {}),
       });
     } else {
       out.push({ role: message.role, content: parts });
     }
   }
   return out;
+}
+
+/** Provider metadata used when an interleaved-reasoning API requires the
+ * field on every historical assistant message, including turns whose stored
+ * response has no thinking block. The compatible provider merges this into
+ * the assistant wire object as `reasoning_content: ""`. */
+function emptyReasoningContentOption(): Record<string, Record<string, string>> {
+  return { openaiCompatible: { reasoning_content: "" } };
 }
 
 /** Convert Lumisca AgentTools to Vercel Tool objects WITH execute functions,

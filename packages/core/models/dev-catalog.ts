@@ -221,6 +221,10 @@ function toLumiscaModel(
     maxTokens: m.limit?.output,
     headers: m.provider?.headers,
     thinkingLevelMap: thinkingLevelMapFor(m.reasoning_options),
+    ...(typeof m.interleaved === "object" &&
+        m.interleaved.field === "reasoning_content"
+      ? { compat: { requiresReasoningContentOnAssistantMessages: true } }
+      : {}),
   };
 }
 
