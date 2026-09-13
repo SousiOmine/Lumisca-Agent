@@ -118,55 +118,74 @@ export function createGrepTool(
 
       const lines: string[] = [];
       let files = 0;
-      if (params.path !== undefined) {
-        const resolved = await resolveSearchRoot(ctx, params.path);
-        const stat = await Deno.stat(resolved);
-        if (stat.isFile) {
+      for await (const root of searchRoots(ctx, params.path)) {
+        if (root.isFile) {
           // Explicitly targeted files bypass gitignore filtering.
-          const hits = await grepFileLines(resolved, re, maxResults);
+          const hits = await grepFileLines(root.path, re, maxResults);
           if (hits.length > 0) files++;
           appendLines(lines, hits, maxResults);
         } else {
-          files += await grepTree(resolved, re, gitignore, lines, maxResults);
+          files += await grepTree(root.path, re, gitignore, lines, maxResults);
         }
-      } else {
-        for (const root of ctx.sandbox.roots) {
-          const stat = await Deno.stat(root).catch(() => null);
-          if (stat === null) continue;
-          if (stat.isFile) {
-            const hits = await grepFileLines(root, re, maxResults);
-            if (hits.length > 0) files++;
-            appendLines(lines, hits, maxResults);
-          } else {
-            files += await grepTree(root, re, gitignore, lines, maxResults);
-          }
-          if (lines.length >= maxResults) break;
-        }
+        if (lines.length >= maxResults) break;
       }
 
-      const { text, truncated } = truncate(lines.join("\n"));
-      const note = truncated ? truncatedNote("matches") : "";
-      const capped = lines.length >= maxResults
-        ? `\n[maximum of ${maxResults} matches reached]`
-        : "";
       return {
-        content: [{ type: "text", text: text + note + capped }],
+        content: [{
+          type: "text",
+          text: cappedResult(lines, maxResults, "matches"),
+        }],
         details: { matches: lines.length, files },
       };
     },
   };
 }
 
-/** Resolve a user-supplied search path inside the sandbox (throws on
- * sandbox escape or missing path). */
-async function resolveSearchRoot(
+/** One root of a search call: the explicitly requested path, or one
+ * workspace root. `isFile` marks a directly targeted file (grep searches it
+ * without the tree walk, glob matches the path itself). */
+interface SearchRoot {
+  path: string;
+  isFile: boolean;
+}
+
+/** Yield the roots a search call must visit: the explicitly requested path
+ * (validated inside the sandbox, and only that one), or every workspace
+ * root that still exists. Shared by grep and glob so the root policy — what
+ * an explicit `path` means, and that a missing one fails with the same
+ * message — cannot drift between them. */
+async function* searchRoots(
   ctx: FsToolContext,
-  requested: string,
-): Promise<string> {
-  const path = await requireResolved(ctx.sandbox, requested);
-  const stat = await Deno.stat(path).catch(() => null);
-  if (stat === null) throw new Error(`Path does not exist: ${requested}`);
-  return path;
+  requested: string | undefined,
+): AsyncGenerator<SearchRoot> {
+  if (requested !== undefined) {
+    const path = await requireResolved(ctx.sandbox, requested);
+    const stat = await Deno.stat(path).catch(() => null);
+    if (stat === null) throw new Error(`Path does not exist: ${requested}`);
+    yield { path, isFile: stat.isFile };
+    return;
+  }
+  for (const root of ctx.sandbox.roots) {
+    const stat = await Deno.stat(root).catch(() => null);
+    if (stat === null) continue;
+    yield { path: root, isFile: stat.isFile };
+  }
+}
+
+/** Format a capped search result: the hits, the byte-truncation note and
+ * the cap note. Shared so grep (`matches`) and glob (`paths`) phrase their
+ * limits identically — the model reads both and compares them. */
+function cappedResult(
+  hits: readonly string[],
+  maxResults: number,
+  what: string,
+): string {
+  const { text, truncated } = truncate(hits.join("\n"));
+  const note = truncated ? truncatedNote(what) : "";
+  const capped = hits.length >= maxResults
+    ? `\n[maximum of ${maxResults} ${what} reached]`
+    : "";
+  return text + note + capped;
 }
 
 /** Grep every file under a directory, honoring gitignore filtering (hidden
@@ -313,44 +332,25 @@ export function createGlobTool(
         });
 
       const found: string[] = [];
-      if (params.path !== undefined) {
-        const root = await resolveSearchRoot(ctx, params.path);
-        const stat = await Deno.stat(root);
-        if (stat.isFile) {
-          if (re.test(root)) found.push(root);
+      for await (const root of searchRoots(ctx, params.path)) {
+        if (root.isFile) {
+          if (re.test(root.path)) found.push(root.path);
         } else {
-          for await (const file of walk(root)) {
-            if (re.test(relative(root, file).replace(/\\/g, "/"))) {
+          for await (const file of walk(root.path)) {
+            if (re.test(relative(root.path, file).replace(/\\/g, "/"))) {
               found.push(file);
               if (found.length >= maxResults) break;
             }
           }
         }
-      } else {
-        for (const root of ctx.sandbox.roots) {
-          const stat = await Deno.stat(root).catch(() => null);
-          if (stat === null) continue;
-          if (stat.isFile) {
-            if (re.test(root)) found.push(root);
-          } else {
-            for await (const file of walk(root)) {
-              if (re.test(relative(root, file).replace(/\\/g, "/"))) {
-                found.push(file);
-                if (found.length >= maxResults) break;
-              }
-            }
-          }
-          if (found.length >= maxResults) break;
-        }
+        if (found.length >= maxResults) break;
       }
 
-      const { text, truncated } = truncate(found.join("\n"));
-      const note = truncated ? truncatedNote("paths") : "";
-      const capped = found.length >= maxResults
-        ? `\n[maximum of ${maxResults} paths reached]`
-        : "";
       return {
-        content: [{ type: "text", text: text + note + capped }],
+        content: [{
+          type: "text",
+          text: cappedResult(found, maxResults, "paths"),
+        }],
         details: { count: found.length },
       };
     },

@@ -15,7 +15,7 @@ import type { Sandbox } from "../workspace/sandbox.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { killProcessTree } from "./process-tree.ts";
-import { getShell } from "./shell.ts";
+import { shellCommand } from "./shell.ts";
 import { requireResolved } from "./resolve.ts";
 import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
@@ -225,13 +225,11 @@ export class BackgroundProcessManager {
       );
     }
     const commandId = String(this.nextId++);
-    const shell = getShell();
-    const child = new Deno.Command(shell.file, {
-      args: [...shell.args, input.command],
+    const child = shellCommand({
+      command: input.command,
       cwd: input.cwd,
-      env: { ...this.options.env, ...shell.env, ...input.env },
-      stdout: "piped",
-      stderr: "piped",
+      baseEnv: this.options.env,
+      env: input.env,
     }).spawn();
 
     const info: BackgroundCommandInfo = {

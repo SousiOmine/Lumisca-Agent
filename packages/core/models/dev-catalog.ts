@@ -303,11 +303,3 @@ export function clinepassProvider(): Provider {
 export function opencodeGoProvider(): Provider {
   return builtinProvider("opencode-go")!;
 }
-
-/** The number of models.dev providers exposed (for tests/UI). */
-export function devProviderCount(): number {
-  return DEV_PROVIDER_IDS.reduce(
-    (n, id) => n + (snapshot.providers[id] !== undefined ? 1 : 0),
-    0,
-  );
-}

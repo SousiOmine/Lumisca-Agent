@@ -11,7 +11,7 @@ import type { Sandbox } from "../workspace/sandbox.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { killProcessTree } from "./process-tree.ts";
-import { getShell } from "./shell.ts";
+import { shellCommand } from "./shell.ts";
 import { requireResolved } from "./resolve.ts";
 import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
@@ -79,15 +79,13 @@ export function createBashTool(
       );
       if (blocked !== undefined) return blocked;
       const timeoutSec = params.timeout ?? defaultTimeoutSec;
-      const shell = getShell();
 
-      const command = new Deno.Command(shell.file, {
-        args: [...shell.args, params.command],
+      // Per-call env vars override the tool-level env and the shell env.
+      const command = shellCommand({
+        command: params.command,
         cwd,
-        // Per-call env vars override the tool-level env and the shell env.
-        env: { ...options.env, ...shell.env, ...params.env },
-        stdout: "piped",
-        stderr: "piped",
+        baseEnv: options.env,
+        env: params.env,
       });
 
       const child = command.spawn();

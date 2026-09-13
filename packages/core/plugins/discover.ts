@@ -5,7 +5,8 @@ import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { McpServerConfig } from "../mcp/config.ts";
 import { parsePluginManifest, type PluginManifest } from "./manifest.ts";
-import { isWithinRealpath, parsePluginMcp } from "./mcp.ts";
+import { parsePluginMcp } from "./mcp.ts";
+import { isWithinRealpath } from "../workspace/path-util.ts";
 
 /** Directory holding agent plugins (each immediate child directory is one
  * plugin root with a plugin.json manifest). Workspace and global

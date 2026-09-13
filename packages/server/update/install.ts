@@ -23,7 +23,6 @@ import { basename, join } from "node:path";
 import { extractArchive } from "./archive.ts";
 import {
   EXTRACT_DIR_NAME,
-  readStagedUpdate,
   type StagedUpdate,
   stagingDir,
   writeAppliedUpdate,
@@ -244,13 +243,6 @@ export async function applyStagedUpdate(
     replaced: order,
     backup: join(installDir, `${binaryName}${backupSuffix}`),
   };
-}
-
-/** The package currently on this installation's disk, staged and ready. */
-export function pendingStagedUpdate(
-  environment: InstallEnvironment,
-): StagedUpdate | undefined {
-  return readStagedUpdate(environment.installDir);
 }
 
 export interface SuccessorOptions {

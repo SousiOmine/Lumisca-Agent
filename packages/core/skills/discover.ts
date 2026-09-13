@@ -1,6 +1,6 @@
 import { isAbsolute, join, normalize, sep } from "node:path";
 import { repoChain } from "../memory/agents-md.ts";
-import { isWithinRealpath } from "../plugins/mcp.ts";
+import { isWithinRealpath } from "../workspace/path-util.ts";
 import {
   readIfExists,
   resolveGlobalDirs as resolveGlobalDirsBase,

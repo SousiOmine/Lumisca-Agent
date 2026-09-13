@@ -1,6 +1,7 @@
 import { join, normalize, sep } from "node:path";
 import type { McpServerConfig } from "../mcp/config.ts";
 import { errorMessage } from "../errors.ts";
+import { isWithinRealpath } from "../workspace/path-util.ts";
 
 /** Canonical identifier of the mcp.json schema this client implements
  * (Agent Plugins 1.0.0). */
@@ -298,22 +299,4 @@ function resolveInside(root: string, relativePath: string): string | undefined {
     return undefined;
   }
   return isWithinRealpath(root, resolved) ? resolved : undefined;
-}
-
-/** Filesystem-resolved containment: when both paths resolve, the real
- * path must stay inside the real root (symlink/junction escape guard).
- * Unresolvable targets (e.g. a command that does not exist yet) count as
- * inside; the lexical check above already ran. */
-export function isWithinRealpath(root: string, path: string): boolean {
-  try {
-    const realRoot = Deno.realPathSync(root);
-    const realPath = Deno.realPathSync(path);
-    const cmp = (p: string) =>
-      Deno.build.os === "windows" ? p.toLowerCase() : p;
-    const r = cmp(realRoot);
-    const p = cmp(realPath);
-    return p === r || p.startsWith(r + sep);
-  } catch {
-    return true; // target may not exist yet (e.g. a command to build)
-  }
 }

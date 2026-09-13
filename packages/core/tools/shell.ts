@@ -34,6 +34,32 @@ export function getShell(): Shell {
   return cached;
 }
 
+/** Build the process for one shell invocation: the detected shell with the
+ * command string as its final argument, both pipes captured.
+ *
+ * This is the single place the env merge order lives — tool/manager env
+ * (lowest), the shell's own (NO_COLOR), then per-call env (highest) — so
+ * `bash` and `async_bash` cannot end up running the same command with
+ * different environments. */
+export function shellCommand(options: {
+  command: string;
+  cwd: string;
+  /** Env of the tool/manager as a whole; overridden by the shell's own and
+   * by `env`. */
+  baseEnv?: Record<string, string>;
+  /** Per-call env vars; override everything else. */
+  env?: Record<string, string>;
+}): Deno.Command {
+  const shell = getShell();
+  return new Deno.Command(shell.file, {
+    args: [...shell.args, options.command],
+    cwd: options.cwd,
+    env: { ...options.baseEnv, ...shell.env, ...options.env },
+    stdout: "piped",
+    stderr: "piped",
+  });
+}
+
 function detectWindowsShell(): Shell {
   const ps = {
     args: ["-NoProfile", "-NonInteractive", "-Command"],

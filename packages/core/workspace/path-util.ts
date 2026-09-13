@@ -22,3 +22,18 @@ export function isWithin(root: string, candidate: string): boolean {
   if (c === r) return true;
   return c.startsWith(r.endsWith("/") ? r : `${r}/`);
 }
+
+/** Filesystem-resolved containment: when both paths resolve, the real path
+ * must stay inside the real root (symlink/junction escape guard). Builds on
+ * {@link isWithin} so the comparison rules cannot drift between the lexical
+ * and the resolved check.
+ *
+ * Unresolvable targets (e.g. a command that does not exist yet) count as
+ * inside; the lexical check must have run first. */
+export function isWithinRealpath(root: string, path: string): boolean {
+  try {
+    return isWithin(Deno.realPathSync(root), Deno.realPathSync(path));
+  } catch {
+    return true;
+  }
+}

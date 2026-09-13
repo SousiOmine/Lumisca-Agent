@@ -22,7 +22,6 @@ import {
   parseUserProviderInput,
   UserProviderStore,
 } from "./user-providers.ts";
-import { extraProviders } from "./extra-providers.ts";
 import { buildProvider, loadCustomProviders } from "./custom.ts";
 import {
   buildCatalogProviders,
@@ -78,13 +77,10 @@ export class ModelManager {
     this.settings = settings;
     this.credentials = credentials;
     this.userStore = new UserProviderStore(settings);
-    // ai-sdk built-in providers (OpenAI, Anthropic, Google, Mistral).
+    // ai-sdk built-in providers (OpenAI, Anthropic, Google, Mistral) plus
+    // every other models.dev provider on the allow-list (DeepInfra,
+    // ClinePass, OpenCode Go, …) — all of them come from the same catalog.
     for (const provider of builtinProviders()) {
-      this.models.setProvider(provider);
-    }
-    // Lumisca-shipped providers outside the SDK catalog (DeepInfra,
-    // ClinePass, OpenCode Go) are registered right after the builtins.
-    for (const provider of extraProviders()) {
       this.models.setProvider(provider);
     }
     this.applyCustomProviders();
