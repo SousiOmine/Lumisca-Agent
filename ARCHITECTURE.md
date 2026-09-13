@@ -17,7 +17,7 @@
 
 ## web内部
 
-- `modelCatalog.ts`：プロバイダー／モデルカタログの**共有ストア**（peer単位）。設定のモデル一覧・モデルピッカー・チャットビューはここだけを読み、再マウント（設定ダイアログの開き直し、タブ切替）でも取り直さない。したがって**変更は必ずストアへ書き戻す**（`applyModelEnabled`。トグルUIは `providers.ts` の `setModelEnabled` を通す）。コンポーネントローカルに持つと、その変更はコンポーネントと共に消える。
+- `modelCatalog.ts`：プロバイダー／モデルカタログの**共有ストア**（peer単位）。設定のプロバイダー一覧・モデル一覧・モデルピッカー・チャットビューはここだけを読み、再マウント（設定ダイアログの開き直し、タブ切替）でも取り直さない。したがって**変更は必ずストアへ書き戻す**（`applyModelEnabled`。トグルUIは `providers.ts` の `setModelEnabled` を通す）。コンポーネントローカルに持つと、その変更はコンポーネントと共に消える。
 
 ## core内部
 
@@ -51,8 +51,11 @@
 - `@napi-rs/canvas` はPDF描画専用（動的import、要 `--allow-ffi`）。
 - `preact/compat` はweb全体のReact互換層として使用中。削除不可。
 - `ai/test` は未使用のため削除済み。
-- `browser-rpc/cdp.rs` はデスクトップのブラウザラボが使うCDPパラメータ生成／応答解釈（`browser_lab.rs` の同期呼び出しから切り離し、解釈を一箇所に保つ）。
-- `desktop/src-tauri/pane.rs` はドックペインのジオメトリとOS依存の配置（z-order、仮想デスクトップ固定）。
+- `browser-rpc/src/cdp.rs` はデスクトップのブラウザラボが使うCDPパラメータ生成／応答解釈（`browser_lab.rs` の同期呼び出しから切り離し、解釈を一箇所に保つ）。
+- `desktop/src-tauri/src/pane.rs` はドックペインのジオメトリとOS依存の配置（z-order、仮想デスクトップ固定）。
+- **Rustのロックは `lib.rs` の `LockRecover::lock_recover()` 経由で取る**（`Mutex::lock().unwrap_or_else(|e| e.into_inner())` を各所に書かない）。poison したロックから回復する方針がここに1つだけあり、Tauriコマンドがpanicで無応答になるのを避ける。
+- **`scripts/lib.ts`**：スクリプト共通ヘルパー（`repoRoot` / `binaryName` / `reportUsage` / `parseOptions` / `createChecker`）。`repoRoot` は `fileURLToPath` で解決する（`.pathname` を手で変換するとスペース入りパスで壊れる）。
+- **esbuild（本番）と Vite（開発）の二重バンドラ**：`server/bundle.ts` のesbuildが配布物のバンドル（`deno compile` に同梱）を作り、`packages/web/vite.config.ts` のViteが開発時のHMRとAPIプロキシを担う。CSSの `@import` 解決順は両者で同一（`packages/web/src/styles/README.md`）。
 
 ## バージョン
 
