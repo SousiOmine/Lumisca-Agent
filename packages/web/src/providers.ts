@@ -9,31 +9,10 @@ import { api, modelApi } from "./api.ts";
 import { modelCatalog, type PeerCatalogState } from "./modelCatalog.ts";
 import { splitTabKey } from "./tabs.ts";
 import type {
-  ProviderInfo,
   SessionView,
   ThinkingLevel,
   UserProviderSummary,
 } from "./types.ts";
-
-/** Load the provider list once; `reload()` re-fetches. Failures are
- * surfaced separately so callers can tell "no providers configured" apart
- * from "server unreachable". */
-export function useProviders(): {
-  providers: ProviderInfo[];
-  error: string | null;
-  reload: () => void;
-} {
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const reload = () => {
-    setError(null);
-    api.listProviders()
-      .then(setProviders)
-      .catch((e) => setError(errorText(e)));
-  };
-  useEffect(reload, []);
-  return { providers, error, reload };
-}
 
 /** User-defined OpenAI-compatible providers (the settings UI manages these).
  * The API key is never returned — `hasApiKey` reports whether one is set. */
@@ -70,14 +49,16 @@ export type UseProviderModelsResult = PeerCatalogState & {
 
 /** Providers → models of a peer ("" = this server) with a stale guard
  * (only the latest fetch may write state), loading/error, and reload.
- * Shared by the model picker, the settings model list and the model
- * preference panel so the fetch bookkeeping never varies.
+ * Shared by the settings provider list / add-provider flow / provider
+ * detail, the model picker, the settings model list and the model
+ * preference panel, so the fetch bookkeeping never varies.
  *
  * The state lives in the catalog store keyed by peer (see modelCatalog.ts):
  * the chat view and the model picker inside its composer both mount this
  * hook for the same peer, and each tab switch remounts the chat view, so a
  * per-mount fetch would re-request the same catalog several times per page
- * load. */
+ * load. The settings dialog shows providers and models side by side, so a
+ * second provider-only fetch would hit the same endpoint twice. */
 export function useProviderModels(peerId = ""): UseProviderModelsResult {
   const subscribe = useCallback(
     (listener: () => void) => modelCatalog.subscribe(peerId, listener),

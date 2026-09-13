@@ -15,7 +15,11 @@ import {
 } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
-import { errorText, useProviders, useUserProviders } from "../../providers.ts";
+import {
+  errorText,
+  useProviderModels,
+  useUserProviders,
+} from "../../providers.ts";
 import type {
   ProviderAuthType,
   ProviderLoginEvent,
@@ -46,7 +50,7 @@ export function ProviderDetail({
   onDone: () => void;
   onEditUser?: (providerId: string) => void;
 }) {
-  const { providers, reload: reloadProviders } = useProviders();
+  const { providers, reload: reloadProviders } = useProviderModels("");
   const { ids: userProviderIds, reload: reloadUserProviders } =
     useUserProviders();
   const isUser = userProviderIds.has(providerId);

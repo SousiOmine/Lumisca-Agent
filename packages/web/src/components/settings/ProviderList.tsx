@@ -2,7 +2,7 @@ import { useState } from "preact/compat";
 import { IconPlus } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
-import { errorText, useProviders } from "../../providers.ts";
+import { errorText, useProviderModels } from "../../providers.ts";
 import type { CatalogStatus } from "../../types.ts";
 
 const CATALOG_SOURCE_LABEL: Record<CatalogStatus["source"], string> = {
@@ -90,7 +90,7 @@ export function ProviderList({
   onAdd: () => void;
   onOpen: (providerId: string) => void;
 }) {
-  const { providers, reload } = useProviders();
+  const { providers, reload } = useProviderModels("");
 
   const configured = providers.filter(
     (p) => p.configured !== false || p.userDefined,

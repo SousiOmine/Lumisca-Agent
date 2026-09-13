@@ -1,6 +1,6 @@
 import { useMemo, useState } from "preact/compat";
 import { IconArrowLeft, IconPlugConnected } from "@tabler/icons-preact";
-import { filterByQuery, useProviders } from "../../providers.ts";
+import { filterByQuery, useProviderModels } from "../../providers.ts";
 
 /** Settings → add provider: searchable list of every known provider, plus
  * an entry to add an arbitrary OpenAI-compatible provider by hand. */
@@ -13,7 +13,7 @@ export function AddProviderFlow({
   onAddUser: () => void;
   onBack: () => void;
 }) {
-  const { providers } = useProviders();
+  const { providers } = useProviderModels("");
   const [search, setSearch] = useState("");
 
   const visible = useMemo(
