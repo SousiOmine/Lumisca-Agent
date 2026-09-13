@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useState } from "preact/compat";
+import { useCallback, useLayoutEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
 import { errorMessage as errorText, THEME_KEY } from "@lumisca/core/shared";
 import type { ThemeSetting } from "../types.ts";
@@ -25,6 +25,11 @@ export function useTheme(initial: ThemeSetting = "dark"): {
 } {
   const [setting, setSetting] = useState<ThemeSetting>(initial);
   const [error, setError] = useState<string | null>(null);
+  // The value the last persist attempt wrote. A failed request must roll
+  // back to what the server still holds, but only while the user has not
+  // picked something newer in the meantime — reading `setting` from the
+  // callback closure would revert a later choice with a stale value.
+  const chosen = useRef(setting);
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = resolveTheme(setting);
@@ -38,16 +43,20 @@ export function useTheme(initial: ThemeSetting = "dark"): {
   }, [setting]);
 
   const setTheme = useCallback((next: ThemeSetting) => {
-    if (setting === next) return;
+    const previous = chosen.current;
+    if (previous === next) return;
+    chosen.current = next;
     setError(null);
     // Optimistic: the scheme applies immediately; a failed persist rolls
     // back to the value the server still holds.
     setSetting(next);
     api.setSetting(THEME_KEY, next).catch((failure) => {
       setError(errorText(failure));
-      setSetting(setting);
+      if (chosen.current !== next) return; // a newer choice superseded this one
+      chosen.current = previous;
+      setSetting(previous);
     });
-  }, [setting]);
+  }, []);
 
   return { theme: setting, setTheme, error };
 }
