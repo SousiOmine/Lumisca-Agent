@@ -67,6 +67,14 @@ export function sessionApi(key: string) {
       api.rewind,
       fed.rewind,
     ) as (timestamp: number) => Promise<{ ok: boolean }>,
+    /** Condense older history into a checkpoint on demand (`/compact`).
+     * `compacted` is absent when nothing could be condensed. */
+    compact: sessionRouted(
+      peerId,
+      sessionId,
+      api.compact,
+      fed.compact,
+    ) as () => Promise<{ ok: boolean; compacted?: number }>,
     answer: sessionRouted(
       peerId,
       sessionId,

@@ -809,3 +809,109 @@ Deno.test("events: sameGoal compares snapshots exactly", () => {
   const reasoned = { ...GOAL, lastReason: "other" };
   assertEquals(sameGoal(GOAL, reasoned), false);
 });
+
+Deno.test("events: messages_compacted replaces the span and keeps run state", () => {
+  const checkpoint: AgentMessage = {
+    role: "checkpoint",
+    title: "履歴 2 件を要約しました（約 12K トークン）",
+    body: "summary",
+    timestamp: 500,
+  };
+  let v = view({
+    messages: [
+      message("user", 100),
+      message("assistant", 200),
+      message("user", 300),
+      message("assistant", 400),
+    ],
+    streamingText: "partial",
+    runningTools: new Map([["t1", "bash"]]),
+    agentStartedAt: 1,
+  });
+
+  v = applyEvent(
+    {
+      type: "messages_compacted",
+      sessionId: "s1",
+      index: 0,
+      message: checkpoint,
+      removed: [
+        { role: "user", timestamp: 100 },
+        { role: "assistant", timestamp: 200 },
+      ],
+    },
+    v,
+  )!;
+
+  // The replaced span is gone and the checkpoint took its place, before the
+  // retained messages.
+  assertEquals(
+    v.messages.map((m) => `${m.role}:${m.timestamp}`),
+    ["checkpoint:500", "user:300", "assistant:400"],
+  );
+  // The replaced keys are tombstoned, so a later resync cannot resurrect
+  // them through the append-only merge.
+  assertEquals([...v.removed].sort(), ["assistant:200", "user:100"].sort());
+  // A compaction happens mid-run: unlike a rewind it must NOT clear the run
+  // state (the run keeps streaming).
+  assertEquals(v.streamingText, "partial");
+  assertEquals(v.runningTools.size, 1);
+  assertEquals(v.agentStartedAt, 1);
+
+  // A re-delivered event must not duplicate the checkpoint.
+  const again = applyEvent(
+    {
+      type: "messages_compacted",
+      sessionId: "s1",
+      index: 0,
+      message: checkpoint,
+      removed: [
+        { role: "user", timestamp: 100 },
+        { role: "assistant", timestamp: 200 },
+      ],
+    },
+    v,
+  )!;
+  assertEquals(
+    again.messages.filter((m) => m.role === "checkpoint").length,
+    1,
+  );
+
+  // Other sessions are ignored.
+  assertEquals(
+    applyEvent(
+      {
+        type: "messages_compacted",
+        sessionId: "s2",
+        index: 0,
+        message: checkpoint,
+        removed: [],
+      },
+      view(),
+    ),
+    null,
+  );
+});
+
+Deno.test("events: a compaction whose retained prefix is missing still shows the checkpoint", () => {
+  // A view that is behind (a resync in flight) cannot locate the insertion
+  // point; the checkpoint must still appear — its summary is the only trace
+  // of the removed history.
+  const checkpoint: AgentMessage = {
+    role: "checkpoint",
+    title: "履歴 4 件を要約しました（約 40K トークン）",
+    body: "summary",
+    timestamp: 500,
+  };
+  const v = applyEvent(
+    {
+      type: "messages_compacted",
+      sessionId: "s1",
+      index: 0,
+      message: checkpoint,
+      removed: [{ role: "user", timestamp: 100 }],
+    },
+    view({ messages: [message("user", 100)] }),
+  )!;
+  assertEquals(v.messages.map((m) => m.role), ["checkpoint"]);
+});

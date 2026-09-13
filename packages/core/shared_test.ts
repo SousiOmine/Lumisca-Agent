@@ -2,15 +2,22 @@ import { assertEquals } from "@std/assert";
 import {
   contextTokensOf,
   contextUsageRatio,
+  estimateMessagesTokens,
+  estimateMessageTokens,
+  estimateTextTokens,
+  estimateToolTokens,
   FAST_MODEL_KEY,
   formatCompactTokens,
   formatContextUsageLine,
   formatPercent1,
   IMAGE_MODEL_KEY,
+  IMAGE_TOKEN_ESTIMATE,
   parseModelPreference,
   serializeModelPreference,
   summarizeContextUsage,
 } from "./shared/mod.ts";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "./ai/faux.ts";
+import type { AgentMessage } from "./ai/types.ts";
 
 Deno.test("model preference keys are distinct settings keys", () => {
   assertEquals(FAST_MODEL_KEY, "model_fast");
@@ -142,4 +149,102 @@ Deno.test("formatContextUsageLine renders the card headline in one line", () => 
     formatContextUsageLine(summary, undefined),
     "301.2K · Avg cache hit 99.6%",
   );
+});
+
+// ---- token estimation (see token-estimate.ts) ------------------------------
+
+Deno.test("estimateTextTokens: ASCII is four characters per token", () => {
+  assertEquals(estimateTextTokens(""), 0);
+  assertEquals(estimateTextTokens("abcd"), 1);
+  assertEquals(estimateTextTokens("abcde"), 2);
+});
+
+Deno.test("estimateTextTokens: non-ASCII costs one token per character", () => {
+  // Japanese is what the four-characters-per-token rule underprices; the
+  // estimate must not understate it (compacting late is what overflows).
+  assertEquals(estimateTextTokens("日本語"), 3);
+  assertEquals(estimateTextTokens("こんにちは世界"), 7);
+  // A mixed string sums the two rates.
+  assertEquals(estimateTextTokens("abc日"), 1 + 1);
+});
+
+Deno.test("estimateMessageTokens prices each role as the model receives it", () => {
+  const user: AgentMessage = {
+    role: "user",
+    content: [{ type: "text", text: "abcd" }],
+    timestamp: 1,
+  };
+  const notification: AgentMessage = {
+    role: "notification",
+    kind: "task",
+    title: "abcd",
+    body: "abcd",
+    status: "success",
+    timestamp: 2,
+  };
+  const context: AgentMessage = {
+    role: "context",
+    provider: "skills",
+    title: "Skills",
+    body: "abcd",
+    timestamp: 3,
+  };
+  const checkpoint: AgentMessage = {
+    role: "checkpoint",
+    title: "履歴 2 件を要約しました",
+    body: "abcd",
+    timestamp: 4,
+  };
+  // The model reads the body, not the head line: the title must not be
+  // priced (it is UI text).
+  assertEquals(
+    estimateMessageTokens(checkpoint) === estimateMessageTokens(context),
+    true,
+  );
+  // Every message costs its text plus structural overhead.
+  assertEquals(estimateMessageTokens(user) > 1, true);
+  assertEquals(estimateMessageTokens(notification) > 1, true);
+});
+
+Deno.test("estimateMessageTokens: images are priced by a fixed visual budget", () => {
+  const withImage: AgentMessage = {
+    role: "user",
+    content: [{
+      type: "image",
+      data: "A".repeat(100_000),
+      mimeType: "image/png",
+    }],
+    timestamp: 1,
+  };
+  const tokens = estimateMessageTokens(withImage);
+  // The base64 payload is not text the model reads: counting its characters
+  // would overstate a screenshot by orders of magnitude.
+  assertEquals(tokens < 10_000, true);
+  assertEquals(tokens >= IMAGE_TOKEN_ESTIMATE, true);
+});
+
+Deno.test("estimateMessageTokens: tool calls are priced by their arguments", () => {
+  const call: AgentMessage = fauxAssistantMessage([
+    fauxToolCall("bash", { command: "x".repeat(400) }, "t1"),
+  ]);
+  const text: AgentMessage = fauxAssistantMessage([fauxText("x".repeat(400))]);
+  // A tool call's arguments are as much of the request as text is.
+  assertEquals(
+    estimateMessageTokens(call) >= estimateMessageTokens(text),
+    true,
+  );
+});
+
+Deno.test("estimateMessagesTokens and estimateToolTokens are additive", () => {
+  const messages: AgentMessage[] = [
+    { role: "user", content: [{ type: "text", text: "abcd" }], timestamp: 1 },
+    fauxAssistantMessage([fauxText("abcd")]),
+  ];
+  assertEquals(
+    estimateMessagesTokens(messages),
+    estimateMessageTokens(messages[0]!) +
+      estimateMessageTokens(messages[1]!),
+  );
+  const tool = { name: "bash", description: "Run a command", parameters: {} };
+  assertEquals(estimateToolTokens(tool) > 0, true);
 });

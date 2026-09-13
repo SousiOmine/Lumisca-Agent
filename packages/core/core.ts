@@ -674,6 +674,18 @@ export class LumiscaCore {
     await agent.rewind(timestamp);
   }
 
+  /** Condense the session's older history into a checkpoint on demand (the
+   * `/compact` command), even below the automatic pressure threshold.
+   * Returns how many messages were replaced, or undefined when nothing
+   * could be condensed (no safe span, or the summarization failed — the
+   * transcript is unchanged either way). */
+  async compactSession(id: string): Promise<number | undefined> {
+    const agent = this.pool.require(id);
+    this.sessions.touch(id);
+    const result = await agent.compactNow();
+    return result?.removed.length;
+  }
+
   /** Switch the model used by a session (persisted). Retired models
    * (removed upstream, kept for existing sessions) cannot be newly
    * selected. Throws `conflict` while the session is streaming (rebuilding

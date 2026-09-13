@@ -94,9 +94,10 @@ interface ComposerProps {
    * text-taking command (`/plan `) or inserting a saved prompt. The menu
    * is generic: every caller can pass its own command list. */
   slashCommands?: SlashCommand[];
-  /** A `run` command (or one of its subcommands) was picked at the start
-   * of the input: the parent builds the mode prompt and submits it. The
-   * other kinds never reach the parent (the text is edited here). */
+  /** A `run` or `action` command (or one of its subcommands) was picked at
+   * the start of the input: the parent builds the mode prompt and submits
+   * it, or runs the client-side command. The other kinds never reach the
+   * parent (the text is edited here). */
   onSlashCommand?: (
     command: SlashCommand,
     item?: SlashCommandItem,
@@ -233,6 +234,9 @@ export function Composer({
         if (insert !== undefined) replaceSlashToken(state, insert, false);
         return;
       }
+      // "run" and "action" replace the whole message (a mode prompt, or a
+      // client-side command that sends nothing), so they only apply from
+      // the start of the input.
       if (value.slice(0, state.start).trim() === "") {
         onSlashCommand?.(command, item);
       }

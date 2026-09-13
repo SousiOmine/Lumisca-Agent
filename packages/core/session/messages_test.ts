@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "./messages.ts";
 import type { AgentMessage } from "@lumisca/core";
@@ -139,6 +139,92 @@ Deno.test("messages: deleteFrom removes a positional suffix", () => {
     } as AgentMessage);
     repo.deleteFrom("s1", 0);
     assertEquals(repo.list("s2"), [other]);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: replaceRange swaps a span for one message", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    const texts = ["a", "b", "c", "d"];
+    for (const [i, text] of texts.entries()) {
+      repo.append("s1", {
+        role: i % 2 === 0 ? "user" : "assistant",
+        content: [{ type: "text", text }],
+        timestamp: 1000 + i,
+      } as AgentMessage);
+    }
+
+    const checkpoint: AgentMessage = {
+      role: "checkpoint",
+      title: "履歴 2 件を要約しました",
+      body: "summary",
+      timestamp: 2000,
+    } as AgentMessage;
+    repo.replaceRange("s1", 0, 2, checkpoint);
+
+    // The replaced rows are gone, the checkpoint took the span's place, and
+    // the retained rows keep their order (a later read reproduces the
+    // in-memory transcript).
+    const listed = repo.listMessages("s1");
+    assertEquals(listed.length, 3);
+    assertEquals(listed[0]!.role, "checkpoint");
+    assertEquals(
+      listed.slice(1).map((m) =>
+        (m as { content: Array<{ text: string }> }).content[0]!.text
+      ),
+      ["c", "d"],
+    );
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: replaceRange tolerates a span past the persisted tail", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    // Two rows persisted, but the transcript the caller is replacing spans
+    // four messages: the newest two have no row yet (a run in flight).
+    for (const [i, text] of ["a", "b"].entries()) {
+      repo.append("s1", {
+        role: "user",
+        content: [{ type: "text", text }],
+        timestamp: 1000 + i,
+      } as AgentMessage);
+    }
+    const checkpoint: AgentMessage = {
+      role: "checkpoint",
+      title: "履歴 4 件を要約しました",
+      body: "summary",
+      timestamp: 2000,
+    } as AgentMessage;
+
+    repo.replaceRange("s1", 0, 4, checkpoint);
+
+    // Everything from the span's first row on is the span: nothing is left
+    // dangling behind the checkpoint.
+    const listed = repo.listMessages("s1");
+    assertEquals(listed.length, 1);
+    assertEquals(listed[0]!.role, "checkpoint");
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: replaceRange throws not_found for an unknown span", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    const thrown = assertThrows(() =>
+      repo.replaceRange("s1", 0, 2, sampleMessage())
+    ) as { kind: string };
+    assertEquals(thrown.kind, "not_found");
   } finally {
     db.close();
   }

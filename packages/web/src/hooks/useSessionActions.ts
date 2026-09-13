@@ -151,6 +151,17 @@ export function useSessionActions(
     [setViewError],
   );
 
+  /** Condense the session's older history into a checkpoint on demand (the
+   * `/compact` command). The event stream carries the resulting
+   * `messages_compacted` update, so nothing is applied here; a failure
+   * surfaces on the view. */
+  const compact = useCallback(
+    (key: string) => {
+      sessionApi(key).compact().catch((error) => setViewError(key, error));
+    },
+    [setViewError],
+  );
+
   const changeModel = useCallback(
     async (key: string, provider: string, modelId: string) => {
       const seq = ++modelChangeSeq.current;
@@ -213,6 +224,7 @@ export function useSessionActions(
     cancelGoal,
     answer,
     rewind,
+    compact,
     changeModel,
     changeThinkingLevel,
   };

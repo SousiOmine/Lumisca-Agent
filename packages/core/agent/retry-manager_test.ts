@@ -3,7 +3,10 @@ import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import type { AgentMessage } from "../ai/types.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
 import { RetryManager } from "./retry-manager.ts";
-import { MAX_EMPTY_RESPONSE_RETRIES } from "./retry-policy.ts";
+import {
+  isContextOverflowError,
+  MAX_EMPTY_RESPONSE_RETRIES,
+} from "./retry-policy.ts";
 
 /** An error-stopped, outputless assistant turn with the given message. */
 function errored(errorMessage: string): AgentMessage {
@@ -289,5 +292,115 @@ Deno.test("reset clears the budgets and the parked restarts", () => {
   assertEquals(
     retries.classify(fauxAssistantMessage(""), false).action,
     "followUp",
+  );
+});
+
+Deno.test("isContextOverflowError: provider window rejections are classified", () => {
+  // The reported failure (OpenCode Go / Console Go wording).
+  assertEquals(
+    isContextOverflowError(fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage:
+        "Error from provider (Console Go): This model's maximum context " +
+        "length is 1048576 tokens. However, you requested 1049871 tokens " +
+        "(665871 in the messages, 384000 in the completion). Please reduce " +
+        "the length of the messages or completion.",
+    })),
+    true,
+  );
+  // Other providers' wordings for the same condition.
+  assertEquals(
+    isContextOverflowError(fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage: "context_length_exceeded: your prompt is too long",
+    })),
+    true,
+  );
+  assertEquals(
+    isContextOverflowError(fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage: "The input token count exceeds the maximum",
+    })),
+    true,
+  );
+});
+
+Deno.test("isContextOverflowError: other failures are not overflows", () => {
+  // A transport cut is retried by the transient path, not by compaction.
+  assertEquals(
+    isContextOverflowError(fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage: "Stream ended without finish_reason",
+    })),
+    false,
+  );
+  // A permanent configuration failure has nothing to compact away.
+  assertEquals(
+    isContextOverflowError(fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage: "invalid api key",
+    })),
+    false,
+  );
+  // A normal stop is never an overflow, whatever it says.
+  assertEquals(
+    isContextOverflowError(fauxAssistantMessage("maximum context length")),
+    false,
+  );
+});
+
+Deno.test("classify: a context overflow parks a restart that condenses first", () => {
+  const retries = new RetryManager(instantSleep);
+  const decision = retries.classify(
+    fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage:
+        "This model's maximum context length is 1000 tokens. Please reduce " +
+        "the length of the messages or completion.",
+    }),
+    false,
+  );
+  assertEquals(decision.action, "park");
+  if (decision.action !== "park") throw new Error("expected park");
+  assertEquals(decision.overflow, true);
+  assertEquals(retries.hasPendingOverflow, true);
+  assertEquals(decision.notification.title.includes("Context window"), true);
+});
+
+Deno.test("classify: a second overflow surfaces instead of retrying", () => {
+  const retries = new RetryManager(instantSleep);
+  const overflow = () =>
+    fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage: "This model's maximum context length is 1000 tokens.",
+    });
+  retries.classify(overflow(), false);
+  // The retry was already spent: the provider's own error must stand.
+  assertEquals(retries.classify(overflow(), false), { action: "none" });
+  assertEquals(retries.hasPendingOverflow, true);
+});
+
+Deno.test("abort and reset clear a parked overflow", () => {
+  const retries = new RetryManager(instantSleep);
+  retries.classify(
+    fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage: "This model's maximum context length is 1000 tokens.",
+    }),
+    false,
+  );
+  assertEquals(retries.hasPendingOverflow, true);
+  retries.reset();
+  assertEquals(retries.hasPendingOverflow, false);
+  // The budget is reset too: a fresh exchange gets its recovery back.
+  assertEquals(
+    retries.classify(
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "This model's maximum context length is 1000 tokens.",
+      }),
+      false,
+    ).action,
+    "park",
   );
 });

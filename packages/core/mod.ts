@@ -49,6 +49,7 @@ export type {
   AgentMessage,
   AgentTool,
   AssistantMessage,
+  CheckpointMessage,
   ContextMessage,
   ImageContent,
   Message,
@@ -62,6 +63,15 @@ export type {
   Usage,
 } from "./ai/types.ts";
 export { SessionAgent } from "./agent/session-agent.ts";
+export {
+  type CompactionBudgets,
+  type CompactionPolicy,
+  type CompactionResult,
+  ContextCompactor,
+  DEFAULT_COMPACTION_POLICY,
+  resolveCompactionBudgets,
+  resolveCompactionPolicy,
+} from "./agent/context-compaction.ts";
 export { AGENT_MODES, findAgentMode } from "./modes/mod.ts";
 export type { AgentMode, AgentModeOption } from "./modes/mod.ts";
 export {

@@ -14,6 +14,7 @@
  * - `./content.ts` — message content helpers,
  * - `./mcp-config.ts` — MCP server config serialization,
  * - `./context-usage.ts` — context accounting and formatting,
+ * - `./token-estimate.ts` — fixed-heuristic token estimates for history,
  * - `./misc.ts` — errorMessage, InitialData, decode/parse/format helpers.
  */
 export * from "./settings-keys.ts";
@@ -25,4 +26,5 @@ export * from "./content.ts";
 export * from "./diff-stat.ts";
 export * from "./mcp-config.ts";
 export * from "./context-usage.ts";
+export * from "./token-estimate.ts";
 export * from "./misc.ts";

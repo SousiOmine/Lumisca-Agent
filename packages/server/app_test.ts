@@ -4,6 +4,7 @@ import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
+  type StreamRequest,
 } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore, type TodoPhase } from "@lumisca/core";
@@ -1809,5 +1810,100 @@ Deno.test("todo API returns the session's current plan", async () => {
     server.shutdown();
     core.close();
     if (root) await removeDirRetry(root);
+  }
+});
+
+Deno.test("compact condenses the history via the API", async () => {
+  const { core, server, faux, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+
+    // A small window so a couple of big turns cross the pressure threshold
+    // (the compaction only runs when a replacement can actually reduce the
+    // request).
+    const provider = faux.provider as unknown as {
+      getModels(): Array<Record<string, unknown>>;
+    };
+    const original = provider.getModels;
+    provider.getModels = () => [
+      ...original.call(faux.provider),
+      {
+        id: "small-window",
+        name: "small",
+        api: "openai-completions",
+        provider: faux.provider.id,
+        contextWindow: 30_000,
+        maxTokens: 3000,
+      },
+    ];
+
+    const sessionRes = await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        modelProvider: faux.provider.id,
+        modelId: "small-window",
+      }),
+    });
+    const session = await sessionRes.json();
+
+    // A context-inspecting responder: the summarization request is
+    // recognized by the compaction instruction in its final user message,
+    // so the answer order does not depend on how the prompts are scheduled
+    // (the prompt endpoint is fire-and-forget).
+    faux.setResponses(
+      Array.from({ length: 20 }, () => (context: StreamRequest) => {
+        const last = context.messages.at(-1) as
+          | { content?: Array<{ text?: string }> }
+          | undefined;
+        const text = last?.content?.[0]?.text ?? "";
+        return text.includes("compaction engine")
+          ? fauxAssistantMessage("## Summary\n- condensed")
+          : fauxAssistantMessage("ok");
+      }),
+    );
+    for (let i = 0; i < 6; i++) {
+      await json(base, `/api/sessions/${session.id}/prompt`, {
+        method: "POST",
+        body: JSON.stringify({ text: `turn ${i} ${"x".repeat(40_000)}` }),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+    let messages: Array<{ role: string }> = [];
+    for (let i = 0; i < 100; i++) {
+      messages = await (
+        await json(base, `/api/sessions/${session.id}/messages`)
+      ).json();
+      if (messages.some((m) => m.role === "checkpoint")) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assertEquals(messages.some((m) => m.role === "checkpoint"), true);
+
+    // The endpoint reports how many messages the manual call replaced (or
+    // omits the count when nothing safe was left).
+    const compactRes = await json(
+      base,
+      `/api/sessions/${session.id}/compact`,
+      { method: "POST" },
+    );
+    assertEquals(compactRes.status, 200);
+    const body = await compactRes.json();
+    assertEquals(body.ok, true);
+
+    // An unknown session is a 404, like the other session routes.
+    const missing = await json(base, "/api/sessions/nope/compact", {
+      method: "POST",
+    });
+    assertEquals(missing.status, 404);
+
+    await removeDirRetry(root);
+  } finally {
+    server.shutdown();
+    core.close();
   }
 });

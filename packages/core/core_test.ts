@@ -2436,3 +2436,126 @@ Deno.test("rewind while a question is pending aborts the run cleanly", async () 
 
   core.close();
 });
+
+// ---- context compaction (see agent/context-compaction.ts) ------------------
+
+/** A model whose window is small enough that a few turns of history cross
+ * the pressure threshold; the completion reserve is part of the budget the
+ * provider validates against (`window - outputCap`). */
+const SMALL_WINDOW_MODEL_ID = "small-window";
+
+/** Register a small-window faux model on the provider so a session can be
+ * compacted by the real code path (the faux stream answers every call). */
+function registerSmallWindowModel(
+  faux: ReturnType<typeof fauxProvider>,
+): void {
+  const provider = faux.provider as unknown as {
+    getModels(): Array<Record<string, unknown>>;
+  };
+  const original = provider.getModels;
+  provider.getModels = () => [
+    ...original.call(faux.provider),
+    {
+      id: SMALL_WINDOW_MODEL_ID,
+      name: "small",
+      api: "openai-completions",
+      provider: "faux",
+      // Big enough for the session's system prompt and tool schemas (an
+      // envelope over the threshold can never be repaired by compacting
+      // history), small enough that a few turns cross the threshold.
+      contextWindow: 30_000,
+      maxTokens: 3000,
+    },
+  ];
+}
+
+/** Answer a session's prompts with `turns` exchanges of a big user message
+ * and a short reply, so the transcript holds several units — the shape a
+ * long session has, and what makes a compaction possible at all (a single
+ * oversized message cannot be repaired by replacing its neighbours).
+ *
+ * Once the history crosses the threshold the pre-step compaction fires
+ * before a turn's own request, so each turn is served a summarization
+ * answer followed by its reply. */
+async function fillHistory(
+  core: LumiscaCore,
+  faux: ReturnType<typeof fauxProvider>,
+  sessionId: string,
+  turns: number,
+): Promise<void> {
+  faux.setResponses(
+    Array.from(
+      { length: turns * 2 },
+      (_, i) =>
+        fauxAssistantMessage([
+          fauxText(i % 2 === 0 ? "## Summary\n- condensed" : "ok"),
+        ]),
+    ),
+  );
+  for (let i = 0; i < turns; i++) {
+    await promptSession(core, sessionId, `turn ${i} ${"x".repeat(20_000)}`);
+  }
+}
+
+Deno.test("compaction persists the checkpoint and survives a reopen", async () => {
+  const { core, faux } = setup();
+  registerSmallWindowModel(faux);
+  const { ws } = await makeWorkspace(core);
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: faux.provider.id,
+    modelId: SMALL_WINDOW_MODEL_ID,
+  });
+  core.openSession(session.id);
+
+  await fillHistory(core, faux, session.id, 4);
+  // The next prompt needs the compaction's summarization call FIRST (the
+  // pre-step runs before the request), then the turn's own answer.
+  faux.setResponses([
+    fauxAssistantMessage([fauxText("## Summary\n- condensed")]),
+    fauxAssistantMessage([fauxText("done")]),
+  ]);
+  await promptSession(core, session.id, `turn 4 ${"x".repeat(20_000)}`);
+
+  const agent = core.getAgent(session.id)!;
+  // The history was condensed before the request went out.
+  assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
+  const roles = agent.messages.map((m) => m.role);
+
+  // Reopening restores exactly the condensed transcript from the database:
+  // the replaced rows are gone, the checkpoint is in their place, and
+  // nothing is duplicated or resurrected.
+  await core.closeSession(session.id);
+  await core.openSession(session.id);
+  const restored = core.getAgent(session.id)!.messages;
+  assertEquals(restored.map((m) => m.role), roles);
+  assertEquals(restored[0]!.role, "checkpoint");
+
+  await core.close();
+});
+
+Deno.test("compactSession condenses on demand and reports the count", async () => {
+  const { core, faux } = setup();
+  registerSmallWindowModel(faux);
+  const { ws } = await makeWorkspace(core);
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: faux.provider.id,
+    modelId: SMALL_WINDOW_MODEL_ID,
+  });
+  core.openSession(session.id);
+
+  await fillHistory(core, faux, session.id, 3);
+  const before = core.getAgent(session.id)!.messages.length;
+  // On demand: condense without waiting for the pressure threshold.
+  faux.setResponses([
+    fauxAssistantMessage([fauxText("## Summary\n- condensed")]),
+  ]);
+  const compacted = await core.compactSession(session.id);
+  assertEquals(compacted !== undefined && compacted > 0, true);
+  const agent = core.getAgent(session.id)!;
+  assertEquals(agent.messages.length < before, true);
+  assertEquals(agent.messages[0]!.role, "checkpoint");
+
+  await core.close();
+});

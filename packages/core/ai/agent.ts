@@ -40,6 +40,13 @@ export interface AgentInit {
   /** Convert the transcript to LLM messages (Lumisca's notification/mode
    * handling + image analysis live here). May be async (image analysis). */
   convertToLlm?: (messages: AgentMessage[]) => unknown[] | Promise<unknown[]>;
+  /** Runs before every LLM request of the loop, with the run's abort signal
+   * — after the previous turn's results landed and before the request is
+   * derived from the transcript. The context compactor (see
+   * agent/context-compaction.ts) rewrites `state.messages` here, so the
+   * request that follows already reflects the replacement; a long
+   * tool-heavy turn therefore cannot grow past the window mid-turn. */
+  beforeStep?: (signal: AbortSignal) => Promise<void>;
 }
 
 /** A completion (tool result) of one tool call. */
@@ -67,6 +74,9 @@ export class Agent {
   private readonly convertToLlm: (
     messages: AgentMessage[],
   ) => unknown[] | Promise<unknown[]>;
+  private readonly beforeStep:
+    | ((signal: AbortSignal) => Promise<void>)
+    | undefined;
   private readonly listeners = new Set<(event: AgentEvent) => void>();
   /** Signal of the CURRENT run. Recreated at every run start: an
    * AbortSignal is one-way, so a single long-lived controller would keep
@@ -86,6 +96,7 @@ export class Agent {
     this.streamFn = init.streamFn;
     this.sessionId = init.sessionId;
     this.convertToLlm = init.convertToLlm ?? ((m) => m as unknown[]);
+    this.beforeStep = init.beforeStep;
     this.state = {
       systemPrompt: init.initialState.systemPrompt,
       model: init.initialState.model,
@@ -287,6 +298,13 @@ export class Agent {
         const queued = this.steerQueue.shift()!;
         this.append(queued);
         continue;
+      }
+      // Pre-step: the transcript is complete up to this point (the previous
+      // turn's results and any steered message landed), so a rewrite here is
+      // what the request below is derived from.
+      if (this.beforeStep !== undefined) {
+        await this.beforeStep(this.abortController.signal);
+        if (this.abortRequested) return;
       }
       const { assistant, executedIds } = await this.step();
       if (this.abortRequested) return;

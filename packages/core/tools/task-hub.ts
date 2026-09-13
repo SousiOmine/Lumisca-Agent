@@ -2,6 +2,7 @@ import { Agent } from "../ai/agent.ts";
 import type { AgentEvent, AgentMessage, StreamFn } from "../ai/types.ts";
 import type { Api, AssistantMessage, Model } from "../ai/types.ts";
 import { CoreError, errorMessage } from "../errors.ts";
+import { createLogger } from "../log.ts";
 import {
   buildInterruptedRetryNotification,
   buildRetryNotification,
@@ -42,6 +43,7 @@ import {
   sandboxFileTools,
   sessionSkills,
 } from "./toolsets.ts";
+import { ContextCompactor } from "../agent/context-compaction.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import {
   formatTaskCompletion,
@@ -68,6 +70,10 @@ const TASK_TAIL_LIMIT = 8 * 1024;
 const MAX_FINISHED_SUBAGENTS = 100;
 /** `to` values of send_message that resolve to the caller's parent agent. */
 const PARENT_ALIASES = ["parent", "main"] as const;
+
+/** Module logger (debug-gated): a failed sub-agent compaction is a
+ * best-effort miss, not a session failure. */
+const log = createLogger("task");
 
 /** Read-only investigation tools of the `explore` sub-agent. */
 function exploreTools(
@@ -118,6 +124,10 @@ interface Subagent {
   description: string;
   status: SubagentStatus;
   agent: Agent | null;
+  /** Condenses this sub-agent's history when a request would exceed its
+   * model's window (see compactBeforeStep). Per sub-agent so the
+   * measurement anchor tracks its own turns. */
+  compactor: ContextCompactor;
   startedAt: number;
   finishedAt?: number;
   /** Tail of the current response (bounded; reported while running). */
@@ -379,6 +389,11 @@ export class TaskHub {
       // Steered notifications must reach the sub-agent's LLM as user
       // messages (the default conversion would drop their role).
       convertToLlm: (messages) => toLlmMessages(messages),
+      // Sub-agents run their own long tool chains, so they condense their
+      // history like the main agent: same seam, same budgets. The
+      // transcript is private (memory only — nothing is persisted and no
+      // client watches it), so the replacement is a plain splice.
+      beforeStep: (signal) => this.compactBeforeStep(id, signal),
     });
     const abort = new AbortController();
     const sub: Subagent = {
@@ -389,6 +404,18 @@ export class TaskHub {
       description,
       status: "running",
       agent,
+      compactor: new ContextCompactor({
+        model: runtime.model,
+        systemPrompt: () => agent.state.systemPrompt,
+        tools: () => agent.state.tools,
+        streamFn: this.streamFn,
+        sessionId: id,
+        // Memory only: a sub-agent's transcript is never persisted, so the
+        // replacement is the same splice the agent loop reads.
+        replace: (index, count, message) => {
+          agent.state.messages.splice(index, count, message);
+        },
+      }),
       startedAt: Date.now(),
       tail: "",
       resultText: "",
@@ -409,9 +436,30 @@ export class TaskHub {
     return this.info(id);
   }
 
+  /** Pre-step hook of one sub-agent: condense its history before a request
+   * that would exceed its model's window is derived from it (see
+   * agent/context-compaction.ts — the main agent runs the same seam). The
+   * compactor is cached per sub-agent so its measurement anchor survives the
+   * turns. */
+  private async compactBeforeStep(
+    agentId: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const sub = this.subs.get(agentId);
+    if (this.closed || signal.aborted || sub === undefined) return;
+    const agent = sub.agent;
+    if (agent === null) return;
+    try {
+      await sub.compactor.compactIfNeeded(agent.state.messages);
+    } catch (error) {
+      // A failed compaction must not kill the sub-agent: the request goes
+      // out with the history it had.
+      log.debug(`sub-agent compaction failed: ${errorMessage(error)}`);
+    }
+  }
+
   /** Run a sub-agent to completion, retrying the two recoverable failures
    * with exponential backoff (bounded by MAX_RATE_LIMIT_RETRIES each):
-   *
    * - a rate-limited (429) turn drops the empty error turn and re-runs the
    *   same prompt (no duplicate user message),
    * - a transient transport failure (a stream cut mid-flight) continues the

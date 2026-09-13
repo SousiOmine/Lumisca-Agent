@@ -84,6 +84,7 @@ async function* runStream(
     yield { type: "error", errorMessage: NOT_CONFIGURED(model.provider) };
     return;
   }
+  const outputCap = outputCapFor(model, options);
   const request: Record<string, unknown> = {
     model: languageModel,
     messages: toCoreMessages(context.messages),
@@ -96,10 +97,10 @@ async function* runStream(
     // The model's documented output cap (models.dev `limit.output`). Without
     // it the stream length is bounded only by the provider/gateway, and a
     // response cut off at that limit arrives as an opaque mid-stream
-    // failure; sending the cap lets the model finish its turn instead.
-    ...(model.maxTokens !== undefined && model.maxTokens > 0
-      ? { maxOutputTokens: model.maxTokens }
-      : {}),
+    // failure; sending the cap lets the model finish its turn instead. A
+    // caller may override it for one call (the compaction summarizer caps
+    // its own completion so the auxiliary request fits the window).
+    ...(outputCap !== undefined ? { maxOutputTokens: outputCap } : {}),
     // Exactly one LLM turn per StreamFn call: the SDK executes this turn's
     // tool calls (via the execute functions above); the Agent's outer loop
     // decides whether another turn follows.
@@ -400,6 +401,20 @@ function uncachedInputTokens(
   return typeof prompt === "number"
     ? Math.max(0, prompt - cacheRead - cacheWrite)
     : 0;
+}
+
+/** The completion cap to send for one request: the caller's override when it
+ * set one, else the model's documented `maxTokens`, else none (the
+ * provider's own default). */
+function outputCapFor(
+  model: Model<Api>,
+  options: StreamOptions | undefined,
+): number | undefined {
+  const override = options?.maxOutputTokens;
+  if (override !== undefined && override > 0) return override;
+  return model.maxTokens !== undefined && model.maxTokens > 0
+    ? model.maxTokens
+    : undefined;
 }
 
 /** Map a Lumisca thinking level to a Vercel reasoning hint (best effort).

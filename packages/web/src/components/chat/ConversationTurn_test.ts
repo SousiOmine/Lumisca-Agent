@@ -139,3 +139,37 @@ Deno.test("buildTurns: context snapshots join the turn they precede", () => {
     "assistant",
   ]);
 });
+
+Deno.test("buildTurns: a compaction checkpoint is a turn of its own", () => {
+  const checkpoint = (timestamp: number): AgentMessage => ({
+    role: "checkpoint",
+    title: "履歴 2 件を要約しました（約 12K トークン）",
+    body: "summary",
+    timestamp,
+  });
+
+  // The checkpoint marks where older history was replaced: it must not be
+  // absorbed into the surrounding turn, so the retained messages before it
+  // stay with their own prompt.
+  const turns = buildTurns([
+    user(1),
+    assistant(2),
+    checkpoint(3),
+    user(4),
+    assistant(5),
+  ]);
+  assertEquals(turns.length, 3);
+  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(turns[1]!.user.role, "checkpoint");
+  assertEquals(turns[1]!.standalone, true);
+  assertEquals(turns[1]!.responses.length, 0);
+  assertEquals(turns[2]!.user.role, "user");
+
+  // A checkpoint that replaced the whole prefix is still a row of its own,
+  // followed by the retained turn.
+  const leading = buildTurns([checkpoint(1), user(2), assistant(3)]);
+  assertEquals(leading.length, 2);
+  assertEquals(leading[0]!.user.role, "checkpoint");
+  assertEquals(leading[0]!.standalone, true);
+  assertEquals(leading[1]!.user.role, "user");
+});

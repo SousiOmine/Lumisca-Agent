@@ -14,6 +14,7 @@ import type { ReactNode } from "preact/compat";
 import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
 import type { ModePrompt, SavedPrompt } from "@lumisca/core";
 import {
+  IconArrowsMinimize,
   IconCode,
   IconFileDiff,
   IconGitBranch,
@@ -47,7 +48,11 @@ export type SlashCommandKind =
   /** Build the mode prompt from the selection and submit it. Only from the
    * start of the input — that prompt replaces the whole message, so a
    * command typed mid-text is left alone (mode palettes like `/review`). */
-  | "run";
+  | "run"
+  /** Run a client-side action instead of sending a prompt (`/compact`
+   * condenses the history through the session API). Only from the start of
+   * the input, like `run`. */
+  | "action";
 
 /** A slash command offered when `/` is typed at a word start. Commands with
  * `items` open a second level before executing; leaf commands execute
@@ -75,6 +80,20 @@ const MODE_ICONS: Record<string, Icon> = {
 
 const FALLBACK_ICON: Icon = IconCode;
 
+/** Client-side commands that are not agent modes (see SlashCommandKind
+ * "action"): `/compact` condenses the session's older history into a
+ * checkpoint. They need no workspace, so they are offered in chat sessions
+ * too. */
+export const ACTION_COMMANDS: SlashCommand[] = [
+  {
+    id: "compact",
+    label: "履歴を圧縮",
+    description: "古い履歴を要約してコンテキストを節約します",
+    icon: IconArrowsMinimize,
+    kind: "action",
+  },
+];
+
 /** The menu offered for `/` at a word start. A mode with
  * `buildPromptForText` is reusable anywhere in the input (`complete`); the
  * others are mode palettes that can only replace a whole message
@@ -96,7 +115,8 @@ export const slashCommands: SlashCommand[] = AGENT_MODES.map((mode) => ({
 }));
 
 /** Build the slash-commands menu including the /prompt submenu.
- * In chat mode only saved prompts are shown (agent modes need a workspace).
+ * In chat mode only saved prompts and client-side actions are shown (agent
+ * modes need a workspace).
  * Shared between ChatView and NewSessionView so the logic is not duplicated. */
 export function buildSlashCommands(
   savedPrompts: SavedPrompt[],
@@ -109,30 +129,26 @@ export function buildSlashCommands(
     insertText: p.prompt,
   }));
   if (isChat) {
-    // Chat mode: only saved prompts, no agent modes.
-    if (promptItems.length === 0) return [];
-    return [{
-      id: "prompt",
-      label: "保存済みプロンプト",
-      description: "保存したプロンプトテンプレートを挿入",
-      icon: IconMessage,
-      kind: "insert",
-      items: promptItems,
-    }];
+    // Chat mode: saved prompts and client-side actions, no agent modes.
+    return [...ACTION_COMMANDS, ...promptItemsMenu(promptItems)];
   }
-  // Workspace mode: agent modes + saved prompts.
-  const commands = [...slashCommands];
-  if (promptItems.length > 0) {
-    commands.push({
-      id: "prompt",
-      label: "保存済みプロンプト",
-      description: "保存したプロンプトテンプレートを挿入",
-      icon: IconMessage,
-      kind: "insert",
-      items: promptItems,
-    });
-  }
+  // Workspace mode: agent modes + client-side actions + saved prompts.
+  const commands = [...slashCommands, ...ACTION_COMMANDS];
+  commands.push(...promptItemsMenu(promptItems));
   return commands;
+}
+
+/** The `/prompt` submenu entry, or nothing when the user saved none. */
+function promptItemsMenu(promptItems: SlashCommandItem[]): SlashCommand[] {
+  if (promptItems.length === 0) return [];
+  return [{
+    id: "prompt",
+    label: "保存済みプロンプト",
+    description: "保存したプロンプトテンプレートを挿入",
+    icon: IconMessage,
+    kind: "insert",
+    items: promptItems,
+  }];
 }
 
 /** Build the user message + mode metadata a slash-command selection sends;

@@ -90,6 +90,7 @@ export function App({ initialData }: AppProps): ReactElement {
     cancelGoal,
     answer,
     rewind,
+    compact,
     changeModel,
     changeThinkingLevel,
   } = useSessionActions({
@@ -191,6 +192,10 @@ export function App({ initialData }: AppProps): ReactElement {
                   level,
                 )}
               onCancelGoal={() => activeTab && cancelGoal(activeTab)}
+              onActionCommand={(commandId) => {
+                if (!activeTab) return;
+                if (commandId === "compact") compact(activeTab);
+              }}
               onOpenSettings={() => setSettingsCategory("providers")}
             />
           )

@@ -23,6 +23,9 @@
   接続先（ピア）ごとのプロバイダーおよびモデル情報を一元管理する共有ストアです。設定ダイアログのプロバイダー／モデル一覧、モデルピッカー、チャットビューなどの全UIコンポーネントは、このストアを一貫して参照します。設定画面の開き直しやタブの切り替えなどで再マウントされても再フェッチは行われません。  
   そのため、**モデルの変更操作は必ず本ストアへ書き戻す必要があります**（内部的には `applyModelEnabled` を使用し、トグルUIからは `providers.ts` の `setModelEnabled` を経由して実行します）。状態をコンポーネント内のローカルステートに持たせてしまうと、画面遷移やアンマウント時に変更内容が消失するためご注意ください。
 
+- **圧縮チェックポイントの表示**  
+  圧縮で生成される `checkpoint` メッセージは、`ContextRow` と同じ `SystemRow` を使ったコンパクトな1行（`CheckpointRow.tsx`）として描画され、クリックでモデルに渡された要約本文を展開できます。`buildTurns` では独立した行（`standalone`）として扱い、前後のターンに吸収させません（置換位置を示す行であり、そのターンを開始したプロンプトではないため）。実行中の圧縮は走行状態を消してはならないため、巻き戻しの `messages_truncated` とは別イベント（`messages_compacted`）で通知します。
+
 ---
 
 ## 3. core パッケージの設計方針
@@ -32,6 +35,16 @@
 - **`agent/`**  
   `SessionAgent`（プロンプト生成・タイトル付与・MCP・通知処理）、`RetryManager`（空応答や429エラーのリトライ制御）、`GoalRunner`（自律的なゴール達成ループ）、`AgentFactory`（配線処理）、`SessionPool`（エージェントのライフサイクル管理）で構成されます。  
   なお、`agent/context-providers.ts` で扱う**動的コンテキスト**（スキルカタログや `AGENTS.md`）は、プロンプトに直書きせず `context` メッセージとして履歴スタックに追加し、値に変更があった場合のみ再送する設計です（DSHにおける `PromptContext` と同様のアプローチです）。
+- **`agent/context-compaction.ts`**  
+  長時間動作するセッションの履歴をモデルのリクエスト上限内に保つ**コンテキスト圧縮**の唯一の実装です（DeepSeek Harness の compaction seam と token meter をLumiscaの語彙に写像したもの）。設計上の要点は次のとおりです。
+  * **計測**: 直近の assistant `usage`（プロバイダーが報告した実測値）をアンカーとし、それ以降に追加された分だけを `shared/token-estimate.ts` のヒューリスティックで見積もります。アンカーが無い場合のみリクエスト全体（システムプロンプト＋ツール定義＋履歴）を見積もります。
+  * **予算**: プロバイダーは `prompt + maxOutputTokens` をウィンドウに対して検証するため、しきい値は `contextWindow` ではなく **`contextWindow − maxTokens`**（使用可能入力）に対する比率です。既定はしきい値 80%・保持 16%（DSH の `thresholdRatio` / `retainRatio` と同値）。
+  * **発火点**: `Agent.beforeStep`（各LLMリクエストの直前）。ターン内でツール結果が積み上がる暴走を止められます（DSH の `agent/pre-step` と同じ理由）。
+  * **置換**: 古い区間を**1つの `checkpoint` メッセージで置き換え**ます（追記ではありません）。切断点は「assistant + 続く toolResult 群」を1単位として選ぶため、tool-call/result の対応は必ず保たれます（DSH の tool-pairing balance 検査に相当）。最新の1単位は常に保持します。
+  * **要約呼び出し**: セッション自身のシステムプロンプト・ツールスキーマ・対象区間をそのまま再生し、指示を最後の user メッセージとして追加します（プロバイダーのプレフィックスキャッシュを再利用）。`StreamOptions.maxOutputTokens` で出力を上限内に抑えます。
+  * **失敗時**: 要約が失敗した場合は履歴を一切変更せず、そのままの履歴でリクエストを続行します（DSH と同じ「durable surface を保持する」方針）。要約が元区間より縮まない場合も拒否します。
+  * **overflow 回復**: プロバイダーがウィンドウ超過を返した場合（`retry-policy.ts` の `isContextOverflowError`）、しきい値と保持予算を無視した強制圧縮を1回だけ行い、成功した場合のみ再試行します。2回目の拒否はプロバイダーの元エラーをそのまま提示します（DSH の `maxOverflowRetries` と同じ）。
+  * **適用範囲**: メインセッション（DB永続化＋`messages_compacted` イベント）とサブエージェント（メモリのみ）の双方が同じ `ContextCompactor` を使います。
 - **`ai/rate-limit.ts`**  
   HTTP 429（レート制限）の判定、指数バックオフ、リトライループを担う唯一の実装です。通信トランスポート、セッション、サブエージェントの間で共有されています。`agent/llm-retry.ts` は本モジュールへ処理を委譲する形で assistant メッセージのリトライを行います。
 - **`goal/loop.ts`**  
@@ -44,6 +57,8 @@
   フロントエンドでも安全に動作する共通ヘルパー群です（esbuild により web バンドルへ取り込まれます）。`misc.ts` はエラー処理、JSON、テキスト操作、モデル定義、ブートストラップ、非同期処理のカテゴリごとに明確に分類されています。
 - **`shared/context-usage.ts`**  
   コンテキスト使用量メーターを計算する唯一の共通実装です。`Usage.input` は**キャッシュされていない**プロンプト入力トークン数を表しており、1ターンの総プロンプトトークン数は `input + cacheRead + cacheWrite` として算出されます（`ai/types.ts` の仕様に準拠）。この仕様を取り違えると使用量が本来の倍で見積もられてしまうため、本関数を通じて計算する必要があります。
+- **`shared/token-estimate.ts`**  
+  プロバイダーの実測値が無い履歴を価格付けする固定ヒューリスティックです（ASCII は4文字/トークン、それ以外は1文字/トークン、画像は固定の視覚予算）。コンパクタはアンカー以降の差分だけをここで見積もるため、この誤差は常にリクエスト全体ではなく差分に限定されます。CJK を過小評価しない（＝圧縮が遅れて溢れる方向に倒れない）よう、非ASCII は1文字1トークンとしています。
 - **`settings/keys.ts` 相当の機能**  
   **設定キーの信頼できる単一の情報源（SSOT）は `shared/settings-keys.ts` です**（`APP_MCP_SETTINGS_KEY` などの定数もここで定義されています）。テーマなどのUI関連キーから、サーバー単体で動作する自動アップデート設定（`UPDATE_AUTO_KEY` / `UPDATE_AUTO_RESTART_KEY`）まで、すべての設定キーを同ファイルで一元管理しています。
 
@@ -92,6 +107,10 @@
   メンテナンス用スクリプト共通のヘルパー関数群（`repoRoot` / `binaryName` / `reportUsage` / `parseOptions` / `createChecker`）を提供します。`repoRoot` のパス解決には `fileURLToPath` を使用しています（`.pathname` の手動変換は、スペースを含むパスで破損するため禁止です）。
 - **esbuild（本番環境）と Vite（開発環境）のデュアル構成**  
   本番用配布物のバンドル生成（`deno compile` への内包）は `server/bundle.ts`（esbuild）が担当し、開発時の HMR（Hot Module Replacement）および API プロキシ機能は `packages/web/vite.config.ts`（Vite）が担います。なお、CSS の `@import` 解決順序の仕様は両環境で厳密に一致させています（詳細は `packages/web/src/styles/README.md` を参照）。
+- **履歴メッセージのロール**  
+  モデルに見せる形（`toLlmMessages`）は `user` / `assistant` / `toolResult` の3種のみです。Lumisca 固有のロール（`notification` / `context` / `mode` / `checkpoint`）はいずれも user メッセージへ変換されます。新しいロールを追加する場合は、この変換・`estimateMessageTokens`（トークン見積り）・web 側の `MessageRow` / `buildTurns` の3か所を同時に更新してください（1か所でも漏れると、そのメッセージがモデルに届かないか、UIで描画されません）。
+- **`MessageRepo.replaceRange`**  
+  履歴の一部を置き換える唯一の DB 操作です（圧縮が使用）。行はトランスクリプト順に挿入されるため rowid が位置と一致する、という `deleteFrom` と同じ前提に依存しています。置換後の永続化済み件数（`SessionAgent.savedCount`）は「置換位置＋1＋置換区間より後ろに残った既存行数」で再計算します。ここを単純にトランスクリプト長にしてしまうと、まだ保存されていない末尾のメッセージが二重に挿入されます。
 
 ---
 

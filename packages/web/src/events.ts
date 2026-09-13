@@ -416,6 +416,35 @@ export function applyEvent(
         thinkingStartAt: undefined,
       };
     }
+    case "messages_compacted": {
+      // Older history was condensed into a checkpoint (the run keeps
+      // streaming, so no run state is touched). Drop the replaced messages
+      // and tombstone their keys exactly like a rewind truncation, then put
+      // the checkpoint where they were: at `index` in the new transcript,
+      // which is one position after the retained prefix the view already
+      // shows. A view that is missing part of that prefix (a resync in
+      // flight) falls back to appending — the checkpoint must never be
+      // dropped, its summary is the only trace of the removed history.
+      const removedKeys = new Set(event.removed.map((m) => messageKey(m)));
+      const removed = new Set(view.removed);
+      for (const key of removedKeys) removed.add(key);
+      const kept = view.messages.filter((m) =>
+        !removedKeys.has(messageKey(m)) &&
+        messageKey(m) !== messageKey(event.message)
+      );
+      // The checkpoint sits where the replaced span began: `event.index` in
+      // the new transcript, which is the position of the first kept message
+      // that followed the span. A view that lacks that message (a resync in
+      // flight) appends instead — the checkpoint must never be dropped, its
+      // summary is the only trace of the removed history.
+      const anchor = view.messages[event.index + event.removed.length];
+      const at = anchor === undefined
+        ? -1
+        : kept.findIndex((m) => messageKey(m) === messageKey(anchor));
+      const messages = [...kept];
+      messages.splice(at === -1 ? kept.length : at, 0, event.message);
+      return { ...view, messages, removed };
+    }
     case "agent_end":
       return view.agentStartedAt === undefined ? null : {
         ...view,

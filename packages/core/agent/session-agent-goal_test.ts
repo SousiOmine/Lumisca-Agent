@@ -107,6 +107,7 @@ function makeGoalAgent(
       list: () => [],
       listMessages: () => [],
       deleteFrom: () => {},
+      replaceRange: () => {},
       deleteBySession: () => {},
     },
     onEvent: (event) => {

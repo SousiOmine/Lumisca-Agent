@@ -1,6 +1,8 @@
 import { assertEquals } from "@std/assert";
 import { detectSlash } from "./hooks/useSlashMenu.ts";
 import {
+  ACTION_COMMANDS,
+  buildSlashCommands,
   modeRewindText,
   slashCommands,
   slashPrompt,
@@ -217,4 +219,30 @@ Deno.test("detectSlash: caret must stay in the token (closes after space)", () =
 Deno.test("detectSlash: the nearest token behind the caret wins", () => {
   assertEquals(detectSlash("メモ /plan あと /re", 18, false)?.query, "re");
   assertEquals(detectSlash("メモ /plan あと /re", 18, false)?.start, 12);
+});
+
+Deno.test("buildSlashCommands: /compact is offered as an action command", () => {
+  const compactCommand = ACTION_COMMANDS.find((c) => c.id === "compact");
+  assertEquals(compactCommand !== undefined, true);
+  assertEquals(compactCommand!.kind, "action");
+  assertEquals(compactCommand!.items, undefined);
+
+  // Chat sessions (no workspace) get it too: condensing history needs no
+  // workspace, unlike the agent modes.
+  const chat = buildSlashCommands([], true);
+  assertEquals(chat.map((c) => c.id), ["compact"]);
+  assertEquals(chat[0]!.kind, "action");
+
+  // Workspace sessions keep the agent modes and add the action command.
+  const workspace = buildSlashCommands([], false);
+  assertEquals(workspace.some((c) => c.id === "compact"), true);
+  assertEquals(workspace.some((c) => c.id === "plan"), true);
+
+  // Saved prompts stay a separate submenu, after the action commands.
+  const withPrompts = buildSlashCommands(
+    [{ id: "p1", label: "P", prompt: "text" }],
+    true,
+  );
+  assertEquals(withPrompts.map((c) => c.id), ["compact", "prompt"]);
+  assertEquals(withPrompts[1]!.kind, "insert");
 });

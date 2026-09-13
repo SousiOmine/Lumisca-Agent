@@ -66,6 +66,9 @@ interface ChatViewProps {
   onThinkingLevelChange: (level: ThinkingLevel) => void;
   /** Cancel the session's active goal (the goal panel's button). */
   onCancelGoal: () => void;
+  /** Run a client-side slash command (kind "action"): `/compact` condenses
+   * the session's older history into a checkpoint. */
+  onActionCommand?: (commandId: string) => void;
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
 }
@@ -85,6 +88,7 @@ export function ChatView(
     onModelChange,
     onThinkingLevelChange,
     onCancelGoal,
+    onActionCommand,
     onOpenSettings,
   }: ChatViewProps,
 ) {
@@ -180,15 +184,22 @@ export function ChatView(
     if (el) el.scrollTop = el.scrollHeight;
   };
 
-  /** A `run` command was picked at the start of the input (the composer
-   * handles completion and insertion itself — see Composer.applySlashPick).
-   * Agent modes (existing commands) build their prompt and send it like a
-   * regular submit (with mode metadata). The composer text is cleared by
-   * the caller as with a regular submit. */
+  /** A `run` or `action` command was picked at the start of the input (the
+   * composer handles completion and insertion itself — see
+   * Composer.applySlashPick). Agent modes (existing commands) build their
+   * prompt and send it like a regular submit (with mode metadata).
+   * Client-side actions (`/compact`) call their API instead of sending a
+   * prompt; the command token leaves the composer either way, exactly like
+   * a submit clears it. */
   const handleSlashCommand = (
     command: SlashCommand,
     item?: SlashCommandItem,
   ) => {
+    if (command.kind === "action") {
+      onInputChange("");
+      onActionCommand?.(command.id);
+      return;
+    }
     const result = slashPrompt(command, item);
     if (result !== null) {
       submit(result.text, result.mode);

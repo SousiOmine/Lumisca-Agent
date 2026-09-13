@@ -46,6 +46,10 @@ import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import type { GoalStore } from "../goal/loop.ts";
+import {
+  type CompactionResult,
+  ContextCompactor,
+} from "./context-compaction.ts";
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
@@ -146,6 +150,11 @@ export class SessionAgent {
   /** Owns the vacant-response / rate-limit retry state (budgets, parked
    * restarts, abort epochs). */
   private readonly retry: RetryManager;
+  /** Condenses the history when a request would exceed the model's window
+   * (the DeepSeek Harness's compaction seam; see context-compaction.ts).
+   * Runs before every LLM request of a run and after a provider-confirmed
+   * overflow. */
+  private readonly compactor: ContextCompactor;
   /** Owns the autonomous goal loop (start / cancel / rewind-cancel /
    * per-turn judging). Null when the goal loop is disabled. */
   private readonly goals: GoalRunner | null;
@@ -226,6 +235,32 @@ export class SessionAgent {
       streamFn: options.streamFn,
       sessionId: options.sessionId,
       convertToLlm: (messages) => this.convertToLlm(messages),
+      beforeStep: (signal) => this.compactBeforeStep(signal),
+    });
+    // Condense the history before a request would exceed the model's window
+    // (see context-compaction.ts). The compactor reads the live prompt and
+    // tools, so a mid-session model or tool change is reflected without
+    // rebuilding it.
+    this.compactor = new ContextCompactor({
+      model: options.model,
+      systemPrompt: () => this.agent.state.systemPrompt,
+      tools: () => this.agent.state.tools,
+      streamFn: options.streamFn,
+      sessionId: options.sessionId,
+      replace: (index, count, message) =>
+        this.replaceHistory(index, count, message),
+      onCompacted: (result, message) => {
+        this.emit({
+          type: "messages_compacted",
+          sessionId: this.sessionId,
+          index: result.index,
+          message,
+          removed: result.removed.map(({ role, timestamp: ts }) => ({
+            role,
+            timestamp: ts,
+          })),
+        });
+      },
     });
     this.contextProviders = options.contextProviders ?? [];
     this.rebaseContexts(this.agent.state.messages);
@@ -956,17 +991,130 @@ export class SessionAgent {
    * notification becomes the next prompt once the dead run has fully
    * settled, so both run callers — prompt() (an awaited run) and startRun()
    * (web / injected notifications) — hold off reporting completion until
-   * the restart chain has finished. */
+   * the restart chain has finished.
+   *
+   * A restart parked by a context overflow condenses the history first: the
+   * request that was rejected cannot be re-sent unchanged, so the forced
+   * compaction (threshold and retention bypassed) runs here — after the dead
+   * run settled, before the restart's first request. When nothing could be
+   * freed the restart is dropped and the provider's own error stands, rather
+   * than paying for a request that will be rejected again. */
   private async resumeAfterErrorRun(): Promise<void> {
+    if (this.retry.hasPendingOverflow) {
+      const result = await this.compactForOverflow();
+      if (result === null) {
+        this.retry.clearPendingRestart();
+        return;
+      }
+    }
     await this.retry.resumeOnce(this.agent, this.closed);
+  }
+
+  /** Condense the history as far as one balanced span allows (the overflow
+   * recovery path). Returns null when nothing could be replaced — a failed
+   * summarization or no safe span — which is the signal that the retry
+   * cannot help. */
+  private async compactForOverflow(): Promise<CompactionResult | null> {
+    try {
+      const result = await this.compactor.compactIfNeeded(
+        this.agent.state.messages,
+        true,
+      );
+      if (result !== null) this.republishContextsAfter(result);
+      return result;
+    } catch (error) {
+      log.warn(
+        `session ${this.sessionId}: overflow compaction failed: ${
+          errorMessage(error)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  /** Pre-step hook of the agent loop: condense the history before a request
+   * that would exceed the model's window is derived from it. Running here
+   * (rather than only when a run ends) is what keeps a tool-heavy turn from
+   * growing past the window mid-turn.
+   *
+   * A compaction that removed context publications republishes them: the
+   * provider would otherwise keep an anchor to a message that is no longer
+   * in the history and never send the value again. */
+  private async compactBeforeStep(signal: AbortSignal): Promise<void> {
+    if (this.closed || signal.aborted) return;
+    try {
+      const result = await this.compactor.compactIfNeeded(
+        this.agent.state.messages,
+      );
+      if (result !== null) this.republishContextsAfter(result);
+    } catch (error) {
+      // A failed replacement must not kill the run: the request then goes
+      // out with the history it had (the same outcome as a failed
+      // summarization).
+      log.warn(
+        `session ${this.sessionId}: compaction failed: ${errorMessage(error)}`,
+      );
+    }
+  }
+
+  /** Condense the history on demand (the manual `/compact` path). Resolves
+   * with what was replaced, or undefined when no safe span existed or the
+   * summarization failed — the transcript is then unchanged either way. */
+  async compactNow(): Promise<CompactionResult | undefined> {
+    if (this.closed) return undefined;
+    const result = await this.compactor.compactNow(this.agent.state.messages);
+    if (result !== null) this.republishContextsAfter(result);
+    return result ?? undefined;
+  }
+
+  /** After a compaction: publish the context updates that the re-anchoring
+   * queued. Only a compaction that removed a context publication can queue
+   * one (a provider whose snapshot is gone must re-establish its value);
+   * everything else is already anchored. */
+  private republishContextsAfter(result: CompactionResult): void {
+    const removedProvider = result.removed.some(
+      (message) => message.role === "context",
+    );
+    if (!removedProvider) return;
+    this.publishContexts();
+  }
+
+  /** Replace `count` messages from `index` with `message`: the database
+   * first (a failed write leaves memory untouched, so the two can never
+   * diverge), then the in-memory transcript, the persisted-row counter, and
+   * the clients. Used by the context compactor through its `replace`
+   * callback.
+   *
+   * The persisted-row counter is recomputed, not reset: before the
+   * replacement the first `savedCount` messages had rows, so the messages
+   * that followed the span and sat inside that prefix are still persisted
+   * after it. Only the checkpoint (position `index`) and that surviving
+   * prefix are counted; whatever trailed the persisted prefix is written by
+   * the next `persistMessages`. */
+  private replaceHistory(
+    index: number,
+    count: number,
+    message: AgentMessage,
+  ): void {
+    const persistedBefore = this.savedCount;
+    this.messageRepo.replaceRange(this.sessionId, index, count, message);
+    this.agent.state.messages.splice(index, count, message);
+    this.savedCount = index + 1 +
+      Math.max(0, persistedBefore - (index + count));
+    // The replacement may have removed the context publications the
+    // truncated messages carried: re-anchor so a provider whose snapshot is
+    // gone publishes it again before the next request (the caller publishes
+    // what the re-anchoring queued).
+    this.rebaseContexts(this.agent.state.messages);
   }
 
   /** Append only the messages added since the last save. */
   private persistMessages(): void {
     const messages = this.agent.state.messages;
     if (messages.length < this.savedCount) {
-      // History was compacted/truncated (no such path today, but guard
-      // against it): re-anchor so messages are never re-appended.
+      // The history shrank (a compaction replaced a span, or a rewind
+      // truncated it) and the rows are already in step: re-anchor so the
+      // surviving messages are never re-appended.
       this.savedCount = messages.length;
     }
     for (let i = this.savedCount; i < messages.length; i++) {

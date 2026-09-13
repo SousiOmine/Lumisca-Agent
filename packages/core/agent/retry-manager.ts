@@ -1,10 +1,12 @@
 import type { Agent } from "../ai/agent.ts";
 import type { AgentMessage, AssistantMessage } from "../ai/types.ts";
 import {
+  buildContextOverflowRetryNotification,
   buildInterruptedRetryNotification,
   buildRateLimitRetryNotification,
   buildRetryNotification,
   hasNoVisibleOutput,
+  isContextOverflowError,
   isSilentErrorResponse,
   isTransientStreamError,
   MAX_EMPTY_RESPONSE_RETRIES,
@@ -21,7 +23,21 @@ import type { NotificationMessage } from "../types/notification.ts";
 export type RetryDecision =
   | { action: "none" }
   | { action: "followUp"; notification: NotificationMessage }
-  | { action: "park"; notification: NotificationMessage; rateLimit: boolean };
+  | {
+    action: "park";
+    notification: NotificationMessage;
+    rateLimit: boolean;
+    /** True when the parked restart follows a context overflow: the history
+     * must be condensed before the run restarts (see SessionAgent). */
+    overflow?: boolean;
+  };
+
+/** Maximum consecutive context-overflow recoveries per exchange. One is
+ * enough when the forced compaction reduces the history; a second rejection
+ * means compaction could not free enough (one indivisible unit still
+ * exceeds the window), so the provider's own error must surface instead of
+ * looping. Mirrors DSH's `maxOverflowRetries` default. */
+export const MAX_OVERFLOW_RETRIES = 1;
 
 /** Owns the vacant-response / rate-limit retry state of one session agent.
  * Extracted from SessionAgent so the retry budgets, the parked restart
@@ -45,6 +61,13 @@ export class RetryManager {
    * dropping long streams cannot loop forever (each restart re-sends the
    * whole conversation, so an unbounded chain would burn quota). */
   private interruptedRetries = 0;
+  /** Consecutive context-overflow recoveries in the current exchange.
+   * Bounded: the first one condenses the history and restarts, a second
+   * rejection surfaces (compaction could not free enough). */
+  private overflowRetries = 0;
+  /** True while a parked restart follows a context overflow: the agent
+   * condenses the history before consuming it. */
+  private pendingOverflow = false;
   /** The retry notification parked to restart a run after a silent-error
    * turn killed it. Consumed by resumeOnce the dead run has settled. */
   private pendingErrorRetry: NotificationMessage | null = null;
@@ -82,6 +105,8 @@ export class RetryManager {
     this.emptyResponseRetries = 0;
     this.rateLimitRetries = 0;
     this.interruptedRetries = 0;
+    this.overflowRetries = 0;
+    this.pendingOverflow = false;
     this.pendingErrorRetry = null;
     this.pendingRateLimitRetry = null;
   }
@@ -90,12 +115,30 @@ export class RetryManager {
   abort(): void {
     this.retryAbort.abort();
     this.abortEpoch++;
+    this.pendingOverflow = false;
   }
 
   /** True when a silent-error or rate-limit restart is parked. */
   get hasPendingRestart(): boolean {
     return this.pendingErrorRetry !== null ||
       this.pendingRateLimitRetry !== null;
+  }
+
+  /** True when a parked restart follows a context overflow: the caller
+   * must condense the history before it re-prompts (see resumeOnce). */
+  get hasPendingOverflow(): boolean {
+    return this.pendingOverflow;
+  }
+
+  /** Drop a parked restart. Used by the overflow path when the forced
+   * compaction could not free anything: the retry would hit the same
+   * rejection, so the provider's original error must surface instead of
+   * burning another request (DSH authorizes the overflow retry only when the
+   * surface replacement actually advanced). */
+  clearPendingRestart(): void {
+    this.pendingErrorRetry = null;
+    this.pendingRateLimitRetry = null;
+    this.pendingOverflow = false;
   }
 
   /** Classify one assistant turn: progress resets, vacant normal stops
@@ -132,6 +175,29 @@ export class RetryManager {
     if (assistant.stopReason === "aborted") return { action: "none" };
     const rateLimit = isRetryableRateLimit(assistant);
     const transientStreamError = isSilentErrorResponse(assistant);
+    // Context overflow is recoverable, but only by shrinking the history:
+    // park a restart that the agent condenses before consuming. Checked
+    // before the vacant/transient branches because an overflow arrives as an
+    // error-stopped turn like they do — its wording is what distinguishes
+    // it. A second rejection within the same exchange means compaction could
+    // not free enough, so the provider's own error surfaces.
+    if (
+      !closed && isContextOverflowError(assistant) &&
+      this.overflowRetries < MAX_OVERFLOW_RETRIES
+    ) {
+      this.overflowRetries++;
+      this.pendingOverflow = true;
+      const notification = buildContextOverflowRetryNotification(
+        this.overflowRetries,
+      );
+      this.pendingErrorRetry = notification;
+      return {
+        action: "park",
+        notification,
+        rateLimit: false,
+        overflow: true,
+      };
+    }
     if (!rateLimit && !transientStreamError) {
       // Outputless but not retryable: a vacant normal stop retries in-run
       // (followUp); a permanent error surfaces.
@@ -191,6 +257,7 @@ export class RetryManager {
       } else {
         this.pendingErrorRetry = null;
       }
+      this.pendingOverflow = false;
       if (isRateLimit) {
         const delayMs = rateLimitRetryDelayMs(this.rateLimitRetries);
         try {

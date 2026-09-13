@@ -17,6 +17,7 @@ export type {
   AskQuestion,
   BackgroundCommandInfo,
   CatalogStatus,
+  CheckpointMessage,
   ClientEvent,
   ConnectionEntry,
   ContextMessage,

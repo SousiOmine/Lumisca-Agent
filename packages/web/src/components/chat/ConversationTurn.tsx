@@ -21,7 +21,13 @@ export type { ConversationTurnData } from "./types.ts";
  * so the agent can react to them). Empty-response retries (kind "retry")
  * are an internal repair and must not split the turn: the retried response
  * then lands in the same turn, and the whole thing collapses together when
- * the run ends. */
+ * the run ends.
+ *
+ * A compaction checkpoint is a row of its own, not part of any turn: it
+ * marks where older history was replaced, so it must not be absorbed into
+ * the surrounding turn (the retained messages before it belong to their own
+ * prompt). Its `responses` stay empty — see ConversationTurn, which renders
+ * such a turn without an activity header. */
 export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   const turns: ConversationTurnData[] = [];
   // Context snapshots published before the session's first prompt belong to
@@ -31,6 +37,11 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   for (const message of messages) {
     if (message.role === "user" || message.role === "mode") {
       turns.push({ user: message, responses: pending });
+      pending = [];
+      continue;
+    }
+    if (message.role === "checkpoint") {
+      turns.push({ user: message, responses: pending, standalone: true });
       pending = [];
       continue;
     }
@@ -72,6 +83,19 @@ export const ConversationTurn = memo(function ConversationTurn({
   ) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  // A checkpoint turn is one compact row: no activity header, no work log
+  // (nothing ran for it), no timing.
+  if (turn.standalone) {
+    return (
+      <section className="conversation-turn">
+        <MessageRow
+          message={turn.user}
+          toolResults={toolResults}
+          runningTools={runningTools}
+        />
+      </section>
+    );
+  }
   const assistants = turn.responses.filter(
     (message): message is AssistantMessage => message.role === "assistant",
   );

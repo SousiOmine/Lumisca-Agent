@@ -155,24 +155,28 @@ export type Message = UserMessage | AssistantMessage | ToolResultMessage;
 
 export type LlmContentBlock = TextContent | ImageContent | ThinkingContent;
 
-/** A message as handed to the LLM transport (not yet provider-specific). */
+/** A message as handed to the LLM transport (not yet provider-specific).
+ * The content blocks are the assistant's own union too: an assistant turn
+ * carries tool calls, and the transport serializes them (`toCoreMessages`
+ * maps a toolCall block to the provider's tool-call part). */
 export interface LlmMessage {
   role: "user" | "assistant" | "toolResult";
-  content: string | LlmContentBlock[];
+  content: string | (LlmContentBlock | ToolCall)[];
   timestamp?: number;
 }
 
 // ---- agent message (the transcript, incl. Lumisca extras) --------------------
 
 /** The Lumisca transcript message: the pi-ai union plus the mode,
- * notification and context roles the agent loop injects. */
+ * notification, context and checkpoint roles the agent loop injects. */
 export type AgentMessage =
   | UserMessage
   | AssistantMessage
   | ToolResultMessage
   | ModeMessage
   | NotificationMessage
-  | ContextMessage;
+  | ContextMessage
+  | CheckpointMessage;
 
 export interface ModeMessage {
   role: "mode";
@@ -217,6 +221,30 @@ export interface ContextMessage {
    * reopened session neither republishes an unchanged value nor loses track
    * of what the history already carries. */
   state?: unknown;
+  timestamp: number;
+}
+
+/**
+ * A compaction checkpoint: the summary that replaced an older span of the
+ * transcript to keep the conversation inside the model's request limit (see
+ * agent/context-compaction.ts). It is one durable message sitting where the
+ * replaced span was, so the history after a compaction reads as
+ * checkpoint → retained recent messages.
+ *
+ * The replacement is how the DeepSeek Harness's compaction seam makes a
+ * summary durable: the summary rides on an ordinary model-facing message
+ * (`user/message` with a checkpoint source there; here a role of its own,
+ * which also keeps it out of the user-message path in the UI) instead of
+ * being an append-only note the model would read as new input.
+ */
+export interface CheckpointMessage {
+  role: "checkpoint";
+  /** Head line: the UI row label, carrying what was replaced (the model
+   * never reads it — the body is the model-facing text). */
+  title: string;
+  /** Model-facing text: the checkpoint preamble plus the framed summary,
+   * sent as ONE user message (see toLlmMessages). */
+  body: string;
   timestamp: number;
 }
 
@@ -506,6 +534,12 @@ export interface StreamOptions {
   signal?: AbortSignal;
   maxRetries?: number;
   maxRetryDelayMs?: number;
+  /** Override the model's own output cap for this call (the transport sends
+   * `model.maxTokens` otherwise). The compaction summarizer uses it: its
+   * output is a bounded summary, and the smaller reservation is what keeps
+   * the auxiliary call itself inside a request that is already near the
+   * window. */
+  maxOutputTokens?: number;
   /** Stable id of the conversation this request belongs to. Agent sessions
    * pass their session id; one-off auxiliary calls (title generation,
    * image analysis, judgements) pass a fresh id per call. Session-affinity

@@ -53,7 +53,8 @@ export function notificationText(
 
 /** Convert agent messages to LLM messages: notification and context
  * messages become user messages (carrying notificationText / the context
- * body), mode messages become user messages carrying the full prompt text
+ * body), compaction checkpoints become user messages carrying the checkpoint
+ * text, mode messages become user messages carrying the full prompt text
  * (so the LLM sees the full mode prompt), everything else passes the
  * standard role filter (the same one pi applies by default). */
 export function toLlmMessages(messages: AgentMessage[]): Message[] {
@@ -67,7 +68,7 @@ export function toLlmMessages(messages: AgentMessage[]): Message[] {
       });
       continue;
     }
-    if (message.role === "context") {
+    if (message.role === "context" || message.role === "checkpoint") {
       out.push({
         role: "user",
         content: [{ type: "text", text: message.body }],

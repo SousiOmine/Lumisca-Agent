@@ -38,10 +38,33 @@ export function isVacantResponse(message: AssistantMessage): boolean {
  * the SDK's `APICallError.cause`, which the transport renders into the
  * message). Only these qualify for automatic restarts — a silent
  * PERMANENT failure (unconfigured or unauthorized provider, content
- * filter, context overflow) has no chance of recovering, so it must
- * surface immediately instead of burning through the retry limit. */
+ * filter) has no chance of recovering, so it must surface immediately
+ * instead of burning through the retry limit.
+ *
+ * Context overflow is deliberately NOT here: it is recoverable, but only by
+ * shrinking the history first (see isContextOverflowError). */
 const TRANSIENT_STREAM_ERROR_PATTERN =
   /without finish_reason|finish_reason: network_error|failed to process successful response|invalid json response|fetch failed|network|socket hang up|connection|terminated|premature close|timed out|\b(?:500|502|503|504|529)\b|overloaded/i;
+
+/** Error-message signatures of a provider-confirmed context overflow: the
+ * request was rejected because prompt + completion exceeded the model's
+ * window. The wording differs per provider (and per gateway — OpenCode Go
+ * forwards Console Go's "This model's maximum context length is ... Please
+ * reduce the length of the messages or completion"), so the pattern covers
+ * the families rather than one literal string. This is the trigger the
+ * compactor's overflow recovery hangs off: the request cannot succeed
+ * unchanged, and the only repair is a smaller history. */
+const CONTEXT_OVERFLOW_PATTERN =
+  /maximum context length|context length is|context_length_exceeded|context window|reduce the length of the messages|prompt is too long|too many tokens|input token count|exceeds the maximum/i;
+
+/** True when the turn failed because the request was too large for the
+ * model's window. A permanent failure otherwise (it can never succeed while
+ * the history stays as it is), so it is classified apart from the transient
+ * transport errors. */
+export function isContextOverflowError(message: AssistantMessage): boolean {
+  if (message.stopReason !== "error") return false;
+  return CONTEXT_OVERFLOW_PATTERN.test(message.errorMessage ?? "");
+}
 
 /** True when an error-stopped response failed for a transport reason that
  * may recover. The provider's own flag (`APICallError.isRetryable`, carried
@@ -104,6 +127,25 @@ export function buildRateLimitRetryNotification(
     body:
       "The provider returned a rate-limit error. Wait a moment, then continue: " +
       "respond with text or call a tool.",
+    status: "neutral",
+  });
+}
+
+/** The notification queued to restart a run whose request exceeded the
+ * model's context window. The history is condensed before the restart (see
+ * SessionAgent's compaction), so the retry asks the model to pick the work
+ * back up from the checkpoint — the transcript it sees is the condensed
+ * one, not the request that was rejected. */
+export function buildContextOverflowRetryNotification(
+  attempt: number,
+): NotificationMessage {
+  return notificationMessage({
+    kind: "retry",
+    title: `Context window exceeded (retry ${attempt})`,
+    body:
+      "The previous request exceeded the model's context window, so older " +
+      "history was condensed into a checkpoint. Continue the work from the " +
+      "current state: respond with text or call a tool.",
     status: "neutral",
   });
 }

@@ -172,6 +172,10 @@ export interface SessionApi {
   ): void;
   abort(id: string): void;
   rewind(id: string, timestamp: number): Promise<void>;
+  /** Condense the session's older history into a checkpoint on demand (the
+   * `/compact` command). Resolves with the number of replaced messages, or
+   * undefined when nothing could be condensed. */
+  compactSession(id: string): Promise<number | undefined>;
   setSessionModel(id: string, provider: string, modelId: string): void;
   /** Resolve a pending ask (the ask tool) with the user's answers. */
   answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
@@ -371,6 +375,20 @@ export function sessionRoutes(core: SessionApi): Hono {
     await core.openSession(id);
     await core.rewind(id, timestamp);
     return c.json({ ok: true });
+  });
+
+  /** Condense the session's older history into a checkpoint on demand (the
+   * `/compact` command). `compacted` is the number of messages replaced —
+   * absent when nothing could be condensed (no safe span, or the
+   * summarization failed; the transcript is unchanged in both cases). The
+   * request resolves once the replacement is durable, so the client can
+   * report the outcome. */
+  app.post("/sessions/:id/compact", async (c) => {
+    const id = c.req.param("id");
+    requireSession(id);
+    await core.openSession(id);
+    const compacted = await core.compactSession(id);
+    return c.json({ ok: true, compacted });
   });
 
   app.post("/sessions/:id/model", async (c) => {
