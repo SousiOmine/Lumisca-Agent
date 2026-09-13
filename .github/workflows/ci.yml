@@ -45,7 +45,7 @@ jobs:
       # the linking reruns (measured: ~1.5 min).
       - name: Cache node_modules
         if: runner.os != 'Windows'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('deno.json', 'deno.lock') }}
@@ -206,7 +206,7 @@ jobs:
       # breaks module resolution.
       - name: Cache node_modules
         if: runner.os != 'Windows'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ hashFiles('deno.json', 'deno.lock') }}

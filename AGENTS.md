@@ -86,3 +86,18 @@ journalctl --user -u lumisca -n 100
 ```
 
 `SIGTERM` の受信、drain のタイムアウト（5秒）、`Restart=always` による再起動をここで区別できます。ユニットの状態と生成物の一致は `./lumisca-server service status` で確認可能です。
+
+## 5. 依存関係の更新
+
+依存のバージョンは各マニフェストに固定されており、解決経路ごとに更新コマンドが異なります。手で書き換えず、次のコマンドで更新してください。
+
+```bash
+deno update -r --latest                                        # ルートと全ワークスペースの deno.json / deno.lock
+cargo update --manifest-path packages/desktop/src-tauri/Cargo.toml
+cargo update --manifest-path packages/browser-rpc/Cargo.toml
+npm outdated                                                   # packages/desktop で実行（@tauri-apps/cli）
+```
+
+* **24時間ゲート**: Deno 2.9 以降、公開から24時間以内のバージョンは既定で採用されません。`deno outdated --latest` が最新版を表示しても `deno update --latest` が据え置くことがあります（`--minimum-dependency-age 0` で無効化できますが、リリース直前の更新では既定のままにします）。
+* **`packages/desktop` はワークスペース外**のため（本ファイル 1 節）、`deno update -r` の対象に含まれません。`@tauri-apps/cli` の実体は `package-lock.json` です。
+* **`uses:` も依存です**: ワークフローで使うアクションは、メジャー更新時にランナーの要件（例: `actions/cache@v5` 以降は Node 24 と runner 2.327.1 以上）が変わります。更新時はリリースノートを確認してください。

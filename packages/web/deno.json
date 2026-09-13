@@ -2,11 +2,11 @@
   "name": "@lumisca/web",
   "version": "0.7.7",
   "tasks": {
-    "dev": "deno run -A npm:vite@8.2.2 --configLoader native"
+    "dev": "deno run -A vite --configLoader native"
   },
   "imports": {
     "@preact/preset-vite": "npm:@preact/preset-vite@2.10.6",
-    "vite": "npm:vite@8.2.2"
+    "vite": "npm:vite@8.3.0"
   },
   "exports": {
     "./app": "./src/App.tsx",
