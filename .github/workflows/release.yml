@@ -249,13 +249,22 @@ jobs:
 
       # Verify the real artifact with the updater's own implementation
       # (signature + container + contents) before it can be published.
+      #
+      # `shell: bash` on every step that expands `$ARCHIVE`: the default shell
+      # on a Windows runner is pwsh, where a trailing `\` is not a line
+      # continuation (the step died with a ParserError before running anything
+      # — v0.8.0) and `$ARCHIVE` would be a PowerShell variable (unset) rather
+      # than the environment variable the packaging step exported. The
+      # packaging/signing/upload steps around it use bash for the same reason.
       - name: Verify the package installs as an update
+        shell: bash
         run: |
           deno run --allow-read --allow-write scripts/check-server-archive.ts \
             --archive "$ARCHIVE" --signature "$ARCHIVE.sig" \
             --stage "dist/server/stage/${{ matrix.stage }}"
 
       - name: Write the update manifest
+        shell: bash
         run: |
           deno run --allow-read --allow-write scripts/build-server-manifest.ts \
             --archive "$ARCHIVE" --signature "$ARCHIVE.sig" \
