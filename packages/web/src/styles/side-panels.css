@@ -10,7 +10,13 @@
  * empty. */
 .chat-panels {
   position: fixed;
-  top: calc(var(--tab-height) + 8px);
+  /* Below the title bar AND below the banners the app stacks above the
+   * chat: they live in the app body's flow while this container is fixed
+   * to the viewport, so a hardcoded offset would put the panels on top of
+   * a banner and swallow its buttons. The measured height of that band
+   * arrives as a variable (see hooks/usePanelInset.ts); its default is a
+   * layout token. */
+  top: calc(var(--tab-height) + var(--app-banner-height, 0px) + 8px);
   right: 12px;
   z-index: 45;
   width: 264px;

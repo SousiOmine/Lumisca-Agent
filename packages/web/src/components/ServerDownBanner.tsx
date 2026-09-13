@@ -5,13 +5,23 @@ import {
   IconClipboard,
 } from "@tabler/icons-preact";
 import type { ServerHealth } from "../hooks/useServerHealth.ts";
+import type { BannerMount } from "../hooks/usePanelInset.ts";
 
 /** Banner shown when the desktop local server looks unreachable: recent
  * fetch/WS failures plus the shell confirming the child is gone — or
  * failures persisting while the child is alive (a hang). Offers one-click
  * restart (through the shell) and the captured server log tail for
- * copy-paste diagnosis ("勝手に落ちる" reports). */
-export function ServerDownBanner({ health }: { health: ServerHealth }) {
+ * copy-paste diagnosis ("勝手に落ちる" reports).
+ *
+ * The element goes to the app through `onMount` so its layout can measure
+ * this strip while it is on screen (see usePanelInset). */
+export function ServerDownBanner(
+  { health, onMount }: {
+    health: ServerHealth;
+    /** The strip's element while it is shown, `null` while it is not. */
+    onMount?: BannerMount;
+  },
+) {
   const [showLog, setShowLog] = useState(false);
   const [copied, setCopied] = useState(false);
   const { server } = health;
@@ -47,7 +57,7 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
   };
 
   return (
-    <div className="server-down-banner" role="alert">
+    <div className="server-down-banner" role="alert" ref={onMount}>
       <IconAlertTriangle size={16} className="server-down-icon" />
       <div className="server-down-body">
         <span className="server-down-text">

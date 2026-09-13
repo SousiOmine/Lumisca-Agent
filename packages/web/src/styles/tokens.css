@@ -29,6 +29,12 @@
   --radius-sm: 4px;
   --radius: 8px;
   --tab-height: 40px;
+  /* Height of the banners the app stacks above the chat (the update banner
+   * today). Zero here: the app replaces it with a measured value while a
+   * banner is on screen, and the fixed top-right panels use it to start
+   * below that band (see hooks/usePanelInset.ts). The default must stay a
+   * length — an undefined variable would drop the panels' whole calc(). */
+  --app-banner-height: 0px;
   /* the docked pane (the agent's browser lab today, hosting a native
    * surface at the right edge). Must match PANE_WIDTH /
    * PANE_HEADER_HEIGHT in packages/desktop/src-tauri/src/browser_lab.rs

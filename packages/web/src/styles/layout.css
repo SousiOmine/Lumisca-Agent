@@ -37,6 +37,15 @@
   margin-right: var(--pane-width);
 }
 
+/* Banners that stretch across the full app body would put their action
+ * buttons under the native pane window; reserve the pane's width on the
+ * right like the body does. The banner's own height is measured after
+ * the reflow, so the panels below it follow the wrapping text. */
+.app.pane-open .update-banner,
+.app.pane-open .server-down-banner {
+  padding-right: calc(16px + var(--pane-width));
+}
+
 /* The docked pane's header strip: rendered by this webview directly
  * ABOVE the native pane window (which starts below this strip), so it
  * never overlaps it and stays fully clickable. */

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "preact/compat";
 import { IconDownload, IconRefresh, IconX } from "@tabler/icons-preact";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
+import type { BannerMount } from "../hooks/usePanelInset.ts";
 
 /** The "update ready" strip under the title bar (renders nothing when no
  * updater has something to install). Owns its dismissed state: a new
@@ -10,8 +11,17 @@ import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
  *
  * Two shapes share the strip: the desktop shell installs and restarts the
  * app in one step, while a standalone server installs the files first and
- * takes effect at the next start (the restart is its own decision). */
-export function UpdateBanner({ update }: { update: UpdateControls }) {
+ * takes effect at the next start (the restart is its own decision).
+ *
+ * The element goes to the app through `onMount` so its layout can
+ * measure this strip while it is on screen (see usePanelInset). */
+export function UpdateBanner(
+  { update, onMount }: {
+    update: UpdateControls;
+    /** The strip's element while it is shown, `null` while it is not. */
+    onMount?: BannerMount;
+  },
+) {
   const [dismissed, setDismissed] = useState(false);
   const status = update.status;
   const server = update.source === "server";
@@ -61,7 +71,7 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
     : readyText + "インストールするとアプリが再起動します。";
 
   return (
-    <div className="update-banner">
+    <div className="update-banner" ref={onMount}>
       {restartPending ? <IconRefresh size={16} /> : <IconDownload size={16} />}
       <span className="update-banner-text">{text}</span>
       {restartPending
