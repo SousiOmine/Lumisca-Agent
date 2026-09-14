@@ -13,6 +13,7 @@ import { Assets } from "./assets.ts";
 import { renderHtmlDocument } from "./render.ts";
 import { fsRoutes } from "./routes/fs.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
+import { skillRoutes } from "./routes/skills.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 import { providerRoutes } from "./routes/providers.ts";
 import { settingRoutes } from "./routes/settings.ts";
@@ -357,6 +358,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   app.route("/api", fsRoutes());
   app.route("/api", workspaceRoutes(core));
+  app.route("/api", skillRoutes(core));
   app.route("/api", mcpRoutes(core));
   app.route("/api", sessionRoutes(core));
   app.route("/api", providerRoutes(core));

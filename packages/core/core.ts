@@ -55,6 +55,9 @@ import type { SessionAgent } from "./agent/session-agent.ts";
 import { SessionPool } from "./agent/pool.ts";
 import { withProviderRetryDefaults } from "./agent/llm-retry.ts";
 import { buildChatSystemPrompt, buildSystemPrompt } from "./tools/mod.ts";
+import { sessionSkills } from "./tools/toolsets.ts";
+import type { SkillInfo } from "./skills/discover.ts";
+import { skillInfo } from "./skills/discover.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
 import { CommandSafety } from "./safety/command-safety.ts";
@@ -609,6 +612,22 @@ export class LumiscaCore {
    * the background panel after a WS drop or page reload. */
   getBackground(id: string): BackgroundCommandInfo[] {
     return this.pool.getBackground(id);
+  }
+
+  /** The skills a session in this workspace would get: the same discovery
+   * the agent's skill tool and the skill catalog provider run
+   * (sessionSkills), so the composer's `/skill` palette lists exactly what
+   * the agent can load — including the browser gate of the built-in skills.
+   * Omitted `workspaceId` lists a chat session's skills (global and
+   * built-in only), the same "omitted → chat" contract as createSession. */
+  listSkills(workspaceId?: string): SkillInfo[] {
+    const folders = workspaceId === undefined
+      ? []
+      : this.requireWorkspace(workspaceId).folders;
+    return sessionSkills(folders, {
+      browserAvailable: this.browserBackend !== undefined,
+      globalDirs: this.globalSkillDirs,
+    }).map(skillInfo);
   }
 
   /** The session's active goal (`/goal` mode), if any. Persisted in the

@@ -15,6 +15,9 @@ export default defineConfig({
       "@lumisca/core/modes": fileURLToPath(
         new URL("../core/modes/mod.ts", import.meta.url),
       ),
+      "@lumisca/core/skills/slash": fileURLToPath(
+        new URL("../core/skills/slash.ts", import.meta.url),
+      ),
     },
   },
   server: {

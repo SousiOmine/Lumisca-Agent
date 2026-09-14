@@ -5,6 +5,7 @@
     ".": "./mod.ts",
     "./shared": "./shared/mod.ts",
     "./modes": "./modes/mod.ts",
+    "./skills/slash": "./skills/slash.ts",
     "./log": "./log.ts",
     "./test-utils": "./test-utils.ts"
   }

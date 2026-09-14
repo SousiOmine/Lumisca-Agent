@@ -33,7 +33,11 @@ import {
   type SlashState,
   useSlashMenu,
 } from "../hooks/useSlashMenu.ts";
-import type { SlashCommand, SlashCommandItem } from "../slashCommands.ts";
+import {
+  type SlashCommand,
+  type SlashCommandItem,
+  slashCompletion,
+} from "../slashCommands.ts";
 export type { SlashCommand, SlashCommandItem };
 import type { ModelInfo, PendingImage, ThinkingLevel } from "../types.ts";
 
@@ -214,7 +218,9 @@ export function Composer({
    * commands (`/plan`, `/goal`) are completed to `/id ` and the menu
    * closes: the request is typed after the token like normal input and
    * wrapped into the mode prompt on submit (see ChatView/NewSessionView) —
-   * picking the command never sends by itself. Saved prompts are inserted
+   * picking the command never sends by itself. A command with subcommands
+   * completes to `/id <picked item> ` (the skill palette), so the picked
+   * entry stays an argument of the command line. Saved prompts are inserted
    * where the command was typed. Mode palettes run through the parent, but
    * only from the start of the input: their prompt replaces the whole
    * message, so a command typed mid-text is left alone instead of
@@ -226,7 +232,7 @@ export function Composer({
       state: SlashState,
     ) => {
       if (command.kind === "complete") {
-        replaceSlashToken(state, `/${command.id} `, true);
+        replaceSlashToken(state, slashCompletion(command, item), true);
         return;
       }
       if (command.kind === "insert") {

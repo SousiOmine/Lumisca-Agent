@@ -35,6 +35,21 @@ export interface SkillDef {
   read?: (relativePath?: string) => string;
 }
 
+/** A skill as listed to a client: the name to load it by and the catalog
+ * description. The wire shape of `GET /api/skills` (the composer's `/skill`
+ * palette); the disk paths of a SkillDef stay server-side. */
+export interface SkillInfo {
+  name: string;
+  description: string;
+}
+
+/** Project a discovered skill to its listed form (see SkillInfo). The
+ * single place a skill's client-visible fields are chosen, so the palette
+ * and the skill tool's catalog cannot drift apart. */
+export function skillInfo(skill: SkillDef): SkillInfo {
+  return { name: skill.name, description: skill.description };
+}
+
 export interface DiscoverOptions {
   /** Global skills directories to scan instead of ~/.agents/skills.
    * Used by tests to avoid touching the real home directory. */

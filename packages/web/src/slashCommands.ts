@@ -8,11 +8,18 @@
  * `buildPromptForText`, e.g. plan mode) are completed to `/id ` and the
  * request typed after the token is wrapped into the mode prompt by the
  * submit path (slashPromptFromText) — wherever the token sits, so
- * `背景メモ /plan 履歴を追加` resolves like `/plan 履歴を追加`. */
+ * `背景メモ /plan 履歴を追加` resolves like `/plan 履歴を追加`.
+ *
+ * The skill palette is the dynamic source of the same shape: `/skill` lists
+ * the session's skill catalog (fetched per workspace, see useSkills) and
+ * completes to `/skill <name> `, which skillPromptFromText turns into the
+ * skill prompt on submit. */
 
 import type { ReactNode } from "preact/compat";
+import { buildSkillPrompt } from "@lumisca/core/skills/slash";
 import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
 import type { ModePrompt, SavedPrompt } from "@lumisca/core";
+import type { SkillInfo } from "./types.ts";
 import {
   IconArrowsMinimize,
   IconCode,
@@ -21,6 +28,7 @@ import {
   IconGitCommit,
   IconListCheck,
   IconMessage,
+  IconSparkles,
   IconTarget,
 } from "@tabler/icons-preact";
 
@@ -38,9 +46,11 @@ export interface SlashCommandItem {
 
 /** What picking the command does with the composer text. */
 export type SlashCommandKind =
-  /** Complete the input to `/id ` and close the menu: the request is typed
-   * after the token like normal text and wrapped into the mode prompt on
-   * submit (`/plan`, `/goal`). */
+  /** Complete the input and close the menu: the request is typed after the
+   * token like normal text and wrapped into the command's prompt on submit
+   * (`/plan`, `/goal`). A command with `items` completes to
+   * `/id <picked item> ` instead: the item id is the command's argument
+   * (the skill palette's `/skill <name> `, see slashCompletion). */
   | "complete"
   /** Insert the picked entry's `insertText` at the command position,
    * keeping the text around it (saved prompts). */
@@ -114,26 +124,77 @@ export const slashCommands: SlashCommand[] = AGENT_MODES.map((mode) => ({
     : undefined,
 }));
 
-/** Build the slash-commands menu including the /prompt submenu.
- * In chat mode only saved prompts and client-side actions are shown (agent
- * modes need a workspace).
+/** The id of the skill palette's first level; its submenu holds the
+ * session's skill catalog. */
+const SKILL_COMMAND_ID = "skill";
+
+/** The text a `complete` pick leaves in the composer (see
+ * SlashCommandKind "complete"): `/id ` for the command itself, and
+ * `/id <item> ` when an entry of its submenu was picked — the item id is
+ * the command's argument, which the submit path reads back out (the skill
+ * name, see skillPromptFromText). */
+export function slashCompletion(
+  command: SlashCommand,
+  item?: SlashCommandItem,
+): string {
+  return item === undefined ? `/${command.id} ` : `/${command.id} ${item.id} `;
+}
+
+/** One-line menu text, capped like the popover's own ellipsis (a 500
+ * character skill description would still be a huge DOM string). */
+function menuDescription(text: string): string {
+  return text.slice(0, 80) + (text.length > 80 ? "…" : "");
+}
+
+/** The `/skill` submenu: one entry per skill of the session catalog (name +
+ * catalog description). Hidden while the catalog is empty — a dead entry
+ * would promise skills that cannot be loaded. Picking a skill completes the
+ * input to `/skill <name> `, so the request is typed after it like any
+ * other text; skillPromptFromText then wraps that line into the prompt that
+ * makes the agent load the skill. */
+export function skillMenu(skills: readonly SkillInfo[]): SlashCommand[] {
+  if (skills.length === 0) return [];
+  return [{
+    id: SKILL_COMMAND_ID,
+    label: "スキル",
+    description: "このセッションで使えるスキルを呼び出します",
+    icon: IconSparkles,
+    kind: "complete",
+    items: skills.map((skill) => ({
+      id: skill.name,
+      label: skill.name,
+      description: menuDescription(skill.description),
+    })),
+  }];
+}
+
+/** Build the slash-commands menu including the /skill and /prompt submenus.
+ * In chat mode only skills, saved prompts and client-side actions are shown
+ * (agent modes need a workspace; global and built-in skills do not).
  * Shared between ChatView and NewSessionView so the logic is not duplicated. */
 export function buildSlashCommands(
   savedPrompts: SavedPrompt[],
   isChat: boolean,
+  skills: readonly SkillInfo[],
 ): SlashCommand[] {
   const promptItems: SlashCommandItem[] = savedPrompts.map((p) => ({
     id: p.id,
     label: p.label,
-    description: p.prompt.slice(0, 80) + (p.prompt.length > 80 ? "…" : ""),
+    description: menuDescription(p.prompt),
     insertText: p.prompt,
   }));
+  const skillCommands = skillMenu(skills);
   if (isChat) {
-    // Chat mode: saved prompts and client-side actions, no agent modes.
-    return [...ACTION_COMMANDS, ...promptItemsMenu(promptItems)];
+    // Chat mode: skills (global and built-in only), saved prompts and
+    // client-side actions, no agent modes.
+    return [
+      ...skillCommands,
+      ...ACTION_COMMANDS,
+      ...promptItemsMenu(promptItems),
+    ];
   }
-  // Workspace mode: agent modes + client-side actions + saved prompts.
-  const commands = [...slashCommands, ...ACTION_COMMANDS];
+  // Workspace mode: agent modes + skills + client-side actions + prompts.
+  const commands = [...slashCommands, ...skillCommands, ...ACTION_COMMANDS];
   commands.push(...promptItemsMenu(promptItems));
   return commands;
 }
@@ -193,9 +254,15 @@ export function slashPrompt(
   return null;
 }
 
-/** A text-taking command line parsed from composer text. */
+/** A command line parsed from composer text — `/plan 依頼文` (a text-taking
+ * mode) or `/skill スキル名 依頼文` (the skill palette). "wrap" carries the
+ * message to send: with mode metadata when the line named an agent mode
+ * (the transcript stores a ModeMessage with a badge), without it for a
+ * skill (a plain user message). "needs-text" means the command is
+ * incomplete — its request or its skill name is missing — so nothing is
+ * sent. */
 export type TextCommandLine =
-  | { kind: "wrap"; text: string; mode: ModePrompt }
+  | { kind: "wrap"; text: string; mode?: ModePrompt }
   | { kind: "needs-text" };
 
 /** The composer text to restore when rewinding a mode message (the undo
@@ -258,4 +325,42 @@ function joinRequest(before: string, after: string): string {
   if (head.length === 0) return tail;
   if (tail.length === 0) return head;
   return `${head} ${tail}`;
+}
+
+/** Resolve composer text that contains the skill palette's command line
+ * (`/skill <name> [依頼文]`, e.g. `/skill canvas-design ポスターを作って`)
+ * into the message that invokes that skill. The name is the first word
+ * after the token and the request is everything the user wrote around the
+ * pair — each side trimmed and joined by a space (joinRequest), so text
+ * before the command is not dropped: `ポスターを作って /skill canvas-design`
+ * resolves the same as the form above.
+ *
+ * `skills` is the session's catalog (useSkills). Null when the text holds
+ * no skill command, or names a skill outside that catalog: like an unknown
+ * mode token, the text is then sent as written (the menu only lists the
+ * catalog, so an unknown name is hand-typed). "needs-text" means the
+ * command is present without a name — nothing is sent. */
+export function skillPromptFromText(
+  text: string,
+  skills: readonly SkillInfo[],
+): TextCommandLine | null {
+  const token = /(?:^|\s)\/([^\s/]+)/g;
+  for (let m = token.exec(text); m !== null; m = token.exec(text)) {
+    const command = m[1]!;
+    if (command !== SKILL_COMMAND_ID) continue;
+    // Right after `/skill`: whitespace, then the skill name.
+    const rest = text.slice(m.index + m[0].length);
+    const nameMatch = /^\s+(\S+)/.exec(rest);
+    if (nameMatch === null) return { kind: "needs-text" };
+    const name = nameMatch[1]!;
+    if (!skills.some((skill) => skill.name === name)) return null;
+    return {
+      kind: "wrap",
+      text: buildSkillPrompt(
+        name,
+        joinRequest(text.slice(0, m.index), rest.slice(nameMatch[0].length)),
+      ),
+    };
+  }
+  return null;
 }

@@ -10,6 +10,7 @@ import type {
   PendingImage,
   ProviderInfo,
   SessionInfo,
+  SkillInfo,
   TaskInfo,
   ThinkingLevel,
   TodoPhase,
@@ -67,6 +68,15 @@ export const fed = {
       `/workspaces/${encodeURIComponent(workspaceId)}/files?query=${
         encodeURIComponent(query)
       }`,
+    ),
+  /** A peer's skills for a workspace (the `/skill` palette of a session
+   * running there); omitted workspaceId → its chat skills. */
+  getSkills: (peerId: string, workspaceId?: string) =>
+    fedRequest<{ skills: SkillInfo[] }>(
+      peerId,
+      workspaceId === undefined
+        ? "/skills"
+        : `/skills?workspaceId=${encodeURIComponent(workspaceId)}`,
     ),
   createSession: (peerId: string, input: {
     workspaceId?: string;

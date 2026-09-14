@@ -10,11 +10,13 @@ import type {
   ThinkingLevel,
 } from "../types.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
+import { useSkills } from "../hooks/useSkills.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import {
   buildSlashCommands,
+  skillPromptFromText,
   slashPrompt,
   slashPromptFromText,
 } from "../slashCommands.ts";
@@ -292,12 +294,20 @@ export function NewSessionView(
   // model, so the model picker is hidden for them.
   const remoteWorkspace = (selectedWorkspace?.peerId ?? "") !== "";
 
-  // Build the slash commands list including the /prompt submenu.
-  // In chat mode only saved prompts are shown (agent modes need a workspace).
+  // Build the slash commands list including the /skill and /prompt submenus.
+  // In chat mode only skills, actions and saved prompts are shown (agent
+  // modes need a workspace).
   const isChat = selectedWorkspace?.workspace.chat ?? false;
+  // The skills of the selected workspace (the `/skill` palette), fetched
+  // from the server that owns it; a chat draft asks for a chat session's
+  // skills (global and built-in only), exactly like the session it starts.
+  const { skills } = useSkills(
+    selectedWorkspace?.peerId ?? "",
+    isChat ? undefined : selectedWorkspace?.workspace.id,
+  );
   const allSlashCommands = useMemo<SlashCommand[]>(
-    () => buildSlashCommands(savedPrompts, isChat),
-    [isChat, savedPrompts],
+    () => buildSlashCommands(savedPrompts, isChat, skills),
+    [isChat, savedPrompts, skills],
   );
 
   /** Start the session with the composer text, or an explicit message. The
@@ -305,11 +315,12 @@ export function NewSessionView(
    * stays so the user can retry. `mode` marks the message as a mode
    * prompt (ModeMessage in the transcript).
    *
-   * Composer text that contains a text-taking command token (`/plan
-   * 依頼文` — even mid-text: `背景メモ /plan 依頼文` wraps too) is turned
-   * into that mode's prompt on every submit path (send button, Ctrl+Enter,
-   * Enter — which the composer maps to a newline, not a submit); without
-   * the request text nothing is sent (the plan mode needs its subject). */
+   * Composer text the menu completed in place is resolved here even when
+   * the menu was bypassed (send button, Ctrl+Enter): a text-taking mode
+   * (`/plan 依頼文` — workspace drafts only, modes need a workspace) or the
+   * skill palette (`/skill 名前 依頼文`, which a chat draft has too). An
+   * incomplete command line (`/plan` without a request, `/skill` without a
+   * skill name) sends nothing. */
   const submit = async (message?: string, mode?: ModePrompt) => {
     let trimmed = (message ?? input).trim();
     if (
@@ -318,8 +329,10 @@ export function NewSessionView(
     ) {
       return;
     }
-    if (message === undefined && !isChat) {
-      const line = slashPromptFromText(trimmed);
+    if (message === undefined) {
+      // Modes first: their token is a mode id, so the two never collide.
+      const line = (isChat ? null : slashPromptFromText(trimmed)) ??
+        skillPromptFromText(trimmed, skills);
       if (line !== null) {
         if (line.kind === "needs-text") return;
         trimmed = line.text;

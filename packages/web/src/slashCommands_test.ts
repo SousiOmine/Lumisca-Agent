@@ -4,14 +4,23 @@ import {
   ACTION_COMMANDS,
   buildSlashCommands,
   modeRewindText,
+  skillPromptFromText,
   slashCommands,
+  slashCompletion,
   slashPrompt,
   slashPromptFromText,
 } from "./slashCommands.ts";
+import type { SkillInfo } from "./types.ts";
 
 const planCommand = slashCommands.find((c) => c.id === "plan");
 const reviewCommand = slashCommands.find((c) => c.id === "review");
 const goalCommand = slashCommands.find((c) => c.id === "goal");
+
+/** A catalog like the server's `/api/skills` returns it. */
+const SKILLS: SkillInfo[] = [
+  { name: "canvas-design", description: "Posters and static art." },
+  { name: "diagnosing-bugs", description: "Diagnosis loop for hard bugs." },
+];
 
 Deno.test("slashCommands: plan and goal are text-taking (complete) commands", () => {
   assertEquals(planCommand !== undefined, true);
@@ -44,8 +53,8 @@ Deno.test("slashPrompt: text-taking mode without text builds nothing", () => {
 Deno.test("slashPromptFromText: /plan <request> wraps as a text line", () => {
   const line = slashPromptFromText("/plan 履歴機能を追加して");
   if (line === null || line.kind !== "wrap") return;
-  assertEquals(line.mode.modeId, "plan");
-  assertEquals(line.mode.shortText, "履歴機能を追加して");
+  assertEquals(line.mode?.modeId, "plan");
+  assertEquals(line.mode?.shortText, "履歴機能を追加して");
   assertEquals(line.text.includes("履歴機能を追加して"), true);
 });
 
@@ -73,22 +82,22 @@ Deno.test("slashPromptFromText: mid-text /plan wraps and keeps both sides", () =
   // around it becomes the request (token removed, sides joined by a space).
   const line = slashPromptFromText("背景メモ /plan 履歴を追加して");
   if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
-  assertEquals(line.mode.modeId, "plan");
-  assertEquals(line.mode.shortText, "背景メモ 履歴を追加して");
+  assertEquals(line.mode?.modeId, "plan");
+  assertEquals(line.mode?.shortText, "背景メモ 履歴を追加して");
   assertEquals(line.text.includes("背景メモ 履歴を追加して"), true);
 
   // The first text-taking command wins; its query is not part of the
   // request.
   const multi = slashPromptFromText("メモ /plan 一つ目 /plan 二つ目");
   if (multi === null || multi.kind !== "wrap") throw new Error("expected wrap");
-  assertEquals(multi.mode.shortText, "メモ 一つ目 /plan 二つ目");
+  assertEquals(multi.mode?.shortText, "メモ 一つ目 /plan 二つ目");
 
   // A command after the caret-agnostic token: the exact position does not
   // matter, only the word-start boundary.
   const mid = slashPromptFromText("まず /plan を実行して、それから /goal 続行");
   if (mid === null || mid.kind !== "wrap") throw new Error("expected wrap");
-  assertEquals(mid.mode.modeId, "plan");
-  assertEquals(mid.mode.shortText, "まず を実行して、それから /goal 続行");
+  assertEquals(mid.mode?.modeId, "plan");
+  assertEquals(mid.mode?.shortText, "まず を実行して、それから /goal 続行");
 });
 
 Deno.test("slashPromptFromText: mid-text token keeps the other side as request", () => {
@@ -98,12 +107,12 @@ Deno.test("slashPromptFromText: mid-text token keeps the other side as request",
   // transforms the input, it never sends.
   const head = slashPromptFromText("メモ /plan");
   if (head === null || head.kind !== "wrap") throw new Error("expected wrap");
-  assertEquals(head.mode.shortText, "メモ");
+  assertEquals(head.mode?.shortText, "メモ");
   const headSpace = slashPromptFromText("メモ /plan ");
   if (headSpace === null || headSpace.kind !== "wrap") {
     throw new Error("expected wrap");
   }
-  assertEquals(headSpace.mode.shortText, "メモ");
+  assertEquals(headSpace.mode?.shortText, "メモ");
   // An empty command at the input start still sends nothing.
   assertEquals(slashPromptFromText("/plan")?.kind, "needs-text");
   assertEquals(slashPromptFromText("/plan ")?.kind, "needs-text");
@@ -162,8 +171,8 @@ Deno.test("slashPrompt: goal mode wraps the trailing text", () => {
 Deno.test("slashPromptFromText: /goal <goal> wraps as a text line", () => {
   const line = slashPromptFromText("/goal 全テストが通るまで実装して");
   if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
-  assertEquals(line.mode.modeId, "goal");
-  assertEquals(line.mode.shortText, "全テストが通るまで実装して");
+  assertEquals(line.mode?.modeId, "goal");
+  assertEquals(line.mode?.shortText, "全テストが通るまで実装して");
   assertEquals(line.text.includes("全テストが通るまで実装して"), true);
 });
 
@@ -229,12 +238,12 @@ Deno.test("buildSlashCommands: /compact is offered as an action command", () => 
 
   // Chat sessions (no workspace) get it too: condensing history needs no
   // workspace, unlike the agent modes.
-  const chat = buildSlashCommands([], true);
+  const chat = buildSlashCommands([], true, []);
   assertEquals(chat.map((c) => c.id), ["compact"]);
   assertEquals(chat[0]!.kind, "action");
 
   // Workspace sessions keep the agent modes and add the action command.
-  const workspace = buildSlashCommands([], false);
+  const workspace = buildSlashCommands([], false, []);
   assertEquals(workspace.some((c) => c.id === "compact"), true);
   assertEquals(workspace.some((c) => c.id === "plan"), true);
 
@@ -242,7 +251,136 @@ Deno.test("buildSlashCommands: /compact is offered as an action command", () => 
   const withPrompts = buildSlashCommands(
     [{ id: "p1", label: "P", prompt: "text" }],
     true,
+    [],
   );
   assertEquals(withPrompts.map((c) => c.id), ["compact", "prompt"]);
   assertEquals(withPrompts[1]!.kind, "insert");
+});
+
+// --- skill palette ------------------------------------------------------
+
+Deno.test("buildSlashCommands: /skill lists the session catalog", () => {
+  // Without a catalog the entry is hidden: a submenu that can never load a
+  // skill would be a dead end.
+  assertEquals(
+    buildSlashCommands([], false, []).some((c) => c.id === "skill"),
+    false,
+  );
+
+  const workspace = buildSlashCommands([], false, SKILLS);
+  const skill = workspace.find((c) => c.id === "skill");
+  assertEquals(skill !== undefined, true);
+  // The command completes the input in place like the text-taking modes,
+  // and its items are the catalog entries.
+  assertEquals(skill!.kind, "complete");
+  const items = skill!.items ?? [];
+  assertEquals(items.map((i) => i.id), [
+    "canvas-design",
+    "diagnosing-bugs",
+  ]);
+  assertEquals(items[0]?.label, "canvas-design");
+  assertEquals(items[0]?.description, "Posters and static art.");
+  // Skills sit right after the agent modes, before the action commands.
+  assertEquals(workspace.map((c) => c.id), [
+    ...slashCommands.map((c) => c.id),
+    "skill",
+    "compact",
+  ]);
+
+  // Chat sessions offer skills too (global and built-in ones), unlike the
+  // agent modes.
+  const chat = buildSlashCommands([], true, SKILLS);
+  assertEquals(chat.map((c) => c.id), ["skill", "compact"]);
+});
+
+Deno.test("skillMenu: long descriptions are capped for the menu", () => {
+  const [command] = buildSlashCommands([], true, [{
+    name: "long",
+    description: "x".repeat(500),
+  }]);
+  const description = (command?.items ?? [])[0]?.description ?? "";
+  assertEquals(description.length, 81);
+  assertEquals(description.endsWith("…"), true);
+});
+
+Deno.test("slashCompletion: a picked item becomes the command's argument", () => {
+  const [skill] = buildSlashCommands([], true, SKILLS);
+  // The command itself completes with no argument (as before).
+  assertEquals(slashCompletion(skill!), "/skill ");
+  // An item of the submenu completes to `/skill <name> ` — the form
+  // skillPromptFromText parses back out.
+  assertEquals(
+    slashCompletion(skill!, (skill?.items ?? [])[0]),
+    "/skill canvas-design ",
+  );
+});
+
+Deno.test("skillPromptFromText: /skill <name> invokes the skill", () => {
+  const line = skillPromptFromText("/skill canvas-design", SKILLS);
+  if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
+  // No mode metadata: the transcript shows a plain user message.
+  assertEquals(line.mode, undefined);
+  assertEquals(line.text.includes("スキル「canvas-design」を呼び出して"), true);
+  assertEquals(
+    line.text.includes("skill ツールで「canvas-design」を読み込み"),
+    true,
+  );
+  // No request → no subject section.
+  assertEquals(line.text.includes("# 依頼内容"), false);
+});
+
+Deno.test("skillPromptFromText: the request travels with the skill", () => {
+  const line = skillPromptFromText(
+    "/skill canvas-design ポスターを作って",
+    SKILLS,
+  );
+  if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
+  assertEquals(line.text.endsWith("# 依頼内容\nポスターを作って"), true);
+
+  // The text around the command is the request too (like the modes): a
+  // memo before the token is not dropped.
+  const before = skillPromptFromText(
+    "A4で /skill canvas-design",
+    SKILLS,
+  );
+  if (before === null || before.kind !== "wrap") {
+    throw new Error("expected wrap");
+  }
+  assertEquals(before.text.endsWith("# 依頼内容\nA4で"), true);
+
+  // Both sides are joined by a single space.
+  const both = skillPromptFromText("A4で /skill canvas-design 片面で", SKILLS);
+  if (both === null || both.kind !== "wrap") throw new Error("expected wrap");
+  assertEquals(both.text.endsWith("# 依頼内容\nA4で 片面で"), true);
+});
+
+Deno.test("skillPromptFromText: incomplete and unknown names send as written", () => {
+  // `/skill` without a name: nothing is sent (like a text-taking mode
+  // without its request).
+  assertEquals(skillPromptFromText("/skill", SKILLS)?.kind, "needs-text");
+  assertEquals(skillPromptFromText("/skill ", SKILLS)?.kind, "needs-text");
+  assertEquals(skillPromptFromText("メモ /skill", SKILLS)?.kind, "needs-text");
+  // A name outside the catalog is hand-typed: the text passes through
+  // unchanged (the same contract as an unknown mode token), as does a
+  // missing catalog or a different command.
+  assertEquals(skillPromptFromText("/skill nope なにか", SKILLS), null);
+  assertEquals(skillPromptFromText("/skill canvas-design, して", SKILLS), null);
+  assertEquals(skillPromptFromText("/skill canvas-design", []), null);
+  assertEquals(skillPromptFromText("/plan なにか", SKILLS), null);
+  assertEquals(skillPromptFromText("普通のメッセージ", SKILLS), null);
+  // The word-start rule holds: a path is not a command.
+  assertEquals(skillPromptFromText("src/skill canvas-design", SKILLS), null);
+});
+
+Deno.test("skillPromptFromText: the palette's completion round-trips", () => {
+  // What the composer leaves in the input after picking a skill (see
+  // slashCompletion) is exactly what the submit path parses.
+  const [skill] = buildSlashCommands([], true, SKILLS);
+  const typed = slashCompletion(skill!, (skill?.items ?? [])[0]) +
+    "ポスターを作って";
+  assertEquals(typed, "/skill canvas-design ポスターを作って");
+  const line = skillPromptFromText(typed, SKILLS);
+  if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
+  assertEquals(line.text.includes("スキル「canvas-design」を呼び出して"), true);
+  assertEquals(line.text.endsWith("# 依頼内容\nポスターを作って"), true);
 });

@@ -117,6 +117,52 @@ Deno.test("workspace files API returns @-mention suggestions", async () => {
   }
 });
 
+Deno.test("skills API lists the workspace catalog and the chat subset", async () => {
+  const { core, server, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+
+    // A workspace skill fixture: the only source of skills in a test core
+    // (global discovery is disabled, and no browser backend is attached, so
+    // the built-in web-browser skill is gated out).
+    const skillDir = join(root, ".agents", "skills", "demo");
+    await Deno.mkdir(skillDir, { recursive: true });
+    await Deno.writeTextFile(
+      join(skillDir, "SKILL.md"),
+      "---\nname: demo\ndescription: Demo skill.\n---\n\nDo the demo thing.\n",
+    );
+
+    const forWorkspace = await json(
+      base,
+      `/api/skills?workspaceId=${ws.id}`,
+    );
+    assertEquals(forWorkspace.status, 200);
+    assertEquals((await forWorkspace.json()).skills, [
+      { name: "demo", description: "Demo skill." },
+    ]);
+
+    // Without a workspaceId the endpoint answers for a chat session, which
+    // sees no workspace skill (the same contract as POST /sessions).
+    const chat = await json(base, "/api/skills");
+    assertEquals(chat.status, 200);
+    assertEquals((await chat.json()).skills, []);
+
+    // An unknown workspace is a 404, never a fallback to the chat list.
+    const unknown = await json(base, "/api/skills?workspaceId=nope");
+    assertEquals(unknown.status, 404);
+
+    await removeDirRetry(root);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("workspace update and delete API", async () => {
   const { core, server, base } = await setup();
   try {

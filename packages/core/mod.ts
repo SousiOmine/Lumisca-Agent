@@ -102,13 +102,16 @@ export {
   discoverSkills,
   formatAvailableSkills,
   loadSkillContent,
+  skillInfo,
 } from "./skills/discover.ts";
 export type {
   DiscoverOptions,
   SkillDef,
+  SkillInfo,
   SkillSource,
 } from "./skills/discover.ts";
 export { createSkillTool } from "./skills/tool.ts";
+export { buildSkillPrompt } from "./skills/slash.ts";
 export { parseSkillFrontmatter } from "./skills/frontmatter.ts";
 export { builtinSkills } from "./skills/builtin/mod.ts";
 export type { BuiltinContext } from "./skills/builtin/mod.ts";

@@ -13,6 +13,7 @@ import type {
   ProviderInfo,
   ProviderLoginSnapshot,
   SessionInfo,
+  SkillInfo,
   TaskInfo,
   ThinkingLevel,
   TodoPhase,
@@ -48,6 +49,17 @@ export const api = {
       `/api/workspaces/${encodeURIComponent(workspaceId)}/files?query=${
         encodeURIComponent(query)
       }`,
+    ),
+
+  /** The skills a session in this workspace would see (the `/skill`
+   * palette's source of truth — the same discovery the agent's skill tool
+   * runs). Omitted workspaceId asks for a chat session's skills, like
+   * createSession without a workspace. */
+  getSkills: (workspaceId?: string) =>
+    request<{ skills: SkillInfo[] }>(
+      workspaceId === undefined
+        ? "/api/skills"
+        : `/api/skills?workspaceId=${encodeURIComponent(workspaceId)}`,
     ),
 
   getDefaultModel: () =>

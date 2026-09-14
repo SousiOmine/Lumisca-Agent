@@ -37,6 +37,7 @@ export type {
   ProviderLoginSnapshot,
   SavedPrompt,
   SessionInfo,
+  SkillInfo,
   SubagentStatus,
   SubagentType,
   TaskInfo,
