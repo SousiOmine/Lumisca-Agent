@@ -43,6 +43,7 @@
     "@modelcontextprotocol/sdk/client/stdio.js": "npm:@modelcontextprotocol/sdk@1.30.0/client/stdio.js",
     "@modelcontextprotocol/sdk/client/streamableHttp.js": "npm:@modelcontextprotocol/sdk@1.30.0/client/streamableHttp.js",
     "hono": "npm:hono@^4.13.7",
+    "hono/cookie": "npm:hono@^4.13.7/cookie",
     "hono/cors": "npm:hono@^4.13.7/cors",
     "hono/deno": "npm:hono@^4.13.7/deno",
     "hono/http-status": "npm:hono@^4.13.7/utils/http-status"

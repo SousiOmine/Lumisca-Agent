@@ -1095,6 +1095,135 @@ Deno.test("token auth guards the API, websocket and page", async () => {
   }
 });
 
+Deno.test("token auth remembers a presented token in a cookie", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const app = createApp(core, { token: "secret-token" });
+  const HOST = { host: "127.0.0.1:8000" };
+  try {
+    // The first visit carries the token in the URL (that is what the
+    // desktop shell and `service install` hand out). The answer stores it in
+    // a cookie — the point of this test — and keeps passing the token down
+    // to the page, which the desktop shell's bridge key depends on.
+    const first = await app.fetch(
+      new Request("http://127.0.0.1:8000/?token=secret-token", {
+        headers: HOST,
+      }),
+    );
+    assertEquals(first.status, 200);
+    const setCookie = first.headers.get("set-cookie") ?? "";
+    assertEquals(
+      setCookie.startsWith("lumisca_token_8000=secret-token"),
+      true,
+      setCookie,
+    );
+    assertEquals(setCookie.includes("HttpOnly"), true);
+    assertEquals(setCookie.includes("SameSite=Lax"), true);
+    assertEquals(
+      (await first.text()).includes(
+        'src="/assets/initial-data.js?token=secret-token"',
+      ),
+      true,
+    );
+
+    // From then on the browser sends only the cookie: the address bar has no
+    // token, yet the app comes up — the guard, the API and the WebSocket all
+    // accept the remembered credential.
+    const remembered = { ...HOST, cookie: "lumisca_token_8000=secret-token" };
+    const page = await app.fetch(
+      new Request("http://127.0.0.1:8000/", { headers: remembered }),
+    );
+    assertEquals(page.status, 200);
+    // Nothing to tell the browser again — the cookie is already there.
+    assertEquals(page.headers.get("set-cookie"), null);
+    // The page keeps carrying the token: the desktop shell's bridge key and
+    // the UI's request header are built from it, and a reload without
+    // `?token=` (the client strips it after the first load) must not lose
+    // them.
+    assertEquals(
+      (await page.text()).includes(
+        'src="/assets/initial-data.js?token=secret-token"',
+      ),
+      true,
+    );
+
+    const data = await app.fetch(
+      new Request("http://127.0.0.1:8000/assets/initial-data.js", {
+        headers: remembered,
+      }),
+    );
+    assertEquals(data.status, 200);
+    assertEquals(
+      (await data.text()).includes('window.__LUMISCA_TOKEN__ = "secret-token"'),
+      true,
+    );
+
+    // API and WebSocket (the UI sends no header on either) pass on the
+    // cookie alone. The upgrade itself does not complete without websocket
+    // headers, so assert only that it is not the guard's refusal.
+    const api = await app.fetch(
+      new Request("http://127.0.0.1:8000/api/health", { headers: remembered }),
+    );
+    assertEquals(api.status, 200);
+    const ws = await app.fetch(
+      new Request("http://127.0.0.1:8000/ws", { headers: remembered }),
+    );
+    assertEquals(ws.status !== 401 && ws.status !== 403, true);
+
+    // A cookie that does not match (another server instance, a rotated
+    // token) is worth nothing; a browser gets an explanation instead of the
+    // JSON blob an API client would see.
+    const stale = await app.fetch(
+      new Request("http://127.0.0.1:8000/", {
+        headers: {
+          ...remembered,
+          cookie: "lumisca_token_8000=old-token",
+          accept: "text/html",
+        },
+      }),
+    );
+    assertEquals(stale.status, 401);
+    assertEquals((await stale.text()).includes("トークンが必要です"), true);
+
+    const denied = await app.fetch(
+      new Request("http://127.0.0.1:8000/api/health", { headers: HOST }),
+    );
+    assertEquals(denied.status, 401);
+    assertEquals(
+      (await denied.json()).error,
+      "Unauthorized: missing or invalid token",
+    );
+
+    // Two servers on one host stay apart: the cookie of the other port is
+    // not this server's credential (see auth-cookie.ts).
+    const otherPort = await app.fetch(
+      new Request("http://127.0.0.1:8000/", {
+        headers: {
+          host: "127.0.0.1:8000",
+          cookie: "lumisca_token_8100=secret-token",
+        },
+      }),
+    );
+    assertEquals(otherPort.status, 401);
+
+    // Presenting the token again refreshes a stale cookie.
+    const refreshed = await app.fetch(
+      new Request("http://127.0.0.1:8000/?token=secret-token", {
+        headers: { ...remembered, cookie: "lumisca_token_8000=old-token" },
+      }),
+    );
+    assertEquals(refreshed.status, 200);
+    assertEquals(
+      (refreshed.headers.get("set-cookie") ?? "").startsWith(
+        "lumisca_token_8000=secret-token",
+      ),
+      true,
+    );
+  } finally {
+    core.close();
+  }
+});
+
 Deno.test("host guard rejects non-loopback hosts by default", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);

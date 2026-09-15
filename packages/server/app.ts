@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { type Context, Hono } from "hono";
+import { getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
 import { upgradeWebSocket } from "hono/deno";
 import {
@@ -10,7 +11,8 @@ import {
 } from "@lumisca/core";
 import type { InitialData } from "@lumisca/core/shared";
 import { Assets } from "./assets.ts";
-import { renderHtmlDocument } from "./render.ts";
+import { TOKEN_COOKIE_OPTIONS, tokenCookieName } from "./auth-cookie.ts";
+import { renderHtmlDocument, renderTokenRequiredPage } from "./render.ts";
 import { fsRoutes } from "./routes/fs.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
 import { skillRoutes } from "./routes/skills.ts";
@@ -39,9 +41,10 @@ export interface AppOptions {
    * hostnames are always accepted; DNS-rebinding protection stays intact
    * because the Host check still applies. */
   allowedHosts?: string[];
-  /** When set, requests require this token (X-Lumisca-Token header, the
-   * `token` query parameter for browser WebSockets, or `?token=` on the
-   * page URL). In production mode the page itself is also
+  /** When set, requests require this token: the X-Lumisca-Token header,
+   * the `token` query parameter (browser WebSockets and `?token=` page
+   * URLs), or the cookie a browser keeps after the first such visit (see
+   * auth-cookie.ts). In production mode the page itself is also
    * guarded, so the token is a real capability, not just a barrier for
    * casual local processes. Used by the desktop shell so only its own
    * spawned server instance answers. */
@@ -162,24 +165,40 @@ function installSecurityMiddleware(
 
   // Optional bearer token: blocks arbitrary local processes (curl, other
   // apps) from driving the agent, and — for remote hosting — anyone without
-  // the token from reaching the page itself. The token is accepted as
-  // the X-Lumisca-Token header, the `token` query parameter (WebSocket
-  // handshakes), or `?token=` on the page URL (the desktop shell opens the
-  // page that way). Static assets stay public (they contain no secrets) so
-  // the authenticated page can load them without a token query.
+  // the token from reaching the page itself. The token is accepted as the
+  // X-Lumisca-Token header, the `token` query parameter (WebSocket
+  // handshakes; also `?token=` on the page URL, which is how the desktop
+  // shell and a first-time browser open the UI), or the cookie the browser
+  // keeps after such a visit (auth-cookie.ts) — that last form is what
+  // saves a remote user from pasting the token into the address bar every
+  // time. Static assets stay public (they contain no secrets) so the page
+  // can load them without a token query.
   if (options.token) {
+    const token = options.token;
     const publicPath = (path: string) =>
       path === "/assets/app.js" || path === "/styles.css" ||
       path === "/favicon.png";
     app.use("*", async (c, next) => {
       if (!publicPath(c.req.path)) {
-        const supplied = c.req.header("x-lumisca-token") ??
+        const cookieName = tokenCookieName(c.req.header("host"));
+        const remembered = getCookie(c, cookieName);
+        const presented = c.req.header("x-lumisca-token") ??
           c.req.query("token");
-        if (supplied !== options.token) {
-          return c.json(
-            { error: "Unauthorized: missing or invalid token" },
-            401,
-          );
+        if (presented !== token && remembered !== token) {
+          // A browser (Accept: text/html) is told what to do; every other
+          // client keeps the JSON error it can parse.
+          return c.req.header("accept")?.includes("text/html")
+            ? c.html(renderTokenRequiredPage(), 401)
+            : c.json(
+              { error: "Unauthorized: missing or invalid token" },
+              401,
+            );
+        }
+        // The client presented the token itself, so let the browser
+        // remember it: the next visit — an address without any credential —
+        // then passes this guard.
+        if (remembered !== token) {
+          setCookie(c, cookieName, token, TOKEN_COOKIE_OPTIONS);
         }
       }
       await next();
@@ -288,7 +307,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   const renderPage = async (c: Context) => {
     const css = await assets.getCss();
-    return new Response(
+    // Built through the context (`c.newResponse`) rather than as a raw
+    // Response: only then do headers a middleware set — the token cookie
+    // included — reach the final response.
+    return c.newResponse(
       renderHtmlDocument(css, resolvedTheme(), {
         // The page's own host, so the CSP can name the WebSocket endpoint
         // (the UI's event stream) even when the page is served remotely.
@@ -297,7 +319,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         pageHost: safePageHost(c.req.header("host")),
         token: options.token,
       }),
-      { headers: { "content-type": "text/html; charset=utf-8" } },
+      200,
+      { "content-type": "text/html; charset=utf-8" },
     );
   };
 

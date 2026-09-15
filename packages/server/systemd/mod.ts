@@ -371,6 +371,28 @@ function tokenUrl(base: string, token: string): string {
   return `${base}?token=${encodeURIComponent(token)}`;
 }
 
+/** Where clients reach the server, with the two things the operator needs
+ * to know about such a URL: it carries the credential (so it must not be
+ * shared), and pasting it is a one-time act — the browser stores the token
+ * as a cookie (packages/server/auth-cookie.ts), so later visits need only
+ * the plain address. */
+function printConnectionTargets(
+  host: string,
+  port: number,
+  token: string,
+  deps: ServiceDeps,
+): void {
+  deps.out("接続先:");
+  for (const url of connectionUrls(host, port, deps.interfaces())) {
+    deps.out(`  ${tokenUrl(url, token)}`);
+  }
+  deps.out("  ※ この URL はトークンを含みます。共有しないでください。");
+  deps.out(
+    "  ※ ブラウザで一度開くとトークンが Cookie に保存され、" +
+      "以降はトークン無しの URL でも開けます。",
+  );
+}
+
 /** Whether binding `host` here can be tested at all: an address this machine
  * does not own fails for a different reason, and reporting that as a port
  * conflict would be misleading. */
@@ -527,13 +549,7 @@ async function runInstall(
 
   if (healthy) {
     deps.out("");
-    deps.out("接続先:");
-    for (
-      const url of connectionUrls(values.host, values.port, deps.interfaces())
-    ) {
-      deps.out(`  ${tokenUrl(url, values.token)}`);
-    }
-    deps.out("  ※ この URL はトークンを含みます。共有しないでください。");
+    printConnectionTargets(values.host, values.port, values.token, deps);
   }
   deps.out("");
   deps.out(`ログ:        journalctl --user -u ${UNIT_NAME} -f`);
@@ -580,13 +596,12 @@ async function runStatus(deps: ServiceDeps): Promise<number> {
     );
   }
   if (installed.token !== undefined) {
-    const host = installed.host ?? DEFAULT_HOST;
-    const port = installed.port ?? DEFAULT_PORT;
-    deps.out("接続先:");
-    for (const url of connectionUrls(host, port, deps.interfaces())) {
-      deps.out(`  ${tokenUrl(url, installed.token)}`);
-    }
-    deps.out("  ※ この URL はトークンを含みます。共有しないでください。");
+    printConnectionTargets(
+      installed.host ?? DEFAULT_HOST,
+      installed.port ?? DEFAULT_PORT,
+      installed.token,
+      deps,
+    );
   } else {
     deps.out(
       "トークンが service.env にありません " +

@@ -438,6 +438,13 @@ Deno.test("install names every address a wildcard bind answers on", async () => 
     const output = test.lines.join("\n");
     assertStringIncludes(output, `http://127.0.0.1:${test.port}/?token=`);
     assertStringIncludes(output, `http://192.168.1.5:${test.port}/?token=`);
+    // The URL is a credential, but pasting it is a one-time act: the browser
+    // keeps the token (see server/auth-cookie.ts), and the operator is told
+    // that the plain address works from then on.
+    assertStringIncludes(
+      output,
+      "ブラウザで一度開くとトークンが Cookie に保存され",
+    );
     const document = await Deno.readTextFile(test.documentPath);
     assertStringIncludes(document, 'LUMISCA_HOST="0.0.0.0"');
     assertStringIncludes(document, 'LUMISCA_ALLOWED_HOSTS="homeserver"');
