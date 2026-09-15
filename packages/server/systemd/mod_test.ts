@@ -94,6 +94,14 @@ interface Harness {
   systemd: FakeSystemd;
   lines: string[];
   errors: string[];
+  /** A port nothing holds right now. `install` refuses a port another
+   * process already owns — before it reaches the systemd steps most of these
+   * tests are about — so a test that exercises those steps must ask for a
+   * free port instead of inheriting the default one. The default (8000) is
+   * commonly taken on a developer machine by a running server (the desktop
+   * app's own, or `deno task dev:server`), which used to fail those tests
+   * for a reason that has nothing to do with what they cover. */
+  port: number;
   cleanup: () => Promise<void>;
 }
 
@@ -151,6 +159,7 @@ async function harness(
     systemd,
     lines,
     errors,
+    port: freePort(),
     cleanup: () => Deno.remove(root, { recursive: true }).catch(() => {}),
   };
 }
@@ -174,7 +183,10 @@ function freePort(): number {
 Deno.test("install writes the definition and starts the service", async () => {
   const test = await harness();
   try {
-    const code = await runServiceCommand(["install"], test.deps);
+    const code = await runServiceCommand(
+      ["install", "--port", String(test.port)],
+      test.deps,
+    );
     assertEquals(code, 0, test.errors.join("\n"));
 
     const unit = await Deno.readTextFile(test.unitPath);
@@ -194,7 +206,7 @@ Deno.test("install writes the definition and starts the service", async () => {
 
     const document = await Deno.readTextFile(test.documentPath);
     assertStringIncludes(document, 'LUMISCA_HOST="127.0.0.1"');
-    assertStringIncludes(document, 'LUMISCA_PORT="8000"');
+    assertStringIncludes(document, `LUMISCA_PORT="${test.port}"`);
     assertStringIncludes(document, 'LUMISCA_TOKEN="generated-token"');
     assertStringIncludes(document, 'LUMISCA_UPDATE_RESTART="supervisor"');
 
@@ -215,7 +227,7 @@ Deno.test("install writes the definition and starts the service", async () => {
     assertStringIncludes(output, "自動起動: ok");
     assertStringIncludes(
       output,
-      "http://127.0.0.1:8000/?token=generated-token",
+      `http://127.0.0.1:${test.port}/?token=generated-token`,
     );
     assertStringIncludes(output, "journalctl --user -u lumisca");
     assertEquals(test.errors, []);
@@ -337,7 +349,10 @@ Deno.test("a systemd failure is reported with the reason it gave", async () => {
   const test = await harness();
   test.systemd.failOn = `systemctl restart ${UNIT_NAME}`;
   try {
-    const code = await runServiceCommand(["install"], test.deps);
+    const code = await runServiceCommand(
+      ["install", "--port", String(test.port)],
+      test.deps,
+    );
     assertEquals(code, 1);
     assertStringIncludes(test.errors.join("\n"), "Unit entered failed state");
     // The definition is on disk: the operator fixes the reason and restarts.
@@ -350,7 +365,10 @@ Deno.test("a systemd failure is reported with the reason it gave", async () => {
 Deno.test("a server that never answers is a failure, not a silent success", async () => {
   const test = await harness({ probe: false });
   try {
-    const code = await runServiceCommand(["install"], test.deps);
+    const code = await runServiceCommand(
+      ["install", "--port", String(test.port)],
+      test.deps,
+    );
     assertEquals(code, 1);
     assertStringIncludes(test.lines.join("\n"), "疎通確認: 応答がありません");
     assertStringIncludes(
@@ -366,7 +384,10 @@ Deno.test("a unit that cannot start at boot is a failure, with the one command l
   const test = await harness();
   test.systemd.grantLinger = false;
   try {
-    const code = await runServiceCommand(["install"], test.deps);
+    const code = await runServiceCommand(
+      ["install", "--port", String(test.port)],
+      test.deps,
+    );
     assertEquals(code, 1);
     assertStringIncludes(
       test.errors.join("\n"),
@@ -402,13 +423,21 @@ Deno.test("install names every address a wildcard bind answers on", async () => 
   });
   try {
     const code = await runServiceCommand(
-      ["install", "--host", "0.0.0.0", "--allowed-hosts", "homeserver"],
+      [
+        "install",
+        "--host",
+        "0.0.0.0",
+        "--allowed-hosts",
+        "homeserver",
+        "--port",
+        String(test.port),
+      ],
       test.deps,
     );
     assertEquals(code, 0, test.errors.join("\n"));
     const output = test.lines.join("\n");
-    assertStringIncludes(output, "http://127.0.0.1:8000/?token=");
-    assertStringIncludes(output, "http://192.168.1.5:8000/?token=");
+    assertStringIncludes(output, `http://127.0.0.1:${test.port}/?token=`);
+    assertStringIncludes(output, `http://192.168.1.5:${test.port}/?token=`);
     const document = await Deno.readTextFile(test.documentPath);
     assertStringIncludes(document, 'LUMISCA_HOST="0.0.0.0"');
     assertStringIncludes(document, 'LUMISCA_ALLOWED_HOSTS="homeserver"');
@@ -510,7 +539,13 @@ Deno.test("status reports the installation, its drift, and where it is", async (
 Deno.test("status reports an inactive or non-lingering installation as unhealthy", async () => {
   const test = await harness();
   try {
-    assertEquals(await runServiceCommand(["install"], test.deps), 0);
+    assertEquals(
+      await runServiceCommand(
+        ["install", "--port", String(test.port)],
+        test.deps,
+      ),
+      0,
+    );
     test.systemd.active = false;
     test.lines.length = 0;
     assertEquals(await runServiceCommand(["status"], test.deps), 1);
@@ -536,7 +571,10 @@ Deno.test("uninstall stops the unit and keeps the operator's state", async () =>
     assertStringIncludes(test.lines.join("\n"), "削除するユニットがありません");
 
     assertEquals(
-      await runServiceCommand(["install", "--db", "data/x.db"], test.deps),
+      await runServiceCommand(
+        ["install", "--db", "data/x.db", "--port", String(test.port)],
+        test.deps,
+      ),
       0,
     );
     test.lines.length = 0;
