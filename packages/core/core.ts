@@ -42,8 +42,12 @@ import type { BackgroundCommandInfo } from "./tools/background.ts";
 import {
   CONNECTIONS_KEY,
   formatSessionName,
+  LANGUAGE_KEY,
+  type Locale,
+  resolveLocale,
   type SavedPrompt,
 } from "./shared/mod.ts";
+import { systemLanguageTags } from "./locale.ts";
 import { CoreError } from "./errors.ts";
 import { createWorkspaceRepo } from "./workspace/repo.ts";
 import { WorkspaceService } from "./workspaces.ts";
@@ -155,6 +159,7 @@ export class LumiscaCore {
       renameSession: (id, name) => this.setSessionName(id, name),
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
+      getLanguage: () => this.getLanguage(),
       buildGeneratedPrompt: (workspace, model, tools) =>
         this.buildGeneratedPrompt(workspace, model, tools),
       personalInstructions: () => {
@@ -307,6 +312,18 @@ export class LumiscaCore {
   deleteSetting(key: string): void {
     assertNotProtected(key);
     this.settings.delete(key);
+  }
+
+  /** The app language: the stored setting when one was chosen, else the
+   * machine's own locale (see shared/i18n and locale.ts). The server
+   * resolves the same value per request — its first page load stores the
+   * browser's language — so both agree on what "the app language" is.
+   *
+   * It is read when a session is created (the prompt and the provisional
+   * name) and when a session agent is built (the language of the text the
+   * core generates into the transcript). */
+  getLanguage(): Locale {
+    return resolveLocale(this.settings.get(LANGUAGE_KEY), systemLanguageTags());
   }
 
   // --- command safety (fast-model judgement of bash/eval) -------------------
@@ -538,7 +555,10 @@ export class LumiscaCore {
     // which only the agent factory knows.
     const session = this.sessions.create({
       workspaceId: workspace.id,
-      name: input.name ?? formatSessionName(),
+      // The provisional name is replaced by the title generator right
+      // after the first message; it is stored, so it keeps the language it
+      // was created with.
+      name: input.name ?? formatSessionName(this.getLanguage()),
       modelProvider: model.provider,
       modelId: model.modelId,
     });
@@ -954,9 +974,13 @@ export class LumiscaCore {
         name: this.models.getModel(model.provider, model.modelId)?.name,
       }
       : undefined;
+    // The language is resolved once, here: the prompt is snapshotted with
+    // the session, so the session keeps the language it started in even
+    // after the setting changes (see tools/language.ts).
+    const language = this.getLanguage();
     return workspace.chat
-      ? buildChatSystemPrompt({ tools, model: resolved })
-      : buildSystemPrompt(workspace, { tools, model: resolved });
+      ? buildChatSystemPrompt({ tools, model: resolved, language })
+      : buildSystemPrompt(workspace, { tools, model: resolved, language });
   }
 
   /** Resolve the model for a new session: explicit choice, else the

@@ -7,6 +7,7 @@ import {
   IconSettings,
 } from "@tabler/icons-preact";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
+import { useT } from "../i18n.ts";
 
 interface AppMenuProps {
   onNew: () => void;
@@ -31,7 +32,7 @@ interface AppMenuProps {
  * styles/tokens.css and PANE_WIDTH in browser_lab.rs. */
 const PANE_WIDTH = 460;
 
-/** Hamburger app menu (新しいタブ / セッション履歴 / 設定 / 終了). Shown
+/** Hamburger app menu (new tab / session history / settings / quit). Shown
  * in the desktop title bar next to the window controls, and at the right
  * end of the tab bar in a plain browser. */
 export function AppMenu({
@@ -43,6 +44,7 @@ export function AppMenu({
   buttonClass = "icon-btn",
   paneVisible = false,
 }: AppMenuProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -64,7 +66,7 @@ export function AppMenu({
           }
           setOpen((v) => !v);
         }}
-        title="アプリケーションメニュー"
+        title={t("chrome.appMenu.title")}
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -91,7 +93,7 @@ export function AppMenu({
             }}
           >
             <IconPlus size={14} />
-            <span>新しいタブ</span>
+            <span>{t("chrome.appMenu.newTab")}</span>
             <span className="app-menu-shortcut">Ctrl+T</span>
           </button>
           <button
@@ -104,7 +106,7 @@ export function AppMenu({
             }}
           >
             <IconHistory size={14} />
-            <span>セッション履歴</span>
+            <span>{t("chrome.appMenu.history")}</span>
           </button>
           <div className="app-menu-sep" role="separator" />
           <button
@@ -117,7 +119,7 @@ export function AppMenu({
             }}
           >
             <IconSettings size={14} />
-            <span>設定</span>
+            <span>{t("common.settings")}</span>
           </button>
           {isDesktop && (
             <>
@@ -132,7 +134,7 @@ export function AppMenu({
                 }}
               >
                 <IconPower size={14} />
-                <span>終了</span>
+                <span>{t("chrome.appMenu.quit")}</span>
               </button>
             </>
           )}

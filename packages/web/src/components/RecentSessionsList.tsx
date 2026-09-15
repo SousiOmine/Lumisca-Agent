@@ -1,5 +1,7 @@
 import { IconRefresh } from "@tabler/icons-preact";
 import type { RecentSessionItem } from "../hooks/useRecentSessions.ts";
+import { formatRelativeTime } from "../format.ts";
+import { useLocale, useT } from "../i18n.ts";
 
 interface RecentSessionsListProps {
   items: RecentSessionItem[];
@@ -17,20 +19,6 @@ interface RecentSessionsListProps {
   onReload?: () => void;
 }
 
-/** Japanese relative time, falling back to a date for older sessions. */
-function relativeTime(timestamp: number): string {
-  const diff = Date.now() - timestamp;
-  if (diff < 60_000) return "たった今";
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 60) return `${minutes}分前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}時間前`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}日前`;
-  const d = new Date(timestamp);
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-}
-
 /** The closed-session list shared by the "セッション履歴" modal and the
  * "最近使ったセッション" section of the new-session screen. Clicking a row
  * reopens that session in a tab. */
@@ -44,6 +32,8 @@ export function RecentSessionsList({
   onSelect,
   onReload,
 }: RecentSessionsListProps) {
+  const t = useT();
+  const locale = useLocale();
   const visible = items.filter((item) => !openKeys.has(item.key)).slice(
     0,
     limit,
@@ -58,10 +48,10 @@ export function RecentSessionsList({
             type="button"
             className="btn small"
             onClick={onReload}
-            title="更新"
+            title={t("common.reload")}
           >
             <IconRefresh size={13} />
-            更新
+            {t("common.reload")}
           </button>
         )}
       </div>
@@ -69,24 +59,24 @@ export function RecentSessionsList({
   }
 
   if (loading && items.length === 0) {
-    return <div className="recent-empty">読み込み中…</div>;
+    return <div className="recent-empty">{t("common.loading")}</div>;
   }
 
   if (visible.length === 0) {
-    return <div className="recent-empty">履歴はありません</div>;
+    return <div className="recent-empty">{t("panels.recent.empty")}</div>;
   }
 
   return (
     <div className={bare ? "recent-list bare" : "recent-list"}>
       {visible.map(({ key, info, peerId, peerName }) => {
-        const name = info.name || "無題のセッション";
+        const name = info.name || t("panels.recent.untitled");
         return (
           <button
             key={key}
             type="button"
             className="recent-item"
             onClick={() => onSelect(key)}
-            title={`「${name}」を新しいタブで開く`}
+            title={t("panels.recent.openTab", { name })}
           >
             <span className="recent-item-body">
               <span className="recent-item-name">{name}</span>
@@ -99,7 +89,7 @@ export function RecentSessionsList({
               )}
             </span>
             <span className="recent-item-time">
-              {relativeTime(info.updatedAt)}
+              {formatRelativeTime(info.updatedAt, locale)}
             </span>
           </button>
         );

@@ -6,6 +6,7 @@ import { Modal } from "./Modal.tsx";
 import { FolderBrowser } from "./FolderBrowser.tsx";
 import { errorText } from "../providers.ts";
 import { nativeFolderPickerAvailable, pickFolder } from "../shell.ts";
+import { useT } from "../i18n.ts";
 
 interface WorkspaceModalProps {
   /** Present → edit mode (rename / change folders / delete). */
@@ -31,6 +32,7 @@ export function WorkspaceModal(
     WorkspaceModalProps,
 ) {
   const editing = workspace !== undefined;
+  const t = useT();
   const [view, setView] = useState<View>({ kind: "main" });
   const [name, setName] = useState(workspace?.name ?? "");
   const [folders, setFolders] = useState<string[]>(workspace?.folders ?? []);
@@ -131,24 +133,30 @@ export function WorkspaceModal(
         : (
           <>
             <h2>
-              {editing ? "ワークスペースの編集" : "ワークスペースの新規作成"}
+              {editing
+                ? t("chrome.workspaceModal.editTitle")
+                : t("chrome.workspaceModal.createTitle")}
             </h2>
 
             <p className="settings-note">
-              接続先サーバー: {peerId === "" ? "ローカルサーバー" : peerName}
+              {t("chrome.workspaceModal.server", {
+                server: peerId === ""
+                  ? t("chrome.workspaceModal.localServer")
+                  : peerName,
+              })}
             </p>
 
             <label>
-              ワークスペース名
+              {t("chrome.workspaceModal.nameLabel")}
               <input
-                placeholder="例: プロジェクトA"
+                placeholder={t("chrome.workspaceModal.namePlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.currentTarget.value)}
               />
             </label>
 
             <label>
-              対象フォルダー
+              {t("chrome.workspaceModal.foldersLabel")}
               <div className="folder-picker">
                 <button
                   type="button"
@@ -157,7 +165,9 @@ export function WorkspaceModal(
                   disabled={picking}
                 >
                   <IconPlus size={14} />
-                  {picking ? "選択中…" : "フォルダーを選択"}
+                  {picking
+                    ? t("chrome.workspaceModal.picking")
+                    : t("chrome.workspaceModal.selectFolder")}
                 </button>
               </div>
             </label>
@@ -174,7 +184,7 @@ export function WorkspaceModal(
                         setFolders((prev) => prev.filter((p) => p !== f))}
                     >
                       <IconTrash size={13} />
-                      削除
+                      {t("chrome.workspaceModal.removeFolder")}
                     </button>
                   </div>
                 ))}
@@ -182,8 +192,7 @@ export function WorkspaceModal(
             )}
 
             <p className="settings-note">
-              {"関連する複数のフォルダーをまとめて、作業環境（ワークスペース）を作成します。" +
-                "AIによるファイルの読み書きやコマンド実行は、指定したフォルダー内に限定されます。"}
+              {t("chrome.workspaceModal.description")}
             </p>
 
             {error && <div className="error-text">{error}</div>}
@@ -197,11 +206,11 @@ export function WorkspaceModal(
                   disabled={busy}
                 >
                   <IconTrash size={14} />
-                  削除
+                  {t("common.delete")}
                 </button>
               )}
               <button type="button" className="btn" onClick={onClose}>
-                キャンセル
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -209,7 +218,11 @@ export function WorkspaceModal(
                 onClick={save}
                 disabled={busy || !name.trim() || folders.length === 0}
               >
-                {busy ? "保存中…" : editing ? "保存" : "作成"}
+                {busy
+                  ? t("chrome.workspaceModal.saving")
+                  : editing
+                  ? t("common.save")
+                  : t("chrome.workspaceModal.create")}
               </button>
             </div>
           </>

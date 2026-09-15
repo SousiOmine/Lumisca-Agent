@@ -2,6 +2,7 @@ import { useState } from "preact/compat";
 import type { CSSProperties } from "preact/compat";
 import { IconArrowLeft } from "@tabler/icons-preact";
 import type { McpServerInfo } from "../../types.ts";
+import { useT } from "../../i18n.ts";
 import { Field } from "../Field.tsx";
 
 /** Parse textarea lines into a string list (blanks removed). */
@@ -31,12 +32,6 @@ function joinKeyValues(record: Record<string, string>): string {
 
 const fullWidth: CSSProperties = { width: "100%" };
 
-/** Placeholders with real newlines: JSX attribute strings do not process
- * escape sequences, so these stay in JS string literals. */
-const ARGS_PLACEHOLDER = "例:\n-y\n@modelcontextprotocol/server-filesystem\n.";
-const ENV_PLACEHOLDER = "例:\nTOKEN=abc123";
-const HEADERS_PLACEHOLDER = "例:\nAuthorization=Bearer x";
-
 /** Edit (or create) one MCP server. Saving calls back with the assembled
  * server; the list persists it. */
 export function McpDetail({
@@ -50,6 +45,7 @@ export function McpDetail({
   onSave: (server: McpServerInfo) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState(initial?.name ?? "");
   const [type, setType] = useState<"stdio" | "http">(initial?.type ?? "stdio");
   const [command, setCommand] = useState(initial?.command ?? "");
@@ -65,19 +61,19 @@ export function McpDetail({
   const submit = () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("名前を入力してください");
+      setError(t("settings.mcp.nameEmpty"));
       return;
     }
     if (initial === null && existingNames.includes(trimmed)) {
-      setError(`サーバー「${trimmed}」は既に存在します`);
+      setError(t("settings.mcp.nameExists", { name: trimmed }));
       return;
     }
     if (type === "stdio" && !command.trim()) {
-      setError("コマンドを入力してください");
+      setError(t("settings.mcp.commandEmpty"));
       return;
     }
     if (type === "http" && !url.trim()) {
-      setError("URL を入力してください");
+      setError(t("settings.mcp.urlEmpty"));
       return;
     }
     onSave({
@@ -99,11 +95,15 @@ export function McpDetail({
     <>
       <div className="modal-header">
         <button type="button" className="btn" onClick={onCancel}>
-          <IconArrowLeft size={14} /> 戻る
+          <IconArrowLeft size={14} /> {t("common.back")}
         </button>
-        <h2>{initial ? `編集: ${initial.name}` : "サーバーを追加"}</h2>
+        <h2>
+          {initial
+            ? t("settings.mcp.editTitle", { name: initial.name })
+            : t("settings.mcp.addTitle")}
+        </h2>
         <button type="button" className="btn push" onClick={onCancel}>
-          閉じる
+          {t("common.close")}
         </button>
       </div>
 
@@ -115,58 +115,58 @@ export function McpDetail({
           fontSize: 13,
         }}
       >
-        <Field label="名前">
+        <Field label={t("settings.mcp.nameLabel")}>
           <input
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
-            placeholder="例: filesystem"
+            placeholder={t("settings.mcp.namePlaceholder")}
             style={fullWidth}
           />
         </Field>
 
-        <Field label="種類">
+        <Field label={t("settings.mcp.typeLabel")}>
           <select
             value={type}
             onChange={(e) => setType(e.currentTarget.value as "stdio" | "http")}
             style={fullWidth}
           >
-            <option value="stdio">stdio（子プロセス）</option>
-            <option value="http">HTTP (streamable)</option>
+            <option value="stdio">{t("settings.mcp.typeStdio")}</option>
+            <option value="http">{t("settings.mcp.typeHttp")}</option>
           </select>
         </Field>
 
         {type === "stdio"
           ? (
             <>
-              <Field label="コマンド">
+              <Field label={t("settings.mcp.commandLabel")}>
                 <input
                   value={command}
                   onChange={(e) => setCommand(e.currentTarget.value)}
-                  placeholder="例: npx"
+                  placeholder={t("settings.mcp.commandPlaceholder")}
                   style={fullWidth}
                 />
               </Field>
-              <Field label="引数（1行に1つ）">
+              <Field label={t("settings.mcp.argsLabel")}>
                 <textarea
                   rows={3}
                   value={args}
                   onChange={(e) => setArgs(e.currentTarget.value)}
-                  placeholder={ARGS_PLACEHOLDER}
+                  placeholder={t("settings.mcp.argsPlaceholder")}
                   style={{ ...fullWidth, fontFamily: "monospace" }}
                 />
               </Field>
-              <Field label="作業ディレクトリ（省略可）">
+              <Field label={t("settings.mcp.cwdLabel")}>
                 <input
                   value={cwd}
                   onChange={(e) => setCwd(e.currentTarget.value)}
-                  placeholder="ワークスペース基準の相対パス"
+                  placeholder={t("settings.mcp.cwdPlaceholder")}
                   style={fullWidth}
                 />
               </Field>
             </>
           )
           : (
-            <Field label="URL">
+            <Field label={t("settings.mcp.urlLabel")}>
               <input
                 value={url}
                 onChange={(e) => setUrl(e.currentTarget.value)}
@@ -176,23 +176,23 @@ export function McpDetail({
             </Field>
           )}
 
-        <Field label="環境変数（key=value、1行に1つ、${VAR} 展開可）">
+        <Field label={t("settings.mcp.envLabel", { var: "${VAR}" })}>
           <textarea
             rows={3}
             value={env}
             onChange={(e) => setEnv(e.currentTarget.value)}
-            placeholder={ENV_PLACEHOLDER}
+            placeholder={t("settings.mcp.envPlaceholder")}
             style={{ ...fullWidth, fontFamily: "monospace" }}
           />
         </Field>
 
         {type === "http" && (
-          <Field label="HTTPヘッダー（key=value、1行に1つ）">
+          <Field label={t("settings.mcp.httpHeadersLabel")}>
             <textarea
               rows={3}
               value={headers}
               onChange={(e) => setHeaders(e.currentTarget.value)}
-              placeholder={HEADERS_PLACEHOLDER}
+              placeholder={t("settings.mcp.headersPlaceholder")}
               style={{ ...fullWidth, fontFamily: "monospace" }}
             />
           </Field>
@@ -203,10 +203,10 @@ export function McpDetail({
 
       <div className="modal-actions">
         <button type="button" className="btn" onClick={onCancel}>
-          キャンセル
+          {t("common.cancel")}
         </button>
         <button type="button" className="btn primary" onClick={submit}>
-          保存
+          {t("common.save")}
         </button>
       </div>
     </>

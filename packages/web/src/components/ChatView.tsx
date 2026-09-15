@@ -39,6 +39,7 @@ import type { UserMessageImage } from "./chat/types.ts";
 import { useProviderModels } from "../providers.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { useSkills } from "../hooks/useSkills.ts";
+import { useT } from "../i18n.ts";
 
 export { buildTurns } from "./chat/ConversationTurn.tsx";
 
@@ -95,6 +96,9 @@ export function ChatView(
   }: ChatViewProps,
 ) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Message lookup of the app language (the slash menu's labels are
+   * catalogue entries). */
+  const t = useT();
   // Set on submit: the sent message must become visible even if the user was
   // scrolled up reading earlier messages. The user message arrives
   // asynchronously via the event stream, so the intent is remembered until
@@ -116,10 +120,11 @@ export function ChatView(
 
   // Build the slash commands list including the /skill and /prompt submenus.
   // In chat mode only skills, actions and saved prompts are shown (agent
-  // modes need a workspace).
+  // modes need a workspace). The translator is a dependency: the menu text
+  // follows the app language.
   const allSlashCommands = useMemo<SlashCommand[]>(
-    () => buildSlashCommands(savedPrompts, view.info.chat ?? false, skills),
-    [view.info.chat, savedPrompts, skills],
+    () => buildSlashCommands(savedPrompts, view.info.chat ?? false, skills, t),
+    [view.info.chat, savedPrompts, skills, t],
   );
 
   // Pin the scroll to the newest content while the user is at the bottom.
@@ -176,7 +181,7 @@ export function ChatView(
     if (!text && images.length === 0) return;
     if (message === undefined) {
       // Modes first: their token is a mode id, so the two never collide.
-      const line = (view.info.chat ? null : slashPromptFromText(text)) ??
+      const line = (view.info.chat ? null : slashPromptFromText(text, t)) ??
         skillPromptFromText(text, skills);
       if (line !== null) {
         if (line.kind === "needs-text") return;
@@ -213,7 +218,7 @@ export function ChatView(
       onActionCommand?.(command.id);
       return;
     }
-    const result = slashPrompt(command, item);
+    const result = slashPrompt(command, item, "", t);
     if (result !== null) {
       submit(result.text, result.mode);
     }
@@ -316,12 +321,12 @@ export function ChatView(
                 {view.info.chat
                   ? (
                     <p>
-                      メッセージを入力してください。フォルダー連携を行わないシンプルなチャットです。
+                      {t("chat.empty.chat")}
                     </p>
                   )
                   : (
                     <p>
-                      作業内容（タスク）を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律して進めます。
+                      {t("chat.empty.workspace")}
                     </p>
                   )}
               </div>
@@ -356,7 +361,7 @@ export function ChatView(
         <Composer
           value={input}
           onChange={onInputChange}
-          placeholder="指示・メッセージを入力してください…"
+          placeholder={t("chat.composer.placeholder")}
           onKeyDown={onKeyDown}
           model={{
             provider: view.info.modelProvider,
@@ -367,7 +372,7 @@ export function ChatView(
           thinkingLevel={view.info.thinkingLevel}
           thinkingLevels={view.info.thinkingLevels}
           onThinkingLevelChange={onThinkingLevelChange}
-          submitLabel="送信"
+          submitLabel={t("chat.composer.submit")}
           submitIcon={IconSend}
           submitIconOnly
           submitDisabled={!input.trim() && images.length === 0}

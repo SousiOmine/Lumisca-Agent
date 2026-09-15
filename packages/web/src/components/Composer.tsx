@@ -17,7 +17,7 @@ import {
   IconPlayerStop,
   IconX,
 } from "@tabler/icons-preact";
-import { MAX_PROMPT_IMAGES, THINKING_LEVEL_LABELS } from "@lumisca/core/shared";
+import { MAX_PROMPT_IMAGES } from "@lumisca/core/shared";
 import {
   ContextUsageCard,
   type ContextUsageData,
@@ -40,6 +40,8 @@ import {
 } from "../slashCommands.ts";
 export type { SlashCommand, SlashCommandItem };
 import type { ModelInfo, PendingImage, ThinkingLevel } from "../types.ts";
+import { useT } from "../i18n.ts";
+import { thinkingLevelLabel } from "../format.ts";
 
 export interface ComposerModel {
   provider: string;
@@ -150,6 +152,8 @@ export function Composer({
   const [showCtx, setShowCtx] = useState(false);
   const [dragging, setDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** Message lookup of the app language (the composer's own labels). */
+  const t = useT();
   // Latest images, read inside the async FileReader callback so a burst of
   // drops/pastes never appends from a stale closure. The ref is kept in an
   // effect: writing it during render breaks under concurrent rendering.
@@ -379,7 +383,7 @@ export function Composer({
               <button
                 type="button"
                 className="input-image-remove"
-                title="添付画像を削除"
+                title={t("chat.composer.image.remove")}
                 onClick={() =>
                   onImagesChange?.(images.filter((_, i) => i !== index))}
               >
@@ -423,11 +427,15 @@ export function Composer({
               : { left: caretPos.x, top: `calc(${caretPos.y}px + 20px)` }}
           >
             {mention.loading && mention.items.length === 0
-              ? <div className="mention-status">読み込み中…</div>
+              ? (
+                <div className="mention-status">
+                  {t("chat.composer.mention.loading")}
+                </div>
+              )
               : mention.items.length === 0
               ? (
                 <div className="mention-status">
-                  一致するファイルが見つかりません
+                  {t("chat.composer.mention.noMatch")}
                 </div>
               )
               : (
@@ -464,7 +472,7 @@ export function Composer({
                 <button
                   type="button"
                   className="slash-back"
-                  title="コマンド一覧に戻る"
+                  title={t("chat.composer.slash.back")}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() =>
                     setSlash({ ...slash, submenu: null, active: 0 })}
@@ -475,7 +483,11 @@ export function Composer({
               </div>
             )}
             {slashEntries.length === 0
-              ? <div className="slash-status">該当するコマンドがありません</div>
+              ? (
+                <div className="slash-status">
+                  {t("chat.composer.slash.empty")}
+                </div>
+              )
               : slashEntries.map((item, index) => (
                 <button
                   key={item.id}
@@ -514,7 +526,7 @@ export function Composer({
         {hideModelSwitch
           ? (
             <span className="settings-note" style={{ alignSelf: "center" }}>
-              接続先サーバーで設定されたデフォルトモデルを使用します
+              {t("chat.composer.remoteDefault")}
             </span>
           )
           : (
@@ -526,7 +538,7 @@ export function Composer({
                   setShowModelPicker((o) => !o);
                   setShowCtx(false);
                 }}
-                title="モデル・推論強度の選択"
+                title={t("chat.composer.modelSwitchTitle")}
               >
                 <span
                   className="live-dot"
@@ -539,13 +551,13 @@ export function Composer({
                 <span className="mono">
                   {model
                     ? `${model.provider}/${model.modelId}`
-                    : "モデルを選択"}
+                    : t("chat.composer.modelSelect")}
                 </span>
                 {canThink && (
                   <span className="model-thinking-label">
                     <IconBrain size={12} />
                     <span>
-                      {THINKING_LEVEL_LABELS[thinkingLevel ?? "off"]}
+                      {thinkingLevelLabel(thinkingLevel ?? "off", t)}
                     </span>
                   </span>
                 )}
@@ -601,8 +613,8 @@ export function Composer({
               type="button"
               className="btn danger"
               onClick={onAbort}
-              aria-label="処理を停止"
-              title="処理を停止"
+              aria-label={t("chat.composer.stop")}
+              title={t("chat.composer.stop")}
             >
               <IconPlayerStop size={14} />
             </button>

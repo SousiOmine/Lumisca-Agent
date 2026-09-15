@@ -1,5 +1,7 @@
 import { withTimeout } from "@lumisca/core/shared";
+import type { Translator } from "@lumisca/core/shared";
 import { notifyApi, type WindowState, windowStateApi } from "./shell.ts";
+import { t } from "./i18n.ts";
 import type { AskQuestion } from "./types.ts";
 
 /** Background agent-event notifications (desktop only).
@@ -53,19 +55,28 @@ function truncate(text: string, max: number): string {
   return chars.length <= max ? text : chars.slice(0, max).join("");
 }
 
-function sessionLabel(name: string): string {
+/** A session name for a notification: trimmed, capped, and named by the
+ * catalogue when the session has no title yet. */
+function sessionLabel(name: string, tr: Translator): string {
   const trimmed = name.trim();
-  return truncate(trimmed === "" ? "セッション" : trimmed, MAX_NAME_CHARS);
+  return truncate(
+    trimmed === "" ? tr("notify.sessionName") : trimmed,
+    MAX_NAME_CHARS,
+  );
 }
 
-/** Display text for a finished run. Pure (unit-tested). */
-export function buildAgentEndNotification(sessionName: string): {
+/** Display text for a finished run. Pure (unit-tested; `tr` defaults to the
+ * app language at call time). */
+export function buildAgentEndNotification(
+  sessionName: string,
+  tr: Translator = t,
+): {
   title: string;
   body: string;
 } {
   return {
     title: "Lumisca",
-    body: `「${sessionLabel(sessionName)}」の処理が完了しました`,
+    body: tr("notify.agentFinished", { name: sessionLabel(sessionName, tr) }),
   };
 }
 
@@ -75,15 +86,21 @@ export function buildAgentEndNotification(sessionName: string): {
 export function buildQuestionNotification(
   sessionName: string,
   questions: AskQuestion[],
+  tr: Translator = t,
 ): { title: string; body: string } {
   const first = questions[0];
   const gist = first === undefined
     ? ""
     : (first.header?.trim() || first.question.trim());
-  const suffix = gist === "" ? "" : `：${truncate(gist, MAX_QUESTION_CHARS)}`;
+  const detail = gist === "" ? "" : tr("notify.questionDetail", {
+    gist: truncate(gist, MAX_QUESTION_CHARS),
+  });
   return {
     title: "Lumisca",
-    body: `「${sessionLabel(sessionName)}」に質問があります${suffix}`,
+    body: tr("notify.question", {
+      name: sessionLabel(sessionName, tr),
+      detail,
+    }),
   };
 }
 

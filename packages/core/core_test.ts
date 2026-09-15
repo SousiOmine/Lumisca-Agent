@@ -16,6 +16,7 @@ import { SCHEMA_VERSION } from "./db/schema.ts";
 import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
+  LANGUAGE_KEY,
   serializeModelPreference,
   TOOL_BROWSER_OPEN,
   TOOL_CALL,
@@ -973,6 +974,51 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
   assertEquals(reopenedAgent.messages.length, 2);
 
   core.close();
+});
+
+Deno.test("session language: the prompt is generated with the setting, then frozen", async () => {
+  const { core, providerId, modelId } = setup();
+  try {
+    // The language is a server setting (the settings dialog writes exactly
+    // this), read when the session's prompt is generated.
+    core.setSetting(LANGUAGE_KEY, "en");
+    const english = core.createSession({ modelProvider: providerId, modelId });
+    const englishPrompt = core.getAgent(english.id)!.agent.state.systemPrompt;
+    assert(
+      englishPrompt.includes("Write every reply in English"),
+      "an English session must be told to answer in English",
+    );
+    // The provisional session name follows the same language.
+    assert(
+      english.name.startsWith("Session "),
+      `english session name: ${english.name}`,
+    );
+
+    // Changing the setting afterwards does not touch an existing session:
+    // its prompt is the snapshot taken at creation, so the agent keeps
+    // answering in the language the session started in.
+    core.setSetting(LANGUAGE_KEY, "ja");
+    core.closeSession(english.id);
+    await core.openSession(english.id);
+    assertEquals(
+      core.getAgent(english.id)!.agent.state.systemPrompt,
+      englishPrompt,
+    );
+
+    // A session created after the switch starts in the new language.
+    const japanese = core.createSession({ modelProvider: providerId, modelId });
+    const japanesePrompt = core.getAgent(japanese.id)!.agent.state.systemPrompt;
+    assert(
+      japanesePrompt.includes("Write every reply in Japanese"),
+      "a Japanese session must be told to answer in Japanese",
+    );
+    assert(
+      japanese.name.startsWith("セッション "),
+      `japanese session name: ${japanese.name}`,
+    );
+  } finally {
+    core.close();
+  }
 });
 
 Deno.test("session_created event carries the decorated session (chat flag)", () => {
@@ -2129,12 +2175,15 @@ Deno.test("fast model: first prompt auto-generates the session title", async () 
   const { core, faux, providerId } = setupFastTitle();
   const { ws } = await makeWorkspace(core);
 
+  // The provisional name follows the app language, so the test pins it
+  // instead of depending on the machine's locale.
+  core.setSetting(LANGUAGE_KEY, "ja");
   const session = core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "main",
   });
-  assertEquals(session.name.startsWith("Session "), true); // provisional
+  assertEquals(session.name.startsWith("セッション "), true); // provisional
 
   const captured: CapturedCall[] = [];
   faux.setResponses(makeImageAnalysisResponses(captured, [
@@ -2165,12 +2214,14 @@ Deno.test("startPrompt (web path): first prompt auto-generates the session title
   const { core, faux, providerId } = setupFastTitle();
   const { ws } = await makeWorkspace(core);
 
+  // Pinned like the test above: the provisional name is localized.
+  core.setSetting(LANGUAGE_KEY, "ja");
   const session = core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "main",
   });
-  assertEquals(session.name.startsWith("Session "), true); // provisional
+  assertEquals(session.name.startsWith("セッション "), true); // provisional
 
   const captured: CapturedCall[] = [];
   faux.setResponses(makeImageAnalysisResponses(captured, [
@@ -2200,6 +2251,8 @@ Deno.test("no fast model: session keeps its provisional name", async () => {
   const { core, faux, providerId } = setup();
   const { ws } = await makeWorkspace(core);
 
+  // Pinned: the provisional name is the localized "Session <date>".
+  core.setSetting(LANGUAGE_KEY, "ja");
   const session = core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
@@ -2210,7 +2263,7 @@ Deno.test("no fast model: session keeps its provisional name", async () => {
   await promptSession(core, session.id, "hello");
 
   assertEquals(core.getSession(session.id)!.name, session.name);
-  assertEquals(session.name.startsWith("Session "), true);
+  assertEquals(session.name.startsWith("セッション "), true);
 
   core.close();
 });

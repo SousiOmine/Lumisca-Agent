@@ -2,20 +2,16 @@ import { useState } from "preact/compat";
 import { IconPlus } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
+import { useT } from "../../i18n.ts";
 import { errorText, useProviderModels } from "../../providers.ts";
 import type { CatalogStatus } from "../../types.ts";
-
-const CATALOG_SOURCE_LABEL: Record<CatalogStatus["source"], string> = {
-  live: "最新",
-  cache: "キャッシュ",
-  snapshot: "同梱版",
-};
 
 /** One-line catalog status with a manual refresh button. Shown at the top
  * of the provider list: the model catalog now syncs from models.dev at
  * startup (and on demand here), falling back to the cache/bundled
  * snapshot when offline. */
 function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
+  const t = useT();
   const [status, setStatus] = useState<CatalogStatus | undefined>();
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -44,6 +40,12 @@ function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
     }
   };
 
+  const sourceLabel = status?.source === "live"
+    ? t("settings.provider.catalogSourceLatest")
+    : status?.source === "cache"
+    ? t("settings.provider.catalogSourceCache")
+    : t("settings.provider.catalogSourceSnapshot");
+
   const generated = status?.generatedAt !== undefined
     ? ` (${status.generatedAt.slice(0, 10)})`
     : "";
@@ -58,9 +60,9 @@ function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
         }}
       >
         <span style={{ flex: 1 }}>
-          モデルカタログ: {status
-            ? `${CATALOG_SOURCE_LABEL[status.source]}${generated}`
-            : "確認中…"}
+          {t("settings.provider.catalogStatus")} {status
+            ? `${sourceLabel}${generated}`
+            : t("settings.provider.catalogChecking")}
         </span>
         <button
           type="button"
@@ -68,12 +70,14 @@ function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
           onClick={refresh}
           disabled={refreshing}
         >
-          {refreshing ? "更新中…" : "最新に更新"}
+          {refreshing
+            ? t("settings.provider.refreshing")
+            : t("settings.provider.refreshToLatest")}
         </button>
       </div>
       {error && (
         <p className="settings-note" style={{ marginTop: 6 }}>
-          更新できませんでした: {error}
+          {t("settings.provider.refreshFailed", { error })}
         </p>
       )}
     </div>
@@ -90,6 +94,7 @@ export function ProviderList({
   onAdd: () => void;
   onOpen: (providerId: string) => void;
 }) {
+  const t = useT();
   const { providers, reload } = useProviderModels("");
 
   const configured = providers.filter(
@@ -99,7 +104,7 @@ export function ProviderList({
   return (
     <>
       <div className="modal-header">
-        <h2>APIプロバイダー</h2>
+        <h2>{t("settings.nav.providers")}</h2>
       </div>
 
       <CatalogStatusRow onRefreshed={reload} />
@@ -107,7 +112,7 @@ export function ProviderList({
       <div className="stack-8">
         {configured.length === 0 && (
           <div className="faint-box">
-            登録されたプロバイダーがありません。「プロバイダーを追加」ボタンから設定してください。
+            {t("settings.provider.noProviders")}
           </div>
         )}
         {configured.map((p) => (
@@ -127,12 +132,16 @@ export function ProviderList({
             {p.userDefined
               ? (
                 <span className="provider-state">
-                  {p.configured ? "設定済み" : "未設定"}
+                  {p.configured
+                    ? t("settings.provider.configured")
+                    : t("settings.provider.notConfigured")}
                 </span>
               )
               : (
                 <span className="provider-state configured">
-                  {p.authType === "oauth" ? "OAuth" : (p.source ?? "APIキー")}
+                  {p.authType === "oauth"
+                    ? "OAuth"
+                    : (p.source ?? t("settings.provider.apiKeyLabel"))}
                 </span>
               )}
           </button>
@@ -142,7 +151,7 @@ export function ProviderList({
       <div className="modal-actions">
         <button type="button" className="btn primary" onClick={onAdd}>
           <IconPlus size={14} />
-          プロバイダーを追加
+          {t("settings.provider.addProvider")}
         </button>
       </div>
     </>

@@ -13,21 +13,11 @@ export type ThinkingLevel =
   | "xhigh"
   | "max";
 
-/** User-facing labels for the thinking levels. Shared by the web UI and
- * the core so the level names stay consistent. */
-export const THINKING_LEVEL_LABELS: Record<ThinkingLevel, string> = {
-  off: "Off",
-  minimal: "Minimal",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra High",
-  max: "Max",
-};
-
 /** Thinking levels weakest-first ("off" first). Single source of truth for
  * the strength order; the web slider sorts supported levels with this, and
- * `models/thinking.ts` sorts with it. */
+ * `models/thinking.ts` sorts with it. The DISPLAY names live in the UI
+ * catalogue (`common.thinking.*`), not here: the level ids are the wire
+ * values, the labels are language-dependent. */
 export const THINKING_LEVEL_ORDER: readonly ThinkingLevel[] = [
   "off",
   "minimal",

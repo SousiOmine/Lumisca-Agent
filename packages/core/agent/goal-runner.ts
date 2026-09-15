@@ -1,6 +1,7 @@
 import type { AgentMessage, Api, Model, StreamFn } from "../ai/types.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
+import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type { GoalStore } from "../goal/loop.ts";
 import {
   finishGoal,
@@ -17,6 +18,9 @@ export interface GoalRunnerDeps {
   getTranscript: () => AgentMessage[];
   getJudgeModel: () => Model<Api>;
   streamFn: StreamFn;
+  /** The language of the notices written into the transcript (stop
+   * reasons): the language the session's agent was built with. */
+  language?: Locale;
   runTurn: (instruction: string) => Promise<void>;
   emit: (event: ClientEvent) => void;
   isClosed: () => boolean;
@@ -91,7 +95,10 @@ export class GoalRunner {
       this.deps.sessionId,
       goal.text,
       false,
-      "操作の取り消し（巻き戻し）が行われたため、処理を中断しました",
+      translate(
+        this.deps.language ?? DEFAULT_LOCALE,
+        "goal.cancelledByRewind",
+      ),
     );
   }
 
@@ -125,6 +132,7 @@ export class GoalRunner {
     try {
       await runGoalLoop({
         sessionId: this.deps.sessionId,
+        language: this.deps.language ?? DEFAULT_LOCALE,
         loadGoal: () => this.deps.goalStore.loadGoal(),
         saveGoal: (text, max) => this.deps.goalStore.saveGoal(text, max),
         updateGoal: (patch) => this.deps.goalStore.updateGoal(patch),

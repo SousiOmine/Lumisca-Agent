@@ -239,6 +239,7 @@ export class AgentFactory {
           resolveRuntime: runtimeResolver,
           streamFn: this.deps.streamFn,
           safety: this.deps.commandSafety,
+          language: this.deps.getLanguage(),
           emit: (event: ClientEvent) => this.deps.emit(event),
         });
         resources.tasks = tasks;
@@ -247,10 +248,12 @@ export class AgentFactory {
       }
       // The sub-agents share the session's MCP attachment and tool
       // registry (general sub-agents get the search/call pair over it),
-      // and the browser availability gate (the web-browser built-in skill
-      // in their skill tool).
+      // the browser availability gate (the web-browser built-in skill
+      // in their skill tool), and the language their reports come back
+      // in — re-read on every open, like the rest.
       tasks.setMcp(mcp, registry);
       tasks.setBrowserAvailable(browserAvailable);
+      tasks.setLanguage(this.deps.getLanguage());
     } else {
       tasks = undefined;
     }
@@ -320,6 +323,7 @@ export class AgentFactory {
       contextProviders,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
+      language: this.deps.getLanguage(),
       renameSession: (name) => this.deps.renameSession(session.id, name),
       goalStore: {
         loadGoal: () => this.deps.loadGoal(session.id),

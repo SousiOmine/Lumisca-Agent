@@ -8,7 +8,10 @@ import {
 } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore, type TodoPhase } from "@lumisca/core";
-import { COMMAND_SAFETY_APPROVALS_KEY } from "@lumisca/core/shared";
+import {
+  COMMAND_SAFETY_APPROVALS_KEY,
+  LANGUAGE_KEY,
+} from "@lumisca/core/shared";
 import {
   createApp,
   disposeServer,
@@ -1173,6 +1176,11 @@ Deno.test("token auth remembers a presented token in a cookie", async () => {
     // A cookie that does not match (another server instance, a rotated
     // token) is worth nothing; a browser gets an explanation instead of the
     // JSON blob an API client would see.
+    // This page is rendered before the app bundle loads, so its text comes
+    // straight from the catalogue. Pin the language first: the page loads
+    // above already resolved it for real, and every later request follows
+    // the stored value (a 401 never writes one).
+    core.setSetting(LANGUAGE_KEY, "ja");
     const stale = await app.fetch(
       new Request("http://127.0.0.1:8000/", {
         headers: {
@@ -1645,7 +1653,11 @@ Deno.test("server serves the app shell", async () => {
   const server = startServer(core, 0, { repoRoot: Deno.cwd() });
   try {
     const base = `http://127.0.0.1:${server.addr.port}`;
-    const index = await fetch(`${base}/`);
+    // The language is resolved per request; the header pins it so the test
+    // does not depend on the machine's locale.
+    const index = await fetch(`${base}/`, {
+      headers: { "accept-language": "ja-JP,ja;q=0.9" },
+    });
     assertEquals(index.status, 200);
     const html = await index.text();
     // Static shell: an empty #root (the app renders client-side), the
@@ -1655,17 +1667,21 @@ Deno.test("server serves the app shell", async () => {
     assertEquals(html.includes('src="/assets/initial-data.js"'), true);
     assertEquals(html.includes('src="/assets/app.js"'), true);
     assertEquals(html.includes("styles.css") || html.includes("<style>"), true);
+    // The document already declares the app language (font fallback,
+    // hyphenation, screen readers) before the client bundle runs.
+    assertEquals(html.includes('<html lang="ja"'), true);
     // The desktop shell bridge (settings → 接続先サーバー) is allowed by
     // the CSP; in plain browsers that host does not resolve.
     assertEquals(html.includes("http://lumisca.localhost"), true);
 
-    // The initial-data script carries the serialized state.
+    // The initial-data script carries the serialized state, the language
+    // included — the client seeds its catalogue with it before the first
+    // render, so the UI never flashes the wrong language.
     const dataScript = await fetch(`${base}/assets/initial-data.js`);
     assertEquals(dataScript.status, 200);
-    assertEquals(
-      (await dataScript.text()).includes("window.__INITIAL_DATA__"),
-      true,
-    );
+    const dataText = await dataScript.text();
+    assertEquals(dataText.includes("window.__INITIAL_DATA__"), true);
+    assertEquals(dataText.includes('"language":"ja"'), true);
 
     // SPA fallback renders the same shell.
     const fallback = await fetch(`${base}/some/route`);
@@ -1676,6 +1692,97 @@ Deno.test("server serves the app shell", async () => {
     const health = await fetch(`${base}/api/health`);
     assertEquals(health.status, 200);
     assertEquals((await health.json()).ok, true);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("token-required page renders in the request's language", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const app = createApp(core, { token: "secret-token" });
+  const host = { host: "127.0.0.1:8000" };
+  try {
+    // Nothing is stored yet and no app page has been loaded, so the
+    // browser's own preference decides — the only hint a page served
+    // before the app exists can have.
+    const ja = await app.fetch(
+      new Request("http://127.0.0.1:8000/", {
+        headers: { ...host, accept: "text/html", "accept-language": "ja-JP" },
+      }),
+    );
+    assertEquals(ja.status, 401);
+    assertEquals((await ja.text()).includes("トークンが必要です"), true);
+
+    const en = await app.fetch(
+      new Request("http://127.0.0.1:8000/", {
+        headers: {
+          ...host,
+          accept: "text/html",
+          "accept-language": "en-US,en;q=0.9",
+        },
+      }),
+    );
+    assertEquals(en.status, 401);
+    assertEquals((await en.text()).includes("A token is required"), true);
+
+    // A 401 is not a page load of the app: it resolved a language for its
+    // own response but stored nothing, so the first real page load still
+    // decides (and no later request inherits a guess from a rejected one).
+    assertEquals(core.getSetting(LANGUAGE_KEY), undefined);
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("server resolves the app language once and stores it", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+
+    // First load: nothing is stored yet, so the browser's preference
+    // decides — and the resolved value is remembered, because the language
+    // must not depend on which client happens to create the next session.
+    const first = await fetch(`${base}/`, {
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+    assertEquals((await first.text()).includes('<html lang="en"'), true);
+    const settings = await (await fetch(`${base}/api/settings`)).json();
+    assertEquals(settings.language, "en");
+
+    // A later request with a different preference does not flip it: the
+    // stored setting is the source of truth, and the settings dialog is
+    // its only writer after this point.
+    const second = await fetch(`${base}/`, {
+      headers: { "accept-language": "ja" },
+    });
+    assertEquals((await second.text()).includes('<html lang="en"'), true);
+
+    // The user's explicit choice wins over every fallback.
+    await fetch(`${base}/api/settings/language`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: "ja" }),
+    });
+    const third = await fetch(`${base}/`);
+    assertEquals((await third.text()).includes('<html lang="ja"'), true);
+    const data = await fetch(`${base}/assets/initial-data.js`);
+    assertEquals((await data.text()).includes('"language":"ja"'), true);
+
+    // An unknown stored value is "not chosen": it is replaced by the
+    // resolved language instead of reaching the page.
+    await fetch(`${base}/api/settings/language`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: "fr" }),
+    });
+    const fourth = await fetch(`${base}/`, {
+      headers: { "accept-language": "ja" },
+    });
+    assertEquals((await fourth.text()).includes('<html lang="ja"'), true);
   } finally {
     server.shutdown();
     core.close();

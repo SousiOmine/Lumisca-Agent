@@ -2,7 +2,9 @@ import { type ReactElement, useState } from "preact/compat";
 import type { InitialData } from "./types.ts";
 import type { SessionView } from "./types.ts";
 import { splitTabKey } from "./tabs.ts";
+import { useT } from "./i18n.ts";
 import { useTheme } from "./hooks/useTheme.ts";
+import { useLanguage } from "./hooks/useLanguage.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useServerHealth } from "./hooks/useServerHealth.ts";
@@ -33,9 +35,18 @@ export interface AppProps {
 }
 
 export function App({ initialData }: AppProps): ReactElement {
+  const t = useT();
   const { theme, setTheme, error: themeError } = useTheme(
     initialData?.theme ?? "dark",
   );
+  // The language store was seeded from InitialData before the first render
+  // (client.tsx); this hook owns the settings-dialog state and the persist
+  // (a failed save rolls the UI back).
+  const {
+    language,
+    setLanguage,
+    error: languageError,
+  } = useLanguage();
   const {
     workspaces,
     peers,
@@ -163,7 +174,7 @@ export function App({ initialData }: AppProps): ReactElement {
         {loadError && (
           <div className="msg">
             <div className="msg-body error-text">
-              <p>サーバーに接続できません: {loadError}</p>
+              <p>{t("common.serverUnreachable", { error: loadError })}</p>
             </div>
           </div>
         )}
@@ -245,6 +256,9 @@ export function App({ initialData }: AppProps): ReactElement {
           theme={theme}
           themeError={themeError}
           onThemeChange={setTheme}
+          language={language}
+          languageError={languageError}
+          onLanguageChange={setLanguage}
           update={update}
           notifyEnabled={notifyEnabled}
           onNotifyEnabledChange={handleNotifyEnabledChange}

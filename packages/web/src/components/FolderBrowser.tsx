@@ -9,6 +9,7 @@ import {
 import { workspaceApi } from "../api.ts";
 import { errorText } from "../providers.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
+import { useT } from "../i18n.ts";
 
 interface BrowseEntry {
   name: string;
@@ -29,6 +30,7 @@ export function FolderBrowser({
   onAdd: (path: string) => void;
   onBack: () => void;
 }) {
+  const t = useT();
   const [roots, setRoots] = useState<string[]>([]);
   const [path, setPath] = useState<string | null>(null);
   const [parent, setParent] = useState<string | null>(null);
@@ -78,14 +80,14 @@ export function FolderBrowser({
       <>
         <div className="modal-header">
           <button type="button" className="btn" onClick={onBack}>
-            <IconArrowLeft size={14} /> 戻る
+            <IconArrowLeft size={14} /> {t("common.back")}
           </button>
-          <h2>フォルダーの選択</h2>
+          <h2>{t("chrome.folderBrowser.title")}</h2>
         </div>
         <p className="settings-note">
           {peerId === ""
-            ? "参照先フォルダーを選択してください"
-            : `「${peerName} (${peerId})」のフォルダーを選択してください`}
+            ? t("chrome.folderBrowser.selectPrompt")
+            : t("chrome.folderBrowser.selectPeerPrompt", { peerName, peerId })}
         </p>
         <div className="model-list" style={{ maxHeight: 320 }}>
           {roots.map((r) => (
@@ -107,7 +109,7 @@ export function FolderBrowser({
             <div
               style={{ padding: 8, fontSize: 12, color: "var(--text-faint)" }}
             >
-              指定されたフォルダーが見つかりません
+              {t("chrome.folderBrowser.notFound")}
             </div>
           )}
         </div>
@@ -119,9 +121,9 @@ export function FolderBrowser({
     <>
       <div className="modal-header">
         <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> 戻る
+          <IconArrowLeft size={14} /> {t("common.back")}
         </button>
-        <h2>フォルダーの選択</h2>
+        <h2>{t("chrome.folderBrowser.title")}</h2>
       </div>
       <div className="browse-path mono">{path}</div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -132,11 +134,11 @@ export function FolderBrowser({
           disabled={!parent}
         >
           <IconArrowUp size={14} />
-          上の階層へ
+          {t("chrome.folderBrowser.goUp")}
         </button>
         <button type="button" className="btn" onClick={() => go(null)}>
           <IconDeviceDesktop size={14} />
-          フォルダーを選び直す
+          {t("chrome.folderBrowser.reselect")}
         </button>
       </div>
       <div className="model-list" style={{ maxHeight: 280 }}>
@@ -157,21 +159,21 @@ export function FolderBrowser({
         ))}
         {entries.length === 0 && (
           <div style={{ padding: 8, fontSize: 12, color: "var(--text-faint)" }}>
-            サブフォルダーはありません
+            {t("chrome.folderBrowser.noSubfolders")}
           </div>
         )}
       </div>
       {error && <div className="error-text">{error}</div>}
       <div className="modal-actions">
         <button type="button" className="btn" onClick={onBack}>
-          キャンセル
+          {t("common.cancel")}
         </button>
         <button
           type="button"
           className="btn primary"
           onClick={() => onAdd(path)}
         >
-          このフォルダーを選択
+          {t("chrome.folderBrowser.selectThis")}
         </button>
       </div>
     </>

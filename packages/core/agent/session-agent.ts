@@ -29,6 +29,7 @@ import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
 import type { AskHub } from "../tools/ask.ts";
 import type { AskAnswer } from "../shared/mod.ts";
+import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type {
   BackgroundCommandDone,
   BackgroundProcessManager,
@@ -99,6 +100,13 @@ export interface SessionAgentOptions {
    * definitions stay small and stable. Omitted → no discoverable tools
    * (the pair is not built). */
   toolRegistry?: ToolRegistry;
+  /** The app language of this agent: the language of the text the core
+   * writes into the transcript (goal notices, compaction checkpoints) and
+   * of the session's title. The pool passes the setting read when the
+   * agent was built; omitted → the catalogue's fallback language. The
+   * session's PROMPT language is decided separately, when the prompt is
+   * generated (see core.ts). */
+  language?: Locale;
   /** Dynamic context providers (skill catalog, workspace instructions).
    * Their updates are published as durable `context` messages before a run
    * starts, and republished only when the value changed (see
@@ -141,6 +149,10 @@ export class SessionAgent {
   /** Generates the session title from the first user message (null when
    * no fast model is configured). */
   private readonly titleGenerator: TitleGenerator | null;
+  /** The app language this agent was built with: the language of the text
+   * the core generates into the transcript (goal notices, compaction
+   * checkpoints) and of the session's title (see SessionAgentOptions). */
+  private readonly language: Locale;
   /** The rewind currently running (abort + truncation), if any. Prompts
    * delivered while it runs wait for it: the truncation removes everything
    * from the rewound message onward, so a run started in between would have
@@ -200,6 +212,7 @@ export class SessionAgent {
     this.titleGenerator = options.fastModel !== undefined
       ? new TitleGenerator(options.fastModel, options.streamFn)
       : null;
+    this.language = options.language ?? DEFAULT_LOCALE;
     this.retry = new RetryManager(options.rateLimitRetrySleep);
     const goalStore = options.goalStore ?? null;
     this.goals = goalStore === null ? null : new GoalRunner({
@@ -208,6 +221,7 @@ export class SessionAgent {
       getTranscript: () => this.messages,
       getJudgeModel: () => options.fastModel ?? options.model,
       streamFn: options.streamFn,
+      language: this.language,
       runTurn: (instruction) => this.runMainTurn(instruction),
       emit: (event) => this.emit(event),
       isClosed: () => this.closed,
@@ -247,6 +261,7 @@ export class SessionAgent {
       tools: () => this.agent.state.tools,
       streamFn: options.streamFn,
       sessionId: options.sessionId,
+      language: this.language,
       replace: (index, count, message) =>
         this.replaceHistory(index, count, message),
       onCompacted: (result, message) => {
@@ -516,7 +531,10 @@ export class SessionAgent {
     const text = firstMessage.trim();
     if (!text) return;
     try {
-      const title = await this.titleGenerator!.generateTitle(text);
+      const title = await this.titleGenerator!.generateTitle(
+        text,
+        this.language,
+      );
       this.renameSession(title);
     } catch (error) {
       // Keep the provisional name; the failure is only visible on debug.
@@ -611,7 +629,7 @@ export class SessionAgent {
    * goal runs. Also used by the abort fast path to stop the autonomous
    * goal loop. */
   cancelGoal(): void {
-    this.goals?.cancel("ユーザー操作により処理を中止しました");
+    this.goals?.cancel(translate(this.language, "goal.cancelledByUser"));
   }
 
   /** Start the autonomous goal when a `/goal` mode prompt arrives. */

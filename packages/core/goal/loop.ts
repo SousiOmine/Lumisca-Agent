@@ -2,6 +2,7 @@ import type { Api, Model } from "../ai/types.ts";
 import type { AgentMessage, StreamFn } from "../ai/types.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
+import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";
 import { GoalJudge, lastAssistantOutput } from "./judge.ts";
 
@@ -24,6 +25,9 @@ export interface GoalStore {
  * turns. */
 export interface GoalLoopDeps extends GoalStore {
   sessionId: string;
+  /** The language of the notices this loop writes into the transcript
+   * (stop reasons, judge failures). */
+  language?: Locale;
   getTranscript(): AgentMessage[];
   /** The judge model: fast model when configured, else the main model. */
   getJudgeModel(): Model<Api>;
@@ -75,6 +79,7 @@ export function finishGoal(
 export async function runGoalLoop(
   deps: GoalLoopDeps,
 ): Promise<GoalLoopOutcome> {
+  const language = deps.language ?? DEFAULT_LOCALE;
   let goal = deps.loadGoal();
   if (!goal) return { stopped: "none" };
 
@@ -89,7 +94,9 @@ export async function runGoalLoop(
         deps.sessionId,
         goal.text,
         false,
-        `反復実行の上限回数（${goal.maxIterations}回）に達したため、安全のため処理を停止しました`,
+        translate(language, "goal.maxIterations", {
+          max: goal.maxIterations,
+        }),
       );
       return { stopped: "max", text };
     }
@@ -123,18 +130,18 @@ export async function runGoalLoop(
         deps.sessionId,
         goal.text,
         false,
-        `判定エラー: ${message}`,
+        translate(language, "goal.judgeError", { message }),
       );
       deps.emit({
         type: "session_error",
         sessionId: deps.sessionId,
-        message: `ゴールの判定に失敗したため停止しました: ${message}`,
+        message: translate(language, "goal.judgeFailed", { message }),
       });
       return { stopped: "error", text, message };
     }
     if (deps.isCancelled()) return { stopped: "cancelled" };
     if (verdict === null) {
-      const message = "高速モデルの応答を解釈できませんでした";
+      const message = translate(language, "goal.judgeUnparsable");
       const text = finishGoal(
         deps,
         (event) => deps.emit(event),
@@ -146,7 +153,7 @@ export async function runGoalLoop(
       deps.emit({
         type: "session_error",
         sessionId: deps.sessionId,
-        message: `ゴールの判定に失敗したため停止しました: ${message}`,
+        message: translate(language, "goal.judgeFailed", { message }),
       });
       return { stopped: "error", text, message };
     }

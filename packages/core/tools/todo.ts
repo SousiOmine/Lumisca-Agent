@@ -126,7 +126,7 @@ export function formatTodoCounts(phases: TodoPhase[]): string {
 const todoSchema = object({
   phases: array(
     object({
-      name: string("The phase name (e.g. 調査, 実装, テスト)"),
+      name: string("The phase name (e.g. Research, Implementation, Tests)"),
       tasks: array(
         object({
           name: string("The task"),

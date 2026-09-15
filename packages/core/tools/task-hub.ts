@@ -30,6 +30,7 @@ import type {
   TaskInfo,
   ThinkingLevel,
 } from "../shared/mod.ts";
+import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
@@ -179,6 +180,10 @@ export interface TaskHubOptions {
    * fast model judges commands before they run). Omitted → the sub-agent's
    * command tools run unchecked. */
   safety?: CommandSafety;
+  /** The app language the sub-agents must answer in (see tools/language).
+   * Defaults to the catalogue's fallback language; the pool re-sets it on
+   * every session open (setLanguage), like the browser gate. */
+  language?: Locale;
   emit: (event: ClientEvent) => void;
 }
 
@@ -204,6 +209,9 @@ export class TaskHub {
   private readonly streamFn: StreamFn;
   private readonly safety: CommandSafety | undefined;
   private readonly emit: (event: ClientEvent) => void;
+  /** The language the sub-agents answer in: the session's own at the time
+   * its agent was built (see the pool's getLanguage dep). */
+  private language: Locale;
   /** Whether the session has a browser backend attached (set by the pool on
    * every open). Gates the built-in web-browser skill in the sub-agent tool
    * sets, matching the main agent's tool set and prompt listing. */
@@ -225,6 +233,7 @@ export class TaskHub {
     this.resolveRuntime = options.resolveRuntime;
     this.streamFn = options.streamFn;
     this.safety = options.safety;
+    this.language = options.language ?? DEFAULT_LOCALE;
     this.emit = options.emit;
   }
 
@@ -232,6 +241,14 @@ export class TaskHub {
    * the closure never holds a stale session or model). */
   setRuntimeResolver(resolver: () => SubagentRuntime): void {
     this.resolveRuntime = resolver;
+  }
+
+  /** Set the language sub-agents answer in (called on every session
+   * open/rebuild, like setRuntimeResolver, so a language change applies to
+   * the sub-agents spawned after it — running ones keep the language they
+   * were started with). */
+  setLanguage(language: Locale): void {
+    this.language = language;
   }
 
   /** Set whether the session has a browser backend attached (called on
@@ -373,6 +390,7 @@ export class TaskHub {
       parentId,
       type,
       tools.map((tool) => tool.name),
+      this.language,
     );
     const systemPrompt = searchable.length > 0
       ? appendMcpToolsNote(basePrompt)

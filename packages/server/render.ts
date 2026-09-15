@@ -1,12 +1,13 @@
 /**
  * The HTML documents served by the app. `renderHtmlDocument` is the app
  * itself: a static shell. The Preact app is rendered entirely client-side,
- * so the shell only carries the theme (the first paint is already themed —
- * no flash), the inlined styles, and two scripts: the externalized initial
- * data + auth token (inline scripts are banned by the page CSP), and the
- * bundled client app. `renderTokenRequiredPage` is what an unauthenticated
- * browser lands on instead (the token guard's 401).
+ * so the shell only carries the language and the theme (the first paint is
+ * already in both — no flash), the inlined styles, and two scripts: the
+ * externalized initial data + auth token (inline scripts are banned by the
+ * page CSP), and the bundled client app. `renderTokenRequiredPage` is what
+ * an unauthenticated browser lands on instead (the token guard's 401).
  */
+import { type Locale, translate } from "@lumisca/core/shared";
 
 /**
  * Content-Security-Policy for the page. Inline scripts are banned, so
@@ -49,6 +50,11 @@ export interface HtmlDocumentOptions {
   /** The page's own host (Host header), used by the CSP to name the
    * WebSocket endpoint when the page is served remotely. */
   pageHost?: string;
+  /** The app language, for the document's `lang` attribute: the page's text
+   * is rendered by the client bundle, but the shell must already declare
+   * the language (font fallback, hyphenation, screen readers) — the same
+   * value the client seeds its catalogue with. */
+  language: Locale;
 }
 
 /** Assemble the full HTML document: the empty #root (client-rendered app),
@@ -56,10 +62,10 @@ export interface HtmlDocumentOptions {
 export function renderHtmlDocument(
   css: string,
   theme: "light" | "dark",
-  options: HtmlDocumentOptions = {},
+  options: HtmlDocumentOptions,
 ): string {
   return `<!doctype html>
-<html lang="ja" data-theme="${theme}">
+<html lang="${options.language}" data-theme="${theme}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -84,6 +90,16 @@ export function renderHtmlDocument(
 </html>`;
 }
 
+/** Escape the characters that would otherwise be parsed as markup. The only
+ * catalogue messages that need it are the URL examples (they contain the
+ * placeholders in angle brackets). */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 /** The document an unauthenticated request gets instead of the app (401):
  * a browser landing here has no valid credential — no cookie yet, a cookie
  * from another server instance, or a mistyped token. It answers the two
@@ -91,15 +107,19 @@ export function renderHtmlDocument(
  * I do now?") and nothing else.
  *
  * Deliberately self-contained: every asset of the app is guarded too, so
- * the page carries its own minimal styling. It is the one response served
- * without any credential, so it names no host, port or token. */
-export function renderTokenRequiredPage(): string {
+ * the page carries its own minimal styling. It is served before the app
+ * loads, so its text comes from the catalogue with the language the server
+ * resolved for that request (see app.ts); it still names no host, port or
+ * token. */
+export function renderTokenRequiredPage(language: Locale): string {
   return `<!doctype html>
-<html lang="ja">
+<html lang="${language}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lumisca Agent — トークンが必要です</title>
+    <title>Lumisca Agent — ${
+    escapeHtml(translate(language, "common.tokenRequired.title"))
+  }</title>
     <style>
       :root { color-scheme: dark light; }
       body {
@@ -121,15 +141,16 @@ export function renderTokenRequiredPage(): string {
   </head>
   <body>
     <main>
-      <h1>トークンが必要です</h1>
+      <h1>${escapeHtml(translate(language, "common.tokenRequired.title"))}</h1>
       <p>
-        このサーバーはトークン認証が有効です。ブラウザにトークンが保存されていない、または保存されたトークンが一致しないため、このページを表示できません。
+        ${escapeHtml(translate(language, "common.tokenRequired.why"))}
       </p>
-      <p>次の形式の URL を<strong>一度だけ</strong>開いてください。2 回目以降はトークン無しの URL で開けます。</p>
-      <pre><code>http://&lt;ホスト&gt;:&lt;ポート&gt;/?token=&lt;トークン&gt;</code></pre>
+      <p>${escapeHtml(translate(language, "common.tokenRequired.how"))}</p>
+      <pre><code>${
+    escapeHtml(translate(language, "common.tokenRequired.example"))
+  }</code></pre>
       <p class="note">
-        トークンの値はサーバーの設定 (<code>LUMISCA_TOKEN</code> / <code>service.env</code>) を確認してください。
-        ブラウザが Cookie を拒否している場合もこの画面になります。
+        ${escapeHtml(translate(language, "common.tokenRequired.note"))}
       </p>
     </main>
   </body>

@@ -102,3 +102,21 @@ npm outdated                                                   # packages/deskto
 * **24時間ゲート**: Deno 2.9 以降、公開から24時間以内のバージョンは既定で採用されません。`deno outdated --latest` が最新版を表示しても `deno update --latest` が据え置くことがあります（`--minimum-dependency-age 0` で無効化できますが、リリース直前の更新では既定のままにします）。
 * **`packages/desktop` はワークスペース外**のため（本ファイル 1 節）、`deno update -r` の対象に含まれません。`@tauri-apps/cli` の実体は `package-lock.json` です。
 * **`uses:` も依存です**: ワークフローで使うアクションは、メジャー更新時にランナーの要件（例: `actions/cache@v5` 以降は Node 24 と runner 2.327.1 以上）が変わります。更新時はリリースノートを確認してください。
+
+## 6. UI 文言の追加（多言語）
+
+アプリの文言は `packages/core/shared/i18n/` のカタログに集約されています（`ja` と `en` を1エントリに併記）。
+
+```ts
+// packages/core/shared/i18n/panels.ts
+export const panels = {
+  "panels.todo.title": { ja: "進捗", en: "Progress" },
+} satisfies Record<string, LocalizedText>;
+```
+
+* **コンポーネントでは** `const t = useT();`（`packages/web/src/i18n.ts`）を使い、`t("panels.todo.title")` のように引きます。モジュール定数や描画外のコードは `t()` を直接呼ぶか、翻訳関数を引数で受け取ってください（読み込み時に評価される定数は言語切替に追従しません）。
+* **配置先**は表面ごとに選びます: `common`（共通・コア生成文言・通知）、`chrome`（タイトルバー/タブ/メニュー/ピッカー/バナー）、`settings`（設定ダイアログ）、`chat`（チャット/コンポーザ/スラッシュメニュー/モード文言）、`panels`（サイドパネル/セッション一覧）。
+* **キーは `<area>.<surface>.<element>`**、`{name}` プレースホルダは両言語で同じ名前にします（`deno test packages/core/shared/i18n_test.ts` が検証します）。
+* **LLM に送るプロンプトは英語のまま**です（`core/tools/`, `core/modes/`, `core/skills/slash.ts`）。回答言語は各セッションのシステムプロンプトの指示（`core/tools/language.ts`）だけが決めるため、プロンプトを言語ごとに分ける必要はありません。
+* 新しい言語を足す場合は `Locale`（`core/shared/i18n/mod.ts`）とカタログの双方に追加し、`i18n_test.ts` が通ることを確認してください。
+* 対象外（日本語のまま）: デスクトップシェル（Rust）の文言、サーバー CLI / systemd のメッセージ、起動スプラッシュ。サーバー API のエラー文言（`server/federation.ts`, `server/login.ts`）とブラウザツールの診断メッセージ（`core/browser/*`）も未対応です（`ARCHITECTURE.md` 6節の「未対応」を参照）。

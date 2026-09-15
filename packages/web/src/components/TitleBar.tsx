@@ -6,6 +6,7 @@ import {
 } from "preact/compat";
 import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
 import { shellCall, type ShellState, windowApi } from "../shell.ts";
+import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
 import { paneIcon } from "./paneIcons.tsx";
 
@@ -56,6 +57,7 @@ export function TitleBar({
   paneKind = null,
   onTogglePane,
 }: TitleBarProps) {
+  const t = useT();
   const [available, setAvailable] = useState(false);
   const [maximized, setMaximized] = useState(false);
 
@@ -115,10 +117,12 @@ export function TitleBar({
             type="button"
             className={`titlebar-btn${paneOpen ? " active" : ""}`}
             onClick={onTogglePane}
-            title={paneVisible ? "サイドパネルを閉じる" : "サイドパネルを表示"}
+            title={paneVisible
+              ? t("chrome.titleBar.paneHide")
+              : t("chrome.titleBar.paneShow")}
             aria-label={paneVisible
-              ? "サイドパネルを閉じる"
-              : "サイドパネルを表示"}
+              ? t("chrome.titleBar.paneHide")
+              : t("chrome.titleBar.paneShow")}
           >
             {paneIcon(paneKind ?? "", 15)}
             {
@@ -141,8 +145,8 @@ export function TitleBar({
           type="button"
           className="titlebar-btn"
           onClick={() => windowApi.minimize()}
-          title="最小化"
-          aria-label="最小化"
+          title={t("chrome.titleBar.minimize")}
+          aria-label={t("chrome.titleBar.minimize")}
         >
           <IconMinus size={15} />
         </button>
@@ -150,8 +154,12 @@ export function TitleBar({
           type="button"
           className="titlebar-btn"
           onClick={() => windowApi.toggleMaximize()}
-          title={maximized ? "元のサイズに戻す" : "最大化"}
-          aria-label={maximized ? "元のサイズに戻す" : "最大化"}
+          title={maximized
+            ? t("chrome.titleBar.restore")
+            : t("chrome.titleBar.maximize")}
+          aria-label={maximized
+            ? t("chrome.titleBar.restore")
+            : t("chrome.titleBar.maximize")}
         >
           {maximized ? <IconCopy size={13} /> : <IconSquare size={12} />}
         </button>
@@ -159,8 +167,8 @@ export function TitleBar({
           type="button"
           className="titlebar-btn close"
           onClick={() => windowApi.close()}
-          title="閉じる"
-          aria-label="閉じる"
+          title={t("chrome.titleBar.close")}
+          aria-label={t("chrome.titleBar.close")}
         >
           <IconX size={15} />
         </button>

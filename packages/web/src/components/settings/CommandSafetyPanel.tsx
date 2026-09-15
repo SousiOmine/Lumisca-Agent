@@ -8,12 +8,14 @@ import type { CommandApproval } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
+import { useT } from "../../i18n.ts";
 
 /** Settings → セキュリティ: the command safety check. When enabled, the
  * fast model judges every bash / eval / async_bash command before it runs;
  * commands judged safe are recorded and skip the check afterwards. Commands
  * the check cannot judge (no fast model, errors, timeouts) are blocked too. */
 export function CommandSafetyPanel() {
+  const t = useT();
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [fastModelSet, setFastModelSet] = useState(true);
@@ -90,12 +92,12 @@ export function CommandSafetyPanel() {
     <div className="settings-pane">
       <div
         className="update-item"
-        title="シェルコマンド（bash等）の実行前に、AIが危険な操作を含んでいないか安全性を自動で検証します。安全と判定されたコマンドは承認リストに記録され、次回からは判定なしで実行されます。危険と判定されたコマンドのほか、判定できなかったコマンド（判定が失敗・タイムアウトした場合）も実行されず、停止理由がエージェントに返されます。"
+        title={t("settings.security.tooltip")}
       >
         <div className="update-info">
-          <span className="update-label">コマンド安全チェック</span>
+          <span className="update-label">{t("settings.security.title")}</span>
           <span className="update-desc">
-            bash / eval / async_bash を実行するたびに高速モデルで判定します。
+            {t("settings.security.description")}
           </span>
         </div>
         <label className="toggle-switch">
@@ -104,7 +106,7 @@ export function CommandSafetyPanel() {
             checked={enabled}
             disabled={saving}
             onChange={(e) => setEnabledValue(e.currentTarget.checked)}
-            aria-label="コマンド安全チェック"
+            aria-label={t("settings.security.title")}
           />
           <span className="toggle-slider" />
         </label>
@@ -112,14 +114,15 @@ export function CommandSafetyPanel() {
 
       {!fastModelSet && (
         <p className="settings-warning">
-          {"【重要】高速モデルが未設定です。このまま有効にすると、すべてのコマンドが安全確認不可として実行拒否されます。" +
-            "先に「モデル設定」より「高速モデル」を指定してください。"}
+          {t("settings.security.fastModelMissing")}
         </p>
       )}
 
       <div className="approval-section">
         <div className="approval-header">
-          <span className="approval-title">承認済みコマンド</span>
+          <span className="approval-title">
+            {t("settings.security.approvedCommands")}
+          </span>
           {approvals.length > 0 && (
             <button
               type="button"
@@ -127,14 +130,16 @@ export function CommandSafetyPanel() {
               disabled={saving}
               onClick={clearApprovals}
             >
-              すべて削除
+              {t("settings.security.deleteAll")}
             </button>
           )}
         </div>
         {approvals.length === 0
           ? (
             <p className="settings-note">
-              {loaded ? "承認済みのコマンドはありません" : "読み込み中…"}
+              {loaded
+                ? t("settings.security.approvedNone")
+                : t("common.loading")}
             </p>
           )
           : (
@@ -153,9 +158,9 @@ export function CommandSafetyPanel() {
                     disabled={saving}
                     onClick={() =>
                       removeApproval(entry.hash)}
-                    aria-label="承認を削除"
+                    aria-label={t("settings.security.deleteApprovalAria")}
                   >
-                    削除
+                    {t("common.delete")}
                   </button>
                 </li>
               ))}
@@ -163,7 +168,11 @@ export function CommandSafetyPanel() {
           )}
       </div>
 
-      {error && <div className="error-text">操作に失敗しました: {error}</div>}
+      {error && (
+        <div className="error-text">
+          {t("settings.security.operationFailed", { error })}
+        </div>
+      )}
     </div>
   );
 }

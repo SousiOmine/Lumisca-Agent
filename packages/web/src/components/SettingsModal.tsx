@@ -11,6 +11,8 @@ import {
   IconWorld,
   IconX,
 } from "@tabler/icons-preact";
+import type { MessageKey } from "@lumisca/core/shared";
+import { useT } from "../i18n.ts";
 import { Modal } from "./Modal.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
@@ -27,13 +29,18 @@ import { AppearancePanel } from "./settings/AppearancePanel.tsx";
 import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
 import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
-import type { ThemeSetting } from "../types.ts";
+import type { Locale, ThemeSetting } from "../types.ts";
 
 interface SettingsModalProps {
   theme: ThemeSetting;
   /** Persist failure of the theme setting (shown in the appearance panel). */
   themeError: string | null;
   onThemeChange: (theme: ThemeSetting) => void;
+  /** The app language and the persist failure of the last change (shown in
+   * the general panel). */
+  language: Locale;
+  languageError: string | null;
+  onLanguageChange: (language: Locale) => void;
   update: UpdateControls;
   /** Background agent-event notifications (desktop only). */
   notifyEnabled: boolean;
@@ -46,12 +53,12 @@ interface SettingsModalProps {
 
 export type SettingsCategory =
   | "general"
+  | "appearance"
   | "providers"
   | "models"
   | "mcp"
   | "servers"
   | "personalize"
-  | "appearance"
   | "security";
 
 /** Provider category navigation. `detail` records which screen it was
@@ -63,41 +70,47 @@ type ProvidersView =
   | { kind: "addUser" }
   | { kind: "editUser"; providerId: string };
 
+/** Navigation entries. The labels are catalogue keys: they follow the app
+ * language like every other string. */
 const CATEGORIES: {
   id: SettingsCategory;
-  label: string;
+  labelKey: MessageKey;
   icon: ReactNode;
 }[] = [
   {
     id: "general",
-    label: "一般",
+    labelKey: "settings.nav.general",
     icon: <IconSettings size={18} />,
   },
   {
     id: "appearance",
-    label: "外観",
+    labelKey: "settings.nav.appearance",
     icon: <IconPalette size={18} />,
   },
   {
     id: "personalize",
-    label: "カスタマイズ",
+    labelKey: "settings.nav.personalize",
     icon: <IconUser size={18} />,
   },
-  { id: "servers", label: "接続先サーバー", icon: <IconWorld size={18} /> },
+  {
+    id: "servers",
+    labelKey: "settings.nav.servers",
+    icon: <IconWorld size={18} />,
+  },
   {
     id: "providers",
-    label: "APIプロバイダー",
+    labelKey: "settings.nav.providers",
     icon: <IconPlugConnected size={18} />,
   },
   {
     id: "models",
-    label: "モデル設定",
+    labelKey: "settings.nav.models",
     icon: <IconBrain size={18} />,
   },
-  { id: "mcp", label: "MCPサーバー", icon: <IconServer size={18} /> },
+  { id: "mcp", labelKey: "settings.nav.mcp", icon: <IconServer size={18} /> },
   {
     id: "security",
-    label: "セキュリティ",
+    labelKey: "settings.nav.security",
     icon: <IconShield size={18} />,
   },
 ];
@@ -106,12 +119,16 @@ export function SettingsModal({
   theme,
   themeError,
   onThemeChange,
+  language,
+  languageError,
+  onLanguageChange,
   update,
   notifyEnabled,
   onNotifyEnabledChange,
   initialCategory,
   onClose,
 }: SettingsModalProps) {
+  const t = useT();
   const [category, setCategory] = useState<SettingsCategory>(initialCategory);
   const [providersView, setProvidersView] = useState<ProvidersView>({
     kind: "list",
@@ -133,13 +150,13 @@ export function SettingsModal({
       onClose={onClose}
     >
       <div className="modal-header">
-        <h2>設定</h2>
+        <h2>{t("settings.dialog.title")}</h2>
         <button
           type="button"
           className="btn push"
           onClick={onClose}
-          title="閉じる"
-          aria-label="閉じる"
+          title={t("common.close")}
+          aria-label={t("common.close")}
         >
           <IconX size={16} />
         </button>
@@ -157,7 +174,7 @@ export function SettingsModal({
               onClick={() => openCategory(c.id)}
             >
               {c.icon}
-              {c.label}
+              {t(c.labelKey)}
             </button>
           ))}
         </nav>
@@ -168,6 +185,9 @@ export function SettingsModal({
               status={update.status}
               source={update.source}
               bridgeError={update.error}
+              language={language}
+              languageError={languageError}
+              onLanguageChange={onLanguageChange}
               onSetAuto={update.setAuto}
               onSetAutoRestart={update.setAutoRestart}
               onCheck={update.check}

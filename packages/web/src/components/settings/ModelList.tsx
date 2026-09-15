@@ -7,6 +7,7 @@ import {
   useProviderModels,
 } from "../../providers.ts";
 import type { ModelInfo } from "../../types.ts";
+import { useT } from "../../i18n.ts";
 
 interface ProviderModels {
   providerId: string;
@@ -16,6 +17,7 @@ interface ProviderModels {
 
 /** Settings → models: all models grouped by provider with toggle switches. */
 export function ModelList() {
+  const t = useT();
   const { providers, modelsByProvider, loading, error } = useProviderModels();
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -75,22 +77,22 @@ export function ModelList() {
   return (
     <>
       <div className="modal-header">
-        <h2>モデル設定</h2>
+        <h2>{t("settings.nav.models")}</h2>
       </div>
 
       <input
-        placeholder="モデルを検索…"
+        placeholder={t("settings.model.searchPlaceholder")}
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
       />
 
-      {loading && <div className="faint-box">読み込み中…</div>}
+      {loading && <div className="faint-box">{t("common.loading")}</div>}
 
       {!loading && filtered.length === 0 && (
         <div className="faint-box">
           {configured.length === 0
-            ? "利用可能なプロバイダーが未設定です。「APIプロバイダー」からAPIキーを登録してください。"
-            : "該当するモデルがありません"}
+            ? t("settings.model.noProviders")
+            : t("settings.model.noMatch")}
         </div>
       )}
 
@@ -151,7 +153,9 @@ export function ModelList() {
 
       {error && <div className="error-text">{error.message}</div>}
       {saveError && (
-        <div className="error-text">保存に失敗しました: {saveError}</div>
+        <div className="error-text">
+          {t("settings.model.saveFailed", { error: saveError })}
+        </div>
       )}
     </>
   );

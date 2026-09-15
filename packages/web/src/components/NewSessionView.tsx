@@ -12,6 +12,7 @@ import type {
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { useSkills } from "../hooks/useSkills.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
+import { useT } from "../i18n.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import {
@@ -81,13 +82,13 @@ interface NewSessionViewProps {
  * workspace). Never a real row; excluded from the regular picker list. */
 const CHAT_ENTRY_ID = "@chat";
 
-function chatEntry(peerId: string): FederatedWorkspace {
+function chatEntry(peerId: string, name: string): FederatedWorkspace {
   return {
     peerId,
     peerName: "",
     workspace: {
       id: CHAT_ENTRY_ID,
-      name: "通常チャット（ワークスペースなし）",
+      name,
       folders: [],
       createdAt: 0,
       chat: true,
@@ -129,6 +130,9 @@ export function NewSessionView(
   // The last selected workspace, restored from localStorage. Kept in a ref
   // until the (possibly async) workspace list can validate it.
   const pendingWorkspaceKey = useRef<string | null>(loadLastWorkspaceKey());
+  /** Message lookup of the app language (the slash menu's labels are
+   * catalogue entries). */
+  const t = useT();
   const [selectedPeerId, setSelectedPeerId] = useState(
     () => splitTabKey(pendingWorkspaceKey.current ?? "").peerId,
   );
@@ -200,7 +204,7 @@ export function NewSessionView(
     peers.some((p) => p.id === peerId) ||
     workspaces.some((w) => w.peerId === peerId);
   const chatOption = selectablePeer(selectedPeerId)
-    ? chatEntry(selectedPeerId)
+    ? chatEntry(selectedPeerId, t("chat.newSession.chatName"))
     : undefined;
 
   // Keep a valid selection when the workspace list changes (e.g. after a
@@ -306,8 +310,8 @@ export function NewSessionView(
     isChat ? undefined : selectedWorkspace?.workspace.id,
   );
   const allSlashCommands = useMemo<SlashCommand[]>(
-    () => buildSlashCommands(savedPrompts, isChat, skills),
-    [isChat, savedPrompts, skills],
+    () => buildSlashCommands(savedPrompts, isChat, skills, t),
+    [isChat, savedPrompts, skills, t],
   );
 
   /** Start the session with the composer text, or an explicit message. The
@@ -331,7 +335,7 @@ export function NewSessionView(
     }
     if (message === undefined) {
       // Modes first: their token is a mode id, so the two never collide.
-      const line = (isChat ? null : slashPromptFromText(trimmed)) ??
+      const line = (isChat ? null : slashPromptFromText(trimmed, t)) ??
         skillPromptFromText(trimmed, skills);
       if (line !== null) {
         if (line.kind === "needs-text") return;
@@ -357,7 +361,7 @@ export function NewSessionView(
     command: SlashCommand,
     item?: SlashCommandItem,
   ) => {
-    const result = slashPrompt(command, item);
+    const result = slashPrompt(command, item, "", t);
     if (result !== null) {
       void submit(result.text, result.mode);
     }
@@ -399,10 +403,10 @@ export function NewSessionView(
       <div className="chat-scroll">
         <div className="new-session-center">
           <div className="new-session-card">
-            <h2>新しいセッション</h2>
+            <h2>{t("chat.newSession.title")}</h2>
             <div className="new-session-select-row">
               <label className="new-session-select">
-                <span>ワークスペース</span>
+                <span>{t("chat.newSession.workspace")}</span>
                 <WorkspacePicker
                   workspaces={pickerWorkspaces}
                   chat={chatOption}
@@ -422,7 +426,7 @@ export function NewSessionView(
                 />
               </label>
               <label className="new-session-select">
-                <span>接続先サーバー</span>
+                <span>{t("chat.newSession.peer")}</span>
                 <PeerPicker
                   peers={peers}
                   workspaces={workspaces}
@@ -433,13 +437,13 @@ export function NewSessionView(
             </div>
             {defaultModelError && (
               <div className="error-text" role="alert">
-                デフォルトのモデルを取得できませんでした: {defaultModelError}
+                {t("chat.newSession.defaultModelError")} {defaultModelError}
               </div>
             )}
             <Composer
               value={input}
               onChange={onInputChange}
-              placeholder="依頼するタスクを入力してください…"
+              placeholder={t("chat.newSession.placeholder")}
               autoFocus
               large
               model={model}
@@ -456,7 +460,9 @@ export function NewSessionView(
               thinkingLevel={model?.thinkingLevel}
               thinkingLevels={model?.thinkingLevels}
               onThinkingLevelChange={changeThinkingLevel}
-              submitLabel={busy ? "作成中…" : "開始"}
+              submitLabel={busy
+                ? t("chat.newSession.submitCreating")
+                : t("chat.newSession.submitStart")}
               submitIcon={IconArrowUp}
               submitIconOnly
               submitDisabled={busy || (!input.trim() && images.length === 0) ||
@@ -477,7 +483,7 @@ export function NewSessionView(
             {error && <div className="error-text">{error}</div>}
             <div className="new-session-recent">
               <div className="new-session-recent-header">
-                <h3>最近使ったセッション</h3>
+                <h3>{t("chat.newSession.recentTitle")}</h3>
               </div>
               <RecentSessionsList
                 items={recent.items}

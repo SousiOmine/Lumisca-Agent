@@ -2,6 +2,7 @@ import { type MouseEvent, useEffect, useRef, useState } from "preact/compat";
 import { IconChevronRight, IconPlus, IconX } from "@tabler/icons-preact";
 import { isViewRunning, type SessionView } from "../types.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
+import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
 
 interface TabBarProps {
@@ -45,6 +46,7 @@ export function TabBar({
   isDesktop,
   onQuit,
 }: TabBarProps) {
+  const t = useT();
   const [menu, setMenu] = useState<TabMenu | null>(null);
   // Clamped menu position: rendered at the cursor first, then adjusted once
   // the menu is measured so it never leaves the viewport.
@@ -101,7 +103,11 @@ export function TabBar({
   const isLeftmost = menuIndex === 0;
 
   return (
-    <div className="tabbar" role="tablist" aria-label="セッションタブ">
+    <div
+      className="tabbar"
+      role="tablist"
+      aria-label={t("chrome.tabBar.label")}
+    >
       {tabs.map((id) => {
         const view = views.get(id);
         const isActive = id === activeTab;
@@ -109,7 +115,7 @@ export function TabBar({
         const runningTool = view?.runningTools.values().next().value as
           | string
           | undefined;
-        const name = view?.info.name ?? "新しいセッション";
+        const name = view?.info.name ?? t("chrome.tabBar.newSession");
         return (
           <div
             key={id}
@@ -118,9 +124,14 @@ export function TabBar({
             className={`tab${isActive ? " active" : ""}`}
             onClick={() => onSelect(id)}
             onContextMenu={(e) => openMenu(id, e)}
-            title={view?.info.modelId ?? "新しいセッション"}
+            title={view?.info.modelId ?? t("chrome.tabBar.newSession")}
           >
-            {isRunning && <span className="live-dot" aria-label="処理中" />}
+            {isRunning && (
+              <span
+                className="live-dot"
+                aria-label={t("chrome.tabBar.processing")}
+              />
+            )}
             <span className="tab-name">{name}</span>
             {isRunning && runningTool && (
               <span className="tab-badge">{runningTool}</span>
@@ -132,8 +143,8 @@ export function TabBar({
                 e.stopPropagation();
                 onClose(id);
               }}
-              title="タブを閉じる"
-              aria-label={`「${name}」を閉じる`}
+              title={t("chrome.tabBar.closeTab")}
+              aria-label={t("chrome.tabBar.closeTabNamed", { name })}
             >
               <IconX size={13} />
             </button>
@@ -144,8 +155,8 @@ export function TabBar({
         type="button"
         className="tab-new"
         onClick={onNew}
-        title="新しいセッション"
-        aria-label="新しいセッション"
+        title={t("chrome.tabBar.newSession")}
+        aria-label={t("chrome.tabBar.newSession")}
       >
         <IconPlus size={17} />
       </button>
@@ -182,7 +193,7 @@ export function TabBar({
             }}
           >
             <IconPlus size={14} />
-            <span>新しいタブを開く</span>
+            <span>{t("chrome.tabBar.openNewTab")}</span>
           </button>
           <div className="tab-context-sep" role="separator" />
           <button
@@ -195,7 +206,7 @@ export function TabBar({
             }}
           >
             <IconX size={14} />
-            <span>タブを閉じる</span>
+            <span>{t("chrome.tabBar.closeTab")}</span>
           </button>
           <div
             className="tab-context-item tab-context-submenu-trigger"
@@ -205,7 +216,7 @@ export function TabBar({
             onMouseEnter={() => setSubmenuOpen(true)}
             onMouseLeave={() => setSubmenuOpen(false)}
           >
-            <span>他のタブを閉じる</span>
+            <span>{t("chrome.tabBar.closeOtherTabs")}</span>
             <IconChevronRight size={14} />
             <div
               ref={submenuRef}
@@ -224,7 +235,7 @@ export function TabBar({
                   onCloseToRight(menu.tabId);
                 }}
               >
-                右側のタブをすべて閉じる
+                {t("chrome.tabBar.closeAllRight")}
               </button>
               <button
                 type="button"
@@ -236,7 +247,7 @@ export function TabBar({
                   onCloseToLeft(menu.tabId);
                 }}
               >
-                左側のタブをすべて閉じる
+                {t("chrome.tabBar.closeAllLeft")}
               </button>
               <button
                 type="button"
@@ -247,7 +258,7 @@ export function TabBar({
                   onCloseOthers(menu.tabId);
                 }}
               >
-                これ以外のタブをすべて閉じる
+                {t("chrome.tabBar.closeAllOthers")}
               </button>
             </div>
           </div>

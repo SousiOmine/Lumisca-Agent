@@ -5,7 +5,9 @@ import type {
   NotificationPayload,
 } from "../types/notification.ts";
 import type { SubagentType, TaskInfo } from "../shared/mod.ts";
+import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
+import { outputLanguageSection } from "./language.ts";
 import {
   EXPLORE_SUBAGENT_SECTIONS,
   GENERAL_SUBAGENT_SECTIONS,
@@ -14,12 +16,15 @@ import {
 
 /** The system prompt of one sub-agent: its identity (ids and role, which
  * only the caller knows) plus the guidelines of its kind, pruned to the
- * tools it actually has (see prompt-sections). */
+ * tools it actually has (see prompt-sections). The output-language rule is
+ * part of it: a sub-agent's report is read by its parent and shown to the
+ * user, so it must come back in the session's language. */
 export function subagentSystemPrompt(
   agentId: string,
   parentId: string,
   type: SubagentType,
   tools: readonly string[],
+  language: Locale = DEFAULT_LOCALE,
 ): string {
   const role = type === "explore" ? "research" : "coding";
   const sections = type === "explore"
@@ -31,7 +36,12 @@ Work on the assigned task and answer with a complete final report as your last m
 If you need input mid-task, send a message to ${parentId} with send_message. You cannot ask the user directly.
 
 Guidelines:
-${renderPromptSections(sections, tools)}
+${
+      renderPromptSections(
+        [outputLanguageSection(language), ...sections],
+        tools,
+      )
+    }
 `;
 }
 

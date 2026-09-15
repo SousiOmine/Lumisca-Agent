@@ -15,9 +15,11 @@
  * - `./mcp-config.ts` — MCP server config serialization,
  * - `./context-usage.ts` — context accounting and formatting,
  * - `./token-estimate.ts` — fixed-heuristic token estimates for history,
- * - `./misc.ts` — errorMessage, InitialData, decode/parse/format helpers.
+ * - `./misc.ts` — errorMessage, InitialData, decode/parse/format helpers,
+ * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
 export * from "./settings-keys.ts";
+export * from "./i18n/mod.ts";
 export * from "./tool-names.ts";
 export * from "./interaction.ts";
 export * from "./goal.ts";

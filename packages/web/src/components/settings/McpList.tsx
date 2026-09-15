@@ -11,6 +11,7 @@ import { serializeMcpServers } from "@lumisca/core/shared";
 import type { McpInfo, McpServerInfo } from "../../types.ts";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
+import { useT } from "../../i18n.ts";
 import { McpDetail } from "./McpDetail.tsx";
 
 /** Config-relevant fields only; ignores live status/toolCount so the
@@ -35,6 +36,7 @@ function configKey(servers: McpServerInfo[]): string {
  * applies to every workspace; each workspace's own `.mcp.json` is merged in
  * automatically by the server and is not editable here. */
 export function McpList() {
+  const t = useT();
   const [config, setConfig] = useState<McpInfo | null>(null);
   const [baseline, setBaseline] = useState<McpInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +72,7 @@ export function McpList() {
         if (configKey(current.servers) !== configKey(baseline.servers)) {
           if (
             !globalThis.confirm(
-              "MCPの設定ファイルが外部で更新されています。現在の内容で上書き保存してもよろしいですか？",
+              t("settings.mcp.configConflict"),
             )
           ) {
             return false;
@@ -98,7 +100,7 @@ export function McpList() {
 
   const remove = (name: string) => {
     if (!config) return;
-    if (!globalThis.confirm(`MCPサーバー「${name}」を削除しますか？`)) return;
+    if (!globalThis.confirm(t("settings.mcp.deleteConfirm", { name }))) return;
     void save(config.servers.filter((s) => s.name !== name));
   };
 
@@ -126,15 +128,15 @@ export function McpList() {
   return (
     <>
       <div className="modal-header">
-        <h2>MCPサーバー</h2>
+        <h2>{t("settings.nav.mcp")}</h2>
       </div>
 
       <div className="stack-8">
         {error && <p className="error-text">{error}</p>}
-        {loading && <p className="settings-note">読み込み中…</p>}
+        {loading && <p className="settings-note">{t("common.loading")}</p>}
         {!loading && config && config.servers.length === 0 && (
           <div className="faint-box">
-            MCPサーバーが登録されていません。下の「サーバーを追加」から設定してください。
+            {t("settings.mcp.noServers")}
           </div>
         )}
         {!loading &&
@@ -163,13 +165,13 @@ export function McpList() {
                     ? (
                       <>
                         <IconAlertTriangle size={12} />
-                        エラー
+                        {t("settings.mcp.error")}
                       </>
                     )
                     : (
                       <>
                         <IconCircleDashed size={12} />
-                        未起動
+                        {t("settings.mcp.notStarted")}
                       </>
                     )}
                 </span>
@@ -189,16 +191,16 @@ export function McpList() {
                   checked={s.enabled}
                   onChange={() => toggle(s.name)}
                 />
-                有効
+                {t("settings.mcp.enabled")}
               </label>
               <button
                 type="button"
                 className="btn"
-                title={`${s.name} を削除`}
+                title={t("common.delete")}
                 onClick={() => remove(s.name)}
               >
                 <IconTrash size={13} />
-                削除
+                {t("common.delete")}
               </button>
             </div>
           ))}
@@ -212,7 +214,7 @@ export function McpList() {
           disabled={!config}
         >
           <IconPlus size={14} />
-          サーバーを追加
+          {t("settings.mcp.addServer")}
         </button>
       </div>
     </>

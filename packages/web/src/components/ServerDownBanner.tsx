@@ -6,6 +6,7 @@ import {
 } from "@tabler/icons-preact";
 import type { ServerHealth } from "../hooks/useServerHealth.ts";
 import type { BannerMount } from "../hooks/usePanelInset.ts";
+import { useT } from "../i18n.ts";
 
 /** Banner shown when the desktop local server looks unreachable: recent
  * fetch/WS failures plus the shell confirming the child is gone — or
@@ -22,6 +23,7 @@ export function ServerDownBanner(
     onMount?: BannerMount;
   },
 ) {
+  const t = useT();
   const [showLog, setShowLog] = useState(false);
   const [copied, setCopied] = useState(false);
   const { server } = health;
@@ -31,12 +33,12 @@ export function ServerDownBanner(
   const crashed = server?.liveness === "exited";
   const hung = server?.liveness === "running";
   const headline = crashed
-    ? `ローカルサーバーが終了しました${
-      server?.exitCode != null ? `（終了コード: ${server.exitCode}）` : ""
-    }`
+    ? (server?.exitCode != null
+      ? t("chrome.serverDown.crashed", { code: String(server.exitCode) })
+      : t("chrome.serverDown.crashedNoCode"))
     : hung
-    ? "ローカルサーバーから応答がありません（応答停止の可能性）"
-    : "ローカルサーバーに接続できません";
+    ? t("chrome.serverDown.hung")
+    : t("chrome.serverDown.unreachable");
   const logTail = server?.logTail?.trim() ?? "";
 
   const copyLog = async () => {
@@ -45,7 +47,7 @@ export function ServerDownBanner(
       server?.port != null ? `port: ${server.port}` : "",
       server?.exitCode != null ? `exit code: ${server.exitCode}` : "",
       "",
-      logTail || "サーバーログはありません",
+      logTail || t("chrome.serverDown.noLog"),
     ].filter((line, i) => i < 3 || line !== "").join("\n");
     try {
       await navigator.clipboard.writeText(body);
@@ -61,16 +63,20 @@ export function ServerDownBanner(
       <IconAlertTriangle size={16} className="server-down-icon" />
       <div className="server-down-body">
         <span className="server-down-text">
-          {headline}。作業データは保持されています。サーバーを再起動すると作業を再開できます。
+          {headline}
+          {". "}
+          {t("chrome.serverDown.note")}
         </span>
         {health.restartError && (
           <span className="error-text server-down-error">
-            再起動に失敗しました: {health.restartError}
+            {t("chrome.serverDown.restartFailed", {
+              error: health.restartError,
+            })}
           </span>
         )}
         {showLog && (
           <pre className="server-down-log">
-            {logTail || "サーバーログはありません"}
+            {logTail || t("chrome.serverDown.noLog")}
           </pre>
         )}
       </div>
@@ -81,7 +87,9 @@ export function ServerDownBanner(
           disabled={health.restarting}
           onClick={() => void health.restart()}
         >
-          {health.restarting ? "再起動中…" : "サーバーを再起動"}
+          {health.restarting
+            ? t("chrome.serverDown.restarting")
+            : t("chrome.serverDown.restart")}
         </button>
         <button
           type="button"
@@ -89,25 +97,27 @@ export function ServerDownBanner(
           onClick={() => setShowLog((v) => !v)}
           aria-expanded={showLog}
         >
-          {showLog ? "ログを非表示" : "ログを表示"}
+          {showLog
+            ? t("chrome.serverDown.hideLog")
+            : t("chrome.serverDown.showLog")}
         </button>
         <button
           type="button"
           className="btn small"
           onClick={() => void copyLog()}
-          title="サーバーログをクリップボードにコピー"
+          title={t("chrome.serverDown.copyLogTitle")}
         >
           {copied ? <IconCheck size={14} /> : <IconClipboard size={14} />}
-          ログをクリップボードにコピー
+          {t("chrome.serverDown.copyLog")}
         </button>
         <button
           type="button"
           className="btn small"
           onClick={health.dismiss}
-          title="閉じる"
-          aria-label="閉じる"
+          title={t("common.close")}
+          aria-label={t("common.close")}
         >
-          閉じる
+          {t("common.close")}
         </button>
       </div>
     </div>

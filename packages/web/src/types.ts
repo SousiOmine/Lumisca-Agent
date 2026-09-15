@@ -22,6 +22,7 @@ export type {
   ConnectionEntry,
   ContextMessage,
   GoalInfo,
+  Locale,
   McpInfo,
   McpServerInfo,
   ModelInfo,

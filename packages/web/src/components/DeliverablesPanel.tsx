@@ -8,6 +8,7 @@ import {
 } from "@tabler/icons-preact";
 import { TOOL_PRESENT } from "@lumisca/core/shared";
 import type { AgentMessage } from "../types.ts";
+import { useT } from "../i18n.ts";
 
 /** A single deliverable file entry extracted from a successful `present`
  * tool call. */
@@ -85,6 +86,7 @@ function useCopyFeedback() {
 export function DeliverablesPanel(
   { deliverables }: { deliverables: DeliverableFile[] },
 ) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(false);
   const { copiedPath, copy } = useCopyFeedback();
   if (deliverables.length === 0) return null;
@@ -93,11 +95,15 @@ export function DeliverablesPanel(
       <button
         type="button"
         className="deliverables-panel-header"
-        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
+        title={collapsed
+          ? t("common.expandPanel")
+          : t("panels.common.collapse")}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconFile size={14} />
-        <span className="deliverables-panel-title">成果物</span>
+        <span className="deliverables-panel-title">
+          {t("panels.deliverables.title")}
+        </span>
         <span className="deliverables-panel-summary">
           {deliverables.length}
         </span>
@@ -112,7 +118,7 @@ export function DeliverablesPanel(
               <button
                 type="button"
                 className="deliverable-path"
-                title={`クリックでコピー: ${file.path}`}
+                title={t("panels.deliverables.copyHint", { path: file.path })}
                 onClick={() =>
                   copy(file.path)}
               >

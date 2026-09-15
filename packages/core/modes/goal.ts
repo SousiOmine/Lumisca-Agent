@@ -5,28 +5,29 @@ import type { AgentMode } from "./mod.ts";
  * a future setting may override it per goal. */
 export const DEFAULT_MAX_GOAL_ITERATIONS = 10;
 
-/** The goal-mode internal rules, embedded in every goal prompt. The
- * server-side loop (fast model judge) decides continuation; the agent
- * itself just works toward the goal and reports completion. */
-const GOAL_RULES = `# 進め方
-1. ゴール達成のために必要な作業（調査・編集・テスト・修正）を進めてください。
-2. エージェントが判断できないこと（依頼の解釈、計画の前提、実装方針の選択など、計画の成否に影響する判断）は、ask ツールでユーザーに質問してください。自分で調査・確認できることは質問せず、調査してください。
-3. 途中でユーザーから停止（abort）や巻き戻し（rewind）の指示があった場合は、直ちに従ってください。
+/** The goal-mode internal rules, embedded in every goal prompt (English,
+ * like every prompt the app sends). The server-side loop (fast model
+ * judge) decides continuation; the agent itself just works toward the
+ * goal and reports completion. */
+const GOAL_RULES = `# How to proceed
+1. Do the work the goal needs: investigate, edit, test, fix.
+2. Questions you cannot decide yourself (interpreting the request, the plan's assumptions, the choice of implementation approach — anything that decides whether the work succeeds) must be asked with the ask tool. Investigate what you can check yourself instead of asking.
+3. If the user asks you to stop (abort) or rewind while you work, obey immediately.
 
-# 終了条件
-- ゴールが達成できたら、その根拠（テスト結果・変更内容など）とともに完了を報告して終了してください。`;
+# Completion
+- Once the goal is reached, report completion together with its evidence (test results, the changes you made) and finish.`;
 
-/** Build the goal-mode prompt for a goal. An empty goal yields a
- * defensive fallback that asks the user for it instead of running
- * blindly (the UI never sends this — it requires the goal text). */
+/** Build the goal-mode prompt for a goal. An empty goal yields a defensive
+ * fallback that asks the user for it instead of running blindly (the UI
+ * never sends this — it requires the goal text). */
 export function buildGoalPrompt(goal: string): string {
   const trimmed = goal.trim();
   const subject = trimmed.length > 0
     ? trimmed
-    : "（ゴールが指定されていません。まず ask ツールでユーザーにゴールを確認してください）";
-  return `あなたはゴール達成エージェントです。以下のゴールが達成されるまで、自律的に作業を進めてください。
+    : "(No goal was given. First ask the user for the goal with the ask tool.)";
+  return `You are a goal-achieving agent. Keep working autonomously until the following goal is achieved.
 
-# ゴール
+# Goal
 ${subject}
 
 ${GOAL_RULES}`;
@@ -34,9 +35,9 @@ ${GOAL_RULES}`;
 
 export const goalMode: AgentMode = {
   id: "goal",
-  label: "ゴール",
-  modeLabel: "ゴールモード",
-  description: "目標を設定し、達成するまでAIが自律的に作業を継続します",
+  label: "chat.mode.goal.label",
+  modeLabel: "chat.mode.goal.modeLabel",
+  description: "chat.mode.goal.description",
   options: [],
   // Text-taking mode: the goal arrives via buildPromptForText; a plain
   // buildPrompt call has no goal, so it falls back to asking the user.
@@ -45,8 +46,5 @@ export const goalMode: AgentMode = {
   },
   buildPromptForText(text: string): string {
     return buildGoalPrompt(text);
-  },
-  buildShortText(): string {
-    return "ゴール達成まで作業してください";
   },
 };

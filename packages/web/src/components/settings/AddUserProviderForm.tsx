@@ -6,6 +6,7 @@ import {
   IconTrash,
 } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
+import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";
 import type { UserProviderSummary } from "../../types.ts";
 
@@ -64,12 +65,13 @@ function ModelRowEditor({
   onChange: (next: ModelRow) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   const set = (patch: Partial<ModelRow>) => onChange({ ...row, ...patch });
   return (
     <div className="user-provider-card">
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <input
-          placeholder="モデルID（例: gpt-4o）"
+          placeholder={t("settings.userProvider.modelIdPlaceholder")}
           value={row.id}
           onChange={(e) => set({ id: e.currentTarget.value })}
           style={{ flex: 1 }}
@@ -84,7 +86,7 @@ function ModelRowEditor({
         </button>
       </div>
       <input
-        placeholder="表示名（任意）"
+        placeholder={t("settings.userProvider.modelNamePlaceholder")}
         value={row.name}
         onChange={(e) => set({ name: e.currentTarget.value })}
       />
@@ -95,7 +97,7 @@ function ModelRowEditor({
             checked={row.reasoning}
             onChange={(e) => set({ reasoning: e.currentTarget.checked })}
           />
-          推論モード対応
+          {t("settings.userProvider.reasoningSupport")}
         </label>
         <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input
@@ -103,19 +105,19 @@ function ModelRowEditor({
             checked={row.image}
             onChange={(e) => set({ image: e.currentTarget.checked })}
           />
-          画像入力対応
+          {t("settings.userProvider.imageInputSupport")}
         </label>
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <input
-          placeholder="コンテキストウィンドウ（トークン）"
+          placeholder={t("settings.userProvider.contextWindowPlaceholder")}
           value={row.contextWindow}
           inputMode="numeric"
           onChange={(e) => set({ contextWindow: e.currentTarget.value })}
           style={{ flex: 1 }}
         />
         <input
-          placeholder="最大出力（トークン）"
+          placeholder={t("settings.userProvider.maxOutputPlaceholder")}
           value={row.maxTokens}
           inputMode="numeric"
           onChange={(e) => set({ maxTokens: e.currentTarget.value })}
@@ -135,16 +137,17 @@ function HeaderRowEditor({
   onChange: (next: HeaderRow) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   return (
     <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
       <input
-        placeholder="ヘッダー名"
+        placeholder={t("settings.userProvider.headerNamePlaceholder")}
         value={row.key}
         onChange={(e) => onChange({ ...row, key: e.currentTarget.value })}
         style={{ flex: 1 }}
       />
       <input
-        placeholder="値"
+        placeholder={t("settings.userProvider.headerValuePlaceholder")}
         value={row.value}
         onChange={(e) => onChange({ ...row, value: e.currentTarget.value })}
         style={{ flex: 1 }}
@@ -171,6 +174,7 @@ export function AddUserProviderForm({
   onDone: (providerId: string) => void;
   onDeleted?: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState(initial?.name ?? "");
   const [id, setId] = useState(initial?.id ?? "");
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
@@ -243,7 +247,7 @@ export function AddUserProviderForm({
     for (const h of headers) {
       if (h.key.trim() === "") continue;
       if (h.key in headerMap) {
-        setError(`重複するヘッダー名: ${h.key}`);
+        setError(t("settings.provider.duplicateHeader", { name: h.key }));
         return;
       }
       headerMap[h.key] = h.value;
@@ -295,7 +299,9 @@ export function AddUserProviderForm({
 
   const handleDelete = async () => {
     if (!initial?.id) return;
-    if (!confirm(`プロバイダー "${initial.name}" を削除しますか？`)) return;
+    if (
+      !confirm(t("settings.provider.deleteConfirm", { name: initial.name }))
+    ) return;
     setDeleting(true);
     setError(undefined);
     try {
@@ -313,29 +319,29 @@ export function AddUserProviderForm({
     <>
       <div className="modal-header">
         <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> 戻る
+          <IconArrowLeft size={14} /> {t("common.back")}
         </button>
         <h2>
           {mode === "create"
-            ? "カスタムプロバイダーを追加"
-            : "カスタムプロバイダーを編集"}
+            ? t("settings.userProvider.createTitle")
+            : t("settings.userProvider.editTitle")}
         </h2>
       </div>
 
       <div className="settings-pane" style={{ gap: 10 }}>
         <label className="field">
-          <span>表示名</span>
+          <span>{t("settings.userProvider.displayNameLabel")}</span>
           <input
-            placeholder="例: 自宅 vLLM"
+            placeholder={t("settings.userProvider.displayNamePlaceholder")}
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
           />
         </label>
 
         <label className="field">
-          <span>プロバイダーID</span>
+          <span>{t("settings.userProvider.idLabel")}</span>
           <input
-            placeholder="例: home-vllm"
+            placeholder={t("settings.userProvider.idPlaceholder")}
             value={id}
             disabled={!idEditable}
             onChange={(e) => {
@@ -345,8 +351,8 @@ export function AddUserProviderForm({
           />
           <p className="settings-note">
             {idEditable
-              ? "モデル指定で使う識別子（例: home-vllm/gpt-4o）。英数字・. _ - のみ"
-              : "編集時は変更できません"}
+              ? t("settings.userProvider.idHint")
+              : t("settings.userProvider.idHintEdit")}
           </p>
         </label>
 
@@ -358,7 +364,7 @@ export function AddUserProviderForm({
             onChange={(e) => setBaseUrl(e.currentTarget.value)}
           />
           <p className="settings-note">
-            OpenAI 互換エンドポイントの基底 URL（通常は /v1 まで）
+            {t("settings.userProvider.baseUrlHint")}
           </p>
         </label>
 
@@ -372,21 +378,30 @@ export function AddUserProviderForm({
               <option key={a} value={a}>{a}</option>
             ))}
           </select>
-          <p className="settings-note">モデルが未指定の場合の既定 API</p>
+          <p className="settings-note">
+            {t("settings.userProvider.apiDefaultHint")}
+          </p>
         </label>
 
         <label className="field">
-          <span>APIキー {mode === "edit" && "（空白で維持）"}</span>
+          <span>
+            {t("settings.userProvider.apiKeyLabel")}{" "}
+            {mode === "edit" && t("settings.userProvider.apiKeyKeepBlank")}
+          </span>
           <input
             type="password"
-            placeholder={initial?.hasApiKey ? "設定済み（上書き）" : "APIキー"}
+            placeholder={initial?.hasApiKey
+              ? t("settings.userProvider.apiKeyPlaceholderSet")
+              : t("settings.userProvider.apiKeyPlaceholder")}
             value={apiKey}
             onChange={(e) => setApiKey(e.currentTarget.value)}
           />
         </label>
 
         <div>
-          <p className="settings-note">カスタムヘッダー（任意）</p>
+          <p className="settings-note">
+            {t("settings.userProvider.customHeaders")}
+          </p>
           {headers.map((h, i) => (
             <HeaderRowEditor
               key={i}
@@ -401,12 +416,14 @@ export function AddUserProviderForm({
             onClick={() =>
               setHeaders((cur) => [...cur, { key: "", value: "" }])}
           >
-            <IconPlus size={14} /> ヘッダーを追加
+            <IconPlus size={14} /> {t("settings.userProvider.addHeader")}
           </button>
         </div>
 
         <div>
-          <p className="settings-note">モデル（1つ以上）</p>
+          <p className="settings-note">
+            {t("settings.userProvider.modelsLabel")}
+          </p>
           {models.map((m, i) => (
             <ModelRowEditor
               key={i}
@@ -421,7 +438,7 @@ export function AddUserProviderForm({
             className="btn small"
             onClick={() => setModels((cur) => [...cur, emptyModel()])}
           >
-            <IconPlus size={14} /> モデルを追加
+            <IconPlus size={14} /> {t("settings.userProvider.addModel")}
           </button>
         </div>
 
@@ -436,7 +453,7 @@ export function AddUserProviderForm({
             onClick={handleDelete}
             disabled={deleting || saving}
           >
-            <IconTrash size={14} /> 削除
+            <IconTrash size={14} /> {t("common.delete")}
           </button>
         )}
         <button
@@ -446,7 +463,7 @@ export function AddUserProviderForm({
           disabled={saving || deleting}
         >
           <IconCheck size={14} />
-          {mode === "create" ? "追加" : "保存"}
+          {mode === "create" ? t("settings.personalize.add") : t("common.save")}
         </button>
       </div>
     </>

@@ -5,7 +5,13 @@ import { cors } from "hono/cors";
 import { upgradeWebSocket } from "hono/deno";
 import {
   errorMessage,
+  LANGUAGE_KEY,
+  type Locale,
   type LumiscaCore,
+  parseAcceptLanguage,
+  parseLocale,
+  resolveLocale,
+  systemLanguageTags,
   THEME_KEY,
   type ThemeSetting,
 } from "@lumisca/core";
@@ -140,10 +146,14 @@ function disposeApp(app: Hono): void {
 /** The security middleware chain: Host guard (DNS-rebinding protection),
  * optional bearer token, CORS (same-origin + Tauri WebView), and the
  * WebSocket Origin check (CORS does not apply to WS handshakes). Extracted
- * so createApp stays a composition root over routes. */
+ * so createApp stays a composition root over routes. `language` resolves
+ * the app language of one request: the token-required page is the one
+ * response rendered before the client bundle loads, so its text comes from
+ * the catalogue (see createApp's languageFor). */
 function installSecurityMiddleware(
   app: Hono,
   options: AppOptions,
+  language: (c: Context) => Locale,
 ): void {
   // The server is local-only by default: refuse requests that do not target
   // a loopback host (blocks DNS rebinding and cross-origin browser access).
@@ -186,9 +196,11 @@ function installSecurityMiddleware(
           c.req.query("token");
         if (presented !== token && remembered !== token) {
           // A browser (Accept: text/html) is told what to do; every other
-          // client keeps the JSON error it can parse.
+          // client keeps the JSON error it can parse. The page renders in
+          // the language of this request (it is served before the app
+          // loads, so the catalogue is the only source of its text).
           return c.req.header("accept")?.includes("text/html")
-            ? c.html(renderTokenRequiredPage(), 401)
+            ? c.html(renderTokenRequiredPage(language(c)), 401)
             : c.json(
               { error: "Unauthorized: missing or invalid token" },
               401,
@@ -254,7 +266,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   // Host guard, token, CORS, and the WS Origin check (see
   // installSecurityMiddleware).
-  installSecurityMiddleware(app, options);
+  installSecurityMiddleware(app, options, (c) => languageFor(c));
 
   // Route handlers throw instead of catching: unify error responses here.
   app.onError((error, c) => {
@@ -296,17 +308,47 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const resolvedTheme = (): "light" | "dark" =>
     theme() === "light" ? "light" : "dark";
 
+  /**
+   * The app language of one request: the stored setting when the user has
+   * chosen one, else the browser's own preference (Accept-Language), else
+   * the machine's locale (see shared/i18n resolveLocale).
+   *
+   * The setting is what makes the language stable: it is read when a
+   * session is created (the prompt is generated with it — see core.ts) and
+   * when the UI is rendered, so every part of the app agrees. A first-time
+   * page load stores the resolved value, once (see renderPage): without
+   * that, the language of a session would depend on whichever client
+   * happened to create it.
+   */
+  const languageFor = (c: Context): Locale => {
+    return resolveLocale(core.getSetting(LANGUAGE_KEY), [
+      ...parseAcceptLanguage(c.req.header("accept-language")),
+      ...systemLanguageTags(),
+    ]);
+  };
+
   /** Initial data for the app bootstrap, served as the externalized
    * /assets/initial-data.js script (inline scripts are banned by the page
    * CSP). Fresh per request — the client re-reads the data on every load,
    * so it can never go stale relative to the server's state. */
-  const initialData = (): InitialData => ({
+  const initialData = (language: Locale): InitialData => ({
     workspaces: core.listWorkspaces(),
     theme: theme(),
+    language,
   });
 
   const renderPage = async (c: Context) => {
     const css = await assets.getCss();
+    const language = languageFor(c);
+    // First run (no language chosen yet): remember what this request asked
+    // for — the browser's preference, else the machine's locale. Idempotent
+    // (only an unset setting is written) and deliberate about happening on
+    // a GET: the value has to exist before the first session is created,
+    // and session creation is not tied to any one client. From here on the
+    // settings dialog is the only writer.
+    if (parseLocale(core.getSetting(LANGUAGE_KEY)) === undefined) {
+      core.setSetting(LANGUAGE_KEY, language);
+    }
     // Built through the context (`c.newResponse`) rather than as a raw
     // Response: only then do headers a middleware set — the token cookie
     // included — reach the final response.
@@ -318,6 +360,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         // reach the CSP attribute.
         pageHost: safePageHost(c.req.header("host")),
         token: options.token,
+        language,
       }),
       200,
       { "content-type": "text/html; charset=utf-8" },
@@ -328,7 +371,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   app.get("/assets/initial-data.js", (c) => {
     // `<` is escaped so the JSON can never close the script tag.
-    const safeData = JSON.stringify(initialData()).replace(/</g, "\\u003c");
+    const safeData = JSON.stringify(initialData(languageFor(c)))
+      .replace(/</g, "\\u003c");
     const tokenLine = options.token
       ? `\nwindow.__LUMISCA_TOKEN__ = ${JSON.stringify(options.token)};`
       : "";

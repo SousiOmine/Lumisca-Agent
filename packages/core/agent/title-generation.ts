@@ -1,9 +1,12 @@
 import type { Api, Model } from "../ai/types.ts";
 import type { StreamFn } from "../ai/types.ts";
 import { streamText } from "../ai/stream.ts";
+import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
+import { outputLanguageSentence } from "../tools/language.ts";
 
 /** System prompt for the title model: a short, plain session title based
- * on the user's first message. */
+ * on the user's first message. The output-language sentence is appended by
+ * the caller (the title follows the session's language). */
 const TITLE_SYSTEM_PROMPT =
   "You generate short titles for AI chat sessions. Based on the user's " +
   "first message, produce a concise title of at most 30 characters. " +
@@ -39,13 +42,20 @@ export class TitleGenerator {
   ) {}
 
   /** Ask the fast model for a title. Throws on stream errors or empty
-   * output. */
-  async generateTitle(firstMessage: string): Promise<string> {
+   * output. The session's language is appended to the prompt: the tab must
+   * read in the language the session answers in, whichever language the
+   * first message happened to be written in. */
+  async generateTitle(
+    firstMessage: string,
+    language: Locale = DEFAULT_LOCALE,
+  ): Promise<string> {
     const text = await streamText(
       this.streamFn,
       this.model,
       {
-        systemPrompt: TITLE_SYSTEM_PROMPT,
+        systemPrompt: `${TITLE_SYSTEM_PROMPT} ${
+          outputLanguageSentence(language)
+        }`,
         messages: [{
           role: "user",
           content: [{ type: "text", text: firstMessage }],

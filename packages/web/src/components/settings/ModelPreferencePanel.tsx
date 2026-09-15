@@ -11,14 +11,12 @@ import {
   parseModelPreference,
   serializeModelPreference,
 } from "@lumisca/core/shared";
-import {
-  type ModelPreference,
-  THINKING_LEVEL_LABELS,
-  type ThinkingLevel,
-} from "@lumisca/core/shared";
+import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useClickOutside } from "../../hooks/useClickOutside.ts";
+import { useT } from "../../i18n.ts";
+import { thinkingLevelLabel } from "../../format.ts";
 import {
   errorText,
   setModelThinkingLevel,
@@ -37,24 +35,6 @@ interface ModelPrefRow {
   thinking?: boolean;
 }
 
-const ROWS: ModelPrefRow[] = [
-  {
-    key: FAST_MODEL_KEY,
-    label: "高速モデル",
-    description:
-      "タスク本体とは別に、高速・低コストな補助処理（要約・サブタスクなど）で使用するモデルです。",
-    thinking: true,
-  },
-  {
-    key: IMAGE_MODEL_KEY,
-    label: "画像分析モデル",
-    description:
-      "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデルです。",
-    imageOnly: true,
-    thinking: true,
-  },
-];
-
 const MENU_MARGIN = 8;
 
 /** Settings → モデル: the auxiliary model preferences (fast model, image
@@ -65,6 +45,7 @@ const MENU_MARGIN = 8;
 export function ModelPreferencePanel(
   { onOpenProviders }: { onOpenProviders: () => void },
 ) {
+  const t = useT();
   const [values, setValues] = useState<
     Record<string, ModelPreference | undefined>
   >({});
@@ -93,6 +74,23 @@ export function ModelPreferencePanel(
     reload: reloadModels,
   } = useProviderModels();
 
+  // Localized ROWS, built inside the component so t() is available.
+  const localizedRows = useMemo<ModelPrefRow[]>(() => [
+    {
+      key: FAST_MODEL_KEY,
+      label: t("settings.model.fastModel"),
+      description: t("settings.model.fastModelDesc"),
+      thinking: true,
+    },
+    {
+      key: IMAGE_MODEL_KEY,
+      label: t("settings.model.imageAnalysisModel"),
+      description: t("settings.model.imageAnalysisModelDesc"),
+      imageOnly: true,
+      thinking: true,
+    },
+  ], [t]);
+
   /** Load the stored preferences once. */
   useAsyncEffect(async (isStale) => {
     try {
@@ -117,7 +115,7 @@ export function ModelPreferencePanel(
       string,
       { current: ThinkingLevel; supported: ThinkingLevel[] } | undefined
     > = {};
-    for (const row of ROWS) {
+    for (const row of localizedRows) {
       if (!row.thinking) continue;
       const pref = values[row.key];
       if (pref === undefined) continue;
@@ -132,7 +130,7 @@ export function ModelPreferencePanel(
       };
     }
     return out;
-  }, [modelsByProvider, values, levelOverrides]);
+  }, [modelsByProvider, values, levelOverrides, localizedRows]);
 
   // Close on outside click, Escape, scroll and window blur (the settings
   // content scrolls independently of the fixed-position popover).
@@ -217,11 +215,11 @@ export function ModelPreferencePanel(
     }
   };
 
-  const openRowDef = ROWS.find((r) => r.key === openRow);
+  const openRowDef = localizedRows.find((r) => r.key === openRow);
 
   return (
     <div className="settings-pane model-pref-panel">
-      {ROWS.map((row) => {
+      {localizedRows.map((row) => {
         const value = values[row.key];
         return (
           <div key={row.key} className="model-pref-item">
@@ -231,7 +229,11 @@ export function ModelPreferencePanel(
             </div>
             <div className="model-pref-value">
               {!loaded && !loadError
-                ? <span className="model-pref-unset">読み込み中…</span>
+                ? (
+                  <span className="model-pref-unset">
+                    {t("common.loading")}
+                  </span>
+                )
                 : value
                 ? (
                   <>
@@ -240,12 +242,16 @@ export function ModelPreferencePanel(
                     </span>
                     {row.thinking && levelsByRow[row.key] && (
                       <span className="model-pref-level">
-                        {THINKING_LEVEL_LABELS[levelsByRow[row.key]!.current]}
+                        {thinkingLevelLabel(levelsByRow[row.key]!.current, t)}
                       </span>
                     )}
                   </>
                 )
-                : <span className="model-pref-unset">未設定</span>}
+                : (
+                  <span className="model-pref-unset">
+                    {t("settings.model.unset")}
+                  </span>
+                )}
             </div>
             <div className="model-pref-actions">
               <button
@@ -257,7 +263,7 @@ export function ModelPreferencePanel(
                 disabled={saving === row.key}
                 onClick={(e) => openPicker(row.key, e.currentTarget)}
               >
-                変更
+                {t("settings.personalize.update")}
               </button>
               {value && (
                 <button
@@ -266,7 +272,7 @@ export function ModelPreferencePanel(
                   disabled={saving === row.key}
                   onClick={() => save(row.key, undefined)}
                 >
-                  クリア
+                  {t("common.cancel")}
                 </button>
               )}
             </div>
@@ -312,11 +318,13 @@ export function ModelPreferencePanel(
 
       {loadError && (
         <div className="error-text">
-          設定の読み込みに失敗しました: {loadError}
+          {t("settings.model.loadFailed", { error: loadError })}
         </div>
       )}
       {saveError && (
-        <div className="error-text">保存に失敗しました: {saveError}</div>
+        <div className="error-text">
+          {t("settings.model.saveFailed", { error: saveError })}
+        </div>
       )}
     </div>
   );

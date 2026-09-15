@@ -6,6 +6,7 @@ import { api } from "../../api.ts";
 import { shellAvailable, shellCall, type ShellState } from "../../shell.ts";
 import { errorText } from "../../providers.ts";
 import { Field } from "../Field.tsx";
+import { useT } from "../../i18n.ts";
 
 const ACTIVE_TAG: CSSProperties = {
   fontSize: 11,
@@ -27,6 +28,7 @@ function pageUrl(url: string, token: string): string {
  * clients alike. The desktop shell bridge only handles the local server
  * and UI switching; everything else goes through the same API. */
 export function ConnectionList() {
+  const t = useT();
   /** null = probing the shell bridge. */
   const [desktop, setDesktop] = useState<boolean | null>(null);
   const [state, setState] = useState<ShellState | null>(null);
@@ -99,7 +101,7 @@ export function ConnectionList() {
 
   const remove = (id: string) =>
     run(async () => {
-      if (!globalThis.confirm("このサーバーを削除しますか？")) return;
+      if (!globalThis.confirm(t("settings.connection.deleteConfirm"))) return;
       const next = servers.filter((s) => s.id !== id);
       await api.putConnections(next);
       setServers(next);
@@ -130,10 +132,13 @@ export function ConnectionList() {
       clearTimeout(timer);
       return {
         ok: true,
-        text: "疎通確認に成功しました（認証トークンは接続時に検証されます）",
+        text: t("settings.connection.testSuccess"),
       };
     } catch {
-      return { ok: false, text: `サーバーに到達できません: ${url}` };
+      return {
+        ok: false,
+        text: t("settings.connection.unreachable", { url }),
+      };
     }
   };
 
@@ -141,7 +146,7 @@ export function ConnectionList() {
   const bridgeTest = async (url: string, token: string) => {
     try {
       await shellCall("test", { url, token });
-      return { ok: true, text: "接続OK" };
+      return { ok: true, text: t("settings.connection.testOk") };
     } catch (e) {
       return {
         ok: false,
@@ -153,18 +158,28 @@ export function ConnectionList() {
   return (
     <>
       <div className="modal-header">
-        <h2>接続先サーバー</h2>
+        <h2>{t("settings.connection.title")}</h2>
       </div>
 
-      {desktop === null && <p className="settings-note">読み込み中…</p>}
+      {desktop === null && (
+        <p className="settings-note">{t("common.loading")}</p>
+      )}
       {desktop !== null && (
         <div className="stack-8">
           <p className="settings-note">
             {desktop
               ? state?.mode === "remote"
-                ? `現在の表示: ${state.url ?? ""}`
-                : "現在の表示: ローカルサーバー"
-              : `現在の表示: このサーバー（${location.origin}）`}
+                ? `${t("settings.connection.currentDisplay")} ${
+                  state.url ?? ""
+                }`
+                : `${t("settings.connection.currentDisplay")} ${
+                  t("settings.connection.localServer")
+                }`
+              : `${t("settings.connection.currentDisplay")} ${
+                t("settings.connection.thisServer", {
+                  origin: location.origin,
+                })
+              }`}
           </p>
 
           {error && <p className="error-text">{error}</p>}
@@ -173,13 +188,15 @@ export function ConnectionList() {
             <div className="setting-card">
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 600 }}>
-                  ローカルサーバー
+                  {t("settings.connection.localServer")}
                   {state?.mode === "local" && (
-                    <span style={ACTIVE_TAG}>表示中</span>
+                    <span style={ACTIVE_TAG}>
+                      {t("settings.connection.activeTag")}
+                    </span>
                   )}
                 </span>
                 <p className="settings-note">
-                  ローカル（このPC）で稼働しているサーバーに接続します
+                  {t("settings.connection.localServerDesc")}
                 </p>
               </div>
               <button
@@ -188,7 +205,7 @@ export function ConnectionList() {
                 disabled={busy || state?.mode === "local"}
                 onClick={connectLocal}
               >
-                表示
+                {t("settings.connection.view")}
               </button>
             </div>
           )}
@@ -210,7 +227,7 @@ export function ConnectionList() {
 
           <div>
             <button type="button" className="btn" disabled={busy} onClick={add}>
-              <IconPlus size={14} /> サーバーを追加
+              <IconPlus size={14} /> {t("settings.connection.addServer")}
             </button>
           </div>
         </div>
@@ -239,6 +256,7 @@ function ServerCard({
   onSave: () => void;
   onDelete: () => void;
 }) {
+  const t = useT();
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(
     null,
@@ -271,13 +289,13 @@ function ServerCard({
       }}
     >
       <span style={{ fontWeight: 600 }}>
-        {server.name || "（無名）"}
+        {server.name || t("settings.connection.unnamed")}
       </span>
-      <Field label="名前">
+      <Field label={t("settings.connection.serverNameLabel")}>
         <input
           value={server.name}
           onChange={(e) => onChange({ name: e.currentTarget.value })}
-          placeholder="例: 自宅サーバー"
+          placeholder={t("settings.connection.serverNamePlaceholder")}
         />
       </Field>
       <Field label="URL">
@@ -288,7 +306,7 @@ function ServerCard({
           spellcheck={false}
         />
       </Field>
-      <Field label="トークン（LUMISCA_TOKEN と同じ値）">
+      <Field label={t("settings.connection.tokenLabel")}>
         <input
           type="password"
           value={server.token}
@@ -310,7 +328,7 @@ function ServerCard({
           disabled={busy || testing}
           onClick={onConnect}
         >
-          表示
+          {t("settings.connection.view")}
         </button>
         <button
           type="button"
@@ -318,7 +336,7 @@ function ServerCard({
           disabled={busy || testing}
           onClick={test}
         >
-          テスト
+          {t("settings.connection.test")}
         </button>
         <button
           type="button"
@@ -326,7 +344,7 @@ function ServerCard({
           disabled={busy || testing}
           onClick={onSave}
         >
-          保存
+          {t("common.save")}
         </button>
         <button
           type="button"

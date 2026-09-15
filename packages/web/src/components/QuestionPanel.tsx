@@ -1,6 +1,7 @@
 import { useState } from "preact/compat";
 import { IconMessageQuestion, IconSend } from "@tabler/icons-preact";
 import type { AskAnswer, AskQuestion, PendingQuestion } from "../types.ts";
+import { useT } from "../i18n.ts";
 
 /** Selected option indices per question id, inside one question card. */
 type Selections = Record<string, number[]>;
@@ -70,6 +71,7 @@ function QuestionCard({
   pending: PendingQuestion;
   onAnswer: (toolCallId: string, answers: AskAnswer[]) => Promise<void>;
 }) {
+  const t = useT();
   const [selections, setSelections] = useState<Selections>(() =>
     initialSelections(pending.questions)
   );
@@ -131,7 +133,7 @@ function QuestionCard({
     <div className="question-card">
       <div className="question-card-header">
         <IconMessageQuestion size={14} />
-        <span>質問</span>
+        <span>{t("panels.question.header")}</span>
       </div>
       {pending.questions.map((q) => {
         const multi = q.multi === true;
@@ -174,8 +176,10 @@ function QuestionCard({
             <input
               type="text"
               className="question-free-input"
-              placeholder="選択肢にない回答はこちらに入力してください"
-              aria-label={`「${q.question}」への回答`}
+              placeholder={t("panels.question.placeholder")}
+              aria-label={t("panels.question.ariaLabel", {
+                question: q.question,
+              })}
               value={custom}
               onChange={(e) => editCustom(q.id, e.currentTarget.value, multi)}
             />
@@ -191,7 +195,9 @@ function QuestionCard({
             !allAnswered(pending.questions, selections, customs)}
         >
           <IconSend size={13} />
-          {submitting ? "送信中…" : "回答を送信"}
+          {submitting
+            ? t("panels.question.submitting")
+            : t("panels.question.submit")}
         </button>
         {error && <span className="question-error">{error}</span>}
       </div>

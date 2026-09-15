@@ -14,6 +14,7 @@ import {
   IconX,
 } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
+import { useT } from "../../i18n.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import {
   errorText,
@@ -50,6 +51,7 @@ export function ProviderDetail({
   onDone: () => void;
   onEditUser?: (providerId: string) => void;
 }) {
+  const t = useT();
   const { providers, reload: reloadProviders } = useProviderModels("");
   const { ids: userProviderIds, reload: reloadUserProviders } =
     useUserProviders();
@@ -133,9 +135,9 @@ export function ProviderDetail({
     const status = loginFlow?.snapshot?.status;
     if (!status || status === "starting" || status === "waiting") return;
     if (status === "done") {
-      setNotice("ログインしました");
+      setNotice(t("settings.provider.loginDone"));
     } else if (status === "error") {
-      setError(loginFlow.snapshot?.error ?? "ログインに失敗しました");
+      setError(loginFlow.snapshot?.error ?? t("settings.provider.loginFailed"));
     }
     setLoginFlow(undefined);
     load().catch((e) => setError(errorText(e)));
@@ -180,7 +182,7 @@ export function ProviderDetail({
     setLoginFlow(undefined);
     try {
       await api.providerLoginCancel(providerId, flow.sessionId);
-      setNotice("ログインをキャンセルしました");
+      setNotice(t("settings.provider.loginCancelledNotice"));
     } catch (e) {
       setError(errorText(e));
     }
@@ -208,7 +210,7 @@ export function ProviderDetail({
     setError(undefined);
     try {
       await api.providerLogout(providerId);
-      setNotice("ログアウトしました");
+      setNotice(t("settings.provider.logoutDone"));
       await load();
       reloadProviders();
     } catch (e) {
@@ -222,7 +224,9 @@ export function ProviderDetail({
   const removeProvider = async () => {
     if (
       !confirm(
-        `プロバイダー "${provider?.name ?? providerId}" を削除しますか？`,
+        t("settings.provider.deleteConfirm", {
+          name: provider?.name ?? providerId,
+        }),
       )
     ) {
       return;
@@ -243,9 +247,9 @@ export function ProviderDetail({
   const copy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setNotice("コピーしました");
+      setNotice(t("settings.provider.copyDone"));
     } catch {
-      setError("コピーに失敗しました");
+      setError(t("settings.provider.copyFailed"));
     }
   };
 
@@ -261,7 +265,9 @@ export function ProviderDetail({
             key={index}
             className="stack-6"
           >
-            <p className="settings-note">確認コード</p>
+            <p className="settings-note">
+              {t("settings.provider.deviceCodeLabel")}
+            </p>
             <div className="login-code">{event.userCode}</div>
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -269,18 +275,19 @@ export function ProviderDetail({
                 className="btn small"
                 onClick={() => copy(event.userCode)}
               >
-                <IconCopy size={14} /> コピー
+                <IconCopy size={14} /> {t("settings.provider.copy")}
               </button>
               <button
                 type="button"
                 className="btn small"
                 onClick={() => open(event.verificationUri)}
               >
-                <IconExternalLink size={14} /> ログイン画面を開く
+                <IconExternalLink size={14} />{" "}
+                {t("settings.provider.openLoginScreen")}
               </button>
             </div>
             <p className="settings-note">
-              表示された認証画面で上記の確認コードを入力し、連携を承認してください。
+              {t("settings.provider.deviceCodeHint")}
             </p>
           </div>
         );
@@ -295,7 +302,8 @@ export function ProviderDetail({
               className="btn primary"
               onClick={() => open(event.url)}
             >
-              <IconExternalLink size={14} /> ブラウザでログイン
+              <IconExternalLink size={14} />{" "}
+              {t("settings.provider.loginInBrowser")}
             </button>
             {event.instructions && (
               <p className="settings-note">{event.instructions}</p>
@@ -354,7 +362,7 @@ export function ProviderDetail({
           onClick={submit}
           disabled={!promptValue.trim()}
         >
-          <IconSend size={14} /> 送信
+          <IconSend size={14} /> {t("settings.provider.send")}
         </button>
       </div>
     );
@@ -369,18 +377,21 @@ export function ProviderDetail({
     <>
       <div className="modal-header">
         <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> 戻る
+          <IconArrowLeft size={14} /> {t("common.back")}
         </button>
         <h2>{provider?.name ?? providerId}</h2>
         {auth.configured
           ? (
             <span className="provider-state configured">
-              <IconCheck size={12} /> {isOAuth ? "ログイン済み" : "設定済み"}
+              <IconCheck size={12} /> {isOAuth
+                ? t("settings.provider.loginStatus")
+                : t("settings.provider.configured")}
             </span>
           )
           : (
             <span className="provider-state">
-              <IconCircleDashed size={12} /> 未設定
+              <IconCircleDashed size={12} />{" "}
+              {t("settings.provider.notConfigured")}
             </span>
           )}
       </div>
@@ -390,7 +401,7 @@ export function ProviderDetail({
           ? (
             <div className="stack-8">
               <p className="settings-note">
-                OAuth ログイン（サブスクリプション契約）
+                {t("settings.provider.oauthDescription")}
               </p>
 
               {auth.configured && (
@@ -400,7 +411,7 @@ export function ProviderDetail({
                   onClick={logout}
                   disabled={loginBusy}
                 >
-                  <IconLogout size={14} /> ログアウト
+                  <IconLogout size={14} /> {t("settings.provider.logout")}
                 </button>
               )}
 
@@ -414,7 +425,9 @@ export function ProviderDetail({
                   {loginBusy
                     ? <IconLoader2 size={14} className="spin" />
                     : <IconLogin2 size={14} />}
-                  {auth.configured ? "再ログイン" : "ログイン"}
+                  {auth.configured
+                    ? t("settings.provider.relogin")
+                    : t("settings.provider.login")}
                 </button>
               )}
 
@@ -426,40 +439,45 @@ export function ProviderDetail({
                     className="settings-note"
                     style={{ display: "flex", alignItems: "center", gap: 6 }}
                   >
-                    <IconLoader2 size={14} className="spin" /> 認証を待機中…
+                    <IconLoader2 size={14} className="spin" />{" "}
+                    {t("settings.provider.authWaiting")}
                   </p>
                   {(snapshot?.events ?? []).map(renderEvent)}
                   {flowPrompt && renderPrompt(flowPrompt)}
                   <button type="button" className="btn" onClick={cancelLogin}>
-                    <IconX size={14} /> キャンセル
+                    <IconX size={14} /> {t("common.cancel")}
                   </button>
                 </div>
               )}
 
               {snapshot?.status === "done" && (
                 <p className="settings-note" style={{ color: "var(--ok)" }}>
-                  ログインしました
+                  {t("settings.provider.loginDone")}
                 </p>
               )}
               {snapshot?.status === "cancelled" && (
-                <p className="settings-note">キャンセルしました</p>
+                <p className="settings-note">
+                  {t("settings.provider.loginCancelled")}
+                </p>
               )}
               {snapshot?.status === "error" && (
                 <div className="error-text">
-                  {snapshot.error ?? "ログインに失敗しました"}
+                  {snapshot.error ?? t("settings.provider.loginFailed")}
                 </div>
               )}
             </div>
           )
           : (
             <>
-              <p className="settings-note">APIキー</p>
+              <p className="settings-note">
+                {t("settings.provider.apiKeyLabel")}
+              </p>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   type="password"
                   placeholder={auth.configured
-                    ? "新しいAPIキー（上書き）"
-                    : "APIキーを入力"}
+                    ? t("settings.provider.apiKeyPlaceholderOverwrite")
+                    : t("settings.provider.apiKeyPlaceholderNew")}
                   value={key}
                   onChange={(e) => setKey(e.currentTarget.value)}
                   style={{ flex: 1 }}
@@ -470,12 +488,12 @@ export function ProviderDetail({
                   onClick={saveKey}
                   disabled={savingKey || !key.trim()}
                 >
-                  保存
+                  {t("common.save")}
                 </button>
               </div>
               {savedNotice && (
                 <p className="settings-note" style={{ color: "var(--ok)" }}>
-                  APIキーを保存しました
+                  {t("settings.provider.apiKeySaved")}
                 </p>
               )}
             </>
@@ -498,7 +516,7 @@ export function ProviderDetail({
                 className="btn"
                 onClick={() => onEditUser(providerId)}
               >
-                <IconEdit size={14} /> 編集
+                <IconEdit size={14} /> {t("settings.provider.edit")}
               </button>
             )}
             <button
@@ -507,12 +525,12 @@ export function ProviderDetail({
               onClick={removeProvider}
               disabled={removing}
             >
-              <IconTrash size={14} /> 削除
+              <IconTrash size={14} /> {t("common.delete")}
             </button>
           </>
         )}
         <button type="button" className="btn primary" onClick={onDone}>
-          完了
+          {t("settings.provider.done")}
         </button>
       </div>
     </>

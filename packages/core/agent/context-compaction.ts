@@ -52,6 +52,7 @@ import {
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
 import { contextTokensOf } from "../shared/context-usage.ts";
+import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import { toLlmMessages } from "../types/notification.ts";
 
 /** Module logger (debug-gated): every compaction outcome is logged so a
@@ -251,6 +252,11 @@ export interface ContextCompactorOptions {
   /** The conversation id of the summarization call (session-affinity
    * gateways require it on every request). */
   sessionId: string;
+  /** The language of the checkpoint's head line — the language the
+   * session's agent was built with (see SessionAgentOptions.language). The
+   * summary itself is model output and already follows the session's
+   * output-language rule. Omitted → the catalogue's fallback language. */
+  language?: Locale;
   /** Replace `count` messages from `index` with `message` in the durable
    * transcript and in memory. The host owns this write so it can order the
    * two sides (database first: a failed write must leave memory untouched)
@@ -451,6 +457,7 @@ export class ContextCompactor {
       span.count,
       span.replacedTokens,
       trimmed,
+      this.options.language ?? DEFAULT_LOCALE,
     );
     // A summary that does not shrink its source would make the request
     // bigger: refuse it rather than pay for the replacement (DSH validates
@@ -526,12 +533,14 @@ export function checkpointMessage(
   replacedCount: number,
   replacedTokens: number,
   summary: string,
+  language: Locale = DEFAULT_LOCALE,
 ): CheckpointMessage {
   return {
     role: "checkpoint",
-    title: `履歴 ${replacedCount} 件を要約しました（約 ${
-      formatTokenCount(replacedTokens)
-    } トークン）`,
+    title: translate(language, "checkpoint.title", {
+      count: replacedCount,
+      tokens: formatTokenCount(replacedTokens),
+    }),
     body:
       `${CHECKPOINT_PREAMBLE}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n${summary}\n</${CHECKPOINT_SUMMARY_TAG}>`,
     timestamp: Date.now(),

@@ -6,6 +6,7 @@ import {
   IconX,
 } from "@tabler/icons-preact";
 import type { GoalInfo } from "../types.ts";
+import { useT } from "../i18n.ts";
 
 /** The session's active goal (`/goal` mode), shown as a rounded panel
  * fixed to the top-right of the chat (same stack as todo/tasks). Renders
@@ -14,17 +15,20 @@ import type { GoalInfo } from "../types.ts";
 export function GoalPanel(
   { goal, onCancel }: { goal?: GoalInfo; onCancel: () => void },
 ) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(false);
   if (goal === undefined) return null;
   const summary = `${goal.iteration}/${goal.maxIterations}${
-    goal.status === "judging" ? " · 進捗を判定中…" : ""
+    goal.status === "judging" ? ` · ${t("panels.goal.judging")}` : ""
   }`;
   return (
     <div className={`goal-panel${collapsed ? " collapsed" : ""}`}>
       <button
         type="button"
         className="goal-panel-header"
-        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
+        title={collapsed
+          ? t("common.expandPanel")
+          : t("panels.common.collapse")}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconTarget size={14} />
@@ -45,14 +49,14 @@ export function GoalPanel(
           <button
             type="button"
             className="goal-cancel"
-            title="ゴール実行を中止する"
+            title={t("panels.goal.stopTitle")}
             onClick={(e) => {
               e.stopPropagation();
               onCancel();
             }}
           >
             <IconX size={12} />
-            <span>中止</span>
+            <span>{t("panels.goal.stop")}</span>
           </button>
         </div>
       )}

@@ -13,12 +13,20 @@
  * The skill palette is the dynamic source of the same shape: `/skill` lists
  * the session's skill catalog (fetched per workspace, see useSkills) and
  * completes to `/skill <name> `, which skillPromptFromText turns into the
- * skill prompt on submit. */
+ * skill prompt on submit.
+ *
+ * EVERY string this module renders comes from the catalogue through the
+ * `t` the caller passes in: the mode labels are catalogue keys (core/modes
+ * holds no text), and passing the translator keeps the menu's memos — its
+ * callers rebuild the list with `useMemo` — tied to the app language. The
+ * PROMPTS the modes send are uniformly English on purpose (see
+ * core/modes/mod.ts). */
 
 import type { ReactNode } from "preact/compat";
 import { buildSkillPrompt } from "@lumisca/core/skills/slash";
 import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
 import type { ModePrompt, SavedPrompt } from "@lumisca/core";
+import type { Translator } from "@lumisca/core/shared";
 import type { SkillInfo } from "./types.ts";
 import {
   IconArrowsMinimize,
@@ -94,35 +102,39 @@ const FALLBACK_ICON: Icon = IconCode;
  * "action"): `/compact` condenses the session's older history into a
  * checkpoint. They need no workspace, so they are offered in chat sessions
  * too. */
-export const ACTION_COMMANDS: SlashCommand[] = [
-  {
-    id: "compact",
-    label: "履歴を圧縮",
-    description: "古い履歴を要約してコンテキストを節約します",
-    icon: IconArrowsMinimize,
-    kind: "action",
-  },
-];
+function actionCommands(t: Translator): SlashCommand[] {
+  return [
+    {
+      id: "compact",
+      label: t("chat.slash.compact.label"),
+      description: t("chat.slash.compact.description"),
+      icon: IconArrowsMinimize,
+      kind: "action",
+    },
+  ];
+}
 
 /** The menu offered for `/` at a word start. A mode with
  * `buildPromptForText` is reusable anywhere in the input (`complete`); the
  * others are mode palettes that can only replace a whole message
  * (`run`). */
-export const slashCommands: SlashCommand[] = AGENT_MODES.map((mode) => ({
-  id: mode.id,
-  label: mode.label,
-  description: mode.description,
-  icon: MODE_ICONS[mode.id] ?? FALLBACK_ICON,
-  kind: mode.buildPromptForText === undefined ? "run" : "complete",
-  items: mode.options.length > 0
-    ? mode.options.map((option) => ({
-      id: option.id,
-      label: option.label,
-      description: option.description,
-      icon: MODE_ICONS[option.id] ?? FALLBACK_ICON,
-    }))
-    : undefined,
-}));
+function modeCommands(t: Translator): SlashCommand[] {
+  return AGENT_MODES.map((mode) => ({
+    id: mode.id,
+    label: t(mode.label),
+    description: t(mode.description),
+    icon: MODE_ICONS[mode.id] ?? FALLBACK_ICON,
+    kind: mode.buildPromptForText === undefined ? "run" : "complete",
+    items: mode.options.length > 0
+      ? mode.options.map((option) => ({
+        id: option.id,
+        label: t(option.label),
+        description: t(option.description),
+        icon: MODE_ICONS[option.id] ?? FALLBACK_ICON,
+      }))
+      : undefined,
+  }));
+}
 
 /** The id of the skill palette's first level; its submenu holds the
  * session's skill catalog. */
@@ -152,12 +164,15 @@ function menuDescription(text: string): string {
  * input to `/skill <name> `, so the request is typed after it like any
  * other text; skillPromptFromText then wraps that line into the prompt that
  * makes the agent load the skill. */
-export function skillMenu(skills: readonly SkillInfo[]): SlashCommand[] {
+export function skillMenu(
+  skills: readonly SkillInfo[],
+  t: Translator,
+): SlashCommand[] {
   if (skills.length === 0) return [];
   return [{
     id: SKILL_COMMAND_ID,
-    label: "スキル",
-    description: "このセッションで使えるスキルを呼び出します",
+    label: t("chat.slash.skill.label"),
+    description: t("chat.slash.skill.description"),
     icon: IconSparkles,
     kind: "complete",
     items: skills.map((skill) => ({
@@ -171,11 +186,14 @@ export function skillMenu(skills: readonly SkillInfo[]): SlashCommand[] {
 /** Build the slash-commands menu including the /skill and /prompt submenus.
  * In chat mode only skills, saved prompts and client-side actions are shown
  * (agent modes need a workspace; global and built-in skills do not).
- * Shared between ChatView and NewSessionView so the logic is not duplicated. */
+ * Shared between ChatView and NewSessionView so the logic is not duplicated.
+ * The callers pass the translator so their `useMemo` follows the app
+ * language. */
 export function buildSlashCommands(
   savedPrompts: SavedPrompt[],
   isChat: boolean,
   skills: readonly SkillInfo[],
+  t: Translator,
 ): SlashCommand[] {
   const promptItems: SlashCommandItem[] = savedPrompts.map((p) => ({
     id: p.id,
@@ -183,29 +201,36 @@ export function buildSlashCommands(
     description: menuDescription(p.prompt),
     insertText: p.prompt,
   }));
-  const skillCommands = skillMenu(skills);
+  const skillCommands = skillMenu(skills, t);
   if (isChat) {
     // Chat mode: skills (global and built-in only), saved prompts and
     // client-side actions, no agent modes.
     return [
       ...skillCommands,
-      ...ACTION_COMMANDS,
-      ...promptItemsMenu(promptItems),
+      ...actionCommands(t),
+      ...promptItemsMenu(promptItems, t),
     ];
   }
   // Workspace mode: agent modes + skills + client-side actions + prompts.
-  const commands = [...slashCommands, ...skillCommands, ...ACTION_COMMANDS];
-  commands.push(...promptItemsMenu(promptItems));
+  const commands = [
+    ...modeCommands(t),
+    ...skillCommands,
+    ...actionCommands(t),
+  ];
+  commands.push(...promptItemsMenu(promptItems, t));
   return commands;
 }
 
 /** The `/prompt` submenu entry, or nothing when the user saved none. */
-function promptItemsMenu(promptItems: SlashCommandItem[]): SlashCommand[] {
+function promptItemsMenu(
+  promptItems: SlashCommandItem[],
+  t: Translator,
+): SlashCommand[] {
   if (promptItems.length === 0) return [];
   return [{
     id: "prompt",
-    label: "保存済みプロンプト",
-    description: "保存したプロンプトテンプレートを挿入",
+    label: t("chat.slash.prompt.label"),
+    description: t("chat.slash.prompt.description"),
     icon: IconMessage,
     kind: "insert",
     items: promptItems,
@@ -221,8 +246,9 @@ function promptItemsMenu(promptItems: SlashCommandItem[]): SlashCommand[] {
  * sent (null), so the user keeps typing the request. */
 export function slashPrompt(
   command: SlashCommand,
-  item?: SlashCommandItem,
-  text = "",
+  item: SlashCommandItem | undefined,
+  text: string,
+  t: Translator,
 ): { text: string; mode: ModePrompt } | null {
   const mode = findAgentMode(command.id);
   if (!mode) return null;
@@ -234,7 +260,7 @@ export function slashPrompt(
       mode: {
         modeId: mode.id,
         optionId: "",
-        modeLabel: mode.modeLabel,
+        modeLabel: t(mode.modeLabel),
         shortText: request,
       },
     };
@@ -246,8 +272,14 @@ export function slashPrompt(
       mode: {
         modeId: mode.id,
         optionId,
-        modeLabel: mode.modeLabel,
-        shortText: mode.buildShortText(optionId),
+        modeLabel: t(mode.modeLabel),
+        // The short text is the one the transcript shows instead of the
+        // prompt: the picked option's, else the mode's own (see
+        // AgentMode.shortText).
+        shortText: t(
+          mode.options.find((option) => option.id === optionId)?.shortText ??
+            mode.shortText ?? mode.modeLabel,
+        ),
       },
     };
   }
@@ -285,7 +317,10 @@ export function modeRewindText(modeId: string, shortText: string): string {
  * the request is empty — nothing should be sent. Null when the text has no
  * text-taking command (a plain message, or a command without text support
  * such as review). */
-export function slashPromptFromText(text: string): TextCommandLine | null {
+export function slashPromptFromText(
+  text: string,
+  t: Translator,
+): TextCommandLine | null {
   // Word-start token: `/` at the start of the input or after whitespace,
   // followed by the command name. The name stops at whitespace or another
   // `/`, so a path like `/usr/local/bin` is not read as a command — the
@@ -307,7 +342,7 @@ export function slashPromptFromText(text: string): TextCommandLine | null {
       mode: {
         modeId: mode.id,
         optionId: "",
-        modeLabel: mode.modeLabel,
+        modeLabel: t(mode.modeLabel),
         shortText: request,
       },
     };

@@ -5,6 +5,7 @@ import {
   formatContextUsageLine,
   formatPercent1,
 } from "@lumisca/core/shared";
+import { useT } from "../i18n.ts";
 
 export interface ContextUsageData {
   summary: ContextUsageSummary;
@@ -26,22 +27,22 @@ export function ContextUsageTrigger({
   open,
   onToggle,
 }: ContextUsageTriggerProps) {
+  const t = useT();
   const ratio = contextUsageRatio(summary, contextWindow);
   const label = ratio !== undefined
     ? formatPercent1(ratio)
     : formatCompactTokens(summary.currentTokens ?? 0);
+  const detail = formatContextUsageLine(summary, contextWindow) || label;
   return (
     <button
       type="button"
       className={`ctx-meter${open ? " open" : ""}`}
       onClick={onToggle}
       title={formatContextUsageLine(summary, contextWindow) ||
-        "コンテキスト消費量（トークン）"}
+        t("panels.context.title")}
       aria-expanded={open}
       aria-haspopup="dialog"
-      aria-label={`コンテキスト消費量（トークン）: ${
-        formatContextUsageLine(summary, contextWindow) || label
-      }`}
+      aria-label={`${t("panels.context.title")}: ${detail}`}
     >
       <span className="mono">{label}</span>
     </button>
@@ -55,6 +56,7 @@ export function ContextUsageCard({
   summary,
   contextWindow,
 }: ContextUsageData) {
+  const t = useT();
   const current = summary.currentTokens ?? 0;
   const ratio = contextUsageRatio(summary, contextWindow);
   const headRight = contextWindow !== undefined && contextWindow > 0
@@ -69,10 +71,10 @@ export function ContextUsageCard({
     <div
       className="ctx-popover"
       role="dialog"
-      aria-label="コンテキスト消費量（トークン）"
+      aria-label={t("panels.context.title")}
     >
       <div className="ctx-row">
-        <span>コンテキスト上限</span>
+        <span>{t("panels.context.limit")}</span>
         <span className="mono">{headRight}</span>
       </div>
       {ratio !== undefined && (
@@ -82,7 +84,9 @@ export function ContextUsageCard({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(barPercent * 10) / 10}
-          aria-label={`コンテキスト使用率: ${formatPercent1(ratio)}`}
+          aria-label={t("panels.context.usageRate", {
+            value: formatPercent1(ratio),
+          })}
         >
           <div
             className={`ctx-bar-fill${ratio >= 0.8 ? " warn" : ""}`}
@@ -91,7 +95,7 @@ export function ContextUsageCard({
         </div>
       )}
       <div className="ctx-row">
-        <span>プロンプトキャッシュ率</span>
+        <span>{t("panels.context.cacheRate")}</span>
         <span className="mono">
           {summary.averageCacheHitRate === undefined
             ? "—"

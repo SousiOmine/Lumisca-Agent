@@ -1,6 +1,12 @@
 /** Error-message helper (see shared/mod.ts for the frontend-safe contract). */
 import type { ThemeSetting } from "./settings-keys.ts";
 import type { Workspace } from "../types/workspace.ts";
+import {
+  DEFAULT_LOCALE,
+  type Locale,
+  localeTag,
+  translate,
+} from "./i18n/mod.ts";
 
 // ---- errors ---------------------------------------------------------------
 
@@ -62,10 +68,16 @@ export function parseJsonOrThrow<T>(
 export function decodeUtf8(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }
-/** Display name for a newly created session ("Session <date>"), shown
- * until the title generator replaces it. */
-export function formatSessionName(date: Date = new Date()): string {
-  return `Session ${date.toLocaleString()}`;
+/** Display name for a newly created session ("Session <date>" /
+ * "セッション <date>"), shown until the title generator replaces it. The
+ * language is the session's own (the setting at creation). */
+export function formatSessionName(
+  locale: Locale = DEFAULT_LOCALE,
+  date: Date = new Date(),
+): string {
+  return translate(locale, "common.sessionName", {
+    date: date.toLocaleString(localeTag(locale)),
+  });
 }
 
 // ---- models ---------------------------------------------------------------
@@ -89,6 +101,11 @@ export function formatModelMeta(contextWindow?: number): string {
 export interface InitialData {
   workspaces: Workspace[];
   theme: ThemeSetting;
+  /** The app language: the stored setting when one was chosen, else the
+   * language resolved from the browser (Accept-Language) at the first page
+   * load (see server/app.ts and shared/i18n). The page renders in it from
+   * the first paint. */
+  language: Locale;
 }
 
 // ---- async ----------------------------------------------------------------

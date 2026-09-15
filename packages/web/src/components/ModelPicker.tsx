@@ -9,6 +9,7 @@ import { formatModelMeta } from "@lumisca/core/shared";
 import type { ModelInfo, ThinkingLevel } from "../types.ts";
 import { filterByQuery, useProviderModels } from "../providers.ts";
 import { ThinkingLevelSlider } from "./ThinkingLevelSlider.tsx";
+import { useT } from "../i18n.ts";
 
 export interface ModelPickerProps {
   value: { provider: string; modelId: string } | null;
@@ -60,6 +61,7 @@ export function ModelPicker({
   onThinkingChange,
   thinkingDisabled,
 }: ModelPickerProps) {
+  const t = useT();
   const { providers: fetchedProviders, modelsByProvider, loading, error } =
     useProviderModels(peerId);
   const [providerId, setProviderId] = useState(value?.provider ?? "");
@@ -128,14 +130,14 @@ export function ModelPicker({
         ? (
           <div className="error-text">
             {error.phase === "providers"
-              ? "プロバイダー一覧を取得できませんでした（サーバーに接続できません）"
-              : "モデル一覧を取得できませんでした"}
+              ? t("chrome.modelPicker.providersError")
+              : t("chrome.modelPicker.modelsError")}
           </div>
         )
         : providers.length === 0
         ? (
           <div className="settings-note" style={{ padding: 6 }}>
-            利用可能なプロバイダーが未設定です。設定画面でAPIキーを登録してください。
+            {t("chrome.modelPicker.noProviders")}
           </div>
         )
         : (
@@ -167,7 +169,7 @@ export function ModelPicker({
                 onClick={onOpenSettings}
               >
                 <IconSettings size={14} />
-                <span>設定画面</span>
+                <span>{t("chrome.modelPicker.settingsLink")}</span>
               </button>
             </div>
 
@@ -175,11 +177,13 @@ export function ModelPicker({
             <div className="mp-models">
               <input
                 className="mp-model-search"
-                placeholder="モデルを検索…"
+                placeholder={t("chrome.modelPicker.search")}
                 value={search}
                 onChange={(e) => setSearch(e.currentTarget.value)}
               />
-              {loading && <div className="mp-loading">読み込み中…</div>}
+              {loading && (
+                <div className="mp-loading">{t("common.loading")}</div>
+              )}
               <div className="mp-model-list">
                 {visible.slice(0, 200).map((m) => (
                   <button
@@ -196,8 +200,8 @@ export function ModelPicker({
                       {m.reasoning && (
                         <IconBrain
                           size={12}
-                          title="推論モデル（Reasoning）"
-                          aria-label="推論モデル（Reasoning）"
+                          title={t("chrome.modelPicker.reasoning")}
+                          aria-label={t("chrome.modelPicker.reasoning")}
                         />
                       )}
                     </span>
@@ -209,10 +213,10 @@ export function ModelPicker({
                 {visible.length === 0 && !loading && (
                   <div className="mp-empty">
                     {imageOnly && models.length > 0
-                      ? "画像認識に対応したモデルがありません"
+                      ? t("chrome.modelPicker.noImageModels")
                       : enabledOnly && models.length > 0
-                      ? "利用可能なモデルがありません（設定画面でモデルを有効化してください）"
-                      : "条件に一致するモデルがありません"}
+                      ? t("chrome.modelPicker.noEnabledModels")
+                      : t("chrome.modelPicker.noMatch")}
                   </div>
                 )}
               </div>
@@ -229,7 +233,7 @@ export function ModelPicker({
                 ? (
                   <>
                     <div className="mp-thinking-head">
-                      推論強度（思考レベル）
+                      {t("chrome.modelPicker.thinkingStrength")}
                     </div>
                     <ThinkingLevelSlider
                       value={resolvedValue}

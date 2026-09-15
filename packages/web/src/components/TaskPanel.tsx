@@ -5,6 +5,7 @@ import {
   IconUsers,
 } from "@tabler/icons-preact";
 import type { TaskView } from "../types.ts";
+import { useT } from "../i18n.ts";
 
 /** The session's sub-agent tasks (the task tool), stacked under the todo
  * panel in the same fixed top-right corner. Shows only the tasks that are
@@ -13,15 +14,18 @@ import type { TaskView } from "../types.ts";
  * tool result or a completion notification). Renders nothing while no task
  * runs; the header collapses the body to a compact card. */
 export function TaskPanel({ tasks }: { tasks: TaskView[] }) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(false);
-  const running = tasks.filter((t) => t.status === "running");
+  const running = tasks.filter((task) => task.status === "running");
   if (running.length === 0) return null;
   return (
     <div className={`task-panel${collapsed ? " collapsed" : ""}`}>
       <button
         type="button"
         className="task-panel-header"
-        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
+        title={collapsed
+          ? t("common.expandPanel")
+          : t("panels.common.collapse")}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconUsers size={14} />

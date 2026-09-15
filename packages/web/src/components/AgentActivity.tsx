@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/compat";
 import { IconChevronRight, IconLoader2 } from "@tabler/icons-preact";
+import { useT } from "../i18n.ts";
 
 /** Format elapsed milliseconds as "Xm Ys" or "Ys". */
 function formatElapsed(ms: number): string {
@@ -33,18 +34,20 @@ export function AgentActivity({
   expandable,
   onToggle,
 }: AgentActivityProps) {
+  const t = useT();
   // Live-update the elapsed counter every second while running.
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    const id = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [running]);
 
   const elapsed = Math.max(0, (endedAt ?? Date.now()) - startedAt);
+  const time = formatElapsed(elapsed);
   const label = running
-    ? `作業中（経過時間: ${formatElapsed(elapsed)}）`
-    : `作業完了（所要時間: ${formatElapsed(elapsed)}）`;
+    ? t("panels.activity.working", { time })
+    : t("panels.activity.completed", { time });
 
   return (
     <button

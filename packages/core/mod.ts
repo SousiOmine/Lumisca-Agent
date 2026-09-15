@@ -72,13 +72,10 @@ export {
   resolveCompactionBudgets,
   resolveCompactionPolicy,
 } from "./agent/context-compaction.ts";
+export { systemLanguageTags } from "./locale.ts";
 export { AGENT_MODES, findAgentMode } from "./modes/mod.ts";
 export type { AgentMode, AgentModeOption } from "./modes/mod.ts";
-export {
-  buildReviewPrompt,
-  REVIEW_TARGET_LABELS,
-  reviewMode,
-} from "./modes/review.ts";
+export { buildReviewPrompt, reviewMode } from "./modes/review.ts";
 export type { ReviewTarget } from "./modes/review.ts";
 export {
   buildGoalPrompt,
@@ -233,6 +230,16 @@ export { WorkspaceService } from "./workspaces.ts";
 export type { WorkspaceServiceDeps } from "./workspaces.ts";
 export { THEME_KEY } from "./settings/repo.ts";
 export type { ThemeSetting } from "./shared/mod.ts";
+export type { Locale } from "./shared/mod.ts";
+export { DEFAULT_LOCALE, LANGUAGE_KEY, LOCALES } from "./shared/mod.ts";
+export {
+  localeForTag,
+  localeTag,
+  parseAcceptLanguage,
+  parseLocale,
+  resolveLocale,
+  translate,
+} from "./shared/mod.ts";
 export type { InitialData } from "./shared/mod.ts";
 export type { SavedPrompt } from "./shared/mod.ts";
 export {
@@ -263,7 +270,6 @@ export {
   isThinkingLevel,
 } from "./models/thinking.ts";
 export type { ThinkingLevel } from "./shared/mod.ts";
-export { THINKING_LEVEL_LABELS } from "./shared/mod.ts";
 export type { ModelInfo, ProviderInfo } from "./shared/mod.ts";
 export type { CatalogStatus } from "./shared/mod.ts";
 export {

@@ -1,5 +1,6 @@
 import { IconArrowBarToRight } from "@tabler/icons-preact";
 import type { PaneContent } from "../shell.ts";
+import { useT } from "../i18n.ts";
 import { paneIcon } from "./paneIcons.tsx";
 
 interface PaneHeaderProps {
@@ -19,6 +20,7 @@ interface PaneHeaderProps {
  * starts below this strip), so it never overlaps it and stays fully
  * clickable. */
 export function PaneHeader({ content, onHide, error }: PaneHeaderProps) {
+  const t = useT();
   return (
     <div className="pane-header">
       <span className="pane-icon" aria-hidden="true">
@@ -31,15 +33,15 @@ export function PaneHeader({ content, onHide, error }: PaneHeaderProps) {
       )}
       {error !== undefined && (
         <span className="pane-error error-text" role="alert" title={error}>
-          このパネルは現在操作できません
+          {t("chrome.paneHeader.unavailable")}
         </span>
       )}
       <button
         type="button"
         className="pane-hide"
         onClick={onHide}
-        title="パネルを閉じる"
-        aria-label="パネルを閉じる"
+        title={t("chrome.paneHeader.close")}
+        aria-label={t("chrome.paneHeader.close")}
       >
         <IconArrowBarToRight size={15} />
       </button>

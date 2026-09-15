@@ -4,88 +4,87 @@ import type { AgentMode } from "./mod.ts";
  * uncommitted worktree changes. */
 export type ReviewTarget = "base-diff" | "uncommitted";
 
-/** Shared review rules; the language of the report is left to the agent
- * (it follows the conversation's language naturally). */
-const REVIEW_RULES = `# 指摘ルール
-- 指摘するのは、正確性・性能・セキュリティ・保守性に意味のある影響がある問題のみです。
-- 問題は具体的かつ修正可能であること。曖昧な感想や好みの指摘はしないでください。
-- 作者が知ったら実際に直したいと思う問題に絞ってください。
-- 作者の意図について暗黙の仮定を置かないでください。意図が読み取れない変更がある場合は、その旨を指摘として報告してください。
-- 「他の場所が壊れる」と推測するだけでは不十分です。実際に影響される箇所（呼び出し元・利用箇所）をコードを読んで特定し、根拠を示してください。
-- 明らかに意図的な変更（リファクタリング、命名変更、明示的な妥協など）をバグとして扱わないでください。意図的と思われる変更にはその旨を添えてください。
-- レビュー対象の差分に含まれない既存の問題は掘り返さないでください。
+/** Shared review rules (English, like every prompt the app sends). The
+ * language of the report itself follows the session's output-language rule
+ * (tools/language.ts), not the language of these instructions. */
+const REVIEW_RULES = `# Review rules
+- Report only problems that have a meaningful effect on correctness, performance, security or maintainability.
+- A finding must be concrete and fixable. No vague impressions or matters of taste.
+- Focus on problems the author would actually want to fix once they know about them.
+- Do not make implicit assumptions about the author's intent. If a change's intent cannot be read from the code, report that as a finding.
+- "This probably breaks something else" is not enough. Read the code, identify the places actually affected (callers, usages) and show the evidence.
+- Do not treat clearly intentional changes (refactoring, renames, explicit trade-offs) as bugs; say that they look intentional instead.
+- Do not dig up pre-existing problems outside the reviewed diff.
 
-# 報告形式
-指摘ごとに、次の情報を含めて報告してください:
-- 場所: ファイルパスと行番号（または変更箇所）
-- 問題: 何が問題か
-- 影響: なぜ問題か、何に影響するか
-- 推奨する修正の方向性: どう直すべきか`;
+# Report format
+For each finding, include:
+- Location: file path and line number (or the changed hunk)
+- Problem: what is wrong
+- Impact: why it matters, what it affects
+- Suggested direction: how it should be fixed`;
 
 /** Git steps for the uncommitted-changes target. */
-const UNCOMMITTED_STEPS = `未コミットの変更の場合:
-- \`git status\` で変更されたファイルの一覧を確認してください。
-- \`git diff HEAD\` でステージ済み・未ステージの両方の変更の差分を取得してください。
-- 追跡されていない新規ファイルも \`git status\` で確認し、今回の変更の一部と判断できるものは読んでレビューに含めてください。`;
+const UNCOMMITTED_STEPS = `For uncommitted changes:
+- List the changed files with \`git status\`.
+- Get the diff of both staged and unstaged changes with \`git diff HEAD\`.
+- Untracked new files also appear in \`git status\`: read the ones that belong to this change and include them in the review.`;
 
 /** Git steps for the base-branch-diff target. */
-const BASE_DIFF_STEPS = `ベースブランチとの差分の場合:
-- \`git branch --show-current\` で現在のブランチを確認してください。
-- ベースブランチを特定してください: リポジトリに \`main\` または \`master\` ブランチがあればそれを使い、どちらもない場合は \`git remote show origin\` の出力からリモートの既定ブランチ（HEAD）を確認してください。
-- \`git diff <ベースブランチ>...HEAD\` で、現在のブランチの変更差分を取得してください。
-- 現在のブランチがベースブランチと同じ場合は差分が空になります。`;
+const BASE_DIFF_STEPS = `For the diff against the base branch:
+- Check the current branch with \`git branch --show-current\`.
+- Identify the base branch: use \`main\` or \`master\` when the repository has one; otherwise read the remote's default branch (HEAD) from \`git remote show origin\`.
+- Get the branch's changes with \`git diff <base branch>...HEAD\`.
+- When the current branch IS the base branch, the diff is empty.`;
+
+/** How the reviewed target is named in the prompt. English, like the rest
+ * of the prompt; the menu calls the same target something else (see the
+ * catalogue's chat.mode.review.option.*). */
+const REVIEW_TARGET_PROMPT_LABELS: Record<ReviewTarget, string> = {
+  "base-diff": "The diff against the base branch",
+  uncommitted: "The uncommitted changes",
+};
 
 /** Build the review user message for a target. The agent fetches the diff
  * itself with its git/bash tools, so no server support is needed. */
 export function buildReviewPrompt(target: ReviewTarget): string {
-  const targetLabel = REVIEW_TARGET_LABELS[target];
+  const targetLabel = REVIEW_TARGET_PROMPT_LABELS[target];
   const steps = target === "uncommitted" ? UNCOMMITTED_STEPS : BASE_DIFF_STEPS;
-  return `あなたはコードレビュアーです。別のエンジニアが行ったコード変更をレビューし、指摘事項を報告してください。コードの修正は行わないでください（ファイルの編集・書き込みは禁止です）。指摘のみを行います。
+  return `You are a code reviewer. Review the code changes another engineer made and report your findings. Do not fix the code: editing and writing files is forbidden, findings only.
 
-# レビュー対象
+# Target
 ${targetLabel}
 
-# 進め方
-1. bash ツールで git コマンドを実行して、レビュー対象の変更を取得してください。
+# How to proceed
+1. Run git commands with the bash tool to get the reviewed changes.
 ${steps}
-- 差分が空の場合、または git リポジトリではない場合は、その旨を報告して終了してください。
-- 差分が大きい場合（bash の出力が切り詰められる場合）は、\`git diff -- <path>\` のようにファイル単位に分割して取得してください。
-2. 変更されたファイルとその周辺を read / grep / glob ツールで読み、変更の内容と影響範囲を正確に把握してください。
+- If the diff is empty, or this is not a git repository, report that and stop.
+- If the diff is large (bash output gets truncated), split it per file, e.g. \`git diff -- <path>\`.
+2. Read the changed files and their surroundings with the read / grep / glob tools to understand exactly what changed and what it affects.
 
 ${REVIEW_RULES}`;
 }
 
-/** Labels of the review targets (menu text; also embedded in the prompt's
- * 対象 line). */
-export const REVIEW_TARGET_LABELS: Record<ReviewTarget, string> = {
-  "base-diff": "ベースブランチとの差分",
-  uncommitted: "未コミットの変更",
-};
-
 export const reviewMode: AgentMode = {
   id: "review",
-  label: "レビュー",
-  modeLabel: "レビューモード",
-  description: "コード変更をレビューします",
+  label: "chat.mode.review.label",
+  modeLabel: "chat.mode.review.modeLabel",
+  description: "chat.mode.review.description",
   options: [
     {
       id: "base-diff",
-      label: REVIEW_TARGET_LABELS["base-diff"],
-      description: "現在のブランチと main などのベースブランチの差分をレビュー",
+      label: "chat.mode.review.option.baseDiff.label",
+      description: "chat.mode.review.option.baseDiff.description",
+      shortText: "chat.mode.review.option.baseDiff.shortText",
     },
     {
       id: "uncommitted",
-      label: REVIEW_TARGET_LABELS.uncommitted,
-      description: "まだコミットされていない変更をレビュー",
+      label: "chat.mode.review.option.uncommitted.label",
+      description: "chat.mode.review.option.uncommitted.description",
+      shortText: "chat.mode.review.option.uncommitted.shortText",
     },
   ],
   buildPrompt(optionId: string): string {
     const target = optionId === "uncommitted" ? "uncommitted" : "base-diff";
     return buildReviewPrompt(target);
-  },
-  buildShortText(optionId: string): string {
-    const target = optionId === "uncommitted" ? "uncommitted" : "base-diff";
-    const targetLabel = REVIEW_TARGET_LABELS[target];
-    return `${targetLabel}をレビューしてください`;
   },
 };

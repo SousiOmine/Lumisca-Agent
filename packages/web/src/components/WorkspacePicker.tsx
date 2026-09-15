@@ -10,6 +10,7 @@ import {
 import type { FederatedWorkspace } from "../types.ts";
 import { tabKey } from "../tabs.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
+import { useT } from "../i18n.ts";
 
 interface WorkspacePickerProps {
   workspaces: FederatedWorkspace[];
@@ -36,6 +37,7 @@ export function WorkspacePicker({
   onDelete,
   onCreate,
 }: WorkspacePickerProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -55,12 +57,14 @@ export function WorkspacePicker({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={selected ? selected.workspace.name : "ワークスペースの選択"}
+        title={selected
+          ? selected.workspace.name
+          : t("chrome.workspacePicker.select")}
       >
         <span className="workspace-picker-name">
           {selected
             ? selected.workspace.name
-            : "ワークスペースが登録されていません"}
+            : t("chrome.workspacePicker.none")}
         </span>
         <span className={`workspace-picker-chevron${open ? " open" : ""}`}>
           <IconChevronDown size={15} />
@@ -71,7 +75,7 @@ export function WorkspacePicker({
         <div className="workspace-popover" role="listbox">
           {selectable.length === 0 && (
             <div className="workspace-popover-empty">
-              ワークスペースが登録されていません
+              {t("chrome.workspacePicker.none")}
             </div>
           )}
           {chat && (
@@ -93,7 +97,7 @@ export function WorkspacePicker({
                 <IconMessage size={14} />
               </span>
               <span className="workspace-option-name">
-                通常チャット（ワークスペースなし）
+                {t("chrome.workspacePicker.chatOnly")}
               </span>
             </div>
           )}
@@ -122,14 +126,18 @@ export function WorkspacePicker({
                   {fws.workspace.name}
                 </span>
                 <span className="workspace-option-meta">
-                  {fws.workspace.folders.length} 件のフォルダー
+                  {t("chrome.workspacePicker.folderCount", {
+                    count: fws.workspace.folders.length,
+                  })}
                 </span>
                 <span className="workspace-option-actions">
                   <button
                     type="button"
                     className="icon-btn"
-                    title="編集"
-                    aria-label={`「${fws.workspace.name}」を編集`}
+                    title={t("chrome.workspacePicker.edit")}
+                    aria-label={t("chrome.workspacePicker.editNamed", {
+                      name: fws.workspace.name,
+                    })}
                     onClick={(e) => {
                       e.stopPropagation();
                       setOpen(false);
@@ -141,8 +149,10 @@ export function WorkspacePicker({
                   <button
                     type="button"
                     className="icon-btn"
-                    title="削除"
-                    aria-label={`「${fws.workspace.name}」を削除`}
+                    title={t("chrome.workspacePicker.delete")}
+                    aria-label={t("chrome.workspacePicker.deleteNamed", {
+                      name: fws.workspace.name,
+                    })}
                     onClick={(e) => {
                       e.stopPropagation();
                       setOpen(false);
@@ -164,7 +174,7 @@ export function WorkspacePicker({
             }}
           >
             <IconPlus size={14} />
-            <span>ワークスペースの新規作成</span>
+            <span>{t("chrome.workspacePicker.create")}</span>
           </button>
         </div>
       )}

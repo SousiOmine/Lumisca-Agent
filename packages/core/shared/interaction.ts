@@ -48,7 +48,8 @@ export interface TodoTask {
   status: TodoStatus;
 }
 
-/** One phase of the todo plan: a group of tasks (e.g. 調査・実装・テスト).
+/** One phase of the todo plan: a group of tasks (e.g. research,
+ * implementation, tests).
  * `id` is stable within the session (e.g. `p1`, `p2`). */
 export interface TodoPhase {
   id: string;

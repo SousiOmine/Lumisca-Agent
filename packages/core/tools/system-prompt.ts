@@ -1,11 +1,14 @@
 import type { Workspace } from "../types/workspace.ts";
+import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import {
   buildEnvironmentSection,
   type EnvironmentModel,
 } from "../environment.ts";
+import { outputLanguageSection } from "./language.ts";
 import {
   CHAT_PROMPT_SECTIONS,
   CODING_PROMPT_SECTIONS,
+  type PromptSection,
   renderPromptSections,
 } from "./prompt-sections.ts";
 
@@ -17,15 +20,26 @@ export interface SystemPromptOptions {
   tools?: readonly string[];
   /** The session's model, shown in the environment section. */
   model?: EnvironmentModel;
+  /** The language selected when the session started: the agent answers in
+   * it for the session's whole life (see tools/language.ts). Omitted →
+   * the default language (tests and callers without a setting). */
+  language?: Locale;
 }
 
 /** The "Guidelines:" block, filled from the sections visible for the
- * session's tool set. */
+ * session's tool set. The output-language rule leads the list: it applies
+ * to every reply, whatever tools the session has. */
 function guidelines(
-  sections: Parameters<typeof renderPromptSections>[0],
+  sections: readonly PromptSection[],
   toolNames: readonly string[],
+  language: Locale,
 ): string {
-  return `\n\nGuidelines:\n${renderPromptSections(sections, toolNames)}`;
+  return `\n\nGuidelines:\n${
+    renderPromptSections(
+      [outputLanguageSection(language), ...sections],
+      toolNames,
+    )
+  }`;
 }
 
 /**
@@ -45,7 +59,11 @@ export function buildSystemPrompt(
 
 The workspace contains these folders (file access is restricted to them):
 ${folders}${buildEnvironmentSection(options.model)}${
-    guidelines(CODING_PROMPT_SECTIONS, options.tools ?? [])
+    guidelines(
+      CODING_PROMPT_SECTIONS,
+      options.tools ?? [],
+      options.language ?? DEFAULT_LOCALE,
+    )
   }
 `;
 }
@@ -65,7 +83,11 @@ You are running without a file workspace: the file, shell and sub-agent tools
 are unavailable, so you cannot read, write or execute anything on this
 machine. Answer questions, explain things, and help with text-based tasks.
 Images can be attached to prompts.${buildEnvironmentSection(options.model)}${
-    guidelines(CHAT_PROMPT_SECTIONS, options.tools ?? [])
+    guidelines(
+      CHAT_PROMPT_SECTIONS,
+      options.tools ?? [],
+      options.language ?? DEFAULT_LOCALE,
+    )
   }
 `;
 }

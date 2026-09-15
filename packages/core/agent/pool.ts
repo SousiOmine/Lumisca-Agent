@@ -2,6 +2,7 @@ import type { Api, Model } from "../ai/types.ts";
 import type { AgentMessage, StreamFn } from "../ai/types.ts";
 import { CoreError } from "../errors.ts";
 import type { ThinkingLevel, TodoPhase } from "../shared/mod.ts";
+import type { Locale } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
@@ -38,6 +39,13 @@ export interface ModelResolver {
     | undefined;
   /** The stored thinking level of a model, clamped to what it supports. */
   getThinkingLevel(provider: string, modelId: string): ThinkingLevel;
+  /** The app language (the stored setting, else the machine's locale). It
+   * is read when a session's agent is built: it fixes the language of the
+   * sub-agents' output rule and of the text the core generates into the
+   * transcript (compaction checkpoints, goal notices). The session's own
+   * prompt resolves it separately at creation — that snapshot is what the
+   * session keeps. */
+  getLanguage(): Locale;
 }
 
 /** Session persistence the agent factory needs (repos + prompt snapshot). */

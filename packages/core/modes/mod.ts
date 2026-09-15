@@ -1,3 +1,4 @@
+import type { MessageKey } from "../shared/mod.ts";
 import { goalMode } from "./goal.ts";
 import { planMode } from "./plan.ts";
 import { reviewMode } from "./review.ts";
@@ -7,10 +8,13 @@ import { reviewMode } from "./review.ts";
  * directly from the first menu level. */
 export interface AgentModeOption {
   id: string;
-  /** Menu label, e.g. 「ベースブランチとの差分」. */
-  label: string;
-  /** Menu description shown under the label. */
-  description: string;
+  /** Catalogue key of the menu label. */
+  label: MessageKey;
+  /** Catalogue key of the menu description shown under the label. */
+  description: MessageKey;
+  /** Catalogue key of the short text stored with the message this option
+   * sends: the transcript shows it instead of the mode's full prompt. */
+  shortText: MessageKey;
 }
 
 /**
@@ -19,19 +23,31 @@ export interface AgentModeOption {
  * for text-taking modes) as the user message, so the agent adopts the
  * mode's role and rules for that run without any server support.
  *
- * To add a mode: create a file in this directory implementing AgentMode and
- * register it in AGENT_MODES. The UI renders every registered mode
- * generically (see the web package's slashCommands.ts), so no UI changes
- * are needed.
+ * The menu text is NOT here: the labels are catalogue keys (shared/i18n),
+ * so a mode reads in the app language like every other UI string. The
+ * PROMPTS, in contrast, are uniformly English — the language the agent
+ * answers in is fixed by the session's system prompt (tools/language.ts),
+ * not by the language of the instructions it receives.
+ *
+ * To add a mode: create a file in this directory implementing AgentMode,
+ * add its menu text to the catalogue, and register it in AGENT_MODES. The
+ * UI renders every registered mode generically (see the web package's
+ * slashCommands.ts), so no UI changes are needed.
  */
 export interface AgentMode {
   id: string;
-  /** Menu label, e.g. 「レビュー」. */
-  label: string;
-  /** Menu description shown under the label. */
-  description: string;
-  /** Badge label shown under the user message, e.g. "レビューモード". */
-  modeLabel: string;
+  /** Catalogue key of the menu label. */
+  label: MessageKey;
+  /** Catalogue key of the menu description. */
+  description: MessageKey;
+  /** Catalogue key of the badge shown under the user message. */
+  modeLabel: MessageKey;
+  /** Catalogue key of the short text stored with a mode's message when the
+   * mode has NO options (it is what the transcript shows instead of the
+   * full prompt). Modes with options carry one per option; text-taking
+   * modes never need it — there the user's own request is the short text.
+   * Omitted and unreachable → the badge text is used. */
+  shortText?: MessageKey;
   /** Second-level options offered after selecting the mode. */
   options: AgentModeOption[];
   /** The user message sent when the mode (or one of its options) is
@@ -39,15 +55,11 @@ export interface AgentMode {
   buildPrompt(optionId: string): string;
   /** When set, the mode takes the user's own text as its subject instead
    * of fixed options: the composer keeps the text typed after the command
-   * token (e.g. `/plan 履歴機能を追加して`), and this method builds the full
-   * prompt from it. The UI then requires that text (nothing is sent while
-   * it is missing) and never calls `buildPrompt` for the mode. Modes with
-   * this method must have no options. */
+   * token (e.g. `/plan add a history feature`), and this method builds the
+   * full prompt from it. The UI then requires that text (nothing is sent
+   * while it is missing) and never calls `buildPrompt` for the mode. Modes
+   * with this method must have no options. */
   buildPromptForText?(text: string): string;
-  /** Build a short display text for the user message, e.g.
-   * "未コミットの変更をレビューしてください". Shown in the chat UI
-   * instead of the full prompt. */
-  buildShortText(optionId: string): string;
 }
 
 /** Every registered agent mode, in menu order. */

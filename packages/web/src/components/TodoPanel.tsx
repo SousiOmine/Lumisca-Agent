@@ -5,6 +5,7 @@ import {
   IconListCheck,
 } from "@tabler/icons-preact";
 import type { TodoPhase, TodoTask } from "../types.ts";
+import { useT } from "../i18n.ts";
 
 /** Marker glyph per status, mirroring the tool's text rendering. */
 const STATUS_MARKS: Record<TodoTask["status"], string> = {
@@ -26,6 +27,7 @@ function summary(todos: TodoPhase[]): string {
  * to the top-right of the chat. Renders nothing while the plan is empty;
  * the header collapses the body to a compact pill. */
 export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(false);
   if (todos.length === 0) return null;
   return (
@@ -33,7 +35,9 @@ export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
       <button
         type="button"
         className="todo-panel-header"
-        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
+        title={collapsed
+          ? t("common.expandPanel")
+          : t("panels.common.collapse")}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconListCheck size={14} />

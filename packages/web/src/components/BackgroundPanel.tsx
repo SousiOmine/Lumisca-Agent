@@ -5,6 +5,7 @@ import {
   IconTerminal,
 } from "@tabler/icons-preact";
 import type { BackgroundView } from "../types.ts";
+import { useT } from "../i18n.ts";
 
 /** The session's background commands (the async_bash tool), stacked under
  * the task panel in the same fixed top-right corner. Shows only the
@@ -13,6 +14,7 @@ import type { BackgroundView } from "../types.ts";
  * as a notification instead). Renders nothing while nothing runs; the
  * header collapses the body to a compact card. */
 export function BackgroundPanel({ commands }: { commands: BackgroundView[] }) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(false);
   const running = commands.filter((c) => c.state === "running");
   if (running.length === 0) return null;
@@ -21,7 +23,9 @@ export function BackgroundPanel({ commands }: { commands: BackgroundView[] }) {
       <button
         type="button"
         className="background-panel-header"
-        title={collapsed ? "パネルを展開" : "パネルを折りたたむ"}
+        title={collapsed
+          ? t("common.expandPanel")
+          : t("panels.common.collapse")}
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconTerminal size={14} />

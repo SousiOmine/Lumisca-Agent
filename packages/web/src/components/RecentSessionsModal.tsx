@@ -2,6 +2,7 @@ import { IconX } from "@tabler/icons-preact";
 import { Modal } from "./Modal.tsx";
 import { RecentSessionsList } from "./RecentSessionsList.tsx";
 import { useRecentSessions } from "../hooks/useRecentSessions.ts";
+import { useT } from "../i18n.ts";
 
 interface RecentSessionsModalProps {
   /** Tab keys currently open; those sessions are hidden ("閉じたセッション"). */
@@ -18,17 +19,18 @@ export function RecentSessionsModal({
   onOpen,
   onClose,
 }: RecentSessionsModalProps) {
+  const t = useT();
   const { items, loading, error, reload } = useRecentSessions();
   return (
     <Modal onClose={onClose}>
       <div className="modal-header">
-        <h2>セッション履歴</h2>
+        <h2>{t("panels.sessions.title")}</h2>
         <button
           type="button"
           className="icon-btn push"
           onClick={onClose}
-          title="閉じる"
-          aria-label="閉じる"
+          title={t("common.close")}
+          aria-label={t("common.close")}
         >
           <IconX size={15} />
         </button>

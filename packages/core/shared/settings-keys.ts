@@ -10,6 +10,16 @@ import { safeJsonParse } from "./misc.ts";
 /** Settings-table key for the UI theme. */
 export const THEME_KEY = "theme";
 
+/** Settings-table key for the app language ("ja" | "en"; see
+ * shared/i18n). It is the single source of the language for BOTH the UI and
+ * the session's system prompt, so the server must hold it: the prompt is
+ * generated server-side when a session is created, and the language in
+ * effect at that moment is what the session keeps (the prompt is
+ * snapshotted). Unset means "not chosen yet": the first page load resolves
+ * it from the browser (Accept-Language), then the machine's locale, and
+ * stores the result, so the value is never ambiguous afterwards. */
+export const LANGUAGE_KEY = "language";
+
 /** Settings-table key for the fast/cheap auxiliary model. Configured in
  * the settings dialog's model section, separate from the per-session model
  * chosen in the chatbox picker. */

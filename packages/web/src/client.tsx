@@ -1,5 +1,7 @@
 import { createRoot } from "preact/compat/client";
+import { DEFAULT_LOCALE } from "@lumisca/core/shared";
 import { App } from "./App.tsx";
+import { initLocale } from "./i18n.ts";
 import type { InitialData } from "./types.ts";
 
 declare global {
@@ -15,6 +17,11 @@ declare global {
 if (location.search.includes("token=")) {
   history.replaceState(null, "", location.pathname);
 }
+
+// The app language must be known before the first render: every component
+// reads it from the store, and the server already resolved it (the stored
+// setting, else the browser's Accept-Language — see server/app.ts).
+initLocale(globalThis.__INITIAL_DATA__?.language ?? DEFAULT_LOCALE);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("root element not found");

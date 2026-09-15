@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "preact/compat";
-import {
-  THINKING_LEVEL_LABELS,
-  THINKING_LEVEL_ORDER,
-} from "@lumisca/core/shared";
+import { THINKING_LEVEL_ORDER } from "@lumisca/core/shared";
 import type { ThinkingLevel } from "../types.ts";
+import { useT } from "../i18n.ts";
+import { thinkingLevelLabel } from "../format.ts";
 
 interface ThinkingLevelSliderProps {
   /** Currently stored level (may be outside `levels` when the catalog
@@ -27,6 +26,7 @@ export function ThinkingLevelSlider({
   onCommit,
   disabled,
 }: ThinkingLevelSliderProps) {
+  const t = useT();
   // Strength order, regardless of the catalog's array order.
   const sorted = useMemo(
     () =>
@@ -89,8 +89,8 @@ export function ThinkingLevelSlider({
           <input
             type="range"
             className="tls-range"
-            aria-label="推論強度（思考レベル）"
-            aria-valuetext={THINKING_LEVEL_LABELS[shownLevel]}
+            aria-label={t("panels.thinking.ariaLabel")}
+            aria-valuetext={thinkingLevelLabel(shownLevel, t)}
             min={0}
             max={max}
             step={1}
@@ -102,7 +102,7 @@ export function ThinkingLevelSlider({
         </div>
       </div>
       <div className="tls-value" key={shownLevel} aria-live="polite">
-        {THINKING_LEVEL_LABELS[shownLevel]}
+        {thinkingLevelLabel(shownLevel, t)}
       </div>
     </div>
   );

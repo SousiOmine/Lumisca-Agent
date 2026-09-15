@@ -1,6 +1,7 @@
 import { useMemo, useState } from "preact/compat";
 import { IconArrowLeft, IconPlugConnected } from "@tabler/icons-preact";
 import { filterByQuery, useProviderModels } from "../../providers.ts";
+import { useT } from "../../i18n.ts";
 
 /** Settings → add provider: searchable list of every known provider, plus
  * an entry to add an arbitrary OpenAI-compatible provider by hand. */
@@ -13,6 +14,7 @@ export function AddProviderFlow({
   onAddUser: () => void;
   onBack: () => void;
 }) {
+  const t = useT();
   const { providers } = useProviderModels("");
   const [search, setSearch] = useState("");
 
@@ -25,15 +27,15 @@ export function AddProviderFlow({
     <>
       <div className="modal-header">
         <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> 戻る
+          <IconArrowLeft size={14} /> {t("common.back")}
         </button>
-        <h2>プロバイダーを追加</h2>
+        <h2>{t("settings.provider.addProvider")}</h2>
       </div>
       <p className="settings-note">
-        追加するプロバイダーを選択してください
+        {t("settings.provider.selectToAdd")}
       </p>
       <input
-        placeholder="プロバイダーを検索…"
+        placeholder={t("settings.provider.searchPlaceholder")}
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
       />
@@ -50,17 +52,17 @@ export function AddProviderFlow({
         ))}
         {visible.length === 0 && (
           <div className="faint-box">
-            該当するプロバイダーがありません
+            {t("settings.provider.noMatch")}
           </div>
         )}
       </div>
 
       <p className="settings-note" style={{ marginTop: 12 }}>
-        一覧にないプロバイダー
+        {t("settings.provider.notInList")}
       </p>
       <button type="button" className="btn" onClick={onAddUser}>
         <IconPlugConnected size={14} />
-        カスタム OpenAI 互換プロバイダーを追加
+        {t("settings.provider.addCustomOpenAI")}
       </button>
     </>
   );

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "preact/compat";
 import { IconDownload, IconRefresh, IconX } from "@tabler/icons-preact";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import type { BannerMount } from "../hooks/usePanelInset.ts";
+import { useT } from "../i18n.ts";
 
 /** The "update ready" strip under the title bar (renders nothing when no
  * updater has something to install). Owns its dismissed state: a new
@@ -22,6 +23,7 @@ export function UpdateBanner(
     onMount?: BannerMount;
   },
 ) {
+  const t = useT();
   const [dismissed, setDismissed] = useState(false);
   const status = update.status;
   const server = update.source === "server";
@@ -55,20 +57,20 @@ export function UpdateBanner(
   // The server installs the files and takes effect at the next start; the
   // desktop shell bundles the restart with the install, so only it has to
   // warn about the app going down.
-  const readyText =
-    `新しいバージョン（v${status?.latestVersion}）にアップデートできます。`;
+  const readyText = t("chrome.update.ready", {
+    version: status?.latestVersion ?? "",
+  });
   const restartText = status?.restartMode === "supervisor"
-    ? "再起動すると適用されます（※実行中のセッションは停止します）。" +
-      "systemd が新しいバージョンで起動します。"
+    ? t("chrome.update.restartNote") + t("chrome.update.systemdNote")
     : canRestart
-    ? "アプリを再起動すると適用されます（※実行中のセッションは停止します）。"
-    : "次回の起動で適用されます（LUMISCA_UPDATE_RESTART=none）。";
+    ? t("chrome.update.restartNote")
+    : t("chrome.update.nextStart");
   const text = restartPending
-    ? `Lumisca v${status?.appliedVersion} をダウンロードしました。` +
+    ? t("chrome.update.downloaded", { version: status?.appliedVersion ?? "" }) +
       restartText
     : server
     ? readyText
-    : readyText + "インストールするとアプリが再起動します。";
+    : readyText + t("chrome.update.installRestart");
 
   return (
     <div className="update-banner" ref={onMount}>
@@ -77,20 +79,20 @@ export function UpdateBanner(
       {restartPending
         ? canRestart && (
           <button type="button" className="btn push" onClick={update.restart}>
-            今すぐ再起動
+            {t("chrome.update.restartNow")}
           </button>
         )
         : (
           <button type="button" className="btn push" onClick={update.install}>
-            今すぐインストール
+            {t("chrome.update.installNow")}
           </button>
         )}
       <button
         type="button"
         className="btn"
         onClick={() => setDismissed(true)}
-        title="後で閉じる"
-        aria-label="後で閉じる"
+        title={t("chrome.update.dismiss")}
+        aria-label={t("chrome.update.dismiss")}
       >
         <IconX size={14} />
       </button>
