@@ -44,12 +44,10 @@ export function createTaskTool(
     label: "Task",
     description:
       "Start a sub-agent on one self-contained job and return its agent id " +
-      "immediately; the sub-agent runs in the background and does not see " +
-      "this conversation, so the prompt must carry every fact it needs. " +
-      "The result reports the agent id and the description. The sub-agent's " +
-      "outcome arrives later as a `[Task <id> ...]` notification; " +
-      "`task_output` reports it on demand. `subagent_type` is `general` " +
-      "(full coding tool set) or `explore` (read-only investigation).",
+      "immediately; it runs in the background and does not see this " +
+      "conversation, so the prompt must carry every fact it needs. Its " +
+      "outcome arrives later as a `[Task <id> ...]` notification, or on " +
+      "demand through `task_output`.",
     parameters: taskSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       if (

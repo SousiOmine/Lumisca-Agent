@@ -30,12 +30,10 @@ export function createPresentTool(
     label: "Present",
     description:
       "Declare files as final deliverables of this session, so the UI can " +
-      "list them for the user. Each `path` must already exist as a regular " +
-      "file inside the workspace; a path that does not exist fails, and a " +
-      "directory fails with `Is a directory: <path>`. Nothing is copied or " +
-      "moved — the panel points at the file on disk, so later edits are " +
-      "what the user sees. The result lists the declared files; paths that " +
-      "repeat an earlier declaration are listed again.",
+      "list them for the user. Nothing is copied or moved: the panel points " +
+      "at the file on disk, so later edits are what the user sees. A `path` " +
+      "that does not exist fails, and a directory fails with " +
+      "`Is a directory: <path>`.",
     parameters: presentSchema,
     execute: async (_id, params) => {
       const lines: string[] = [];

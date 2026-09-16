@@ -261,10 +261,9 @@ export function createEvalTool(
       "(files, network, processes, env) and gets Deno, fetch, " +
       "AbortController, TextEncoder/TextDecoder, crypto, timers and the " +
       "other standard web globals; node internals (process, require, " +
-      "Buffer) are absent. `reset` clears the REPL state, and `timeout` is " +
-      "in milliseconds. A failure of the snippet itself is a result, not a " +
-      "tool error: it comes back as `[error]` followed by the message, and " +
-      "the session state survives for the next call.",
+      "Buffer) are absent. A failure of the snippet itself is a result, not " +
+      "a tool error: it comes back as `[error]` followed by the message, " +
+      "and the session state survives for the next call.",
     parameters: evalSchema,
     execute: async (_id, params): Promise<ToolResult> => {
       const run = async (): Promise<ToolResult> => {

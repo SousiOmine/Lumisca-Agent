@@ -23,9 +23,8 @@ const LANGUAGE_NAMES: Record<Locale, string> = {
 /** The guideline bullet that fixes the reply language. */
 export function outputLanguageBullet(language: Locale): string {
   return `- Write every reply in ${LANGUAGE_NAMES[language]}, the language ` +
-    "selected when this session started. Keep that language for the whole " +
-    "session: do not switch to the language of the user's message, and do " +
-    "not mirror the language of tool output, files or web pages.";
+    "selected when this session started; do not switch to the language of " +
+    "the user's message, tool output, files or web pages.";
 }
 
 /** The output-language section of a system prompt (coding, chat and

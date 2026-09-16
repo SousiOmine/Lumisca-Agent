@@ -579,13 +579,10 @@ export function createAsyncBashTools(
     name: TOOL_ASYNC_BASH,
     label: "Async Bash",
     description:
-      "Start a shell command in the background and return a command id " +
-      "immediately. `cwd` is required and must be a workspace folder name or " +
-      "an absolute path; `timeout` is in seconds (omit it for no timeout). " +
-      "The command keeps running after the tool call returns, and an abort " +
-      "of the run does not stop it. The result reports the id, the pid and " +
-      "the resolved cwd. On Windows the command runs in PowerShell, " +
-      "elsewhere in /bin/sh (same dialect notes as bash).",
+      "Start a shell command in the background and return immediately: the " +
+      "command keeps running after the tool call returns, and an abort of " +
+      "the run does not stop it. The result reports the command's id and " +
+      "pid; the shell is the same as bash.",
     parameters: startSchema,
     execute: async (_id, params) => {
       const cwd = await requireResolved(sandbox, params.cwd);

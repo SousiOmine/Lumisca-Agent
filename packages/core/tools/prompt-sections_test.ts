@@ -77,10 +77,20 @@ function bullets(text: string): string[] {
 
 Deno.test("renderPromptSections renders only the sections the tools satisfy", () => {
   const all = renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS);
-  assert(all.includes("`[exit code: N]`"), "bash guidance expected");
+  assert(all.includes("non-zero exit code"), "bash guidance expected");
   assert(all.includes("async_bash"), "async_bash guidance expected");
-  assert(all.includes("[Task ...]"), "task guidance expected");
+  assert(all.includes("Delegate independent work"), "task guidance expected");
   assert(all.includes("Prioritize correctness"), "quality guidance expected");
+
+  // The notification rule covers every notification source, so it renders
+  // only when all of them can reach the session.
+  const withoutTask = CODING_TOOLS.filter((name) => name !== TOOL_TASK);
+  assertEquals(
+    renderPromptSections(CODING_PROMPT_SECTIONS, withoutTask)
+      .includes("[Background command ...]"),
+    false,
+    "the notification rule needs every tool that produces one",
+  );
 
   const readOnly = renderPromptSections(CODING_PROMPT_SECTIONS, [TOOL_READ]);
   assert(readOnly.includes("Use read to inspect files"), "read expected");

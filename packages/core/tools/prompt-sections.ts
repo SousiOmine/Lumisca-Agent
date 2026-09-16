@@ -23,10 +23,13 @@ import {
  * Harness uses): a tool's `description` states the contract of ONE call — what
  * it does, how to build its arguments, and the exact markers its result carries
  * on truncation or failure — while cross-call guidance lives here, as a prompt
- * section. A section can require tools: it is rendered only when every tool it
- * names is part of the session's preloaded tool set, so a session can never be
- * told about a tool it does not have (the same coupling DSH expresses with
- * `ctx.tools.get(name, scope) === undefined ? '' : …`).
+ * section. A bullet therefore never restates what its tool's description (or
+ * one of its arguments) already says: it carries the guidance the description
+ * cannot, such as when to reach for the tool, which tool to prefer, and how to
+ * react to a result. A section can require tools: it is rendered only when
+ * every tool it names is part of the session's preloaded tool set, so a session
+ * can never be told about a tool it does not have (the same coupling DSH
+ * expresses with `ctx.tools.get(name, scope) === undefined ? '' : …`).
  */
 
 /** One guideline section of the system prompt. */
@@ -69,13 +72,15 @@ export function renderPromptSections(
     .join("\n");
 }
 
-/** Section orders, grouped by concern. Gaps leave room for new sections
- * without renumbering (the same reason DSH allocates its section orders
- * centrally). */
+/** Section orders, grouped by concern. Every group owns a range of its own,
+ * so the rendered block walks the groups in order (workspace, tools,
+ * notifications, quality, workflow, chat) and a section can never land in
+ * the middle of another group. Gaps leave room for new sections without
+ * renumbering (the same reason DSH allocates its section orders centrally). */
 const ORDER = {
   workspace: 0,
   tool: 100,
-  notification: 200,
+  notification: 250,
   quality: 300,
   workflow: 400,
   chat: 500,
@@ -98,11 +103,7 @@ const READ_SECTION: PromptSection = {
   name: "tool:read",
   order: ORDER.tool,
   requires: [TOOL_READ],
-  text:
-    "- Use read to inspect files instead of shell commands like `cat`: it " +
-    "returns\n  line-numbered chunks and never floods the context. Read a " +
-    "range\n  (`src/main.ts:50-100`) for a large file, and continue from the " +
-    "`[file continues; …]`\n  note instead of reading the whole file again.",
+  text: "- Use read to inspect files instead of shell commands like `cat`.",
 };
 
 const WRITE_SECTION: PromptSection = {
@@ -110,7 +111,7 @@ const WRITE_SECTION: PromptSection = {
   order: ORDER.tool + 10,
   requires: [TOOL_WRITE],
   text: "- Use write to create a file or replace one wholesale; prefer edit " +
-    "for a targeted\n  change to an existing file.",
+    "for a targeted change.",
 };
 
 const EDIT_SECTION: PromptSection = {
@@ -118,18 +119,14 @@ const EDIT_SECTION: PromptSection = {
   order: ORDER.tool + 20,
   requires: [TOOL_EDIT],
   text: "- Use edit for targeted changes: one literal replacement per call. " +
-    "Re-read the\n  file when the match fails or the file changed since you " +
-    "last read it.",
+    "Re-read the\n  file when the match fails or it changed.",
 };
 
 const GLOB_SECTION: PromptSection = {
   name: "tool:glob",
   order: ORDER.tool + 30,
   requires: [TOOL_GLOB],
-  text:
-    "- Use glob to discover files by path pattern instead of shell `find`: " +
-    "its results\n  honor `.gitignore` and the hidden-file option without a " +
-    "shell.",
+  text: "- Use glob to discover files by path pattern instead of shell `find`.",
 };
 
 const GREP_SECTION: PromptSection = {
@@ -138,36 +135,33 @@ const GREP_SECTION: PromptSection = {
   requires: [TOOL_GREP],
   text:
     "- Use grep to search file contents instead of shell `grep`/`rg`, and " +
-    "read a\n  matched file for surrounding context rather than widening the " +
-    "pattern.",
+    "read a\n  matched file for context instead of widening the pattern.",
 };
 
 const SEARCH_CAPS_SECTION: PromptSection = {
   name: "tool:search-caps",
   order: ORDER.tool + 50,
   requires: [TOOL_GLOB, TOOL_GREP],
-  text: "- A capped search result says so (`[maximum of N … reached]`, or a " +
-    "truncation\n  note): narrow the pattern or raise `max_results` instead " +
-    "of reading the result as\n  complete.",
+  text: "- A capped search result is not a complete result: narrow the " +
+    "pattern or raise\n  `max_results`.",
 };
 
 const BASH_SECTION: PromptSection = {
   name: "tool:bash",
   order: ORDER.tool + 60,
   requires: [TOOL_BASH],
-  text: "- Check the `[exit code: N]` marker on every bash result and " +
-    "investigate a\n  non-zero exit before moving on; a command killed by " +
-    "the timeout says so. An\n  empty result is never proof of success.",
+  text:
+    "- Investigate a non-zero exit code before moving on; an empty result " +
+    "is never\n  proof of success.",
 };
 
 const ASYNC_BASH_SECTION: PromptSection = {
   name: "tool:async_bash",
   order: ORDER.tool + 70,
   requires: [TOOL_ASYNC_BASH],
-  text: "- Start long-running work (dev servers, watchers, downloads) with " +
-    "async_bash\n  instead of bash: it returns immediately and the command " +
-    "keeps running after the\n  run ends. Track every command id, check it " +
-    "with async_bash_status and stop it\n  with async_bash_kill.",
+  text: "- Use async_bash for long-running work (dev servers, watchers, " +
+    "downloads);\n  check it with async_bash_status and stop it with " +
+    "async_bash_kill when done.",
 };
 
 const EVAL_SECTION: PromptSection = {
@@ -175,8 +169,7 @@ const EVAL_SECTION: PromptSection = {
   order: ORDER.tool + 80,
   requires: [TOOL_EVAL],
   text: "- Use eval for quick calculations and data processing instead of " +
-    "spawning\n  python or node from bash; the REPL state persists between " +
-    "calls.",
+    "spawning\n  python or node from bash.",
 };
 
 const ASK_SECTION: PromptSection = {
@@ -190,21 +183,17 @@ const TODO_SECTION: PromptSection = {
   name: "tool:todo",
   order: ORDER.tool + 100,
   requires: [TOOL_TODO],
-  text: "- Plan multi-step work with the todo tool and keep the plan current " +
-    "as you go:\n  the user watches it live in the UI. Send the whole plan " +
-    "on every call; mark what\n  you are working on `in_progress` (several " +
-    "at once when work genuinely runs in\n  parallel), and mark each task " +
-    "`completed` the moment it is done — do not batch\n  completions. Skip " +
-    "the list for a single trivial step.",
+  text: "- Keep the todo list current as you go: mark each task `completed` " +
+    "the moment\n  it is done — do not batch completions. Skip the list for " +
+    "a single trivial step.",
 };
 
 const SKILL_SECTION: PromptSection = {
   name: "tool:skill",
   order: ORDER.tool + 110,
   requires: [TOOL_SKILL],
-  text: "- The session skill catalog lists reusable instructions: load one " +
-    "with the skill\n  tool before starting work that names or clearly " +
-    "matches it.",
+  text: "- Load a skill before starting work that matches one in the " +
+    "catalog.",
 };
 
 const PRESENT_SECTION: PromptSection = {
@@ -212,51 +201,38 @@ const PRESENT_SECTION: PromptSection = {
   order: ORDER.tool + 120,
   requires: [TOOL_PRESENT],
   text: "- When a file you create or update is an output the user asked to " +
-    "receive, declare\n  it with the present tool after writing it and " +
-    "before your final reply; naming its\n  path in your reply does not " +
-    "replace the call.",
-};
-
-// --- system notifications ----------------------------------------------------
-
-const BACKGROUND_NOTIFICATION_SECTION: PromptSection = {
-  name: "notification:background",
-  order: ORDER.notification,
-  requires: [TOOL_ASYNC_BASH],
-  text: '- A user message starting with "[Background command ...]" is a ' +
-    "system\n  notification about a finished background command, not a " +
-    "message from the user:\n  acknowledge it, but do not mistake it for " +
-    "user input. Do not poll a running\n  command — its notification " +
-    "arrives on its own.",
+    "receive, declare\n  it with the present tool before your final reply — " +
+    "naming its path is not\n  enough.",
 };
 
 const TASK_SECTION: PromptSection = {
   name: "tool:task",
-  order: ORDER.notification + 10,
+  order: ORDER.tool + 130,
   requires: [TOOL_TASK],
-  text: "- Delegate independent work to sub-agents with the task tool: it " +
-    "starts the agent\n  in the background and returns immediately, so keep " +
-    'working while it runs. The\n  result arrives as a "[Task ...]" ' +
-    "notification, or fetch it with task_output\n  (wait: true) when your " +
-    "next step depends on it. Reach a running sub-agent with\n  send_message.",
+  text: "- Delegate independent work to sub-agents with the task tool and " +
+    "keep working\n  while they run: wait for one with task_output (wait: " +
+    "true) when your next step\n  depends on its result, and reach a running " +
+    "agent with send_message.",
 };
 
-const TASK_NOTIFICATION_SECTION: PromptSection = {
-  name: "notification:task",
-  order: ORDER.notification + 20,
-  requires: [TOOL_TASK],
-  text: '- A user message starting with "[Task ...]" or "[Message from ...]" ' +
-    "is a system\n  notification from a sub-agent or another agent, not from " +
-    "the user: acknowledge it,\n  but do not mistake it for user input.",
-};
+// --- system notifications ----------------------------------------------------
 
-const TASK_REPORT_SECTION: PromptSection = {
-  name: "notification:task-report",
-  order: ORDER.notification + 30,
-  requires: [TOOL_TASK],
-  text: "- A sub-agent report that ends inside a tool-call block carries a " +
-    "`[warning]`: treat\n  the report as incomplete instead of trusting it " +
-    "as final.",
+/** Notifications arrive as user-role messages, so one section covers them
+ * all. A coding session always has both the background-command manager and
+ * the task hub (factory.ts builds them together for non-chat sessions),
+ * which is exactly when a notification can appear. The `[warning]` a
+ * truncated sub-agent report carries is explained by the task_output
+ * description and repeated in the warning itself (subagent-format.ts), so
+ * it needs no bullet here. */
+const NOTIFICATION_SECTION: PromptSection = {
+  name: "notification:system",
+  order: ORDER.notification,
+  requires: [TOOL_ASYNC_BASH, TOOL_TASK],
+  text: '- A user message starting with "[Background command ...]", "[Task ' +
+    '...]"\n  or "[Message from ...]" is a system notification, not from the ' +
+    "user: acknowledge\n  it and carry on — never treat it as user input. Do " +
+    "not poll a running background\n  command: its notification arrives on " +
+    "its own.",
 };
 
 // --- quality and workflow ----------------------------------------------------
@@ -292,9 +268,8 @@ const WORKFLOW_SECTION: PromptSection = {
 const CHAT_ANSWERS_SECTION: PromptSection = {
   name: "chat:answers",
   order: ORDER.chat,
-  text: "- Write answers with future readers in mind.\n" +
-    "- Do not hand in placeholder content as finished work.\n" +
-    "- Do not ask the user for information you can obtain yourself.",
+  text: "- Write answers with future readers in mind; do not hand in " +
+    "placeholder content as finished work.",
 };
 
 // --- sub-agent guidelines ----------------------------------------------------
@@ -357,10 +332,8 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   TODO_SECTION,
   SKILL_SECTION,
   PRESENT_SECTION,
-  BACKGROUND_NOTIFICATION_SECTION,
   TASK_SECTION,
-  TASK_NOTIFICATION_SECTION,
-  TASK_REPORT_SECTION,
+  NOTIFICATION_SECTION,
   QUALITY_SECTION,
   WORKFLOW_SECTION,
 ];

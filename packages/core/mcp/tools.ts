@@ -14,11 +14,9 @@ const MAX_SCHEMA_CHARS = 8192;
  * the MCP out-of-workspace boundary. Shared by every attachment site
  * (session agent, sub-agents) so the contract text stays in one place. */
 export const MCP_TOOLS_PROMPT_NOTE =
-  "\n\nNote: Additional tools (MCP servers, extensions, the browser lab) " +
-  "are not preloaded into the context to keep it small. Use tool_search " +
-  "to find them — the result describes each tool and its arguments — " +
-  "then call one with tool_call(name, args). MCP tools (names starting " +
-  "with mcp__) can access resources outside the workspace.";
+  "\n\nNote: tools beyond the preloaded set (MCP servers, extensions, the " +
+  "browser lab) are found with tool_search and run with tool_call; `mcp__` " +
+  "tools can access resources outside the workspace.";
 
 /** Make server names safe for provider function-name rules
  * (`^[a-zA-Z0-9_-]{1,64}$`); tool names are already constrained by the

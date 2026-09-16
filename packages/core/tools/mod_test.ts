@@ -80,9 +80,9 @@ Deno.test("sessionSkills advertises the web-browser skill only with a browser ba
 
 Deno.test("renderPromptSections renders only the sections the tools satisfy", () => {
   const all = renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS);
-  assert(all.includes("`[exit code: N]`"), "bash guidance expected");
+  assert(all.includes("non-zero exit code"), "bash guidance expected");
   assert(all.includes("async_bash"), "async_bash guidance expected");
-  assert(all.includes("[Task ...]"), "task guidance expected");
+  assert(all.includes("Delegate independent work"), "task guidance expected");
   assert(all.includes("Prioritize correctness"), "quality guidance expected");
 
   const readOnly = renderPromptSections(CODING_PROMPT_SECTIONS, [TOOL_READ]);
@@ -157,7 +157,7 @@ Deno.test("chat prompt lists only the chat guidelines", () => {
     tools: [TOOL_ASK, TOOL_TODO, TOOL_SKILL],
   });
   assert(prompt.includes("You are Lumisca, a helpful AI assistant."));
-  assert(prompt.includes("Write answers with future readers in mind."));
+  assert(prompt.includes("Write answers with future readers in mind"));
   assert(prompt.includes("Ask the user when a task is ambiguous."));
   assertEquals(
     prompt.includes("`[exit code: N]`"),

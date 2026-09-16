@@ -53,19 +53,14 @@ export function createBashTool(
     name: TOOL_BASH,
     label: "Bash",
     description:
-      "Execute a shell command in the workspace and return its output. " +
-      "`cwd` is required and must be a workspace folder name or an absolute " +
-      "path; `timeout` is in seconds (the default is 120, and the command is " +
-      "killed on expiry). Every result ends with `[exit code: N]`; a killed " +
-      "command reports the exit code of the kill. stdout and stderr are " +
-      "capped separately — a cut stream ends with `[stdout truncated to the " +
-      "last 65536 bytes]` / `[stderr truncated to the last 65536 bytes]`. " +
-      "On Windows, commands run in PowerShell (PowerShell 7 if installed, " +
-      "else Windows PowerShell; systems without PowerShell fall back to " +
-      "Git Bash or cmd.exe): use `$env:VAR` for environment variables, `;` " +
-      "to separate commands, `2>&1` to merge stderr into stdout; `&&` is " +
-      "only available with PowerShell 7. cmd-style aliases (`cd`, `dir`, " +
-      "`type`, `copy`) work. On macOS/Linux, commands run in /bin/sh.",
+      "Execute a shell command in the workspace and return its output; a " +
+      "command that outlives `timeout` is killed. Every result ends with " +
+      "`[exit code: N]` — a kill reports the kill's exit code — and stdout " +
+      "and stderr are capped separately: a cut stream ends with " +
+      "`[stdout truncated to the last 65536 bytes]` / " +
+      "`[stderr truncated to the last 65536 bytes]`. On Windows the shell is " +
+      "PowerShell (7 if installed, else Windows PowerShell, with Git Bash or " +
+      "cmd.exe as a fallback); on macOS/Linux it is /bin/sh.",
     parameters: bashSchema,
     execute: async (_id, params, signal) => {
       // Resolve the working directory before the safety check so the check
