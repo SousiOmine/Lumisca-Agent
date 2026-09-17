@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { summarizeContextUsage } from "../shared/mod.ts";
-import type { Api, Model, StreamRequest } from "./types.ts";
+import type { AgentTool, Api, Model, StreamRequest } from "./types.ts";
 import { createStreamFn, type StreamTransport } from "./stream.ts";
 
 /** A fake LanguageModel implementing the AI SDK v2 provider surface (the
@@ -40,19 +40,80 @@ function transportFor(model: unknown): StreamTransport {
   };
 }
 
-/** Collect every event of a stream function call. */
-async function runStream(parts: unknown[]) {
+/** Collect every event of a stream function call (the caller may pass its
+ * own request, e.g. to hand the transport tools). */
+async function runStream(
+  parts: unknown[],
+  request: StreamRequest = { messages: [{ role: "user", content: "hi" }] },
+) {
   const model: Model<Api> = { id: "m", name: "m" } as unknown as Model<Api>;
   const streamFn = createStreamFn(transportFor(fakeLanguageModel(parts)));
   const events: Array<{ type: string } & Record<string, unknown>> = [];
-  const request: StreamRequest = {
-    messages: [{ role: "user", content: "hi" }],
-  };
   for await (const event of streamFn(model, request, undefined)) {
     events.push(event as never);
   }
   return events;
 }
+
+/** One tool call in the v2 provider stream shape. The transport hands the
+ * SDK tools WITH execute functions, so the SDK itself runs the tool and
+ * appends its own `tool-result` part to the stream (the real path; only
+ * test doubles bypass it). */
+function toolCallParts(
+  toolCallId: string,
+  toolName: string,
+  input: Record<string, unknown>,
+) {
+  return [
+    { type: "tool-input-start", id: toolCallId, toolName },
+    { type: "tool-input-delta", id: toolCallId, delta: JSON.stringify(input) },
+    { type: "tool-input-end", id: toolCallId },
+    {
+      type: "tool-call",
+      toolCallId,
+      toolName,
+      input: JSON.stringify(input),
+    },
+    {
+      type: "finish",
+      finishReason: "tool-calls",
+      usage: { inputTokens: 100, outputTokens: 10, cachedInputTokens: 0 },
+    },
+  ];
+}
+
+/** The edit tool as the app defines it: one text line for the transcript,
+ * and the line counts in `details` for the UI's `+3 -2` badge. */
+function editTool(): AgentTool {
+  return {
+    name: "edit",
+    label: "Edit File",
+    description: "Replace text in a file.",
+    parameters: { type: "object", properties: { path: { type: "string" } } },
+    execute: () =>
+      Promise.resolve({
+        content: [{ type: "text" as const, text: "Edited a.ts" }],
+        details: { addedLines: 3, removedLines: 2 },
+      }),
+  };
+}
+
+Deno.test("an SDK-executed tool result keeps its details", async () => {
+  const events = await runStream(
+    toolCallParts("t1", "edit", { path: "a.ts" }),
+    {
+      messages: [{ role: "user", content: "edit a.ts" }],
+      tools: [editTool()],
+    },
+  );
+
+  const result = events.find((e) => e.type === "toolcall_result");
+  assertEquals(result?.toolCallId, "t1");
+  assertEquals(result?.content, [{ type: "text", text: "Edited a.ts" }]);
+  // The UI reads the structured details (the diff badge, the deliverables
+  // panel); the transport must not drop them on the way to the transcript.
+  assertEquals(result?.details, { addedLines: 3, removedLines: 2 });
+});
 
 /** v2 provider stream parts: finish carries the v2 usage shape. */
 function v2Parts(usage: {

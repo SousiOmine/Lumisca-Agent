@@ -411,12 +411,16 @@ export class Agent {
         // the transcript record waits until after the assistant message
         // (see pendingResults). The id marks the call as executed so the
         // exchange loop never runs it a second time.
+        // The result's details travel with the event: they are what the UI
+        // renders beyond the text (the diff badge, the deliverables panel),
+        // and a resync rebuilds them from the same stored message.
+        const details = event.details ?? {};
         executedIds.add(event.toolCallId);
         this.emit({
           type: "tool_execution_end",
           toolCallId: event.toolCallId,
           toolName: event.toolName,
-          result: { content: event.content, details: {} },
+          result: { content: event.content, details },
           isError: event.isError,
         });
         pendingResults.push({
@@ -430,7 +434,7 @@ export class Agent {
               mimeType: string;
             }
           >,
-          details: {},
+          details,
           isError: event.isError,
           timestamp: Date.now(),
         });

@@ -181,11 +181,16 @@ async function* runStream(
           break;
         }
         case "tool-result": {
+          const output = readToolOutput(p.output);
           yield {
             type: "toolcall_result",
             toolCallId: String(p.toolCallId ?? ""),
             toolName: String(p.toolName ?? ""),
-            content: [{ type: "text" as const, text: outputText(p.output) }],
+            content: [{ type: "text" as const, text: output.text }],
+            // The details are the UI's half of the result (the diff badge,
+            // the deliverables panel) 窶・the Agent keeps them in the
+            // transcript instead of dropping them at the transport.
+            details: output.details,
             isError: false,
           };
           break;
@@ -543,6 +548,46 @@ function toArgsRecord(input: unknown): Record<string, unknown> {
   return {};
 }
 
+/** What a Lumisca tool's `execute` hands to the AI SDK's tool loop: the
+ * transcript text plus the structured details the UI reads (the `+3 -2`
+ * diff badge, the deliverables panel, ...). The SDK carries the whole
+ * object on its `tool-result` part, and `toModelOutput` keeps the
+ * model-facing result to the text alone 窶・the details are local
+ * presentation and must not be sent to the provider. */
+export interface ToolOutput {
+  text: string;
+  details: Record<string, unknown>;
+}
+
+/** Read a `tool-result` part's output as {@link ToolOutput}: our own
+ * envelope, or the text of any other result (a provider-executed or
+ * test-double result carries no details). */
+export function readToolOutput(output: unknown): ToolOutput {
+  if (typeof output === "object" && output !== null) {
+    const candidate = output as { text?: unknown; details?: unknown };
+    if (
+      typeof candidate.text === "string" &&
+      typeof candidate.details === "object" &&
+      candidate.details !== null
+    ) {
+      return {
+        text: candidate.text,
+        details: candidate.details as Record<string, unknown>,
+      };
+    }
+  }
+  return { text: outputText(output), details: {} };
+}
+
+/** Normalize a tool result's details to a plain record: a tool that
+ * reported none (or something other than an object) gets `{}` instead, so
+ * the transcript never carries a non-record. */
+function toolDetails(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 /** Render an SDK tool `output` (whatever the execute function returned)
  * as the transcript/display text. */
 function outputText(output: unknown): string {
@@ -684,7 +729,7 @@ function toExecutableToolSet(
         execute: async (
           input: Record<string, unknown>,
           options: { toolCallId: string; abortSignal?: AbortSignal },
-        ) => {
+        ): Promise<ToolOutput> => {
           const prepared = t.prepareArguments
             ? t.prepareArguments(input)
             : input;
@@ -696,14 +741,24 @@ function toExecutableToolSet(
             prepared as never,
             toolSignal,
           );
-          const text = result.content
-            .filter((c): c is { type: "text"; text: string } =>
-              c.type === "text"
-            )
-            .map((c) => c.text)
-            .join("\n");
-          return text;
+          return {
+            text: result.content
+              .filter((c): c is { type: "text"; text: string } =>
+                c.type === "text"
+              )
+              .map((c) => c.text)
+              .join("\n"),
+            details: toolDetails(result.details),
+          };
         },
+        // The two audiences of a tool result are separated here: the part
+        // above carries the details for the UI, this conversion decides
+        // what the provider sees (the text alone 窶・the details would be
+        // noise in the prompt).
+        toModelOutput: ({ output }: { output?: unknown }) => ({
+          type: "text" as const,
+          value: readToolOutput(output).text,
+        }),
       } as never);
     } else {
       set[t.name] = tool({ description: t.description, inputSchema } as never);

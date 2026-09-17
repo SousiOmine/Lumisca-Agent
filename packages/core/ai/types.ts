@@ -506,6 +506,10 @@ export type StreamEvent =
         mimeType?: string;
       }
     >;
+    /** Structured details of the result (see tools/schema.ts
+     * `ToolResult.details`): the UI reads them for the diff badge and the
+     * deliverables panel. `{}` when the result carried none. */
+    details?: Record<string, unknown>;
     isError: boolean;
     [k: string]: unknown;
   }

@@ -1,19 +1,19 @@
 import { assertEquals } from "@std/assert";
-import {
-  Agent,
-  createAssistantMessageEventStream,
-  fauxAssistantMessage,
-  fauxToolCall,
-} from "@lumisca/core";
+import { Agent } from "../ai/agent.ts";
+import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
+import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import type {
   AgentEvent,
   AgentMessage,
+  AgentTool,
   Api,
   AssistantMessage,
   Model,
   StreamFn,
   ToolCall,
-} from "@lumisca/core";
+  ToolResultMessage,
+} from "../ai/types.ts";
+import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import { object, string, type Tool } from "../tools/schema.ts";
 
@@ -93,6 +93,7 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
         toolCallId: "t1",
         toolName: "echo",
         content: [{ type: "text", text: "echo:hi" }],
+        details: { matches: 2 },
         isError: false,
       });
       s.push({ type: "done", message: toolTurn });
@@ -143,6 +144,17 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
     b.type === "toolCall"
   ) as ToolCall;
   assertEquals(recorded.arguments, { text: "hi" });
+
+  // The result's details survive the trip: the transcript keeps them (the
+  // UI rebuilds the badge from the stored message on a reload) and the live
+  // event carries the same value.
+  const recordedResult = messages[resultIndex] as ToolResultMessage;
+  assertEquals(recordedResult.details, { matches: 2 });
+  const end = events.find((e) =>
+    e.type === "tool_execution_end" &&
+    (e as { toolCallId?: string }).toolCallId === "t1"
+  ) as { result: { details: unknown } };
+  assertEquals(end.result.details, { matches: 2 });
 });
 
 Deno.test("tool calls without SDK results still run via the fallback", async () => {
@@ -180,4 +192,135 @@ Deno.test("tool calls without SDK results still run via the fallback", async () 
 
   assertEquals(counter.calls, 1);
   assertEquals(toolStartArgs(events), [{ text: "yo" }]);
+});
+
+// ---- real transport --------------------------------------------------------
+
+/** The fake provider stream parts of one tool call (v2 shape: the arguments
+ * arrive as JSON text). */
+function toolCallParts(
+  toolCallId: string,
+  toolName: string,
+  input: Record<string, unknown>,
+): unknown[] {
+  return [
+    { type: "tool-input-start", id: toolCallId, toolName },
+    { type: "tool-input-delta", id: toolCallId, delta: JSON.stringify(input) },
+    { type: "tool-input-end", id: toolCallId },
+    {
+      type: "tool-call",
+      toolCallId,
+      toolName,
+      input: JSON.stringify(input),
+    },
+    { type: "finish", finishReason: "tool-calls", usage: usage() },
+  ];
+}
+
+/** The fake provider stream parts of one plain answer. */
+function answerParts(text: string): unknown[] {
+  return [
+    { type: "text-start", id: "t1" },
+    { type: "text-delta", id: "t1", delta: text },
+    { type: "text-end", id: "t1" },
+    { type: "finish", finishReason: "stop", usage: usage() },
+  ];
+}
+
+function usage() {
+  return { inputTokens: 100, outputTokens: 10, cachedInputTokens: 0 };
+}
+
+/** A fake v2 provider serving one scripted stream per call, recording the
+ * prompt each call received (what the model is really asked). */
+function scriptedLanguageModel(scripts: unknown[][]) {
+  const prompts: unknown[] = [];
+  let call = 0;
+  const model = {
+    specificationVersion: "v2",
+    provider: "fake",
+    modelId: "m",
+    supportedUrls: {},
+    doGenerate: () => {
+      throw new Error("not used");
+    },
+    doStream: (options: { prompt?: unknown }) => {
+      prompts.push(options.prompt);
+      const parts = scripts[call++] ?? [];
+      return {
+        stream: new ReadableStream<unknown>({
+          start(controller) {
+            for (const part of parts) controller.enqueue(part);
+            controller.close();
+          },
+        }),
+        request: {},
+        response: {},
+      };
+    },
+  };
+  return { model, prompts };
+}
+
+/** The whole path end to end: the Agent drives the real transport, the SDK
+ * executes the tool, and the result reaches both audiences 窶・the UI (the
+ * details) and the model (the text alone). */
+Deno.test("the tool result keeps its details for the UI and stays text for the model", async () => {
+  const call = { args: undefined as unknown };
+  const editTool: AgentTool = {
+    name: "edit",
+    label: "Edit File",
+    description: "Replace text in a file.",
+    parameters: {
+      type: "object",
+      properties: { path: { type: "string" } },
+    },
+    execute: (_id, params) => {
+      call.args = params;
+      return Promise.resolve({
+        content: [{ type: "text" as const, text: "Edited a.ts" }],
+        // The counts the web UI renders as the `+3 -2` badge.
+        details: { path: "a.ts", addedLines: 3, removedLines: 2 },
+      });
+    },
+  };
+  const fake = scriptedLanguageModel([
+    toolCallParts("t1", "edit", { path: "a.ts" }),
+    answerParts("done"),
+  ]);
+  const transport: StreamTransport = {
+    languageModelFor: () => Promise.resolve(fake.model as never),
+  };
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: "test",
+      model: fakeModel(),
+      tools: [editTool],
+      thinkingLevel: "off",
+    },
+    streamFn: createStreamFn(transport),
+    sessionId: "s1",
+  });
+
+  await agent.prompt("edit a.ts");
+
+  // The tool ran once, with the model's arguments.
+  assertEquals(call.args, { path: "a.ts" });
+  // The transcript (and therefore the DB, and the UI after a reload)
+  // carries the details the badge reads.
+  const result = agent.messages.find((m) =>
+    m.role === "toolResult"
+  ) as ToolResultMessage;
+  assertEquals(result.details, {
+    path: "a.ts",
+    addedLines: 3,
+    removedLines: 2,
+  });
+  assertEquals(result.content, [{ type: "text", text: "Edited a.ts" }]);
+  // The model was asked twice (tool call, then the answer) and the second
+  // request carries the result text 窶・never the UI's details envelope.
+  assertEquals(fake.prompts.length, 2);
+  const secondPrompt = JSON.stringify(fake.prompts[1]);
+  assertEquals(secondPrompt.includes("Edited a.ts"), true);
+  assertEquals(secondPrompt.includes("addedLines"), false);
 });
