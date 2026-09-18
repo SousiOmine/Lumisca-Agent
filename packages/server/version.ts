@@ -7,4 +7,4 @@
  * `scripts/check-versions.ts` lists this file as one more manifest, so the
  * constant can never drift from the tag the release was cut from.
  */
-export const SERVER_VERSION = "0.8.1";
+export const SERVER_VERSION = "0.8.2";
