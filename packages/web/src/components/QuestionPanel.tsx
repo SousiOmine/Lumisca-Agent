@@ -187,6 +187,7 @@ function QuestionCard({
         );
       })}
       <div className="question-card-footer">
+        {error && <span className="question-error">{error}</span>}
         <button
           type="button"
           className="btn primary"
@@ -199,7 +200,6 @@ function QuestionCard({
             ? t("panels.question.submitting")
             : t("panels.question.submit")}
         </button>
-        {error && <span className="question-error">{error}</span>}
       </div>
     </div>
   );

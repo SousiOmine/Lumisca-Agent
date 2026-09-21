@@ -547,6 +547,16 @@
 
 /* ---- agent questions (ask tool) ------------------------------------------ */
 
+/* The question list is the one part of the input area allowed to grow, so
+ * it carries the height cap the progress panels above already use
+ * (todo/task/goal: min(50vh, …)) and scrolls inside it. Without the cap a
+ * long ask (many questions, or many options per question) pushed the
+ * composer below the viewport and covered the transcript. The flex
+ * properties only matter once .input-area becomes a column flex container
+ * (composer.css): there the panel is the item that gives back space, so
+ * the composer stays fully visible even when the cap alone would not fit
+ * (expanded composer on a short window). overscroll containment keeps the
+ * wheel from chaining into the chat behind the panel. */
 .question-panel {
   width: 100%;
   max-width: 880px;
@@ -554,6 +564,11 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(50vh, 440px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .question-card {
@@ -669,9 +684,22 @@
   border-color: var(--accent);
 }
 
+/* The submit row sticks to the bottom of the panel's scrollport while its
+ * card overflows it, so a card with many questions keeps its send button
+ * reachable without scrolling to the very end. The surface background
+ * hides the card content passing underneath; at rest it matches the card
+ * background, so the unpinned look is unchanged. The sticky range is the
+ * card itself, so only the card currently spanning the bottom edge pins
+ * (cards do not pin across each other). */
 .question-card-footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
   display: flex;
   align-items: center;
+  /* The send button hugs the right edge; the error message sits to its
+   * left (the DOM order below already lists it first). */
+  justify-content: flex-end;
   gap: 10px;
 }
 

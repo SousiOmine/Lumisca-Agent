@@ -4,16 +4,27 @@
 
 /* ---- input --------------------------------------------------------------- */
 
+/* The chrome bar holds the question panel (ask tool) above the composer.
+ * The chat history still cannot squeeze it: the history's flex basis is 0,
+ * so only this area ever gives back space, and only when it alone would
+ * overflow the viewport (a tall ask on a short window). Then the question
+ * panel inside absorbs the shrink and scrolls (side-panels.css), while the
+ * composer keeps its natural height — nothing ends up below the fold. */
 .input-area {
   padding: 12px 16px 10px;
-  /* Chrome bar: never shrink when the chat history overflows the viewport. */
-  flex: none;
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .input-composer {
   width: 100%;
   max-width: 880px;
   margin: 0 auto;
+  /* Never give up height: when .input-area has to shrink, the question
+   * panel above is the only child that does. */
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 6px;
