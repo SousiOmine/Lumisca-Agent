@@ -10,6 +10,7 @@ import { TOOL_BASH } from "../shared/mod.ts";
 import type { Sandbox } from "../workspace/sandbox.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
+import { formatDuration } from "./duration.ts";
 import { killProcessTree } from "./process-tree.ts";
 import { shellCommand } from "./shell.ts";
 import { requireResolved } from "./resolve.ts";
@@ -55,12 +56,13 @@ export function createBashTool(
     description:
       "Execute a shell command in the workspace and return its output; a " +
       "command that outlives `timeout` is killed. Every result ends with " +
-      "`[exit code: N]` — a kill reports the kill's exit code — and stdout " +
-      "and stderr are capped separately: a cut stream ends with " +
-      "`[stdout truncated to the last 65536 bytes]` / " +
-      "`[stderr truncated to the last 65536 bytes]`. On Windows the shell is " +
-      "PowerShell (7 if installed, else Windows PowerShell, with Git Bash or " +
-      "cmd.exe as a fallback); on macOS/Linux it is /bin/sh.",
+      "`[exit code: N]` — a kill reports the kill's exit code — followed by " +
+      "`[duration: X]`, how long the command ran (`850ms`, `1.4s`, `12s`, " +
+      "`2m 05s`). stdout and stderr are capped separately: a cut stream " +
+      "ends with `[stdout truncated to the last 65536 bytes]` / " +
+      "`[stderr truncated to the last 65536 bytes]`. On Windows the shell " +
+      "is PowerShell (7 if installed, else Windows PowerShell, with Git Bash " +
+      "or cmd.exe as a fallback); on macOS/Linux it is /bin/sh.",
     parameters: bashSchema,
     execute: async (_id, params, signal) => {
       // Resolve the working directory before the safety check so the check
@@ -83,6 +85,7 @@ export function createBashTool(
         env: params.env,
       });
 
+      const startedAt = performance.now();
       const child = command.spawn();
       // Fire-and-forget: the timeout/abort path must not await the kill
       // (bash itself already waits for the child's exit below).
@@ -93,6 +96,10 @@ export function createBashTool(
 
       try {
         const { stdout, stderr, code } = await child.output();
+        // Measured from before spawn() to the drained pipes: this is what
+        // the agent waited for (shell startup included), not just the
+        // child's own runtime. Decoding happens after the clock stops.
+        const durationMs = Math.round(performance.now() - startedAt);
         clearTimeout(timer);
         signal?.removeEventListener("abort", onAbort);
         const oemLabel = await detectOemLabel();
@@ -114,9 +121,10 @@ export function createBashTool(
           if (errTruncated) body += truncatedNote("stderr");
         }
         body += `\n[exit code: ${code}]`;
+        body += `\n[duration: ${formatDuration(durationMs)}]`;
         return {
           content: [{ type: "text", text: body }],
-          details: { exitCode: code, cwd },
+          details: { exitCode: code, cwd, durationMs },
         };
       } catch (error) {
         // output() failed (pipe error, spawn-time failure): make sure the

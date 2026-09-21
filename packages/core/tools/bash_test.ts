@@ -3,6 +3,7 @@ import { assert, assertEquals } from "@std/assert";
 import { createBashTool } from "./bash.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
+import { formatDuration } from "./duration.ts";
 import { removeDirRetry, toolText } from "../test-utils.ts";
 
 function makeTool() {
@@ -21,6 +22,34 @@ Deno.test("bash tool reports exit code", async () => {
     );
     assertEquals(result.details?.exitCode, 3);
     assertEquals(toolText(result).includes("[exit code: 3]"), true);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("bash tool reports how long the command took", async () => {
+  const { tool, root } = makeTool();
+  try {
+    // A command that sleeps ~300ms: the measurement has to cover the wait,
+    // not only the process creation.
+    const command = Deno.build.os === "windows"
+      ? "Start-Sleep -Milliseconds 300"
+      : "sleep 0.3";
+    const result = await tool.execute(
+      "1",
+      { cwd: root, command },
+      undefined,
+    );
+    const text = toolText(result);
+    const durationMs = result.details?.durationMs;
+    assert(typeof durationMs === "number", `durationMs: ${durationMs}`);
+    assert(durationMs >= 300, `durationMs: ${durationMs}`);
+    assertEquals(text.includes("[exit code: 0]"), true);
+    assertEquals(
+      text.endsWith(`[duration: ${formatDuration(durationMs)}]`),
+      true,
+      `output: ${text}`,
+    );
   } finally {
     await removeDirRetry(root);
   }

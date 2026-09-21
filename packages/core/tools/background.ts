@@ -14,6 +14,7 @@ import {
 import type { Sandbox } from "../workspace/sandbox.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
+import { formatDuration } from "./duration.ts";
 import { killProcessTree } from "./process-tree.ts";
 import { shellCommand } from "./shell.ts";
 import { requireResolved } from "./resolve.ts";
@@ -119,21 +120,6 @@ export function trimIncompleteUtf8(bytes: Uint8Array): Uint8Array {
   else if ((lead & 0b1111_1000) === 0b1111_0000) len = 4;
   else return bytes; // ASCII tail: clean cut
   return start - 1 + len <= bytes.length ? bytes : bytes.slice(0, start - 1);
-}
-
-/** Format a duration for a human (e.g. "1m 5s"). */
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  if (h > 0) {
-    return `${h}h ${String(m).padStart(2, "0")}m ${
-      String(s).padStart(2, "0")
-    }s`;
-  }
-  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
-  return `${s}s`;
 }
 
 /** The notification injected into the agent loop when a background command
