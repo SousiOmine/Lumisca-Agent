@@ -30,10 +30,14 @@ getrandom = "0.4"
 lumisca-browser-rpc = { path = "../../browser-rpc" }
 
 [target.'cfg(windows)'.dependencies]
-# Same version tauri/tao already use (no duplicate in the tree). Used to
-# force-activate the window before a bridge-started caption drag, and for
-# IVirtualDesktopManager (the browser lab pane follows the main window
-# across Windows virtual desktops — see browser_lab.rs).
+# Tracks the line tao/tauri/wry/webview2-com resolve to (0.61 today) and
+# must not be bumped on its own: their `HWND`/`windows-core` types cross
+# into our calls (Window::hwnd(), the CDP handler in browser_lab.rs), so a
+# second copy of the crate is a different type. `cargo update` therefore
+# reports it as "unchanged behind latest" — expected until the framework
+# moves. Used to force-activate the window before a bridge-started caption
+# drag, and for IVirtualDesktopManager (the browser lab pane follows the
+# main window across Windows virtual desktops — see browser_lab.rs).
 windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_System_Com",
@@ -54,7 +58,10 @@ windows = { version = "0.61", features = [
 # notify-rust (via tauri-plugin-notification) is used on other platforms.
 tauri-winrt-notification = "0.8"
 # Direct WebView2 COM access for the browser lab's CDP screenshot and
-# (future) runtime/console/network events. Same version wry uses.
+# (future) runtime/console/network events. Must stay on the copy wry
+# resolves to (same reason as `windows` above): the
+# ICoreWebView2Controller our CDP calls arrive on comes from wry's
+# `with_webview`, so another copy of the crate is another type.
 webview2-com = "0.38"
 
 [target.'cfg(unix)'.dependencies]
