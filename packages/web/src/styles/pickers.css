@@ -213,11 +213,11 @@
 }
 
 .peer-picker-dot.ok {
-  background: var(--green, #22c55e);
+  background: var(--ok);
 }
 
 .peer-picker-dot.err {
-  background: var(--red, #ef4444);
+  background: var(--error);
 }
 
 .peer-picker-name {
@@ -294,11 +294,11 @@
 }
 
 .peer-option-dot.ok {
-  background: var(--green, #22c55e);
+  background: var(--ok);
 }
 
 .peer-option-dot.err {
-  background: var(--red, #ef4444);
+  background: var(--error);
 }
 
 .peer-option-name {

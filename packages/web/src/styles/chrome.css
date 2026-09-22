@@ -77,6 +77,9 @@
   pointer-events: none;
 }
 
+/* The close button keeps the Windows red on hover in both themes (the
+ * desktop splash draws the same control with the same value), so this
+ * color is deliberately not a theme token. */
 .titlebar-btn.close:hover {
   background: #c42b1c;
   color: #ffffff;
@@ -127,8 +130,10 @@
   color: var(--text);
 }
 
-/* selected tab: a white card floating on the bar — bordered and rounded
- * on all sides (inset by margin) so it never merges with content below */
+/* selected tab: a raised card floating on the bar — bordered and rounded
+ * on all sides (inset by margin) so it never merges with content below.
+ * The card's own colors come from the theme (--tab-active-* in tokens.css):
+ * light draws a white card, dark a lighter surface of the same ramp. */
 .tab.active {
   background: var(--tab-active-bg);
   color: var(--tab-active-text);
@@ -159,7 +164,8 @@
   color: var(--text);
 }
 
-/* inside the white active card, close button and badge use dark-on-white */
+/* inside the active card, close button and badge follow the card's own
+ * (theme-dependent) text colors */
 .tab.active .tab-close {
   color: var(--tab-active-dim);
 }

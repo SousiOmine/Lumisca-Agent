@@ -316,7 +316,7 @@ function ServerCard({
       {result && (
         <p
           className={result.ok ? undefined : "error-text"}
-          style={result.ok ? { color: "#2e7d32", fontSize: 12.5 } : undefined}
+          style={result.ok ? { color: "var(--ok)", fontSize: 12.5 } : undefined}
         >
           {result.text}
         </p>

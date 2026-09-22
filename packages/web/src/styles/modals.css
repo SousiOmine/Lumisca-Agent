@@ -4,6 +4,8 @@
 
 /* ---- modals --------------------------------------------------------------- */
 
+/* The backdrop dims whatever is underneath, in either theme: the scrim is
+ * deliberately not a theme token. */
 .modal-backdrop {
   position: fixed;
   inset: 0;

@@ -464,7 +464,7 @@
 }
 
 .model-group-header:hover {
-  background: var(--surface-3, var(--surface-2));
+  background: var(--surface-3);
 }
 
 .model-group-chevron {
@@ -550,7 +550,7 @@
 .toggle-slider {
   position: absolute;
   inset: 0;
-  background: var(--surface-3, #ccc);
+  background: var(--surface-3);
   border-radius: 20px;
   transition: background 200ms ease;
 }
@@ -562,13 +562,13 @@
   height: 16px;
   left: 2px;
   top: 2px;
-  background: white;
+  background: var(--toggle-knob);
   border-radius: 50%;
   transition: transform 200ms ease;
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background: var(--accent, #4f7df5);
+  background: var(--accent);
 }
 
 .toggle-switch input:checked + .toggle-slider::before {
@@ -630,7 +630,7 @@
   height: 6px;
   flex: none;
   border-radius: 3px;
-  background: var(--surface-3, #ccc);
+  background: var(--surface-3);
   overflow: hidden;
 }
 

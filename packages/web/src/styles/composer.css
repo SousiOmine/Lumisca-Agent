@@ -67,6 +67,8 @@
   display: block;
 }
 
+/* The scrim sits on a user image, not on a themed surface: it stays dark in
+ * both themes so the white icon reads on any photo. */
 .input-image-remove {
   position: absolute;
   top: 2px;
