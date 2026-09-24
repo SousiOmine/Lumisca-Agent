@@ -443,6 +443,124 @@
   margin-bottom: 0;
 }
 
+/* ---- deliverables (the present tool) ------------------------------------- */
+
+/* The files the agent declared for the user, listed under the conversation
+ * (the last block of the chat column). The component renders nothing while
+ * the list is empty. */
+.deliverables {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: lum-fade var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+.deliverables-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.deliverables-head svg {
+  flex: none;
+}
+
+.deliverables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One deliverable: the type tile, the name with its type line, and the
+ * copy-path action. */
+.deliverable {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.deliverable-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-dim);
+}
+
+.deliverable-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.deliverable-name {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deliverable-meta {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.deliverable-desc {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.deliverable-copy {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.deliverable-copy:hover {
+  background: var(--accent-soft);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.deliverable-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* the check-mark the button swaps in while the clipboard holds the path */
+.deliverable-copied {
+  color: var(--ok);
+}
+
 /* ---- mode badge on user messages (review, etc.) ---------------------------
  * Rendered at the bottom-right OUTSIDE the gray message bubble (in the
  * actions row), as a faint label: the bubble itself stays clean and the

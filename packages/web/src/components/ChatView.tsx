@@ -31,7 +31,7 @@ import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { BackgroundPanel } from "./BackgroundPanel.tsx";
 import { GoalPanel } from "./GoalPanel.tsx";
-import { deliverablesOf, DeliverablesPanel } from "./DeliverablesPanel.tsx";
+import { Deliverables, deliverablesOf } from "./chat/Deliverables.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
@@ -311,7 +311,6 @@ export function ChatView(
         <TodoPanel todos={view.todos} />
         <TaskPanel tasks={view.tasks} />
         <BackgroundPanel commands={view.backgrounds} />
-        <DeliverablesPanel deliverables={deliverables} />
       </div>
       <div className="chat-scroll" ref={scrollRef}>
         <div className="chat-column">
@@ -353,6 +352,7 @@ export function ChatView(
               </div>
             </div>
           )}
+          <Deliverables deliverables={deliverables} />
           {view.error && <ErrorBanner text={view.error} />}
         </div>
       </div>

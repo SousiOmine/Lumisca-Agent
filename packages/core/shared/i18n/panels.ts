@@ -2,8 +2,8 @@ import type { LocalizedText } from "./types.ts";
 
 /**
  * Messages of the side panels and session lists: the progress panels (todo,
- * tasks, background commands, goal, deliverables, context usage), the
- * question panel, and the recent-session list/modal.
+ * tasks, background commands, goal, context usage), the question panel, and
+ * the recent-session list/modal.
  *
  * Keys are `panels.<surface>.<element>`; the shared actions (close, back,
  * …) live in `common.ts`.
@@ -38,13 +38,6 @@ export const panels = {
   "panels.context.usageRate": {
     ja: "コンテキスト使用率: {value}",
     en: "Context usage: {value}",
-  },
-
-  // --- deliverables --------------------------------------------------------
-  "panels.deliverables.title": { ja: "成果物", en: "Deliverables" },
-  "panels.deliverables.copyHint": {
-    ja: "クリックでコピー: {path}",
-    en: "Click to copy: {path}",
   },
 
   // --- goal ----------------------------------------------------------------
