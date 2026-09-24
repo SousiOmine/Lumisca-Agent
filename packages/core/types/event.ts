@@ -44,17 +44,16 @@ export type ClientEvent =
   }
   /** Older history was condensed into a checkpoint message because the
    * conversation reached the model's request limit (see
-   * agent/context-compaction.ts). `removed` lists the messages the
-   * checkpoint replaced — clients drop them exactly like a rewind
-   * truncation — and `message` is the checkpoint, which sits at `index` in
-   * the new transcript. Unlike `messages_truncated` this arrives while a
-   * run keeps streaming: it never clears the run state. */
+   * agent/context-compaction.ts). The checkpoint was INSERTED at `index`:
+   * every message stays in the transcript (and in the database), and the
+   * model's view now starts at the checkpoint — clients show the row where
+   * it sits without dropping anything. Unlike `messages_truncated` this
+   * arrives while a run keeps streaming: it never clears the run state. */
   | {
-    type: "messages_compacted";
+    type: "messages_checkpoint";
     sessionId: string;
     index: number;
     message: AgentMessage;
-    removed: Array<{ role: string; timestamp: number }>;
   }
   /** The session title changed (e.g. auto-generated from the first
    * message by the fast model). Clients update the displayed name. */

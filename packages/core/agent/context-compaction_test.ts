@@ -9,27 +9,42 @@ import type {
 } from "../ai/types.ts";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import {
+  CHECKPOINT_PREAMBLE,
   CHECKPOINT_SUMMARY_TAG,
-  COMPACTION_INSTRUCTION,
+  checkpointSummaryText,
   ContextCompactor,
+  contextStart,
   DEFAULT_COMPACTION_POLICY,
   resolveCompactionBudgets,
   resolveCompactionPolicy,
   selectCompactionSpan,
+  SUMMARIZATION_PROMPT,
+  SUMMARIZATION_SYSTEM_PROMPT,
   transcriptUnits,
+  UPDATE_SUMMARIZATION_PROMPT,
 } from "./context-compaction.ts";
 
-/** A model with a 1M window reserving a 384K completion — the shape that
- * made the original failure possible (prompt + completion is validated
- * together), so the budgets must come out of `window - outputCap`. */
-function bigModel(): Model<Api> {
+/** A model with a wide window: the summarization request then has room for
+ * the whole head, so a test can assert on the request as it was built. */
+function wideModel(): Model<Api> {
   return {
     id: "test-model",
     name: "Test",
     api: "openai-completions",
     provider: "test",
-    contextWindow: 1_000_000,
-    maxTokens: 384_000,
+    contextWindow: 200_000,
+    maxTokens: 64_000,
+  };
+}
+
+function modelWith(contextWindow: number, maxTokens: number): Model<Api> {
+  return {
+    id: "small",
+    name: "small",
+    api: "openai-completions",
+    provider: "p",
+    contextWindow,
+    maxTokens,
   };
 }
 
@@ -60,22 +75,29 @@ function toolPair(id: string, text: string): AgentMessage[] {
   ];
 }
 
+/** `count` units of roughly `chars` characters each, plus the leading user
+ * message. */
+function conversation(count: number, chars: number): AgentMessage[] {
+  const messages: AgentMessage[] = [user("start")];
+  for (let i = 0; i < count; i++) {
+    messages.push(...toolPair(`t${i}`, `${i}`.repeat(chars)));
+  }
+  return messages;
+}
+
+interface RecordedRequest {
+  systemPrompt?: string;
+  messages: readonly unknown[];
+  tools?: readonly AgentTool[];
+  maxOutputTokens?: number;
+}
+
 /** A stream fn that answers with `reply` and records the requests it saw. */
 function recordingStreamFn(reply: string): {
   streamFn: StreamFn;
-  requests: Array<{
-    systemPrompt?: string;
-    messages: readonly unknown[];
-    tools?: readonly AgentTool[];
-    maxOutputTokens?: number;
-  }>;
+  requests: RecordedRequest[];
 } {
-  const requests: Array<{
-    systemPrompt?: string;
-    messages: readonly unknown[];
-    tools?: readonly AgentTool[];
-    maxOutputTokens?: number;
-  }> = [];
+  const requests: RecordedRequest[] = [];
   const streamFn: StreamFn = (_model, context, options) => {
     requests.push({
       systemPrompt: context.systemPrompt,
@@ -92,29 +114,26 @@ function recordingStreamFn(reply: string): {
   return { streamFn, requests };
 }
 
-/** Build a compactor whose replacements are recorded, over a stub stream. */
+/** Build a compactor that splices its checkpoint into `messages` (the same
+ * shape the session agent's insert produces) and records the call. */
 function compactorFor(
   messages: AgentMessage[],
   options: {
     reply?: string;
     model?: Model<Api>;
-    onReplace?: (index: number, count: number, message: AgentMessage) => void;
+    policy?: Parameters<typeof resolveCompactionPolicy>[0];
   } = {},
 ): {
   compactor: ContextCompactor;
-  requests: ReturnType<typeof recordingStreamFn>["requests"];
-  replacements: Array<{ index: number; count: number; message: AgentMessage }>;
+  requests: RecordedRequest[];
+  inserts: Array<{ index: number; message: AgentMessage }>;
 } {
   const { streamFn, requests } = recordingStreamFn(
-    options.reply ?? "## Summary\n- did things",
+    options.reply ?? "## Goal\n- test the compactor",
   );
-  const replacements: Array<{
-    index: number;
-    count: number;
-    message: AgentMessage;
-  }> = [];
+  const inserts: Array<{ index: number; message: AgentMessage }> = [];
   const compactor = new ContextCompactor({
-    model: options.model ?? bigModel(),
+    model: options.model ?? wideModel(),
     systemPrompt: () => "You are Lumisca.",
     tools: () => [{
       name: "bash",
@@ -125,74 +144,73 @@ function compactorFor(
     }],
     streamFn,
     sessionId: "s1",
-    replace: (index, count, message) => {
-      replacements.push({ index, count, message });
-      messages.splice(index, count, message);
-      options.onReplace?.(index, count, message);
+    ...(options.policy !== undefined ? { policy: () => options.policy! } : {}),
+    insert: (index, message) => {
+      inserts.push({ index, message });
+      messages.splice(index, 0, message);
     },
   });
-  return { compactor, requests, replacements };
+  return { compactor, requests, inserts };
 }
 
-Deno.test("resolveCompactionBudgets reserves the model's completion cap", () => {
-  const budgets = resolveCompactionBudgets(bigModel())!;
-  // 1M window minus the 384K completion the request reserves.
-  assertEquals(budgets.usableInputTokens, 616_000);
-  assertEquals(
-    budgets.thresholdTokens,
-    Math.floor(616_000 * DEFAULT_COMPACTION_POLICY.thresholdRatio),
-  );
-  assertEquals(
-    budgets.retainTokens,
-    Math.floor(616_000 * DEFAULT_COMPACTION_POLICY.retainRatio),
-  );
+/** The text of the single user message of a summarization request. */
+function requestText(request: RecordedRequest): string {
+  const message = request.messages[0] as {
+    content: Array<{ text: string }>;
+  };
+  return message.content[0]!.text;
+}
+
+Deno.test("resolveCompactionBudgets: the threshold sits one reservation below the window", () => {
+  const budgets = resolveCompactionBudgets(wideModel())!;
+  assertEquals(budgets.contextWindow, 200_000);
+  assertEquals(budgets.thresholdTokens, 200_000 - 16_384);
+  assertEquals(budgets.keepRecentTokens, 20_000);
+  // pi: 80% of the reservation, capped by the model's own output limit.
+  assertEquals(budgets.summaryMaxTokens, Math.floor(16_384 * 0.8));
 });
 
-Deno.test("resolveCompactionBudgets: no window or no room disables compaction", () => {
+Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables compaction", () => {
+  const bare: Model<Api> = {
+    id: "x",
+    name: "x",
+    api: "openai-completions",
+    provider: "p",
+  };
+  assertEquals(resolveCompactionBudgets(bare), undefined);
+  // A reservation as large as the window leaves nothing for a prompt.
+  assertEquals(resolveCompactionBudgets(modelWith(10_000, 1_000)), undefined);
   assertEquals(
-    resolveCompactionBudgets({
-      id: "x",
-      name: "x",
-      api: "openai-completions",
-      provider: "p",
+    resolveCompactionBudgets(modelWith(200_000, 1_000), {
+      ...DEFAULT_COMPACTION_POLICY,
+      enabled: false,
     }),
     undefined,
   );
-  // A completion cap as large as the window leaves nothing for a prompt.
+});
+
+Deno.test("resolveCompactionBudgets: a zero reservation falls back to the model's cap", () => {
+  const budgets = resolveCompactionBudgets(modelWith(200_000, 8_000), {
+    enabled: true,
+    reserveTokens: 0,
+    keepRecentTokens: 0,
+  })!;
+  assertEquals(budgets.thresholdTokens, 200_000);
+  assertEquals(budgets.summaryMaxTokens, 8_000);
+});
+
+Deno.test("resolveCompactionPolicy falls back to pi's defaults", () => {
+  const policy = resolveCompactionPolicy();
+  assertEquals(policy, DEFAULT_COMPACTION_POLICY);
+  // Invalid and unset values keep the defaults; explicit ones win.
   assertEquals(
-    resolveCompactionBudgets({
-      id: "x",
-      name: "x",
-      api: "openai-completions",
-      provider: "p",
-      contextWindow: 1000,
-      maxTokens: 1000,
-    }),
-    undefined,
+    resolveCompactionPolicy({ enabled: false, reserveTokens: -5 }),
+    { enabled: false, reserveTokens: 16_384, keepRecentTokens: 20_000 },
   );
-});
-
-Deno.test("resolveCompactionBudgets: the retained tail never fills the threshold", () => {
-  // A model whose retain ratio would exceed half the threshold is clamped.
-  const budgets = resolveCompactionBudgets(
-    {
-      id: "x",
-      name: "x",
-      api: "openai-completions",
-      provider: "p",
-      contextWindow: 10_000,
-    },
-    { ...DEFAULT_COMPACTION_POLICY, retainRatio: 0.9 },
-  )!;
-  assertEquals(budgets.retainTokens, Math.floor(budgets.thresholdTokens / 2));
-});
-
-Deno.test("resolveCompactionPolicy returns the documented defaults", () => {
-  const policy = resolveCompactionPolicy(bigModel());
-  assertEquals(policy.thresholdRatio, 0.8);
-  assertEquals(policy.retainRatio, 0.16);
-  assertEquals(policy.compactionRetries, 1);
-  assertEquals(policy.summarizationMaxTokens, 8192);
+  assertEquals(
+    resolveCompactionPolicy({ reserveTokens: 1_000.7, keepRecentTokens: 0 }),
+    { enabled: true, reserveTokens: 1_000, keepRecentTokens: 0 },
+  );
 });
 
 Deno.test("transcriptUnits keeps an assistant turn with its tool results", () => {
@@ -202,305 +220,302 @@ Deno.test("transcriptUnits keeps an assistant turn with its tool results", () =>
     assistant("done"),
     user("again"),
   ];
-  const units = transcriptUnits(messages);
-  assertEquals(units.map((u) => [u.index, u.count]), [
+  assertEquals(transcriptUnits(messages).map((u) => [u.index, u.count]), [
     [0, 1],
     [1, 2],
     [3, 1],
     [4, 1],
   ]);
+  // `from` starts the split at the projection start.
+  assertEquals(transcriptUnits(messages, 3).map((u) => [u.index, u.count]), [
+    [3, 1],
+    [4, 1],
+  ]);
+});
+
+Deno.test("contextStart is the newest checkpoint (0 when there is none)", () => {
+  const messages: AgentMessage[] = [
+    user("a"),
+    assistant("b"),
+    { role: "checkpoint", title: "t", body: "s", timestamp: 3 } as AgentMessage,
+    user("c"),
+  ];
+  assertEquals(contextStart(messages), 2);
+  assertEquals(contextStart([user("a")]), 0);
+});
+
+Deno.test("checkpointSummaryText unwraps the framed summary", () => {
+  const message = {
+    role: "checkpoint",
+    title: "t",
+    body:
+      `${CHECKPOINT_PREAMBLE}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n## Goal\n- x\n</${CHECKPOINT_SUMMARY_TAG}>`,
+    timestamp: 1,
+  } as AgentMessage;
+  assertEquals(checkpointSummaryText(message), "## Goal\n- x");
 });
 
 Deno.test("selectCompactionSpan retains the newest unit and cuts on a unit boundary", () => {
-  // Units: user(0), pair(1,2), pair(3,4) — each pair carries a big payload.
-  const messages: AgentMessage[] = [
-    user("start"),
-    ...toolPair("t1", "x".repeat(4000)),
-    ...toolPair("t2", "y".repeat(4000)),
-  ];
+  // Units: user(0), pair(1,2), pair(3,4), pair(5,6).
+  const messages = conversation(3, 4_000);
   const budgets = {
-    usableInputTokens: 2500,
-    thresholdTokens: 2000,
-    retainTokens: 200,
-    outputCapTokens: 0,
+    contextWindow: 10_000,
+    thresholdTokens: 2_000,
+    keepRecentTokens: 100,
+    summaryMaxTokens: 100,
   };
-  const span = selectCompactionSpan(messages, budgets)!;
-  // The newest unit (index 3, count 2) is retained; everything before it is
-  // replaced, and the cut never splits the tool pair.
-  assertEquals(span.index, 0);
-  assertEquals(span.count, 3);
+  const span = selectCompactionSpan(messages, 0, budgets)!;
+  assertEquals(span.start, 0);
+  assertEquals(span.cutIndex, 5);
+  assertEquals(span.count, 5);
+  assertEquals(span.headTokens > 0, true);
 });
 
-Deno.test("selectCompactionSpan: a single unit is never compacted", () => {
-  const messages: AgentMessage[] = [user("only")];
+Deno.test("selectCompactionSpan: a single unit, or one with nothing to summarize, is refused", () => {
   const budgets = {
-    usableInputTokens: 100,
+    contextWindow: 10_000,
     thresholdTokens: 80,
-    retainTokens: 10,
-    outputCapTokens: 0,
+    keepRecentTokens: 10,
+    summaryMaxTokens: 100,
   };
-  assertEquals(selectCompactionSpan(messages, budgets), null);
+  assertEquals(selectCompactionSpan([user("only")], 0, budgets), null);
+  // The projection holds only the previous checkpoint: summarizing it again
+  // would churn a checkpoint without reducing a request.
+  const checkpointOnly: AgentMessage[] = [
+    { role: "checkpoint", title: "t", body: "s", timestamp: 1 } as AgentMessage,
+    assistant("a"),
+  ];
+  assertEquals(selectCompactionSpan(checkpointOnly, 0, budgets), null);
 });
 
 Deno.test("selectCompactionSpan: force reduces as far as one span allows", () => {
   const messages: AgentMessage[] = [
-    user("a".repeat(4000)),
-    user("b".repeat(4000)),
-    user("c".repeat(4000)),
+    user("a".repeat(4_000)),
+    user("b".repeat(4_000)),
+    user("c".repeat(4_000)),
   ];
   const budgets = {
-    usableInputTokens: 6000,
-    thresholdTokens: 5000,
-    retainTokens: 4000,
-    outputCapTokens: 0,
+    contextWindow: 10_000,
+    thresholdTokens: 5_000,
+    keepRecentTokens: 4_000,
+    summaryMaxTokens: 100,
   };
   // Without force the retention budget already covers the whole history.
-  assertEquals(selectCompactionSpan(messages, budgets), null);
+  assertEquals(selectCompactionSpan(messages, 0, budgets), null);
   // Forced (overflow recovery): everything but the newest unit goes.
-  const span = selectCompactionSpan(messages, budgets, true)!;
-  assertEquals([span.index, span.count], [0, 2]);
+  const span = selectCompactionSpan(messages, 0, budgets, true)!;
+  assertEquals([span.start, span.cutIndex, span.count], [0, 2, 2]);
 });
 
 Deno.test("compactIfNeeded does nothing below the pressure threshold", async () => {
   const messages: AgentMessage[] = [user("short"), assistant("ok")];
-  const { compactor, requests, replacements } = compactorFor(messages);
+  const { compactor, requests, inserts } = compactorFor(messages);
   assertEquals(await compactor.compactIfNeeded(messages), null);
   assertEquals(requests.length, 0);
-  assertEquals(replacements.length, 0);
+  assertEquals(inserts.length, 0);
 });
 
-Deno.test("compactIfNeeded replaces the oldest span above the threshold", async () => {
-  const payload = "x".repeat(4000);
-  const messages: AgentMessage[] = [
-    user("start"),
-    ...toolPair("t1", payload),
-    ...toolPair("t2", payload),
-    ...toolPair("t3", payload),
-  ];
-  const { compactor, requests, replacements } = compactorFor(messages, {
-    model: {
-      id: "small",
-      name: "small",
-      api: "openai-completions",
-      provider: "p",
-      contextWindow: 2000,
-      maxTokens: 500,
-    },
+Deno.test("compactIfNeeded inserts a checkpoint at the cut and keeps every message", async () => {
+  const messages = conversation(3, 16_000);
+  const before = [...messages];
+  const { compactor, requests, inserts } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
   });
   const result = await compactor.compactIfNeeded(messages);
   assertEquals(result !== null, true);
-  assertEquals(replacements.length, 1);
-  // The checkpoint sits where the replaced span began and carries the
-  // framed summary.
-  const checkpoint = messages[0]!;
-  assertEquals(checkpoint.role, "checkpoint");
-  assertEquals(
-    (checkpoint as { body: string }).body.includes(CHECKPOINT_SUMMARY_TAG),
-    true,
-  );
-  // The summarization request replays the session's own prompt and tools,
-  // appends the instruction, and caps its own completion.
+  // Nothing was deleted: the checkpoint was inserted where the retained
+  // tail starts, and the summarized messages are still there.
+  assertEquals(inserts.length, 1);
+  assertEquals(messages.length, before.length + 1);
+  assertEquals(result!.index, 5);
+  assertEquals(messages[5]!.role, "checkpoint");
+  assertEquals(result!.summarized.length, 5);
+  assertEquals(result!.summarized, before.slice(0, 5));
+  assertEquals(result!.freedTokens > 0, true);
+  // The model's view starts at the checkpoint (the older messages are kept
+  // but no longer sent).
+  assertEquals(contextStart(messages), 5);
   assertEquals(requests.length, 1);
-  assertEquals(requests[0]!.systemPrompt, "You are Lumisca.");
-  assertEquals(requests[0]!.tools?.length, 1);
-  assertEquals(requests[0]!.maxOutputTokens, 8192);
-  const last = requests[0]!.messages.at(-1) as {
-    role: string;
-    content: Array<{ text: string }>;
-  };
-  assertEquals(last.role, "user");
-  assertEquals(last.content[0]!.text, COMPACTION_INSTRUCTION);
-  // The replayed span keeps the tool call/result pairing intact.
-  const roles = requests[0]!.messages.map((m) => (m as { role: string }).role);
-  assertEquals(roles.includes("toolResult"), true);
-  // The newest unit survived: the model still sees the work in progress.
-  assertEquals(messages.at(-1)!.role, "toolResult");
-  assertEquals(result!.removed.length > 0, true);
+});
+
+Deno.test("the summarization request is a dedicated, tool-free call", async () => {
+  const messages = conversation(2, 4_000);
+  const { compactor, requests } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+  });
+  await compactor.compactNow(messages);
+  assertEquals(requests.length, 1);
+  const request = requests[0]!;
+  assertEquals(request.systemPrompt, SUMMARIZATION_SYSTEM_PROMPT);
+  assertEquals(request.tools, undefined);
+  assertEquals(request.maxOutputTokens, Math.floor(2_000 * 0.8));
+  const text = requestText(request);
+  // The head is serialized (not replayed as roles), framed, and followed by
+  // pi's instruction.
+  assertEquals(text.startsWith("<conversation>"), true);
+  assertEquals(text.includes("[User]: start"), true);
+  assertEquals(text.includes("[Assistant tool calls]:"), true);
+  assertEquals(text.includes("[Tool result]:"), true);
+  assertEquals(text.includes(SUMMARIZATION_PROMPT), true);
+  assertEquals(text.includes("<previous-summary>"), false);
+});
+
+Deno.test("a second compaction merges the previous summary", async () => {
+  const messages = conversation(2, 4_000);
+  const { compactor, requests } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+  });
+  await compactor.compactNow(messages);
+  assertEquals(requests.length, 1);
+  // More work arrives; the projection now starts at the checkpoint.
+  messages.push(...toolPair("t9", "z".repeat(4_000)));
+  const second = await compactor.compactNow(messages);
+  assertEquals(second !== null, true);
+  assertEquals(requests.length, 2);
+  const text = requestText(requests[1]!);
+  assertEquals(text.includes("<previous-summary>"), true);
+  assertEquals(text.includes("## Goal"), true);
+  assertEquals(text.includes(UPDATE_SUMMARIZATION_PROMPT), true);
+  assertEquals(text.includes(SUMMARIZATION_PROMPT), false);
+  // The previous checkpoint itself is not replayed as a message.
+  assertEquals(text.includes(CHECKPOINT_PREAMBLE), false);
+});
+
+Deno.test("custom instructions steer the summary", async () => {
+  const messages = conversation(2, 4_000);
+  const { compactor, requests } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+  });
+  await compactor.compactNow(messages, "  keep the file paths  ");
+  assertEquals(requests.length, 1);
+  const text = requestText(requests[0]!);
+  assertEquals(text.includes("Additional focus: keep the file paths"), true);
 });
 
 Deno.test("compactIfNeeded leaves the transcript untouched when summarization fails", async () => {
-  const payload = "x".repeat(4000);
-  const messages: AgentMessage[] = [
-    user("start"),
-    ...toolPair("t1", payload),
-    ...toolPair("t2", payload),
-    ...toolPair("t3", payload),
-  ];
+  const messages = conversation(3, 4_000);
+  const before = [...messages];
   const failingStreamFn: StreamFn = () => {
     const stream = createAssistantMessageEventStream();
     stream.push({ type: "error", errorMessage: "boom" });
     stream.end();
     return stream;
   };
-  const replacements: unknown[] = [];
+  const inserts: unknown[] = [];
   const compactor = new ContextCompactor({
-    model: {
-      id: "small",
-      name: "small",
-      api: "openai-completions",
-      provider: "p",
-      contextWindow: 2000,
-      maxTokens: 500,
-    },
+    model: modelWith(10_000, 2_000),
     systemPrompt: () => "prompt",
     tools: () => [],
     streamFn: failingStreamFn,
     sessionId: "s1",
-    replace: (index, count, message) => {
-      replacements.push({ index, count, message });
-      messages.splice(index, count, message);
-    },
+    policy: () => ({ reserveTokens: 2_000, keepRecentTokens: 100 }),
+    insert: (index, message) => inserts.push({ index, message }),
   });
-  const before = [...messages];
   assertEquals(await compactor.compactIfNeeded(messages), null);
-  assertEquals(replacements.length, 0);
+  assertEquals(inserts.length, 0);
   assertEquals(messages, before);
 });
 
 Deno.test("compactIfNeeded refuses a summary that does not shrink its source", async () => {
-  const messages: AgentMessage[] = [user("a"), assistant("b")];
-  const { compactor, replacements } = compactorFor(messages, {
-    reply: "s".repeat(5000),
-    model: {
-      id: "small",
-      name: "small",
-      api: "openai-completions",
-      provider: "p",
-      contextWindow: 2000,
-      maxTokens: 500,
-    },
+  const messages = conversation(2, 4_000);
+  const before = [...messages];
+  const { compactor, inserts } = compactorFor(messages, {
+    reply: "s".repeat(40_000),
+    model: modelWith(10_000, 2_000),
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
   });
   assertEquals(await compactor.compactIfNeeded(messages), null);
-  assertEquals(replacements.length, 0);
-  assertEquals(messages.length, 2);
+  assertEquals(inserts.length, 0);
+  assertEquals(messages, before);
 });
 
 Deno.test("compactNow condenses below the threshold on demand", async () => {
-  const messages: AgentMessage[] = [
-    user("start"),
-    ...toolPair("t1", "x".repeat(4000)),
-    ...toolPair("t2", "y".repeat(4000)),
-  ];
-  const { compactor, replacements } = compactorFor(messages, {
-    model: {
-      id: "small",
-      name: "small",
-      api: "openai-completions",
-      provider: "p",
-      contextWindow: 2000,
-      maxTokens: 500,
-    },
+  const messages = conversation(2, 4_000);
+  // The retention budget must be smaller than the conversation, otherwise
+  // there is nothing left to summarize (the default 20k keeps it all).
+  const { compactor, inserts } = compactorFor(messages, {
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
   });
   const result = await compactor.compactNow(messages);
   assertEquals(result !== null, true);
-  assertEquals(replacements.length, 1);
+  assertEquals(inserts.length, 1);
+  assertEquals(messages[0]!.role, "user");
+  assertEquals(messages[inserts[0]!.index]!.role, "checkpoint");
   // Only the newest unit is retained.
   assertEquals(messages.at(-1)!.role, "toolResult");
-  assertEquals(messages[0]!.role, "checkpoint");
 });
 
 Deno.test("compactNow does nothing when no safe span exists", async () => {
   const messages: AgentMessage[] = [user("only")];
-  const { compactor, requests, replacements } = compactorFor(messages);
+  const { compactor, requests, inserts } = compactorFor(messages);
   assertEquals(await compactor.compactNow(messages), null);
   assertEquals(requests.length, 0);
-  assertEquals(replacements.length, 0);
+  assertEquals(inserts.length, 0);
 });
 
 Deno.test("compactNow refuses a span too small to reduce a request", async () => {
   // Two tiny units: summarizing them would cost a call and free nothing.
   const messages: AgentMessage[] = [user("a"), assistant("b")];
-  const { compactor, requests, replacements } = compactorFor(messages);
+  const { compactor, requests, inserts } = compactorFor(messages);
   assertEquals(await compactor.compactNow(messages), null);
   assertEquals(requests.length, 0);
-  assertEquals(replacements.length, 0);
-});
-
-Deno.test("compactIfNeeded refuses a span that is only a previous checkpoint", async () => {
-  const payload = "x".repeat(4000);
-  const messages: AgentMessage[] = [
-    user("start"),
-    ...toolPair("t1", payload),
-    ...toolPair("t2", payload),
-    ...toolPair("t3", payload),
-  ];
-  const model: Model<Api> = {
-    id: "small",
-    name: "small",
-    api: "openai-completions",
-    provider: "p",
-    contextWindow: 2000,
-    maxTokens: 500,
-  };
-  const { compactor, replacements } = compactorFor(messages, { model });
-  await compactor.compactIfNeeded(messages);
-  assertEquals(replacements.length, 1);
-  // The history now starts with the checkpoint: a second compaction would
-  // only summarize the summary, so it is refused.
-  assertEquals(await compactor.compactIfNeeded(messages), null);
-  assertEquals(replacements.length, 1);
+  assertEquals(inserts.length, 0);
 });
 
 Deno.test("measure anchors on provider usage and estimates only the delta", () => {
   const messages: AgentMessage[] = [user("start"), assistant("ok")];
   const { compactor } = compactorFor(messages);
-  // No usage reported yet: the whole envelope plus the transcript.
   const full = compactor.measure(messages);
   assertEquals(full > 0, true);
-  // A provider-reported prompt replaces the transcript estimate: the
-  // measured request is the reported figure plus what followed the turn.
   messages.push(fauxAssistantMessage([fauxText("second")], {
-    usage: { input: 500_000, output: 10, cacheRead: 0, cacheWrite: 0 },
+    usage: { input: 150_000, output: 10, cacheRead: 0, cacheWrite: 0 },
   }));
   compactor.observeTurn(messages);
   const anchored = compactor.measure(messages);
-  assertEquals(anchored >= 500_000, true);
-  assertEquals(anchored < 520_000, true);
+  assertEquals(anchored >= 150_000, true);
+  assertEquals(anchored < 160_000, true);
 });
 
-Deno.test("a replacement invalidates the measurement anchor", async () => {
-  const payload = "x".repeat(4000);
-  const messages: AgentMessage[] = [
-    user("start"),
-    ...toolPair("t1", payload),
-    ...toolPair("t2", payload),
-    ...toolPair("t3", payload),
-  ];
-  const model: Model<Api> = {
-    id: "small",
-    name: "small",
-    api: "openai-completions",
-    provider: "p",
-    contextWindow: 2000,
-    maxTokens: 500,
-  };
-  const { compactor } = compactorFor(messages, { model });
+Deno.test("measure only counts the model's view, not the kept-but-hidden history", async () => {
+  const messages = conversation(2, 4_000);
+  const { compactor } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+  });
+  const before = compactor.measure(messages);
+  await compactor.compactNow(messages);
+  const after = compactor.measure(messages);
+  // The transcript GREW by the checkpoint, yet the measured view shrank:
+  // the summarized messages are still stored but no longer sent.
+  assertEquals(messages.length, 6);
+  assertEquals(after < before, true);
+});
+
+Deno.test("an insertion invalidates the measurement anchor", async () => {
+  const messages = conversation(3, 4_000);
+  const { compactor } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+  });
   compactor.observeTurn(messages);
   await compactor.compactIfNeeded(messages);
-  // The old anchor described a transcript that no longer exists: the next
-  // measurement must be a full estimate again, not the stale figure.
+  // The old anchor described a projection that no longer exists: the next
+  // measurement must be a fresh estimate, not the stale figure.
   const measured = compactor.measure(messages);
   assertEquals(measured > 0, true);
-  assertEquals(measured < 1_000_000, true);
+  assertEquals(measured < 10_000, true);
 });
 
 Deno.test("compaction re-entrancy is refused while a summarization runs", async () => {
-  const payload = "x".repeat(4000);
-  const messages: AgentMessage[] = [
-    user("start"),
-    ...toolPair("t1", payload),
-    ...toolPair("t2", payload),
-    ...toolPair("t3", payload),
-  ];
-  const model: Model<Api> = {
-    id: "small",
-    name: "small",
-    api: "openai-completions",
-    provider: "p",
-    contextWindow: 2000,
-    maxTokens: 500,
-  };
-  const { compactor } = compactorFor(messages, { model });
+  const messages = conversation(3, 4_000);
+  const { compactor } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+  });
   const first = compactor.compactIfNeeded(messages);
   // A nested call (the summarization request's own step) must not start a
   // second transaction.

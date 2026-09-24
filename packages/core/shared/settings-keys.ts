@@ -56,6 +56,67 @@ export const UPDATE_AUTO_RESTART_KEY = "update_auto_restart";
  * entries that can be inserted via the `/prompt` slash menu. */
 export const SAVED_PROMPTS_KEY = "saved_prompts";
 
+/** Settings-table key enabling automatic context compaction. "1" = on (the
+ * default), "0" = off. */
+export const COMPACTION_ENABLED_KEY = "compaction_enabled";
+
+/** Settings-table key for the room left below the model's window when
+ * compaction triggers (pi's `reserveTokens`): the conversation is condensed
+ * once it would come closer than this to the window. */
+export const COMPACTION_RESERVE_TOKENS_KEY = "compaction_reserve_tokens";
+
+/** Settings-table key for the newest tokens kept verbatim after a
+ * compaction (pi's `keepRecentTokens`). */
+export const COMPACTION_KEEP_RECENT_TOKENS_KEY =
+  "compaction_keep_recent_tokens";
+
+/** The compactor's default reservation (pi's `reserveTokens`): also the
+ * placeholder the settings dialog shows for an unset value. */
+export const COMPACTION_DEFAULT_RESERVE_TOKENS = 16_384;
+
+/** The compactor's default retention (pi's `keepRecentTokens`). */
+export const COMPACTION_DEFAULT_KEEP_RECENT_TOKENS = 20_000;
+
+/** Compaction tuning read from the settings table; omitted fields keep the
+ * compactor's defaults (see agent/context-compaction.ts). */
+export interface CompactionPolicyInput {
+  enabled?: boolean;
+  reserveTokens?: number;
+  keepRecentTokens?: number;
+}
+
+/** Parse a non-negative integer setting; undefined when unset, blank, or
+ * not a number. */
+export function parseNonNegativeIntSetting(
+  raw: string | undefined,
+): number | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
+}
+
+/** Parse the compaction tuning from the settings store (the keys above).
+ * Unset, blank and invalid values are omitted, so the compactor's defaults
+ * apply; `enabled` follows the "1"/"0" convention of the other flags. */
+export function parseCompactionPolicyInput(
+  read: (key: string) => string | undefined,
+): CompactionPolicyInput {
+  const input: CompactionPolicyInput = {};
+  const enabled = read(COMPACTION_ENABLED_KEY);
+  if (enabled !== undefined && enabled.trim() !== "") {
+    input.enabled = enabled !== "0";
+  }
+  const reserveTokens = parseNonNegativeIntSetting(
+    read(COMPACTION_RESERVE_TOKENS_KEY),
+  );
+  if (reserveTokens !== undefined) input.reserveTokens = reserveTokens;
+  const keepRecentTokens = parseNonNegativeIntSetting(
+    read(COMPACTION_KEEP_RECENT_TOKENS_KEY),
+  );
+  if (keepRecentTokens !== undefined) input.keepRecentTokens = keepRecentTokens;
+  return input;
+}
+
 /** Settings-table key holding the app-level MCP server config (JSON). It may
  * contain secrets (env vars, headers), so it is protected from the generic
  * settings surface. */

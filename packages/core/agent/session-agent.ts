@@ -50,7 +50,9 @@ import type { GoalStore } from "../goal/loop.ts";
 import {
   type CompactionResult,
   ContextCompactor,
+  contextStart,
 } from "./context-compaction.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
@@ -112,6 +114,11 @@ export interface SessionAgentOptions {
    * starts, and republished only when the value changed (see
    * publishContexts). Omitted → no dynamic context. */
   contextProviders?: ContextProvider[];
+  /** The compaction tuning read from the settings store (see
+   * shared/settings-keys.ts). Read on every check, so a settings change
+   * applies without rebuilding the agent; omitted → the compactor's
+   * defaults. */
+  compactionPolicy?: () => CompactionPolicyInput;
 }
 
 /**
@@ -254,7 +261,8 @@ export class SessionAgent {
     // Condense the history before a request would exceed the model's window
     // (see context-compaction.ts). The compactor reads the live prompt and
     // tools, so a mid-session model or tool change is reflected without
-    // rebuilding it.
+    // rebuilding it; the checkpoint is inserted at the cut and the model's
+    // view starts there (nothing is deleted).
     this.compactor = new ContextCompactor({
       model: options.model,
       systemPrompt: () => this.agent.state.systemPrompt,
@@ -262,18 +270,16 @@ export class SessionAgent {
       streamFn: options.streamFn,
       sessionId: options.sessionId,
       language: this.language,
-      replace: (index, count, message) =>
-        this.replaceHistory(index, count, message),
+      ...(options.compactionPolicy !== undefined
+        ? { policy: options.compactionPolicy }
+        : {}),
+      insert: (index, message) => this.insertHistory(index, message),
       onCompacted: (result, message) => {
         this.emit({
-          type: "messages_compacted",
+          type: "messages_checkpoint",
           sessionId: this.sessionId,
           index: result.index,
           message,
-          removed: result.removed.map(({ role, timestamp: ts }) => ({
-            role,
-            timestamp: ts,
-          })),
         });
       },
     });
@@ -282,15 +288,20 @@ export class SessionAgent {
     this.agent.subscribe((event) => this.handleEvent(event));
   }
 
-  /** Re-anchor every context provider to the transcript it just received:
-   * the restored history already carries the last publication of each
-   * provider, so a reopened session must neither republish an unchanged
-   * value nor lose track of what the model has already seen. Called on
-   * construction and after a rewind truncated the history. */
+  /** Re-anchor every context provider to the part of the transcript the
+   * model actually sees (from the newest compaction checkpoint on): the
+   * restored history already carries the last publication of each provider,
+   * so a reopened session must neither republish an unchanged value nor
+   * lose track of what the model has already seen. A publication that a
+   * compaction left outside the model's view is forgotten here, so the
+   * provider publishes its current value again before the next request.
+   * Called on construction, after a compaction and after a rewind truncated
+   * the history. */
   private rebaseContexts(messages: readonly AgentMessage[]): void {
     if (this.contextProviders.length === 0) return;
     const last = new Map<string, unknown>();
-    for (const message of messages) {
+    for (let i = contextStart(messages); i < messages.length; i++) {
+      const message = messages[i]!;
       if (message.role === "context") last.set(message.provider, message.state);
     }
     for (const provider of this.contextProviders) {
@@ -573,14 +584,20 @@ export class SessionAgent {
     void this.deliverPrompt(message);
   }
 
-  /** Convert the transcript for the LLM: notification messages become
-   * user messages carrying their title + body (the prefix contract the
-   * system prompt teaches), then image blocks are replaced by their
-   * analysis text when the main model cannot see images. */
+  /** Convert the transcript for the LLM: the model's view starts at the
+   * newest compaction checkpoint (everything before it stays in the
+   * transcript, the database and the UI but is not sent — see
+   * agent/context-compaction.ts), notification messages become user
+   * messages carrying their title + body (the prefix contract the system
+   * prompt teaches), then image blocks are replaced by their analysis text
+   * when the main model cannot see images. */
   private convertToLlm(
     messages: AgentMessage[],
   ): Message[] | Promise<Message[]> {
-    const mapped = toLlmMessages(messages);
+    const start = contextStart(messages);
+    const mapped = toLlmMessages(
+      start === 0 ? messages : messages.slice(start),
+    );
     return this.imageAnalyzer === null
       ? mapped
       : this.convertWithAnalysis(mapped);
@@ -1036,7 +1053,7 @@ export class SessionAgent {
     try {
       const result = await this.compactor.compactIfNeeded(
         this.agent.state.messages,
-        true,
+        { force: true },
       );
       if (result !== null) this.republishContextsAfter(result);
       return result;
@@ -1075,54 +1092,55 @@ export class SessionAgent {
     }
   }
 
-  /** Condense the history on demand (the manual `/compact` path). Resolves
-   * with what was replaced, or undefined when no safe span existed or the
-   * summarization failed — the transcript is then unchanged either way. */
-  async compactNow(): Promise<CompactionResult | undefined> {
+  /** Condense the history on demand (the manual `/compact` path; pi's
+   * `/compact [instructions]`). Resolves with what was summarized, or
+   * undefined when no safe span existed or the summarization failed — the
+   * transcript is then unchanged either way. */
+  async compactNow(
+    instructions?: string,
+  ): Promise<CompactionResult | undefined> {
     if (this.closed) return undefined;
-    const result = await this.compactor.compactNow(this.agent.state.messages);
+    const result = await this.compactor.compactNow(
+      this.agent.state.messages,
+      instructions,
+    );
     if (result !== null) this.republishContextsAfter(result);
     return result ?? undefined;
   }
 
   /** After a compaction: publish the context updates that the re-anchoring
-   * queued. Only a compaction that removed a context publication can queue
-   * one (a provider whose snapshot is gone must re-establish its value);
-   * everything else is already anchored. */
+   * queued. Only a compaction that summarized a context publication can
+   * queue one (a provider whose snapshot is no longer in the model's view
+   * must re-establish its value); everything else is already anchored. */
   private republishContextsAfter(result: CompactionResult): void {
-    const removedProvider = result.removed.some(
+    const lostProvider = result.summarized.some(
       (message) => message.role === "context",
     );
-    if (!removedProvider) return;
+    if (!lostProvider) return;
     this.publishContexts();
   }
 
-  /** Replace `count` messages from `index` with `message`: the database
-   * first (a failed write leaves memory untouched, so the two can never
-   * diverge), then the in-memory transcript, the persisted-row counter, and
-   * the clients. Used by the context compactor through its `replace`
-   * callback.
+  /** Insert `message` at `index`: the database first (a failed write leaves
+   * memory untouched, so the two can never diverge), then the in-memory
+   * transcript, the persisted-row counter, and the clients. Used by the
+   * context compactor through its `insert` callback.
    *
-   * The persisted-row counter is recomputed, not reset: before the
-   * replacement the first `savedCount` messages had rows, so the messages
-   * that followed the span and sat inside that prefix are still persisted
-   * after it. Only the checkpoint (position `index`) and that surviving
-   * prefix are counted; whatever trailed the persisted prefix is written by
-   * the next `persistMessages`. */
-  private replaceHistory(
-    index: number,
-    count: number,
-    message: AgentMessage,
-  ): void {
+   * The persisted-row counter is recomputed, not reset: the first
+   * `savedCount` messages had rows before the insertion, so the rows that
+   * follow the inserted message are still persisted after it. Only the
+   * messages up to and including the insertion are counted; whatever
+   * trailed the persisted prefix is written by the next `persistMessages`. */
+  private insertHistory(index: number, message: AgentMessage): void {
     const persistedBefore = this.savedCount;
-    this.messageRepo.replaceRange(this.sessionId, index, count, message);
-    this.agent.state.messages.splice(index, count, message);
-    this.savedCount = index + 1 +
-      Math.max(0, persistedBefore - (index + count));
-    // The replacement may have removed the context publications the
-    // truncated messages carried: re-anchor so a provider whose snapshot is
-    // gone publishes it again before the next request (the caller publishes
-    // what the re-anchoring queued).
+    this.messageRepo.insertAt(this.sessionId, index, message);
+    this.agent.state.messages.splice(index, 0, message);
+    this.savedCount = index < persistedBefore
+      ? persistedBefore + 1
+      : persistedBefore;
+    // The insertion may have moved the model's view past the context
+    // publications the older messages carried: re-anchor so a provider
+    // whose snapshot is no longer visible publishes it again before the
+    // next request (the caller publishes what the re-anchoring queued).
     this.rebaseContexts(this.agent.state.messages);
   }
 

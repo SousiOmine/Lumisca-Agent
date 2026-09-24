@@ -16,6 +16,7 @@ import { useT } from "../i18n.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import {
+  actionCommandFromText,
   buildSlashCommands,
   skillPromptFromText,
   slashPrompt,
@@ -334,7 +335,11 @@ export function NewSessionView(
       return;
     }
     if (message === undefined) {
-      // Modes first: their token is a mode id, so the two never collide.
+      // Client-side actions need a session to condense, and this composer
+      // starts one: the text is left in the composer instead of being sent
+      // as a prompt.
+      if (actionCommandFromText(trimmed) !== null) return;
+      // Modes next: their token is a mode id, so the two never collide.
       const line = (isChat ? null : slashPromptFromText(trimmed, t)) ??
         skillPromptFromText(trimmed, skills);
       if (line !== null) {

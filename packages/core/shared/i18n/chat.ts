@@ -58,8 +58,8 @@ export const chat = {
   // --- client-side slash commands ------------------------------------------
   "chat.slash.compact.label": { ja: "履歴を圧縮", en: "Compact history" },
   "chat.slash.compact.description": {
-    ja: "古い履歴を要約してコンテキストを節約します",
-    en: "Summarize older history to save context",
+    ja: "古い履歴を要約します（続けて指示を書くと要約の観点を指定できます）",
+    en: "Summarize older history (type a focus after it to steer the summary)",
   },
   "chat.slash.skill.label": { ja: "スキル", en: "Skills" },
   "chat.slash.skill.description": {

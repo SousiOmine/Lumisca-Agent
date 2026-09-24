@@ -22,6 +22,7 @@ import { useUserProviders } from "../providers.ts";
 import type { UserProviderSummary } from "../types.ts";
 import { ModelList } from "./settings/ModelList.tsx";
 import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
+import { CompactionSettings } from "./settings/CompactionSettings.tsx";
 import { McpList } from "./settings/McpList.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
@@ -263,6 +264,7 @@ export function SettingsModal({
               <ModelPreferencePanel
                 onOpenProviders={() => openCategory("providers")}
               />
+              <CompactionSettings />
               <ModelList />
             </>
           )}

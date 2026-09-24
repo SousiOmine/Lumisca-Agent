@@ -44,6 +44,30 @@ interface AnswerBody {
   answers?: unknown;
 }
 
+/** Longest custom focus a `/compact` instruction may carry. The text is
+ * appended to the summarization prompt, so it is bounded like any other
+ * user-facing prompt fragment. */
+const MAX_COMPACT_INSTRUCTIONS_LENGTH = 2_000;
+
+/** Validate the optional `/compact` instruction: a string (trimmed), an
+ * empty value meaning "no instruction". Anything else — a non-string, or
+ * one longer than the cap — is rejected rather than silently dropped. */
+function optionalInstructions(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") {
+    throw new AppError("instructions must be a string", 400);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return undefined;
+  if (trimmed.length > MAX_COMPACT_INSTRUCTIONS_LENGTH) {
+    throw new AppError(
+      `instructions must be at most ${MAX_COMPACT_INSTRUCTIONS_LENGTH} characters`,
+      400,
+    );
+  }
+  return trimmed;
+}
+
 /** Validate an answer request body for a pending ask (the ask tool): the
  * tool call id and the answer list shape. The core validates the values
  * against the pending questions (ids and non-empty values; option labels
@@ -173,9 +197,12 @@ export interface SessionApi {
   abort(id: string): void;
   rewind(id: string, timestamp: number): Promise<void>;
   /** Condense the session's older history into a checkpoint on demand (the
-   * `/compact` command). Resolves with the number of replaced messages, or
-   * undefined when nothing could be condensed. */
-  compactSession(id: string): Promise<number | undefined>;
+   * `/compact [instructions]` command). Resolves with the number of
+   * summarized messages, or undefined when nothing could be condensed. */
+  compactSession(
+    id: string,
+    instructions?: string,
+  ): Promise<number | undefined>;
   setSessionModel(id: string, provider: string, modelId: string): void;
   /** Resolve a pending ask (the ask tool) with the user's answers. */
   answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
@@ -378,16 +405,20 @@ export function sessionRoutes(core: SessionApi): Hono {
   });
 
   /** Condense the session's older history into a checkpoint on demand (the
-   * `/compact` command). `compacted` is the number of messages replaced —
-   * absent when nothing could be condensed (no safe span, or the
-   * summarization failed; the transcript is unchanged in both cases). The
-   * request resolves once the replacement is durable, so the client can
-   * report the outcome. */
+   * `/compact [instructions]` command). `compacted` is the number of
+   * messages summarized — absent when nothing could be condensed (no safe
+   * span, or the summarization failed; the transcript is unchanged in both
+   * cases). The request resolves once the insertion is durable, so the
+   * client can report the outcome. */
   app.post("/sessions/:id/compact", async (c) => {
+    const body = await parseBody<{ instructions?: unknown }>(c);
     const id = c.req.param("id");
     requireSession(id);
     await core.openSession(id);
-    const compacted = await core.compactSession(id);
+    const compacted = await core.compactSession(
+      id,
+      optionalInstructions(body?.instructions),
+    );
     return c.json({ ok: true, compacted });
   });
 

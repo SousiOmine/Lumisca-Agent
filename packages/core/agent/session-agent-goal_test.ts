@@ -107,7 +107,16 @@ function makeGoalAgent(
       list: () => [],
       listMessages: () => [],
       deleteFrom: () => {},
-      replaceRange: () => {},
+      insertAt: (_sessionId, index, message) => {
+        void index;
+        return {
+          id: "id",
+          sessionId: _sessionId,
+          role: message.role,
+          message,
+          timestamp: message.timestamp,
+        };
+      },
       deleteBySession: () => {},
     },
     onEvent: (event) => {

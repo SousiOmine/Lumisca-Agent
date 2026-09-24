@@ -24,7 +24,7 @@
   そのため、**モデルの変更操作は必ず本ストアへ書き戻す必要があります**（内部的には `applyModelEnabled` を使用し、トグルUIからは `providers.ts` の `setModelEnabled` を経由して実行します）。状態をコンポーネント内のローカルステートに持たせてしまうと、画面遷移やアンマウント時に変更内容が消失するためご注意ください。
 
 - **圧縮チェックポイントの表示**  
-  圧縮で生成される `checkpoint` メッセージは、`ContextRow` と同じ `SystemRow` を使ったコンパクトな1行（`CheckpointRow.tsx`）として描画され、クリックでモデルに渡された要約本文を展開できます。`buildTurns` では独立した行（`standalone`）として扱い、前後のターンに吸収させません（置換位置を示す行であり、そのターンを開始したプロンプトではないため）。実行中の圧縮は走行状態を消してはならないため、巻き戻しの `messages_truncated` とは別イベント（`messages_compacted`）で通知します。
+  圧縮で生成される `checkpoint` メッセージは、`ContextRow` と同じ `SystemRow` を使ったコンパクトな1行（`CheckpointRow.tsx`）として描画され、クリックでモデルに渡された要約本文を展開できます。`buildTurns` では独立した行（`standalone`）として扱い、前後のターンに吸収させません（モデルの視界が始まる境界を示す行であり、そのターンを開始したプロンプトではないため）。圧縮は履歴を削除せず挿入するだけなので、クライアントは `messages_checkpoint` で行を足すだけで、要約されたメッセージはそのまま表示され続けます。実行中の圧縮は走行状態を消してはならないため、巻き戻しの `messages_truncated` とは別イベントで通知します。
 
 - **スキルパレット（`/skill`）**  
   コンポーザーのスラッシュメニューには、静的なモード（`AGENT_MODES`）と保存済みプロンプトに加えて、**セッションのスキルカタログ**が第三の供給元として入ります（`useSkills` が `GET /api/skills` をワークスペース所有ピアから取得）。`/skill` はカタログをサブメニューとして開き、選択するとコンポーザーが `/skill <名前> ` まで補完します（`SlashCommandKind` の `complete` は、項目付きのコマンドでは `/<id> <項目id> ` へ補完する＝項目id がコマンドの引数）。送信時は `skillPromptFromText` がその行を `buildSkillPrompt`（core）のプロンプトへ包みます。  
@@ -40,15 +40,17 @@
   `SessionAgent`（プロンプト生成・タイトル付与・MCP・通知処理）、`RetryManager`（空応答や429エラーのリトライ制御）、`GoalRunner`（自律的なゴール達成ループ）、`AgentFactory`（配線処理）、`SessionPool`（エージェントのライフサイクル管理）で構成されます。  
   なお、`agent/context-providers.ts` で扱う**動的コンテキスト**（スキルカタログや `AGENTS.md`）は、プロンプトに直書きせず `context` メッセージとして履歴スタックに追加し、値に変更があった場合のみ再送する設計です（DSHにおける `PromptContext` と同様のアプローチです）。
 - **`agent/context-compaction.ts`**  
-  長時間動作するセッションの履歴をモデルのリクエスト上限内に保つ**コンテキスト圧縮**の唯一の実装です（DeepSeek Harness の compaction seam と token meter をLumiscaの語彙に写像したもの）。設計上の要点は次のとおりです。
-  * **計測**: 直近の assistant `usage`（プロバイダーが報告した実測値）をアンカーとし、それ以降に追加された分だけを `shared/token-estimate.ts` のヒューリスティックで見積もります。アンカーが無い場合のみリクエスト全体（システムプロンプト＋ツール定義＋履歴）を見積もります。
-  * **予算**: プロバイダーは `prompt + maxOutputTokens` をウィンドウに対して検証するため、しきい値は `contextWindow` ではなく **`contextWindow − maxTokens`**（使用可能入力）に対する比率です。既定はしきい値 80%・保持 16%（DSH の `thresholdRatio` / `retainRatio` と同値）。
-  * **発火点**: `Agent.beforeStep`（各LLMリクエストの直前）。ターン内でツール結果が積み上がる暴走を止められます（DSH の `agent/pre-step` と同じ理由）。
-  * **置換**: 古い区間を**1つの `checkpoint` メッセージで置き換え**ます（追記ではありません）。切断点は「assistant + 続く toolResult 群」を1単位として選ぶため、tool-call/result の対応は必ず保たれます（DSH の tool-pairing balance 検査に相当）。最新の1単位は常に保持します。
-  * **要約呼び出し**: セッション自身のシステムプロンプト・ツールスキーマ・対象区間をそのまま再生し、指示を最後の user メッセージとして追加します（プロバイダーのプレフィックスキャッシュを再利用）。`StreamOptions.maxOutputTokens` で出力を上限内に抑えます。
-  * **失敗時**: 要約が失敗した場合は履歴を一切変更せず、そのままの履歴でリクエストを続行します（DSH と同じ「durable surface を保持する」方針）。要約が元区間より縮まない場合も拒否します。
-  * **overflow 回復**: プロバイダーがウィンドウ超過を返した場合（`retry-policy.ts` の `isContextOverflowError`）、しきい値と保持予算を無視した強制圧縮を1回だけ行い、成功した場合のみ再試行します。2回目の拒否はプロバイダーの元エラーをそのまま提示します（DSH の `maxOverflowRetries` と同じ）。
-  * **適用範囲**: メインセッション（DB永続化＋`messages_compacted` イベント）とサブエージェント（メモリのみ）の双方が同じ `ContextCompactor` を使います。
+  長時間動作するセッションの履歴をモデルのリクエスト上限内に保つ**コンテキスト圧縮**の唯一の実装です（badlogic/pi-mono の `packages/coding-agent/src/core/compaction` をLumiscaの語彙に写像したもの）。設計上の要点は次のとおりです。
+  * **計測**: 直近の assistant `usage`（プロバイダーが報告した実測値）をアンカーとし、それ以降に追加された分だけを `shared/token-estimate.ts` のヒューリスティックで見積もります。アンカーが無い場合、または投影の開始位置が動いた場合はモデルの視界全体を見積もります。
+  * **予算**: しきい値は **`contextWindow − reserveTokens`**（pi の `shouldCompact` と同じ）。既定は `reserveTokens = 16384` / `keepRecentTokens = 20000`。予約分は要約呼び出し自身の出力上限（`min(0.8 × reserveTokens, モデル出力上限)`）にも使います。ウィンドウを報告しないモデルでは圧縮しません。
+  * **リクエストの出力上限**: プロバイダーは `prompt + max_output` をウィンドウに対して検証するため、`ai/stream.ts` が全リクエストの `maxOutputTokens` を `min(要求値, ウィンドウ − 見積りプロンプト − 4096)` にクランプします（pi の `clampMaxTokensToContext` と同値の安全代）。しきい値をウィンドウ際まで許せるのは、このクランプが成立しているためです。
+  * **発火点**: `Agent.beforeStep`（各LLMリクエストの直前）。ターン内でツール結果が積み上がる暴走を止められます。
+  * **非破壊（挿入）**: 古い区間を消さず、**切断位置に `checkpoint` メッセージを挿入**します。モデルの視界は「最新の `checkpoint` 以降」に投影され（`contextStart`、`SessionAgent.convertToLlm` が適用）、DB・UI には全メッセージが残ります。切断点は「assistant + 続く toolResult 群」を1単位として選ぶため、tool-call/result の対応は必ず保たれます。最新の1単位は常に保持します。
+  * **要約呼び出し**: 対象区間をテキストへ直列化し（ツール出力は2000文字に切り詰め）、専用のシステムプロンプト（`SUMMARIZATION_SYSTEM_PROMPT`）で要約させます。セッションのシステムプロンプトとツールは再生しません（ウィンドウ際の補助リクエストを小さく保つため。pi も同じ）。既存の checkpoint がある場合はその要約を `<previous-summary>` として渡し、pi の更新用指示でマージします。ユーザーの `/compact <指示>` は `Additional focus:` として加わります。
+  * **失敗時**: 要約が失敗した場合は履歴を一切変更せず、そのままの履歴でリクエストを続行します。要約が元区間より縮まない場合も拒否します。
+  * **overflow 回復**: プロバイダーがウィンドウ超過を返した場合（`retry-policy.ts` の `isContextOverflowError`）、しきい値と保持予算を無視した強制圧縮を1回だけ行い、成功した場合のみ再試行します。2回目の拒否はプロバイダーの元エラーをそのまま提示します。
+  * **設定**: `compaction_enabled` / `compaction_reserve_tokens` / `compaction_keep_recent_tokens`（`shared/settings-keys.ts`）。`LumiscaCore.getCompactionPolicy()` が読み出し、エージェントは検査のたびに読むため再起動なしで反映されます（設定ダイアログのモデルセクションに UI があります）。
+  * **適用範囲**: メインセッション（DB永続化＋`messages_checkpoint` イベント）とサブエージェント（メモリのみの splice）の双方が同じ `ContextCompactor` を使います。
 - **`ai/rate-limit.ts`**  
   HTTP 429（レート制限）の判定、指数バックオフ、リトライループを担う唯一の実装です。通信トランスポート、セッション、サブエージェントの間で共有されています。`agent/llm-retry.ts` は本モジュールへ処理を委譲する形で assistant メッセージのリトライを行います。
 - **`goal/loop.ts`**  
@@ -119,8 +121,8 @@
   本番用配布物のバンドル生成（`deno compile` への内包）は `server/bundle.ts`（esbuild）が担当し、開発時の HMR（Hot Module Replacement）および API プロキシ機能は `packages/web/vite.config.ts`（Vite）が担います。なお、CSS の `@import` 解決順序の仕様は両環境で厳密に一致させています（詳細は `packages/web/src/styles/README.md` を参照）。
 - **履歴メッセージのロール**  
   モデルに見せる形（`toLlmMessages`）は `user` / `assistant` / `toolResult` の3種のみです。Lumisca 固有のロール（`notification` / `context` / `mode` / `checkpoint`）はいずれも user メッセージへ変換されます。新しいロールを追加する場合は、この変換・`estimateMessageTokens`（トークン見積り）・web 側の `MessageRow` / `buildTurns` の3か所を同時に更新してください（1か所でも漏れると、そのメッセージがモデルに届かないか、UIで描画されません）。
-- **`MessageRepo.replaceRange`**  
-  履歴の一部を置き換える唯一の DB 操作です（圧縮が使用）。行はトランスクリプト順に挿入されるため rowid が位置と一致する、という `deleteFrom` と同じ前提に依存しています。置換後の永続化済み件数（`SessionAgent.savedCount`）は「置換位置＋1＋置換区間より後ろに残った既存行数」で再計算します。ここを単純にトランスクリプト長にしてしまうと、まだ保存されていない末尾のメッセージが二重に挿入されます。
+- **`MessageRepo.insertAt`**  
+  履歴の途中に1件を挿入する唯一の DB 操作です（圧縮が使用）。行はトランスクリプト順に挿入されるため rowid が位置と一致する、という `deleteFrom` と同じ前提に依存しています。SQLite の rowid は全セッションで共有されるため、+1 シフトは他セッションの行と衝突し得ます。そこで挿入位置以降の自セッションの行を読み出して削除し、新しい行を挿入してから元の id・内容・timestamp のまま挿入し直します（1トランザクション、失敗時はロールバック）。挿入後の永続化済み件数（`SessionAgent.savedCount`）は「挿入位置が保存済み範囲内なら +1」で更新します。単純にトランスクリプト長にすると、まだ保存されていない末尾のメッセージが二重に挿入されます。
 
 ---
 

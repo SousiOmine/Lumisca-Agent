@@ -7,9 +7,19 @@ import {
 } from "@lumisca/core/shared";
 import { useT } from "../i18n.ts";
 
+/** Fallback warn point when the caller knows no compaction reservation: the
+ * bar then turns amber on a generic "filling up" hint rather than on the
+ * exact compaction point. */
+const DEFAULT_WARN_RATIO = 0.8;
+
 export interface ContextUsageData {
   summary: ContextUsageSummary;
   contextWindow?: number;
+  /** The usage ratio the bar turns amber from: the point where the next
+   * compaction check condenses the history (see
+   * shared/context-usage.ts compactionUsageRatio). Omitted → the meter's
+   * own default hint. */
+  warnRatio?: number;
 }
 
 interface ContextUsageTriggerProps extends ContextUsageData {
@@ -55,6 +65,7 @@ export function ContextUsageTrigger({
 export function ContextUsageCard({
   summary,
   contextWindow,
+  warnRatio = DEFAULT_WARN_RATIO,
 }: ContextUsageData) {
   const t = useT();
   const current = summary.currentTokens ?? 0;
@@ -89,7 +100,7 @@ export function ContextUsageCard({
           })}
         >
           <div
-            className={`ctx-bar-fill${ratio >= 0.8 ? " warn" : ""}`}
+            className={`ctx-bar-fill${ratio >= warnRatio ? " warn" : ""}`}
             style={{ width: `${barPercent}%` }}
           />
         </div>

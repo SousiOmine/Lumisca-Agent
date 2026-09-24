@@ -1,35 +1,33 @@
 /**
  * Context compaction: keep a long-running conversation inside the model's
- * request limit by replacing its oldest span with one summary checkpoint.
+ * request limit by inserting one summary checkpoint in front of the history
+ * the model no longer needs to see verbatim.
  *
- * The design follows the DeepSeek Harness's compaction seam and token
- * meter, translated into Lumisca's vocabulary:
+ * The design is pi's (badlogic/pi-mono, packages/coding-agent/src/core/
+ * compaction) translated into Lumisca's vocabulary:
  *
- * - **Measurement anchored on provider usage.** A request is priced from
- *   the newest assistant `usage` — the provider's own token count for the
- *   prompt it received — plus a fixed heuristic for what was appended
- *   after it (`shared/token-estimate.ts`). Only when no turn reported
- *   usage yet is the whole envelope estimated.
- * - **A budget derived from what a request may actually carry.** Providers
- *   reject `prompt + maxOutputTokens` against the window (the reported
- *   failure: 665,871 prompt tokens plus the 384,000 reserved completion
- *   against 1,048,576), so the threshold is a fraction of
- *   `contextWindow - outputCap`, never of the window itself.
- * - **Pressure at the step boundary.** The check runs before every LLM
- *   request of a run (`Agent.beforeStep`), so a tool-heavy turn cannot grow
- *   past the window mid-turn — the same reason DSH checks at
- *   `agent/pre-step` after every successful step.
- * - **Replacement, not append.** The selected span is replaced in place by
- *   one checkpoint message, so the model reads "checkpoint → retained
- *   recent messages" instead of a second copy of the history.
- * - **Summarization replays the request.** The auxiliary call sends the
- *   session's own system prompt, tool schemas, and the selected span
- *   verbatim, then the instruction as the final user message, so the
- *   provider's warm prefix cache covers everything but the instruction.
- * - **Failures never destroy history.** A failed summarization leaves the
- *   transcript untouched (the run then continues with the over-budget
- *   history, exactly as it would have without compaction) and the original
- *   provider error is never swallowed.
+ * - **Trigger**: the projected context exceeds `contextWindow -
+ *   reserveTokens` (pi's `shouldCompact`), never a fraction of the window.
+ * - **Retention**: the newest `keepRecentTokens` tokens stay verbatim; the
+ *   cut lands on a unit boundary (an assistant message together with the
+ *   tool results that follow it), so a call is never separated from its
+ *   result.
+ * - **Non-destructive**: nothing is deleted. The checkpoint is INSERTED at
+ *   the cut, and the model's view becomes "from the newest checkpoint
+ *   onward" (see {@link contextStart}). The transcript, the database and
+ *   the UI keep every message.
+ * - **Merge**: when a previous checkpoint exists, its summary is carried
+ *   into the new one (`<previous-summary>`), so repeated compactions never
+ *   drop facts that are still true.
+ * - **Summarization request**: the head is serialized to text (tool results
+ *   truncated) and sent with a dedicated summarization system prompt — the
+ *   session's own prompt and tools are NOT replayed, so the auxiliary
+ *   request stays small enough near the window (pi does the same).
+ * - **Measurement**: anchored on the provider's own prompt count (see
+ *   observeTurn) plus a heuristic for what followed it; a full estimate
+ *   only when no turn reported usage yet.
+ * - **Failures never destroy history**: a failed summarization leaves the
+ *   transcript untouched and the run continues with the history it had.
  */
 
 import type {
@@ -37,51 +35,84 @@ import type {
   AgentTool,
   Api,
   AssistantMessage,
-  CheckpointMessage,
   LlmMessage,
+  Message,
   Model,
   StreamFn,
 } from "../ai/types.ts";
-import { CoreError, errorMessage } from "../errors.ts";
+import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
-import { streamText } from "../ai/stream.ts";
+import { CONTEXT_SAFETY_TOKENS, streamText } from "../ai/stream.ts";
 import {
-  estimateMessagesTokens,
   estimateMessageTokens,
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
 import { contextTokensOf } from "../shared/context-usage.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import {
+  COMPACTION_DEFAULT_KEEP_RECENT_TOKENS,
+  COMPACTION_DEFAULT_RESERVE_TOKENS,
+} from "../shared/settings-keys.ts";
 import { toLlmMessages } from "../types/notification.ts";
 
 /** Module logger (debug-gated): every compaction outcome is logged so a
  * session that kept working past its window can be traced. */
 const log = createLogger("compaction");
 
-/** Start compacting at this fraction of the usable input budget (DSH's
- * `thresholdRatio` default). */
-const DEFAULT_THRESHOLD_RATIO = 0.8;
+/** The compaction tuning (pi's `CompactionSettings`): whether automatic
+ * compaction runs, how much room below the window it leaves for the next
+ * request, and how much of the newest history stays verbatim. */
+export interface CompactionPolicy {
+  enabled: boolean;
+  /** Compact once the projected context passes `contextWindow` minus this
+   * (pi's `reserveTokens`). It is also the room the summarization request
+   * may use for its own output (see CompactionBudgets.summaryMaxTokens). */
+  reserveTokens: number;
+  /** Newest tokens kept verbatim (pi's `keepRecentTokens`). The cut lands
+   * on a unit boundary, so the retained tail is this value rounded up. */
+  keepRecentTokens: number;
+}
 
-/** Keep the newest messages verbatim until they fill this fraction of the
- * usable input budget (DSH's `retainRatio` default). */
-const DEFAULT_RETAIN_RATIO = 0.16;
+/** pi's defaults (DEFAULT_COMPACTION_SETTINGS). */
+export const DEFAULT_COMPACTION_POLICY: CompactionPolicy = {
+  enabled: true,
+  reserveTokens: COMPACTION_DEFAULT_RESERVE_TOKENS,
+  keepRecentTokens: COMPACTION_DEFAULT_KEEP_RECENT_TOKENS,
+};
 
-/** Extra compaction attempts when the first one did not restore safe
- * pressure (DSH's `compactionRetries` default). */
-const DEFAULT_COMPACTION_RETRIES = 1;
+/** Extra compaction passes per check, each one a summarization call. The
+ * second pass only runs while the projection is still over the threshold
+ * (pi re-checks on every turn instead; a single check here may need two
+ * passes because the retained tail can itself be large). */
+const MAX_COMPACTION_ATTEMPTS = 2;
 
-/** Output cap of the summarization call. Bounded because the auxiliary
- * request itself must fit the window it is trying to free (DSH's
- * `maxTokens` default). */
-const DEFAULT_SUMMARIZATION_MAX_TOKENS = 8192;
+/** Smallest head worth a summarization call. Below this the checkpoint
+ * (preamble included) could not free anything meaningful, so the call is
+ * not spent. An absolute floor rather than a fraction of the threshold: the
+ * manual `/compact` path legitimately condenses below the threshold, where
+ * a fraction of it would refuse every useful span. */
+const MINIMUM_SPAN_TOKENS = 512;
+
+/** Characters kept per tool result in the serialized conversation (pi's
+ * TOOL_RESULT_MAX_CHARS): the full output is not needed to summarize. */
+const TOOL_RESULT_MAX_CHARS = 2_000;
+
+/** Output floor of the summarization request. Below this a summary could
+ * not say anything, so the conversation is trimmed instead of failing. */
+const MIN_SUMMARY_TOKENS = 1_024;
+
+/** Fallback output cap of the summarization request when the policy
+ * reserves no room (reserveTokens = 0) and the model documents no cap. */
+const FALLBACK_SUMMARY_MAX_TOKENS = 8_192;
 
 /** Structural overhead charged for the request envelope (role markers and
  * the tool-calling scaffold around the system prompt). */
 const ENVELOPE_OVERHEAD_TOKENS = 32;
 
 /** The checkpoint preamble: tells the model what the block is and that the
- * work continues after it (DSH's checkpoint preamble). */
+ * work continues after it (pi's compaction summary prefix). */
 export const CHECKPOINT_PREAMBLE =
   "This is an automatically generated checkpoint condensing an earlier span " +
   "of the conversation to free up context. Treat the captured context as " +
@@ -92,161 +123,203 @@ export const CHECKPOINT_PREAMBLE =
 /** Tags framing the summary inside the checkpoint body. */
 export const CHECKPOINT_SUMMARY_TAG = "compacted-summary";
 
-/** The instruction appended as the final user message of the summarization
- * request. The section structure is the DeepSeek Harness's: a fixed
- * Markdown skeleton keeps checkpoints comparable between cycles and forces
- * the summarizer to state what is still pending instead of retelling the
- * conversation. */
-export const COMPACTION_INSTRUCTION =
-  `You are now acting as a compaction engine for this AI coding assistant. Condense the conversation ABOVE into a structured checkpoint that lets another model resume the work with no loss of essential context.
+/** System prompt of the summarization call (pi's
+ * SUMMARIZATION_SYSTEM_PROMPT): the auxiliary request must not continue the
+ * conversation, and it carries no tools. */
+export const SUMMARIZATION_SYSTEM_PROMPT =
+  "You are a context summarization assistant. Your task is to read a " +
+  "conversation between a user and an AI assistant, then produce a " +
+  "structured summary following the exact format specified.\n\n" +
+  "Do NOT continue the conversation. Do NOT respond to any questions in " +
+  "the conversation. ONLY output the structured summary.";
 
-Output EXACTLY the Markdown structure below: keep every section, in order. Use terse bullets, not prose paragraphs. Write "(none)" for an empty section — never drop a section.
+/** Instruction appended after the serialized conversation on a first
+ * compaction (pi's SUMMARIZATION_PROMPT). */
+export const SUMMARIZATION_PROMPT =
+  `The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
 
-## Primary Request and Intent
-- [the user's original and evolving goals; quote verbatim where the exact wording matters]
+Use this EXACT format:
 
-## Key Technical Concepts
-- [technologies, frameworks, patterns, and conventions in play]
+## Goal
+[What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]
 
-## Files and Code
-- [exact path: why it matters, key changes or snippets]
+## Constraints & Preferences
+- [Any constraints, preferences, or requirements mentioned by user]
+- [Or "(none)" if none were mentioned]
 
-## Errors and Fixes
-- [error: how it was resolved, plus any related user feedback]
+## Progress
+### Done
+- [x] [Completed tasks/changes]
 
-## Pending Jobs
-- [explicitly requested work not yet completed]
+### In Progress
+- [ ] [Current work]
 
-## Current Work
-- [precisely what was in progress at this checkpoint]
+### Blocked
+- [Issues preventing progress, if any]
 
-## Next Step
-- [the single next action, directly in line with the most recent request, or "(none)"]
+## Key Decisions
+- **[Decision]**: [Brief rationale]
+
+## Next Steps
+1. [Ordered list of what should happen next]
 
 ## Critical Context
-- [decisions and their rationale, constraints, user preferences, open questions, data needed to continue]
+- [Any data, examples, or references needed to continue]
+- [Or "(none)" if not applicable]
 
-Rules:
-- Write concise English engineering prose. Preserve exact file paths, commands, error strings, identifiers, numeric values, function signatures, and syntax fragments.
-- Capture user feedback and explicit instructions faithfully, especially corrections.
-- Do NOT mention this summarization request or that the context was compacted.
-- Output only the checkpoint text: do not call any tool or take any other action.
-- If the conversation already contains a <${CHECKPOINT_SUMMARY_TAG}> block, it is a PRIOR checkpoint. Do not copy it forward verbatim: preserve still-true facts, drop stale ones, and merge newer information into a single consolidated summary under the same structure.`;
+Keep each section concise. Preserve exact file paths, function names, and error messages.`;
 
-/** Trigger policy of the compactor: the ratios and caps that decide when a
- * conversation is condensed. Resolved from the session's model, so a small
- * window compacts early and a large one late. */
-export interface CompactionPolicy {
-  /** Start compacting at this fraction of the usable input budget. */
-  thresholdRatio: number;
-  /** Fraction of the usable input budget kept verbatim at the tail. */
-  retainRatio: number;
-  /** Extra attempts when the first compaction did not restore pressure. */
-  compactionRetries: number;
-  /** Output cap of the summarization request. */
-  summarizationMaxTokens: number;
-}
+/** Instruction used when a previous checkpoint exists: the previous summary
+ * is merged instead of being replaced (pi's UPDATE_SUMMARIZATION_PROMPT). */
+export const UPDATE_SUMMARIZATION_PROMPT =
+  `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
 
-/** The default policy (see the constants above). */
-export const DEFAULT_COMPACTION_POLICY: CompactionPolicy = {
-  thresholdRatio: DEFAULT_THRESHOLD_RATIO,
-  retainRatio: DEFAULT_RETAIN_RATIO,
-  compactionRetries: DEFAULT_COMPACTION_RETRIES,
-  summarizationMaxTokens: DEFAULT_SUMMARIZATION_MAX_TOKENS,
-};
+Update the existing structured summary with new information. RULES:
+- PRESERVE all existing information from the previous summary
+- ADD new progress, decisions, and context from the new messages
+- UPDATE the Progress section: move items from "In Progress" to "Done" when completed
+- UPDATE "Next Steps" based on what was accomplished
+- PRESERVE exact file paths, function names, and error messages
+- If something is no longer relevant, you may remove it
 
-/** The token budgets one model can actually be asked for: the window minus
- * the completion the request reserves, and the thresholds derived from it.
- * `undefined` when the model documents no window — without a capacity there
- * is nothing to measure pressure against, so compaction stays off (DSH
- * behaves the same way: an adapter reporting no capacity disables the
- * automatic pressure path). */
+Use this EXACT format:
+
+## Goal
+[Preserve existing goals, add new ones if the task expanded]
+
+## Constraints & Preferences
+- [Preserve existing, add new ones discovered]
+
+## Progress
+### Done
+- [x] [Include previously done items AND newly completed items]
+
+### In Progress
+- [ ] [Current work - update based on progress]
+
+### Blocked
+- [Current blockers - remove if resolved]
+
+## Key Decisions
+- **[Decision]**: [Brief rationale] (preserve all previous, add new)
+
+## Next Steps
+1. [Update based on current state]
+
+## Critical Context
+- [Preserve important context, add new if needed]
+
+Keep each section concise. Preserve exact file paths, function names, and error messages.`;
+
+/** The token budgets one model can actually be asked for. `undefined` when
+ * the model documents no window (compaction then stays off: without a
+ * capacity there is nothing to measure pressure against) or when the
+ * policy disables it. */
 export interface CompactionBudgets {
-  /** `contextWindow - outputCap`: the widest prompt the provider accepts. */
-  usableInputTokens: number;
-  /** Compact when the next request would exceed this. */
+  /** The model's documented window. */
+  contextWindow: number;
+  /** Compact when the projected context would exceed this
+   * (`contextWindow - reserveTokens`). */
   thresholdTokens: number;
-  /** Tail kept verbatim (a lower bound per unit, not a hard cut). */
-  retainTokens: number;
-  /** Completion reserved by every request (0 when the model documents no
-   * output cap). */
-  outputCapTokens: number;
+  /** Newest tokens kept verbatim. */
+  keepRecentTokens: number;
+  /** Output cap of the summarization request. */
+  summaryMaxTokens: number;
 }
 
-/** Resolve the policy of a model. The policy is a function of the model
- * alone today; a settings-backed override has this one place to land. */
+/** Resolve the policy from the settings input (see
+ * shared/settings-keys.ts): omitted or invalid values keep pi's defaults. */
 export function resolveCompactionPolicy(
-  _model: Model<Api>,
+  input?: CompactionPolicyInput,
 ): CompactionPolicy {
-  return DEFAULT_COMPACTION_POLICY;
+  return {
+    enabled: input?.enabled ?? DEFAULT_COMPACTION_POLICY.enabled,
+    reserveTokens: nonNegativeInt(input?.reserveTokens) ??
+      DEFAULT_COMPACTION_POLICY.reserveTokens,
+    keepRecentTokens: nonNegativeInt(input?.keepRecentTokens) ??
+      DEFAULT_COMPACTION_POLICY.keepRecentTokens,
+  };
+}
+
+function nonNegativeInt(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : undefined;
 }
 
 /**
- * Resolve the token budgets of a model. The completion reserve matters:
- * providers validate `prompt + maxOutputTokens` against the window, so a
- * model reserving a 384,000-token completion can only carry
- * `window - 384,000` prompt tokens however large the window is.
+ * Resolve the token budgets of a model: the threshold sits `reserveTokens`
+ * below the window, and the summarization call may use at most 80% of that
+ * reservation for its own output (pi's `maxTokens`).
  */
 export function resolveCompactionBudgets(
   model: Model<Api>,
-  policy: CompactionPolicy = resolveCompactionPolicy(model),
+  policy: CompactionPolicy = DEFAULT_COMPACTION_POLICY,
 ): CompactionBudgets | undefined {
+  if (!policy.enabled) return undefined;
   const window = model.contextWindow;
   if (window === undefined || !Number.isFinite(window) || window <= 0) {
     return undefined;
   }
+  const threshold = window - policy.reserveTokens;
+  // A reservation as large as the window leaves no room for a prompt:
+  // compacting would not make the request acceptable either.
+  if (threshold <= 0) return undefined;
   const outputCap = model.maxTokens !== undefined && model.maxTokens > 0
     ? model.maxTokens
-    : 0;
-  const usable = window - outputCap;
-  // A model whose completion reserve leaves no room for a prompt cannot be
-  // budgeted: compacting would not make the request acceptable either.
-  if (usable <= 0) return undefined;
-  const threshold = Math.floor(usable * policy.thresholdRatio);
-  // The retained tail never fills the whole threshold: a compaction must
-  // leave headroom for the messages that follow it.
-  const retain = Math.min(
-    Math.floor(usable * policy.retainRatio),
-    Math.floor(threshold / 2),
-  );
+    : undefined;
+  const summaryMaxTokens = policy.reserveTokens > 0
+    ? Math.max(
+      1,
+      Math.min(
+        Math.floor(policy.reserveTokens * 0.8),
+        outputCap ?? Number.POSITIVE_INFINITY,
+      ),
+    )
+    : outputCap ?? FALLBACK_SUMMARY_MAX_TOKENS;
   return {
-    usableInputTokens: usable,
+    contextWindow: window,
     thresholdTokens: threshold,
-    retainTokens: retain,
-    outputCapTokens: outputCap,
+    keepRecentTokens: policy.keepRecentTokens,
+    summaryMaxTokens,
   };
 }
 
-/** One compaction decision: the span to replace and its estimated cost. */
+/** One compaction decision: the head to summarize and where the checkpoint
+ * goes. */
 export interface CompactionSpan {
-  /** 0-based transcript index of the first replaced message. */
-  index: number;
-  /** Number of messages replaced. */
+  /** 0-based transcript index of the head's first message. */
+  start: number;
+  /** 0-based transcript index of the first retained message — where the
+   * checkpoint is inserted. */
+  cutIndex: number;
+  /** Number of messages in the head. */
   count: number;
-  /** Tokens the replaced span is estimated to cost. */
-  replacedTokens: number;
+  /** Estimated tokens the head costs the model's view. */
+  headTokens: number;
 }
 
 /** What one compaction attempt did. */
 export interface CompactionResult {
-  /** 0-based transcript index the checkpoint now sits at. */
+  /** Transcript index the checkpoint now sits at: the model's view starts
+   * here. */
   index: number;
-  /** The messages that were replaced. */
-  removed: AgentMessage[];
-  /** Estimated tokens freed (replaced span minus the checkpoint). */
+  /** The messages the checkpoint summarizes. They stay in the transcript;
+   * the model no longer sees them (see contextStart). */
+  summarized: AgentMessage[];
+  /** Estimated tokens the model's view shrank by. */
   freedTokens: number;
 }
 
 /** The collaborators a compactor needs from its host agent. */
 export interface ContextCompactorOptions {
-  /** The model the session's requests go to: its window and output cap set
-   * the budgets, and it writes the summary. */
+  /** The model the session's requests go to: its window sets the budgets,
+   * and it writes the summary. */
   model: Model<Api>;
-  /** The session's system prompt: replayed in the summarization request so
-   * the provider's prefix cache covers it. */
+  /** The session's system prompt: priced in the envelope estimate (never
+   * replayed in the summarization request — see the module comment). */
   systemPrompt: () => string;
-  /** The session's preloaded tools: replayed as schemas (never executed) in
-   * the summarization request, and priced when the envelope is estimated. */
+  /** The session's preloaded tools: priced in the envelope estimate. */
   tools: () => readonly AgentTool[];
   streamFn: StreamFn;
   /** The conversation id of the summarization call (session-affinity
@@ -257,35 +330,42 @@ export interface ContextCompactorOptions {
    * summary itself is model output and already follows the session's
    * output-language rule. Omitted → the catalogue's fallback language. */
   language?: Locale;
-  /** Replace `count` messages from `index` with `message` in the durable
-   * transcript and in memory. The host owns this write so it can order the
-   * two sides (database first: a failed write must leave memory untouched)
-   * and keep its own bookkeeping — a persisted-message counter, the
+  /** The compaction tuning read from the settings store. Read on every
+   * check, so a settings change applies without rebuilding the agent. */
+  policy?: () => CompactionPolicyInput;
+  /** Insert the checkpoint at `index` in the durable transcript and in
+   * memory. The host owns this write so it can order the two sides
+   * (database first: a failed write must leave memory untouched) and keep
+   * its own bookkeeping — the persisted-message counter, the
    * context-provider anchors — in step. A throw aborts the compaction with
    * the transcript unchanged. */
-  replace: (index: number, count: number, message: AgentMessage) => void;
+  insert: (index: number, message: AgentMessage) => void;
   /** Notify clients that history was condensed (optional: sub-agents have
    * no client surface). */
   onCompacted?: (result: CompactionResult, message: AgentMessage) => void;
 }
 
-/** The measurement anchor: the newest provider-reported prompt size, the
- * transcript prefix it priced, and the envelope estimate at that moment (so
- * a system-prompt change afterwards is repriced instead of ignored). */
+/** The measurement anchor: the newest provider-reported prompt size, how
+ * many projected messages it priced, the projection start at that moment,
+ * and the envelope estimate then (so a system-prompt change afterwards is
+ * repriced instead of ignored). */
 interface MeasurementAnchor {
   /** Prompt tokens the provider reported for that request. */
   tokens: number;
-  /** Number of transcript messages the prompt covered. */
+  /** Number of projected messages the prompt covered. */
   length: number;
   /** Estimated system-prompt + tools tokens at the same moment. */
   envelopeTokens: number;
+  /** Projection start the measurement was taken under. A different start
+   * (a checkpoint was inserted) invalidates the anchor. */
+  start: number;
 }
 
 /**
  * Condenses one conversation's history. Owned by the agent that runs the
  * conversation (the session agent, or one sub-agent); the transcript itself
  * stays the agent's (`Agent.state.messages`) and is only rewritten through
- * the injected `commit`.
+ * the injected `insert`.
  */
 export class ContextCompactor {
   private readonly options: ContextCompactorOptions;
@@ -298,13 +378,15 @@ export class ContextCompactor {
     this.options = options;
   }
 
-  /** The budgets of the session's model (undefined when it documents no
-   * usable window: compaction is then disabled). */
+  /** The policy in effect (settings-backed, pi's defaults otherwise). */
+  policy(): CompactionPolicy {
+    return resolveCompactionPolicy(this.options.policy?.());
+  }
+
+  /** The budgets of the session's model (undefined when the model
+   * documents no usable window or the policy disables compaction). */
   budgets(): CompactionBudgets | undefined {
-    return resolveCompactionBudgets(
-      this.options.model,
-      resolveCompactionPolicy(this.options.model),
-    );
+    return resolveCompactionBudgets(this.options.model, this.policy());
   }
 
   /** Record the newest provider-reported prompt size as the measurement
@@ -312,7 +394,8 @@ export class ContextCompactor {
    * newest request the provider actually priced; the delta the heuristic
    * has to estimate is then only what followed that turn. */
   observeTurn(messages: readonly AgentMessage[]): void {
-    for (let i = messages.length - 1; i >= 0; i--) {
+    const start = contextStart(messages);
+    for (let i = messages.length - 1; i >= start; i--) {
       const message = messages[i]!;
       if (message.role !== "assistant") continue;
       const tokens = contextTokensOf((message as AssistantMessage).usage);
@@ -324,8 +407,9 @@ export class ContextCompactor {
         // The provider priced the prompt it received: everything BEFORE
         // this assistant message. What follows it (the message itself and
         // its tool results) is the estimated delta.
-        length: i,
+        length: i - start,
         envelopeTokens: this.envelopeTokens(),
+        start,
       };
       return;
     }
@@ -342,18 +426,21 @@ export class ContextCompactor {
       );
   }
 
-  /** Estimated tokens of the next request: the anchored provider figure
+  /** Estimated tokens of the model's view: the anchored provider figure
    * plus everything appended since, or a full estimate when no anchor
-   * applies (no turn reported usage, or a replacement/truncation moved the
-   * transcript out from under it). */
+   * applies (no turn reported usage, or the projection moved under it). */
   measure(messages: readonly AgentMessage[]): number {
+    const start = contextStart(messages);
     const anchor = this.anchor;
-    if (anchor !== undefined && anchor.length <= messages.length) {
+    if (
+      anchor !== undefined && anchor.start === start &&
+      anchor.length <= messages.length - start
+    ) {
       return anchor.tokens +
         (this.envelopeTokens() - anchor.envelopeTokens) +
-        estimateMessagesTokensFrom(messages, anchor.length);
+        estimateMessagesTokensFrom(messages, start + anchor.length);
     }
-    return this.envelopeTokens() + estimateMessagesTokens(messages);
+    return this.envelopeTokens() + estimateMessagesTokensFrom(messages, start);
   }
 
   /**
@@ -361,7 +448,8 @@ export class ContextCompactor {
    * threshold and retention policy and reduces the history as far as one
    * balanced span allows — the overflow recovery path (a provider-confirmed
    * window rejection), where waiting for the next threshold is not an
-   * option.
+   * option. `instructions` is the user's extra focus for the summary (the
+   * `/compact <instructions>` path).
    *
    * Returns the result, or null when nothing had to (or could) be done. A
    * failed summarization is not an exception for the caller: the transcript
@@ -369,29 +457,25 @@ export class ContextCompactor {
    */
   async compactIfNeeded(
     messages: AgentMessage[],
-    force = false,
+    options: { force?: boolean; instructions?: string } = {},
   ): Promise<CompactionResult | null> {
     if (this.running) return null;
     const budgets = this.budgets();
     if (budgets === undefined) return null;
+    const force = options.force === true;
     this.observeTurn(messages);
     if (!force) {
       const measured = this.measure(messages);
       if (measured <= budgets.thresholdTokens) return null;
       // The envelope alone (system prompt + tool schemas) is over the
       // threshold: replacing history cannot bring the request under it, so
-      // a summarization call would be spent for nothing. DSH draws the same
-      // line — compaction shrinks derived history, never the system prompt,
-      // the tools, or the session prefix.
+      // a summarization call would be spent for nothing.
       if (this.envelopeTokens() >= budgets.thresholdTokens) return null;
     }
-    const attempts = force
-      ? 1
-      : 1 + resolveCompactionPolicy(this.options.model).compactionRetries;
     let last: CompactionResult | null = null;
     let previous = this.measure(messages);
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const result = await this.runOnce(messages, force);
+    for (let attempt = 0; attempt < MAX_COMPACTION_ATTEMPTS; attempt++) {
+      const result = await this.runOnce(messages, force, options.instructions);
       if (result === null) return last;
       last = result;
       if (force) continue;
@@ -412,31 +496,43 @@ export class ContextCompactor {
    * `/compact` path). Returns null when no safe span exists. */
   async compactNow(
     messages: AgentMessage[],
+    instructions?: string,
   ): Promise<CompactionResult | null> {
     if (this.running) return null;
     this.observeTurn(messages);
-    return await this.runOnce(messages, false);
+    return await this.runOnce(messages, false, instructions);
   }
 
-  /** One compaction transaction: select the span, summarize it, and commit
-   * the replacement. */
+  /** One compaction transaction: select the head, summarize it, and commit
+   * the checkpoint. */
   private async runOnce(
     messages: AgentMessage[],
     force: boolean,
+    instructions?: string,
   ): Promise<CompactionResult | null> {
     const budgets = this.budgets();
     if (budgets === undefined) return null;
-    const span = selectCompactionSpan(messages, budgets, force);
+    const span = selectCompactionSpan(
+      messages,
+      contextStart(messages),
+      budgets,
+      force,
+    );
     if (span === null) return null;
-    const replaced = messages.slice(span.index, span.index + span.count);
+    const head = messages.slice(span.start, span.cutIndex);
+    // A previous checkpoint is not replayed as a message: its summary is
+    // merged into the new one (pi's UPDATE_SUMMARIZATION_PROMPT).
+    const previous = head[0]?.role === "checkpoint"
+      ? checkpointSummaryText(head[0])
+      : undefined;
+    const source = previous === undefined ? head : head.slice(1);
     this.running = true;
     let summary: string;
     try {
-      summary = await this.summarize(replaced);
+      summary = await this.summarize(source, previous, instructions, budgets);
     } catch (error) {
       // Nothing was rewritten: the transcript keeps the history it had, and
-      // the run continues with it (DSH: a summarization failure preserves
-      // the latest durable surface).
+      // the run continues with it.
       log.warn(
         `session ${this.options.sessionId}: compaction failed: ${
           errorMessage(error)
@@ -454,32 +550,31 @@ export class ContextCompactor {
       return null;
     }
     const checkpoint = checkpointMessage(
-      span.count,
-      span.replacedTokens,
+      head.length,
+      span.headTokens,
       trimmed,
       this.options.language ?? DEFAULT_LOCALE,
     );
-    // A summary that does not shrink its source would make the request
-    // bigger: refuse it rather than pay for the replacement (DSH validates
-    // the same way).
-    if (estimateMessageTokens(checkpoint) >= span.replacedTokens) {
+    // A summary that does not shrink the view would make the request
+    // bigger: refuse it rather than pay for the insertion.
+    if (estimateMessageTokens(checkpoint) >= span.headTokens) {
       log.warn(
         `session ${this.options.sessionId}: compaction summary did not ` +
-          `shrink its source (${span.replacedTokens} tokens)`,
+          `shrink its source (${span.headTokens} tokens)`,
       );
       return null;
     }
-    // The host performs the replacement (durable first). A throw leaves the
+    // The host performs the insertion (durable first). A throw leaves the
     // transcript exactly as it was: nothing to roll back here.
-    this.options.replace(span.index, span.count, checkpoint);
+    this.options.insert(span.cutIndex, checkpoint);
     this.anchor = undefined;
     const result: CompactionResult = {
-      index: span.index,
-      removed: replaced,
-      freedTokens: span.replacedTokens - estimateMessageTokens(checkpoint),
+      index: span.cutIndex,
+      summarized: head,
+      freedTokens: span.headTokens - estimateMessageTokens(checkpoint),
     };
     log.debug(
-      `session ${this.options.sessionId}: compacted ${span.count} messages ` +
+      `session ${this.options.sessionId}: compacted ${head.length} messages ` +
         `(~${result.freedTokens} tokens freed)`,
     );
     this.options.onCompacted?.(result, checkpoint);
@@ -487,40 +582,42 @@ export class ContextCompactor {
   }
 
   /**
-   * Write the summary for one span: the session's own system prompt, tool
-   * schemas, and the selected messages are replayed verbatim, and the
-   * compaction instruction is appended as the final user message — so the
-   * provider's warm prefix cache covers everything except the instruction.
-   * Only the returned text is kept: reasoning and tool calls would leak
-   * private reasoning or create a call with no result.
+   * Write the summary for one head: the head is serialized to text (tool
+   * results truncated) and sent with a dedicated summarization system
+   * prompt, so the model summarizes instead of continuing the conversation.
+   * The session's own system prompt and tools are deliberately not part of
+   * the request: the head already sits near the window, and the auxiliary
+   * request must leave room for its own output (pi does the same).
    */
-  private async summarize(span: readonly AgentMessage[]): Promise<string> {
-    // The span is replayed as the conversation's own request would send it
-    // (notification/context/checkpoint roles become user messages), plus the
-    // instruction as the final user message.
-    const messages: LlmMessage[] = toLlmMessages([...span]);
-    messages.push({
-      role: "user",
-      content: [{ type: "text", text: COMPACTION_INSTRUCTION }],
-      timestamp: Date.now(),
-    });
-    const tools = this.options.tools();
+  private async summarize(
+    head: readonly AgentMessage[],
+    previous: string | undefined,
+    instructions: string | undefined,
+    budgets: CompactionBudgets,
+  ): Promise<string> {
+    const prompt = buildSummarizationPrompt(
+      head,
+      previous,
+      instructions,
+      budgets,
+      this.options.sessionId,
+    );
+    const request = {
+      systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+      messages: [{
+        role: "user",
+        content: [{ type: "text", text: prompt }],
+        timestamp: Date.now(),
+      }] as LlmMessage[],
+    };
     return await streamText(
       this.options.streamFn,
       this.options.model,
-      {
-        systemPrompt: this.options.systemPrompt(),
-        messages,
-        // Schemas only: the summarizer must not execute anything, but the
-        // definitions must match the conversation's own request for the
-        // cache prefix to hold.
-        ...(tools.length > 0 ? { tools: schemaOnlyTools(tools) } : {}),
-      },
+      request,
       "compaction summarization failed",
       {
         sessionId: this.options.sessionId,
-        maxOutputTokens: resolveCompactionPolicy(this.options.model)
-          .summarizationMaxTokens,
+        maxOutputTokens: budgets.summaryMaxTokens,
       },
     );
   }
@@ -530,21 +627,34 @@ export class ContextCompactor {
  * head line the UI shows. The title never reaches the model — the body
  * carries the model-facing text. */
 export function checkpointMessage(
-  replacedCount: number,
-  replacedTokens: number,
+  summarizedCount: number,
+  summarizedTokens: number,
   summary: string,
   language: Locale = DEFAULT_LOCALE,
-): CheckpointMessage {
+): AgentMessage {
   return {
     role: "checkpoint",
     title: translate(language, "checkpoint.title", {
-      count: replacedCount,
-      tokens: formatTokenCount(replacedTokens),
+      count: summarizedCount,
+      tokens: formatTokenCount(summarizedTokens),
     }),
     body:
       `${CHECKPOINT_PREAMBLE}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n${summary}\n</${CHECKPOINT_SUMMARY_TAG}>`,
     timestamp: Date.now(),
-  };
+  } as AgentMessage;
+}
+
+/** The summary text of a checkpoint (the body minus the preamble and the
+ * framing tags), used as `<previous-summary>` on the next compaction. */
+export function checkpointSummaryText(message: AgentMessage): string {
+  const body = (message as { body?: unknown }).body;
+  if (typeof body !== "string") return "";
+  const open = `<${CHECKPOINT_SUMMARY_TAG}>`;
+  const close = `</${CHECKPOINT_SUMMARY_TAG}>`;
+  const start = body.indexOf(open);
+  const end = body.lastIndexOf(close);
+  if (start === -1 || end === -1 || end <= start) return body.trim();
+  return body.slice(start + open.length, end).trim();
 }
 
 /** Compact token count for the checkpoint title ("12K"). */
@@ -556,23 +666,133 @@ function formatTokenCount(value: number): string {
   return String(value);
 }
 
-/** Strip the execute functions from tool definitions: the summarization
- * request replays the schemas but must never run a tool. A model that calls
- * one anyway gets an explicit refusal, which `streamText` surfaces as a
- * failed call (no summary, history untouched). */
-function schemaOnlyTools(tools: readonly AgentTool[]): AgentTool[] {
-  return tools.map((tool) => ({
-    name: tool.name,
-    label: tool.label,
-    description: tool.description,
-    parameters: tool.parameters,
-    execute: () => {
-      throw new CoreError(
-        "Tools are not executable during compaction",
-        "unavailable",
-      );
-    },
-  }));
+/** Structural view of an LLM content block (the serializer only reads
+ * text, thinking, images, and tool calls). */
+interface ContentBlockLike {
+  type?: string;
+  text?: string;
+  thinking?: string;
+  name?: string;
+  arguments?: unknown;
+}
+
+/** Text of one message's content, with images marked so the summary can
+ * still mention that something was attached. */
+function contentText(content: string | readonly unknown[]): string {
+  if (typeof content === "string") return content;
+  const parts: string[] = [];
+  for (const raw of content) {
+    const block = raw as ContentBlockLike;
+    if (block.type === "text" && typeof block.text === "string") {
+      parts.push(block.text);
+    } else if (block.type === "image") {
+      parts.push("[Attached image]");
+    }
+  }
+  return parts.join("\n");
+}
+
+/** Truncate a tool result for the serialized conversation (pi's
+ * truncateForSummary). */
+function truncateForSummary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const truncated = text.length - maxChars;
+  return `${
+    text.slice(0, maxChars)
+  }\n\n[... ${truncated} more characters truncated]`;
+}
+
+/** Serialize one LLM message into the `[Role]: text` shape pi uses. */
+function serializeMessage(message: Message): string | undefined {
+  if (message.role === "user") {
+    const text = contentText(message.content);
+    return text.trim().length > 0 ? `[User]: ${text}` : undefined;
+  }
+  if (message.role === "assistant") {
+    const blocks = Array.isArray(message.content) ? message.content : [];
+    const thinking: string[] = [];
+    const calls: string[] = [];
+    for (const raw of blocks) {
+      const block = raw as ContentBlockLike;
+      if (block.type === "thinking" && typeof block.thinking === "string") {
+        thinking.push(block.thinking);
+      } else if (block.type === "toolCall") {
+        calls.push(`${block.name}(${JSON.stringify(block.arguments)})`);
+      }
+    }
+    const text = contentText(message.content);
+    const parts: string[] = [];
+    if (thinking.length > 0) {
+      parts.push(`[Assistant thinking]: ${thinking.join("\n")}`);
+    }
+    if (text.trim().length > 0) parts.push(`[Assistant]: ${text}`);
+    if (calls.length > 0) {
+      parts.push(`[Assistant tool calls]: ${calls.join("; ")}`);
+    }
+    return parts.length > 0 ? parts.join("\n") : undefined;
+  }
+  if (message.role === "toolResult") {
+    const text = contentText(message.content);
+    if (text.trim().length === 0) return undefined;
+    const label = message.isError ? "Tool error" : "Tool result";
+    return `[${label}]: ${truncateForSummary(text, TOOL_RESULT_MAX_CHARS)}`;
+  }
+  return undefined;
+}
+
+/** Serialize the head, one part per message (empty messages are skipped). */
+function serializeHead(head: readonly AgentMessage[]): string[] {
+  const parts: string[] = [];
+  for (const message of toLlmMessages([...head])) {
+    const part = serializeMessage(message);
+    if (part !== undefined) parts.push(part);
+  }
+  return parts;
+}
+
+/**
+ * Build the summarization prompt: the serialized head inside
+ * `<conversation>` tags, the previous summary (when there is one), and the
+ * instruction. The oldest parts are dropped when the request would not
+ * leave room for the summary itself — pi relies on its overflow retry here,
+ * but the late threshold means the head routinely sits near the window, so
+ * the request is trimmed instead of failing.
+ */
+function buildSummarizationPrompt(
+  head: readonly AgentMessage[],
+  previous: string | undefined,
+  instructions: string | undefined,
+  budgets: CompactionBudgets,
+  sessionId: string,
+): string {
+  const instruction = previous === undefined
+    ? SUMMARIZATION_PROMPT
+    : UPDATE_SUMMARIZATION_PROMPT;
+  const focus = instructions?.trim();
+  let skeleton = previous === undefined
+    ? ""
+    : `<previous-summary>\n${previous}\n</previous-summary>\n\n`;
+  skeleton += instruction;
+  if (focus !== undefined && focus.length > 0) {
+    skeleton += `\n\nAdditional focus: ${focus}`;
+  }
+  const budget = budgets.contextWindow - CONTEXT_SAFETY_TOKENS -
+    MIN_SUMMARY_TOKENS - estimateTextTokens(skeleton);
+  const parts = serializeHead(head);
+  let total = parts.reduce((sum, part) => sum + estimateTextTokens(part), 0);
+  let from = 0;
+  while (from < parts.length - 1 && total > budget) {
+    total -= estimateTextTokens(parts[from]!);
+    from++;
+  }
+  if (from > 0) {
+    log.debug(
+      `session ${sessionId}: compaction request trimmed ${from} older ` +
+        `messages to fit the window`,
+    );
+  }
+  const conversation = parts.slice(from).join("\n\n");
+  return `<conversation>\n${conversation}\n</conversation>\n\n${skeleton}`;
 }
 
 /** Estimated tokens of `messages` from `from` on (avoids the array copy a
@@ -588,11 +808,20 @@ function estimateMessagesTokensFrom(
   return tokens;
 }
 
+/** The start of the model's view: the newest checkpoint, or 0 when the
+ * conversation was never compacted. Everything before it stays in the
+ * transcript but is not sent to the model. */
+export function contextStart(messages: readonly AgentMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]!.role === "checkpoint") return i;
+  }
+  return 0;
+}
+
 /** One transcript unit: a message together with the tool results that
  * belong to it. A unit boundary is the only safe cut — an assistant message
  * carrying tool calls must never be separated from its results (providers
- * reject a request with an unanswered call), which is exactly what DSH's
- * tool-pairing balance check enforces. */
+ * reject a request with an unanswered call). */
 interface TranscriptUnit {
   /** 0-based index of the unit's first message. */
   index: number;
@@ -602,13 +831,15 @@ interface TranscriptUnit {
   tokens: number;
 }
 
-/** Split a transcript into compaction units: an assistant message together
- * with the tool results directly following it, or a single message. */
+/** Split the transcript from `from` on into compaction units: an assistant
+ * message together with the tool results directly following it, or a single
+ * message. */
 export function transcriptUnits(
   messages: readonly AgentMessage[],
+  from = 0,
 ): TranscriptUnit[] {
   const units: TranscriptUnit[] = [];
-  for (let i = 0; i < messages.length;) {
+  for (let i = from; i < messages.length;) {
     const message = messages[i]!;
     let count = 1;
     if (message.role === "assistant") {
@@ -629,16 +860,11 @@ export function transcriptUnits(
   return units;
 }
 
-/** Fraction of the pressure threshold a span must be worth: replacing less
- * than this cannot meaningfully reduce a request, so the summarization call
- * is not spent on it (DSH's `compactNow` skips a no-op range the same way). */
-const MINIMUM_SPAN_RATIO = 0.1;
-
 /**
- * Select the span to replace: the oldest units, stopping where the retained
- * tail reaches its token budget. The newest unit is always retained, so a
- * compaction can never remove the work in progress — the model must keep
- * answering the most recent request.
+ * Select the head to summarize: the oldest units of the model's view,
+ * stopping where the retained tail reaches its token budget. The newest unit
+ * is always retained, so a compaction can never remove the work in
+ * progress — the model must keep answering the most recent request.
  *
  * `force` ignores the retention budget and reduces as far as one span can
  * (still keeping the newest unit) — the overflow recovery path, where the
@@ -647,43 +873,46 @@ const MINIMUM_SPAN_RATIO = 0.1;
  * Two spans are refused in every mode, because summarizing them would churn
  * checkpoints without reducing a request:
  *
- * - one that holds nothing but earlier checkpoints (a previous compaction
+ * - one that holds nothing but an earlier checkpoint (a previous compaction
  *   that already covered everything up to the retained tail), and
- * - one too small to matter (below {@link MINIMUM_SPAN_RATIO} of the
- *   threshold). This is the case DSH records as out of contract: one
- *   oversized retained unit cannot be repaired by compacting its neighbours.
+ * - one too small to free anything (below {@link MINIMUM_SPAN_TOKENS}).
  */
 export function selectCompactionSpan(
   messages: readonly AgentMessage[],
+  start: number,
   budgets: CompactionBudgets,
   force = false,
 ): CompactionSpan | null {
-  const units = transcriptUnits(messages);
+  const units = transcriptUnits(messages, start);
   if (units.length < 2) return null;
   // Walk the tail backwards: keep the newest unit, then extend while the
-  // retention budget is not met. Everything before the cut is compacted.
+  // retention budget is not met. Everything before the cut is summarized.
   let cutUnit = units.length - 1;
   let retainedTokens = units[cutUnit]!.tokens;
-  while (!force && cutUnit > 0 && retainedTokens < budgets.retainTokens) {
+  while (!force && cutUnit > 0 && retainedTokens < budgets.keepRecentTokens) {
     cutUnit--;
     retainedTokens += units[cutUnit]!.tokens;
   }
   if (cutUnit <= 0) return null;
   const first = units[0]!;
-  const last = units[cutUnit - 1]!;
-  let replacedTokens = 0;
+  const cut = units[cutUnit]!;
+  let headTokens = 0;
+  for (let i = 0; i < cutUnit; i++) headTokens += units[i]!.tokens;
   let hasSourceMessage = false;
-  for (let i = 0; i < cutUnit; i++) {
-    replacedTokens += units[i]!.tokens;
-    for (let j = units[i]!.index; j < units[i]!.index + units[i]!.count; j++) {
-      if (messages[j]!.role !== "checkpoint") hasSourceMessage = true;
+  for (let i = first.index; i < cut.index; i++) {
+    if (messages[i]!.role !== "checkpoint") {
+      hasSourceMessage = true;
+      break;
     }
   }
   if (!hasSourceMessage) return null;
-  if (replacedTokens < budgets.thresholdTokens * MINIMUM_SPAN_RATIO) {
-    return null;
-  }
-  const count = last.index + last.count - first.index;
+  if (headTokens < MINIMUM_SPAN_TOKENS) return null;
+  const count = cut.index - first.index;
   if (count <= 0) return null;
-  return { index: first.index, count, replacedTokens };
+  return {
+    start: first.index,
+    cutIndex: cut.index,
+    count,
+    headTokens,
+  };
 }

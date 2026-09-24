@@ -2,7 +2,14 @@ import { assertEquals } from "@std/assert";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { summarizeContextUsage } from "../shared/mod.ts";
 import type { AgentTool, Api, Model, StreamRequest } from "./types.ts";
-import { createStreamFn, type StreamTransport } from "./stream.ts";
+import {
+  clampMaxTokensToContext,
+  CONTEXT_SAFETY_TOKENS,
+  createStreamFn,
+  MIN_MAX_TOKENS,
+  type StreamTransport,
+} from "./stream.ts";
+import { estimateLlmMessagesTokens } from "../shared/token-estimate.ts";
 
 /** A fake LanguageModel implementing the AI SDK v2 provider surface (the
  * transport accepts any specificationVersion the SDK understands). The
@@ -457,4 +464,112 @@ Deno.test("interleaved reasoning is passed back as reasoning_content", async () 
   assertEquals(assistants[1]?.reasoning_content, "prior reasoning");
   assertEquals(events.some((event) => event.type === "error"), false);
   assertEquals(events.at(-1)?.type, "done");
+});
+
+/** A fake model that records the options the SDK hands it, so a test can
+ * assert on the request the transport built. */
+function recordingLanguageModel(parts: unknown[]): {
+  model: unknown;
+  calls: Array<Record<string, unknown>>;
+} {
+  const calls: Array<Record<string, unknown>> = [];
+  const model = {
+    specificationVersion: "v2",
+    provider: "fake",
+    modelId: "m",
+    supportedUrls: {},
+    doGenerate: () => {
+      throw new Error("not used");
+    },
+    doStream: (options: Record<string, unknown>) => {
+      calls.push(options);
+      return { stream: streamOf(parts), request: {}, response: {} };
+    },
+  };
+  return { model, calls };
+}
+
+/** A model with a window and a completion cap, like the catalog's. */
+function windowedModel(contextWindow: number, maxTokens: number): Model<Api> {
+  return {
+    id: "m",
+    name: "m",
+    api: "openai-completions",
+    provider: "fake",
+    contextWindow,
+    maxTokens,
+  } as Model<Api>;
+}
+
+const USAGE = { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 };
+
+Deno.test("the output cap clamp only shrinks, and never invents a cap", () => {
+  // Plenty of room: the caller's cap stands.
+  assertEquals(
+    clampMaxTokensToContext(windowedModel(100_000, 8_000), 1_000, 8_000),
+    8_000,
+  );
+  // A prompt that leaves less than the cap: the cap shrinks to the room.
+  const model = windowedModel(10_000, 8_000);
+  assertEquals(
+    clampMaxTokensToContext(model, 5_000, 8_000),
+    10_000 - 5_000 - CONTEXT_SAFETY_TOKENS,
+  );
+  // A prompt that leaves nothing: the floor keeps a usable cap.
+  assertEquals(clampMaxTokensToContext(model, 20_000, 8_000), MIN_MAX_TOKENS);
+  // No cap requested, no cap sent (the provider's default applies).
+  assertEquals(clampMaxTokensToContext(model, 5_000, undefined), undefined);
+  // No window: nothing to clamp against.
+  const bare: Model<Api> = { id: "m", name: "m" } as unknown as Model<Api>;
+  assertEquals(clampMaxTokensToContext(bare, 5_000, 8_000), 8_000);
+});
+
+Deno.test("the transport clamps the output cap to the room the prompt leaves", async () => {
+  const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
+  const streamFn = createStreamFn(transportFor(model));
+  const request: StreamRequest = {
+    messages: [{
+      role: "user",
+      content: [{ type: "text", text: "x".repeat(12_000) }],
+    }],
+  };
+  for await (
+    const _ of streamFn(windowedModel(10_000, 8_000), request, undefined)
+  ) {
+    // drain
+  }
+  assertEquals(calls.length, 1);
+  const promptTokens = estimateLlmMessagesTokens(request.messages);
+  assertEquals(
+    calls[0]!.maxOutputTokens,
+    Math.min(8_000, 10_000 - promptTokens - CONTEXT_SAFETY_TOKENS),
+  );
+  // The clamp is below the model's own cap: the prompt really did eat the
+  // room the completion would have used.
+  assertEquals((calls[0]!.maxOutputTokens as number) < 8_000, true);
+});
+
+Deno.test("the transport clamps a caller's override the same way", async () => {
+  const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
+  const streamFn = createStreamFn(transportFor(model));
+  const request: StreamRequest = {
+    messages: [{
+      role: "user",
+      content: [{ type: "text", text: "x".repeat(12_000) }],
+    }],
+  };
+  // The compaction summarizer's smaller cap is clamped too, so its
+  // auxiliary request stays inside the window.
+  for await (
+    const _ of streamFn(windowedModel(10_000, 8_000), request, {
+      maxOutputTokens: 4_000,
+    })
+  ) {
+    // drain
+  }
+  const promptTokens = estimateLlmMessagesTokens(request.messages);
+  assertEquals(
+    calls[0]!.maxOutputTokens,
+    Math.min(4_000, 10_000 - promptTokens - CONTEXT_SAFETY_TOKENS),
+  );
 });

@@ -12,6 +12,7 @@ import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import type { AgentMessage, BrowserBackend, ClientEvent } from "./mod.ts";
 import { LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
+import { COMPACTION_KEEP_RECENT_TOKENS_KEY } from "./shared/settings-keys.ts";
 import { SCHEMA_VERSION } from "./db/schema.ts";
 import {
   FAST_MODEL_KEY,
@@ -2576,13 +2577,15 @@ Deno.test("compaction persists the checkpoint and survives a reopen", async () =
   const roles = agent.messages.map((m) => m.role);
 
   // Reopening restores exactly the condensed transcript from the database:
-  // the replaced rows are gone, the checkpoint is in their place, and
-  // nothing is duplicated or resurrected.
+  // the checkpoint row is where the insert put it, every message around it
+  // survived, and nothing is duplicated or resurrected.
   await core.closeSession(session.id);
   await core.openSession(session.id);
   const restored = core.getAgent(session.id)!.messages;
   assertEquals(restored.map((m) => m.role), roles);
-  assertEquals(restored[0]!.role, "checkpoint");
+  const checkpointIndex = roles.findIndex((role) => role === "checkpoint");
+  assertEquals(checkpointIndex > 0, true);
+  assertEquals(restored[0]!.role, "user");
 
   await core.close();
 });
@@ -2600,15 +2603,26 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
 
   await fillHistory(core, faux, session.id, 3);
   const before = core.getAgent(session.id)!.messages.length;
+  // The manual call summarizes whatever the retention budget leaves out:
+  // with the default 20K kept (against a 30K window) the retained tail
+  // would cover the whole history, so the session is tuned to keep only
+  // the newest 1K — the same settings a user can change in the dialog.
+  core.setSetting(COMPACTION_KEEP_RECENT_TOKENS_KEY, "1000");
   // On demand: condense without waiting for the pressure threshold.
   faux.setResponses([
     fauxAssistantMessage([fauxText("## Summary\n- condensed")]),
   ]);
-  const compacted = await core.compactSession(session.id);
+  const compacted = await core.compactSession(session.id, "keep the paths");
   assertEquals(compacted !== undefined && compacted > 0, true);
   const agent = core.getAgent(session.id)!;
-  assertEquals(agent.messages.length < before, true);
-  assertEquals(agent.messages[0]!.role, "checkpoint");
+  // Nothing was deleted: the transcript GREW by the checkpoint, which sits
+  // at the cut — the summarized messages are still stored.
+  assertEquals(agent.messages.length, before + 1);
+  const checkpointIndex = agent.messages.findIndex((m) =>
+    m.role === "checkpoint"
+  );
+  assertEquals(checkpointIndex > 0, true);
+  assertEquals(agent.messages[0]!.role, "user");
 
   await core.close();
 });

@@ -18,6 +18,11 @@ import { createLogger } from "../log.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
 import {
+  estimateLlmMessagesTokens,
+  estimateTextTokens,
+  estimateToolTokens,
+} from "../shared/token-estimate.ts";
+import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
   retryOnRateLimitError,
@@ -84,7 +89,11 @@ async function* runStream(
     yield { type: "error", errorMessage: NOT_CONFIGURED(model.provider) };
     return;
   }
-  const outputCap = outputCapFor(model, options);
+  const outputCap = clampMaxTokensToContext(
+    model,
+    promptTokensFor(context),
+    outputCapFor(model, options),
+  );
   const request: Record<string, unknown> = {
     model: languageModel,
     messages: toCoreMessages(model, context.messages),
@@ -420,6 +429,55 @@ function outputCapFor(
   return model.maxTokens !== undefined && model.maxTokens > 0
     ? model.maxTokens
     : undefined;
+}
+
+/** Room kept between the prompt and the window when clamping an output cap:
+ * the token estimate is a heuristic, and a request the provider rejects
+ * costs a whole turn. Mirrors pi's CONTEXT_SAFETY_TOKENS. */
+export const CONTEXT_SAFETY_TOKENS = 4_096;
+
+/** The smallest cap a clamped request may carry (pi's MIN_MAX_TOKENS): a
+ * cap of zero would ask for no output at all. */
+export const MIN_MAX_TOKENS = 1;
+
+/** Estimated prompt size of one request: the converted messages, the system
+ * prompt, and the tool schemas — the three parts a provider counts. */
+function promptTokensFor(context: StreamRequest): number {
+  let tokens = estimateLlmMessagesTokens(context.messages);
+  if (context.systemPrompt !== undefined) {
+    tokens += estimateTextTokens(context.systemPrompt);
+  }
+  for (const tool of context.tools ?? []) {
+    tokens += estimateToolTokens(tool);
+  }
+  return tokens;
+}
+
+/**
+ * Clamp a request's output cap to the room its prompt leaves (pi's
+ * `clampMaxTokensToContext`). Providers validate `prompt + max_output`
+ * against the window, so a cap the prompt cannot fit would fail the whole
+ * request; the compaction threshold deliberately lets the conversation come
+ * close to the window, which is exactly when this matters.
+ *
+ * The clamp only ever shrinks a cap — never invents one for a request that
+ * carries none (the provider's own default then applies) — and never goes
+ * below {@link MIN_MAX_TOKENS}. A caller's override (the compaction
+ * summarizer's smaller cap) is clamped the same way, so the auxiliary
+ * request stays inside the window too.
+ */
+export function clampMaxTokensToContext(
+  model: Model<Api>,
+  promptTokens: number,
+  desired: number | undefined,
+): number | undefined {
+  if (desired === undefined) return undefined;
+  const window = model.contextWindow;
+  if (window === undefined || !Number.isFinite(window) || window <= 0) {
+    return Math.max(MIN_MAX_TOKENS, desired);
+  }
+  const available = window - promptTokens - CONTEXT_SAFETY_TOKENS;
+  return Math.min(desired, Math.max(MIN_MAX_TOKENS, available));
 }
 
 /** Map a Lumisca thinking level to a Vercel reasoning hint (best effort).

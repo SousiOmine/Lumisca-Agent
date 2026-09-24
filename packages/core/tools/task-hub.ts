@@ -45,6 +45,7 @@ import {
   sessionSkills,
 } from "./toolsets.ts";
 import { ContextCompactor } from "../agent/context-compaction.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import {
   formatTaskCompletion,
@@ -184,6 +185,10 @@ export interface TaskHubOptions {
    * Defaults to the catalogue's fallback language; the pool re-sets it on
    * every session open (setLanguage), like the browser gate. */
   language?: Locale;
+  /** The compaction tuning read from the settings store (see
+   * shared/settings-keys.ts): the sub-agents condense their history with
+   * the same policy as the main agent. Read on every check. */
+  compactionPolicy?: () => CompactionPolicyInput;
   emit: (event: ClientEvent) => void;
 }
 
@@ -212,6 +217,11 @@ export class TaskHub {
   /** The language the sub-agents answer in: the session's own at the time
    * its agent was built (see the pool's getLanguage dep). */
   private language: Locale;
+  /** The compaction tuning read from the settings store (see
+   * shared/settings-keys.ts); read on every check, like the main agent. */
+  private readonly compactionPolicy:
+    | (() => CompactionPolicyInput)
+    | undefined;
   /** Whether the session has a browser backend attached (set by the pool on
    * every open). Gates the built-in web-browser skill in the sub-agent tool
    * sets, matching the main agent's tool set and prompt listing. */
@@ -234,6 +244,7 @@ export class TaskHub {
     this.streamFn = options.streamFn;
     this.safety = options.safety;
     this.language = options.language ?? DEFAULT_LOCALE;
+    this.compactionPolicy = options.compactionPolicy;
     this.emit = options.emit;
   }
 
@@ -428,10 +439,15 @@ export class TaskHub {
         tools: () => agent.state.tools,
         streamFn: this.streamFn,
         sessionId: id,
-        // Memory only: a sub-agent's transcript is never persisted, so the
-        // replacement is the same splice the agent loop reads.
-        replace: (index, count, message) => {
-          agent.state.messages.splice(index, count, message);
+        ...(this.compactionPolicy !== undefined
+          ? { policy: this.compactionPolicy }
+          : {}),
+        // Memory only: a sub-agent's transcript is never persisted and no
+        // client watches it, so the checkpoint is spliced straight into the
+        // in-memory transcript the agent loop reads (the model's view then
+        // starts at the checkpoint, exactly like the main agent's).
+        insert: (index, message) => {
+          agent.state.messages.splice(index, 0, message);
         },
       }),
       startedAt: Date.now(),

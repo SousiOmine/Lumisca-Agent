@@ -209,9 +209,9 @@ export function App({ initialData }: AppProps): ReactElement {
                   level,
                 )}
               onCancelGoal={() => activeTab && cancelGoal(activeTab)}
-              onActionCommand={(commandId) => {
+              onActionCommand={(commandId, instructions) => {
                 if (!activeTab) return;
-                if (commandId === "compact") compact(activeTab);
+                if (commandId === "compact") compact(activeTab, instructions);
               }}
               onOpenSettings={() => setSettingsCategory("providers")}
             />

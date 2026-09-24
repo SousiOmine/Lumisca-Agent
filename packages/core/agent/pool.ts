@@ -3,6 +3,7 @@ import type { AgentMessage, StreamFn } from "../ai/types.ts";
 import { CoreError } from "../errors.ts";
 import type { ThinkingLevel, TodoPhase } from "../shared/mod.ts";
 import type { Locale } from "../shared/mod.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
@@ -46,6 +47,10 @@ export interface ModelResolver {
    * prompt resolves it separately at creation — that snapshot is what the
    * session keeps. */
   getLanguage(): Locale;
+  /** The compaction tuning read from the settings store (see
+   * shared/settings-keys.ts). The agents read it on every compaction check,
+   * so a settings change applies without rebuilding them. */
+  getCompactionPolicy(): CompactionPolicyInput;
 }
 
 /** Session persistence the agent factory needs (repos + prompt snapshot). */

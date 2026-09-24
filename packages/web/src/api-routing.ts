@@ -68,13 +68,17 @@ export function sessionApi(key: string) {
       fed.rewind,
     ) as (timestamp: number) => Promise<{ ok: boolean }>,
     /** Condense older history into a checkpoint on demand (`/compact`).
+     * `instructions` is the user's extra focus for the summary.
      * `compacted` is absent when nothing could be condensed. */
     compact: sessionRouted(
       peerId,
       sessionId,
       api.compact,
       fed.compact,
-    ) as () => Promise<{ ok: boolean; compacted?: number }>,
+    ) as (instructions?: string) => Promise<{
+      ok: boolean;
+      compacted?: number;
+    }>,
     answer: sessionRouted(
       peerId,
       sessionId,

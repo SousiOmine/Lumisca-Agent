@@ -1,6 +1,5 @@
 import type { AgentMessage } from "../ai/types.ts";
 import type { LumiscaDb } from "../db/mod.ts";
-import { CoreError } from "../errors.ts";
 
 export interface StoredMessage {
   id: string;
@@ -19,21 +18,17 @@ export interface MessageRepo {
    * the rewind feature: positional (not timestamp-based) so messages that
    * share a millisecond with the rewind boundary are handled exactly. */
   deleteFrom(sessionId: string, index: number): void;
-  /** Replace the `count` rows from `index` on with `message`: the row at
-   * `index` becomes the message, the remaining rows of the range are
-   * deleted. Positional like deleteFrom, and rowid order is preserved, so
-   * a later listMessages reproduces the in-memory transcript — the context
-   * compaction uses this to replace a compacted span with its checkpoint
-   * (the retained messages after the range keep their rows). Throws
-   * `not_found` when the span's first message is not in the session; a span
-   * whose end lies past the last persisted row (the newest messages of a
-   * run in flight) deletes everything from its first row on. */
-  replaceRange(
+  /** Insert `message` at the 0-based transcript position `index`, pushing
+   * the rows at and after it one position later. Used by the context
+   * compaction, which inserts its checkpoint at the cut and keeps every
+   * message around it. An `index` at or past the last row appends. The
+   * rewrite runs in one transaction: a failure leaves the session's rows
+   * exactly as they were. */
+  insertAt(
     sessionId: string,
     index: number,
-    count: number,
     message: AgentMessage,
-  ): void;
+  ): StoredMessage;
   deleteBySession(sessionId: string): void;
 }
 
@@ -103,36 +98,6 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
         LIMIT 1 OFFSET ?
       )
   `);
-  // Positional row lookup (same rowid == transcript-position rule as above).
-  const rowidAtStmt = db.db.prepare(`
-    SELECT rowid FROM messages
-    WHERE session_id = ?
-    ORDER BY rowid
-    LIMIT 1 OFFSET ?
-  `);
-  const overwriteStmt = db.db.prepare(`
-    UPDATE messages SET role = ?, content = ?, timestamp = ?
-    WHERE rowid = ?
-  `);
-  // Bounded by the two rows of this session's range, so no other session's
-  // rows (which share the global rowid space) can fall inside it.
-  const deleteBetweenStmt = db.db.prepare(
-    "DELETE FROM messages WHERE rowid > ? AND rowid <= ?",
-  );
-  // Fallback for a span whose end has no row yet: everything after the
-  // span's first row belongs to the span (nothing beyond it is persisted).
-  const deleteAfterRowidStmt = db.db.prepare(
-    "DELETE FROM messages WHERE session_id = ? AND rowid > ?",
-  );
-
-  /** rowid of the row at a 0-based transcript position (undefined when the
-   * session holds no such row). */
-  const rowidAt = (sessionId: string, index: number): number | undefined => {
-    const row = rowidAtStmt.get(sessionId, index) as
-      | { rowid: number }
-      | undefined;
-    return row?.rowid;
-  };
 
   function toStored(row: {
     id: string;
@@ -157,24 +122,27 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     return rows.map(toStored);
   };
 
+  /** Write one row and return its stored form. `id` is reused when an
+   * existing row is rewritten (insertAt), so a message keeps its identity. */
+  const insertRow = (
+    sessionId: string,
+    message: AgentMessage,
+    id = crypto.randomUUID(),
+  ): StoredMessage => {
+    const timestamp = timestampOf(message);
+    insertStmt.run(
+      id,
+      sessionId,
+      message.role,
+      encodeStoredMessage(message),
+      timestamp,
+    );
+    return { id, sessionId, role: message.role, message, timestamp };
+  };
+
   return {
     append(sessionId, message): StoredMessage {
-      const id = crypto.randomUUID();
-      const timestamp = timestampOf(message);
-      insertStmt.run(
-        id,
-        sessionId,
-        message.role,
-        encodeStoredMessage(message),
-        timestamp,
-      );
-      return {
-        id,
-        sessionId,
-        role: message.role,
-        message,
-        timestamp,
-      };
+      return insertRow(sessionId, message);
     },
 
     list,
@@ -187,40 +155,59 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       deleteFromStmt.run(sessionId, sessionId, index);
     },
 
-    replaceRange(
+    insertAt(
       sessionId: string,
       index: number,
-      count: number,
       message: AgentMessage,
-    ): void {
-      const first = rowidAt(sessionId, index);
-      if (first === undefined) {
-        throw new CoreError(
-          `Message not found: ${sessionId} at ${index}`,
-          "not_found",
-        );
-      }
-      overwriteStmt.run(
-        message.role,
-        encodeStoredMessage(message),
-        timestampOf(message),
-        first,
-      );
-      if (count > 1) {
-        // The span's end may lie past the last persisted row (the newest
-        // messages of a run in flight have no row yet): then every row after
-        // the span's first one belongs to the span.
-        const last = rowidAt(sessionId, index + count - 1);
-        if (last === undefined) {
-          deleteAfterRowidStmt.run(sessionId, first);
-        } else {
-          deleteBetweenStmt.run(first, last);
-        }
-      }
+    ): StoredMessage {
+      const rows = listStmt.all(sessionId) as Array<
+        Parameters<typeof toStored>[0]
+      >;
+      const suffix = rows.slice(index);
+      // SQLite rowids are shared by every session, so shifting them by one
+      // could collide with another session's row. Rewriting the session's
+      // own suffix (delete, insert the new row, re-insert the suffix with
+      // its original id/content/timestamp) is collision-free and restores
+      // the "rowid order == transcript order" invariant the positional
+      // operations rely on. An index past the last row appends.
+      return insertAtInTransaction(sessionId, index, suffix, message);
     },
 
     deleteBySession(sessionId: string): void {
       deleteStmt.run(sessionId);
     },
   };
+
+  /** The insertAt body: the suffix rewrite runs in one transaction, so a
+   * failure leaves the session's rows exactly as they were. */
+  function insertAtInTransaction(
+    sessionId: string,
+    index: number,
+    suffix: Array<Parameters<typeof toStored>[0]>,
+    message: AgentMessage,
+  ): StoredMessage {
+    const write = (): StoredMessage => {
+      if (suffix.length > 0) deleteFromStmt.run(sessionId, sessionId, index);
+      const stored = insertRow(sessionId, message);
+      for (const row of suffix) {
+        insertStmt.run(
+          row.id,
+          sessionId,
+          row.role,
+          row.content,
+          row.timestamp,
+        );
+      }
+      return stored;
+    };
+    db.db.exec("BEGIN IMMEDIATE");
+    try {
+      const stored = write();
+      db.db.exec("COMMIT");
+      return stored;
+    } catch (error) {
+      db.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
 }

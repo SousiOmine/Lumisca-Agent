@@ -21,6 +21,7 @@ import {
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "./retry-policy.ts";
 import { SessionAgent } from "./session-agent.ts";
+import type { SessionAgentOptions } from "./session-agent.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
 
 /** A tool that succeeds immediately; a tool call keeps the loop going, so
@@ -56,6 +57,10 @@ function makeAgent(
   extra: {
     rateLimitRetrySleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
     model?: Model<Api>;
+    /** The compaction tuning the agent reads (see
+     * context-compaction.ts); the default model documents a window, so a
+     * test that expects compaction must supply a workable reservation. */
+    compactionPolicy?: SessionAgentOptions["compactionPolicy"];
   } = {},
 ): SessionAgent {
   return new SessionAgent({
@@ -75,7 +80,16 @@ function makeAgent(
       list: () => [],
       listMessages: () => [],
       deleteFrom: () => {},
-      replaceRange: () => {},
+      insertAt: (_sessionId, index, message) => {
+        void index;
+        return {
+          id: "id",
+          sessionId: _sessionId,
+          role: message.role,
+          message,
+          timestamp: message.timestamp,
+        };
+      },
       deleteBySession: () => {},
     },
     onEvent,
@@ -728,23 +742,31 @@ Deno.test("a resend while the rewind runs starts after the truncation", async ()
 
 // ---- context compaction (see context-compaction.ts) ------------------------
 
-/** A model with a window small enough that a couple of tool results cross
- * the pressure threshold, reserving a completion like a real provider does
- * (the reserve is what makes the budget `window - outputCap`). */
+/** A model with a window small enough that a few tool results cross the
+ * pressure threshold. pi's rule is `contextWindow - reserveTokens`, so the
+ * tests reserve a small slice (see TEST_COMPACTION_POLICY) instead of the
+ * model's completion cap. */
 function smallWindowModel(): Model<Api> {
   return {
     id: "small",
     name: "small",
     api: "openai-completions",
     provider: "faux",
-    contextWindow: 2500,
+    contextWindow: 4_000,
     maxTokens: 500,
   } as Model<Api>;
 }
 
+/** The compaction tuning these tests run with: compact 1.5K below the 4K
+ * window and keep only the newest unit, so a handful of 4,000-character
+ * tool results exercise both the threshold and the retention. */
+const TEST_COMPACTION_POLICY = {
+  reserveTokens: 1_500,
+  keepRecentTokens: 100,
+};
+
 /** A tool whose result is big enough to cross the small window's pressure
- * threshold, so the next request would exceed it. */
-const bigTool: Tool = {
+ * threshold, so the next request would exceed it. */ const bigTool: Tool = {
   name: "mock_tool",
   label: "Mock",
   description: "Mock tool for tests.",
@@ -797,43 +819,58 @@ function twoBigTurns(): AssistantMessage[] {
 
 Deno.test("compaction condenses the history before a request crosses the window", async () => {
   const { streamFn } = deltaStreamSequence([
-    ...twoBigTurns(),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t2")]),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t3")]),
+    // The summarization call runs while the fourth request is prepared,
+    // before that request itself is streamed.
     summaryResponse("## Summary\n- condensed"),
+    fauxAssistantMessage([fauxText("finished")]),
   ]);
   const events: ClientEvent[] = [];
   const agent = makeAgent(
     streamFn,
     [bigTool],
     (event) => events.push(event),
-    { model: smallWindowModel() },
+    {
+      model: smallWindowModel(),
+      compactionPolicy: () => TEST_COMPACTION_POLICY,
+    },
   );
 
   await agent.prompt("go");
   await agent.waitForIdle();
 
-  // The oldest span was replaced by a checkpoint, and the clients were told
-  // exactly what was removed.
-  assertEquals(agent.messages[0]!.role, "checkpoint");
-  assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
-  const compacted = events.filter(
-    (e): e is Extract<ClientEvent, { type: "messages_compacted" }> =>
-      e.type === "messages_compacted",
+  // A checkpoint was INSERTED where the retained tail starts: the messages
+  // it summarizes are still in the transcript (and in the database), only
+  // the model's view starts later.
+  const checkpointIndex = agent.messages.findIndex((m) =>
+    m.role === "checkpoint"
   );
-  assertEquals(compacted.length, 1);
-  assertEquals(compacted[0]!.index, 0);
-  assertEquals(compacted[0]!.removed.length > 0, true);
-  assertEquals(compacted[0]!.message.role, "checkpoint");
-  // The newest turn survived: the model still sees the work in progress.
+  assertEquals(checkpointIndex > 0, true);
+  assertEquals(agent.messages[0]!.role, "user");
   assertEquals(agent.messages.at(-1)!.role, "assistant");
+  const checkpoints = events.filter(
+    (e): e is Extract<ClientEvent, { type: "messages_checkpoint" }> =>
+      e.type === "messages_checkpoint",
+  );
+  assertEquals(checkpoints.length, 1);
+  assertEquals(checkpoints[0]!.index, checkpointIndex);
+  assertEquals(checkpoints[0]!.message.role, "checkpoint");
+  // The newest turn survived: the model still sees the work in progress.
+  assertEquals(agent.messages.at(-2)!.role, "toolResult");
 });
 
 Deno.test("compaction keeps the transcript and the stored rows in step", async () => {
   const { streamFn } = deltaStreamSequence([
-    ...twoBigTurns(),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t2")]),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t3")]),
     summaryResponse("## Summary\n- condensed"),
+    fauxAssistantMessage([fauxText("finished")]),
   ]);
-  // A repo stub mirroring the positional replacement the real one performs,
-  // so the transcript and the stored rows can be compared.
+  // A repo stub mirroring the positional insert the real one performs, so
+  // the transcript and the stored rows can be compared.
   const rows: AgentMessage[] = [];
   const repo = {
     append: (_sessionId: string, message: AgentMessage) => {
@@ -851,13 +888,19 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
     deleteFrom: (_sessionId: string, index: number) => {
       rows.splice(index);
     },
-    replaceRange: (
+    insertAt: (
       _sessionId: string,
       index: number,
-      count: number,
       message: AgentMessage,
     ) => {
-      rows.splice(index, count, message);
+      rows.splice(index, 0, message);
+      return {
+        id: "id",
+        sessionId: _sessionId,
+        role: message.role,
+        message,
+        timestamp: (message as { timestamp: number }).timestamp,
+      };
     },
     deleteBySession: () => {},
   };
@@ -871,19 +914,22 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
     onEvent: () => {},
     askHub: new AskHub("s1", () => {}),
     renameSession: () => {},
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
   });
 
   await agent.prompt("go");
   await agent.waitForIdle();
 
-  // The replacement is durable: the stored rows reproduce the in-memory
-  // transcript exactly (no stale rows, no duplicates).
-  assertEquals(agent.messages[0]!.role, "checkpoint");
+  // The insert is durable: the stored rows reproduce the in-memory
+  // transcript exactly (no stale rows, no duplicates) — and nothing was
+  // deleted, so the rows are the full history plus the checkpoint.
+  assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
   assertEquals(rows.length, agent.messages.length);
   assertEquals(
     rows.map((m) => m.role),
     agent.messages.map((m) => m.role),
   );
+  assertEquals(rows.length > 8, true);
 });
 
 Deno.test("a context overflow condenses the history and restarts the run", async () => {
@@ -895,10 +941,11 @@ Deno.test("a context overflow condenses the history and restarts the run", async
       "(2500 in the messages, 500 in the completion).",
   });
   const { streamFn } = deltaStreamSequence([
-    // Turn 1: a tool call whose result is big enough that the NEXT request
-    // is what the provider rejects (below the pressure threshold, so only
-    // the overflow path can save it).
+    // Two tool turns whose results are big enough that the third request is
+    // what the provider rejects. Both stay BELOW the pressure threshold, so
+    // only the overflow path can save the run.
     fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t2")]),
     overflow,
     // The forced compaction's summarization call.
     summaryResponse("## Summary\n- condensed"),
@@ -910,13 +957,16 @@ Deno.test("a context overflow condenses the history and restarts the run", async
     streamFn,
     [bigTool],
     (event) => events.push(event),
-    { model: smallWindowModel() },
+    {
+      model: smallWindowModel(),
+      compactionPolicy: () => TEST_COMPACTION_POLICY,
+    },
   );
 
   await agent.prompt("go");
   await agent.waitForIdle();
 
-  // The overflow was recovered: a checkpoint replaced the old span, the
+  // The overflow was recovered: a checkpoint condensed the older span, the
   // restart produced an answer, and the original error is no longer the
   // last word.
   assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
@@ -928,7 +978,7 @@ Deno.test("a context overflow condenses the history and restarts the run", async
   assertEquals(retries.length, 1);
   assertEquals(retries[0]!.title.includes("Context window exceeded"), true);
   assertEquals(
-    events.filter((e) => e.type === "messages_compacted").length,
+    events.filter((e) => e.type === "messages_checkpoint").length,
     1,
   );
 });
@@ -941,7 +991,8 @@ Deno.test("a second context overflow surfaces the provider's error", async () =>
       "the length of the messages or completion.",
   });
   const { streamFn } = deltaStreamSequence([
-    ...twoBigTurns(),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t2")]),
     overflow,
     // The forced compaction's summarization call.
     summaryResponse("## Summary\n- condensed"),
@@ -953,7 +1004,10 @@ Deno.test("a second context overflow surfaces the provider's error", async () =>
     streamFn,
     [bigTool],
     (event) => events.push(event),
-    { model: smallWindowModel() },
+    {
+      model: smallWindowModel(),
+      compactionPolicy: () => TEST_COMPACTION_POLICY,
+    },
   );
 
   await agent.prompt("go");
@@ -1024,22 +1078,35 @@ Deno.test("compactNow condenses on demand and reports the outcome", async () => 
       list: () => [],
       listMessages: () => [],
       deleteFrom: () => {},
-      replaceRange: () => {},
+      insertAt: (_sessionId, index, message) => {
+        void index;
+        return {
+          id: "id",
+          sessionId: _sessionId,
+          role: message.role,
+          message,
+          timestamp: message.timestamp,
+        };
+      },
       deleteBySession: () => {},
     },
     onEvent: (event) => events.push(event),
     askHub: new AskHub("s1", () => {}),
     renameSession: () => {},
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
   });
 
   const result = await agent.compactNow();
   assertEquals(result !== undefined, true);
-  assertEquals(result!.removed.length > 0, true);
-  assertEquals(agent.messages[0]!.role, "checkpoint");
-  // The newest unit survived: the model still sees the work in progress.
+  assertEquals(result!.summarized.length, 3);
+  // Nothing was deleted: the checkpoint sits at the cut, the summarized
+  // messages are still there, and the newest unit is still visible to the
+  // model.
+  assertEquals(agent.messages[0]!.role, "user");
+  assertEquals(agent.messages[3]!.role, "checkpoint");
   assertEquals(agent.messages.at(-1)!.role, "toolResult");
   assertEquals(
-    events.filter((e) => e.type === "messages_compacted").length,
+    events.filter((e) => e.type === "messages_checkpoint").length,
     1,
   );
 });
@@ -1054,4 +1121,119 @@ Deno.test("compactNow reports nothing when no safe span exists", async () => {
   await agent.prompt("go");
   await agent.waitForIdle();
   assertEquals(await agent.compactNow(), undefined);
+});
+
+Deno.test("a compaction republishes the context its checkpoint left behind", async () => {
+  // A provider whose value never changes: the only reason to publish again
+  // is that a compaction moved the model's view past the first publication.
+  const provider = {
+    name: "catalog",
+    state: undefined as unknown,
+    publishes: 0,
+    next() {
+      if (this.state === "v1") return [];
+      this.state = "v1";
+      this.publishes++;
+      return [{ title: "Catalog", body: "skills: a, b", state: "v1" }];
+    },
+    rebase(state: unknown) {
+      this.state = state;
+    },
+  };
+  const { streamFn } = deltaStreamSequence([
+    summaryResponse("## Summary\n- condensed"),
+    fauxAssistantMessage([fauxText("done")]),
+  ]);
+  const messages: AgentMessage[] = [
+    {
+      role: "context",
+      provider: "catalog",
+      title: "Catalog",
+      body: "skills: a, b",
+      state: "v1",
+      timestamp: 1,
+    } as AgentMessage,
+    { role: "user", content: [{ type: "text", text: "go" }], timestamp: 2 },
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
+    {
+      role: "toolResult",
+      toolCallId: "t1",
+      toolName: "mock_tool",
+      content: [{ type: "text", text: "x".repeat(4000) }],
+      isError: false,
+      timestamp: 3,
+    },
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t2")]),
+    {
+      role: "toolResult",
+      toolCallId: "t2",
+      toolName: "mock_tool",
+      content: [{ type: "text", text: "y".repeat(4000) }],
+      isError: false,
+      timestamp: 4,
+    },
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t3")]),
+    {
+      role: "toolResult",
+      toolCallId: "t3",
+      toolName: "mock_tool",
+      content: [{ type: "text", text: "z".repeat(4000) }],
+      isError: false,
+      timestamp: 5,
+    },
+  ];
+  const agent = new SessionAgent({
+    sessionId: "s1",
+    systemPrompt: "You are a test agent.",
+    model: smallWindowModel(),
+    tools: [bigTool],
+    messages,
+    streamFn,
+    messageRepo: {
+      append: (_sessionId, message) => ({
+        id: "id",
+        sessionId: _sessionId,
+        role: message.role,
+        message,
+        timestamp: message.timestamp,
+      }),
+      list: () => [],
+      listMessages: () => [],
+      deleteFrom: () => {},
+      insertAt: (_sessionId, index, message) => {
+        void index;
+        return {
+          id: "id",
+          sessionId: _sessionId,
+          role: message.role,
+          message,
+          timestamp: message.timestamp,
+        };
+      },
+      deleteBySession: () => {},
+    },
+    contextProviders: [provider],
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
+    onEvent: () => {},
+    askHub: new AskHub("s1", () => {}),
+    renameSession: () => {},
+  });
+  // The constructor rebases from the seeded publication: nothing to publish.
+  assertEquals(provider.publishes, 0);
+
+  await agent.prompt("next");
+  await agent.waitForIdle();
+
+  const checkpointIndex = agent.messages.findIndex((m) =>
+    m.role === "checkpoint"
+  );
+  assertEquals(checkpointIndex > 0, true);
+  // The seeded publication sits before the checkpoint (outside the model's
+  // view), so the provider published its value again — after the boundary.
+  assertEquals(provider.publishes, 1);
+  const contexts = agent.messages
+    .map((m, index) => ({ message: m, index }))
+    .filter(({ message }) => message.role === "context");
+  assertEquals(contexts.length, 2);
+  assertEquals(contexts.at(-1)!.index > checkpointIndex, true);
 });

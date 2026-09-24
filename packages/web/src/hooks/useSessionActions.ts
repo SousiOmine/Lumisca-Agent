@@ -152,12 +152,15 @@ export function useSessionActions(
   );
 
   /** Condense the session's older history into a checkpoint on demand (the
-   * `/compact` command). The event stream carries the resulting
-   * `messages_compacted` update, so nothing is applied here; a failure
+   * `/compact [instructions]` command). `instructions` is the user's extra
+   * focus for the summary. The event stream carries the resulting
+   * `messages_checkpoint` update, so nothing is applied here; a failure
    * surfaces on the view. */
   const compact = useCallback(
-    (key: string) => {
-      sessionApi(key).compact().catch((error) => setViewError(key, error));
+    (key: string, instructions?: string) => {
+      sessionApi(key).compact(instructions).catch((error) =>
+        setViewError(key, error)
+      );
     },
     [setViewError],
   );

@@ -112,6 +112,27 @@ export function contextUsageRatio(
   return summary.currentTokens / contextWindow;
 }
 
+/** The usage ratio at which the next compaction check condenses the history:
+ * `(contextWindow - reserveTokens) / contextWindow` (see
+ * agent/context-compaction.ts). The context meter warns from here on, so the
+ * amber bar and the checkpoint that follows describe the same moment.
+ * Undefined when the window is unknown or the reservation leaves no room —
+ * compaction is then off, and the meter keeps its own default hint. */
+export function compactionUsageRatio(
+  contextWindow: number | undefined,
+  reserveTokens: number,
+): number | undefined {
+  if (
+    contextWindow === undefined || !Number.isFinite(contextWindow) ||
+    contextWindow <= 0 || !Number.isFinite(reserveTokens) || reserveTokens <= 0
+  ) {
+    return undefined;
+  }
+  const threshold = contextWindow - reserveTokens;
+  if (threshold <= 0) return undefined;
+  return Math.min(1, threshold / contextWindow);
+}
+
 /** Compact token count matching the reference card: 999 → "999",
  * 301200 → "301.2K", 1000000 → "1M", 1500000 → "1.5M". */
 export function formatCompactTokens(value: number): string {

@@ -4,9 +4,18 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "preact/compat";
 import { IconSend } from "@tabler/icons-preact";
-import { summarizeContextUsage } from "@lumisca/core/shared";
+import {
+  COMPACTION_DEFAULT_RESERVE_TOKENS,
+  COMPACTION_RESERVE_TOKENS_KEY,
+  compactionUsageRatio,
+  parseNonNegativeIntSetting,
+  summarizeContextUsage,
+} from "@lumisca/core/shared";
+import { api } from "../api.ts";
+import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
   AskAnswer,
@@ -21,6 +30,7 @@ import {
   type SlashCommandItem,
 } from "./Composer.tsx";
 import {
+  actionCommandFromText,
   buildSlashCommands,
   skillPromptFromText,
   slashPrompt,
@@ -70,8 +80,10 @@ interface ChatViewProps {
   /** Cancel the session's active goal (the goal panel's button). */
   onCancelGoal: () => void;
   /** Run a client-side slash command (kind "action"): `/compact` condenses
-   * the session's older history into a checkpoint. */
-  onActionCommand?: (commandId: string) => void;
+   * the session's older history into a checkpoint. `instructions` carries
+   * the text the user typed after the command (`/compact ファイル操作を詳しく`),
+   * which the summarizer uses as its extra focus. */
+  onActionCommand?: (commandId: string, instructions?: string) => void;
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
 }
@@ -171,16 +183,26 @@ export function ChatView(
    * the instruction to load the skill.
    *
    * Composer text the menu completed in place is resolved here even when
-   * the menu was bypassed (send button, Ctrl+Enter): a text-taking mode
-   * (`/plan 依頼文` — workspace sessions only) or the skill palette
-   * (`/skill 名前 依頼文`, which a chat session has too). An incomplete
-   * command line (`/plan` without a request, `/skill` without a skill name)
-   * sends nothing. */
+   * the menu was bypassed (send button, Ctrl+Enter): a client-side action
+   * (`/compact [指示]`, which runs its API instead of sending anything), a
+   * text-taking mode (`/plan 依頼文` — workspace sessions only) or the
+   * skill palette (`/skill 名前 依頼文`, which a chat session has too). An
+   * incomplete command line (`/plan` without a request, `/skill` without a
+   * skill name) sends nothing. */
   const submit = (message?: string, mode?: ModePrompt) => {
     let text = (message ?? input).trim();
     if (!text && images.length === 0) return;
     if (message === undefined) {
-      // Modes first: their token is a mode id, so the two never collide.
+      // Actions first: `/compact` is a client-side command, never a
+      // message, and its argument is the summarizer's extra focus.
+      const action = actionCommandFromText(text);
+      if (action !== null) {
+        onInputChange("");
+        onImagesChange([]);
+        onActionCommand?.(action.commandId, action.instructions);
+        return;
+      }
+      // Modes next: their token is a mode id, so the two never collide.
       const line = (view.info.chat ? null : slashPromptFromText(text, t)) ??
         skillPromptFromText(text, skills);
       if (line !== null) {
@@ -303,6 +325,28 @@ export function ChatView(
   const contextUsage = summary.currentTokens === undefined
     ? undefined
     : { summary, contextWindow };
+  // Where the meter turns amber: the point the next compaction check
+  // condenses the history from (`window - reserveTokens`). The reservation
+  // is a setting read once per view; an unset or unreadable value falls back
+  // to the compactor's default, so the meter is right out of the box.
+  const [compactionReserveTokens, setCompactionReserveTokens] = useState<
+    number | undefined
+  >(undefined);
+  useAsyncEffect(async (isStale) => {
+    try {
+      const settings = await api.getSettings();
+      if (isStale()) return;
+      setCompactionReserveTokens(
+        parseNonNegativeIntSetting(settings[COMPACTION_RESERVE_TOKENS_KEY]),
+      );
+    } catch {
+      // The meter keeps its default hint; nothing else depends on the value.
+    }
+  }, []);
+  const contextWarnRatio = compactionUsageRatio(
+    contextWindow,
+    compactionReserveTokens ?? COMPACTION_DEFAULT_RESERVE_TOKENS,
+  );
 
   return (
     <div className="chat">
@@ -390,6 +434,7 @@ export function ChatView(
           images={images}
           onImagesChange={onImagesChange}
           contextUsage={contextUsage}
+          contextWarnRatio={contextWarnRatio}
         />
       </div>
     </div>

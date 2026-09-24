@@ -81,6 +81,10 @@ export interface SlashCommand extends SlashCommandItem {
   items?: SlashCommandItem[];
   /** What picking the command does with the composer text. */
   kind: SlashCommandKind;
+  /** Action commands only: the command takes a trailing argument, so
+   * picking it completes to `/id ` instead of running right away, and the
+   * submit path reads the argument back (see actionCommandFromText). */
+  takesText?: boolean;
 }
 
 type Icon = (
@@ -98,18 +102,23 @@ const MODE_ICONS: Record<string, Icon> = {
 
 const FALLBACK_ICON: Icon = IconCode;
 
+/** The id of the client-side action that condenses the history; its text
+ * argument is the summarizer's extra focus (see actionCommandFromText). */
+export const COMPACT_COMMAND_ID = "compact";
+
 /** Client-side commands that are not agent modes (see SlashCommandKind
  * "action"): `/compact` condenses the session's older history into a
- * checkpoint. They need no workspace, so they are offered in chat sessions
- * too. */
+ * checkpoint, optionally with the user's own focus for the summary. They
+ * need no workspace, so they are offered in chat sessions too. */
 function actionCommands(t: Translator): SlashCommand[] {
   return [
     {
-      id: "compact",
+      id: COMPACT_COMMAND_ID,
       label: t("chat.slash.compact.label"),
       description: t("chat.slash.compact.description"),
       icon: IconArrowsMinimize,
       kind: "action",
+      takesText: true,
     },
   ];
 }
@@ -139,6 +148,30 @@ function modeCommands(t: Translator): SlashCommand[] {
 /** The id of the skill palette's first level; its submenu holds the
  * session's skill catalog. */
 const SKILL_COMMAND_ID = "skill";
+
+/** A client-side action command line parsed from composer text (`/compact`
+ * or `/compact ファイル操作を詳しく`). Only the start of the input counts:
+ * the action sends nothing itself, so a token typed mid-text stays ordinary
+ * text instead of swallowing the message around it. */
+export interface ActionCommandLine {
+  commandId: string;
+  /** The text after the token, trimmed; absent when the user typed none. */
+  instructions?: string;
+}
+
+/** Resolve composer text that is an action command line. Null when the text
+ * is not one (a plain message, a mode line, or a command this client does
+ * not run) — the caller then treats the text normally. */
+export function actionCommandFromText(text: string): ActionCommandLine | null {
+  const match = /^\s*\/([^\s/]+)([\s\S]*)$/.exec(text);
+  if (match === null) return null;
+  const commandId = match[1]!;
+  if (commandId !== COMPACT_COMMAND_ID) return null;
+  const instructions = match[2]!.trim();
+  return instructions.length === 0
+    ? { commandId }
+    : { commandId, instructions };
+}
 
 /** The text a `complete` pick leaves in the composer (see
  * SlashCommandKind "complete"): `/id ` for the command itself, and

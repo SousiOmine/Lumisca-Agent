@@ -140,12 +140,18 @@ export const api = {
       body: JSON.stringify({ timestamp }),
     }),
   /** Condense older history into a checkpoint on demand (the `/compact`
-   * command). `compacted` is the number of replaced messages; absent when
-   * nothing could be condensed. */
-  compact: (id: string) =>
+   * command). `instructions` is the user's extra focus for the summary.
+   * `compacted` is the number of summarized messages; absent when nothing
+   * could be condensed. */
+  compact: (id: string, instructions?: string) =>
     request<{ ok: boolean; compacted?: number }>(
       `/api${sessionPath(id, "/compact")}`,
-      { method: "POST" },
+      {
+        method: "POST",
+        ...(instructions !== undefined && instructions.length > 0
+          ? { body: JSON.stringify({ instructions }) }
+          : {}),
+      },
     ),
   /** Answer a pending ask (the ask tool) with the user's selections. */
   answer: (id: string, toolCallId: string, answers: AskAnswer[]) =>

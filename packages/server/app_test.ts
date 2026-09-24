@@ -2105,6 +2105,18 @@ Deno.test("compact condenses the history via the API", async () => {
     });
     const ws = await create.json();
 
+    // The compaction tuning is a plain setting read by the agent on every
+    // check: compact 4K below the window and keep only the newest 1K, so
+    // both the automatic and the manual path find a span in this session.
+    await json(base, "/api/settings/compaction_reserve_tokens", {
+      method: "PUT",
+      body: JSON.stringify({ value: "4000" }),
+    });
+    await json(base, "/api/settings/compaction_keep_recent_tokens", {
+      method: "PUT",
+      body: JSON.stringify({ value: "1000" }),
+    });
+
     // A small window so a couple of big turns cross the pressure threshold
     // (the compaction only runs when a replacement can actually reduce the
     // request).
@@ -2135,18 +2147,23 @@ Deno.test("compact condenses the history via the API", async () => {
     const session = await sessionRes.json();
 
     // A context-inspecting responder: the summarization request is
-    // recognized by the compaction instruction in its final user message,
-    // so the answer order does not depend on how the prompts are scheduled
-    // (the prompt endpoint is fire-and-forget).
+    // recognized by the serialized conversation the compactor builds, so
+    // the answer order does not depend on how the prompts are scheduled
+    // (the prompt endpoint is fire-and-forget). The last summarization
+    // prompt is kept so a test can check what the user's `/compact <focus>`
+    // added to it.
+    let summaryPrompt = "";
     faux.setResponses(
       Array.from({ length: 20 }, () => (context: StreamRequest) => {
         const last = context.messages.at(-1) as
           | { content?: Array<{ text?: string }> }
           | undefined;
         const text = last?.content?.[0]?.text ?? "";
-        return text.includes("compaction engine")
-          ? fauxAssistantMessage("## Summary\n- condensed")
-          : fauxAssistantMessage("ok");
+        if (text.includes("<conversation>")) {
+          summaryPrompt = text;
+          return fauxAssistantMessage("## Summary\n- condensed");
+        }
+        return fauxAssistantMessage("ok");
       }),
     );
     for (let i = 0; i < 6; i++) {
@@ -2166,22 +2183,54 @@ Deno.test("compact condenses the history via the API", async () => {
     }
     assertEquals(messages.some((m) => m.role === "checkpoint"), true);
 
-    // The endpoint reports how many messages the manual call replaced (or
-    // omits the count when nothing safe was left).
+    // The endpoint reports how many messages the manual call summarized (or
+    // omits the count when nothing safe was left), and the typed focus is
+    // carried into the summarization prompt.
     const compactRes = await json(
       base,
       `/api/sessions/${session.id}/compact`,
-      { method: "POST" },
+      {
+        method: "POST",
+        body: JSON.stringify({ instructions: "keep the file paths" }),
+      },
     );
     assertEquals(compactRes.status, 200);
     const body = await compactRes.json();
     assertEquals(body.ok, true);
+    assertEquals(typeof body.compacted, "number");
+    assertEquals(
+      summaryPrompt.includes("Additional focus: keep the file paths"),
+      true,
+    );
+
+    // Nothing is deleted: the checkpoint is inserted, and the messages it
+    // summarizes stay in the transcript.
+    const after = await (
+      await json(base, `/api/sessions/${session.id}/messages`)
+    ).json();
+    const checkpointIndex = after.findIndex(
+      (m: { role: string }) => m.role === "checkpoint",
+    );
+    assertEquals(checkpointIndex > 0, true);
+    assertEquals(after[0].role !== "checkpoint", true);
 
     // An unknown session is a 404, like the other session routes.
     const missing = await json(base, "/api/sessions/nope/compact", {
       method: "POST",
     });
     assertEquals(missing.status, 404);
+
+    // The optional focus is validated, not silently dropped.
+    const badType = await json(base, `/api/sessions/${session.id}/compact`, {
+      method: "POST",
+      body: JSON.stringify({ instructions: 42 }),
+    });
+    assertEquals(badType.status, 400);
+    const tooLong = await json(base, `/api/sessions/${session.id}/compact`, {
+      method: "POST",
+      body: JSON.stringify({ instructions: "x".repeat(2_001) }),
+    });
+    assertEquals(tooLong.status, 400);
 
     await removeDirRetry(root);
   } finally {

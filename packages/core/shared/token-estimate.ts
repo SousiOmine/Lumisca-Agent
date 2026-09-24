@@ -1,5 +1,5 @@
 /** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies, bundled into the browser client. */
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage, LlmMessage } from "../ai/types.ts";
 
 /*
  * Token estimation for history that has no provider-reported usage to lean
@@ -131,6 +131,49 @@ export function estimateMessagesTokens(
 ): number {
   let tokens = 0;
   for (const message of messages) tokens += estimateMessageTokens(message);
+  return tokens;
+}
+
+/**
+ * Estimated tokens of one message as the transport sends it (see
+ * ai/types.ts LlmMessage). The request clamp (ai/stream.ts) prices a
+ * converted request with this, so it counts what the provider actually
+ * receives: reasoning blocks are skipped for the same reason as in
+ * {@link estimateMessageTokens}.
+ */
+export function estimateLlmMessageTokens(message: LlmMessage): number {
+  const overhead = MESSAGE_OVERHEAD_TOKENS;
+  if (typeof message.content === "string") {
+    return overhead + estimateTextTokens(message.content);
+  }
+  let tokens = overhead;
+  for (const block of message.content) {
+    switch (block.type) {
+      case "text":
+        tokens += estimateTextTokens(block.text) + BLOCK_OVERHEAD_TOKENS;
+        break;
+      case "image":
+        tokens += IMAGE_TOKEN_ESTIMATE + BLOCK_OVERHEAD_TOKENS;
+        break;
+      case "toolCall":
+        tokens += estimateTextTokens(block.name) +
+          estimateTextTokens(argumentsText(block.arguments)) +
+          BLOCK_OVERHEAD_TOKENS;
+        break;
+      default:
+        // Reasoning blocks are not sent back in most provider protocols.
+        break;
+    }
+  }
+  return tokens;
+}
+
+/** Estimated tokens of a converted request's messages. */
+export function estimateLlmMessagesTokens(
+  messages: readonly LlmMessage[],
+): number {
+  let tokens = 0;
+  for (const message of messages) tokens += estimateLlmMessageTokens(message);
   return tokens;
 }
 

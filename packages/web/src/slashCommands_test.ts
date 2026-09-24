@@ -6,6 +6,7 @@ import {
 } from "@lumisca/core/shared";
 import { detectSlash } from "./hooks/useSlashMenu.ts";
 import {
+  actionCommandFromText,
   buildSlashCommands,
   modeRewindText,
   skillPromptFromText,
@@ -293,6 +294,9 @@ Deno.test("buildSlashCommands: /compact is offered as an action command", () => 
   assertEquals(compactCommand !== undefined, true);
   assertEquals(compactCommand!.kind, "action");
   assertEquals(compactCommand!.items, undefined);
+  // It takes the user's own focus as its argument, so picking it completes
+  // the input instead of running right away.
+  assertEquals(compactCommand!.takesText, true);
   assertEquals(compactCommand!.label, "履歴を圧縮");
   // Its text follows the app language like every other menu entry.
   assertEquals(
@@ -448,4 +452,33 @@ Deno.test("skillPromptFromText: the palette's completion round-trips", () => {
   if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
   assertEquals(line.text.includes('Invoke the skill "canvas-design"'), true);
   assertEquals(line.text.endsWith("# Request\nポスターを作って"), true);
+});
+
+Deno.test("actionCommandFromText: /compact runs with the typed focus", () => {
+  assertEquals(actionCommandFromText("/compact"), { commandId: "compact" });
+  assertEquals(actionCommandFromText("  /compact  "), {
+    commandId: "compact",
+  });
+  assertEquals(
+    actionCommandFromText("/compact ファイル操作を詳しく記録して"),
+    { commandId: "compact", instructions: "ファイル操作を詳しく記録して" },
+  );
+  // Multi-line focus keeps its inner newlines.
+  assertEquals(
+    actionCommandFromText("/compact 一つ目\n二つ目"),
+    { commandId: "compact", instructions: "一つ目\n二つ目" },
+  );
+});
+
+Deno.test("actionCommandFromText: only a leading token, and only this client's commands", () => {
+  // The action sends nothing itself, so a token mid-text stays ordinary
+  // text instead of swallowing the message around it.
+  assertEquals(actionCommandFromText("メモ /compact して"), null);
+  // A mode line, a skill line and plain text are not actions.
+  assertEquals(actionCommandFromText("/plan 履歴を追加"), null);
+  assertEquals(actionCommandFromText("/skill canvas-design ポスター"), null);
+  assertEquals(actionCommandFromText("普通のメッセージ"), null);
+  assertEquals(actionCommandFromText("/nope なにか"), null);
+  // A path is not a command (the same word-start rule as the slash menu).
+  assertEquals(actionCommandFromText("/usr/local/bin"), null);
 });

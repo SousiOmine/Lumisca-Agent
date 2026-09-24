@@ -240,6 +240,7 @@ export class AgentFactory {
           streamFn: this.deps.streamFn,
           safety: this.deps.commandSafety,
           language: this.deps.getLanguage(),
+          compactionPolicy: () => this.deps.getCompactionPolicy(),
           emit: (event: ClientEvent) => this.deps.emit(event),
         });
         resources.tasks = tasks;
@@ -324,6 +325,7 @@ export class AgentFactory {
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
       language: this.deps.getLanguage(),
+      compactionPolicy: () => this.deps.getCompactionPolicy(),
       renameSession: (name) => this.deps.renameSession(session.id, name),
       goalStore: {
         loadGoal: () => this.deps.loadGoal(session.id),

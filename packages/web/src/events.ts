@@ -416,34 +416,25 @@ export function applyEvent(
         thinkingStartAt: undefined,
       };
     }
-    case "messages_compacted": {
+    case "messages_checkpoint": {
       // Older history was condensed into a checkpoint (the run keeps
-      // streaming, so no run state is touched). Drop the replaced messages
-      // and tombstone their keys exactly like a rewind truncation, then put
-      // the checkpoint where they were: at `index` in the new transcript,
-      // which is one position after the retained prefix the view already
-      // shows. A view that is missing part of that prefix (a resync in
-      // flight) falls back to appending — the checkpoint must never be
-      // dropped, its summary is the only trace of the removed history.
-      const removedKeys = new Set(event.removed.map((m) => messageKey(m)));
-      const removed = new Set(view.removed);
-      for (const key of removedKeys) removed.add(key);
-      const kept = view.messages.filter((m) =>
-        !removedKeys.has(messageKey(m)) &&
-        messageKey(m) !== messageKey(event.message)
+      // streaming, so no run state is touched). Nothing was deleted: the
+      // checkpoint is inserted at `event.index`, which is the position of
+      // the first message the model still sees verbatim. A view that is
+      // missing part of the preceding history (a resync in flight) appends
+      // instead — the checkpoint row must never be dropped, it is what
+      // marks where the model's view starts.
+      const existing = view.messages.findIndex((m) =>
+        messageKey(m) === messageKey(event.message)
       );
-      // The checkpoint sits where the replaced span began: `event.index` in
-      // the new transcript, which is the position of the first kept message
-      // that followed the span. A view that lacks that message (a resync in
-      // flight) appends instead — the checkpoint must never be dropped, its
-      // summary is the only trace of the removed history.
-      const anchor = view.messages[event.index + event.removed.length];
+      if (existing !== -1) return null;
+      const anchor = view.messages[event.index];
       const at = anchor === undefined
         ? -1
-        : kept.findIndex((m) => messageKey(m) === messageKey(anchor));
-      const messages = [...kept];
-      messages.splice(at === -1 ? kept.length : at, 0, event.message);
-      return { ...view, messages, removed };
+        : view.messages.findIndex((m) => messageKey(m) === messageKey(anchor));
+      const messages = [...view.messages];
+      messages.splice(at === -1 ? messages.length : at, 0, event.message);
+      return { ...view, messages };
     }
     case "agent_end":
       return view.agentStartedAt === undefined ? null : {

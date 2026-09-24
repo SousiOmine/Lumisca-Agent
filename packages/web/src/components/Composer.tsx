@@ -115,6 +115,9 @@ interface ComposerProps {
   /** Context usage for the meter + popover above the footer (undefined
    * hides it: the session has no assistant usage yet). */
   contextUsage?: ContextUsageData;
+  /** Where the meter's bar turns amber: the compaction point when the
+   * caller knows it (see shared/context-usage.ts compactionUsageRatio). */
+  contextWarnRatio?: number;
 }
 
 /** Shared chat input: textarea + model picker + submit, in one rounded box.
@@ -147,6 +150,7 @@ export function Composer({
   images = [],
   onImagesChange,
   contextUsage,
+  contextWarnRatio,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showCtx, setShowCtx] = useState(false);
@@ -236,6 +240,14 @@ export function Composer({
       state: SlashState,
     ) => {
       if (command.kind === "complete") {
+        replaceSlashToken(state, slashCompletion(command, item), true);
+        return;
+      }
+      // An action command that takes an argument completes to `/id ` like a
+      // text-taking mode: the argument is typed after the token and read
+      // back on submit (see actionCommandFromText). The menu stays a
+      // palette, never a sender.
+      if (command.kind === "action" && command.takesText === true) {
         replaceSlashToken(state, slashCompletion(command, item), true);
         return;
       }
@@ -594,6 +606,7 @@ export function Composer({
               <ContextUsageTrigger
                 summary={contextUsage.summary}
                 contextWindow={contextUsage.contextWindow}
+                warnRatio={contextWarnRatio}
                 open={showCtx}
                 onToggle={() => {
                   setShowCtx((o) => !o);
@@ -604,6 +617,7 @@ export function Composer({
                 <ContextUsageCard
                   summary={contextUsage.summary}
                   contextWindow={contextUsage.contextWindow}
+                  warnRatio={contextWarnRatio}
                 />
               )}
             </div>

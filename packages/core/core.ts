@@ -38,12 +38,14 @@ import type { ThinkingLevel } from "./shared/mod.ts";
 import type { AskAnswer } from "./shared/mod.ts";
 import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
 import type { CommandApproval } from "./shared/mod.ts";
+import type { CompactionPolicyInput } from "./shared/mod.ts";
 import type { BackgroundCommandInfo } from "./tools/background.ts";
 import {
   CONNECTIONS_KEY,
   formatSessionName,
   LANGUAGE_KEY,
   type Locale,
+  parseCompactionPolicyInput,
   resolveLocale,
   type SavedPrompt,
 } from "./shared/mod.ts";
@@ -160,6 +162,7 @@ export class LumiscaCore {
       getThinkingLevel: (provider, modelId) =>
         this.models.getThinkingLevel(provider, modelId),
       getLanguage: () => this.getLanguage(),
+      getCompactionPolicy: () => this.getCompactionPolicy(),
       buildGeneratedPrompt: (workspace, model, tools) =>
         this.buildGeneratedPrompt(workspace, model, tools),
       personalInstructions: () => {
@@ -324,6 +327,14 @@ export class LumiscaCore {
    * core generates into the transcript). */
   getLanguage(): Locale {
     return resolveLocale(this.settings.get(LANGUAGE_KEY), systemLanguageTags());
+  }
+
+  /** The compaction tuning stored in the settings table (see
+   * shared/settings-keys.ts). Read by the session agents on every
+   * compaction check, so a change applies to running sessions without a
+   * rebuild; omitted fields keep the compactor's defaults (pi's). */
+  getCompactionPolicy(): CompactionPolicyInput {
+    return parseCompactionPolicyInput((key) => this.settings.get(key));
   }
 
   // --- command safety (fast-model judgement of bash/eval) -------------------
@@ -714,15 +725,19 @@ export class LumiscaCore {
   }
 
   /** Condense the session's older history into a checkpoint on demand (the
-   * `/compact` command), even below the automatic pressure threshold.
-   * Returns how many messages were replaced, or undefined when nothing
+   * `/compact [instructions]` command), even below the automatic pressure
+   * threshold. `instructions` is the user's extra focus for the summary.
+   * Returns how many messages were summarized, or undefined when nothing
    * could be condensed (no safe span, or the summarization failed — the
    * transcript is unchanged either way). */
-  async compactSession(id: string): Promise<number | undefined> {
+  async compactSession(
+    id: string,
+    instructions?: string,
+  ): Promise<number | undefined> {
     const agent = this.pool.require(id);
     this.sessions.touch(id);
-    const result = await agent.compactNow();
-    return result?.removed.length;
+    const result = await agent.compactNow(instructions);
+    return result?.summarized.length;
   }
 
   /** Switch the model used by a session (persisted). Retired models

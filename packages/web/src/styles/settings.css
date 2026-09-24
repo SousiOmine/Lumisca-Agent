@@ -145,6 +145,18 @@
   gap: 10px;
 }
 
+/* Compaction tuning (settings → モデル): the group's heading and its two
+   numeric fields sit next to the model preference rows. */
+.compaction-settings > .update-label {
+  margin-top: 4px;
+}
+
+.compaction-token-input {
+  width: 96px;
+  flex: none;
+  text-align: right;
+}
+
 /* Card wrapping one model row in the custom-provider form. */
 .user-provider-card {
   border: 1px solid var(--border);

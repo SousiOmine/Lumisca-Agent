@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "./messages.ts";
 import type { AgentMessage } from "@lumisca/core";
@@ -144,18 +144,21 @@ Deno.test("messages: deleteFrom removes a positional suffix", () => {
   }
 });
 
-Deno.test("messages: replaceRange swaps a span for one message", () => {
+Deno.test("messages: insertAt pushes the rows after the position one later", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
     const repo = createMessageRepo(db);
     const texts = ["a", "b", "c", "d"];
+    const ids: string[] = [];
     for (const [i, text] of texts.entries()) {
-      repo.append("s1", {
-        role: i % 2 === 0 ? "user" : "assistant",
-        content: [{ type: "text", text }],
-        timestamp: 1000 + i,
-      } as AgentMessage);
+      ids.push(
+        repo.append("s1", {
+          role: i % 2 === 0 ? "user" : "assistant",
+          content: [{ type: "text", text }],
+          timestamp: 1000 + i,
+        } as AgentMessage).id,
+      );
     }
 
     const checkpoint: AgentMessage = {
@@ -164,67 +167,83 @@ Deno.test("messages: replaceRange swaps a span for one message", () => {
       body: "summary",
       timestamp: 2000,
     } as AgentMessage;
-    repo.replaceRange("s1", 0, 2, checkpoint);
+    const inserted = repo.insertAt("s1", 1, checkpoint);
 
-    // The replaced rows are gone, the checkpoint took the span's place, and
-    // the retained rows keep their order (a later read reproduces the
-    // in-memory transcript).
-    const listed = repo.listMessages("s1");
-    assertEquals(listed.length, 3);
-    assertEquals(listed[0]!.role, "checkpoint");
+    // The checkpoint took position 1, the rows after it moved one later, and
+    // every original row kept its identity and content (the transcript is
+    // never rewritten, only pushed).
+    const listed = repo.list("s1");
+    assertEquals(listed.length, 5);
+    assertEquals(listed[0]!.id, ids[0]!);
+    assertEquals(listed[1]!.id, inserted.id);
+    assertEquals(listed[1]!.message, checkpoint);
+    assertEquals(listed.slice(2).map((row) => row.id), ids.slice(1));
     assertEquals(
-      listed.slice(1).map((m) =>
-        (m as { content: Array<{ text: string }> }).content[0]!.text
+      listed.slice(2).map((row) =>
+        (row.message as { content: Array<{ text: string }> }).content[0]!.text
       ),
-      ["c", "d"],
+      ["b", "c", "d"],
     );
+    // The positional operations still agree with the list: truncating from
+    // the inserted row leaves exactly the prefix before it.
+    repo.deleteFrom("s1", 1);
+    assertEquals(repo.list("s1").map((row) => row.id), [ids[0]!]);
   } finally {
     db.close();
   }
 });
 
-Deno.test("messages: replaceRange tolerates a span past the persisted tail", () => {
+Deno.test("messages: insertAt appends at or past the last row", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
     const repo = createMessageRepo(db);
-    // Two rows persisted, but the transcript the caller is replacing spans
-    // four messages: the newest two have no row yet (a run in flight).
-    for (const [i, text] of ["a", "b"].entries()) {
-      repo.append("s1", {
-        role: "user",
-        content: [{ type: "text", text }],
-        timestamp: 1000 + i,
-      } as AgentMessage);
-    }
+    repo.append("s1", sampleMessage());
     const checkpoint: AgentMessage = {
       role: "checkpoint",
-      title: "履歴 4 件を要約しました",
+      title: "t",
       body: "summary",
       timestamp: 2000,
     } as AgentMessage;
 
-    repo.replaceRange("s1", 0, 4, checkpoint);
+    repo.insertAt("s1", 1, checkpoint);
+    repo.insertAt("s1", 99, checkpoint);
 
-    // Everything from the span's first row on is the span: nothing is left
-    // dangling behind the checkpoint.
     const listed = repo.listMessages("s1");
-    assertEquals(listed.length, 1);
-    assertEquals(listed[0]!.role, "checkpoint");
+    assertEquals(listed.length, 3);
+    assertEquals(listed[1]!.role, "checkpoint");
+    assertEquals(listed[2]!.role, "checkpoint");
   } finally {
     db.close();
   }
 });
 
-Deno.test("messages: replaceRange throws not_found for an unknown span", () => {
+Deno.test("messages: insertAt leaves other sessions untouched", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
+    db.db.prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+       VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
+    ).run();
     const repo = createMessageRepo(db);
-    const thrown = assertThrows(() =>
-      repo.replaceRange("s1", 0, 2, sampleMessage())
-    ) as { kind: string };
-    assertEquals(thrown.kind, "not_found");
+    // Interleaved rows of two sessions share the rowid space: the rewrite
+    // must not move (or drop) the other session's rows.
+    repo.append("s1", sampleMessage());
+    const other = repo.append("s2", sampleMessage());
+    repo.append("s1", sampleMessage());
+
+    repo.insertAt("s1", 0, {
+      role: "checkpoint",
+      title: "t",
+      body: "summary",
+      timestamp: 2000,
+    } as AgentMessage);
+
+    assertEquals(repo.list("s2"), [other]);
+    const s1 = repo.listMessages("s1");
+    assertEquals(s1.length, 3);
+    assertEquals(s1[0]!.role, "checkpoint");
   } finally {
     db.close();
   }

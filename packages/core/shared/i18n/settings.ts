@@ -484,6 +484,50 @@ export const settings = {
     en:
       "When the main model does not support image recognition, this model handles image analysis as a fallback.",
   },
+  // --- context compaction ---------------------------------------------------
+  /** Heading of the compaction group in the settings dialog's model
+   * section. */
+  "settings.compaction.title": {
+    ja: "コンテキスト圧縮",
+    en: "Context compaction",
+  },
+  "settings.compaction.enabled": {
+    ja: "自動圧縮",
+    en: "Automatic compaction",
+  },
+  "settings.compaction.enabledDesc": {
+    ja:
+      "コンテキストが上限に近づいたとき、古い履歴を要約し、モデルに見せる範囲を絞ります。履歴自体は残ります。",
+    en:
+      "Summarizes older history and narrows what the model sees once the context approaches the window. The history itself is kept.",
+  },
+  "settings.compaction.reserveTokens": {
+    ja: "予約トークン",
+    en: "Reserved tokens",
+  },
+  "settings.compaction.reserveTokensDesc": {
+    ja:
+      "モデルのコンテキスト上限からこの分を空けて圧縮します。既定は 16384 です。",
+    en: "Compact this far below the model's context window. Default 16384.",
+  },
+  "settings.compaction.keepRecentTokens": {
+    ja: "保持トークン",
+    en: "Kept tokens",
+  },
+  "settings.compaction.keepRecentTokensDesc": {
+    ja: "圧縮後もそのまま残す直近のトークン数です。既定は 20000 です。",
+    en: "Newest tokens kept verbatim after a compaction. Default 20000.",
+  },
+  "settings.compaction.saveFailed": {
+    ja: "圧縮の設定を保存できませんでした: {error}",
+    en: "Failed to save the compaction settings: {error}",
+  },
+  "settings.compaction.invalidNumber": {
+    ja: "0 以上の整数を入力してください。",
+    en: "Enter a whole number of 0 or more.",
+  },
+  "settings.compaction.saved": { ja: "保存しました", en: "Saved" },
+
   "settings.model.loadFailed": {
     ja: "設定の読み込みに失敗しました: {error}",
     en: "Failed to load settings: {error}",

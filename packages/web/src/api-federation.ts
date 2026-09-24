@@ -147,12 +147,18 @@ export const fed = {
       { method: "POST", body: JSON.stringify({ timestamp }) },
     ),
   /** Condense a remote session's older history into a checkpoint on demand
-   * (the `/compact` command; the agent runs on the peer). */
-  compact: (peerId: string, sessionId: string) =>
+   * (the `/compact` command; the agent runs on the peer). `instructions` is
+   * the user's extra focus for the summary. */
+  compact: (peerId: string, sessionId: string, instructions?: string) =>
     fedRequest<{ ok: boolean; compacted?: number }>(
       peerId,
       sessionPath(sessionId, "/compact"),
-      { method: "POST" },
+      {
+        method: "POST",
+        ...(instructions !== undefined && instructions.length > 0
+          ? { body: JSON.stringify({ instructions }) }
+          : {}),
+      },
     ),
   /** Answer a pending ask of a remote session (the agent runs on the peer;
    * the answer is forwarded to the machine holding the question). */
