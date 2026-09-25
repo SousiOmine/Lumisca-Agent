@@ -209,22 +209,34 @@ export const updateApi = {
  * while in the desktop the shell's updater owns the app (and the server is
  * just one of its resources). Both answer the same status shape, so the UI
  * keeps a single implementation.
+ *
+ * The method is part of that contract, so every call names it: `status` is
+ * the only GET (a read), all actions are POST (the server registers them
+ * that way — an action mutates the installation, and a mutation must not
+ * ride on a GET). Inferring the method from the presence of a body, as this
+ * module first did, sent the four body-less actions (`check`, `download`,
+ * `install`, `restart`) as GETs, which the server answers with 404: every
+ * update button of a browser-hosted page was dead, silently.
  */
 export const serverUpdateApi = {
-  status: () => serverUpdate<UpdateStatus>("status"),
+  status: () => serverUpdate<UpdateStatus>("status", "GET"),
   setAuto: (enabled: boolean) =>
-    serverUpdate<UpdateStatus>("set-auto", { enabled }),
+    serverUpdate<UpdateStatus>("set-auto", "POST", { enabled }),
   setAutoRestart: (enabled: boolean) =>
-    serverUpdate<UpdateStatus>("set-auto-restart", { enabled }),
-  check: () => serverUpdate<UpdateStatus>("check"),
-  download: () => serverUpdate<UpdateStatus>("download"),
-  install: () => serverUpdate<UpdateStatus>("install"),
-  restart: () => serverUpdate<UpdateStatus>("restart"),
+    serverUpdate<UpdateStatus>("set-auto-restart", "POST", { enabled }),
+  check: () => serverUpdate<UpdateStatus>("check", "POST"),
+  download: () => serverUpdate<UpdateStatus>("download", "POST"),
+  install: () => serverUpdate<UpdateStatus>("install", "POST"),
+  restart: () => serverUpdate<UpdateStatus>("restart", "POST"),
 };
 
-function serverUpdate<T>(action: string, body?: unknown): Promise<T> {
+function serverUpdate<T>(
+  action: string,
+  method: "GET" | "POST",
+  body?: unknown,
+): Promise<T> {
   return request<T>(`/api/update/${action}`, {
-    method: body === undefined ? "GET" : "POST",
+    method,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
