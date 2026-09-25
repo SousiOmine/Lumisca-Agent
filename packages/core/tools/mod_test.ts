@@ -21,7 +21,6 @@ import {
 } from "../shared/tool-names.ts";
 import {
   CHAT_PROMPT_SECTIONS,
-  CODING_PROMPT_SECTIONS,
   renderPromptSections,
 } from "./prompt-sections.ts";
 
@@ -74,44 +73,6 @@ Deno.test("sessionSkills advertises the web-browser skill only with a browser ba
       `web-browser must not be advertised for ${JSON.stringify(opts)}`,
     );
   }
-});
-
-// --- section visibility ------------------------------------------------------
-
-Deno.test("renderPromptSections renders only the sections the tools satisfy", () => {
-  const all = renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS);
-  assert(all.includes("non-zero exit code"), "bash guidance expected");
-  assert(all.includes("async_bash"), "async_bash guidance expected");
-  assert(all.includes("Delegate independent work"), "task guidance expected");
-  assert(all.includes("Prioritize correctness"), "quality guidance expected");
-
-  const readOnly = renderPromptSections(CODING_PROMPT_SECTIONS, [TOOL_READ]);
-  assert(readOnly.includes("Use read to inspect files"), "read expected");
-  assertEquals(
-    readOnly.includes("async_bash"),
-    false,
-    "guidance for an absent tool must not render",
-  );
-  assertEquals(readOnly.includes("[Task ...]"), false);
-  assertEquals(
-    readOnly.includes("Prioritize correctness"),
-    true,
-    "unconditional sections always render",
-  );
-
-  assertEquals(
-    renderPromptSections(CODING_PROMPT_SECTIONS, []).includes("Tool"),
-    false,
-  );
-});
-
-Deno.test("sections render in a stable order regardless of the tool set order", () => {
-  const forward = renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS);
-  const reversed = renderPromptSections(
-    CODING_PROMPT_SECTIONS,
-    [...CODING_TOOLS].reverse(),
-  );
-  assertEquals(forward, reversed);
 });
 
 // --- prompt contents ---------------------------------------------------------

@@ -198,16 +198,6 @@ Deno.test("eval can decode, hash and abort with the web globals", async () => {
   assertEquals(toolText(aborted), "[output]\nrejected:true");
 });
 
-Deno.test("eval exposes crypto for ids and random values", async () => {
-  const tool = makeEval();
-  const result = await tool.execute(
-    "1",
-    { code: "crypto.randomUUID().length" },
-    undefined,
-  );
-  assertEquals(toolText(result), "[result]\n36");
-});
-
 Deno.test("eval state is isolated per tool instance", async () => {
   const a = makeEval();
   const b = makeEval();

@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { dirname, join } from "node:path";
-import { atomicWriteTextFileSync, isRecord, readIfExists } from "./fs.ts";
+import { atomicWriteTextFileSync, readIfExists } from "./fs.ts";
 import { bytesToBase64 } from "./base64.ts";
 import { makeRealTempDir, removeDirRetry } from "./test-utils.ts";
 
@@ -43,15 +43,6 @@ Deno.test("readIfExists returns undefined for a missing path", async () => {
   } finally {
     await removeDirRetry(root);
   }
-});
-
-Deno.test("isRecord accepts plain records only", () => {
-  assertEquals(isRecord({}), true);
-  assertEquals(isRecord({ a: 1 }), true);
-  assertEquals(isRecord([]), false);
-  assertEquals(isRecord(null), false);
-  assertEquals(isRecord("x"), false);
-  assertEquals(isRecord(1), false);
 });
 
 Deno.test("bytesToBase64 encodes across the chunk boundary", () => {

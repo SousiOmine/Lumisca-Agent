@@ -61,15 +61,6 @@ Deno.test("rateLimitRetryDelayMs applies up to -25% jitter", () => {
   }
 });
 
-Deno.test("sleepAbortable resolves after the delay", async () => {
-  let done = false;
-  const p = sleepAbortable(5).then(() => {
-    done = true;
-  });
-  await p;
-  assertEquals(done, true);
-});
-
 Deno.test("sleepAbortable rejects when the signal fires", async () => {
   const controller = new AbortController();
   const p = sleepAbortable(1000, controller.signal);

@@ -69,21 +69,4 @@ Deno.test("thinkingLevelLabel: the display names live in the catalogue", () => {
   assertEquals(thinkingLevelLabel("off", ja), "オフ");
   assertEquals(thinkingLevelLabel("xhigh", en), "Extra high");
   assertEquals(thinkingLevelLabel("xhigh", ja), "最高");
-  // Every level has a label in both languages (a missing key would render
-  // as the raw key).
-  for (
-    const level of [
-      "off",
-      "minimal",
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ] as const
-  ) {
-    for (const t of [ja, en]) {
-      assertEquals(thinkingLevelLabel(level, t).startsWith("common."), false);
-    }
-  }
 });

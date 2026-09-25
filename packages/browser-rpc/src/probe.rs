@@ -37,14 +37,13 @@ mod tests {
     #[test]
     fn extraction_finds_the_probe() {
         let probe = extract().expect("extraction must succeed");
+        // The extracted text is the probe, not an empty or truncated slice.
+        // What the probe must *contain* is checked where it is authored, on
+        // the exported string (packages/core/browser/probe_test.ts).
         assert!(
             probe.contains("window.__lumiscaProbe"),
             "probe must install the API"
         );
-        assert!(probe.contains("unhandledrejection"));
-        assert!(probe.contains("MutationObserver"));
-        assert!(probe.contains("ref_not_found"));
-        assert!(probe.contains("requestSubmit"));
         // The probe is an install-guarded IIFE (the extracted text starts
         // with a newline — the template literal opens on its own line).
         assert!(probe.trim_start().starts_with("(function () {"));

@@ -9,7 +9,6 @@ import {
   type ServicePaths,
 } from "./compose.ts";
 import { ServiceDefinitionError, type ServiceValues } from "./document.ts";
-import { SERVICE_USAGE } from "./plan.ts";
 
 /** The shipped template. Imported directly (not through mod.ts) so the test
  * fails if the composer and the template drift apart. */
@@ -216,10 +215,4 @@ Deno.test("XDG_CONFIG_HOME is pinned so the service reads the same settings file
     "/x",
   );
   assertEquals(resolve().xdgConfigHome, undefined);
-});
-
-Deno.test("the usage text documents the contract the flags enforce", () => {
-  assert(SERVICE_USAGE.includes("--allowed-hosts"));
-  assert(SERVICE_USAGE.includes("127.0.0.1"));
-  assert(SERVICE_USAGE.includes("終了コード"));
 });

@@ -183,6 +183,5 @@ Deno.test("suggestWorkspaceFiles matches case-insensitively", () => {
 
 Deno.test("suggestWorkspaceFiles honors the limit", () => {
   assertEquals(suggestWorkspaceFiles(sample, "e", 2).length, 2);
-  assertEquals(suggestWorkspaceFiles(sample, "e", 2).length, 2);
   assertEquals(suggestWorkspaceFiles(sample, "zzz-no-match").length, 0);
 });

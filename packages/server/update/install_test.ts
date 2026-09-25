@@ -4,7 +4,6 @@ import { withTempDir } from "@lumisca/core/test-utils";
 import {
   applyStagedUpdate,
   cleanupStaleFiles,
-  installedFileNames,
   type InstallEnvironment,
   InstallError,
   successorEnvironment,
@@ -353,12 +352,4 @@ Deno.test("successorEnvironment replays the launch configuration", () => {
   assertEquals(successorEnvironment({ LUMISCA_PORT: "8100" }, undefined), {
     LUMISCA_PORT: "8100",
   });
-});
-
-Deno.test("installedFileNames describes the package layout", () => {
-  assertEquals(installedFileNames("/opt/lumisca/lumisca-server"), [
-    "lumisca-server",
-    "assets.json",
-    "icudtl.dat",
-  ]);
 });

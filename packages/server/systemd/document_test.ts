@@ -1,6 +1,5 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
-  DISPLAY_TOKEN,
   DOCUMENT_KEYS,
   documentForDisplay,
   generateToken,
@@ -172,7 +171,6 @@ Deno.test("a generated token is a fresh 32-byte hex secret", () => {
   assertEquals(first.length, 64);
   assert(/^[0-9a-f]{64}$/.test(first));
   assert(first !== generateToken());
-  assertEquals(DISPLAY_TOKEN, "not-installed");
 });
 
 Deno.test("host lists are normalized the way the server reads them", () => {

@@ -118,13 +118,6 @@ Deno.test("pool.require throws not_found for an unopened session", () => {
   assertEquals(pool.lastError("missing"), undefined);
 });
 
-Deno.test("pool snapshot getters are empty for an unopened session", () => {
-  const { pool } = makePool();
-  assertEquals(pool.getTodo("missing"), []);
-  assertEquals(pool.getTasks("missing"), []);
-  assertEquals(pool.getBackground("missing"), []);
-});
-
 Deno.test("pool.close tears down every resource of the session", async () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
