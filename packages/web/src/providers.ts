@@ -74,6 +74,18 @@ export function useProviderModels(peerId = ""): UseProviderModelsResult {
   return { ...state, reload };
 }
 
+/** Re-fetch this server's provider/model catalog into the shared store
+ * (peer "" = this server). For flows that change provider configuration
+ * outside a component already subscribed to the store — the settings
+ * dialog's provider screens save a key, add a user-defined provider, or
+ * delete one. The store is what the pickers, the settings list and the
+ * composer's send gate read, so the change must land there right away;
+ * without this, the next mount would keep showing the pre-change
+ * `configured` flags for the rest of the page session. */
+export function reloadCatalog(): void {
+  void modelCatalog.reload("");
+}
+
 /** Persist a model's enabled flag (an app setting of this server: the
  * settings UI has no peer switcher) and apply it to the catalog store, so
  * the settings list and every model picker follow at once — and still show

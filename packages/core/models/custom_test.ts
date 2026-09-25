@@ -314,7 +314,7 @@ Deno.test("LumiscaCore.open registers the custom provider from env", async () =>
 
     // A session can be created with the custom provider.
     const ws = await core.createWorkspace("ws", [dir]);
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: CUSTOM_PROVIDER_ID,
       modelId: "deepseek-chat",

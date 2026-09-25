@@ -547,17 +547,23 @@ export class LumiscaCore {
 
   // --- sessions -----------------------------------------------------------
 
-  /** The model a new session would get: the last used model, or the first
-   * enabled model. Null when no model can be resolved. Includes the model's
-   * thinking level so the draft tab can show the right control. */
-  getDefaultModel(): {
-    provider: string;
-    modelId: string;
-    thinkingLevel: ThinkingLevel;
-    thinkingLevels: ThinkingLevel[];
-  } | null {
+  /** The model a new session would get: the last used model of a
+   * configured provider, or the first enabled model of a configured one.
+   * Null when no model can be resolved — including "no provider is
+   * configured at all", in which case the UI leaves the model unset and
+   * refuses to start a session (there is nothing that could stream).
+   * Includes the model's thinking level so the draft tab can show the
+   * right control. */
+  async getDefaultModel(): Promise<
+    {
+      provider: string;
+      modelId: string;
+      thinkingLevel: ThinkingLevel;
+      thinkingLevels: ThinkingLevel[];
+    } | null
+  > {
     try {
-      const model = this.resolveDefaultModel();
+      const model = await this.resolveDefaultModel();
       return {
         ...model,
         thinkingLevel: this.models.getThinkingLevel(
@@ -573,13 +579,16 @@ export class LumiscaCore {
     }
   }
 
-  createSession(input: CreateSessionInput): SessionInfo {
+  async createSession(input: CreateSessionInput): Promise<SessionInfo> {
     // No workspaceId → a chat session in the folder-less chat workspace
     // (created on first use).
     const workspace = input.workspaceId !== undefined
       ? this.requireWorkspace(input.workspaceId)
       : this.getOrCreateChatWorkspace();
-    const model = this.resolveDefaultModel(input.modelProvider, input.modelId);
+    const model = await this.resolveDefaultModel(
+      input.modelProvider,
+      input.modelId,
+    );
     // The system prompt is generated (and persisted) when the session is
     // opened below: it depends on the tool set the session actually gets,
     // which only the agent factory knows.
@@ -869,18 +878,17 @@ export class LumiscaCore {
     return await this.models.hasProviderAuth(providerId);
   }
 
-  /** Whether the provider is set up inside Lumisca itself: an API key or
-   * OAuth credential stored here, or a custom provider from Lumisca's own
-   * config (models.json / LUMISCA_* env vars) whose auth resolves.
-   * Ambient machine auth that the SDK happens to find — e.g.
+  /** Whether the provider is set up inside Lumisca itself: a stored API
+   * key / OAuth credential, or a custom provider from Lumisca's own config
+   * (models.json / LUMISCA_* env vars, a user-defined provider) whose auth
+   * resolves. Ambient machine auth that the SDK happens to find — e.g.
    * ANTHROPIC_API_KEY or HF_TOKEN set for other tools — does NOT count:
-   * providers must not appear as "added" just because an env var exists. */
+   * providers must not appear as "added" just because an env var exists.
+   * Also the gate for the default-model resolution and the UI's send
+   * buttons: what the settings list calls "設定済み" must be exactly what
+   * can be used. */
   async hasConfiguredAuth(providerId: string): Promise<boolean> {
-    if ((await this.credentials.read(providerId)) !== undefined) {
-      return true;
-    }
-    return this.models.isCustomProvider(providerId) &&
-      await this.models.hasProviderAuth(providerId);
+    return await this.models.hasConfiguredAuth(providerId);
   }
 
   /** Enable or disable a model for the UI. Disabled models are hidden
@@ -1018,15 +1026,19 @@ export class LumiscaCore {
   }
 
   /** Resolve the model for a new session: explicit choice, else the
-   * last-used model, else the first enabled model of the first provider.
-   * Retired models (removed upstream, kept for existing sessions) are
-   * never selected for new sessions: an explicit retired choice and a
-   * last-used model that has since retired both fall through to the live
-   * fallback. */
-  private resolveDefaultModel(
+   * last-used model, else the first enabled model of the first configured
+   * provider. Provider configuration is load-bearing here: a model whose
+   * provider is not set up inside Lumisca cannot stream, so it is never
+   * auto-selected — that gates both the last-used path (a key removed
+   * since the session ran must not resurrect it as the default) and the
+   * fallback (see `ModelManager.getFallbackModel`). Retired models
+   * (removed upstream, kept for existing sessions) are never selected for
+   * new sessions: an explicit retired choice and a last-used model that
+   * has since retired both fall through to the live fallback. */
+  private async resolveDefaultModel(
     provider?: string,
     modelId?: string,
-  ): { provider: string; modelId: string } {
+  ): Promise<{ provider: string; modelId: string }> {
     if (provider && modelId) {
       const live = this.models.getModel(provider, modelId);
       if (live === undefined) {
@@ -1038,12 +1050,18 @@ export class LumiscaCore {
       return { provider, modelId };
     }
     const latest = this.sessions.list()[0];
-    if (latest && this.models.getModel(latest.modelProvider, latest.modelId)) {
+    if (
+      latest && this.models.getModel(latest.modelProvider, latest.modelId) &&
+      await this.models.hasConfiguredAuth(latest.modelProvider)
+    ) {
       return { provider: latest.modelProvider, modelId: latest.modelId };
     }
-    const fallback = this.models.getFallbackModel();
+    const fallback = await this.models.getFallbackModel();
     if (fallback) return fallback;
-    throw new CoreError("No models available", "unavailable");
+    throw new CoreError(
+      "No models available: no provider is configured",
+      "unavailable",
+    );
   }
 
   /** Attach the session's model thinking level so the UI can render the

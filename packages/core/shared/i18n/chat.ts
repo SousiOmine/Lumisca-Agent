@@ -114,6 +114,12 @@ export const chat = {
     ja: "モデル・推論強度の選択",
     en: "Select model and thinking level",
   },
+  "chat.composer.providerUnconfigured": {
+    ja:
+      "プロバイダー「{provider}」が未設定のため送信できません。設定画面でAPIキーを登録するか、モデルを切り替えてください。",
+    en:
+      'This session\'s provider "{provider}" is not configured, so nothing can be sent. Register an API key in the settings, or switch to another model.',
+  },
   "chat.composer.stop": { ja: "処理を停止", en: "Stop" },
 
   // --- new session ---------------------------------------------------------
@@ -123,6 +129,12 @@ export const chat = {
   "chat.newSession.defaultModelError": {
     ja: "デフォルトのモデルを取得できませんでした:",
     en: "Could not fetch the default model:",
+  },
+  "chat.newSession.noProvider": {
+    ja:
+      "プロバイダーが未設定のため、モデルを選べません。設定画面でAPIキーを登録してください。",
+    en:
+      "No provider is configured, so no model can be selected. Register an API key in the settings.",
   },
   "chat.newSession.placeholder": {
     ja: "依頼するタスクを入力してください…",

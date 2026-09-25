@@ -76,6 +76,12 @@ interface NewSessionViewProps {
   onReopenSession: (key: string) => void;
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
+  /** Bumped by the App every time the settings dialog closes. Registering
+   * a provider there changes what a new session's model resolves to, so
+   * the draft re-reads the default model instead of keeping the "no
+   * provider configured" verdict until a reload (the model picker itself
+   * follows through the shared catalog store). */
+  settingsVersion: number;
 }
 
 /** Sentinel workspace id of the pinned chat entry: selecting it starts a
@@ -126,6 +132,7 @@ export function NewSessionView(
     onDeleteWorkspace,
     onReopenSession,
     onOpenSettings,
+    settingsVersion,
   }: NewSessionViewProps,
 ) {
   // The last selected workspace, restored from localStorage. Kept in a ref
@@ -159,30 +166,42 @@ export function NewSessionView(
   const [defaultModelError, setDefaultModelError] = useState<string | null>(
     null,
   );
+  /** Whether the server answered that it has no model to offer, i.e. no
+   * provider is configured. Only that definitive answer blocks starting a
+   * session: an unanswered or failed fetch leaves the draft working as
+   * before (the server resolves its own default). */
+  const [noDefaultModel, setNoDefaultModel] = useState(false);
 
   // Show the last used model (the one a session without an explicit model
   // would get) right away instead of leaving the picker to choose on click.
   // A selection the user already made is never overwritten by the late
-  // response.
+  // response. Re-read when the settings dialog closes (`settingsVersion`):
+  // registering a provider there makes the server resolve a model, and
+  // removing a key takes it away again.
   useAsyncEffect(async (isStale) => {
     try {
       const m = await api.getDefaultModel();
       if (isStale()) return;
       setDefaultModelError(null);
-      if (m && !modelTouched.current) {
-        setModel({
-          provider: m.provider,
-          modelId: m.modelId,
-          thinkingLevel: m.thinkingLevel,
-          thinkingLevels: m.thinkingLevels,
-        });
+      setNoDefaultModel(m === null);
+      if (!modelTouched.current) {
+        // A null answer clears a previously resolved model too: the draft
+        // must not keep offering a model whose provider is gone.
+        setModel(
+          m === null ? null : {
+            provider: m.provider,
+            modelId: m.modelId,
+            thinkingLevel: m.thinkingLevel,
+            thinkingLevels: m.thinkingLevels,
+          },
+        );
       }
     } catch (error) {
       // Non-critical for starting a session (the server resolves its own
       // default), but the user must know why the picker is empty.
       if (!isStale()) setDefaultModelError(errorText(error));
     }
-  }, []);
+  }, [settingsVersion]);
 
   // Filter workspaces by the selected peer. The pinned chat entry ("simple
   // chat" without a workspace) is a synthetic selection available for every
@@ -298,6 +317,12 @@ export function NewSessionView(
   // Sessions on another server are created with that server's default
   // model, so the model picker is hidden for them.
   const remoteWorkspace = (selectedWorkspace?.peerId ?? "") !== "";
+  // A local draft cannot start without a model, and with no provider
+  // configured the server has none to offer: the field stays unset and the
+  // start button is disabled, instead of creating a session on a model
+  // that could not stream. Remote drafts resolve the peer's own default
+  // model, so they are not judged here.
+  const noModelToStart = !remoteWorkspace && model === null && noDefaultModel;
 
   // Build the slash commands list including the /skill and /prompt submenus.
   // In chat mode only skills, actions and saved prompts are shown (agent
@@ -330,7 +355,7 @@ export function NewSessionView(
     let trimmed = (message ?? input).trim();
     if (
       (!trimmed && images.length === 0) ||
-      !workspaceKey || !selectedWorkspace || busy
+      !workspaceKey || !selectedWorkspace || busy || noModelToStart
     ) {
       return;
     }
@@ -445,6 +470,20 @@ export function NewSessionView(
                 {t("chat.newSession.defaultModelError")} {defaultModelError}
               </div>
             )}
+            {noModelToStart && (
+              <div className="settings-note" role="status">
+                <span>{t("chat.newSession.noProvider")}</span>
+                {onOpenSettings && (
+                  <button
+                    type="button"
+                    className="btn small"
+                    onClick={onOpenSettings}
+                  >
+                    {t("chrome.modelPicker.settingsLink")}
+                  </button>
+                )}
+              </div>
+            )}
             <Composer
               value={input}
               onChange={onInputChange}
@@ -470,7 +509,8 @@ export function NewSessionView(
                 : t("chat.newSession.submitStart")}
               submitIcon={IconArrowUp}
               submitIconOnly
-              submitDisabled={busy || (!input.trim() && images.length === 0) ||
+              submitDisabled={busy || noModelToStart ||
+                (!input.trim() && images.length === 0) ||
                 !workspaceKey}
               onSubmit={() => void submit()}
               onOpenSettings={onOpenSettings}

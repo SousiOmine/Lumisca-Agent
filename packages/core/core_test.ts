@@ -10,7 +10,7 @@ import {
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import type { AgentMessage, BrowserBackend, ClientEvent } from "./mod.ts";
-import { LumiscaCore } from "./mod.ts";
+import { CoreError, LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
 import { COMPACTION_KEEP_RECENT_TOKENS_KEY } from "./shared/settings-keys.ts";
 import { SCHEMA_VERSION } from "./db/schema.ts";
@@ -99,7 +99,7 @@ Deno.test("session prompt persists messages and restores them", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     name: "test",
     modelProvider: providerId,
@@ -136,12 +136,12 @@ Deno.test("sessions are listed and deleted", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const s1 = core.createSession({
+  const s1 = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  const s2 = core.createSession({
+  const s2 = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -162,7 +162,7 @@ Deno.test("tools block file access outside the workspace", async () => {
   const outside = await Deno.makeTempDir({ prefix: "lumisca-outside-" });
   await Deno.writeTextFile(join(outside, "secret.txt"), "secret");
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -236,8 +236,11 @@ Deno.test("model enablement is persisted", () => {
 Deno.test("session without model picks the last used model", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
+  // Default-model resolution only considers providers configured inside
+  // Lumisca; a stored key is what makes the faux provider one.
+  await core.setProviderApiKey(providerId, "faux-key");
 
-  const first = core.createSession({
+  const first = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -246,7 +249,7 @@ Deno.test("session without model picks the last used model", async () => {
   assertEquals(first.modelId, modelId);
 
   // Second session without explicit model: inherits the last used one.
-  const second = core.createSession({ workspaceId: ws.id });
+  const second = await core.createSession({ workspaceId: ws.id });
   assertEquals(second.modelProvider, providerId);
   assertEquals(second.modelId, modelId);
 
@@ -256,19 +259,21 @@ Deno.test("session without model picks the last used model", async () => {
 Deno.test("getDefaultModel returns the last used model or a fallback", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
+  await core.setProviderApiKey(providerId, "faux-key");
 
-  // No sessions yet: falls back to the first enabled model.
-  const initial = core.getDefaultModel();
-  assertEquals(initial !== null, true);
+  // No sessions yet: the configured provider's first enabled model.
+  const initial = await core.getDefaultModel();
+  assertEquals(initial?.provider, providerId);
+  assertEquals(initial?.modelId, modelId);
   assertEquals(core.isModelEnabled(initial!.provider, initial!.modelId), true);
 
   // After a session: the last used model wins.
-  core.createSession({
+  await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  const last = core.getDefaultModel();
+  const last = await core.getDefaultModel();
   assertEquals(last, {
     provider: providerId,
     modelId,
@@ -279,21 +284,20 @@ Deno.test("getDefaultModel returns the last used model or a fallback", async () 
   core.close();
 });
 
-Deno.test("session without model falls back to first enabled model", async () => {
+Deno.test("session without model falls back to a configured provider", async () => {
   const { core, faux } = setup();
   const { ws } = await makeWorkspace(core);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
 
-  // With no prior sessions, the first provider's first enabled model is used.
-  const session = core.createSession({ workspaceId: ws.id });
-  assertEquals(session.modelProvider.length > 0, true);
-  assertEquals(session.modelId.length > 0, true);
-  assertEquals(
-    core.isModelEnabled(session.modelProvider, session.modelId),
-    true,
-  );
+  // With no prior sessions, the configured provider's first enabled model
+  // is used: the built-in catalog entries registered before the faux
+  // provider carry no credentials and are skipped.
+  const session = await core.createSession({ workspaceId: ws.id });
+  assertEquals(session.modelProvider, faux.provider.id);
+  assertEquals(session.modelId, faux.getModel().id);
 
   // The faux provider is still usable when selected explicitly.
-  const explicit = core.createSession({
+  const explicit = await core.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -303,12 +307,42 @@ Deno.test("session without model falls back to first enabled model", async () =>
   core.close();
 });
 
+Deno.test("no configured provider: no default model and no session", async () => {
+  const { core } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  // The built-in providers are registered — with their models enabled —
+  // just from the catalog, but none of them is configured: there is
+  // nothing to default to, so the draft stays without a model instead of
+  // auto-selecting an entry that could not stream.
+  assertEquals(await core.getDefaultModel(), null);
+
+  // Creating a session without a model fails instead of guessing; the
+  // route surfaces it as 503 ("unavailable").
+  const error = await assertRejects(
+    async () => await core.createSession({ workspaceId: ws.id }),
+    CoreError,
+  );
+  assertEquals(error.kind, "unavailable");
+
+  // An explicit model is still accepted: API callers may create the
+  // session first and configure the provider afterwards.
+  const explicit = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: "openai",
+    modelId: core.listModels("openai")[0]!.id,
+  });
+  assertEquals(explicit.modelProvider, "openai");
+
+  core.close();
+});
+
 Deno.test("workspace update rebuilds session tools", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
 
-  core.createSession({
+  await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -334,7 +368,7 @@ Deno.test("startPrompt steers a prompt sent while streaming", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -377,7 +411,7 @@ Deno.test("rewind deletes a user message and everything after it", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -410,7 +444,7 @@ Deno.test("rewind deletes a mode message (slash-command prompt) and everything a
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -449,7 +483,7 @@ Deno.test("rewind mid-history keeps earlier turns and persists without duplicate
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -507,7 +541,7 @@ Deno.test("rewind while running aborts the run and truncates cleanly", async () 
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -552,7 +586,7 @@ Deno.test("rewind of a queued steer drops it without resurrecting it", async () 
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -618,7 +652,7 @@ Deno.test("rewind with an unknown timestamp throws not_found", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -641,7 +675,7 @@ Deno.test("model switch and workspace update are refused while streaming", async
   const { ws, root } = await makeWorkspace(core);
   const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -876,7 +910,7 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
   const { core, faux, providerId, modelId } = setup();
 
   // No workspaceId → a chat session in the folder-less chat workspace.
-  const session = core.createSession({
+  const session = await core.createSession({
     name: "chat",
     modelProvider: providerId,
     modelId,
@@ -895,7 +929,10 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
   assertEquals(chatWs.folders.length, 0);
 
   // A second chat session reuses the same workspace.
-  const second = core.createSession({ modelProvider: providerId, modelId });
+  const second = await core.createSession({
+    modelProvider: providerId,
+    modelId,
+  });
   assertEquals(second.workspaceId, session.workspaceId);
 
   // The system prompt is the chat variant: no workspace folder list, no
@@ -978,7 +1015,10 @@ Deno.test("session language: the prompt is generated with the setting, then froz
     // The language is a server setting (the settings dialog writes exactly
     // this), read when the session's prompt is generated.
     core.setSetting(LANGUAGE_KEY, "en");
-    const english = core.createSession({ modelProvider: providerId, modelId });
+    const english = await core.createSession({
+      modelProvider: providerId,
+      modelId,
+    });
     const englishPrompt = core.getAgent(english.id)!.agent.state.systemPrompt;
     assert(
       englishPrompt.includes("Write every reply in English"),
@@ -1002,7 +1042,10 @@ Deno.test("session language: the prompt is generated with the setting, then froz
     );
 
     // A session created after the switch starts in the new language.
-    const japanese = core.createSession({ modelProvider: providerId, modelId });
+    const japanese = await core.createSession({
+      modelProvider: providerId,
+      modelId,
+    });
     const japanesePrompt = core.getAgent(japanese.id)!.agent.state.systemPrompt;
     assert(
       japanesePrompt.includes("Write every reply in Japanese"),
@@ -1017,12 +1060,15 @@ Deno.test("session language: the prompt is generated with the setting, then froz
   }
 });
 
-Deno.test("session_created event carries the decorated session (chat flag)", () => {
+Deno.test("session_created event carries the decorated session (chat flag)", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const events: ClientEvent[] = [];
   const unsubscribe = core.subscribe((event) => events.push(event));
   try {
-    const session = core.createSession({ modelProvider: providerId, modelId });
+    const session = await core.createSession({
+      modelProvider: providerId,
+      modelId,
+    });
     const created = events.find(
       (e): e is Extract<ClientEvent, { type: "session_created" }> =>
         e.type === "session_created",
@@ -1040,7 +1086,10 @@ Deno.test("session_created event carries the decorated session (chat flag)", () 
 
 Deno.test("chat workspace cannot be updated or deleted", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
-  const session = core.createSession({ modelProvider: providerId, modelId });
+  const session = await core.createSession({
+    modelProvider: providerId,
+    modelId,
+  });
   const chatWorkspace = core.getWorkspace(session.workspaceId)!;
   assertEquals(chatWorkspace.chat, true);
 
@@ -1084,7 +1133,7 @@ Deno.test("sessions default to thinking off and expose supported levels", async 
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -1101,7 +1150,7 @@ Deno.test("sessions default to thinking off and expose supported levels", async 
   // A non-reasoning model only supports "off".
   const plain = setup();
   const { ws: ws2 } = await makeWorkspace(plain.core);
-  const s2 = plain.core.createSession({
+  const s2 = await plain.core.createSession({
     workspaceId: ws2.id,
     modelProvider: plain.providerId,
     modelId: plain.modelId,
@@ -1117,7 +1166,7 @@ Deno.test("setModelThinkingLevel persists, clamps, and reflects on sessions", as
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -1164,7 +1213,7 @@ Deno.test("switching model picks up the new model's thinking level", async () =>
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -1182,7 +1231,7 @@ Deno.test("thinking level reaches the provider stream options", async () => {
   const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
   const core = LumiscaCore.forTesting([faux.provider]);
   const { ws } = await makeWorkspace(core);
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -1218,7 +1267,7 @@ Deno.test("thinking level change while streaming applies from the next run witho
   const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
   const core = LumiscaCore.forTesting([faux.provider]);
   const { ws } = await makeWorkspace(core);
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -1269,7 +1318,7 @@ Deno.test("workspace instructions are context messages, not prompt text, and edi
   await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 2.\n");
   const ws = await core.createWorkspace("ws", [root]);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -1332,7 +1381,7 @@ Deno.test("workspace instructions are context messages, not prompt text, and edi
   );
 
   // A session created after the edit starts from the current content.
-  const fresh = core.createSession({
+  const fresh = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -1370,7 +1419,7 @@ Deno.test("personalization (machine AGENTS.md) is published with the workspace i
   assertEquals(core.getPersonalization().path, agentFile);
   assertEquals(core.getPersonalization().content, "Answer in Japanese.\n");
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -1409,7 +1458,7 @@ Deno.test("personalization (machine AGENTS.md) is published with the workspace i
   assert(updated[1]!.body.includes("Answer in English."));
 
   // ...and a new session starts from the current content.
-  const fresh = core.createSession({
+  const fresh = await core.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -1452,7 +1501,7 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
     }),
   );
   const ws = await core.createWorkspace("ws", [root]);
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -1562,7 +1611,7 @@ Deno.test("app-level MCP config persists and applies to sessions", async () => {
 
     // Sessions get the app-level tools (as the search/call pair over the
     // registry, not the MCP definitions themselves).
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -1635,7 +1684,7 @@ Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
   );
   const ws = await core.createWorkspace("ws", [root]);
   try {
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -1700,7 +1749,7 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
     // must gate the run on MCP readiness so the FIRST turn already sees
     // the search/call pair (previously the run started before the servers
     // had spawned and the tools were missing from the first request).
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -1782,7 +1831,7 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
   const backend = new FakeBrowserBackend();
   core.setBrowserBackend(backend);
   try {
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -1876,7 +1925,7 @@ Deno.test("pdf tool is seeded into the session registry via tool_search", async 
   try {
     // No browser backend, no MCP servers: the PDF page-as-image tool is
     // still seeded by the pool at open.
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -1924,7 +1973,7 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
   const { ws } = await makeWorkspace(core);
   core.setBrowserBackend(new FakeBrowserBackend());
   try {
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -2050,7 +2099,7 @@ Deno.test("text-only model: user images are analyzed and passed as text", async 
   const { core, faux, providerId } = setupImageAnalysis();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "text-only",
@@ -2100,7 +2149,7 @@ Deno.test("text-only model: read tool images are analyzed and passed as text", a
   const { ws, root } = await makeWorkspace(core);
   await Deno.writeFile(join(root, "pic.png"), MINI_PNG);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "text-only",
@@ -2174,7 +2223,7 @@ Deno.test("fast model: first prompt auto-generates the session title", async () 
   // The provisional name follows the app language, so the test pins it
   // instead of depending on the machine's locale.
   core.setSetting(LANGUAGE_KEY, "ja");
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "main",
@@ -2212,7 +2261,7 @@ Deno.test("startPrompt (web path): first prompt auto-generates the session title
 
   // Pinned like the test above: the provisional name is localized.
   core.setSetting(LANGUAGE_KEY, "ja");
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "main",
@@ -2249,7 +2298,7 @@ Deno.test("no fast model: session keeps its provisional name", async () => {
 
   // Pinned: the provisional name is the localized "Session <date>".
   core.setSetting(LANGUAGE_KEY, "ja");
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: faux.getModel().id,
@@ -2268,7 +2317,7 @@ Deno.test("reopened session with history does not regenerate the title", async (
   const { core, faux, providerId } = setupFastTitle();
   const { ws } = await makeWorkspace(core);
 
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "main",
@@ -2320,7 +2369,7 @@ function waitForQuestion(
 Deno.test("ask tool blocks the run until the user answers, then continues", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -2369,7 +2418,7 @@ Deno.test("ask tool blocks the run until the user answers, then continues", asyn
 Deno.test("todo tool records the whole plan and replaces it on the next call", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -2444,7 +2493,7 @@ Deno.test("todo tool records the whole plan and replaces it on the next call", a
 Deno.test("rewind while a question is pending aborts the run cleanly", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  const session = core.createSession({
+  const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,

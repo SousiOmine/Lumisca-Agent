@@ -597,7 +597,7 @@ Deno.test("background completion is injected into the agent loop", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-async-e2e-" });
   try {
     const ws = await core.createWorkspace("ws", [root]);
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -637,7 +637,7 @@ Deno.test("background commands survive a session rebuild", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-async-rebuild-" });
   try {
     const ws = await core.createWorkspace("ws", [root]);
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,

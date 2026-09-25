@@ -175,19 +175,24 @@ export interface SessionApi {
   getSession(id: string): SessionInfo | undefined;
   getSessionLastError(id: string): string | undefined;
   listSessions(workspaceId?: string): SessionInfo[];
-  createSession(input: CreateSessionInput): SessionInfo;
+  createSession(input: CreateSessionInput): Promise<SessionInfo>;
   openSession(id: string): SessionInfo;
   closeSession(id: string): Promise<void>;
   deleteSession(id: string): Promise<void>;
   getAgent(id: string): SessionAgent | undefined;
   /** The model a new session would get, with the thinking control data the
-   * draft tab renders (matches LumiscaCore.getDefaultModel). */
-  getDefaultModel(): {
-    provider: string;
-    modelId: string;
-    thinkingLevel: ThinkingLevel;
-    thinkingLevels: ThinkingLevel[];
-  } | null;
+   * draft tab renders (matches LumiscaCore.getDefaultModel). Null when
+   * none resolves — including "no provider is configured at all", which
+   * the draft renders as an unset model field with the start button
+   * disabled. */
+  getDefaultModel(): Promise<
+    {
+      provider: string;
+      modelId: string;
+      thinkingLevel: ThinkingLevel;
+      thinkingLevels: ThinkingLevel[];
+    } | null
+  >;
   startPrompt(
     id: string,
     text: string,
@@ -239,8 +244,8 @@ export function sessionRoutes(core: SessionApi): Hono {
     return c.json(core.listSessions(workspaceId));
   });
 
-  app.get("/sessions/default-model", (c) => {
-    return c.json(core.getDefaultModel());
+  app.get("/sessions/default-model", async (c) => {
+    return c.json(await core.getDefaultModel());
   });
 
   app.get("/sessions/:id", (c) => {
@@ -326,7 +331,14 @@ export function sessionRoutes(core: SessionApi): Hono {
         400,
       );
     }
-    const session = core.createSession({
+    // Without an explicit model the core resolves the server's default one
+    // (last used model of a configured provider, else its first enabled
+    // model). With no provider configured at all there is no default: the
+    // core refuses (503) instead of creating a session on a model that
+    // could not stream. Clients show that state up front (the draft leaves
+    // the model unset and disables the start button), so this is the
+    // defensive layer for direct API callers.
+    const session = await core.createSession({
       workspaceId: typeof body.workspaceId === "string"
         ? body.workspaceId
         : undefined,

@@ -18,7 +18,7 @@ import { ProviderList } from "./settings/ProviderList.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { AddUserProviderForm } from "./settings/AddUserProviderForm.tsx";
-import { useUserProviders } from "../providers.ts";
+import { reloadCatalog, useUserProviders } from "../providers.ts";
 import type { UserProviderSummary } from "../types.ts";
 import { ModelList } from "./settings/ModelList.tsx";
 import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
@@ -242,6 +242,10 @@ export function SettingsModal({
               onBack={() => setProvidersView({ kind: "list" })}
               onDone={() => {
                 userProviders.reload();
+                // The new provider must become pickable (and its sessions
+                // sendable) without a page reload: the catalog store is
+                // what every picker and the composer's send gate read.
+                reloadCatalog();
                 setProvidersView({ kind: "list" });
               }}
             />
@@ -254,9 +258,15 @@ export function SettingsModal({
               onBack={() => setProvidersView({ kind: "list" })}
               onDone={() => {
                 userProviders.reload();
+                // An edited provider (a cleared key, a changed base URL)
+                // changes whether its models can run: refresh the store.
+                reloadCatalog();
                 setProvidersView({ kind: "list" });
               }}
-              onDeleted={() => userProviders.reload()}
+              onDeleted={() => {
+                userProviders.reload();
+                reloadCatalog();
+              }}
             />
           )}
           {category === "models" && (

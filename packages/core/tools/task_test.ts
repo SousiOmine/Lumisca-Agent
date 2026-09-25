@@ -706,7 +706,7 @@ Deno.test("a task runs in the background and its completion reaches the parent",
   const root = await Deno.makeTempDir({ prefix: "lumisca-task-e2e-" });
   try {
     const ws = await core.createWorkspace("ws", [root]);
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -775,7 +775,7 @@ Deno.test("a waiting task_output receives the result and suppresses the notifica
   const root = await Deno.makeTempDir({ prefix: "lumisca-task-wait-" });
   try {
     const ws = await core.createWorkspace("ws", [root]);
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -830,7 +830,7 @@ Deno.test("sub-agents survive a session rebuild and remain listed", async () => 
   const root = await Deno.makeTempDir({ prefix: "lumisca-task-rebuild-" });
   try {
     const ws = await core.createWorkspace("ws", [root]);
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,

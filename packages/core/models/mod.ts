@@ -472,6 +472,22 @@ export class ModelManager {
     return (await this.models.checkAuth(providerId)) !== undefined;
   }
 
+  /** Whether the provider is set up inside Lumisca itself: an API key or
+   * OAuth credential stored here, or a custom provider from Lumisca's own
+   * config (models.json / LUMISCA_* env vars, a user-defined provider)
+   * whose auth resolves. Ambient machine auth that the SDK happens to find
+   * — e.g. ANTHROPIC_API_KEY or HF_TOKEN set for other tools — does NOT
+   * count: providers must not appear as "added" just because an env var
+   * exists. This is the same verdict the settings list, the pickers and
+   * the default-model resolution use. */
+  async hasConfiguredAuth(providerId: string): Promise<boolean> {
+    if ((await this.credentials.read(providerId)) !== undefined) {
+      return true;
+    }
+    return this.isCustomProvider(providerId) &&
+      await this.hasProviderAuth(providerId);
+  }
+
   /** Enable or disable a model for the UI. Disabled models are hidden
    * from model pickers. Enabled is the default (nothing stored). */
   setModelEnabled(providerId: string, modelId: string, enabled: boolean): void {
@@ -522,9 +538,18 @@ export class ModelManager {
     return effective;
   }
 
-  /** First enabled model across providers (the default-model fallback). */
-  getFallbackModel(): { provider: string; modelId: string } | null {
+  /** First enabled model across *configured* providers (the default-model
+   * fallback). Providers without configured credentials are skipped: no
+   * surface offers them (the pickers list configured providers only) and a
+   * session created on one could not stream, so a built-in catalog entry
+   * must never become a default model by itself. Returns null when nothing
+   * is configured — the caller then has no default model at all (see
+   * `LumiscaCore.getDefaultModel`). */
+  async getFallbackModel(): Promise<
+    { provider: string; modelId: string } | null
+  > {
     for (const p of this.getProviders()) {
+      if (!await this.hasConfiguredAuth(p.id)) continue;
       const model = this.getModels(p.id).find((m) =>
         this.isModelEnabled(p.id, m.id)
       );

@@ -41,6 +41,8 @@
 
 - **`LumiscaCore`**  
   薄いファサード（Facade）かつコンポジションルート（Composition Root）として機能します。コンストラクタで協調動作する各コンポーネントをバインドしており、テスト時には容易にモックやスタブへ差し替えることができます。
+- **既定モデルの解決（`ModelManager.getFallbackModel` / `LumiscaCore.resolveDefaultModel`）**  
+  新規セッションのモデルは「明示指定 → 直近セッションのモデル → 設定済みプロバイダの最初の有効モデル」の順で解決します。対象になるのは **Lumisca に設定済みのプロバイダ**（保存済みAPIキー、models.json / `LUMISCA_*` / ユーザー定義プロバイダ）だけで、カタログに登録されているだけの未設定プロバイダは自動選択しません（環境変数のキーしか無い場合も「未設定」扱いで、設定画面・モデルピッカーと同じ判定です）。1つも設定されていなければ既定モデルは存在せず、`getDefaultModel()` は null を返し、モデル未指定の `createSession` は `unavailable`（HTTP 503）で失敗します。UI 側はこれを「モデル欄を未設定のまま開始ボタンを無効化し、設定画面への案内を出す」挙動に対応させています。
 - **`agent/`**  
   `SessionAgent`（プロンプト生成・タイトル付与・MCP・通知処理）、`RetryManager`（空応答や429エラーのリトライ制御）、`GoalRunner`（自律的なゴール達成ループ）、`AgentFactory`（配線処理）、`SessionPool`（エージェントのライフサイクル管理）で構成されます。  
   なお、`agent/context-providers.ts` で扱う**動的コンテキスト**（スキルカタログや `AGENTS.md`）は、プロンプトに直書きせず `context` メッセージとして履歴スタックに追加し、値に変更があった場合のみ再送する設計です（DSHにおける `PromptContext` と同様のアプローチです）。

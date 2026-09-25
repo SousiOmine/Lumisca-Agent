@@ -534,16 +534,15 @@ Deno.test("session model switch API", async () => {
   }
 });
 
-Deno.test("default model API returns the last used model", async () => {
+Deno.test("default model API follows the configured providers", async () => {
   const { core, server, faux, base } = await setup();
   try {
-    // No sessions yet: the first enabled model is the fallback.
+    // Nothing is configured: the built-in catalog entries are registered
+    // but carry no credentials, so there is no default model at all (the
+    // draft renders an unset model field and refuses to start).
     const empty = await fetch(`${base}/api/sessions/default-model`);
     assertEquals(empty.status, 200);
-    const fallback = await empty.json();
-    assertEquals(fallback !== null, true);
-    assertEquals(typeof fallback.provider, "string");
-    assertEquals(typeof fallback.modelId, "string");
+    assertEquals(await empty.json(), null);
 
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
     const create = await json(base, "/api/workspaces", {
@@ -551,21 +550,45 @@ Deno.test("default model API returns the last used model", async () => {
       body: JSON.stringify({ name: "ws", folders: [root] }),
     });
     const ws = await create.json();
+
+    // A session without an explicit model is refused for the same reason
+    // (503 "unavailable") instead of being created on an unusable model.
+    const refused = await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({ workspaceId: ws.id }),
+    });
+    assertEquals(refused.status, 503);
+
+    // Storing a key makes the faux provider the configured one: now the
+    // fallback resolves there, and a session without a model starts on it.
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    const fallback = await (await fetch(`${base}/api/sessions/default-model`))
+      .json();
+    assertEquals(fallback.provider, faux.provider.id);
+    assertEquals(fallback.modelId, faux.getModel().id);
+
     const sessionRes = await json(base, "/api/sessions", {
       method: "POST",
-      body: JSON.stringify({
-        workspaceId: ws.id,
-        modelProvider: faux.provider.id,
-        modelId: faux.getModel().id,
-      }),
+      body: JSON.stringify({ workspaceId: ws.id }),
     });
     assertEquals(sessionRes.status, 201);
+    const session = await sessionRes.json();
+    assertEquals(session.modelProvider, faux.provider.id);
+    assertEquals(session.modelId, faux.getModel().id);
 
     const res = await fetch(`${base}/api/sessions/default-model`);
     assertEquals(res.status, 200);
     const defaultModel = await res.json();
     assertEquals(defaultModel.provider, faux.provider.id);
     assertEquals(defaultModel.modelId, faux.getModel().id);
+
+    // Removing the credential takes the default away again: a last used
+    // model whose provider is no longer configured must not be resurrected.
+    await core.logoutProvider(faux.provider.id);
+    assertEquals(
+      await (await fetch(`${base}/api/sessions/default-model`)).json(),
+      null,
+    );
 
     await removeDirRetry(root);
   } finally {
@@ -1826,7 +1849,7 @@ Deno.test("MCP config API: get, put, validate and rebuild sessions", async () =>
     assertEquals(emptyInfo.exists, false);
 
     // A session exists before the config is saved; PUT must rebuild it.
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       name: "mcp",
       modelProvider: providerId,
@@ -1975,7 +1998,7 @@ Deno.test("app-level MCP config API applies to every workspace", async () => {
       body: JSON.stringify({ name: "ws", folders: [root] }),
     });
     const ws = await create.json();
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       name: "app-mcp",
       modelProvider: providerId,

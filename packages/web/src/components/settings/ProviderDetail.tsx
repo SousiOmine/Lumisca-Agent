@@ -155,6 +155,11 @@ export function ProviderDetail({
       clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSavedNotice(false), 2000);
       await load();
+      // A freshly stored key changes the provider's `configured` verdict:
+      // the catalog store feeds the model picker and the composer's send
+      // gate, so the change must reach it now (login/logout reload it for
+      // the same reason).
+      reloadProviders();
     } catch (e) {
       setError(errorText(e));
     } finally {

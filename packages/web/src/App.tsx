@@ -82,6 +82,15 @@ export function App({ initialData }: AppProps): ReactElement {
   const [settingsCategory, setSettingsCategory] = useState<
     SettingsCategory | null
   >(null);
+  // Bumped when the settings dialog closes: the draft re-reads the default
+  // model there, since registering (or removing) a provider changes what a
+  // new session would run on. A dialog without a provider change only costs
+  // one cheap request.
+  const [settingsVersion, setSettingsVersion] = useState(0);
+  const closeSettings = () => {
+    setSettingsCategory(null);
+    setSettingsVersion((version) => version + 1);
+  };
   // Background agent-event notifications (desktop only): the event hook
   // reads the persisted value directly, so this state only drives the
   // settings toggle.
@@ -236,6 +245,7 @@ export function App({ initialData }: AppProps): ReactElement {
               onDeleteWorkspace={deleteWorkspace}
               onReopenSession={reopenSession}
               onOpenSettings={() => setSettingsCategory("providers")}
+              settingsVersion={settingsVersion}
             />
           )}
       </div>
@@ -263,7 +273,7 @@ export function App({ initialData }: AppProps): ReactElement {
           notifyEnabled={notifyEnabled}
           onNotifyEnabledChange={handleNotifyEnabledChange}
           initialCategory={settingsCategory}
-          onClose={() => setSettingsCategory(null)}
+          onClose={closeSettings}
         />
       )}
       {showRecent && (

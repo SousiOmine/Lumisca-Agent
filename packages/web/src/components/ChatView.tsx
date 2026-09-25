@@ -130,6 +130,18 @@ export function ChatView(
   // (the workspace may live on a peer).
   const { skills } = useSkills(peerId ?? "", view.info.workspaceId);
 
+  // The owning peer's provider catalog (the composer's context meter below
+  // reads the same one). Its `configured` flags are the same verdict the
+  // settings screen shows, so the send button can explain itself: a session
+  // running on a provider that is not set up in Lumisca can never stream.
+  // A provider the peer does not list at all (retired upstream) is left
+  // alone — an absent entry is not a verdict.
+  const { providers, modelsByProvider } = useProviderModels(peerId ?? "");
+  const sessionProvider = providers.find(
+    (p) => p.id === view.info.modelProvider,
+  );
+  const providerUnconfigured = sessionProvider?.configured === false;
+
   // Build the slash commands list including the /skill and /prompt submenus.
   // In chat mode only skills, actions and saved prompts are shown (agent
   // modes need a workspace). The translator is a dependency: the menu text
@@ -188,10 +200,17 @@ export function ChatView(
    * text-taking mode (`/plan 依頼文` — workspace sessions only) or the
    * skill palette (`/skill 名前 依頼文`, which a chat session has too). An
    * incomplete command line (`/plan` without a request, `/skill` without a
-   * skill name) sends nothing. */
+   * skill name) sends nothing.
+   *
+   * Nothing leaves the composer while the session's provider is not
+   * configured (the run — and the `/compact` summarization — would fail
+   * with a not-configured error): the send button is disabled for the same
+   * reason, and the banner above the composer says which provider is
+   * missing. */
   const submit = (message?: string, mode?: ModePrompt) => {
     let text = (message ?? input).trim();
     if (!text && images.length === 0) return;
+    if (providerUnconfigured) return;
     if (message === undefined) {
       // Actions first: `/compact` is a client-side command, never a
       // message, and its argument is the summarizer's extra focus.
@@ -236,6 +255,7 @@ export function ChatView(
     item?: SlashCommandItem,
   ) => {
     if (command.kind === "action") {
+      if (providerUnconfigured) return;
       onInputChange("");
       onActionCommand?.(command.id);
       return;
@@ -316,7 +336,6 @@ export function ChatView(
     () => summarizeContextUsage(view.messages),
     [view.messages],
   );
-  const { modelsByProvider } = useProviderModels(peerId ?? "");
   const currentModel = modelsByProvider.get(view.info.modelProvider)?.find(
     (m) => m.id === view.info.modelId,
   );
@@ -402,6 +421,24 @@ export function ChatView(
       </div>
       <div className="input-area">
         <QuestionPanel pending={view.pendingQuestions} onAnswer={onAnswer} />
+        {providerUnconfigured && (
+          <div className="settings-note" role="status">
+            <span>
+              {t("chat.composer.providerUnconfigured", {
+                provider: sessionProvider?.name ?? view.info.modelProvider,
+              })}
+            </span>
+            {onOpenSettings && (
+              <button
+                type="button"
+                className="btn small"
+                onClick={onOpenSettings}
+              >
+                {t("chrome.modelPicker.settingsLink")}
+              </button>
+            )}
+          </div>
+        )}
         <Composer
           value={input}
           onChange={onInputChange}
@@ -419,7 +456,8 @@ export function ChatView(
           submitLabel={t("chat.composer.submit")}
           submitIcon={IconSend}
           submitIconOnly
-          submitDisabled={!input.trim() && images.length === 0}
+          submitDisabled={(!input.trim() && images.length === 0) ||
+            providerUnconfigured}
           onAbort={isRunning ? onAbort : undefined}
           onSubmit={() => submit()}
           onOpenSettings={onOpenSettings}

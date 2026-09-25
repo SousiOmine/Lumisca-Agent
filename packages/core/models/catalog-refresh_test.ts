@@ -109,7 +109,7 @@ Deno.test("refreshCatalog keeps an existing session usable after upstream remova
   try {
     const doomed = core.listModels("openai")[0]!;
     const ws = await core.createWorkspace("ws", [await Deno.makeTempDir()]);
-    const session = core.createSession({
+    const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: "openai",
       modelId: doomed.id,
@@ -133,13 +133,16 @@ Deno.test("refreshCatalog keeps an existing session usable after upstream remova
     assertEquals(reopened.modelProvider, "openai");
     assertEquals(reopened.modelId, doomed.id);
     assertEquals(reopened.model?.id, doomed.id);
-    // New sessions cannot select the retired model.
+    // New sessions cannot select the retired model. Another provider is
+    // configured first, so a default model exists at all: the built-in
+    // catalog alone does not count (nothing else is configured here).
     await core.closeSession(session.id);
-    const fresh = core.createSession({ workspaceId: ws.id });
-    assert(
-      !(fresh.modelProvider === "openai" && fresh.modelId === doomed.id) ||
-        core.getModel("openai", doomed.id) !== undefined,
-      "new sessions must not resolve a retired model",
+    await core.setProviderApiKey("anthropic", "sk-ant-test");
+    const fresh = await core.createSession({ workspaceId: ws.id });
+    assertEquals(
+      fresh.modelProvider,
+      "anthropic",
+      "new sessions must resolve a configured provider, never the retired model",
     );
   } finally {
     await core.close();
