@@ -147,9 +147,12 @@ Deno.test("refreshCatalog keeps an existing session usable after upstream remova
 });
 
 Deno.test("refreshCatalog reports custom-provider failure on the status", async () => {
-  const core = LumiscaCore.forTesting();
-  const previous = Deno.env.get("LUMISCA_MODELS_FILE");
-  Deno.env.set("LUMISCA_MODELS_FILE", "C:/nonexistent/models.json");
+  // The models file appears *after* the core is built: only the refresh
+  // re-reads the custom sources, so the failure lands on the status rather
+  // than in the constructor.
+  const vars: Record<string, string> = {};
+  const core = LumiscaCore.forTesting([], () => vars);
+  vars.LUMISCA_MODELS_FILE = "C:/nonexistent/models.json";
   try {
     const status = await core.refreshModelCatalog({
       fetch: stubFetch(liveProviders()),
@@ -164,18 +167,15 @@ Deno.test("refreshCatalog reports custom-provider failure on the status", async 
       core.listModels("openai").some((m) => m.id === "brand-new-test-model"),
     );
   } finally {
-    if (previous === undefined) Deno.env.delete("LUMISCA_MODELS_FILE");
-    else Deno.env.set("LUMISCA_MODELS_FILE", previous);
     await core.close();
   }
 });
 
 Deno.test("refreshCatalog restores the built-in after a stale override is removed", async () => {
-  const core = LumiscaCore.forTesting();
   const dir = await Deno.makeTempDir({ prefix: "lumisca-models-" });
   const path = `${dir}/models.json`;
-  const previous = Deno.env.get("LUMISCA_MODELS_FILE");
-  Deno.env.set("LUMISCA_MODELS_FILE", path);
+  const vars: Record<string, string> = {};
+  const core = LumiscaCore.forTesting([], () => vars);
   try {
     await Deno.writeTextFile(
       path,
@@ -188,6 +188,7 @@ Deno.test("refreshCatalog restores the built-in after a stale override is remove
         },
       }),
     );
+    vars.LUMISCA_MODELS_FILE = path;
     await core.refreshModelCatalog({ fetch: stubFetch(liveProviders()) });
     assert(core.listProviders().some((p) => p.id === "my-corp"));
     // Remove the custom entry: the stale provider must disappear.
@@ -199,8 +200,6 @@ Deno.test("refreshCatalog restores the built-in after a stale override is remove
       "stale custom providers must not linger",
     );
   } finally {
-    if (previous === undefined) Deno.env.delete("LUMISCA_MODELS_FILE");
-    else Deno.env.set("LUMISCA_MODELS_FILE", previous);
     await Deno.remove(dir, { recursive: true }).catch(() => {});
     await core.close();
   }

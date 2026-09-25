@@ -57,8 +57,13 @@ interface HubFixture {
 }
 
 /** A hub with the given stream function, a real model from the faux
- * provider, and a recording event sink. */
-function makeHub(streamFn: StreamFn = hangingStream): HubFixture {
+ * provider, and a recording event sink. `backoffSleep` replaces the retry
+ * backoff: a test that only checks the retry *happened* skips the wait (the
+ * delay math has its own suite in ai/rate-limit_test.ts). */
+function makeHub(
+  streamFn: StreamFn = hangingStream,
+  backoffSleep?: (ms: number, signal?: AbortSignal) => Promise<void>,
+): HubFixture {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
@@ -72,10 +77,15 @@ function makeHub(streamFn: StreamFn = hangingStream): HubFixture {
       thinkingLevel: "off",
     }),
     streamFn,
+    backoffSleep,
     emit: (event) => events.push(event),
   });
   return { core, events, root, hub, model };
 }
+
+/** The retry backoff never waits: the assertions are about *whether* a
+ * retry happened, not how long it slept. */
+const instantSleep = () => Promise.resolve();
 
 /** A hub whose sub-agents stream from the scripted faux responses. */
 function makeScriptedHub() {
@@ -172,7 +182,7 @@ function rateLimitThenOk(): StreamFn {
 }
 
 Deno.test("sub-agent retries a rate-limited turn then succeeds", async () => {
-  const { hub, events } = makeHub(rateLimitThenOk());
+  const { hub, events } = makeHub(rateLimitThenOk(), instantSleep);
   hub.spawn("session-1", 0, "general", "desc", "prompt");
   await waitFor(() => hub.list()[0]?.status === "finished", "task finish");
   assertEquals(hub.list()[0]?.status, "finished");
@@ -220,7 +230,7 @@ function interruptedThenOk(): { streamFn: StreamFn; requests: unknown[][] } {
 
 Deno.test("sub-agent continues after a transport cut instead of dying", async () => {
   const { streamFn, requests } = interruptedThenOk();
-  const { hub } = makeHub(streamFn);
+  const { hub } = makeHub(streamFn, instantSleep);
   hub.spawn("session-1", 0, "explore", "desc", "prompt");
   await waitFor(() => hub.list()[0]?.status === "finished", "task finish");
   assertEquals(hub.list()[0]?.status, "finished");
@@ -462,8 +472,8 @@ Deno.test("wait returns the current state on timeout", async () => {
   try {
     const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
     const before = Date.now();
-    const snapshot = await hub.wait(info.agentId, "session-1", 1);
-    assert(Date.now() - before >= 800, "wait did not honor the timeout");
+    const snapshot = await hub.wait(info.agentId, "session-1", 0.3);
+    assert(Date.now() - before >= 250, "wait did not honor the timeout");
     assertEquals(snapshot.status, "running");
   } finally {
     hub.close();

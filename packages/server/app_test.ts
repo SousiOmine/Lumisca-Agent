@@ -20,9 +20,9 @@ import {
   validateHostConfig,
 } from "./app.ts";
 import { removeDirRetry } from "@lumisca/core/test-utils";
-function setup() {
+function setup(env?: () => Record<string, string>) {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = LumiscaCore.forTesting([faux.provider], env);
   const server = startServer(core, 0);
   const port = server.addr.port;
   const base = `http://127.0.0.1:${port}`;
@@ -654,15 +654,11 @@ Deno.test("providers API includes auth state", async () => {
 });
 
 Deno.test("providers API ignores ambient env keys of built-in providers", async () => {
-  const { core, server, base } = await setup();
-  const saved = new Map(
-    ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_OAUTH_TOKEN"]
-      .map((k) => [k, Deno.env.get(k)] as const),
-  );
+  // The ambient environment is the test's own object, not the process's (the
+  // test runner shares one process environment across every file).
+  const ambient: Record<string, string> = { ANTHROPIC_API_KEY: "sk-env-only" };
+  const { core, server, base } = await setup(() => ambient);
   try {
-    for (const k of saved.keys()) Deno.env.delete(k);
-    Deno.env.set("ANTHROPIC_API_KEY", "sk-env-only");
-
     // The env key resolves (source is reported) but the provider is not
     // configured in Lumisca: it must not appear as "added".
     const res = await fetch(`${base}/api/providers`);
@@ -686,10 +682,6 @@ Deno.test("providers API ignores ambient env keys of built-in providers", async 
       .json() as { configured: boolean };
     assertEquals(after.configured, true);
   } finally {
-    for (const [k, v] of saved) {
-      if (v === undefined) Deno.env.delete(k);
-      else Deno.env.set(k, v);
-    }
     server.shutdown();
     core.close();
   }

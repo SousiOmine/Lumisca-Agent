@@ -33,9 +33,9 @@ import {
   removeDirRetry,
 } from "./test-utils.ts";
 
-function setup() {
+function setup(env?: () => Record<string, string>) {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = LumiscaCore.forTesting([faux.provider], env);
   return {
     core,
     faux,
@@ -696,18 +696,17 @@ Deno.test("workspaces require at least one folder", async () => {
 });
 
 Deno.test("hasConfiguredAuth ignores ambient env keys of built-in providers", async () => {
-  const { core } = setup();
-  const saved = new Map(
-    ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_OAUTH_TOKEN"]
-      .map((k) => [k, Deno.env.get(k)] as const),
-  );
+  // The ambient environment is the test's own object, not the process's:
+  // an env key must resolve for requests while the provider still counts
+  // as unconfigured inside Lumisca.
+  const ambient: Record<string, string> = {};
+  const { core } = setup(() => ambient);
   try {
-    for (const k of saved.keys()) Deno.env.delete(k);
     assertEquals(await core.hasProviderAuth("anthropic"), false);
     assertEquals(await core.hasConfiguredAuth("anthropic"), false);
 
     // An env key set for other tools resolves for actual requests ...
-    Deno.env.set("ANTHROPIC_API_KEY", "sk-env-only");
+    ambient.ANTHROPIC_API_KEY = "sk-env-only";
     assertEquals(await core.hasProviderAuth("anthropic"), true);
     // ... but must not make the provider appear as configured in Lumisca.
     assertEquals(await core.hasConfiguredAuth("anthropic"), false);
@@ -719,10 +718,6 @@ Deno.test("hasConfiguredAuth ignores ambient env keys of built-in providers", as
     await core.logoutProvider("anthropic");
     assertEquals(await core.hasConfiguredAuth("anthropic"), false);
   } finally {
-    for (const [k, v] of saved) {
-      if (v === undefined) Deno.env.delete(k);
-      else Deno.env.set(k, v);
-    }
     core.close();
   }
 });

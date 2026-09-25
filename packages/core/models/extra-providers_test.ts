@@ -15,23 +15,16 @@ import {
 } from "./extra-providers.ts";
 import { getSupportedThinkingLevels } from "./thinking.ts";
 
-const ENV_KEYS = ["DEEPINFRA_API_KEY", "CLINE_API_KEY", "OPENCODE_API_KEY"];
-
-/** Run `body` with a clean env for the extra providers, then restore it. */
-async function withCleanEnv(
-  body: () => void | Promise<void>,
-): Promise<void> {
-  const saved = new Map(ENV_KEYS.map((k) => [k, Deno.env.get(k)]));
-  for (const k of ENV_KEYS) Deno.env.delete(k);
-  try {
-    await body();
-  } finally {
-    for (const k of ENV_KEYS) Deno.env.delete(k);
-    for (const [k, v] of saved) {
-      if (v !== undefined) Deno.env.set(k, v);
-    }
-  }
+/** The model layer reads its environment through this, so a test never
+ * mutates `Deno.env` — the test runner shares ONE process environment
+ * across every test file. */
+function envOf(vars: Record<string, string>) {
+  return () => vars;
 }
+
+/** No ambient keys for the extra providers: nothing may look configured
+ * just because the machine running the tests has a key exported. */
+const NO_ENV = envOf({});
 
 Deno.test("models.dev catalog registers DeepInfra, ClinePass and OpenCode Go", () => {
   const providers = builtinProviders();
@@ -216,61 +209,58 @@ Deno.test("other providers derive per-model levels from reasoning_options", () =
 });
 
 Deno.test("extra providers register in LumiscaCore and need a stored key", async () => {
-  await withCleanEnv(async () => {
-    const core = LumiscaCore.forTesting();
-    try {
-      const deepinfra = core.listProviders().find((p) =>
-        p.id === DEEPINFRA_PROVIDER_ID
-      )!;
-      const clinepass = core.listProviders().find((p) =>
-        p.id === CLINEPASS_PROVIDER_ID
-      )!;
-      assertEquals(deepinfra.getModels().length > 0, true);
-      assertEquals(clinepass.getModels().length > 0, true);
+  const core = LumiscaCore.forTesting([], NO_ENV);
+  try {
+    const deepinfra = core.listProviders().find((p) =>
+      p.id === DEEPINFRA_PROVIDER_ID
+    )!;
+    const clinepass = core.listProviders().find((p) =>
+      p.id === CLINEPASS_PROVIDER_ID
+    )!;
+    assertEquals(deepinfra.getModels().length > 0, true);
+    assertEquals(clinepass.getModels().length > 0, true);
 
-      // Ambient auth must not make them look configured in Lumisca...
-      assertEquals(await core.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID), false);
-      assertEquals(await core.hasConfiguredAuth(CLINEPASS_PROVIDER_ID), false);
+    // Ambient auth must not make them look configured in Lumisca...
+    assertEquals(await core.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID), false);
+    assertEquals(await core.hasConfiguredAuth(CLINEPASS_PROVIDER_ID), false);
 
-      // ...but the settings UI offers API-key entry for all three.
-      assertEquals(core.getProviderAuthType(DEEPINFRA_PROVIDER_ID), "api_key");
-      assertEquals(core.getProviderAuthType(CLINEPASS_PROVIDER_ID), "api_key");
-      assertEquals(
-        core.getProviderAuthType(OPENCODE_GO_PROVIDER_ID),
-        "api_key",
-      );
+    // ...but the settings UI offers API-key entry for all three.
+    assertEquals(core.getProviderAuthType(DEEPINFRA_PROVIDER_ID), "api_key");
+    assertEquals(core.getProviderAuthType(CLINEPASS_PROVIDER_ID), "api_key");
+    assertEquals(
+      core.getProviderAuthType(OPENCODE_GO_PROVIDER_ID),
+      "api_key",
+    );
 
-      // A stored key is the "configured" signal.
-      await core.setProviderApiKey(DEEPINFRA_PROVIDER_ID, "di-key");
-      await core.setProviderApiKey(CLINEPASS_PROVIDER_ID, "cp-key");
-      assertEquals(await core.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID), true);
-      assertEquals(await core.hasConfiguredAuth(CLINEPASS_PROVIDER_ID), true);
-      assertEquals(await core.hasProviderAuth(DEEPINFRA_PROVIDER_ID), true);
-      assertEquals(await core.hasProviderAuth(CLINEPASS_PROVIDER_ID), true);
-    } finally {
-      core.close();
-    }
-  });
+    // A stored key is the "configured" signal.
+    await core.setProviderApiKey(DEEPINFRA_PROVIDER_ID, "di-key");
+    await core.setProviderApiKey(CLINEPASS_PROVIDER_ID, "cp-key");
+    assertEquals(await core.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID), true);
+    assertEquals(await core.hasConfiguredAuth(CLINEPASS_PROVIDER_ID), true);
+    assertEquals(await core.hasProviderAuth(DEEPINFRA_PROVIDER_ID), true);
+    assertEquals(await core.hasProviderAuth(CLINEPASS_PROVIDER_ID), true);
+  } finally {
+    core.close();
+  }
 });
 
 Deno.test("extra providers resolve their env API keys", async () => {
-  Deno.env.set("DEEPINFRA_API_KEY", "di-env-key");
-  Deno.env.set("CLINE_API_KEY", "cp-env-key");
+  const core = LumiscaCore.forTesting(
+    [],
+    envOf({
+      DEEPINFRA_API_KEY: "di-env-key",
+      CLINE_API_KEY: "cp-env-key",
+    }),
+  );
   try {
-    const core = LumiscaCore.forTesting();
-    try {
-      assertEquals(await core.hasProviderAuth(DEEPINFRA_PROVIDER_ID), true);
-      assertEquals(await core.hasProviderAuth(CLINEPASS_PROVIDER_ID), true);
-      const di = await core.checkAuth(DEEPINFRA_PROVIDER_ID);
-      assertEquals(di?.source, "DEEPINFRA_API_KEY");
-      const cp = await core.checkAuth(CLINEPASS_PROVIDER_ID);
-      assertEquals(cp?.source, "CLINE_API_KEY");
-    } finally {
-      core.close();
-    }
+    assertEquals(await core.hasProviderAuth(DEEPINFRA_PROVIDER_ID), true);
+    assertEquals(await core.hasProviderAuth(CLINEPASS_PROVIDER_ID), true);
+    const di = await core.checkAuth(DEEPINFRA_PROVIDER_ID);
+    assertEquals(di?.source, "DEEPINFRA_API_KEY");
+    const cp = await core.checkAuth(CLINEPASS_PROVIDER_ID);
+    assertEquals(cp?.source, "CLINE_API_KEY");
   } finally {
-    Deno.env.delete("DEEPINFRA_API_KEY");
-    Deno.env.delete("CLINE_API_KEY");
+    core.close();
   }
 });
 

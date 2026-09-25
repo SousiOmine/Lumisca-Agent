@@ -25,6 +25,7 @@ import type {
 } from "./ai/types.ts";
 import type { ModePrompt } from "./types/mode-message.ts";
 import { ModelManager } from "./models/mod.ts";
+import type { EnvReader } from "./models/custom.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
@@ -127,6 +128,10 @@ export class LumiscaCore {
       mcp?: McpService;
       workspaces?: WorkspaceService;
       globalSkillDirs?: string[];
+      /** Environment the model layer reads (custom providers, ambient API
+       * keys). Defaults to the real process environment; tests pass their
+       * own so they never mutate the process-global one. */
+      env?: EnvReader;
     } = {},
   ) {
     this.globalSkillDirs = overrides.globalSkillDirs;
@@ -134,7 +139,7 @@ export class LumiscaCore {
     this.settings = settings;
     this.credentials = createDbCredentialStore(this.settings);
     this.models = overrides.models ??
-      new ModelManager(this.credentials, this.settings);
+      new ModelManager(this.credentials, this.settings, overrides.env);
     this.personalization = overrides.personalization ??
       new PersonalizationService(this.settings);
     this.savedPrompts = overrides.savedPrompts ??
@@ -218,14 +223,18 @@ export class LumiscaCore {
   }
 
   /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
-   * (see resolveSettingsPath); an explicit settingsPath overrides that. */
+   * (see resolveSettingsPath); an explicit settingsPath overrides that.
+   * `env` replaces the process environment the model layer reads (see
+   * `forTesting`); production leaves it unset. */
   static open(
     dbPath: string,
     settingsPath: string = resolveSettingsPath(),
+    env?: EnvReader,
   ): LumiscaCore {
     return new LumiscaCore(
       LumiscaDb.open(dbPath),
       createFileSettingsRepo(settingsPath),
+      { env },
     );
   }
 
@@ -240,12 +249,22 @@ export class LumiscaCore {
    * provider). Global skill discovery is disabled: a test's skill catalog
    * must come from its own fixture, never from the machine running it (the
    * developer's `~/.agents/skills` would otherwise change what the model
-   * sees). */
-  static forTesting(extraProviders: Provider[] = []): LumiscaCore {
+   * sees).
+   *
+   * The model layer reads its environment through `env`, which defaults to
+   * EMPTY. `Deno.env` is global to the whole test process (the runner runs
+   * every test file in one process, in parallel worker threads), so reading
+   * it would make a test depend on the machine — and on whatever another
+   * file happened to set at that moment. A test that wants ambient
+   * variables passes them explicitly. */
+  static forTesting(
+    extraProviders: Provider[] = [],
+    env: EnvReader = () => ({}),
+  ): LumiscaCore {
     const core = new LumiscaCore(
       LumiscaDb.openInMemory(),
       createInMemorySettingsRepo(),
-      { globalSkillDirs: [] },
+      { globalSkillDirs: [], env },
     );
     for (const provider of extraProviders) {
       core.models.models.setProvider(provider);

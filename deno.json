@@ -64,8 +64,8 @@
     "lint": "deno lint",
     "fmt": "deno fmt",
     "fmt:check": "deno fmt --check",
-    "test": "deno test packages/core packages/server packages/web --allow-read --allow-write --allow-run --allow-env --allow-net --allow-ffi --allow-sys",
-    "test:watch": "deno test --watch packages/core packages/server packages/web --allow-read --allow-write --allow-run --allow-env --allow-net --allow-ffi --allow-sys",
+    "test": "deno test --parallel packages/core packages/server packages/web --allow-read --allow-write --allow-run --allow-env --allow-net --allow-ffi --allow-sys",
+    "test:watch": "deno test --parallel --watch packages/core packages/server packages/web --allow-read --allow-write --allow-run --allow-env --allow-net --allow-ffi --allow-sys",
     "build:server": "deno run --allow-all scripts/build-server.ts",
     "smoke:server": "deno run --allow-all scripts/smoke-server.ts",
     "dev": {

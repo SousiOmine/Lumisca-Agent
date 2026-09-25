@@ -192,6 +192,9 @@ export interface TaskHubOptions {
    * shared/settings-keys.ts): the sub-agents condense their history with
    * the same policy as the main agent. Read on every check. */
   compactionPolicy?: () => CompactionPolicyInput;
+  /** Sleep before a retry backoff (injectable for tests, like
+   * SessionAgent's rateLimitRetrySleep). Defaults to the real timer. */
+  backoffSleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   emit: (event: ClientEvent) => void;
 }
 
@@ -225,6 +228,11 @@ export class TaskHub {
   private readonly compactionPolicy:
     | (() => CompactionPolicyInput)
     | undefined;
+  /** Sleeps the retry backoff (see backoff()). */
+  private readonly backoffSleep: (
+    ms: number,
+    signal?: AbortSignal,
+  ) => Promise<void>;
   /** Whether the session has a browser backend attached (set by the pool on
    * every open). Gates the built-in web-browser skill in the sub-agent tool
    * sets, matching the main agent's tool set and prompt listing. */
@@ -248,6 +256,7 @@ export class TaskHub {
     this.safety = options.safety;
     this.language = options.language ?? DEFAULT_LOCALE;
     this.compactionPolicy = options.compactionPolicy;
+    this.backoffSleep = options.backoffSleep ?? sleepAbortable;
     this.emit = options.emit;
   }
 
@@ -595,7 +604,7 @@ export class TaskHub {
    * or the sub-agent killed), so the caller settles instead of retrying. */
   private async backoff(sub: Subagent, ms: number): Promise<boolean> {
     try {
-      await sleepAbortable(ms, sub.abort.signal);
+      await this.backoffSleep(ms, sub.abort.signal);
       return true;
     } catch {
       return false;

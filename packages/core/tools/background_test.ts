@@ -22,16 +22,23 @@ import { decodeUtf8 } from "../shared/mod.ts";
 import { promptSession, removeDirRetry, toolText } from "../test-utils.ts";
 
 /** Cross-platform commands. The Windows shell has no sleep; ping is the
- * classic stand-in. */
+ * classic stand-in.
+ *
+ * The durations are the shortest that still let a test observe the state it
+ * asserts: `longCommand` only has to outlive a kill or a sub-second timeout,
+ * `briefCommand` only has to stay running across one await, and
+ * `startContractCommand` only has to be alive when the *synchronous*
+ * `start()` contract is checked (Windows pays ~0.5s for `cmd.exe` startup
+ * before `ping` runs, so it gets an extra ping). */
 const longCommand = Deno.build.os === "windows"
   ? "ping -n 60 127.0.0.1 > $null"
   : "sleep 60";
 const briefCommand = Deno.build.os === "windows"
-  ? "ping -n 2 127.0.0.1 > $null; echo done"
-  : "sleep 1; echo done";
+  ? "ping -n 1 127.0.0.1 > $null; echo done"
+  : "sleep 0.4; echo done";
 const startContractCommand = Deno.build.os === "windows"
-  ? "ping -n 3 127.0.0.1 > $null; echo done"
-  : "sleep 2; echo done";
+  ? "ping -n 2 127.0.0.1 > $null; echo done"
+  : "sleep 0.8; echo done";
 const linesCommand = Deno.build.os === "windows"
   ? "echo start; echo line1; echo line2"
   : "echo start; echo line1; echo line2";
@@ -294,7 +301,7 @@ Deno.test("timeout kills the command and notifies with reason timeout", async ()
   const { commandId } = await manager.start({
     cwd: Deno.cwd(),
     command: longCommand,
-    timeoutSec: 1,
+    timeoutSec: 0.3,
   });
   const done = await exitPromise;
   assertEquals(done.commandId, commandId);

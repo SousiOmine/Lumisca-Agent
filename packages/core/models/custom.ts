@@ -26,10 +26,22 @@ import { isRecord } from "../fs.ts";
  *
  * Both sources may be active at once; the env-var provider is registered
  * last so it wins on provider-id collisions (setProvider is an upsert).
+ *
+ * Neither source reads `Deno.env` directly: both take an {@link EnvReader},
+ * so the host (and a test) decides what "the environment" is.
  */
 
 /** Provider id of the env-var custom provider. */
 export const CUSTOM_PROVIDER_ID = "custom";
+
+/** Reads the process environment the custom sources look at. Injectable so
+ * a host (and a test) can supply its own: `Deno.env` is process-global, so
+ * a test that has to set it would otherwise leak into every other test
+ * running in the same process. */
+export type EnvReader = () => Record<string, string>;
+
+/** The real environment, read afresh on every call. */
+export const processEnv: EnvReader = () => Deno.env.toObject();
 
 /** Defaults matching pi-coding-agent's modelFromJson (models.json). */
 const DEFAULT_CONTEXT_WINDOW = 128_000;
@@ -212,10 +224,13 @@ export function buildProvider(input: {
 
 /** The env-var custom provider, or undefined when LUMISCA_BASE_URL is not
  * set. Throws on a partial configuration (base URL without a model). */
-export function customProviderFromEnv(): Provider | undefined {
-  const baseUrl = Deno.env.get("LUMISCA_BASE_URL");
+export function customProviderFromEnv(
+  env: EnvReader = processEnv,
+): Provider | undefined {
+  const vars = env();
+  const baseUrl = vars.LUMISCA_BASE_URL;
   if (!baseUrl) return undefined;
-  const modelId = Deno.env.get("LUMISCA_MODEL");
+  const modelId = vars.LUMISCA_MODEL;
   if (!modelId) {
     throw new Error(
       "LUMISCA_BASE_URL is set but LUMISCA_MODEL is missing; " +
@@ -248,8 +263,10 @@ export function customProviderFromEnv(): Provider | undefined {
 /** Providers defined in the models.json file pointed to by
  * LUMISCA_MODELS_FILE (empty when the env var is unset). Throws on a
  * missing/unreadable/invalid file — a configured file must be correct. */
-export function customProvidersFromModelsFile(): Provider[] {
-  const path = Deno.env.get("LUMISCA_MODELS_FILE");
+export function customProvidersFromModelsFile(
+  env: EnvReader = processEnv,
+): Provider[] {
+  const path = env().LUMISCA_MODELS_FILE;
   if (!path) return [];
 
   let text: string;
@@ -297,11 +314,10 @@ export function customProvidersFromModelsFile(): Provider[] {
 
 /** Every custom provider: models.json first, then the env-var provider
  * (registered last so it wins id collisions). */
-export function loadCustomProviders(): Provider[] {
+export function loadCustomProviders(env: EnvReader = processEnv): Provider[] {
+  const fromEnv = customProviderFromEnv(env);
   return [
-    ...customProvidersFromModelsFile(),
-    ...(customProviderFromEnv() !== undefined
-      ? [customProviderFromEnv()!]
-      : []),
+    ...customProvidersFromModelsFile(env),
+    ...(fromEnv !== undefined ? [fromEnv] : []),
   ];
 }

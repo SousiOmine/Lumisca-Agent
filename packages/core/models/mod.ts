@@ -22,7 +22,12 @@ import {
   parseUserProviderInput,
   UserProviderStore,
 } from "./user-providers.ts";
-import { buildProvider, loadCustomProviders } from "./custom.ts";
+import {
+  buildProvider,
+  type EnvReader,
+  loadCustomProviders,
+  processEnv,
+} from "./custom.ts";
 import {
   buildCatalogProviders,
   builtinProviders,
@@ -60,6 +65,9 @@ export class ModelManager {
    * runtime). Treated like the other custom providers for `isCustomProvider`. */
   private userProviderIds = new Set<string>();
   private readonly userStore: UserProviderStore;
+  /** The environment the custom provider sources are read from. Stored so
+   * `refreshCatalog` re-reads the same one the constructor did. */
+  private readonly env: EnvReader;
   /** Where the active built-in catalog came from (live fetch, disk cache,
    * or the bundled snapshot). Starts as the snapshot the constructor
    * registered; every `refreshCatalog` replaces it. */
@@ -68,8 +76,9 @@ export class ModelManager {
   constructor(
     credentials: CredentialStore,
     settings: SettingsRepo,
-    env: () => Record<string, string> = () => Deno.env.toObject(),
+    env: EnvReader = processEnv,
   ) {
+    this.env = env;
     this.models = new LumiscaModels({
       credentials,
       env,
@@ -105,7 +114,7 @@ export class ModelManager {
     //   endpoint) — this is the override mechanism, not an accident;
     // - the env-var provider is registered last, so it wins collisions
     //   with models.json ids.
-    const customProviders = loadCustomProviders();
+    const customProviders = loadCustomProviders(this.env);
     const customIds = new Set(customProviders.map((p) => p.id));
     for (const provider of customProviders) {
       this.models.setProvider(provider);

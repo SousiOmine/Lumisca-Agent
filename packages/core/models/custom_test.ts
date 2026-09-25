@@ -6,37 +6,20 @@ import {
   CUSTOM_PROVIDER_ID,
   customProviderFromEnv,
   customProvidersFromModelsFile,
+  type EnvReader,
   loadCustomProviders,
 } from "./custom.ts";
 
-const ENV_KEYS = [
-  "LUMISCA_BASE_URL",
-  "LUMISCA_MODEL",
-  "LUMISCA_API_KEY",
-  "LUMISCA_MODELS_FILE",
-  "LUMISCA_API_KEY_CUSTOM",
-];
-
-/** Run `body` with a clean custom-provider env, then restore it. The
- * env-var custom provider is read at ModelManager construction, so tests
- * must never leak these vars into other test files (deno test runs files
- * in parallel processes). */
-async function withEnv(
-  env: Record<string, string>,
-  body: () => void | Promise<void>,
-): Promise<void> {
-  const saved = new Map(ENV_KEYS.map((k) => [k, Deno.env.get(k)]));
-  for (const k of ENV_KEYS) Deno.env.delete(k);
-  for (const [k, v] of Object.entries(env)) Deno.env.set(k, v);
-  try {
-    await body();
-  } finally {
-    for (const k of ENV_KEYS) Deno.env.delete(k);
-    for (const [k, v] of saved) {
-      if (v !== undefined) Deno.env.set(k, v);
-    }
-  }
+/** The custom-provider sources take their environment as an argument, so
+ * a test never touches `Deno.env`: the test runner shares ONE process
+ * environment across every test file, and a value set here would be read
+ * by whatever else happens to be running at that moment. */
+function envOf(vars: Record<string, string>): EnvReader {
+  return () => vars;
 }
+
+/** No custom-provider configuration at all. */
+const NO_ENV = envOf({});
 
 async function writeModelsFile(content: string): Promise<string> {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-models-" });
@@ -46,37 +29,35 @@ async function writeModelsFile(content: string): Promise<string> {
 }
 
 Deno.test("env vars register the custom provider", () => {
-  withEnv({
+  const provider = customProviderFromEnv(envOf({
     LUMISCA_BASE_URL: "http://localhost:5002/v1",
     LUMISCA_MODEL: "deepseek-chat",
-  }, () => {
-    const provider = customProviderFromEnv();
-    assertEquals(provider !== undefined, true);
-    assertEquals(provider!.id, CUSTOM_PROVIDER_ID);
-    assertEquals(provider!.name, "Custom (OpenAI-compatible)");
-    assertEquals(provider!.baseUrl, "http://localhost:5002/v1");
-    const models = provider!.getModels();
-    assertEquals(models.length, 1);
-    assertEquals(models[0]!.id, "deepseek-chat");
-    assertEquals(models[0]!.api, "openai-completions");
-    assertEquals(models[0]!.baseUrl, "http://localhost:5002/v1");
-    assertEquals(models[0]!.contextWindow, 128_000);
-    assertEquals(models[0]!.maxTokens, 16_384);
-    assertEquals(models[0]!.reasoning, false);
-  });
+  }));
+  assertEquals(provider !== undefined, true);
+  assertEquals(provider!.id, CUSTOM_PROVIDER_ID);
+  assertEquals(provider!.name, "Custom (OpenAI-compatible)");
+  assertEquals(provider!.baseUrl, "http://localhost:5002/v1");
+  const models = provider!.getModels();
+  assertEquals(models.length, 1);
+  assertEquals(models[0]!.id, "deepseek-chat");
+  assertEquals(models[0]!.api, "openai-completions");
+  assertEquals(models[0]!.baseUrl, "http://localhost:5002/v1");
+  assertEquals(models[0]!.contextWindow, 128_000);
+  assertEquals(models[0]!.maxTokens, 16_384);
+  assertEquals(models[0]!.reasoning, false);
 });
 
 Deno.test("env custom provider is absent without LUMISCA_BASE_URL", () => {
-  withEnv({}, () => {
-    assertEquals(customProviderFromEnv(), undefined);
-    assertEquals(loadCustomProviders().length, 0);
-  });
+  assertEquals(customProviderFromEnv(NO_ENV), undefined);
+  assertEquals(loadCustomProviders(NO_ENV).length, 0);
 });
 
 Deno.test("env custom provider requires LUMISCA_MODEL", () => {
-  withEnv({ LUMISCA_BASE_URL: "http://localhost:5002/v1" }, () => {
-    assertThrows(() => customProviderFromEnv(), Error, "LUMISCA_MODEL");
-  });
+  assertThrows(
+    () => customProviderFromEnv(envOf({ LUMISCA_BASE_URL: "http://x/v1" })),
+    Error,
+    "LUMISCA_MODEL",
+  );
 });
 
 Deno.test("models.json registers multiple providers and models", async () => {
@@ -97,24 +78,24 @@ Deno.test("models.json registers multiple providers and models", async () => {
       },
     },
   }));
-  await withEnv({ LUMISCA_MODELS_FILE: path }, () => {
-    const providers = customProvidersFromModelsFile();
-    assertEquals(providers.length, 2);
+  const providers = customProvidersFromModelsFile(
+    envOf({ LUMISCA_MODELS_FILE: path }),
+  );
+  assertEquals(providers.length, 2);
 
-    const dg = providers.find((p) => p.id === "distill-gym")!;
-    assertEquals(dg.name, "distill-gym proxy");
-    const models = dg.getModels();
-    assertEquals(models.length, 2);
-    assertEquals(models[0]!.id, "deepseek-chat");
-    assertEquals(models[0]!.api, "openai-completions");
-    assertEquals(models[0]!.contextWindow, 64000);
-    assertEquals(models[0]!.maxTokens, 8000);
-    assertEquals(models[1]!.id, "deepseek-reasoner");
-    assertEquals(models[1]!.reasoning, true);
+  const dg = providers.find((p) => p.id === "distill-gym")!;
+  assertEquals(dg.name, "distill-gym proxy");
+  const models = dg.getModels();
+  assertEquals(models.length, 2);
+  assertEquals(models[0]!.id, "deepseek-chat");
+  assertEquals(models[0]!.api, "openai-completions");
+  assertEquals(models[0]!.contextWindow, 64000);
+  assertEquals(models[0]!.maxTokens, 8000);
+  assertEquals(models[1]!.id, "deepseek-reasoner");
+  assertEquals(models[1]!.reasoning, true);
 
-    const other = providers.find((p) => p.id === "other")!;
-    assertEquals(other.getModels()[0]!.baseUrl, "http://other:8000/v1");
-  });
+  const other = providers.find((p) => p.id === "other")!;
+  assertEquals(other.getModels()[0]!.baseUrl, "http://other:8000/v1");
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
@@ -128,24 +109,25 @@ Deno.test("models.json apiKey ${ENV} resolves from the environment", async () =>
       },
     },
   }));
-  await withEnv({
-    LUMISCA_MODELS_FILE: path,
-    LUMISCA_TEST_PROXY_KEY: "secret-value",
-  }, async () => {
-    const core = LumiscaCore.forTesting();
-    try {
-      const provider = core.listProviders().find((p) => p.id === "custom");
-      assertEquals(provider !== undefined, true);
-      assertEquals(await core.hasProviderAuth("custom"), true);
-      // models.json providers are Lumisca's own config: they count as
-      // configured even though the key comes from an env var.
-      assertEquals(await core.hasConfiguredAuth("custom"), true);
-      const check = await core.checkAuth("custom");
-      assertEquals(check?.source, "LUMISCA_TEST_PROXY_KEY");
-    } finally {
-      core.close();
-    }
-  });
+  const core = LumiscaCore.forTesting(
+    [],
+    envOf({
+      LUMISCA_MODELS_FILE: path,
+      LUMISCA_TEST_PROXY_KEY: "secret-value",
+    }),
+  );
+  try {
+    const provider = core.listProviders().find((p) => p.id === "custom");
+    assertEquals(provider !== undefined, true);
+    assertEquals(await core.hasProviderAuth("custom"), true);
+    // models.json providers are Lumisca's own config: they count as
+    // configured even though the key comes from an env var.
+    assertEquals(await core.hasConfiguredAuth("custom"), true);
+    const check = await core.checkAuth("custom");
+    assertEquals(check?.source, "LUMISCA_TEST_PROXY_KEY");
+  } finally {
+    core.close();
+  }
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
@@ -159,15 +141,16 @@ Deno.test("models.json literal apiKey resolves without env vars", async () => {
       },
     },
   }));
-  await withEnv({ LUMISCA_MODELS_FILE: path }, async () => {
-    const core = LumiscaCore.forTesting();
-    try {
-      const check = await core.checkAuth("custom");
-      assertEquals(check?.source, "models.json");
-    } finally {
-      core.close();
-    }
-  });
+  const core = LumiscaCore.forTesting(
+    [],
+    envOf({ LUMISCA_MODELS_FILE: path }),
+  );
+  try {
+    const check = await core.checkAuth("custom");
+    assertEquals(check?.source, "models.json");
+  } finally {
+    core.close();
+  }
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
@@ -184,18 +167,18 @@ Deno.test("models.json provider headers propagate to every model", async () => {
       },
     },
   }));
-  await withEnv({ LUMISCA_MODELS_FILE: path }, () => {
-    const providers = customProvidersFromModelsFile();
-    const proxied = providers.find((p) => p.id === "proxied")!;
-    // pi-ai only sends model.headers on requests, so the provider-level
-    // headers must land on each model to take effect.
-    for (const model of proxied.getModels()) {
-      assertEquals(model.headers, {
-        "x-api-key": "proxy-secret",
-        "X-Custom": "yes",
-      });
-    }
-  });
+  const providers = customProvidersFromModelsFile(
+    envOf({ LUMISCA_MODELS_FILE: path }),
+  );
+  const proxied = providers.find((p) => p.id === "proxied")!;
+  // pi-ai only sends model.headers on requests, so the provider-level
+  // headers must land on each model to take effect.
+  for (const model of proxied.getModels()) {
+    assertEquals(model.headers, {
+      "x-api-key": "proxy-secret",
+      "X-Custom": "yes",
+    });
+  }
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
@@ -208,18 +191,19 @@ Deno.test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async
       },
     },
   }));
-  await withEnv({
-    LUMISCA_MODELS_FILE: path,
-    LUMISCA_API_KEY_CUSTOM: "from-env",
-  }, async () => {
-    const core = LumiscaCore.forTesting();
-    try {
-      const check = await core.checkAuth("custom");
-      assertEquals(check?.source, "LUMISCA_API_KEY_CUSTOM");
-    } finally {
-      core.close();
-    }
-  });
+  const core = LumiscaCore.forTesting(
+    [],
+    envOf({
+      LUMISCA_MODELS_FILE: path,
+      LUMISCA_API_KEY_CUSTOM: "from-env",
+    }),
+  );
+  try {
+    const check = await core.checkAuth("custom");
+    assertEquals(check?.source, "LUMISCA_API_KEY_CUSTOM");
+  } finally {
+    core.close();
+  }
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
@@ -227,9 +211,11 @@ Deno.test("models.json without baseUrl throws", async () => {
   const path = await writeModelsFile(JSON.stringify({
     providers: { custom: { models: [{ id: "m" }] } },
   }));
-  await withEnv({ LUMISCA_MODELS_FILE: path }, () => {
-    assertThrows(() => customProvidersFromModelsFile(), Error, "baseUrl");
-  });
+  assertThrows(
+    () => customProvidersFromModelsFile(envOf({ LUMISCA_MODELS_FILE: path })),
+    Error,
+    "baseUrl",
+  );
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
@@ -242,30 +228,31 @@ Deno.test("models.json with unsupported api throws", async () => {
       },
     },
   }));
-  await withEnv({ LUMISCA_MODELS_FILE: path }, () => {
-    assertThrows(
-      () => customProvidersFromModelsFile(),
-      Error,
-      "not-a-real-api",
-    );
-  });
+  assertThrows(
+    () => customProvidersFromModelsFile(envOf({ LUMISCA_MODELS_FILE: path })),
+    Error,
+    "not-a-real-api",
+  );
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
 Deno.test("models.json invalid shape and missing file throw", async () => {
   const path = await writeModelsFile('{"notProviders": {}}');
-  await withEnv({ LUMISCA_MODELS_FILE: path }, () => {
-    assertThrows(() => customProvidersFromModelsFile(), Error, "providers");
-  });
+  assertThrows(
+    () => customProvidersFromModelsFile(envOf({ LUMISCA_MODELS_FILE: path })),
+    Error,
+    "providers",
+  );
   await Deno.remove(join(path, ".."), { recursive: true });
 
-  await withEnv({ LUMISCA_MODELS_FILE: "C:/nonexistent/models.json" }, () => {
-    assertThrows(
-      () => customProvidersFromModelsFile(),
-      Error,
-      "Failed to load",
-    );
-  });
+  assertThrows(
+    () =>
+      customProvidersFromModelsFile(
+        envOf({ LUMISCA_MODELS_FILE: "C:/nonexistent/models.json" }),
+      ),
+    Error,
+    "Failed to load",
+  );
 });
 
 Deno.test("env provider wins id collisions with models.json", async () => {
@@ -281,27 +268,28 @@ Deno.test("env provider wins id collisions with models.json", async () => {
       },
     },
   }));
-  await withEnv({
-    LUMISCA_MODELS_FILE: path,
-    LUMISCA_BASE_URL: "http://env:2/v1",
-    LUMISCA_MODEL: "from-env",
-  }, () => {
-    const core = LumiscaCore.forTesting();
-    try {
-      // The env provider is registered last: it replaces the models.json
-      // entry with the same id.
-      const custom = core.listProviders().find((p) =>
-        p.id === CUSTOM_PROVIDER_ID
-      )!;
-      assertEquals(custom.baseUrl, "http://env:2/v1");
-      assertEquals(custom.getModels()[0]!.id, "from-env");
-      // The other models.json provider survives untouched.
-      const other = core.listProviders().find((p) => p.id === "other")!;
-      assertEquals(other.getModels()[0]!.baseUrl, "http://other:1/v1");
-    } finally {
-      core.close();
-    }
-  });
+  const core = LumiscaCore.forTesting(
+    [],
+    envOf({
+      LUMISCA_MODELS_FILE: path,
+      LUMISCA_BASE_URL: "http://env:2/v1",
+      LUMISCA_MODEL: "from-env",
+    }),
+  );
+  try {
+    // The env provider is registered last: it replaces the models.json
+    // entry with the same id.
+    const custom = core.listProviders().find((p) =>
+      p.id === CUSTOM_PROVIDER_ID
+    )!;
+    assertEquals(custom.baseUrl, "http://env:2/v1");
+    assertEquals(custom.getModels()[0]!.id, "from-env");
+    // The other models.json provider survives untouched.
+    const other = core.listProviders().find((p) => p.id === "other")!;
+    assertEquals(other.getModels()[0]!.baseUrl, "http://other:1/v1");
+  } finally {
+    core.close();
+  }
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
@@ -309,30 +297,32 @@ Deno.test("LumiscaCore.open registers the custom provider from env", async () =>
   const dir = await Deno.makeTempDir({ prefix: "lumisca-custom-" });
   const dbPath = join(dir, "test.db");
   const settingsPath = join(dir, "settings.jsonc");
-  await withEnv({
-    LUMISCA_BASE_URL: "http://localhost:5002/v1",
-    LUMISCA_MODEL: "deepseek-chat",
-    LUMISCA_API_KEY: "proxy-key",
-  }, async () => {
-    const core = LumiscaCore.open(dbPath, settingsPath);
-    try {
-      const model = core.getModel(CUSTOM_PROVIDER_ID, "deepseek-chat");
-      assertEquals(model !== undefined, true);
-      assertEquals(model!.baseUrl, "http://localhost:5002/v1");
-      assertEquals(await core.hasProviderAuth(CUSTOM_PROVIDER_ID), true);
+  const core = LumiscaCore.open(
+    dbPath,
+    settingsPath,
+    envOf({
+      LUMISCA_BASE_URL: "http://localhost:5002/v1",
+      LUMISCA_MODEL: "deepseek-chat",
+      LUMISCA_API_KEY: "proxy-key",
+    }),
+  );
+  try {
+    const model = core.getModel(CUSTOM_PROVIDER_ID, "deepseek-chat");
+    assertEquals(model !== undefined, true);
+    assertEquals(model!.baseUrl, "http://localhost:5002/v1");
+    assertEquals(await core.hasProviderAuth(CUSTOM_PROVIDER_ID), true);
 
-      // A session can be created with the custom provider.
-      const ws = await core.createWorkspace("ws", [dir]);
-      const session = core.createSession({
-        workspaceId: ws.id,
-        modelProvider: CUSTOM_PROVIDER_ID,
-        modelId: "deepseek-chat",
-      });
-      assertEquals(session.modelProvider, CUSTOM_PROVIDER_ID);
-      assertEquals(session.modelId, "deepseek-chat");
-    } finally {
-      core.close();
-    }
-  });
+    // A session can be created with the custom provider.
+    const ws = await core.createWorkspace("ws", [dir]);
+    const session = core.createSession({
+      workspaceId: ws.id,
+      modelProvider: CUSTOM_PROVIDER_ID,
+      modelId: "deepseek-chat",
+    });
+    assertEquals(session.modelProvider, CUSTOM_PROVIDER_ID);
+    assertEquals(session.modelId, "deepseek-chat");
+  } finally {
+    core.close();
+  }
   await removeDirRetry(dir);
 });
