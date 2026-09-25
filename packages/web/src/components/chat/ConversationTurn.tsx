@@ -23,6 +23,13 @@ export type { ConversationTurnData } from "./types.ts";
  * then lands in the same turn, and the whole thing collapses together when
  * the run ends.
  *
+ * A notification steered into the run that was already active
+ * (`steered` — the delivery fact the session agent stamps, see
+ * injectNotification) did not start a run: it joins that run's turn like a
+ * tool result. Splitting the turn for it would make the still-running turn
+ * stop being the last one, collapsing its work log mid-run — the agent
+ * keeps working, so nothing about the ongoing turn is finished yet.
+ *
  * A compaction checkpoint is a row of its own, not part of any turn: it
  * marks where older history was replaced, so it must not be absorbed into
  * the surrounding turn (the retained messages before it belong to their own
@@ -47,6 +54,17 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
     }
     if (message.role === "notification") {
       if (message.kind === "retry") continue;
+      // Steered notifications join the open turn (a checkpoint row cannot
+      // take responses, and a leading one has no turn to join: both keep
+      // today's behavior of starting a turn of their own, so no message is
+      // ever dropped).
+      const current = turns.at(-1);
+      if (
+        message.steered === true && current !== undefined && !current.standalone
+      ) {
+        current.responses.push(message);
+        continue;
+      }
       turns.push({ user: message, responses: pending });
       pending = [];
       continue;
@@ -59,10 +77,12 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
 }
 
 /** One user prompt and the agent's reaction to it: the activity header,
- * the (expandable) work log of intermediate messages + tool calls, and
- * the final assistant text. Memoized — only the last turn's `running`
- * flag changes while a run streams, so the others skip re-rendering; the
- * callers keep the props referentially stable (see ChatView). */
+ * the (expandable) work log of everything the turn produced except the
+ * final assistant text (intermediate messages, tool calls, the turn's
+ * compact rows), and that text below. Memoized — only the last turn's
+ * `running` flag changes while a run streams, so the others skip
+ * re-rendering; the callers keep the props referentially stable (see
+ * ChatView). */
 export const ConversationTurn = memo(function ConversationTurn({
   turn,
   toolResults,
@@ -100,11 +120,19 @@ export const ConversationTurn = memo(function ConversationTurn({
     (message): message is AssistantMessage => message.role === "assistant",
   );
   const finalAssistant = assistants.at(-1);
-  const intermediate = finalAssistant ? assistants.slice(0, -1) : assistants;
+  // Everything the turn produced except the final assistant, whose text
+  // renders below the log: intermediate assistant messages (their text and
+  // tool calls) plus the turn's compact rows — a notification steered into
+  // the run, a dynamic-context snapshot. Their relative order is the
+  // transcript's; the final assistant's tool calls are appended after them
+  // by AssistantTools, which is where they belong.
+  const workLog = finalAssistant === undefined
+    ? turn.responses
+    : turn.responses.filter((message) => message !== finalAssistant);
   const finalToolCalls = finalAssistant?.content.filter(
     (block): block is ToolCallBlock => block.type === "toolCall",
   ) ?? [];
-  const expandable = intermediate.length > 0 || finalToolCalls.length > 0;
+  const expandable = workLog.length > 0 || finalToolCalls.length > 0;
   const lastTimestamp = turn.responses.reduce(
     (latest, message) => Math.max(latest, message.timestamp),
     turn.user.timestamp,
@@ -133,7 +161,7 @@ export const ConversationTurn = memo(function ConversationTurn({
       )}
       {(running || expanded) && (
         <div className="agent-work-log">
-          {intermediate.map((message, index) => (
+          {workLog.map((message, index) => (
             <MessageRow
               key={`${message.timestamp}-${index}`}
               message={message}

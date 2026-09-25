@@ -54,13 +54,18 @@ export function lastAssistantText(messages: AgentMessage[]): string {
   return "";
 }
 
-/** Stamp a payload as a notification message (role + timestamp). */
+/** Stamp a payload as a notification message (role + timestamp). `steered`
+ * marks a notification delivered into the run that was already active
+ * (see NotificationMessage.steered); only the delivery site knows it, so
+ * the payload generators never set it. */
 export function notificationMessage(
   payload: NotificationPayload,
+  steered?: boolean,
 ): NotificationMessage {
   return {
     role: "notification",
     ...payload,
+    ...(steered === true ? { steered } : {}),
     timestamp: Date.now(),
   };
 }

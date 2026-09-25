@@ -196,6 +196,11 @@ export interface NotificationMessage {
   title: string;
   body: string;
   status: "success" | "error" | "neutral";
+  /** True when the notification was steered into the run that was already
+   * active instead of starting its own run; the UI keeps such a
+   * notification inside that run's turn (see the canonical, documented
+   * definition in types/notification.ts — keep the two in sync). */
+  steered?: boolean;
   timestamp: number;
 }
 

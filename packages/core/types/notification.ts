@@ -31,14 +31,24 @@ export interface NotificationMessage {
    * there is nothing beyond the title. */
   body: string;
   status: NotificationStatus;
+  /** True when the notification was steered into the run that was already
+   * active instead of starting its own run (see SessionAgent.deliverPrompt);
+   * absent when it started its own run. The UI keeps a steered notification
+   * inside that run's turn instead of starting a new one (see web's
+   * buildTurns): it is a system event of the ongoing work, like a tool
+   * result, so it must not split the turn — the running turn's work log
+   * would collapse mid-run. */
+  steered?: boolean;
   timestamp: number;
 }
 
 /** What the generators (background / task) produce; the session agent
- * stamps role and timestamp when injecting. */
+ * stamps role, timestamp and `steered` when injecting — only the delivery
+ * site knows whether the notification joins the run that is already
+ * active. */
 export type NotificationPayload = Omit<
   NotificationMessage,
-  "role" | "timestamp"
+  "role" | "timestamp" | "steered"
 >;
 
 /** The agent-visible text of a notification: the title (its "[...]" head)

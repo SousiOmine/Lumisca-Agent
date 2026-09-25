@@ -11,6 +11,10 @@ import type { AgentMessage, StreamFn } from "@lumisca/core";
 import { contentText } from "../shared/mod.ts";
 import type { StreamOptions } from "../ai/types.ts";
 import { AskHub } from "../tools/ask.ts";
+import type {
+  BackgroundCommandDone,
+  BackgroundProcessManager,
+} from "../tools/background.ts";
 import { object, type Tool } from "../tools/schema.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { NotificationMessage } from "../types/notification.ts";
@@ -61,6 +65,9 @@ function makeAgent(
      * context-compaction.ts); the default model documents a window, so a
      * test that expects compaction must supply a workable reservation. */
     compactionPolicy?: SessionAgentOptions["compactionPolicy"];
+    /** A background-process manager double whose exit listener the test
+     * fires (see fakeBackgroundManager). */
+    backgroundManager?: SessionAgentOptions["backgroundManager"];
   } = {},
 ): SessionAgent {
   return new SessionAgent({
@@ -1236,4 +1243,113 @@ Deno.test("a compaction republishes the context its checkpoint left behind", asy
     .filter(({ message }) => message.role === "context");
   assertEquals(contexts.length, 2);
   assertEquals(contexts.at(-1)!.index > checkpointIndex, true);
+});
+
+// ---- notification delivery (see injectNotification) -------------------------
+
+/** A background-process manager double whose exit listener the test fires
+ * (the real manager spawns processes; the notification delivery is what
+ * these tests exercise). */
+function fakeBackgroundManager(): {
+  manager: BackgroundProcessManager;
+  exit: (done: BackgroundCommandDone) => void;
+} {
+  let listener: ((done: BackgroundCommandDone) => void) | null = null;
+  return {
+    manager: {
+      onExit: (fn: (done: BackgroundCommandDone) => void) => {
+        listener = fn;
+        return () => {};
+      },
+    } as unknown as BackgroundProcessManager,
+    exit: (done) => listener?.(done),
+  };
+}
+
+/** A completed background command to report. */
+function backgroundDone(commandId: string): BackgroundCommandDone {
+  return {
+    commandId,
+    exitCode: 0,
+    reason: "exited",
+    durationSec: 1,
+    tail: "",
+  };
+}
+
+Deno.test("a notification delivered mid-run carries steered", async () => {
+  const background = fakeBackgroundManager();
+  const events: ClientEvent[] = [];
+  // The tool reports a completion while its own run is still active: the
+  // notification joins that run (steer), so it must carry the stamp the UI
+  // reads to keep it inside the run's turn instead of splitting it.
+  const notifyTool: Tool = {
+    name: "notify_tool",
+    label: "Notify",
+    description: "Reports a background completion.",
+    parameters: object({}),
+    execute: () => {
+      background.exit(backgroundDone("1"));
+      return Promise.resolve({
+        content: [{ type: "text", text: "ok" }],
+        details: {},
+      });
+    },
+  };
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxToolCall("notify_tool", {})]),
+      fauxAssistantMessage("reacted"),
+    ]),
+    [notifyTool],
+    (event) => events.push(event),
+    { backgroundManager: background.manager },
+  );
+  await agent.prompt("hello");
+
+  const notifications = agent.messages.filter(
+    (m): m is NotificationMessage => m.role === "notification",
+  );
+  assertEquals(notifications.length, 1);
+  assertEquals(notifications[0]!.kind, "background");
+  assertEquals(notifications[0]!.steered, true);
+  // Steered into the same run: only one run started, and the notification
+  // sits before the turn that reacted to it.
+  assertEquals(events.filter((e) => e.type === "agent_start").length, 1);
+  const index = agent.messages.indexOf(notifications[0]!);
+  assertEquals(agent.messages[index + 1]?.role, "assistant");
+  assertEquals(
+    (agent.messages.at(-1) as AssistantMessage).content[0] as TextContent,
+    { type: "text", text: "reacted" },
+  );
+});
+
+Deno.test("a notification delivered while idle starts its own run", async () => {
+  const background = fakeBackgroundManager();
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage("first"),
+      fauxAssistantMessage("reacted"),
+    ]),
+    [],
+    (event) => events.push(event),
+    { backgroundManager: background.manager },
+  );
+  await agent.prompt("hello");
+  // The run is over: the completion starts a run of its own, so it must
+  // not carry the stamp (the UI renders it as a turn row of its own).
+  background.exit(backgroundDone("2"));
+  await agent.waitForIdle();
+
+  const notifications = agent.messages.filter(
+    (m): m is NotificationMessage => m.role === "notification",
+  );
+  assertEquals(notifications.length, 1);
+  assertEquals(notifications[0]!.steered, undefined);
+  assertEquals(events.filter((e) => e.type === "agent_start").length, 2);
+  assertEquals(
+    (agent.messages.at(-1) as AssistantMessage).content[0] as TextContent,
+    { type: "text", text: "reacted" },
+  );
 });

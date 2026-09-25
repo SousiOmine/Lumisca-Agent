@@ -437,6 +437,17 @@ export class SessionAgent {
     void this.deliverPrompt(message, mode);
   }
 
+  /** Whether a message delivered right now joins the run that is already
+   * active (steer) instead of starting its own run. The condition lives
+   * here so the delivery and the `steered` stamp a notification carries
+   * (see injectNotification) can never disagree: a run that is unwinding
+   * from an abort drops its queues, and a rewind is about to abort the run,
+   * so neither takes a steer (see deliverPrompt). */
+  private joinsActiveRun(): boolean {
+    return this.rewindInFlight === null && this.isStreaming &&
+      !this.agent.isAborting;
+  }
+
   /** Deliver an announced prompt to the agent loop: a healthy run takes it
    * as a steer (next turn boundary); otherwise it gets its own run — after
    * an in-flight rewind finished, so its messages are not truncated away
@@ -452,7 +463,7 @@ export class SessionAgent {
       // between the check and the delivery).
       if (this.rewindInFlight !== null) await this.awaitRewind();
       if (this.closed) return;
-      if (this.isStreaming && !this.agent.isAborting) {
+      if (this.joinsActiveRun()) {
         this.agent.steer(message);
         return;
       }
@@ -570,10 +581,15 @@ export class SessionAgent {
    * While streaming, the message is steered in at the next turn boundary;
    * while idle, a new run starts. The system prompt teaches the agent that
    * notification prefixes ("[Background command ...]", "[Task ...]",
-   * "[Message from ...]") mark system notifications, not user input. */
+   * "[Message from ...]") mark system notifications, not user input.
+   *
+   * The delivery decision is stamped on the message (`steered`): the UI
+   * keeps a steered notification inside the run's turn instead of starting
+   * a new one, so a notification arriving mid-run never collapses the
+   * running turn's work log (see web's buildTurns). */
   private injectNotification(payload: NotificationPayload): void {
     if (this.closed) return;
-    const message = notificationMessage(payload);
+    const message = notificationMessage(payload, this.joinsActiveRun());
     // Announce the notification to clients (the agent appends it to the
     // transcript without re-emitting — see Agent.append).
     this.emit({ type: "message_start", sessionId: this.sessionId, message });

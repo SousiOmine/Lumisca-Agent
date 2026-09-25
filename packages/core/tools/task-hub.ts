@@ -161,7 +161,10 @@ export interface SubagentRuntime {
 }
 
 /** Where the parent (main) agent receives injected notifications. Set by
- * the session agent while the session is open. */
+ * the session agent while the session is open. The parent's transcript is
+ * the only one a client renders, so the delivery site (the session agent,
+ * not this hub) stamps the `steered` flag on what it injects — see
+ * SessionAgent.injectNotification. */
 export interface ParentDelivery {
   isActive(): boolean;
   deliver(payload: NotificationPayload): void;
