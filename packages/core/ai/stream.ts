@@ -197,7 +197,7 @@ async function* runStream(
             toolName: String(p.toolName ?? ""),
             content: [{ type: "text" as const, text: output.text }],
             // The details are the UI's half of the result (the diff badge,
-            // the deliverables panel) 窶・the Agent keeps them in the
+            // the deliverables panel) —the Agent keeps them in the
             // transcript instead of dropping them at the transport.
             details: output.details,
             isError: false,
@@ -610,7 +610,7 @@ function toArgsRecord(input: unknown): Record<string, unknown> {
  * transcript text plus the structured details the UI reads (the `+3 -2`
  * diff badge, the deliverables panel, ...). The SDK carries the whole
  * object on its `tool-result` part, and `toModelOutput` keeps the
- * model-facing result to the text alone 窶・the details are local
+ * model-facing result to the text alone —the details are local
  * presentation and must not be sent to the provider. */
 export interface ToolOutput {
   text: string;
@@ -811,7 +811,7 @@ function toExecutableToolSet(
         },
         // The two audiences of a tool result are separated here: the part
         // above carries the details for the UI, this conversion decides
-        // what the provider sees (the text alone 窶・the details would be
+        // what the provider sees (the text alone —the details would be
         // noise in the prompt).
         toModelOutput: ({ output }: { output?: unknown }) => ({
           type: "text" as const,

@@ -41,7 +41,7 @@ export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconListCheck size={14} />
-        <span className="todo-panel-title">Todo</span>
+        <span className="todo-panel-title">{t("panels.todo.title")}</span>
         <span className="todo-panel-summary">{summary(todos)}</span>
         {collapsed
           ? <IconChevronDown size={14} />

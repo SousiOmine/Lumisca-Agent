@@ -39,6 +39,7 @@ import {
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
 import { ContentImages } from "./ContentImages.tsx";
 import { useExpandableRow } from "../hooks/useExpandableRow.ts";
+import { useT } from "../i18n.ts";
 
 /** Map tool names to compact icons. */
 function toolIcon(name: string) {
@@ -269,6 +270,7 @@ interface ToolCallProps {
 
 export function ToolCall({ toolCall, result, running }: ToolCallProps) {
   const { open, triggerProps } = useExpandableRow();
+  const t = useT();
 
   const state = result
     ? result.isError ? "error" : "done"
@@ -320,7 +322,9 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
             className="tool-line-check"
           />
         )}
-        {state === "error" && <span className="tool-line-error">error</span>}
+        {state === "error" && (
+          <span className="tool-line-error">{t("common.error")}</span>
+        )}
       </div>
       {open && (
         <div className="tool-detail">

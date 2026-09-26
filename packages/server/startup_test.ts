@@ -1,10 +1,13 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   consumeServerStartupEnvironment,
+  DEFAULT_PORT,
   defaultAssetsFile,
   describeListenError,
+  DESKTOP_ENV_KEY,
   isAddressInUseError,
   isDesktopManaged,
+  isValidPort,
   parsePortValue,
   parsePortWaitMs,
   parseServerPort,
@@ -209,6 +212,58 @@ Deno.test("describeListenError reports other listen failures plainly", () => {
   );
   assert(message.includes("8000"), "names the port");
   assert(message.includes("permission denied"), "keeps the raw detail");
+});
+
+Deno.test("isValidPort accepts exactly the TCP range", () => {
+  for (const port of [1, 80, 8000, 65535]) {
+    assertEquals(isValidPort(port), true, String(port));
+  }
+  for (
+    const port of [0, -1, 65536, 1.5, Number.NaN, Number.POSITIVE_INFINITY]
+  ) {
+    assertEquals(isValidPort(port), false, String(port));
+  }
+});
+
+Deno.test("the desktop shell mirrors this module's port contract", () => {
+  // packages/desktop is Rust and cannot import this module, so server.rs
+  // repeats the default port, the port key and the desktop marker the shell
+  // passes to the child. Nothing else compares the copies, and a changed
+  // default on either side would silently start the server on another port.
+  const shell = Deno.readTextFileSync(
+    new URL("../desktop/src-tauri/src/server.rs", import.meta.url),
+  );
+  assertEquals(
+    shell.includes(`const DEFAULT_PORT: u16 = ${DEFAULT_PORT};`),
+    true,
+    "server.rs must carry this module's default port",
+  );
+  assertEquals(
+    shell.includes(`const SERVER_PORT_ENV: &str = "LUMISCA_PORT"`),
+    true,
+    "server.rs must carry this module's port key",
+  );
+  assertEquals(
+    shell.includes(`const SERVER_DESKTOP_ENV: &str = "${DESKTOP_ENV_KEY}"`),
+    true,
+    "server.rs must carry this module's desktop marker",
+  );
+
+  // Every key the shell sets for the child must be one the launcher consumes
+  // (SERVER_STARTUP_ENV_KEYS is the list it captures and clears).
+  const passed = new Set(
+    [...shell.matchAll(/\.env\("(LUMISCA_[A-Z_]+)"/g)].map((m) => m[1]!),
+  );
+  assert(passed.size > 0, "server.rs sets no environment for the child");
+  const consumed = new Set<string>(SERVER_STARTUP_ENV_KEYS);
+  const unknown = [...passed].filter((key) => !consumed.has(key));
+  assertEquals(
+    unknown,
+    [],
+    `server.rs passes keys the launcher does not consume: ${
+      unknown.join(", ")
+    }`,
+  );
 });
 
 Deno.test("unset server startup variables are still removed", () => {

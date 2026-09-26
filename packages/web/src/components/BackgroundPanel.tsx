@@ -29,7 +29,9 @@ export function BackgroundPanel({ commands }: { commands: BackgroundView[] }) {
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconTerminal size={14} />
-        <span className="background-panel-title">Background</span>
+        <span className="background-panel-title">
+          {t("panels.background.title")}
+        </span>
         <span className="background-panel-summary">
           {running.length} running
         </span>

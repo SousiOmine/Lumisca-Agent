@@ -39,6 +39,7 @@ import {
   type WaitOptions,
   type WaitResult,
 } from "./types.ts";
+import { isLoopbackHost } from "../shared/mod.ts";
 
 export interface HttpBrowserBackendOptions {
   /** Base URL of the host's RPC endpoint, e.g.
@@ -67,14 +68,7 @@ function parseEndpoint(url: string): URL {
       `browser RPC エンドポイントは http(s) のみです: ${url}`,
     );
   }
-  const host = parsed.hostname.toLowerCase();
-  const bare = host.startsWith("[") && host.endsWith("]")
-    ? host.slice(1, -1)
-    : host;
-  if (
-    !["localhost", "127.0.0.1", "::1", "[::1]"].includes(host) &&
-    !["localhost", "127.0.0.1", "::1", "[::1]"].includes(bare)
-  ) {
+  if (!isLoopbackHost(parsed.hostname)) {
     throw new BrowserBackendError(
       TRANSPORT_BAD_REPLY,
       `browser RPC エンドポイントはループバックのみ許可されます: ${url}`,

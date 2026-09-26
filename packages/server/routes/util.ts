@@ -2,15 +2,6 @@ import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/http-status";
 import { CoreError, errorMessage } from "@lumisca/core";
 
-/** Hostnames that always mean "this machine". Shared by the Host guard and
- * the federation self-check. */
-export const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
-
-/** True when the hostname is a loopback address. */
-export function isLoopbackHost(host: string): boolean {
-  return LOOPBACK_HOSTS.has(host);
-}
-
 /** Error with an explicit HTTP status. Thrown by route handlers when the
  * status matters (e.g. 404); everything else is classified by errorStatus. */
 export class AppError extends Error {

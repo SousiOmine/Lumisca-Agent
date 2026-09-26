@@ -15,8 +15,6 @@
 export interface RateLimitRetryOptions {
   maxRetries?: number;
   signal?: AbortSignal;
-  maxRetryDelayMs?: number;
-  onRetry?: (attempt: number, maxRetries: number, delayMs: number) => void;
   /** Backoff sleep (injectable for tests); defaults to sleepAbortable. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
@@ -117,7 +115,6 @@ export async function retryOnRateLimitError<T>(
       if (n >= maxRetries || !isRetryable(error)) throw error;
       lastError = error;
       const delayMs = rateLimitRetryDelayMs(n + 1);
-      opts.onRetry?.(n + 1, maxRetries, delayMs);
       try {
         await sleepFn(delayMs, opts.signal);
       } catch {

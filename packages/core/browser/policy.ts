@@ -11,6 +11,7 @@
  * The policy is a pure function over strings so both sides can share the
  * exact same rules without a shared runtime.
  */
+import { isLoopbackHost } from "../shared/mod.ts";
 
 /** A URL the lab may open. */
 export interface AllowedUrl {
@@ -37,13 +38,7 @@ export function checkBrowserUrl(input: string): string | undefined {
     return "拒否: URL に認証情報を含めることはできません";
   }
   // Fragments are harmless; hashes are the page's own business.
-  const host = parsed.hostname.toLowerCase();
-  // Strip one layer of IPv6 brackets for the comparison set.
-  const bare = host.startsWith("[") && host.endsWith("]")
-    ? host.slice(1, -1)
-    : host;
-  const allowed = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-  if (!allowed.has(host) && !allowed.has(bare)) {
+  if (!isLoopbackHost(parsed.hostname)) {
     return `拒否: ローカルホスト (localhost / 127.0.0.1 / ::1) 以外の URL は開けません: ${input}`;
   }
   const port = parsed.port === "" ? (scheme === "https" ? 443 : 80) : Number(

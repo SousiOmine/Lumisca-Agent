@@ -7,13 +7,16 @@ import {
   deepinfraProvider,
   opencodeGoProvider,
 } from "./dev-catalog.ts";
-import {
-  CLINEPASS_BASE_URL,
-  CLINEPASS_PROVIDER_ID,
-  DEEPINFRA_PROVIDER_ID,
-  OPENCODE_GO_PROVIDER_ID,
-} from "./extra-providers.ts";
 import { getSupportedThinkingLevels } from "./thinking.ts";
+
+/** The providers this suite covers: the ids the catalog must register and
+ * the endpoint ClinePass must be served from. Written out here instead of
+ * imported — an expectation that mirrors a production constant cannot
+ * catch that constant drifting. */
+const DEEPINFRA_PROVIDER_ID = "deepinfra";
+const CLINEPASS_PROVIDER_ID = "cline-pass";
+const OPENCODE_GO_PROVIDER_ID = "opencode-go";
+const CLINEPASS_BASE_URL = "https://api.cline.bot/api/v1";
 
 /** The model layer reads its environment through this, so a test never
  * mutates `Deno.env` — the test runner shares ONE process environment

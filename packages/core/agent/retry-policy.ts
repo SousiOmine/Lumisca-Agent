@@ -19,17 +19,6 @@ export function hasNoVisibleOutput(message: AssistantMessage): boolean {
   );
 }
 
-/** True when the assistant response produced neither text nor a tool call:
- * the model ended its turn without any output. Error/aborted stops are
- * handled separately (see isSilentErrorResponse and handleTurnEnd) — they
- * terminate the run instead of continuing the loop. */
-export function isVacantResponse(message: AssistantMessage): boolean {
-  if (message.stopReason === "error" || message.stopReason === "aborted") {
-    return false;
-  }
-  return hasNoVisibleOutput(message);
-}
-
 /** Error-message signatures of transient transport failures: streams cut
  * off mid-flight (the observed "Stream ended without finish_reason"),
  * connection resets, provider-side blips, and the AI SDK's own wrapper for

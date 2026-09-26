@@ -1,7 +1,8 @@
 import type { ClientEvent, ConnectionEntry } from "@lumisca/core";
 import { createLogger } from "@lumisca/core";
+import { isLoopbackHost } from "@lumisca/core/shared";
 import type { ContentfulStatusCode } from "hono/http-status";
-import { AppError, LOOPBACK_HOSTS } from "./routes/util.ts";
+import { AppError } from "./routes/util.ts";
 
 /** Error thrown when a peer cannot be reached or answers with an error;
  * carries the HTTP status to return to the UI. */
@@ -138,11 +139,11 @@ export class FederationClient {
       }
       if (url.origin === selfUrl.origin) return false;
       // The hub bound to a loopback address is reachable under several
-      // spellings (localhost vs 127.0.0.1): same loopback host + same
-      // port means the hub itself.
+      // spellings (localhost vs 127.0.0.1 vs [::1]): same loopback host +
+      // same port means the hub itself.
       if (
         url.port === selfUrl.port &&
-        LOOPBACK_HOSTS.has(url.hostname)
+        isLoopbackHost(url.hostname)
       ) {
         return false;
       }

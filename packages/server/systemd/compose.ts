@@ -21,7 +21,8 @@
  * values, which is what makes the whole decision surface unit-testable.
  */
 import { isAbsolute, resolve } from "node:path";
-import { isLoopbackHost } from "../routes/util.ts";
+import { isLoopbackHost } from "@lumisca/core/shared";
+import { isValidPort } from "../startup.ts";
 import {
   hasControlCharacter,
   ServiceDefinitionError,
@@ -186,7 +187,7 @@ export function resolveValues(options: ResolveOptions): ServiceValues {
   );
   const port = options.flags.port ?? options.installed.port ??
     options.defaults.port;
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  if (!isValidPort(port)) {
     throw new ServiceDefinitionError(
       `LUMISCA_PORT が不正です: "${port}" (1〜65535 の整数を指定してください)`,
     );

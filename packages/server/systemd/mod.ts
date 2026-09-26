@@ -25,6 +25,7 @@
 
 /** The unit template shipped in the server binary (template.ts). */
 import { dirname, join } from "node:path";
+import { hostForUrl, isLoopbackHost } from "@lumisca/core/shared";
 import {
   DEFAULT_HOST,
   DEFAULT_PORT,
@@ -335,13 +336,6 @@ async function isLingerEnabled(deps: ServiceDeps): Promise<boolean> {
   return result.code === 0 && result.stdout.includes("Linger=yes");
 }
 
-/** Address a client on this machine reaches a wildcard bind through. */
-function localHost(host: string): string {
-  if (host === "0.0.0.0") return "127.0.0.1";
-  if (host === "::") return "[::1]";
-  return host.includes(":") ? `[${host}]` : host;
-}
-
 /**
  * Every base URL a client can use. A wildcard bind is expanded to this
  * machine's addresses, because that is the case where the operator cannot
@@ -360,7 +354,7 @@ export function connectionUrls(
       if (!hosts.includes(info.address)) hosts.push(info.address);
     }
   } else {
-    hosts.push(localHost(host));
+    hosts.push(hostForUrl(host));
   }
   return hosts.map((entry) => `http://${entry}:${port}/`);
 }
@@ -397,9 +391,7 @@ function printConnectionTargets(
  * does not own fails for a different reason, and reporting that as a port
  * conflict would be misleading. */
 function isBindableHere(host: string, deps: ServiceDeps): boolean {
-  if (host === "127.0.0.1" || host === "localhost" || host === "::1") {
-    return true;
-  }
+  if (isLoopbackHost(host)) return true;
   if (host === "0.0.0.0" || host === "::") return true;
   return deps.interfaces().some((info) => info.address === host);
 }
@@ -429,7 +421,7 @@ async function waitForHealth(
   values: ServiceValues,
   deps: ServiceDeps,
 ): Promise<boolean> {
-  const url = `http://${localHost(values.host)}:${values.port}`;
+  const url = `http://${hostForUrl(values.host)}:${values.port}`;
   const deadline = Date.now() + deps.probeTimeoutMs;
   for (;;) {
     if (await deps.probe(url, values.token)) return true;
@@ -528,7 +520,7 @@ async function runInstall(
   if (!healthy) {
     deps.err(
       `サーバーが応答しません (http://${
-        localHost(values.host)
+        hostForUrl(values.host)
       }:${values.port})。` +
         `ログを確認してください: journalctl --user -u ${UNIT_NAME} -n 50`,
     );

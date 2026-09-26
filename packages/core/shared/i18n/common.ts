@@ -18,6 +18,8 @@ export const common = {
   "common.expandPanel": { ja: "パネルを展開", en: "Expand panel" },
   "common.settings": { ja: "設定", en: "Settings" },
   "common.justNow": { ja: "たった今", en: "just now" },
+  /** Status word on a failed tool call or notification line. */
+  "common.error": { ja: "エラー", en: "Error" },
   /** The page could not reach its own server (App's top-level error). */
   "common.serverUnreachable": {
     ja: "サーバーに接続できません: {error}",

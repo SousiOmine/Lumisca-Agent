@@ -159,8 +159,10 @@ packages/desktop/src-tauri/resources/
 # ZCode client working data (sessions, plans, artifacts)
 .zcode/
 
-# Scratch probes (throwaway e2e harnesses and their build output): they
-# may hold a throwaway signing KEY and multi-hundred-MB test binaries, so
-# they must never be committed by an accidental `git add -A`.
-.tmp-probe/
+# Scratch directories (throwaway e2e harnesses, signing probes and their
+# build output): they may hold a throwaway signing KEY and multi-hundred-MB
+# test binaries, so they must never be committed by an accidental
+# `git add -A`. The pattern covers every `.tmp-*` name, including the ones an
+# ad-hoc session invents (`.tmp-sign`, `.tmp-compile-probe`, ...).
+.tmp-*/
 

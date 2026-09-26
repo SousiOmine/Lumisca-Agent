@@ -29,7 +29,7 @@ export function TaskPanel({ tasks }: { tasks: TaskView[] }) {
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconUsers size={14} />
-        <span className="task-panel-title">Tasks</span>
+        <span className="task-panel-title">{t("panels.task.title")}</span>
         <span className="task-panel-summary">{running.length} running</span>
         {collapsed
           ? <IconChevronDown size={14} />

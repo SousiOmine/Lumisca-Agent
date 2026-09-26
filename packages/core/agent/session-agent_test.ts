@@ -20,8 +20,8 @@ import type { ClientEvent } from "../types/event.ts";
 import type { NotificationMessage } from "../types/notification.ts";
 import {
   buildRetryNotification,
+  hasNoVisibleOutput,
   isSilentErrorResponse,
-  isVacantResponse,
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "./retry-policy.ts";
 import { SessionAgent } from "./session-agent.ts";
@@ -193,38 +193,27 @@ Deno.test("stream calls carry the session id (conversation affinity)", async () 
   assertEquals(seen[0]?.sessionId, "s1");
 });
 
-Deno.test("isVacantResponse: vacant when there is no text and no tool call", () => {
-  assertEquals(isVacantResponse(fauxAssistantMessage("")), true);
+Deno.test("hasNoVisibleOutput: true when there is no text and no tool call", () => {
+  assertEquals(hasNoVisibleOutput(fauxAssistantMessage("")), true);
   assertEquals(
-    isVacantResponse(fauxAssistantMessage([fauxThinking("...")])),
+    hasNoVisibleOutput(fauxAssistantMessage([fauxThinking("...")])),
     true,
   );
 });
 
-Deno.test("isVacantResponse: not vacant with text or tool calls", () => {
-  assertEquals(isVacantResponse(fauxAssistantMessage("Hello")), false);
+Deno.test("hasNoVisibleOutput: false with text or tool calls", () => {
+  assertEquals(hasNoVisibleOutput(fauxAssistantMessage("Hello")), false);
   assertEquals(
-    isVacantResponse(
+    hasNoVisibleOutput(
       fauxAssistantMessage([fauxToolCall("read", { path: "a.txt" })]),
     ),
     false,
   );
-  // Thinking alone is vacant, but any text alongside it is output.
+  // Thinking alone is no output, but any text alongside it is.
   assertEquals(
-    isVacantResponse(
+    hasNoVisibleOutput(
       fauxAssistantMessage([fauxThinking("..."), fauxText("Hi")]),
     ),
-    false,
-  );
-});
-
-Deno.test("isVacantResponse: error/aborted stops are never retried", () => {
-  assertEquals(
-    isVacantResponse(fauxAssistantMessage("", { stopReason: "error" })),
-    false,
-  );
-  assertEquals(
-    isVacantResponse(fauxAssistantMessage("", { stopReason: "aborted" })),
     false,
   );
 });

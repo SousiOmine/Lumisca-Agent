@@ -389,6 +389,7 @@ export const settings = {
     en: "Cannot be changed while editing",
   },
   "settings.userProvider.baseUrlLabel": { ja: "Base URL", en: "Base URL" },
+  "settings.userProvider.apiLabel": { ja: "API", en: "API" },
   "settings.userProvider.baseUrlHint": {
     ja: "OpenAI 互換エンドポイントの基底 URL（通常は /v1 まで）",
     en: "Base URL for the OpenAI-compatible endpoint (usually up to /v1)",
@@ -617,18 +618,6 @@ export const settings = {
   "settings.mcp.httpHeadersLabel": {
     ja: "HTTPヘッダー（key=value、1行に1つ）",
     en: "HTTP headers (key=value, one per line)",
-  },
-  "settings.mcp.exampleArgs": {
-    ja: "例:\n-y\n@modelcontextprotocol/server-filesystem\n.",
-    en: "Example:\n-y\n@modelcontextprotocol/server-filesystem\n.",
-  },
-  "settings.mcp.exampleEnv": {
-    ja: "例:\nTOKEN=abc123",
-    en: "Example:\nTOKEN=abc123",
-  },
-  "settings.mcp.exampleHeaders": {
-    ja: "例:\nAuthorization=Bearer x",
-    en: "Example:\nAuthorization=Bearer x",
   },
 
   // --- connection list -------------------------------------------------------

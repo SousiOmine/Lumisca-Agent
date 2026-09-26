@@ -263,7 +263,7 @@ function scriptedLanguageModel(scripts: unknown[][]) {
 }
 
 /** The whole path end to end: the Agent drives the real transport, the SDK
- * executes the tool, and the result reaches both audiences 窶・the UI (the
+ * executes the tool, and the result reaches both audiences —the UI (the
  * details) and the model (the text alone). */
 Deno.test("the tool result keeps its details for the UI and stays text for the model", async () => {
   const call = { args: undefined as unknown };
@@ -318,7 +318,7 @@ Deno.test("the tool result keeps its details for the UI and stays text for the m
   });
   assertEquals(result.content, [{ type: "text", text: "Edited a.ts" }]);
   // The model was asked twice (tool call, then the answer) and the second
-  // request carries the result text 窶・never the UI's details envelope.
+  // request carries the result text —never the UI's details envelope.
   assertEquals(fake.prompts.length, 2);
   const secondPrompt = JSON.stringify(fake.prompts[1]);
   assertEquals(secondPrompt.includes("Edited a.ts"), true);

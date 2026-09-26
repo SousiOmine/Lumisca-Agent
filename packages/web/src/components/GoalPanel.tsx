@@ -32,7 +32,7 @@ export function GoalPanel(
         onClick={() => setCollapsed((c) => !c)}
       >
         <IconTarget size={14} />
-        <span className="goal-panel-title">Goal</span>
+        <span className="goal-panel-title">{t("panels.goal.title")}</span>
         <span className="goal-panel-summary">{summary}</span>
         {collapsed
           ? <IconChevronDown size={14} />

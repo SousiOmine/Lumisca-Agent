@@ -83,11 +83,18 @@ export function consumeServerStartupEnvironment(
   return values;
 }
 
+/** True when the value is a usable TCP port (1〜65535). The range lives
+ * here once: the launcher's LUMISCA_PORT, the service command's flags and
+ * the service.env document all accept exactly these values. */
+export function isValidPort(port: number): boolean {
+  return Number.isInteger(port) && port >= 1 && port <= 65535;
+}
+
 /** Parse a TCP port value (1〜65535). Throws with a human-readable message;
  * shared by the launcher's LUMISCA_PORT and the service command's `--port`. */
 export function parsePortValue(raw: string): number {
   const port = Number(raw.trim());
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  if (!isValidPort(port)) {
     throw new Error(
       `LUMISCA_PORT が不正です: "${raw}" (1〜65535 の整数を指定してください)`,
     );

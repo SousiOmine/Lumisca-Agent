@@ -15,7 +15,6 @@ import {
 import {
   createApp,
   disposeServer,
-  isLoopbackHost,
   startServer,
   validateHostConfig,
 } from "./app.ts";
@@ -1323,11 +1322,6 @@ Deno.test("validateHostConfig requires a token for non-loopback binds", () => {
   assertEquals(validateHostConfig("0.0.0.0", "token"), null);
   assertEquals(validateHostConfig("100.64.0.5", undefined) !== null, true);
   assertEquals(validateHostConfig("100.64.0.5", "token"), null);
-  assertEquals(isLoopbackHost("127.0.0.1"), true);
-  assertEquals(isLoopbackHost("localhost"), true);
-  assertEquals(isLoopbackHost("::1"), true);
-  assertEquals(isLoopbackHost("0.0.0.0"), false);
-  assertEquals(isLoopbackHost("100.64.0.5"), false);
 });
 
 Deno.test("settings API never exposes credentials", async () => {

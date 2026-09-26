@@ -357,7 +357,7 @@ export function AddUserProviderForm({
         </label>
 
         <label className="field">
-          <span>Base URL</span>
+          <span>{t("settings.userProvider.baseUrlLabel")}</span>
           <input
             placeholder="https://api.example.com/v1"
             value={baseUrl}
@@ -369,7 +369,7 @@ export function AddUserProviderForm({
         </label>
 
         <label className="field">
-          <span>API</span>
+          <span>{t("settings.userProvider.apiLabel")}</span>
           <select
             value={providerApi}
             onChange={(e) => setProviderApi(e.currentTarget.value)}

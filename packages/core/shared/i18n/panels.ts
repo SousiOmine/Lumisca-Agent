@@ -15,6 +15,15 @@ export const panels = {
     en: "Collapse panel",
   },
 
+  // --- panel headings -------------------------------------------------------
+  "panels.todo.title": { ja: "進捗", en: "Progress" },
+  "panels.task.title": { ja: "タスク", en: "Tasks" },
+  "panels.goal.title": { ja: "ゴール", en: "Goal" },
+  "panels.background.title": {
+    ja: "バックグラウンド",
+    en: "Background",
+  },
+
   // --- agent activity (turn timer) -----------------------------------------
   "panels.activity.working": {
     ja: "作業中（経過時間: {time}）",

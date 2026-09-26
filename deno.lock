@@ -1,16 +1,14 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@noble/hashes@^2.4.0": "2.4.0",
-    "jsr:@std/assert@^1.0.19": "1.0.19",
-    "jsr:@std/internal@^1.0.12": "1.0.12",
+    "jsr:@noble/hashes@2.4.0": "2.4.0",
+    "jsr:@std/assert@1.0.19": "1.0.19",
+    "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@std/json@^1.0.2": "1.1.0",
     "jsr:@std/jsonc@1.0.2": "1.0.2",
-    "jsr:@std/jsonc@^1.0.2": "1.0.2",
     "jsr:@std/streams@^1.0.17": "1.1.1",
-    "jsr:@std/tar@~0.1.10": "0.1.10",
-    "jsr:@std/yaml@*": "1.2.0",
-    "jsr:@std/yaml@^1.2.0": "1.2.0",
+    "jsr:@std/tar@0.1.10": "0.1.10",
+    "jsr:@std/yaml@1.2.0": "1.2.0",
     "npm:@ai-sdk/amazon-bedrock@5.0.88": "5.0.88_zod@4.4.3",
     "npm:@ai-sdk/anthropic@4.0.58": "4.0.58_zod@4.4.3",
     "npm:@ai-sdk/azure@4.0.75": "4.0.75_zod@4.4.3",
@@ -24,12 +22,12 @@
     "npm:@opencode-ai/models@*": "0.0.81",
     "npm:@opencode-ai/models@0.0.81": "0.0.81",
     "npm:@preact/preset-vite@2.10.6": "2.10.6_vite@8.3.0_@types+node@26.1.2_esbuild@0.28.2",
-    "npm:@tabler/icons-preact@^3.47.0": "3.47.0_preact@10.29.8",
+    "npm:@tabler/icons-preact@3.47.0": "3.47.0_preact@10.29.8",
     "npm:@types/node@*": "26.1.2",
     "npm:ai@7.0.107": "7.0.107_zod@4.4.3",
     "npm:esbuild@0.28.2": "0.28.2",
-    "npm:hono@^4.13.8": "4.13.8",
-    "npm:marked@^18.0.13": "18.0.13",
+    "npm:hono@4.13.8": "4.13.8",
+    "npm:marked@18.0.13": "18.0.13",
     "npm:preact-render-to-string@6.7.0": "6.7.0_preact@10.29.8",
     "npm:preact@10.29.8": "10.29.8_preact-render-to-string@6.7.0",
     "npm:sucrase@*": "3.35.1",
@@ -52,8 +50,8 @@
         "jsr:@std/internal"
       ]
     },
-    "@std/internal@1.0.12": {
-      "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
+    "@std/internal@1.0.14": {
+      "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     },
     "@std/json@1.1.0": {
       "integrity": "93330d3ed4054d6b1ffe54b075432c80a5f671be77277b978931e018014cb1cc"
@@ -2054,11 +2052,11 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@noble/hashes@^2.4.0",
-      "jsr:@std/assert@^1.0.19",
-      "jsr:@std/jsonc@^1.0.2",
-      "jsr:@std/tar@~0.1.10",
-      "jsr:@std/yaml@^1.2.0",
+      "jsr:@noble/hashes@2.4.0",
+      "jsr:@std/assert@1.0.19",
+      "jsr:@std/jsonc@1.0.2",
+      "jsr:@std/tar@0.1.10",
+      "jsr:@std/yaml@1.2.0",
       "npm:@ai-sdk/amazon-bedrock@5.0.88",
       "npm:@ai-sdk/anthropic@4.0.58",
       "npm:@ai-sdk/azure@4.0.75",
@@ -2069,11 +2067,11 @@
       "npm:@modelcontextprotocol/sdk@1.30.0",
       "npm:@napi-rs/canvas@1.0.9",
       "npm:@opencode-ai/models@0.0.81",
-      "npm:@tabler/icons-preact@^3.47.0",
+      "npm:@tabler/icons-preact@3.47.0",
       "npm:ai@7.0.107",
       "npm:esbuild@0.28.2",
-      "npm:hono@^4.13.8",
-      "npm:marked@^18.0.13",
+      "npm:hono@4.13.8",
+      "npm:marked@18.0.13",
       "npm:preact-render-to-string@6.7.0",
       "npm:preact@10.29.8",
       "npm:sucrase@3.35.1",

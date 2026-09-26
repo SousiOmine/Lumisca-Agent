@@ -16,6 +16,7 @@ import {
   type ThemeSetting,
 } from "@lumisca/core";
 import type { InitialData } from "@lumisca/core/shared";
+import { hostForUrl, isLoopbackHost } from "@lumisca/core/shared";
 import { Assets } from "./assets.ts";
 import { TOKEN_COOKIE_OPTIONS, tokenCookieName } from "./auth-cookie.ts";
 import { renderHtmlDocument, renderTokenRequiredPage } from "./render.ts";
@@ -30,8 +31,7 @@ import { connectionRoutes } from "./routes/connections.ts";
 import { federationRoutes } from "./routes/federation.ts";
 import { type UpdateApi, updateRoutes } from "./routes/update.ts";
 import { FederationClient } from "./federation.ts";
-import { isLoopbackHost, jsonError, LOOPBACK_HOSTS } from "./routes/util.ts";
-export { isLoopbackHost } from "./routes/util.ts";
+import { jsonError } from "./routes/util.ts";
 
 export interface AppOptions {
   /** Repository root (defaults to the current working directory). */
@@ -125,8 +125,8 @@ function isAllowedOrigin(origin: string, host: string | undefined): boolean {
     // other local dev server could read the API cross-origin).
     return actual.protocol === expected.protocol &&
       actual.port === expected.port &&
-      LOOPBACK_HOSTS.has(actual.hostname.replace(/^\[|\]$/g, "")) &&
-      LOOPBACK_HOSTS.has(hostnameOf(host));
+      isLoopbackHost(actual.hostname) &&
+      isLoopbackHost(hostnameOf(host));
   } catch {
     return false;
   }
@@ -516,7 +516,11 @@ export function startServer(
       hostname,
       port,
       onListen(addr) {
-        selfOrigin.current = `http://${addr.hostname}:${addr.port}`;
+        // `hostForUrl` brackets IPv6 literals and maps a wildcard bind to
+        // loopback: `http://::1:8000` is not a URL, so a bare concatenation
+        // used to leave the hub unable to recognise its own origin (every
+        // peer looked remote, including the hub itself).
+        selfOrigin.current = `http://${hostForUrl(addr.hostname)}:${addr.port}`;
         fed.start();
       },
     },

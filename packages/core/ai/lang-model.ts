@@ -123,8 +123,9 @@ function compatibleSettings(
  * on every request (the x-opencode-session header, mandatory since
  * 2026-09-05 — see vercel/ai#20271). The AI SDK does not manage
  * conversations, so the transport maps the caller's conversation id onto
- * that header. Same id as models/extra-providers.ts's catalog constant;
- * duplicated here so the transport layer stays independent of the catalog. */
+ * that header. Same id as the catalog's `opencode-go` provider (see
+ * models/dev-catalog.ts); duplicated here so the transport layer stays
+ * independent of the catalog. */
 const OPENCODE_GO_PROVIDER_ID = "opencode-go";
 
 /** Request headers that carry the caller's conversation id onto the

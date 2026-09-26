@@ -20,6 +20,7 @@
  * rejected instead of mis-parsed — a document this server cannot read
  * exactly is a configuration error, not something to guess about.
  */
+import { isValidPort } from "../startup.ts";
 
 /** Restart mode the unit requires: the server exits after applying an update
  * and systemd's `Restart=always` starts the new binary (see
@@ -191,11 +192,12 @@ export function parseDocument(text: string): ServiceLayer {
   return values;
 }
 
-/** Port from a document. Parsed here (not by startup.parseServerPort) so a
- * malformed value names its line instead of a launcher key. */
+/** Port from a document. The message is built here — not by
+ * `startup.parseServerPort` — so a malformed value names its line instead of
+ * a launcher key; the accepted range comes from that module. */
 function parseDocumentPort(value: string, line: number): number {
   const port = Number(value);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  if (!isValidPort(port)) {
     throw new ServiceDefinitionError(
       `service.env の ${line} 行目: LUMISCA_PORT が不正です: "${value}"`,
     );

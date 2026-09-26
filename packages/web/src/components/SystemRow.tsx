@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-preact";
 import type { NotificationKind, NotificationStatus } from "../types.ts";
 import { useExpandableRow } from "../hooks/useExpandableRow.ts";
+import { useT } from "../i18n.ts";
 
 /** Icon for a notification kind. */
 export function notificationKindIcon(kind: NotificationKind) {
@@ -49,6 +50,7 @@ export function SystemRow({
 }) {
   const expandable = body.length > 0;
   const { open, triggerProps } = useExpandableRow(expandable);
+  const t = useT();
 
   return (
     <div className="notification-timeline">
@@ -69,7 +71,7 @@ export function SystemRow({
           <IconCheck size={12} className="notification-line-check" />
         )}
         {status === "error" && (
-          <span className="notification-line-error">error</span>
+          <span className="notification-line-error">{t("common.error")}</span>
         )}
       </div>
       {open && (

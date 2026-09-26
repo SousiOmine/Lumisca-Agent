@@ -158,6 +158,7 @@ Deno.test("catalogue: user-facing text is not left in one language only", () => 
   const allowed = new Set([
     "settings.language.option.en", // "English" in both
     "settings.userProvider.baseUrlLabel", // "Base URL" in both
+    "settings.userProvider.apiLabel", // "API" in both
     "settings.mcp.typeHttp", // protocol name: "HTTP (streamable)" in both
     "settings.mcp.urlLabel", // "URL" in both
   ]);
