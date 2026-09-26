@@ -1,7 +1,8 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "node:path";
 import { pathUnitValue, quoteUnitValue } from "./compose.ts";
-import { runServiceCommand, type ServiceDeps } from "./mod.ts";
+import type { ServiceDeps } from "./deps.ts";
+import { runServiceCommand } from "./mod.ts";
 import { DOCUMENT_NAME, UNIT_NAME } from "./plan.ts";
 import type { CommandResult, ServiceRunner } from "./runner.ts";
 import { SETTINGS_DIR_NAME } from "@lumisca/core";

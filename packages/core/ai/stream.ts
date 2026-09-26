@@ -12,7 +12,14 @@ import {
   streamText as vercelStreamText,
   tool,
 } from "ai";
-import type { LanguageModel, LanguageModelUsage } from "ai";
+import type {
+  AssistantContent,
+  LanguageModel,
+  LanguageModelUsage,
+  ModelMessage,
+  ToolSet,
+  UserContent,
+} from "ai";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
@@ -60,6 +67,24 @@ function isLanguageModelUsage(value: unknown): value is LanguageModelUsage {
     ("inputTokens" in value || "outputTokens" in value);
 }
 
+/** The request bag handed to the SDK, typed as the SDK's own parameter: a
+ * renamed or retyped field is then a compile error here, not a silently
+ * ignored option at runtime. */
+type VercelStreamRequest = Parameters<typeof vercelStreamText>[0];
+
+/** Provider options as the SDK types them; the helpers below build values
+ * for exactly this slot. */
+type VercelProviderOptions = NonNullable<
+  VercelStreamRequest["providerOptions"]
+>;
+
+/** The part arrays the SDK accepts on a message: an assistant message may
+ * carry reasoning and tool-call parts, a user message text and images. One
+ * loop builds either role's parts (see toCoreMessages), so the array is the
+ * union and each push narrows it back to its role. */
+type VercelAssistantParts = Exclude<AssistantContent, string>;
+type VercelUserParts = Exclude<UserContent, string>;
+
 /** Build the Vercel-backed StreamFn over a transport. */
 export function createStreamFn(transport: StreamTransport): StreamFn {
   return (model, context, options) =>
@@ -94,7 +119,7 @@ async function* runStream(
     promptTokensFor(context),
     outputCapFor(model, options),
   );
-  const request: Record<string, unknown> = {
+  const request: VercelStreamRequest = {
     model: languageModel,
     messages: toCoreMessages(model, context.messages),
     ...(context.systemPrompt !== undefined
@@ -120,7 +145,16 @@ async function* runStream(
   // reasoning hint when the model documents one; leave it off otherwise so
   // providers that do not support reasoning are unaffected.
   const reasoning = reasoningHint(model, context.thinkingLevel ?? "off");
-  if (reasoning !== undefined) request.reasoning = reasoning;
+  // The SDK types `reasoning` as a fixed union, but the value comes from the
+  // model's catalog metadata and @ai-sdk/openai-compatible forwards it
+  // verbatim as `reasoning_effort` — providers accept their own effort names
+  // there. The cast records that deliberate loosening; every other field of
+  // the request stays type-checked.
+  if (reasoning !== undefined) {
+    request.reasoning = reasoning as NonNullable<
+      VercelStreamRequest["reasoning"]
+    >;
+  }
   // Responses-API models whose ids the SDK does not recognize (non-OpenAI
   // gateways such as OpenCode Go) would otherwise have their reasoning
   // hint dropped silently — see reasoningForceOption.
@@ -521,7 +555,7 @@ function reasoningHint(
 export function reasoningForceOption(
   model: Model<Api>,
   reasoning: string | undefined,
-): Record<string, Record<string, unknown>> | undefined {
+): VercelProviderOptions | undefined {
   if (reasoning === undefined) return undefined;
   if (model.reasoning !== true) return undefined;
   if (
@@ -563,10 +597,10 @@ function buildAssistantMessage(
 ): AssistantMessage {
   const content: AssistantMessage["content"] = [];
   if (thinking.length > 0) {
-    content.push({ type: "thinking", thinking } as never);
+    content.push({ type: "thinking", thinking });
   }
   if (text.length > 0) {
-    content.push({ type: "text", text } as never);
+    content.push({ type: "text", text });
   }
   for (const call of step?.toolCalls ?? []) {
     const c = call as {
@@ -582,11 +616,11 @@ function buildAssistantMessage(
       id: c.toolCallId ?? "",
       name: c.toolName ?? "",
       arguments: toArgsRecord(c.input ?? c.args),
-    } as never);
+    });
   }
   return {
     role: "assistant",
-    content: content as AssistantMessage["content"],
+    content,
     api: model.api,
     provider: model.provider,
     model: model.id,
@@ -667,8 +701,11 @@ function outputText(output: unknown): string {
 }
 
 /** Convert Lumisca LLM messages to Vercel CoreMessage[] (v7 format). */
-function toCoreMessages(model: Model<Api>, messages: LlmMessage[]): unknown[] {
-  const out: unknown[] = [];
+function toCoreMessages(
+  model: Model<Api>,
+  messages: LlmMessage[],
+): ModelMessage[] {
+  const out: ModelMessage[] = [];
   const requiresReasoningContent =
     model.compat?.requiresReasoningContentOnAssistantMessages === true;
   for (const message of messages) {
@@ -712,7 +749,8 @@ function toCoreMessages(model: Model<Api>, messages: LlmMessage[]): unknown[] {
     // (assistant). Models whose metadata requires reasoning_content must get
     // every prior thinking block back unchanged so interleaved tool use can
     // continue on the next request.
-    const parts: unknown[] = [];
+    const parts: (VercelAssistantParts[number] | VercelUserParts[number])[] =
+      [];
     let hasReasoningContent = false;
     for (const block of message.content) {
       if (block.type === "text") {
@@ -743,13 +781,15 @@ function toCoreMessages(model: Model<Api>, messages: LlmMessage[]): unknown[] {
     if (message.role === "assistant") {
       out.push({
         role: "assistant",
-        content: parts.length > 0 ? parts : "",
+        content: parts.length > 0 ? parts as VercelAssistantParts : "",
         ...(requiresReasoningContent && !hasReasoningContent
           ? { providerOptions: emptyReasoningContentOption() }
           : {}),
       });
     } else {
-      out.push({ role: message.role, content: parts });
+      // A user message's parts are text and images only (the reasoning and
+      // tool-call branches above belong to assistant messages).
+      out.push({ role: message.role, content: parts as VercelUserParts });
     }
   }
   return out;
@@ -759,7 +799,7 @@ function toCoreMessages(model: Model<Api>, messages: LlmMessage[]): unknown[] {
  * field on every historical assistant message, including turns whose stored
  * response has no thinking block. The compatible provider merges this into
  * the assistant wire object as `reasoning_content: ""`. */
-function emptyReasoningContentOption(): Record<string, Record<string, string>> {
+function emptyReasoningContentOption(): VercelProviderOptions {
   return { openaiCompatible: { reasoning_content: "" } };
 }
 
@@ -770,8 +810,8 @@ function emptyReasoningContentOption(): Record<string, Record<string, string>> {
 function toExecutableToolSet(
   tools: AgentTool[],
   signal?: AbortSignal,
-): Record<string, unknown> {
-  const set: Record<string, unknown> = {};
+): ToolSet {
+  const set: ToolSet = {};
   for (const t of tools) {
     const inputSchema = jsonSchema(
       (t.parameters ?? { type: "object", properties: {} }) as never,

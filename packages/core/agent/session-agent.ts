@@ -16,6 +16,7 @@ import { RetryManager } from "./retry-manager.ts";
 import { GoalRunner } from "./goal-runner.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
+import { TranscriptStore } from "./transcript.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import {
@@ -128,9 +129,10 @@ export interface SessionAgentOptions {
 export class SessionAgent {
   readonly sessionId: string;
   readonly agent: Agent;
-  private readonly messageRepo: MessageRepo;
+  /** The rows this session owns in the messages table, and how many leading
+   * transcript messages they cover (see transcript.ts). */
+  private readonly transcript: TranscriptStore;
   private readonly onEvent: (event: ClientEvent) => void;
-  private savedCount: number;
   /** The session's shared MCP attachment (owned by the session pool); its
    * tools land in the session's tool registry once discovery finished. */
   private mcpAttachment: McpAttachment | null = null;
@@ -198,17 +200,20 @@ export class SessionAgent {
   private closed = false;
   /** Title generation runs once per session, concurrently with the first
    * run; this guards against re-triggering (e.g. after a failed first run
-   * that left savedCount at 0). */
+   * that left the transcript unpersisted). */
   private titleGenerated = false;
 
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
-    this.messageRepo = options.messageRepo;
+    this.transcript = new TranscriptStore(
+      options.sessionId,
+      options.messageRepo,
+      options.messages?.length ?? 0,
+    );
     this.toolRegistry = options.toolRegistry ?? null;
     this.onEvent = options.onEvent;
     this.renameSession = options.renameSession;
     this.askHub = options.askHub;
-    this.savedCount = options.messages?.length ?? 0;
 
     // A vision-capable main model passes images through as-is; only a
     // text-only model with an analysis model configured needs rewriting.
@@ -391,11 +396,11 @@ export class SessionAgent {
    * path (the awaited `prompt` and the web/HTTP `promptWhileRunning`) — missing
    * this would leave web sessions with their provisional name forever.
    * Guarded so it triggers at most once per session, even after a failed
-   * first run that left savedCount at 0. */
+   * first run that left the transcript unpersisted. */
   private maybeGenerateTitle(firstMessage: string): void {
     if (
       !this.titleGenerated && this.titleGenerator !== null &&
-      this.savedCount === 0
+      this.transcript.persistedCount === 0
     ) {
       this.titleGenerated = true;
       void this.generateTitle(firstMessage);
@@ -416,8 +421,8 @@ export class SessionAgent {
    * The message is announced immediately (synthetic message_start/end
    * events) so clients render it right away. When the loop drains it, it
    * re-emits the same events for the same message (identical role +
-   * timestamp), which the UI dedups, and persistMessages saves it exactly
-   * once at that point.
+   * timestamp), which the UI dedups, and the transcript store saves it
+   * exactly once at that point.
    *
    * When `mode` is provided, a ModeMessage is stored in the transcript
    * instead of a regular user message: the UI renders the short text +
@@ -774,8 +779,7 @@ export class SessionAgent {
         role,
         timestamp: ts,
       }));
-      this.savedCount = messages.length;
-      this.messageRepo.deleteFrom(this.sessionId, cut);
+      this.transcript.forgetFrom(messages, cut);
     };
     if (index !== -1) {
       truncateFrom(index);
@@ -954,7 +958,7 @@ export class SessionAgent {
           message: event.message,
         });
         this.reportModelError(event.message);
-        this.persistMessages();
+        this.transcript.persist(this.agent.state.messages);
         break;
       case "tool_execution_start":
         this.emit({
@@ -1136,42 +1140,18 @@ export class SessionAgent {
     this.publishContexts();
   }
 
-  /** Insert `message` at `index`: the database first (a failed write leaves
+  /** Insert `message` at `index`: the row first (a failed write leaves
    * memory untouched, so the two can never diverge), then the in-memory
-   * transcript, the persisted-row counter, and the clients. Used by the
-   * context compactor through its `insert` callback.
-   *
-   * The persisted-row counter is recomputed, not reset: the first
-   * `savedCount` messages had rows before the insertion, so the rows that
-   * follow the inserted message are still persisted after it. Only the
-   * messages up to and including the insertion are counted; whatever
-   * trailed the persisted prefix is written by the next `persistMessages`. */
+   * transcript and the clients. Used by the context compactor through its
+   * `insert` callback; the persisted-row bookkeeping lives in the
+   * {@link TranscriptStore}. */
   private insertHistory(index: number, message: AgentMessage): void {
-    const persistedBefore = this.savedCount;
-    this.messageRepo.insertAt(this.sessionId, index, message);
+    this.transcript.insertAt(index, message);
     this.agent.state.messages.splice(index, 0, message);
-    this.savedCount = index < persistedBefore
-      ? persistedBefore + 1
-      : persistedBefore;
     // The insertion may have moved the model's view past the context
     // publications the older messages carried: re-anchor so a provider
     // whose snapshot is no longer visible publishes it again before the
     // next request (the caller publishes what the re-anchoring queued).
     this.rebaseContexts(this.agent.state.messages);
-  }
-
-  /** Append only the messages added since the last save. */
-  private persistMessages(): void {
-    const messages = this.agent.state.messages;
-    if (messages.length < this.savedCount) {
-      // The history shrank (a compaction replaced a span, or a rewind
-      // truncated it) and the rows are already in step: re-anchor so the
-      // surviving messages are never re-appended.
-      this.savedCount = messages.length;
-    }
-    for (let i = this.savedCount; i < messages.length; i++) {
-      this.messageRepo.append(this.sessionId, messages[i]!);
-    }
-    this.savedCount = messages.length;
   }
 }

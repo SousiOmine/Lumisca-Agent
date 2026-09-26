@@ -45,6 +45,7 @@
   新規セッションのモデルは「明示指定 → 直近セッションのモデル → 設定済みプロバイダの最初の有効モデル」の順で解決します。対象になるのは **Lumisca に設定済みのプロバイダ**（保存済みAPIキー、models.json / `LUMISCA_*` / ユーザー定義プロバイダ）だけで、カタログに登録されているだけの未設定プロバイダは自動選択しません（環境変数のキーしか無い場合も「未設定」扱いで、設定画面・モデルピッカーと同じ判定です）。1つも設定されていなければ既定モデルは存在せず、`getDefaultModel()` は null を返し、モデル未指定の `createSession` は `unavailable`（HTTP 503）で失敗します。UI 側はこれを「モデル欄を未設定のまま開始ボタンを無効化し、設定画面への案内を出す」挙動に対応させています。
 - **`agent/`**  
   `SessionAgent`（プロンプト生成・タイトル付与・MCP・通知処理）、`RetryManager`（空応答や429エラーのリトライ制御）、`GoalRunner`（自律的なゴール達成ループ）、`AgentFactory`（配線処理）、`SessionPool`（エージェントのライフサイクル管理）で構成されます。  
+  `agent/transcript.ts` の `TranscriptStore` は、**メッセージテーブルの行とメモリ上のトランスクリプトの対応**（先頭から何件が永続化済みか）だけを持ちます。追記（`persist`）・途中挿入（`insertAt`、圧縮が checkpoint を差し込む経路）・巻き戻し（`forgetFrom`）という、行数が動く 3 つの操作をここに集約することで、「DB を先に書いてからメモリを進める」順序と挿入後の数え直しが 1 箇所に収まります（数え違いは行の二重挿入か取りこぼしに直結するため）。  
   なお、`agent/context-providers.ts` で扱う**動的コンテキスト**（スキルカタログや `AGENTS.md`）は、プロンプトに直書きせず `context` メッセージとして履歴スタックに追加し、値に変更があった場合のみ再送する設計です（DSHにおける `PromptContext` と同様のアプローチです）。
 - **`agent/context-compaction.ts`**  
   長時間動作するセッションの履歴をモデルのリクエスト上限内に保つ**コンテキスト圧縮**の唯一の実装です（badlogic/pi-mono の `packages/coding-agent/src/core/compaction` をLumiscaの語彙に写像したもの）。設計上の要点は次のとおりです。
@@ -84,7 +85,7 @@
 ## 4. server パッケージの設計方針
 
 - **`systemd/`**  
-  ビルド済みサーバーを Linux の systemd **ユーザーユニット**として常駐させる `service` サブコマンド（`install` / `config` / `status` / `uninstall`）を提供します。設定内容は以下の**3層を順に合成**して生成され、その優先順位は `systemd/compose.ts` で一元管理されています。
+  ビルド済みサーバーを Linux の systemd **ユーザーユニット**として常駐させる `service` サブコマンド（`install` / `config` / `status` / `uninstall`）を提供します。`systemd/mod.ts` はディスパッチャ（引数解析 → 動詞の選択 → 例外の終了コードへの対応付け）だけで、動詞ごとに `systemd/config.ts` / `install.ts` / `status.ts` / `uninstall.ts` が並びます。動詞が共有する前処理・systemd 操作・接続先表示は `systemd/shared.ts`、外の世界（runner・probe・出力・トークン生成）は `systemd/deps.ts` が持ちます。設定内容は以下の**3層を順に合成**して生成され、その優先順位は `systemd/compose.ts` で一元管理されています。
   1. `systemd/template.ts` に定義されたユニットテンプレート（`deno compile` で単一バイナリにパッケージングするため、テンプレートも TypeScript 定数として保持）
   2. 既存の `<config home>/lumisca-agent/service.env`（パーミッション 0600。認証トークンの引き継ぎ元であり、運用担当者が手動編集可能なレイヤー）
   3. 起動時引数フラグ（`--host` / `--port` / `--db` / `--allowed-hosts` / `--token`）

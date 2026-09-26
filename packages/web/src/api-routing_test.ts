@@ -329,23 +329,21 @@ Deno.test("api-routing: a colon in a bare session id reads as a peer prefix (pin
   );
 });
 
-Deno.test("api-routing: a peer id containing ':' mis-splits the tab key (pinned)", async () => {
-  // Both halves of a tab key must be colon-free, but nothing validates that:
-  // the web UI generates connection ids with crypto.randomUUID()
-  // (components/settings/ConnectionList.tsx), while PUT /api/connections
-  // accepts any non-empty string (server/routes/connections.ts). A registry
-  // entry like this one therefore addresses peer "peer" for session
-  // "1:sess-1" — someone else's session. Pinned so that validating the id
-  // (or changing the key format) is a deliberate act.
+Deno.test("api-routing: a peer id containing ':' stays one peer", async () => {
+  // Connection ids are only checked for being non-empty
+  // (server/routes/connections.ts) while the UI generates them with
+  // crypto.randomUUID(), so a hand-written registry entry may carry the key
+  // separator. tabKey escapes it: splitting naively would address peer
+  // "peer" for session "1:sess-1" — someone else's session.
   const key = tabKey("peer:1", "sess-1");
-  assertEquals(key, "peer:1:sess-1");
+  assertEquals(splitTabKey(key), { peerId: "peer:1", sessionId: "sess-1" });
   const session = sessionApi(key);
-  assertEquals(session.peerId, "peer");
-  assertEquals(session.sessionId, "1:sess-1");
+  assertEquals(session.peerId, "peer:1");
+  assertEquals(session.sessionId, "sess-1");
   assertRequest(
     await record(() => session.getMessages()),
     "GET",
-    "/api/fed/peer/sessions/1%3Asess-1/messages",
+    "/api/fed/peer%3A1/sessions/sess-1/messages",
   );
 });
 

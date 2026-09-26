@@ -53,6 +53,8 @@ import {
   notificationMessage,
   subagentSystemPrompt,
 } from "./subagent-format.ts";
+import type { Subagent } from "./subagent-registry.ts";
+import { SubagentRegistry } from "./subagent-registry.ts";
 import {
   createSendMessageTool,
   createTaskOutputTool,
@@ -67,9 +69,6 @@ export const MAX_SUBAGENTS = 8;
 export const MAX_SUBAGENT_DEPTH = 2;
 /** Live-response tail reported while a sub-agent runs. */
 const TASK_TAIL_LIMIT = 8 * 1024;
-/** Settled sub-agents kept queryable (task_output / resync) per session;
- * older entries are dropped so a long session's metadata stays bounded. */
-const MAX_FINISHED_SUBAGENTS = 100;
 /** `to` values of send_message that resolve to the caller's parent agent. */
 const PARENT_ALIASES = ["parent", "main"] as const;
 
@@ -112,44 +111,6 @@ function generalTools(
       skills: sessionSkills(workspace.folders, { browserAvailable }),
     }),
   ];
-}
-
-/** One live sub-agent and its runtime state. `agent` is released (set to
- * null) once the run settles — only the lightweight snapshot fields stay
- * queryable — so finished sub-agents cannot pin their message history in
- * memory for the rest of the session. */
-interface Subagent {
-  id: string;
-  parentId: string;
-  type: SubagentType;
-  depth: number;
-  description: string;
-  status: SubagentStatus;
-  agent: Agent | null;
-  /** Condenses this sub-agent's history when a request would exceed its
-   * model's window (see compactBeforeStep). Per sub-agent so the
-   * measurement anchor tracks its own turns. */
-  compactor: ContextCompactor;
-  startedAt: number;
-  finishedAt?: number;
-  /** Tail of the current response (bounded; reported while running). */
-  tail: string;
-  /** Final response text once the run settled. */
-  resultText: string;
-  unsubscribe: () => void;
-  waiters: Set<Waiter>;
-  /** Aborts the backoff sleep of a rate-limit retry when the sub-agent is
-   * killed or the session closes, so a stop during the wait is not ignored. */
-  abort: AbortController;
-}
-
-/** A blocking task_output wait on a running sub-agent. */
-interface Waiter {
-  /** The agent that issued the wait (used to suppress the completion
-   * notification when it receives the result through the tool instead). */
-  callerId: string;
-  settle: (info: TaskInfo) => void;
-  cancel: () => void;
 }
 
 /** The runtime a new sub-agent spawns into: the workspace (tool sandbox),
@@ -210,7 +171,7 @@ export interface TaskHubOptions {
  * never stops them — and survive agent rebuilds. close() aborts them all.
  */
 export class TaskHub {
-  private readonly subs = new Map<string, Subagent>();
+  private readonly subagents: SubagentRegistry;
   private counter = 0;
   private parentDelivery: ParentDelivery | null = null;
   private closed = false;
@@ -251,6 +212,7 @@ export class TaskHub {
 
   constructor(options: TaskHubOptions) {
     this.sessionId = options.sessionId;
+    this.subagents = new SubagentRegistry(options.sessionId);
     this.resolveRuntime = options.resolveRuntime;
     this.streamFn = options.streamFn;
     this.safety = options.safety;
@@ -314,7 +276,7 @@ export class TaskHub {
     this.registry.addTools(tools);
     if (this.registry.isEmpty) return;
     const pair = this.searchTools();
-    for (const sub of this.subs.values()) {
+    for (const sub of this.subagents.all()) {
       if (sub.status !== "running" || sub.type !== "general") continue;
       if (sub.agent === null) continue;
       addToolsToAgent(sub.agent, pair);
@@ -379,7 +341,7 @@ export class TaskHub {
     if (this.closed) {
       throw new CoreError("The session is closed", "unavailable");
     }
-    const running = [...this.subs.values()]
+    const running = [...this.subagents.all()]
       .filter((sub) => sub.status === "running").length;
     if (running >= MAX_SUBAGENTS) {
       throw new CoreError(
@@ -469,7 +431,7 @@ export class TaskHub {
       waiters: new Set(),
       abort,
     };
-    this.subs.set(id, sub);
+    this.subagents.add(sub);
     this.emit({
       type: "task_start",
       sessionId: this.sessionId,
@@ -491,7 +453,7 @@ export class TaskHub {
     agentId: string,
     signal: AbortSignal,
   ): Promise<void> {
-    const sub = this.subs.get(agentId);
+    const sub = this.subagents.get(agentId);
     if (this.closed || signal.aborted || sub === undefined) return;
     const agent = sub.agent;
     if (agent === null) return;
@@ -611,44 +573,15 @@ export class TaskHub {
     }
   }
 
-  /** Resolve a sub-agent by id, or throw with the list of known ids. */
-  private require(agentId: string): Subagent {
-    const sub = this.subs.get(agentId);
-    if (sub === undefined) {
-      throw new CoreError(
-        `Unknown agent: ${agentId}. Known agents: ${this.knownIds()}`,
-        "not_found",
-      );
-    }
-    return sub;
-  }
-
   /** Snapshot of one sub-agent for task_output and the resync endpoint. */
   info(agentId: string): TaskInfo {
-    return this.infoOf(this.require(agentId));
-  }
-
-  private infoOf(sub: Subagent): TaskInfo {
-    return {
-      agentId: sub.id,
-      parentAgentId: sub.parentId,
-      subagentType: sub.type,
-      description: sub.description,
-      status: sub.status,
-      startedAt: sub.startedAt,
-      ...(sub.finishedAt !== undefined ? { finishedAt: sub.finishedAt } : {}),
-      text: sub.status === "running" ? sub.tail : sub.resultText,
-    };
+    return this.subagents.info(agentId);
   }
 
   /** Snapshots of every sub-agent, newest first (the tasks resync
    * endpoint; mirrors the todo plan snapshot). */
   list(): TaskInfo[] {
-    return [...this.subs.values()].map((sub) => this.infoOf(sub)).reverse();
-  }
-
-  private knownIds(): string {
-    return [this.sessionId, ...this.subs.keys()].join(", ");
+    return this.subagents.list();
   }
 
   /** Register a blocking wait on a sub-agent. Resolves when the agent
@@ -661,52 +594,7 @@ export class TaskHub {
     timeoutSec: number,
     signal?: AbortSignal,
   ): Promise<TaskInfo> {
-    const sub = this.require(agentId);
-    if (sub.status !== "running") return Promise.resolve(this.infoOf(sub));
-    if (signal?.aborted) {
-      return Promise.reject(
-        new CoreError(`Cancelled while waiting for ${agentId}`, "unavailable"),
-      );
-    }
-    return new Promise<TaskInfo>((resolve, reject) => {
-      let settled = false;
-      const onAbort = () => waiter.cancel();
-      const cleanup = () => {
-        settled = true;
-        sub.waiters.delete(waiter);
-        if (timer !== undefined) clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-      };
-      const waiter: Waiter = {
-        callerId,
-        settle: (info) => {
-          cleanup();
-          resolve(info);
-        },
-        cancel: () => {
-          cleanup();
-          reject(
-            new CoreError(
-              `Cancelled while waiting for ${agentId}`,
-              "unavailable",
-            ),
-          );
-        },
-      };
-      const timer = timeoutSec > 0
-        ? setTimeout(() => {
-          if (settled) return;
-          cleanup();
-          resolve(this.infoOf(sub));
-        }, timeoutSec * 1000)
-        : undefined;
-      signal?.addEventListener("abort", onAbort);
-      if (signal?.aborted) {
-        waiter.cancel();
-        return;
-      }
-      sub.waiters.add(waiter);
-    });
+    return this.subagents.wait(agentId, callerId, timeoutSec, signal);
   }
 
   /** Send a message from one agent to another (mesh). The target receives
@@ -735,7 +623,7 @@ export class TaskHub {
 
   private parentOf(agentId: string): string | undefined {
     if (agentId === this.sessionId) return undefined;
-    return this.subs.get(agentId)?.parentId;
+    return this.subagents.get(agentId)?.parentId;
   }
 
   /** Route an explicit message. Throws when the target is unknown or no
@@ -760,13 +648,7 @@ export class TaskHub {
       this.parentDelivery.deliver(payload);
       return;
     }
-    const sub = this.subs.get(targetId);
-    if (sub === undefined) {
-      throw new CoreError(
-        `Unknown agent: ${targetId}. Known agents: ${this.knownIds()}`,
-        "not_found",
-      );
-    }
+    const sub = this.subagents.require(targetId);
     if (sub.status !== "running") {
       throw new CoreError(
         `Agent is not active: ${targetId} (${sub.status})`,
@@ -788,7 +670,7 @@ export class TaskHub {
       }
       return;
     }
-    const sub = this.subs.get(parentId);
+    const sub = this.subagents.get(parentId);
     if (sub !== undefined && sub.status === "running") {
       // Running agents always have a live Agent (finalize releases it).
       sub.agent!.steer(notificationMessage(payload));
@@ -829,7 +711,7 @@ export class TaskHub {
     const parentWaiting = [...sub.waiters].some(
       (waiter) => waiter.callerId === sub.parentId,
     );
-    const snapshot = this.infoOf(sub);
+    const snapshot = this.subagents.infoOf(sub);
     for (const waiter of sub.waiters) waiter.settle(snapshot);
     sub.waiters.clear();
     this.emit({
@@ -841,18 +723,7 @@ export class TaskHub {
     if (!parentWaiting && !this.closed) {
       this.notify(sub.parentId, formatTaskCompletion(snapshot, failure));
     }
-    this.evictFinished();
-  }
-
-  /** Drop the oldest settled sub-agents beyond MAX_FINISHED_SUBAGENTS, so
-   * the metadata kept for task_output / resync stays bounded. */
-  private evictFinished(): void {
-    if (this.subs.size <= MAX_FINISHED_SUBAGENTS) return;
-    for (const [id, sub] of this.subs) {
-      if (sub.status === "running") continue;
-      this.subs.delete(id);
-      if (this.subs.size <= MAX_FINISHED_SUBAGENTS) return;
-    }
+    this.subagents.evictFinished();
   }
 
   /** Abort every running sub-agent and drop the parent delivery hook.
@@ -860,7 +731,7 @@ export class TaskHub {
   close(): void {
     this.closed = true;
     this.parentDelivery = null;
-    for (const sub of [...this.subs.values()]) {
+    for (const sub of [...this.subagents.all()]) {
       if (sub.status !== "running") continue;
       // Running agents always have a live Agent (finalize releases it).
       sub.abort.abort();
