@@ -4,6 +4,8 @@ import type {
   BackgroundCommandInfo,
   CatalogStatus,
   ConnectionEntry,
+  FsBrowse,
+  FsPlace,
   GoalInfo,
   McpInfo,
   ModelInfo,
@@ -267,15 +269,11 @@ export const api = {
       { method: "PUT", body: JSON.stringify({ level }) },
     ),
 
-  fsRoots: () => request<string[]>("/api/fs/roots"),
+  /** The workspace folder picker's sidebar places (the user folders that
+   * exist on this machine, then its filesystem roots). */
+  fsPlaces: () => request<FsPlace[]>("/api/fs/places"),
   fsBrowse: (path: string) =>
-    request<
-      {
-        path: string;
-        parent: string | null;
-        entries: Array<{ name: string; path: string }>;
-      }
-    >(
+    request<FsBrowse>(
       `/api/fs/browse?path=${encodeURIComponent(path)}`,
     ),
   /** App-level (global) MCP config; applies to every workspace. */

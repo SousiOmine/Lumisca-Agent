@@ -294,22 +294,41 @@ export const chrome = {
     ja: "「{peerName} ({peerId})」のフォルダーを選択してください",
     en: 'Select a folder from "{peerName} ({peerId})"',
   },
-  "chrome.folderBrowser.notFound": {
-    ja: "指定されたフォルダーが見つかりません",
-    en: "The specified folder was not found",
+  "chrome.folderBrowser.placesLabel": { ja: "場所", en: "Places" },
+  "chrome.folderBrowser.place.home": { ja: "ホーム", en: "Home" },
+  "chrome.folderBrowser.place.desktop": { ja: "デスクトップ", en: "Desktop" },
+  "chrome.folderBrowser.place.documents": {
+    ja: "ドキュメント",
+    en: "Documents",
+  },
+  "chrome.folderBrowser.place.downloads": {
+    ja: "ダウンロード",
+    en: "Downloads",
+  },
+  "chrome.folderBrowser.noPlaces": {
+    ja: "ブラウズできる場所が見つかりません",
+    en: "No places to browse",
+  },
+  "chrome.folderBrowser.chooseStart": {
+    ja: "左の場所からフォルダーを選んでください",
+    en: "Choose a folder from the places on the left",
+  },
+  "chrome.folderBrowser.emptyFolder": {
+    ja: "このフォルダーには項目がありません",
+    en: "This folder is empty",
   },
   "chrome.folderBrowser.goUp": { ja: "上の階層へ", en: "Go up" },
-  "chrome.folderBrowser.reselect": {
-    ja: "フォルダーを選び直す",
-    en: "Choose a different folder",
-  },
-  "chrome.folderBrowser.noSubfolders": {
-    ja: "サブフォルダーはありません",
-    en: "No subfolders",
-  },
   "chrome.folderBrowser.selectThis": {
     ja: "このフォルダーを選択",
     en: "Select this folder",
+  },
+  "chrome.folderBrowser.selectNamed": {
+    ja: "「{name}」を選択",
+    en: 'Select "{name}"',
+  },
+  "chrome.folderBrowser.fileNotSelectable": {
+    ja: "ファイルは選択できません",
+    en: "Files cannot be selected",
   },
 
   // --- peer picker ---------------------------------------------------------

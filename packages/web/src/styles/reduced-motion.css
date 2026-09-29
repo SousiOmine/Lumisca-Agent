@@ -1,5 +1,5 @@
 /* reduced-motion.css — prefers-reduced-motion overrides.
- * Cascade position 14/14: order is defined by ../styles.css (@import order).
+ * Cascade position 15/15: order is defined by ../styles.css (@import order).
  * See ./README.md before adding new files. */
 
 @media (prefers-reduced-motion: reduce) {

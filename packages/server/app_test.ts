@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { basename, dirname, join, parse } from "node:path";
 import { realpathSync } from "node:fs";
 import {
   fauxAssistantMessage,
@@ -599,34 +599,75 @@ Deno.test("default model API follows the configured providers", async () => {
 Deno.test("filesystem browse API", async () => {
   const { core, server, base } = await setup();
   try {
-    const rootsRes = await fetch(`${base}/api/fs/roots`);
-    assertEquals(rootsRes.status, 200);
-    const roots = await rootsRes.json() as string[];
-    assertEquals(roots.length > 0, true, "at least one root");
-    assertEquals(typeof roots[0], "string");
+    // The picker's sidebar places: the user folders that exist on this
+    // machine, then its filesystem roots.
+    const placesRes = await fetch(`${base}/api/fs/places`);
+    assertEquals(placesRes.status, 200);
+    const places = await placesRes.json() as Array<
+      { kind: string; path: string }
+    >;
+    assertEquals(places.length > 0, true, "at least one place");
+    for (const place of places) {
+      assertEquals(
+        ["home", "desktop", "documents", "downloads", "root"].includes(
+          place.kind,
+        ),
+        true,
+        `unknown place kind: ${place.kind}`,
+      );
+      // Only directories that exist are offered.
+      assertEquals((await Deno.stat(place.path)).isDirectory, true);
+    }
+    assertEquals(places.some((place) => place.kind === "root"), true);
+    // The home folder of the server's environment is one of them.
+    const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME") ?? "";
+    if (home !== "") {
+      assertEquals(places.find((place) => place.kind === "home")?.path, home);
+    }
 
     // Create a nested dir structure in a temp folder and browse it.
     const root = await Deno.makeTempDir({ prefix: "lumisca-fs-" });
-    const sub = `${root}/alpha`;
+    const sub = join(root, "alpha");
     await Deno.mkdir(sub, { recursive: true });
-    await Deno.mkdir(`${sub}/beta`, { recursive: true });
-    await Deno.writeTextFile(`${root}/file.txt`, "x");
+    await Deno.mkdir(join(sub, "beta"), { recursive: true });
+    await Deno.writeTextFile(join(root, "file.txt"), "x");
+    // A symlinked folder stays a folder (its dirent describes the link, but
+    // the picker must still be able to pick the folder). Symlinks need
+    // privileges on Windows.
+    const linked = Deno.build.os !== "windows";
+    if (linked) await Deno.symlink(sub, join(root, "link"), { type: "dir" });
 
     const browseRes = await fetch(
       `${base}/api/fs/browse?path=${encodeURIComponent(root)}`,
     );
     assertEquals(browseRes.status, 200);
-    const browse = await browseRes.json();
+    const browse = await browseRes.json() as {
+      path: string;
+      parent: string | null;
+      breadcrumbs: Array<{ name: string; path: string }>;
+      entries: Array<{ name: string; path: string; kind: string }>;
+    };
     assertEquals(browse.path, root);
-    assertEquals(
-      browse.entries.some((e: { name: string }) => e.name === "alpha"),
-      true,
-    );
-    assertEquals(
-      browse.entries.some((e: { name: string }) => e.name === "file.txt"),
-      false,
-      "files excluded",
-    );
+    // Folders first (the symlink included), then files.
+    const expected: Array<{ name: string; path: string; kind: string }> = [
+      { name: "alpha", path: sub, kind: "dir" },
+    ];
+    if (linked) {
+      expected.push({ name: "link", path: join(root, "link"), kind: "dir" });
+    }
+    expected.push({
+      name: "file.txt",
+      path: join(root, "file.txt"),
+      kind: "file",
+    });
+    assertEquals(browse.entries, expected);
+    // The address bar walks from the filesystem root down to this folder.
+    assertEquals(browse.breadcrumbs.at(-1), {
+      name: basename(root),
+      path: root,
+    });
+    assertEquals(browse.breadcrumbs[0]?.path, parse(root).root);
+    assertEquals(browse.parent, dirname(root));
 
     const nested = await fetch(
       `${base}/api/fs/browse?path=${encodeURIComponent(sub)}`,
@@ -1581,7 +1622,7 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
     try {
       const res = await json(
         `http://127.0.0.1:${deadHub.addr.port}`,
-        "/api/fed/peer1/fs/roots",
+        "/api/fed/peer1/fs/places",
         { headers: { "x-lumisca-token": "hub-token" } },
       );
       assertEquals(res.status, 502);

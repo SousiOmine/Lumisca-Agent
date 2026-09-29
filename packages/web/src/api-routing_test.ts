@@ -210,7 +210,7 @@ const WORKSPACE_CASES: Array<RoutedCase<WorkspaceApi>> = [
     '{"name":"Renamed"}',
   ],
   ["DELETE", "/workspaces/ws-1", (w) => w.delete("ws-1"), undefined],
-  ["GET", "/fs/roots", (w) => w.fsRoots(), undefined],
+  ["GET", "/fs/places", (w) => w.fsPlaces(), undefined],
   [
     "GET",
     "/fs/browse?path=C%3A%5CUsers%5Cme",

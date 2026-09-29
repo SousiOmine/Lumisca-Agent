@@ -69,6 +69,48 @@ export interface PeerStatus {
   error?: string;
 }
 
+/** A starting point of the workspace folder picker's sidebar
+ * (`GET /api/fs/places`): an OS-typical user folder, or a filesystem root
+ * (a drive on Windows). `kind` is a token the UI translates — a root is
+ * labelled by its own path. */
+export type FsPlaceKind =
+  | "home"
+  | "desktop"
+  | "documents"
+  | "downloads"
+  | "root";
+
+export interface FsPlace {
+  kind: FsPlaceKind;
+  path: string;
+}
+
+/** A folder-picker entry: folders can be entered and picked as a workspace
+ * folder, files are listed for orientation only (a workspace is built from
+ * folders). */
+export interface FsEntry {
+  name: string;
+  path: string;
+  kind: "dir" | "file";
+}
+
+/** One step of the picker's address bar, from the filesystem root down to
+ * the browsed folder. */
+export interface FsBreadcrumb {
+  name: string;
+  path: string;
+}
+
+/** A directory listing (`GET /api/fs/browse`): the address bar's chain plus
+ * the folder's entries, folders first. The server walks the chain because
+ * only it knows the platform's path separators. */
+export interface FsBrowse {
+  path: string;
+  parent: string | null;
+  breadcrumbs: FsBreadcrumb[];
+  entries: FsEntry[];
+}
+
 /** Assistant message with text/tool-call content, for rendering. */
 export type AssistantMessage = Extract<Message, { role: "assistant" }>;
 /** Tool-result message, for pairing with its assistant tool call. */

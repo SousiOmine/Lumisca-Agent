@@ -119,10 +119,10 @@ export function workspaceApi(peerId: string) {
       (id: string) => api.deleteWorkspace(id),
       (p, id: string) => fed.deleteWorkspace(p, id),
     ),
-    fsRoots: peerRouted(
+    fsPlaces: peerRouted(
       peerId,
-      () => api.fsRoots(),
-      (p) => fed.fsRoots(p),
+      () => api.fsPlaces(),
+      (p) => fed.fsPlaces(p),
     ),
     fsBrowse: peerRouted(
       peerId,

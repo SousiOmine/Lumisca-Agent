@@ -120,7 +120,14 @@ export function WorkspaceModal(
   };
 
   return (
-    <Modal onClose={onClose}>
+    <Modal
+      onClose={onClose}
+      // The two-pane browser wants the width of a file manager window; the
+      // form view keeps the default dialog width.
+      width={view.kind === "browse"
+        ? "min(880px, calc(100vw - 48px))"
+        : undefined}
+    >
       {view.kind === "browse"
         ? (
           <FolderBrowser

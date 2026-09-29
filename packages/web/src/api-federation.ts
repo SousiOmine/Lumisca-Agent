@@ -3,6 +3,8 @@ import type {
   AskAnswer,
   BackgroundCommandInfo,
   FederatedWorkspace,
+  FsBrowse,
+  FsPlace,
   GoalInfo,
   ModelInfo,
   ModePrompt,
@@ -50,15 +52,11 @@ export const fed = {
       `/workspaces/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
-  fsRoots: (peerId: string) => fedRequest<string[]>(peerId, "/fs/roots"),
+  /** A peer's folder-picker places (the sidebar: its user folders plus its
+   * filesystem roots). */
+  fsPlaces: (peerId: string) => fedRequest<FsPlace[]>(peerId, "/fs/places"),
   fsBrowse: (peerId: string, path: string) =>
-    fedRequest<
-      {
-        path: string;
-        parent: string | null;
-        entries: Array<{ name: string; path: string }>;
-      }
-    >(
+    fedRequest<FsBrowse>(
       peerId,
       `/fs/browse?path=${encodeURIComponent(path)}`,
     ),

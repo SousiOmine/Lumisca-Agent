@@ -181,10 +181,10 @@ const WORKSPACE_CASES: Case[] = [
     call: () => api.getSkills("ws 1"),
   },
   {
-    name: "fsRoots",
+    name: "fsPlaces",
     method: "GET",
-    path: "/api/fs/roots",
-    call: () => api.fsRoots(),
+    path: "/api/fs/places",
+    call: () => api.fsPlaces(),
   },
   {
     name: "fsBrowse",

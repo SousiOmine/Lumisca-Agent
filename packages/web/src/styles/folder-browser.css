@@ -1,0 +1,215 @@
+/* folder-browser.css — the workspace folder picker: the folder list of the
+ * workspace form and the two-pane browser dialog it opens.
+ * Cascade position 14/15: order is defined by ../styles.css (@import order).
+ * See ./README.md before adding new files. */
+
+/* ---- folder list (the workspace form's own rows) -------------------------- */
+
+.folder-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.folder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 7px 10px;
+}
+
+.folder-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- two-pane browser ----------------------------------------------------- */
+
+/* A fixed-height box with two independently scrolling panes, the way a file
+ * manager window behaves (the dialog keeps its own scroll for short
+ * windows). */
+.folder-browser-panes {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  height: min(420px, 55vh);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.folder-browser-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.folder-browser-sidebar-title {
+  padding: 4px 8px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
+
+.folder-browser-place {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.folder-browser-place:hover {
+  background: var(--surface-2);
+}
+
+.folder-browser-place.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.folder-browser-place-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-browser-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.folder-browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.folder-browser-crumbs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.folder-browser-sep {
+  display: inline-flex;
+  color: var(--text-faint);
+}
+
+.folder-browser-crumb {
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.folder-browser-crumb:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* the open folder itself: shown, but not a step to go back to */
+.folder-browser-crumb.current {
+  color: var(--text);
+}
+
+.folder-browser-list {
+  flex: 1;
+  min-height: 0;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.folder-browser-list:focus {
+  outline: none;
+}
+
+/* the list is focused on open (its rows are operated with ↑/↓ and Enter) */
+.folder-browser-list:focus-visible {
+  outline: 1px solid var(--border-strong);
+  outline-offset: -1px;
+}
+
+/* A navigation in flight dims the previous listing instead of blanking it:
+ * the list is replaced only once the new one has arrived. */
+.folder-browser-list.loading {
+  opacity: 0.55;
+}
+
+.folder-browser-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  /* A double click would otherwise select the row's text. */
+  user-select: none;
+}
+
+.folder-browser-row.dir {
+  cursor: pointer;
+}
+
+.folder-browser-row.dir:hover {
+  background: var(--surface-2);
+}
+
+.folder-browser-row.dir.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* a file can be looked at, not picked */
+.folder-browser-row.file {
+  color: var(--text-faint);
+}
+
+.folder-browser-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-browser-empty {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.folder-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+}

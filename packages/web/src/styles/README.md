@@ -23,8 +23,9 @@ Organizing your CSS）の指針に沿った構成です。
 | 10 | `model-picker.css` | モデル切替・思考レベル・コンテキスト量・モデル選択 |
 | 11 | `modals.css` | モーダル枠・エラーバナー |
 | 12 | `settings.css` | 設定モーダル・各設定パネル |
-| 13 | `banners.css` | アップデートバナー・フォルダ選択 |
-| 14 | `reduced-motion.css` | `prefers-reduced-motion` の無効化 |
+| 13 | `banners.css` | アップデートバナー・サーバー停止バナー |
+| 14 | `folder-browser.css` | ワークスペースのフォルダー選択（フォルダー一覧・2ペインのブラウザ） |
+| 15 | `reduced-motion.css` | `prefers-reduced-motion` の無効化 |
 
 ## 新しい見た目を足すとき
 
