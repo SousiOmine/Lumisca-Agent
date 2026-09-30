@@ -58,12 +58,20 @@ async function* textFiles(
       if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".tmp-")) {
         continue;
       }
+      // The entry name is a path segment, not a URL segment: a legal file
+      // name may carry characters like ":" or "#", and new URL would then
+      // build something readDir rejects ("Must be a file URL"), taking both
+      // hygiene tests down with it. Only the URL is encoded; the reported
+      // path keeps the raw name.
       yield* textFiles(
-        new URL(`${entry.name}/`, dir),
+        new URL(`${encodeURIComponent(entry.name)}/`, dir),
         `${prefix}${entry.name}/`,
       );
     } else if (TEXT_EXTENSIONS.some((ext) => entry.name.endsWith(ext))) {
-      yield { url: new URL(entry.name, dir), path: `${prefix}${entry.name}` };
+      yield {
+        url: new URL(encodeURIComponent(entry.name), dir),
+        path: `${prefix}${entry.name}`,
+      };
     }
   }
 }

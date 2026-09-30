@@ -111,7 +111,12 @@ Deno.test("parsePluginMcp rejects commands that escape the plugin root", () => {
 
 Deno.test("parsePluginMcp expands the two placeholders in args, env and cwd only", () => {
   const root = "C:\\plugin";
-  const data = join("C:\\data", "p");
+  // A real (temporary) data root: parsing creates the PLUGIN_DATA directory,
+  // so a Windows-style literal would leave a directory named "C:\data" (a
+  // legal POSIX name) in the working directory — the repository hygiene tests
+  // walk that tree and cannot build a URL from such a name.
+  const dataRoot = tempDataRoot();
+  const data = join(dataRoot, "p");
   const result = parsePluginMcp(
     doc({
       server: {
@@ -124,7 +129,7 @@ Deno.test("parsePluginMcp expands the two placeholders in args, env and cwd only
     }),
     root,
     "p",
-    { pluginDataRoot: "C:\\data" },
+    { pluginDataRoot: dataRoot },
   );
   const server = result.servers[0]!;
   assertEquals(server.args, [`${root}/a`, `${data}/b`, "${OTHER}/c"]);
