@@ -6,6 +6,8 @@ import {
   IconChevronRight,
   IconDeviceDesktop,
   IconDownload,
+  IconEye,
+  IconEyeOff,
   IconFile,
   IconFileText,
   IconFolder,
@@ -43,6 +45,27 @@ function placeLabel(place: FsPlace, t: Translator): string {
     case "root":
       return place.path;
   }
+}
+
+/** Whether an entry is hidden: the dot-prefix rule the OS file managers
+ * follow, and the same one the app's file walk uses
+ * (`core/workspace/walk.ts`). */
+export function isHiddenEntry(entry: FsEntry): boolean {
+  return entry.name.startsWith(".");
+}
+
+/** The rows the list shows. Hidden entries stay out of the way until they
+ * are asked for: a home folder carries dozens of dot-folders (`.cache`,
+ * `.config`, `.local`, …) and they sort before every other name, so listing
+ * them would push the folders the user came for below the fold of a pane
+ * that shows about a dozen rows. */
+export function visibleEntries(
+  entries: FsEntry[],
+  showHidden: boolean,
+): FsEntry[] {
+  return showHidden
+    ? entries
+    : entries.filter((entry) => !isHiddenEntry(entry));
 }
 
 /** One row of the list pane. A folder selects on click and opens on double
@@ -119,6 +142,9 @@ export function FolderBrowser(
   const [places, setPlaces] = useState<FsPlace[]>([]);
   const [open, setOpen] = useState<FsBrowse | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  /** Whether the list also shows hidden entries: off at first, the way the
+   * OS file managers open. */
+  const [showHidden, setShowHidden] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
   // Browsing happens on the peer that owns the workspace (its filesystem).
@@ -168,7 +194,10 @@ export function FolderBrowser(
     listRef.current?.focus();
   }, []);
 
-  const folders = open?.entries.filter((entry) => entry.kind === "dir") ?? [];
+  // The rows of the open folder, and the folders among them: ↑/↓ and Enter
+  // walk the same list the user sees.
+  const entries = open ? visibleEntries(open.entries, showHidden) : [];
+  const folders = entries.filter((entry) => entry.kind === "dir");
 
   const moveSelection = (step: number) => {
     if (folders.length === 0) return;
@@ -202,8 +231,7 @@ export function FolderBrowser(
     }
   };
 
-  const chosen = open?.entries.find((entry) => entry.path === selected) ??
-    null;
+  const chosen = entries.find((entry) => entry.path === selected) ?? null;
   const target = chosen?.path ?? open?.path ?? null;
   // The button names the folder it will add: the selected one, or the open
   // one while nothing is selected.
@@ -283,6 +311,26 @@ export function FolderBrowser(
             </div>
             <button
               type="button"
+              className={`btn small folder-browser-toggle${
+                showHidden ? " on" : ""
+              }`}
+              title={showHidden
+                ? t("chrome.folderBrowser.hideHidden")
+                : t("chrome.folderBrowser.showHidden")}
+              aria-label={showHidden
+                ? t("chrome.folderBrowser.hideHidden")
+                : t("chrome.folderBrowser.showHidden")}
+              onClick={() => {
+                setShowHidden((prev) => !prev);
+                // The toggle is not a place to stay: the keyboard returns to
+                // the list (its rows are operated with ↑/↓ and Enter).
+                listRef.current?.focus();
+              }}
+            >
+              {showHidden ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+            </button>
+            <button
+              type="button"
               className="btn small"
               title={t("chrome.folderBrowser.goUp")}
               aria-label={t("chrome.folderBrowser.goUp")}
@@ -314,7 +362,7 @@ export function FolderBrowser(
                   : t("chrome.folderBrowser.chooseStart")}
               </div>
             )}
-            {open?.entries.map((entry) => (
+            {entries.map((entry) => (
               <EntryRow
                 key={entry.path}
                 entry={entry}
@@ -326,6 +374,16 @@ export function FolderBrowser(
             {open && open.entries.length === 0 && (
               <div className="folder-browser-empty">
                 {t("chrome.folderBrowser.emptyFolder")}
+              </div>
+            )}
+            {
+              /* An empty *listing* is not an empty folder: the hidden entries
+             * are simply out of sight (and the toggle in the toolbar brings
+             * them back). */
+            }
+            {open && open.entries.length > 0 && entries.length === 0 && (
+              <div className="folder-browser-empty">
+                {t("chrome.folderBrowser.hiddenOnly")}
               </div>
             )}
           </div>

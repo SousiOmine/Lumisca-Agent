@@ -10,6 +10,7 @@ import { AgentActivity } from "../AgentActivity.tsx";
 import { MessageRow } from "./MessageRow.tsx";
 import { AssistantText } from "./AssistantText.tsx";
 import { AssistantTools } from "./AssistantTools.tsx";
+import { Deliverables, deliverablesOf } from "./Deliverables.tsx";
 import type { ConversationTurnData, UserMessageImage } from "./types.ts";
 
 export type { ConversationTurnData } from "./types.ts";
@@ -79,8 +80,9 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
 /** One user prompt and the agent's reaction to it: the activity header,
  * the (expandable) work log of everything the turn produced except the
  * final assistant text (intermediate messages, tool calls, the turn's
- * compact rows), and that text below. Memoized — only the last turn's
- * `running` flag changes while a run streams, so the others skip
+ * compact rows), that text below, and the files the turn declared with the
+ * present tool (the deliverable cards) at the end. Memoized — only the last
+ * turn's `running` flag changes while a run streams, so the others skip
  * re-rendering; the callers keep the props referentially stable (see
  * ChatView). */
 export const ConversationTurn = memo(function ConversationTurn({
@@ -138,6 +140,12 @@ export const ConversationTurn = memo(function ConversationTurn({
     turn.user.timestamp,
   );
   const completionTime = endedAt ?? lastTimestamp;
+  // The files this turn declared with the present tool, listed at its end:
+  // the cards travel with the message that declared them, so the next
+  // prompt scrolls them away instead of leaving them under the whole
+  // conversation. They stay outside the collapsible work log — a run that
+  // ended must not hide what the user received.
+  const deliverables = deliverablesOf(turn.responses, toolResults);
 
   return (
     <section className="conversation-turn">
@@ -181,6 +189,7 @@ export const ConversationTurn = memo(function ConversationTurn({
       {finalAssistant && contentText(finalAssistant.content) && (
         <AssistantText message={finalAssistant} />
       )}
+      <Deliverables deliverables={deliverables} />
     </section>
   );
 });

@@ -1,6 +1,12 @@
 import { assertEquals } from "@std/assert";
 import { join, parse, sep } from "node:path";
-import { breadcrumbs, buildPlaces, placeCandidates } from "./fs.ts";
+import { withTempDir } from "@lumisca/core/test-utils";
+import {
+  breadcrumbs,
+  buildPlaces,
+  placeCandidates,
+  readUserDirs,
+} from "./fs.ts";
 
 /** An environment lookup backed by a plain object: the per-platform rules
  * are checked here instead of against the machine running the tests. */
@@ -36,6 +42,67 @@ Deno.test("placeCandidates: Linux prefers the XDG folders", () => {
   assertEquals(places[1]!.path, "/home/me/Bureau");
   // A folder without an XDG variable keeps the English name.
   assertEquals(places[2]!.path, join("/home/me", "Documents"));
+});
+
+Deno.test("placeCandidates: the XDG file fills in for a process without a session", () => {
+  // A server started by systemd has no XDG_* variables at all; the file the
+  // desktop wrote is the only place the localized names exist.
+  const declared: Record<string, string | null> = {
+    XDG_DESKTOP_DIR: "/home/me/デスクトップ",
+    XDG_DOWNLOAD_DIR: null, // turned off: no place for it
+  };
+  const places = placeCandidates(
+    env({ HOME: "/home/me" }),
+    "linux",
+    (key) => declared[key],
+  );
+  assertEquals(places.map((place) => place.kind), [
+    "home",
+    "desktop",
+    "documents",
+    "root",
+  ]);
+  assertEquals(places[1]!.path, "/home/me/デスクトップ");
+  // Nothing declares the documents folder: the English name is the fallback.
+  assertEquals(places[2]!.path, join("/home/me", "Documents"));
+});
+
+Deno.test("placeCandidates: a folder the user turned off is not offered", () => {
+  // `$HOME` (or a variable naming it) is how the spec disables a folder.
+  const places = placeCandidates(
+    env({ HOME: "/home/me", XDG_DOWNLOAD_DIR: "/home/me" }),
+    "linux",
+  );
+  assertEquals(places.some((place) => place.kind === "downloads"), false);
+});
+
+Deno.test("readUserDirs: the localized folders of a desktop session", async () => {
+  await withTempDir("lumisca-userdirs-", async (root) => {
+    const file = join(root, "user-dirs.dirs");
+    await Deno.writeTextFile(
+      file,
+      [
+        "# Managed by xdg-user-dirs-update",
+        'XDG_DESKTOP_DIR="$HOME/デスクトップ"',
+        'XDG_DOCUMENTS_DIR="$HOME/ドキュメント"',
+        // The user turned the downloads folder off.
+        'XDG_DOWNLOAD_DIR="$HOME/"',
+      ].join("\n"),
+    );
+    const dirs = await readUserDirs(file, "/home/me");
+    assertEquals(dirs("XDG_DESKTOP_DIR"), "/home/me/デスクトップ");
+    assertEquals(dirs("XDG_DOCUMENTS_DIR"), "/home/me/ドキュメント");
+    assertEquals(dirs("XDG_DOWNLOAD_DIR"), null);
+    // A folder the file does not name is not a declaration at all.
+    assertEquals(dirs("XDG_MUSIC_DIR"), undefined);
+  });
+});
+
+Deno.test("readUserDirs: without the file nothing is declared", async () => {
+  await withTempDir("lumisca-userdirs-", async (root) => {
+    const dirs = await readUserDirs(join(root, "user-dirs.dirs"), "/home/me");
+    assertEquals(dirs("XDG_DESKTOP_DIR"), undefined);
+  });
 });
 
 Deno.test("placeCandidates: Windows reads USERPROFILE and offers every drive", () => {

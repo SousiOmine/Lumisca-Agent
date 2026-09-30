@@ -47,34 +47,95 @@ function rootPaths(os: string): string[] {
     : ["/"];
 }
 
+/** Whether a declared path is the home folder itself. That is how the XDG
+ * spec turns a user folder off, so the picker must not offer it — a
+ * trailing separator (`"$HOME/"`) does not change which folder it is. */
+function isHomeFolder(path: string, home: string): boolean {
+  const strip = (value: string) => value.replace(/[\\/]+$/, "");
+  return strip(path) === strip(home);
+}
+
+/** The user folders a Linux desktop session declares, read from
+ * `$XDG_CONFIG_HOME/user-dirs.dirs` (`~/.config/user-dirs.dirs` by
+ * default): the path of a declared folder, `null` for one the user turned
+ * off, or nothing when the file does not name it.
+ *
+ * The environment alone cannot answer this: it carries the variables of the
+ * session that started the process, while the server also runs as a systemd
+ * unit or from a bare terminal — and the localized folder names
+ * (`XDG_DOCUMENTS_DIR="$HOME/ドキュメント"`) live in this file, the same
+ * source the desktop's file managers read. */
+export async function readUserDirs(
+  file: string,
+  home: string,
+): Promise<(key: string) => string | null | undefined> {
+  const dirs = new Map<string, string | null>();
+  let text: string;
+  try {
+    text = await Deno.readTextFile(file);
+  } catch {
+    // No file (macOS, Windows, a machine without a desktop session):
+    // nothing is declared here, and the English names take over.
+    return (key) => dirs.get(key);
+  }
+  for (const line of text.split("\n")) {
+    const match = /^\s*(XDG_[A-Z_]+_DIR)\s*=\s*(?:"([^"]*)"|(\S+))\s*$/
+      .exec(line);
+    if (!match) continue;
+    const [, key = "", quoted, bare] = match;
+    // The file writes its values as `"$HOME/ドキュメント"`; the only
+    // variable they may use is $HOME.
+    const value = (quoted ?? bare ?? "").replace(/\$\{?HOME\}?/g, home);
+    dirs.set(key, isHomeFolder(value, home) ? null : value);
+  }
+  return (key) => dirs.get(key);
+}
+
+/** Where a desktop session records its user folders. */
+function userDirsFile(env: (key: string) => string | undefined): string {
+  const configHome = env("XDG_CONFIG_HOME") ||
+    join(env("HOME") ?? "", ".config");
+  return join(configHome, "user-dirs.dirs");
+}
+
 /** The picker's starting points on a platform, in sidebar order, before the
- * existence check. The environment and the platform are parameters (not the
- * ambient ones) so the per-platform rules stay testable. */
+ * existence check. The environment, the platform and the XDG declarations
+ * are parameters (not the ambient ones) so the per-platform rules stay
+ * testable. */
 export function placeCandidates(
   env: (key: string) => string | undefined,
   os: string = Deno.build.os,
+  userDirs: (key: string) => string | null | undefined = () => undefined,
 ): PlaceCandidate[] {
   const home = env("USERPROFILE") || env("HOME") || "";
   const candidates: PlaceCandidate[] = [];
   if (home !== "") {
     candidates.push({ kind: "home", path: home });
-    // Linux names its user folders through XDG (a desktop session exports
-    // the variables); macOS and Windows use the English names.
-    const xdg = os === "linux" ? env : () => undefined;
-    candidates.push(
-      {
-        kind: "desktop",
-        path: xdg("XDG_DESKTOP_DIR") || join(home, "Desktop"),
-      },
-      {
-        kind: "documents",
-        path: xdg("XDG_DOCUMENTS_DIR") || join(home, "Documents"),
-      },
-      {
-        kind: "downloads",
-        path: xdg("XDG_DOWNLOAD_DIR") || join(home, "Downloads"),
-      },
-    );
+    // Linux names its user folders through XDG: the variables a desktop
+    // session exports, or the config file for a process without one.
+    // macOS and Windows use the English names.
+    const xdg = os === "linux"
+      ? (key: string) => env(key) || userDirs(key)
+      : () => undefined;
+    /** One user folder: the declared path, the English name while nothing
+     * declares it, or nothing at all when the user turned it off. */
+    const userFolder = (key: string, englishName: string): string | null => {
+      const declared = xdg(key);
+      // A folder the user turned off stays off: it must not come back as
+      // the English name.
+      if (declared === null) return null;
+      const path = declared || join(home, englishName);
+      return isHomeFolder(path, home) ? null : path;
+    };
+    const folders: Array<{ kind: FsPlaceKind; key: string; name: string }> = [
+      { kind: "desktop", key: "XDG_DESKTOP_DIR", name: "Desktop" },
+      { kind: "documents", key: "XDG_DOCUMENTS_DIR", name: "Documents" },
+      { kind: "downloads", key: "XDG_DOWNLOAD_DIR", name: "Downloads" },
+    ];
+    for (const folder of folders) {
+      const path = userFolder(folder.key, folder.name);
+      if (path !== null) candidates.push({ kind: folder.kind, path });
+    }
   }
   for (const path of rootPaths(os)) candidates.push({ kind: "root", path });
   return candidates;
@@ -122,8 +183,13 @@ export function fsRoutes(): Hono {
   /** The places the sidebar lists: the user folders that exist on the
    * machine serving this request, then its filesystem roots. */
   app.get("/fs/places", async (c) => {
-    const candidates = placeCandidates((key) => Deno.env.get(key));
-    return c.json(await buildPlaces(candidates));
+    const env = (key: string) => Deno.env.get(key);
+    const os = Deno.build.os;
+    // Only Linux keeps its user folders in the XDG config file.
+    const userDirs = os === "linux"
+      ? await readUserDirs(userDirsFile(env), env("HOME") ?? "")
+      : () => undefined;
+    return c.json(await buildPlaces(placeCandidates(env, os, userDirs)));
   });
 
   app.get("/fs/browse", async (c) => {

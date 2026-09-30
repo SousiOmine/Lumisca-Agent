@@ -37,7 +37,7 @@ import {
   IconVideo,
 } from "@tabler/icons-preact";
 import { type MessageKey, TOOL_PRESENT } from "@lumisca/core/shared";
-import type { AgentMessage } from "../../types.ts";
+import type { AgentMessage, ToolResultMessage } from "../../types.ts";
 import { useT } from "../../i18n.ts";
 
 /** A single deliverable file entry extracted from a successful `present`
@@ -257,51 +257,65 @@ export function typeLine(
   return kindLabel === undefined ? extension : `${kindLabel} · ${extension}`;
 }
 
-/** Scan the transcript for successful `present` tool-result messages and
- * extract the file list from each. Returns files in order of first
- * declaration, deduplicated by path (the latest description wins). Pure, so
- * a session restored from the database derives the same list. */
+/** The files one `present` result carries: the entries of `details.files`
+ * that name a path, in order. Anything malformed (no details, a non-array
+ * `files`, an entry that is not an object or carries no path) is skipped —
+ * a result written by another version must not break the cards. */
+function filesOfDetails(details: unknown): DeliverableFile[] {
+  const files = (details as { files?: unknown } | undefined)?.files;
+  if (!Array.isArray(files)) return [];
+  const result: DeliverableFile[] = [];
+  for (const entry of files) {
+    if (!entry || typeof entry !== "object") continue;
+    const { path, description } = entry as Record<string, unknown>;
+    if (typeof path !== "string" || !path) continue;
+    result.push({
+      path,
+      description: typeof description === "string" ? description : undefined,
+    });
+  }
+  return result;
+}
+
+/** The files a turn declared with the `present` tool: every present tool
+ * call of the turn's assistant messages, paired with its result by
+ * tool-call id (the same pairing the tool timeline uses). Pairing by the
+ * call — not by where the result sits in the transcript — keeps the cards
+ * with the message that declared them even when a message steered into the
+ * running agent makes the result land in a later turn. A call whose result
+ * never arrived, or arrived as an error, declares nothing. Returns files in
+ * order of first declaration, deduplicated by path (the latest description
+ * wins). Pure, so a session restored from the database derives the same
+ * cards. */
 export function deliverablesOf(
   messages: AgentMessage[],
+  toolResults: Map<string, ToolResultMessage>,
 ): DeliverableFile[] {
-  const seen = new Map<string, { file: DeliverableFile; order: number }>();
-  let order = 0;
-  for (const msg of messages) {
-    if (msg.role !== "toolResult") continue;
-    if (msg.toolName !== TOOL_PRESENT) continue;
-    if (msg.isError) continue;
-    const details = msg.details as Record<string, unknown> | undefined;
-    if (!details) continue;
-    const files = details.files;
-    if (!Array.isArray(files)) continue;
-    for (const entry of files) {
-      if (!entry || typeof entry !== "object") continue;
-      const { path, description } = entry as Record<string, unknown>;
-      if (typeof path !== "string" || !path) continue;
-      const existing = seen.get(path);
-      if (existing) {
-        existing.file = {
-          path,
-          description: typeof description === "string"
-            ? description
-            : existing.file.description,
-        };
-      } else {
-        seen.set(path, {
-          file: {
-            path,
-            description: typeof description === "string"
-              ? description
-              : undefined,
-          },
-          order: order++,
-        });
+  const seen = new Map<string, DeliverableFile>();
+  const order: string[] = [];
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    for (const block of message.content) {
+      if (block.type !== "toolCall" || block.name !== TOOL_PRESENT) continue;
+      const result = toolResults.get(block.id);
+      if (result === undefined || result.isError) continue;
+      for (const file of filesOfDetails(result.details)) {
+        const existing = seen.get(file.path);
+        if (existing) {
+          // A later declaration of the same path updates the card in place:
+          // the latest description wins, the first position is kept.
+          seen.set(file.path, {
+            path: file.path,
+            description: file.description ?? existing.description,
+          });
+        } else {
+          seen.set(file.path, file);
+          order.push(file.path);
+        }
       }
     }
   }
-  return [...seen.values()]
-    .sort((a, b) => a.order - b.order)
-    .map((v) => v.file);
+  return order.map((path) => seen.get(path)!);
 }
 
 /** One deliverable: a file card with its type, its name, the description the
@@ -359,9 +373,9 @@ function DeliverableCard({ file }: { file: DeliverableFile }) {
   );
 }
 
-/** The session's deliverables (the present tool), listed under the
- * conversation: the files the agent declared for the user. Renders nothing
- * while the list is empty. */
+/** One turn's deliverables (the present tool), listed at the end of that
+ * turn: the files the agent declared for the user while answering it.
+ * Renders nothing while the list is empty. */
 export function Deliverables(
   { deliverables }: { deliverables: DeliverableFile[] },
 ) {

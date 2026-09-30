@@ -151,7 +151,7 @@ export const chat = {
     en: "Chat (no workspace)",
   },
 
-  // --- deliverables (the present tool, listed under the conversation) ------
+  // --- deliverables (the present tool, listed at the turn's end) -----------
   "chat.deliverables.title": { ja: "成果物", en: "Deliverables" },
   "chat.deliverables.copyPath": {
     ja: "パスをコピー: {path}",

@@ -445,9 +445,9 @@
 
 /* ---- deliverables (the present tool) ------------------------------------- */
 
-/* The files the agent declared for the user, listed under the conversation
- * (the last block of the chat column). The component renders nothing while
- * the list is empty. */
+/* The files the agent declared for the user, listed at the end of the turn
+ * that declared them (the last block of the turn, outside the collapsible
+ * work log). The component renders nothing while the list is empty. */
 .deliverables {
   display: flex;
   flex-direction: column;

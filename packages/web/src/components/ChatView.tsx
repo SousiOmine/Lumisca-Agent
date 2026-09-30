@@ -41,7 +41,6 @@ import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { BackgroundPanel } from "./BackgroundPanel.tsx";
 import { GoalPanel } from "./GoalPanel.tsx";
-import { Deliverables, deliverablesOf } from "./chat/Deliverables.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
@@ -322,12 +321,6 @@ export function ChatView(
     return map;
   }, [view.messages]);
 
-  // Derive deliverables from the present tool's successful results.
-  const deliverables = useMemo(
-    () => deliverablesOf(view.messages),
-    [view.messages],
-  );
-
   // Context meter for the composer footer: the latest turn's input usage
   // against the current model's window, plus the session-average cache
   // hit rate. The window comes from the owning peer's model list ("" =
@@ -415,7 +408,6 @@ export function ChatView(
               </div>
             </div>
           )}
-          <Deliverables deliverables={deliverables} />
           {view.error && <ErrorBanner text={view.error} />}
         </div>
       </div>

@@ -142,6 +142,13 @@
   color: var(--text);
 }
 
+/* The hidden-items toggle, lit while the hidden entries are listed: the
+ * state of the list, not a hover. */
+.folder-browser-toggle.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .folder-browser-list {
   flex: 1;
   min-height: 0;

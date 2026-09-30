@@ -6,6 +6,7 @@ import {
 } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
+import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
 import type { AgentMessage, ToolResultMessage } from "../../types.ts";
 import {
   Deliverables,
@@ -19,127 +20,198 @@ function user(timestamp: number): AgentMessage {
   return { role: "user", content: "go", timestamp };
 }
 
-/** Helper: build a tool-result message for the present tool. */
+/** Helper: build an assistant message calling the present tool once per id.
+ * The declared files live in the tool's result, so the arguments the model
+ * sent carry none — only the pairs of call id and result matter here. */
+function presentCalls(...ids: string[]): AgentMessage {
+  return fauxAssistantMessage(
+    ids.map((id) => fauxToolCall("present", { files: [] }, id)),
+    { timestamp: 1 },
+  ) as AgentMessage;
+}
+
+/** Helper: build a tool-result message of the present tool whose `details`
+ * are exactly what the test needs (the file list lives under `files`, but a
+ * transcript from an older version may carry anything). */
 function presentResult(
-  timestamp: number,
-  files: Array<{ path: string; description?: string }>,
+  id: string,
+  details: unknown = { files: [] },
   isError = false,
-): AgentMessage {
+): ToolResultMessage {
   return {
     role: "toolResult",
-    toolCallId: `tc-${timestamp}`,
+    toolCallId: id,
     toolName: "present",
     content: [{ type: "text", text: "ok" }],
-    details: { files },
+    details,
     isError,
-    timestamp,
+    timestamp: 1,
   } satisfies ToolResultMessage;
 }
 
-/** Helper: build a non-present tool-result message. */
-function otherResult(timestamp: number): AgentMessage {
+/** Helper: build a successful result of a tool other than present. */
+function otherResult(id: string): ToolResultMessage {
   return {
     role: "toolResult",
-    toolCallId: `tc-${timestamp}`,
+    toolCallId: id,
     toolName: "read",
     content: [{ type: "text", text: "file contents" }],
     details: {},
     isError: false,
-    timestamp,
+    timestamp: 1,
   } satisfies ToolResultMessage;
 }
 
-Deno.test("deliverablesOf: empty messages → empty array", () => {
-  assertEquals(deliverablesOf([]), []);
+/** Helper: index results by the tool call they answer, the way ChatView
+ * builds the map the timeline and the cards both read. */
+function resultsOf(
+  ...results: ToolResultMessage[]
+): Map<string, ToolResultMessage> {
+  return new Map(results.map((result) => [result.toolCallId, result]));
+}
+
+Deno.test("deliverablesOf: no messages → empty array", () => {
+  assertEquals(deliverablesOf([], resultsOf()), []);
 });
 
-Deno.test("deliverablesOf: ignores non-toolResult messages", () => {
-  assertEquals(deliverablesOf([user(1)]), []);
+Deno.test("deliverablesOf: ignores messages that carry no present call", () => {
+  assertEquals(deliverablesOf([user(1)], resultsOf()), []);
 });
 
-Deno.test("deliverablesOf: ignores non-present tool results", () => {
-  assertEquals(deliverablesOf([otherResult(1)]), []);
+Deno.test("deliverablesOf: ignores tool calls other than present", () => {
+  const read = fauxAssistantMessage(
+    [fauxToolCall("read", { path: "a.md" }, "tc-1")],
+    { timestamp: 1 },
+  ) as AgentMessage;
+  // The result is in the map, but the call is not the present tool.
+  assertEquals(deliverablesOf([read], resultsOf(otherResult("tc-1"))), []);
 });
 
-Deno.test("deliverablesOf: ignores error tool results", () => {
+Deno.test("deliverablesOf: ignores a call whose result has not arrived", () => {
+  assertEquals(deliverablesOf([presentCalls("tc-1")], resultsOf()), []);
+});
+
+Deno.test("deliverablesOf: ignores error results", () => {
   assertEquals(
-    deliverablesOf([presentResult(1, [{ path: "out.txt" }], true)]),
+    deliverablesOf(
+      [presentCalls("tc-1")],
+      resultsOf(presentResult("tc-1", { files: [{ path: "out.txt" }] }, true)),
+    ),
     [],
   );
 });
 
 Deno.test("deliverablesOf: extracts files from a single present call", () => {
-  const result = deliverablesOf([
-    presentResult(1, [
-      { path: "a.md", description: "readme" },
-      { path: "b.txt" },
-    ]),
+  const files = [
+    { path: "a.md", description: "readme" },
+    { path: "b.txt" },
+  ];
+  const result = deliverablesOf(
+    [presentCalls("tc-1")],
+    resultsOf(presentResult("tc-1", { files })),
+  );
+  assertEquals(result, [
+    { path: "a.md", description: "readme" },
+    { path: "b.txt", description: undefined },
   ]);
-  assertEquals(result.length, 2);
-  assertEquals(result[0], { path: "a.md", description: "readme" });
-  assertEquals(result[1], { path: "b.txt", description: undefined });
+});
+
+Deno.test("deliverablesOf: pairs a call with its result by tool-call id", () => {
+  // The rows of the turn need not carry the result: the call is paired with
+  // the map by id, which is what keeps the cards with the message that
+  // declared them when a steered message starts a new turn mid-tool.
+  const result = deliverablesOf(
+    [presentCalls("tc-1")],
+    resultsOf(presentResult("tc-1", { files: [{ path: "out.md" }] })),
+  );
+  assertEquals(result.map((file) => file.path), ["out.md"]);
 });
 
 Deno.test("deliverablesOf: deduplicates by path, keeps latest description", () => {
-  const result = deliverablesOf([
-    presentResult(1, [{ path: "a.md", description: "first" }]),
-    presentResult(2, [{ path: "a.md", description: "second" }]),
-  ]);
+  const result = deliverablesOf(
+    [presentCalls("tc-1", "tc-2")],
+    resultsOf(
+      presentResult("tc-1", {
+        files: [{ path: "a.md", description: "first" }],
+      }),
+      presentResult("tc-2", {
+        files: [{ path: "a.md", description: "second" }],
+      }),
+    ),
+  );
   assertEquals(result.length, 1);
   assertEquals(result[0], { path: "a.md", description: "second" });
 });
 
+Deno.test("deliverablesOf: a later declaration without a description keeps the earlier one", () => {
+  const result = deliverablesOf(
+    [presentCalls("tc-1", "tc-2")],
+    resultsOf(
+      presentResult("tc-1", {
+        files: [{ path: "a.md", description: "first" }],
+      }),
+      presentResult("tc-2", { files: [{ path: "a.md" }] }),
+    ),
+  );
+  assertEquals(result[0], { path: "a.md", description: "first" });
+});
+
 Deno.test("deliverablesOf: preserves order of first appearance", () => {
-  const result = deliverablesOf([
-    presentResult(1, [{ path: "z.txt" }, { path: "a.txt" }]),
-    presentResult(2, [{ path: "m.txt" }]),
-  ]);
-  assertEquals(result.map((f) => f.path), ["z.txt", "a.txt", "m.txt"]);
+  const result = deliverablesOf(
+    [presentCalls("tc-1", "tc-2")],
+    resultsOf(
+      presentResult("tc-1", { files: [{ path: "z.txt" }, { path: "a.txt" }] }),
+      presentResult("tc-2", { files: [{ path: "m.txt" }] }),
+    ),
+  );
+  assertEquals(result.map((file) => file.path), ["z.txt", "a.txt", "m.txt"]);
 });
 
 Deno.test("deliverablesOf: handles missing details gracefully", () => {
-  const msg = {
-    role: "toolResult",
-    toolCallId: "tc-1",
-    toolName: "present",
-    content: [],
-    isError: false,
-    timestamp: 1,
-  } as unknown as AgentMessage;
-  assertEquals(deliverablesOf([msg]), []);
+  assertEquals(
+    deliverablesOf(
+      [presentCalls("tc-1")],
+      resultsOf(presentResult("tc-1", undefined)),
+    ),
+    [],
+  );
 });
 
 Deno.test("deliverablesOf: handles details with non-array files", () => {
-  const msg = {
-    role: "toolResult",
-    toolCallId: "tc-1",
-    toolName: "present",
-    content: [],
-    details: { files: "not-an-array" },
-    isError: false,
-    timestamp: 1,
-  } as unknown as AgentMessage;
-  assertEquals(deliverablesOf([msg]), []);
+  assertEquals(
+    deliverablesOf(
+      [presentCalls("tc-1")],
+      resultsOf(presentResult("tc-1", { files: "not-an-array" })),
+    ),
+    [],
+  );
 });
 
 Deno.test("deliverablesOf: skips entries with missing path", () => {
-  const result = deliverablesOf([
-    presentResult(1, [
-      { path: "ok.txt" },
-      {} as unknown as { path: string },
-    ]),
-  ]);
+  const result = deliverablesOf(
+    [presentCalls("tc-1")],
+    resultsOf(
+      presentResult("tc-1", {
+        files: [{ path: "ok.txt" }, {}, "nope"],
+      }),
+    ),
+  );
   assertEquals(result.length, 1);
   assertEquals(result[0]!.path, "ok.txt");
 });
 
-Deno.test("deliverablesOf: mixed messages extract only present results", () => {
-  const result = deliverablesOf([
-    user(1),
-    otherResult(2),
-    presentResult(3, [{ path: "out.md" }]),
-    otherResult(4),
-  ]);
+Deno.test("deliverablesOf: mixed messages extract only the present calls", () => {
+  const read = fauxAssistantMessage(
+    [fauxToolCall("read", { path: "a.md" }, "tc-2")],
+    { timestamp: 1 },
+  ) as AgentMessage;
+  const result = deliverablesOf(
+    [user(1), read, presentCalls("tc-1")],
+    resultsOf(
+      otherResult("tc-2"),
+      presentResult("tc-1", { files: [{ path: "out.md" }] }),
+    ),
+  );
   assertEquals(result.length, 1);
   assertEquals(result[0]!.path, "out.md");
 });

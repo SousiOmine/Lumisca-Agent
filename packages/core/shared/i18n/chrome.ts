@@ -317,7 +317,19 @@ export const chrome = {
     ja: "このフォルダーには項目がありません",
     en: "This folder is empty",
   },
+  "chrome.folderBrowser.hiddenOnly": {
+    ja: "隠し項目のみがあります",
+    en: "Only hidden items are here",
+  },
   "chrome.folderBrowser.goUp": { ja: "上の階層へ", en: "Go up" },
+  "chrome.folderBrowser.showHidden": {
+    ja: "隠し項目を表示",
+    en: "Show hidden items",
+  },
+  "chrome.folderBrowser.hideHidden": {
+    ja: "隠し項目を隠す",
+    en: "Hide hidden items",
+  },
   "chrome.folderBrowser.selectThis": {
     ja: "このフォルダーを選択",
     en: "Select this folder",
