@@ -8,15 +8,22 @@ import type {
   NotificationMessage,
   ToolResultMessage,
 } from "../../types.ts";
-import { applyEvent } from "../../events.ts";
+import { applyEvent, applyRunState } from "../../events.ts";
 import { emptyView, isViewRunning } from "../../types.ts";
 import { buildTurns, ConversationTurn } from "./ConversationTurn.tsx";
 
-function user(timestamp: number): AgentMessage {
-  return { role: "user", content: [{ type: "text", text: "hi" }], timestamp };
+function user(timestamp: number, steered?: boolean): AgentMessage {
+  return {
+    role: "user",
+    content: [{ type: "text", text: "hi" }],
+    // The session agent stamps a prompt the user sent while the agent was
+    // already working (see promptWhileRunning); it is absent otherwise.
+    ...(steered === true ? { steered } : {}),
+    timestamp,
+  };
 }
 
-function mode(timestamp: number): AgentMessage {
+function mode(timestamp: number, steered?: boolean): AgentMessage {
   return {
     role: "mode",
     modeId: "plan",
@@ -24,6 +31,9 @@ function mode(timestamp: number): AgentMessage {
     modeLabel: "プランモード",
     shortText: "履歴機能を追加して",
     fullPrompt: "あなたは実装プランナーです。...",
+    // Same delivery stamp as a plain prompt: a mode prompt sent while the
+    // run was active joined it.
+    ...(steered === true ? { steered } : {}),
     timestamp,
   };
 }
@@ -145,6 +155,76 @@ Deno.test("buildTurns: a steered notification after a checkpoint starts one", ()
   assertEquals(turns.length, 3);
   assertEquals(turns[1]!.standalone, true);
   assertEquals(turns[2]!.user.role, "notification");
+  assertEquals(turns[2]!.responses.map((m) => m.role), ["assistant"]);
+});
+
+Deno.test("buildTurns: a prompt steered mid-run joins the run's turn", () => {
+  // The user sent a follow-up while the agent was working: the server
+  // steers it into the same run (see promptWhileRunning), so it must not
+  // split the turn — the same rule a steered notification follows, and for
+  // the same reason: the still-running turn would stop being the last one
+  // and collapse its work log mid-run.
+  const turns = buildTurns([
+    user(1),
+    assistant(2),
+    user(3, true),
+    assistant(4, "the reaction"),
+  ]);
+  assertEquals(turns.length, 1);
+  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(
+    turns[0]!.responses.map((m) => m.role),
+    ["assistant", "user", "assistant"],
+  );
+});
+
+Deno.test("buildTurns: a steered mode prompt joins the run's turn", () => {
+  // Mode messages (slash-command prompts like /plan) travel the same
+  // delivery path and carry the same stamp.
+  const turns = buildTurns([
+    user(1),
+    assistant(2),
+    mode(3, true),
+    assistant(4),
+  ]);
+  assertEquals(turns.length, 1);
+  assertEquals(turns[0]!.responses.map((m) => m.role), [
+    "assistant",
+    "mode",
+    "assistant",
+  ]);
+});
+
+Deno.test("buildTurns: a steered prompt with no open turn starts one", () => {
+  // A leading steered prompt has no turn to join: it must still be
+  // rendered, so it falls back to starting a turn of its own.
+  const turns = buildTurns([user(1, true), assistant(2)]);
+  assertEquals(turns.length, 1);
+  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(turns[0]!.user.timestamp, 1);
+  assertEquals(turns[0]!.responses.map((m) => m.role), ["assistant"]);
+});
+
+Deno.test("buildTurns: a steered prompt after a checkpoint starts one", () => {
+  // A checkpoint turn is standalone (its responses are never rendered), so
+  // a steered prompt cannot join it: it starts a turn of its own rather
+  // than vanishing from the history.
+  const checkpoint = (timestamp: number): AgentMessage => ({
+    role: "checkpoint",
+    title: "履歴 2 件を要約しました（約 12K トークン）",
+    body: "summary",
+    timestamp,
+  });
+  const turns = buildTurns([
+    user(1),
+    assistant(2),
+    checkpoint(3),
+    user(4, true),
+    assistant(5),
+  ]);
+  assertEquals(turns.length, 3);
+  assertEquals(turns[1]!.standalone, true);
+  assertEquals(turns[2]!.user.role, "user");
   assertEquals(turns[2]!.responses.map((m) => m.role), ["assistant"]);
 });
 
@@ -389,6 +469,102 @@ Deno.test("a notification steered mid-run keeps the running turn last", () => {
     "assistant",
     "notification",
   ]);
+});
+
+Deno.test("a prompt steered mid-run keeps the running turn last", () => {
+  // The same client path as the notification case (events → view → turns),
+  // now for the prompt the user typed while the agent was working: the
+  // server steers it into the run, so the turn stays the last one and
+  // ChatView keeps its work log expanded while the agent keeps working.
+  let view = emptyView({
+    id: "s1",
+    workspaceId: "w1",
+    name: "s",
+    modelProvider: "p",
+    modelId: "m",
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  view = applyEvent(
+    { type: "message_start", sessionId: "s1", message: user(1) },
+    view,
+  )!;
+  view = applyEvent({ type: "agent_start", sessionId: "s1" }, view)!;
+  view = applyEvent(
+    {
+      type: "message_end",
+      sessionId: "s1",
+      message: fauxAssistantMessage([fauxToolCall("task", {})], {
+        timestamp: 2,
+      }) as AgentMessage,
+    },
+    view,
+  )!;
+  // The follow-up prompt arrives mid-run: the server announces it right
+  // away with the stamp that says it joined the run.
+  view = applyEvent(
+    {
+      type: "message_end",
+      sessionId: "s1",
+      message: user(3, true),
+    },
+    view,
+  )!;
+
+  assertEquals(isViewRunning(view), true);
+  const turns = buildTurns(view.messages);
+  assertEquals(turns.length, 1);
+  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(turns[0]!.responses.map((m) => m.role), [
+    "assistant",
+    "user",
+  ]);
+});
+
+Deno.test("a view restored mid-run keeps its turn running", () => {
+  // The reported bug: the WebUI is (re)loaded — or the socket drops and
+  // resyncs — while the agent is working. `agent_start` is never replayed,
+  // so the transcript snapshot's `running` flag is the only thing that
+  // keeps the turn expanded under 作業中; without it the same transcript
+  // renders as the reported collapse (work log folded up under 作業完了).
+  const info = {
+    id: "s1",
+    workspaceId: "w1",
+    name: "s",
+    modelProvider: "p",
+    modelId: "m",
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const messages: AgentMessage[] = [
+    user(1),
+    fauxAssistantMessage([fauxToolCall("bash", { command: "sleep 10" })], {
+      timestamp: 2,
+    }) as AgentMessage,
+  ];
+  const render = (view: ReturnType<typeof emptyView>) => {
+    const turns = buildTurns(view.messages);
+    return renderToString(createElement(ConversationTurn, {
+      turn: turns[turns.length - 1]!,
+      toolResults: new Map(),
+      runningTools: new Map(),
+      running: isViewRunning(view),
+      endedAt: view.agentEndedAt,
+      onRewind: () => {},
+    }));
+  };
+
+  const restored = applyRunState(emptyView(info, messages), true);
+  const html = render(restored);
+  assertStringIncludes(html, "作業中");
+  assertEquals(html.includes("作業完了"), false);
+  assertEquals(html.includes("agent-work-log"), true);
+
+  // The same transcript with a stale "not running" answer (what the view
+  // held before the snapshot arrived) is the reported symptom.
+  const stale = render(emptyView(info, messages));
+  assertStringIncludes(stale, "作業完了");
+  assertEquals(stale.includes("agent-work-log"), false);
 });
 
 Deno.test("ConversationTurn: the present tool's files are listed at the turn's end", () => {

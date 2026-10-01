@@ -3,7 +3,11 @@
  * - `./api-local.ts` — `api` (this server),
  * - `./api-federation.ts` — `fed` (peer servers via the fed proxy),
  * - `./api-routing.ts` — sessionApi/workspaceApi/modelApi/connectEvents. */
-export { api, type SessionInfoDto } from "./api-local.ts";
+export {
+  api,
+  type MessagesSnapshot,
+  type SessionInfoDto,
+} from "./api-local.ts";
 export { fed } from "./api-federation.ts";
 export {
   connectEvents,

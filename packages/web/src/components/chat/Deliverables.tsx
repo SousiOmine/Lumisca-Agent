@@ -281,8 +281,9 @@ function filesOfDetails(details: unknown): DeliverableFile[] {
  * call of the turn's assistant messages, paired with its result by
  * tool-call id (the same pairing the tool timeline uses). Pairing by the
  * call — not by where the result sits in the transcript — keeps the cards
- * with the message that declared them even when a message steered into the
- * running agent makes the result land in a later turn. A call whose result
+ * with the message that declared them even when the result does not land in
+ * the same turn's rows (a steered message that had to start a turn of its
+ * own, or a delivery order that put the rows apart). A call whose result
  * never arrived, or arrived as an error, declares nothing. Returns files in
  * order of first declaration, deduplicated by path (the latest description
  * wins). Pure, so a session restored from the database derives the same

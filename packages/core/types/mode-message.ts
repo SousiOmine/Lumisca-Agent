@@ -22,14 +22,26 @@ export interface ModeMessage {
   modeLabel: string;
   shortText: string;
   fullPrompt: string;
+  /** True when the mode prompt was delivered into the run that was already
+   * active instead of starting its own run (see
+   * SessionAgent.promptWhileRunning); absent when it started its own run.
+   * The UI keeps such a prompt inside that run's turn instead of starting
+   * a new one (see web's buildTurns) — the same delivery fact
+   * NotificationMessage carries, with the same reason: a message that did
+   * not start a run must not end the running turn. */
+  steered?: boolean;
   timestamp: number;
 }
 
-/** Build a ModeMessage from a ModePrompt + full prompt text. */
+/** Build a ModeMessage from a ModePrompt + full prompt text. `steered`
+ * marks a prompt delivered into the run that was already active; only the
+ * delivery site (the session agent) knows that fact, so callers that
+ * merely render or replay a mode prompt never set it. */
 export function buildModeMessage(
   prompt: ModePrompt,
   fullPrompt: string,
   timestamp: number,
+  steered?: boolean,
 ): ModeMessage {
   return {
     role: "mode",
@@ -38,6 +50,7 @@ export function buildModeMessage(
     modeLabel: prompt.modeLabel,
     shortText: prompt.shortText,
     fullPrompt,
+    ...(steered === true ? { steered } : {}),
     timestamp,
   };
 }

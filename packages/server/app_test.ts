@@ -246,9 +246,88 @@ Deno.test("session prompt roundtrip via API", async () => {
       base,
       `/api/sessions/${session.id}/messages`,
     );
-    const messages = await messagesRes.json();
+    const { messages, running } = await messagesRes.json();
     assertEquals(messages.length, 2);
     assertEquals(messages[1].role, "assistant");
+    // The snapshot carries the run state next to the transcript: the run
+    // finished before it was taken.
+    assertEquals(running, false);
+
+    await removeDirRetry(root);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("messages snapshot reports a run that is still going", async () => {
+  // The reported bug: a client that asks for the transcript while the agent
+  // is working — a page load, a WS drop, a tab opened on the session — must
+  // also be told that the run is active. The event stream carries no
+  // snapshot (`agent_start` is not replayed for a run that is already
+  // going), so the transcript alone would show the live run as finished:
+  // work log collapsed under 作業完了. Both halves must come back from the
+  // one snapshot, read at the same instant.
+  const { core, server, faux, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const create = await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    });
+    const ws = await create.json();
+
+    // Hold the run inside its first LLM call until the assertions below
+    // are done: the snapshot must report it as running.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    faux.setResponses([
+      async () => {
+        await gate;
+        return fauxAssistantMessage("done");
+      },
+    ]);
+    const session = await (await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    })).json();
+
+    // Fire-and-forget: the run announces itself through the events.
+    await json(base, `/api/sessions/${session.id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "Hi" }),
+    });
+    let snapshot: { messages: unknown[]; running: boolean } = {
+      messages: [],
+      running: false,
+    };
+    for (let i = 0; i < 100; i++) {
+      snapshot = await (
+        await json(base, `/api/sessions/${session.id}/messages`)
+      ).json();
+      if (snapshot.running) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assertEquals(snapshot.running, true, "the live run is reported");
+    assertEquals(
+      snapshot.messages.length,
+      1,
+      "the snapshot carries the transcript too",
+    );
+
+    release();
+    await core.getAgent(session.id)!.waitForIdle();
+    snapshot = await (
+      await json(base, `/api/sessions/${session.id}/messages`)
+    ).json();
+    assertEquals(snapshot.running, false, "the finished run is not");
+    assertEquals(snapshot.messages.length, 2);
 
     await removeDirRetry(root);
   } finally {
@@ -297,8 +376,8 @@ Deno.test("chat session API: no workspaceId creates a chat session", async () =>
       `/api/sessions/${session.id}/messages`,
     );
     const messages = await messagesRes.json();
-    assertEquals(messages.length, 2);
-    assertEquals(messages[1].content[0].text, "chat reply");
+    assertEquals(messages.messages.length, 2);
+    assertEquals(messages.messages[1].content[0].text, "chat reply");
 
     // The chat workspace refuses update/delete through the API.
     const del = await json(base, `/api/workspaces/${chatWs.id}`, {
@@ -356,9 +435,9 @@ Deno.test("rewind truncates messages via the API and rejects bad bodies", async 
     });
     let messages: Array<{ role: string; timestamp: number }> = [];
     for (let i = 0; i < 100 && messages.length < 4; i++) {
-      messages = await (
+      messages = (await (
         await json(base, `/api/sessions/${session.id}/messages`)
-      ).json();
+      ).json()).messages;
       if (messages.length < 4) {
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
@@ -384,7 +463,7 @@ Deno.test("rewind truncates messages via the API and rejects bad bodies", async 
       body: JSON.stringify({ timestamp: messages[2]!.timestamp }),
     });
     assertEquals(rewindRes.status, 200);
-    const truncated = await (
+    const { messages: truncated } = await (
       await json(base, `/api/sessions/${session.id}/messages`)
     ).json();
     assertEquals(truncated.length, 2);
@@ -1589,7 +1668,7 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
         `/api/fed/peer1/sessions/${session.id}/messages`,
         { headers: auth },
       );
-      const msgs = await messages.json();
+      const { messages: msgs } = await messages.json();
       assertEquals(msgs.length, 2);
       assertEquals(msgs[1].role, "assistant");
       assertEquals(
@@ -2225,9 +2304,9 @@ Deno.test("compact condenses the history via the API", async () => {
     }
     let messages: Array<{ role: string }> = [];
     for (let i = 0; i < 100; i++) {
-      messages = await (
+      messages = (await (
         await json(base, `/api/sessions/${session.id}/messages`)
-      ).json();
+      ).json()).messages;
       if (messages.some((m) => m.role === "checkpoint")) break;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
@@ -2255,7 +2334,7 @@ Deno.test("compact condenses the history via the API", async () => {
 
     // Nothing is deleted: the checkpoint is inserted, and the messages it
     // summarizes stay in the transcript.
-    const after = await (
+    const { messages: after } = await (
       await json(base, `/api/sessions/${session.id}/messages`)
     ).json();
     const checkpointIndex = after.findIndex(

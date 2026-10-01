@@ -370,7 +370,10 @@ export class SessionAgent {
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.mcpReadyDone) await this.mcpReady;
     await this.awaitRewind();
-    const message = this.buildUserMessage(text, images);
+    // The same delivery fact promptWhileRunning stamps: a prompt delivered
+    // while a run is active is queued into that run by the agent loop
+    // instead of starting one of its own (see Agent.prompt).
+    const message = this.buildUserMessage(text, images, this.joinsActiveRun());
     this.publishContexts();
     this.maybeGenerateTitle(text);
     this.announceMessage(message);
@@ -424,6 +427,11 @@ export class SessionAgent {
    * timestamp), which the UI dedups, and the transcript store saves it
    * exactly once at that point.
    *
+   * A message that joins the active run carries `steered`: the UI keeps it
+   * inside that run's turn instead of starting one of its own, because a
+   * turn that did not start a run must not end the running one (see web's
+   * buildTurns — the same stamp a notification carries).
+   *
    * When `mode` is provided, a ModeMessage is stored in the transcript
    * instead of a regular user message: the UI renders the short text +
    * mode badge, while the LLM receives the full prompt (via
@@ -434,9 +442,12 @@ export class SessionAgent {
     mode?: ModePrompt,
   ): void {
     this.maybeGenerateTitle(mode ? mode.shortText : text);
+    // Decided before the message is built: the stamp must describe the
+    // delivery below, and the condition is the one deliverPrompt re-checks.
+    const steered = this.joinsActiveRun();
     const message = mode
-      ? buildModeMessage(mode, text, Date.now())
-      : this.buildUserMessage(text, images);
+      ? buildModeMessage(mode, text, Date.now(), steered)
+      : this.buildUserMessage(text, images, steered);
     this.publishContexts();
     this.announceMessage(message);
     void this.deliverPrompt(message, mode);
@@ -444,10 +455,11 @@ export class SessionAgent {
 
   /** Whether a message delivered right now joins the run that is already
    * active (steer) instead of starting its own run. The condition lives
-   * here so the delivery and the `steered` stamp a notification carries
-   * (see injectNotification) can never disagree: a run that is unwinding
-   * from an abort drops its queues, and a rewind is about to abort the run,
-   * so neither takes a steer (see deliverPrompt). */
+   * here so the delivery and the `steered` stamp a message carries
+   * (notifications — see injectNotification — and prompts — see
+   * promptWhileRunning) can never disagree: a run that is unwinding from an
+   * abort drops its queues, and a rewind is about to abort the run, so
+   * neither takes a steer (see deliverPrompt). */
   private joinsActiveRun(): boolean {
     return this.rewindInFlight === null && this.isStreaming &&
       !this.agent.isAborting;
@@ -490,14 +502,22 @@ export class SessionAgent {
   }
 
   /** Build a user message from text + optional images (single home for the
-   * content assembly both prompt paths share). */
+   * content assembly every prompt path shares). `steered` marks a prompt
+   * delivered into the run that was already active (see
+   * UserMessage.steered). */
   private buildUserMessage(
     text: string,
     images?: ImageContent[],
+    steered?: boolean,
   ): AgentMessage {
     const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
     if (images !== undefined && images.length > 0) content.push(...images);
-    return { role: "user", content, timestamp: Date.now() };
+    return {
+      role: "user",
+      content,
+      ...(steered === true ? { steered } : {}),
+      timestamp: Date.now(),
+    };
   }
 
   /** Announce a message to clients (synthetic message_start/end so it

@@ -119,7 +119,7 @@ Deno.test("deliverablesOf: extracts files from a single present call", () => {
 Deno.test("deliverablesOf: pairs a call with its result by tool-call id", () => {
   // The rows of the turn need not carry the result: the call is paired with
   // the map by id, which is what keeps the cards with the message that
-  // declared them when a steered message starts a new turn mid-tool.
+  // declared them when the result lands outside the turn's own rows.
   const result = deliverablesOf(
     [presentCalls("tc-1")],
     resultsOf(presentResult("tc-1", { files: [{ path: "out.md" }] })),

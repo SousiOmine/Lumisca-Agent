@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
-import { connectEvents, sessionApi } from "../api.ts";
+import { connectEvents, type MessagesSnapshot, sessionApi } from "../api.ts";
 import { errorText } from "../providers.ts";
 import {
   applyEvent,
+  applyRunState,
   filterRemoved,
   mergeBackgrounds,
   mergeMessages,
@@ -15,7 +16,6 @@ import {
 import { tabKey } from "../tabs.ts";
 import { maybeNotifyAgentEnd, maybeNotifyQuestion } from "../notify.ts";
 import type {
-  AgentMessage,
   BackgroundCommandInfo,
   ClientEvent,
   GoalInfo,
@@ -55,19 +55,33 @@ export function useSessionEvents(
     viewsRef.current = views;
   }, [views]);
 
-  /** Re-fetch persisted messages, the todo plan, the task snapshots, and
-   * the background-command snapshots for every open tab and merge them in
-   * without duplicating what is already shown. Runs on reconnect, on a
-   * short interval while the socket is down, and when a connected tab
-   * returns to the foreground, so a run that completes while the socket
-   * was down — and todo/task/background mutations whose snapshot events
-   * were lost — are not missed until the next WS drop. The todo plan is a
-   * snapshot fetch (the events only fire on mutations), so the fetched
-   * state replaces the view's plan wholesale; tasks merge per agent id so
-   * live deltas are preserved. */
+  /** Re-fetch the transcript snapshot (persisted messages + the run state),
+   * the todo plan, the task snapshots, and the background-command snapshots
+   * for every open tab and merge them in without duplicating what is
+   * already shown. Runs on reconnect, on a short interval while the socket
+   * is down, and when a connected tab returns to the foreground, so a run
+   * that completes while the socket was down — and todo/task/background
+   * mutations whose snapshot events were lost — are not missed until the
+   * next WS drop. The todo plan is a snapshot fetch (the events only fire
+   * on mutations), so the fetched state replaces the view's plan
+   * wholesale; tasks merge per agent id so live deltas are preserved. The
+   * transcript snapshot also carries the server's run state, which is what
+   * tells a view that (re)connected mid-run that the run is still going —
+   * `agent_start` is never replayed (see applyRunState). */
   const syncState = useCallback(async () => {
     const ids = [...viewsRef.current.keys()];
-    const messages = new Map<string, AgentMessage[]>();
+    // The run state as it stood when the fetch started. An event that
+    // changes it while the snapshot is in flight is newer than the
+    // snapshot, so its flag must not be applied on top (a run that just
+    // ended must not be resurrected by a snapshot read a moment earlier).
+    const runStateBefore = new Map(ids.map((id) => {
+      const v = viewsRef.current.get(id)!;
+      return [id, {
+        started: v.agentStartedAt,
+        ended: v.agentEndedAt,
+      }] as const;
+    }));
+    const snapshots = new Map<string, MessagesSnapshot>();
     const todos = new Map<string, TodoPhase[]>();
     const tasks = new Map<string, TaskInfo[]>();
     const backgrounds = new Map<string, BackgroundCommandInfo[]>();
@@ -76,9 +90,9 @@ export function useSessionEvents(
       // Fetch independently: one failing (e.g. the session was deleted)
       // must not drop the other.
       try {
-        messages.set(id, await sessionApi(id).getMessages());
+        snapshots.set(id, await sessionApi(id).getMessages());
       } catch {
-        // Server not reachable yet; keep the current list.
+        // Server not reachable yet; keep the current transcript.
       }
       try {
         const { todos: plan } = await sessionApi(id).getTodo();
@@ -106,7 +120,7 @@ export function useSessionEvents(
       }
     }));
     if (
-      messages.size === 0 && todos.size === 0 && tasks.size === 0 &&
+      snapshots.size === 0 && todos.size === 0 && tasks.size === 0 &&
       backgrounds.size === 0 && goals.size === 0
     ) {
       return;
@@ -115,7 +129,7 @@ export function useSessionEvents(
       const next = new Map(prev);
       for (
         const id of new Set([
-          ...messages.keys(),
+          ...snapshots.keys(),
           ...todos.keys(),
           ...tasks.keys(),
           ...backgrounds.keys(),
@@ -124,12 +138,27 @@ export function useSessionEvents(
       ) {
         const v = next.get(id);
         if (!v) continue;
-        const fetched = messages.get(id);
+        const snapshot = snapshots.get(id);
+        const before = runStateBefore.get(id);
+        const runStateMovedByEvent = before !== undefined &&
+          (v.agentStartedAt !== before.started ||
+            v.agentEndedAt !== before.ended);
+        // The run state travels with the transcript (the server read both
+        // in one handler): a view that (re)connected while a run was going
+        // must render it as running, and one whose run ended unwatched must
+        // stop showing it as running. A run-state change that arrived as an
+        // event while this fetch was in flight wins — it is newer than the
+        // snapshot. Identity is kept when nothing changed, so the periodic
+        // sync does not re-render every tab.
+        const withRun = snapshot === undefined || runStateMovedByEvent
+          ? v
+          : applyRunState(v, snapshot.running);
         // Rewind tombstones: messages deleted while the socket was down
         // must not come back through the append-only merge.
-        const merged = fetched === undefined
-          ? v.messages
-          : filterRemoved(mergeMessages(v.messages, fetched), v.removed);
+        const merged = snapshot === undefined ? v.messages : filterRemoved(
+          mergeMessages(v.messages, snapshot.messages),
+          v.removed,
+        );
         const todo = todos.get(id);
         const todoChanged = todo !== undefined &&
           !sameTodoPlan(todo, v.todos);
@@ -151,12 +180,13 @@ export function useSessionEvents(
         if (
           merged.length === v.messages.length && !todoChanged &&
           !tasksChanged &&
-          !backgroundsChanged && !goalChanged
+          !backgroundsChanged && !goalChanged &&
+          withRun === v
         ) {
           continue;
         }
         next.set(id, {
-          ...v,
+          ...withRun,
           messages: merged,
           ...(todoChanged ? { todos: todo } : {}),
           ...(tasksChanged ? { tasks: mergedTasks } : {}),
@@ -169,8 +199,12 @@ export function useSessionEvents(
   }, []);
 
   /** Clear per-session transient state (stuck streaming/tool indicators)
-   * and re-fetch persisted messages and the todo plan, so nothing is lost
-   * after a WS drop. */
+   * and re-fetch the transcript snapshot and the panel snapshots, so
+   * nothing is lost after a WS drop. The run state is deliberately kept:
+   * this view cannot tell a run that died with the socket from one that is
+   * still going, and clearing it is what used to leave a live run rendered
+   * as 作業完了 until its next `agent_start`. syncState reconciles it from
+   * the server's answer (the transcript snapshot carries it). */
   const resync = useCallback(async () => {
     setViews((prev) => {
       const next = new Map(prev);
@@ -181,8 +215,6 @@ export function useSessionEvents(
           runningTools: new Map(),
           pendingQuestions: [],
           error: undefined,
-          agentStartedAt: undefined,
-          agentEndedAt: undefined,
           thinkingStartAt: undefined,
         });
       }

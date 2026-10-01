@@ -1,3 +1,4 @@
+import { isViewRunning } from "./types.ts";
 import type {
   AgentMessage,
   BackgroundCommandInfo,
@@ -46,6 +47,45 @@ export function mergeMessages(
     }
   }
   return merged;
+}
+
+/** Reconcile a view's run state with the transcript snapshot's `running`
+ * flag (`GET /sessions/:id/messages`; see api-local's MessagesSnapshot).
+ * The events are the live source of the run state, but they are never
+ * replayed: a view that (re)connects while a run is going — a page load, a
+ * WS drop, a tab reopened on this session — never saw its `agent_start`,
+ * and without this the live run would render as finished (work log
+ * collapsed under 作業完了). The server reads the flag with the transcript,
+ * so the two always describe the same instant.
+ *
+ * Only a disagreement writes: a view that already agrees keeps its
+ * identity (the periodic sync must not re-render every tab) and a finished
+ * run keeps the end time its `agent_end` stamped. */
+export function applyRunState(
+  view: SessionView,
+  running: boolean,
+): SessionView {
+  if (running === isViewRunning(view)) return view;
+  if (!running) {
+    // The run ended while this view was not listening. Its `agent_end` is
+    // not replayed, so drop the stale run state: the transcript's own
+    // timestamps carry the finished run's duration (see
+    // ChatView/ConversationTurn).
+    return {
+      ...view,
+      agentStartedAt: undefined,
+      agentEndedAt: undefined,
+    };
+  }
+  // A run is active and this view never saw it start. `agentStartedAt` is
+  // a flag for the UI (every displayed timer is derived from the
+  // transcript's messages), so the moment this view learned about the run
+  // is the honest value.
+  return {
+    ...view,
+    agentStartedAt: Date.now(),
+    agentEndedAt: undefined,
+  };
 }
 
 /** Insert or replace a message at its existing position (dedup by key);

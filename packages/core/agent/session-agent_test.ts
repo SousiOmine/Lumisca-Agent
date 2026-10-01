@@ -1342,3 +1342,122 @@ Deno.test("a notification delivered while idle starts its own run", async () => 
     { type: "text", text: "reacted" },
   );
 });
+
+// ---- prompt delivery (see promptWhileRunning) ----------------------------
+
+/** A tool that runs `deliver` while the run that called it is still active
+ * (the web path: the user sends a prompt while the agent works), then
+ * succeeds. The tool call keeps the run going, so the delivery lands in it
+ * instead of starting a run of its own. */
+function deliverTool(deliver: () => void): Tool {
+  return {
+    name: "deliver_tool",
+    label: "Deliver",
+    description: "Delivers a message into the run that is active.",
+    parameters: object({}),
+    execute: () => {
+      deliver();
+      return Promise.resolve({
+        content: [{ type: "text", text: "ok" }],
+        details: {},
+      });
+    },
+  };
+}
+
+Deno.test("a prompt delivered mid-run carries steered", async () => {
+  const events: ClientEvent[] = [];
+  // The tool needs the agent that owns it, so the agent is built after it
+  // (the closure only runs when the model calls the tool).
+  const holder: { agent?: SessionAgent } = {};
+  // The prompt arrives while the run is active: the loop queues it as a
+  // steer, so it must carry the stamp the UI reads to keep it inside that
+  // run's turn instead of splitting it — a split would make the running
+  // turn stop being the last one, collapsing its work log mid-run.
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxToolCall("deliver_tool", {})]),
+      fauxAssistantMessage("reacted"),
+    ]),
+    [deliverTool(() => holder.agent!.promptWhileRunning("a follow-up"))],
+    (event) => events.push(event),
+  );
+  holder.agent = agent;
+  await agent.prompt("hello");
+
+  const users = agent.messages.filter((m) => m.role === "user");
+  assertEquals(users.length, 2);
+  assertEquals(
+    users[0]!.steered,
+    undefined,
+    "the first prompt started the run",
+  );
+  assertEquals(users[1]!.steered, true);
+  // Steered into the same run: one run started, and the prompt sits right
+  // before the reaction to it.
+  assertEquals(events.filter((e) => e.type === "agent_start").length, 1);
+  const index = agent.messages.indexOf(users[1]!);
+  assertEquals(agent.messages[index + 1]?.role, "assistant");
+  assertEquals(
+    (agent.messages.at(-1) as AssistantMessage).content[0] as TextContent,
+    { type: "text", text: "reacted" },
+  );
+});
+
+Deno.test("a mode prompt delivered mid-run carries steered", async () => {
+  const events: ClientEvent[] = [];
+  const holder: { agent?: SessionAgent } = {};
+  // Mode messages travel the same delivery path (a slash-command prompt
+  // like /plan): the stamp must reach them too, or the UI splits the turn
+  // for the mode prompt alone.
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxToolCall("deliver_tool", {})]),
+      fauxAssistantMessage("reacted"),
+    ]),
+    [
+      deliverTool(() =>
+        holder.agent!.promptWhileRunning("full plan prompt", undefined, {
+          modeId: "plan",
+          optionId: "",
+          modeLabel: "Plan",
+          shortText: "plan it",
+        })
+      ),
+    ],
+    (event) => events.push(event),
+  );
+  holder.agent = agent;
+  await agent.prompt("hello");
+
+  const modes = agent.messages.filter((m) => m.role === "mode");
+  assertEquals(modes.length, 1);
+  assertEquals(modes[0]!.steered, true);
+  assertEquals(modes[0]!.shortText, "plan it");
+  assertEquals(events.filter((e) => e.type === "agent_start").length, 1);
+});
+
+Deno.test("a prompt delivered while idle starts its own run unstamped", async () => {
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage("first"),
+      fauxAssistantMessage("second"),
+    ]),
+    [],
+    (event) => events.push(event),
+  );
+  await agent.prompt("hello");
+  // The run is over: the follow-up starts a run of its own, so it must not
+  // carry the stamp (the UI renders it as a turn row of its own).
+  agent.promptWhileRunning("again");
+  await waitFor(
+    () => events.filter((e) => e.type === "agent_end").length === 2,
+    "the second run to finish",
+  );
+
+  const users = agent.messages.filter((m) => m.role === "user");
+  assertEquals(users.length, 2);
+  assertEquals(users[1]!.steered, undefined);
+  assertEquals(events.filter((e) => e.type === "agent_start").length, 2);
+});

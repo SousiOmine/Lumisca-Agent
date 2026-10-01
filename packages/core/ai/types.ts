@@ -115,6 +115,15 @@ export type StopReason =
 export interface UserMessage {
   role: "user";
   content: string | (TextContent | ImageContent)[];
+  /** True when the prompt was delivered into the run that was already
+   * active instead of starting its own run (see
+   * SessionAgent.joinsActiveRun); absent when it started its own run. The
+   * UI keeps such a prompt inside that run's turn instead of starting a
+   * new one (see web's buildTurns) — the same delivery fact
+   * NotificationMessage carries, with the same reason: a message that did
+   * not start a run must not end the running turn. Not provider-facing:
+   * the transport reads role and content only (see toCoreMessages). */
+  steered?: boolean;
   timestamp: number;
 }
 
@@ -187,6 +196,9 @@ export interface ModeMessage {
   shortText: string;
   /** The full prompt sent to the LLM (via toLlmMessages). */
   fullPrompt: string;
+  /** Steered-into-a-running-run stamp; see the canonical, documented
+   * definition in types/mode-message.ts — keep the two in sync. */
+  steered?: boolean;
   timestamp: number;
 }
 

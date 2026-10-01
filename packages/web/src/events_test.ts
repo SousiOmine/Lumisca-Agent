@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   applyEvent,
+  applyRunState,
   filterRemoved,
   mergeBackgrounds,
   mergeMessages,
@@ -207,6 +208,38 @@ Deno.test("events: other sessions and non-view events are ignored", () => {
     applyEvent({ type: "agent_end", sessionId: "s1" }, v),
     null,
   );
+});
+
+Deno.test("events: applyRunState seeds a run the view never saw start", () => {
+  // The reported bug's fix: a view that (re)connects mid-run — a page load,
+  // a WS drop, a tab opened on the session — never received the run's
+  // agent_start (events are not replayed), so the transcript snapshot's
+  // flag is the only thing that tells it the run is still going. Without
+  // it the live run renders as finished (work log collapsed under 作業完了).
+  const seeded = applyRunState(view(), true);
+  assertEquals(isViewRunning(seeded), true);
+  assertEquals(typeof seeded.agentStartedAt, "number");
+  assertEquals(seeded.agentEndedAt, undefined);
+
+  // A view that already knows the run is going keeps its identity: the
+  // periodic sync must not re-render every tab.
+  assertEquals(applyRunState(seeded, true), seeded);
+});
+
+Deno.test("events: applyRunState drops a run that ended unwatched", () => {
+  // The run ended while the view was disconnected and its agent_end is not
+  // replayed either: the snapshot must stop the view from showing it as
+  // running.
+  const running = applyRunState(view(), true);
+  const stopped = applyRunState(running, false);
+  assertEquals(isViewRunning(stopped), false);
+  assertEquals(stopped.agentStartedAt, undefined);
+  assertEquals(stopped.agentEndedAt, undefined);
+
+  // A view that saw the run end keeps the end time its agent_end stamped:
+  // the header's duration is derived from it.
+  const finished = view({ agentStartedAt: 100, agentEndedAt: 200 });
+  assertEquals(applyRunState(finished, false), finished);
 });
 
 Deno.test("events: mergeMessages is idempotent and order-preserving", () => {

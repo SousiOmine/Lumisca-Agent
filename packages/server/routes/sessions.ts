@@ -252,6 +252,16 @@ export function sessionRoutes(core: SessionApi): Hono {
     return c.json(sessionJson(requireSession(c.req.param("id"))));
   });
 
+  /** The session's transcript snapshot, together with whether a run is
+   * active right now. Clients re-fetch this after a page (re)load or a WS
+   * drop (the web's tab restore and syncState) and need both halves to
+   * render a run honestly: the transcript alone cannot say whether its
+   * last turn is still being produced, and the event stream carries no
+   * snapshot — a client that connected mid-run never saw `agent_start`, so
+   * without the flag it would present a live run as finished (work log
+   * collapsed under 作業完了). Both are read in this one handler, with no
+   * await between them, so the flag and the transcript describe the same
+   * instant. */
   app.get("/sessions/:id/messages", async (c) => {
     const id = c.req.param("id");
     requireSession(id);
@@ -262,7 +272,9 @@ export function sessionRoutes(core: SessionApi): Hono {
       // crash with a TypeError if that invariant ever changes.
       throw new AppError(`Session is not open: ${id}`, 404);
     }
-    return c.json(agent.messages);
+    const messages = agent.messages;
+    const running = agent.isStreaming;
+    return c.json({ messages, running });
   });
 
   /** The session's current todo plan (the todo tool). todo events are

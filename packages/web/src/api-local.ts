@@ -30,6 +30,17 @@ import { promptBody, request, sessionPath } from "./api-client.ts";
 /** Session info as served by the API: includes the last run error, if any. */
 export type SessionInfoDto = SessionInfo & { lastError?: string };
 
+/** What GET /sessions/:id/messages serves: the session's transcript plus
+ * whether a run is active right now. The two travel together because they
+ * must describe the same instant — a client that (re)connects mid-run
+ * (page load, WS drop) needs the flag to tell a still-running turn from a
+ * finished one (see events.applyRunState), and the server reads both in
+ * one handler exactly so they cannot disagree. */
+export interface MessagesSnapshot {
+  messages: AgentMessage[];
+  running: boolean;
+}
+
 export const api = {
   listWorkspaces: () => request<Workspace[]>("/api/workspaces"),
   createWorkspace: (name: string, folders: string[]) =>
@@ -93,8 +104,11 @@ export const api = {
     request<{ ok: boolean }>(`/api${sessionPath(id, "/close")}`, {
       method: "POST",
     }),
+  /** The session's transcript snapshot (persisted messages + the run state
+   * event replay cannot restore); re-fetched after a WS drop or page reload
+   * to restore a tab. */
   getMessages: (id: string) =>
-    request<AgentMessage[]>(`/api${sessionPath(id, "/messages")}`),
+    request<MessagesSnapshot>(`/api${sessionPath(id, "/messages")}`),
   /** The session's current todo plan (the todo tool); re-fetched after a
    * WS drop or page reload to restore the progress panel (todo events are
    * snapshots, but only mutations emit them, so they are not replayed). */

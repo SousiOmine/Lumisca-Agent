@@ -6,13 +6,14 @@ import {
   useRef,
   useState,
 } from "preact/compat";
-import { sessionApi, type SessionInfoDto } from "../api.ts";
 import {
-  type AgentMessage,
-  emptyView,
-  type SessionView,
-  type TodoPhase,
-} from "../types.ts";
+  type MessagesSnapshot,
+  sessionApi,
+  type SessionInfoDto,
+} from "../api.ts";
+import { applyRunState } from "../events.ts";
+import { emptyView, type SessionView, type TodoPhase } from "../types.ts";
+
 /** Tab id for the not-yet-created "new session" draft tab. */
 export const DRAFT_TAB = "__new__";
 
@@ -21,16 +22,20 @@ const TABS_KEY = "lumisca.tabs";
 const ACTIVE_TAB_KEY = "lumisca.activeTab";
 
 /** View state for a restored tab: show the last run error (if any) so a
- * failure that happened without a connected UI is not silently hidden. */
+ * failure that happened without a connected UI is not silently hidden, and
+ * seed the run state from the transcript snapshot's `running` flag — a tab
+ * restored (or a page reloaded) while a run is still going must not render
+ * that run as finished, and its `agent_start` is never replayed (see
+ * applyRunState). */
 function restoreView(
   info: SessionInfoDto,
-  messages: AgentMessage[],
+  snapshot: MessagesSnapshot,
   todos: TodoPhase[] = [],
 ): SessionView {
-  const v = emptyView(info, messages);
+  const v = emptyView(info, snapshot.messages);
   if (info.lastError) v.error = info.lastError;
   v.todos = todos;
-  return v;
+  return applyRunState(v, snapshot.running);
 }
 
 /** Open tabs + active tab: restore after a restart, persist on change,
@@ -62,14 +67,15 @@ export function useTabs(
           // GET /sessions/:id (not /open) for the info: the messages
           // endpoint already opens the session, and the response carries
           // the last run error so a failed run is visible after a restart.
-          // The todo plan is fetched alongside — todo events are only
-          // emitted on mutations, so a fresh page must restore it here.
-          const [info, messages, todo] = await Promise.all([
+          // The todo plan is fetched alongside too — todo events are only
+          // emitted on mutations, so a fresh page must restore it here —
+          // and the transcript snapshot carries the run state.
+          const [info, snapshot, todo] = await Promise.all([
             sessionApi(id).getSession(),
             sessionApi(id).getMessages(),
             sessionApi(id).getTodo(),
           ]);
-          restoredViews.set(id, restoreView(info, messages, todo.todos));
+          restoredViews.set(id, restoreView(info, snapshot, todo.todos));
         } catch {
           // The session no longer exists; skip it.
         }
@@ -163,15 +169,16 @@ export function useTabs(
   }, [tabs, closeTabs]);
 
   /** Reopen a previously closed session in a tab: load its info, transcript
-   * and todo plan (the same data the restart restore fetches) and open the
-   * tab; an already-open session is just focused. */
+   * snapshot (messages + run state) and todo plan (the same data the
+   * restart restore fetches) and open the tab; an already-open session is
+   * just focused. */
   const reopenSession = useCallback(async (key: string) => {
     if (tabs.includes(key)) {
       setActiveTab(key);
       return;
     }
     try {
-      const [info, messages, todo] = await Promise.all([
+      const [info, snapshot, todo] = await Promise.all([
         sessionApi(key).getSession(),
         sessionApi(key).getMessages(),
         sessionApi(key).getTodo(),
@@ -179,7 +186,7 @@ export function useTabs(
       setTabs((prev) => (prev.includes(key) ? prev : [...prev, key]));
       setViews((prev) => {
         const next = new Map(prev);
-        next.set(key, restoreView(info, messages, todo.todos));
+        next.set(key, restoreView(info, snapshot, todo.todos));
         return next;
       });
       setActiveTab(key);

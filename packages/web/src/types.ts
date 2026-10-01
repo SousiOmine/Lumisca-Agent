@@ -188,7 +188,11 @@ export interface SessionView {
    * resync (merge is append-only) cannot resurrect them. */
   removed: Set<string>;
   error?: string;
-  /** Timestamp when agent_start fired (ms since epoch). */
+  /** Timestamp when agent_start fired (ms since epoch) — or, for a view
+   * that (re)connected while a run was already going, when the transcript
+   * snapshot told it the run is active (see events.applyRunState). It is a
+   * flag: every displayed timer is derived from the transcript's own
+   * messages. */
   agentStartedAt?: number;
   /** Timestamp when agent_end fired (ms since epoch). */
   agentEndedAt?: number;

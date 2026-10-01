@@ -1,5 +1,4 @@
 import type {
-  AgentMessage,
   AskAnswer,
   BackgroundCommandInfo,
   FederatedWorkspace,
@@ -20,7 +19,7 @@ import type {
   WorkspaceFileEntry,
 } from "./types.ts";
 import { fedRequest, promptBody, request, sessionPath } from "./api-client.ts";
-import type { SessionInfoDto } from "./api-local.ts";
+import type { MessagesSnapshot, SessionInfoDto } from "./api-local.ts";
 
 /** Federated (hub-and-spoke) API: resources owned by a peer server. The
  * agent runs on the peer; the hub only proxies. Every method here mirrors a
@@ -87,7 +86,7 @@ export const fed = {
   getSession: (peerId: string, sessionId: string) =>
     fedRequest<SessionInfoDto>(peerId, sessionPath(sessionId)),
   getMessages: (peerId: string, sessionId: string) =>
-    fedRequest<AgentMessage[]>(peerId, sessionPath(sessionId, "/messages")),
+    fedRequest<MessagesSnapshot>(peerId, sessionPath(sessionId, "/messages")),
   /** All sessions of a peer, newest first (for the recent sessions list). */
   listSessions: (peerId: string) =>
     fedRequest<SessionInfo[]>(peerId, "/sessions"),

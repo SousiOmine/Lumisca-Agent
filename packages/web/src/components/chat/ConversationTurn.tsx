@@ -15,6 +15,22 @@ import type { ConversationTurnData, UserMessageImage } from "./types.ts";
 
 export type { ConversationTurnData } from "./types.ts";
 
+/** True when the message was delivered into the run that was already
+ * active: the `steered` stamp the session agent sets at delivery time for
+ * notifications (see injectNotification) and for prompts sent while the
+ * agent was working (see promptWhileRunning). Such a message did not start
+ * a run, so it must not start a turn either. */
+function isSteered(message: AgentMessage): boolean {
+  switch (message.role) {
+    case "user":
+    case "mode":
+    case "notification":
+      return message.steered === true;
+    default:
+      return false;
+  }
+}
+
 /** Group the flat agent history by the message that started each run: a
  * user prompt (plain or mode-generated — mode messages are the slash-command
  * prompts like `/plan 依頼文` or review) or a system notification
@@ -24,12 +40,12 @@ export type { ConversationTurnData } from "./types.ts";
  * then lands in the same turn, and the whole thing collapses together when
  * the run ends.
  *
- * A notification steered into the run that was already active
- * (`steered` — the delivery fact the session agent stamps, see
- * injectNotification) did not start a run: it joins that run's turn like a
- * tool result. Splitting the turn for it would make the still-running turn
- * stop being the last one, collapsing its work log mid-run — the agent
- * keeps working, so nothing about the ongoing turn is finished yet.
+ * A message steered into the run that was already active joins that run's
+ * turn like a tool result, whatever its role — a completion notification,
+ * or a prompt the user typed while the agent was working. Splitting the
+ * turn for it would make the still-running turn stop being the last one,
+ * collapsing its work log mid-run — the agent keeps working, so nothing
+ * about the ongoing turn is finished yet.
  *
  * A compaction checkpoint is a row of its own, not part of any turn: it
  * marks where older history was replaced, so it must not be absorbed into
@@ -43,30 +59,28 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   // their own.
   let pending: AgentMessage[] = [];
   for (const message of messages) {
-    if (message.role === "user" || message.role === "mode") {
+    // A retry notification is an internal repair, not a turn: the message
+    // is dropped (the retried response joins the turn it was retried in).
+    if (message.role === "notification" && message.kind === "retry") continue;
+    if (
+      message.role === "user" || message.role === "mode" ||
+      message.role === "notification"
+    ) {
+      // A steered message joins the turn that is open (a checkpoint row
+      // cannot take responses, and a leading one has no turn to join: both
+      // fall back to starting a turn of their own, so no message is ever
+      // dropped).
+      const current = turns.at(-1);
+      if (isSteered(message) && current !== undefined && !current.standalone) {
+        current.responses.push(message);
+        continue;
+      }
       turns.push({ user: message, responses: pending });
       pending = [];
       continue;
     }
     if (message.role === "checkpoint") {
       turns.push({ user: message, responses: pending, standalone: true });
-      pending = [];
-      continue;
-    }
-    if (message.role === "notification") {
-      if (message.kind === "retry") continue;
-      // Steered notifications join the open turn (a checkpoint row cannot
-      // take responses, and a leading one has no turn to join: both keep
-      // today's behavior of starting a turn of their own, so no message is
-      // ever dropped).
-      const current = turns.at(-1);
-      if (
-        message.steered === true && current !== undefined && !current.standalone
-      ) {
-        current.responses.push(message);
-        continue;
-      }
-      turns.push({ user: message, responses: pending });
       pending = [];
       continue;
     }
@@ -124,10 +138,12 @@ export const ConversationTurn = memo(function ConversationTurn({
   const finalAssistant = assistants.at(-1);
   // Everything the turn produced except the final assistant, whose text
   // renders below the log: intermediate assistant messages (their text and
-  // tool calls) plus the turn's compact rows — a notification steered into
-  // the run, a dynamic-context snapshot. Their relative order is the
-  // transcript's; the final assistant's tool calls are appended after them
-  // by AssistantTools, which is where they belong.
+  // tool calls) plus the turn's compact rows — a notification or a prompt
+  // steered into the run, a dynamic-context snapshot. Their relative order
+  // is the transcript's; the final assistant's tool calls are appended
+  // after them by AssistantTools, which is where they belong. A user
+  // message inside the log (a prompt steered into the run) keeps its action
+  // row: rewind works on it like on a turn's own prompt.
   const workLog = finalAssistant === undefined
     ? turn.responses
     : turn.responses.filter((message) => message !== finalAssistant);
@@ -175,6 +191,7 @@ export const ConversationTurn = memo(function ConversationTurn({
               message={message}
               toolResults={toolResults}
               runningTools={runningTools}
+              onRewind={onRewind}
             />
           ))}
           {finalAssistant && finalToolCalls.length > 0 && (
