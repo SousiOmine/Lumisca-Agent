@@ -6,6 +6,7 @@ import {
 } from "@tabler/icons-preact";
 import type { TaskView } from "../types.ts";
 import { useT } from "../i18n.ts";
+import { useNarrowViewport } from "../hooks/useMediaQuery.ts";
 
 /** The session's sub-agent tasks (the task tool), stacked under the todo
  * panel in the same fixed top-right corner. Shows only the tasks that are
@@ -15,7 +16,10 @@ import { useT } from "../i18n.ts";
  * runs; the header collapses the body to a compact card. */
 export function TaskPanel({ tasks }: { tasks: TaskView[] }) {
   const t = useT();
-  const [collapsed, setCollapsed] = useState(false);
+  // Collapsed on a phone: see TodoPanel (the stack sits above the
+  // transcript there).
+  const narrow = useNarrowViewport();
+  const [collapsed, setCollapsed] = useState(narrow);
   const running = tasks.filter((task) => task.status === "running");
   if (running.length === 0) return null;
   return (

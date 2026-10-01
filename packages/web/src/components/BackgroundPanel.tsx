@@ -6,6 +6,7 @@ import {
 } from "@tabler/icons-preact";
 import type { BackgroundView } from "../types.ts";
 import { useT } from "../i18n.ts";
+import { useNarrowViewport } from "../hooks/useMediaQuery.ts";
 
 /** The session's background commands (the async_bash tool), stacked under
  * the task panel in the same fixed top-right corner. Shows only the
@@ -15,7 +16,10 @@ import { useT } from "../i18n.ts";
  * header collapses the body to a compact card. */
 export function BackgroundPanel({ commands }: { commands: BackgroundView[] }) {
   const t = useT();
-  const [collapsed, setCollapsed] = useState(false);
+  // Collapsed on a phone: see TodoPanel (the stack sits above the
+  // transcript there).
+  const narrow = useNarrowViewport();
+  const [collapsed, setCollapsed] = useState(narrow);
   const running = commands.filter((c) => c.state === "running");
   if (running.length === 0) return null;
   return (

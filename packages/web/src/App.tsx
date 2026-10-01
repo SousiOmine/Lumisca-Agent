@@ -12,6 +12,7 @@ import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { usePanelInset } from "./hooks/usePanelInset.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { usePane } from "./hooks/usePane.ts";
+import { useAppHeight } from "./hooks/useAppHeight.ts";
 import { quit } from "./shell.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
 import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
@@ -36,6 +37,9 @@ export interface AppProps {
 
 export function App({ initialData }: AppProps): ReactElement {
   const t = useT();
+  // Follow the visual viewport: the software keyboard on a phone shrinks it,
+  // and the app shrinks with it so the composer stays reachable.
+  useAppHeight();
   const { theme, setTheme, error: themeError } = useTheme(
     initialData?.theme ?? "dark",
   );

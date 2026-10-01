@@ -6,6 +6,12 @@
 
 .new-session-center {
   display: grid;
+  /* An explicit track, not the implicit `auto` one: `auto` may grow past the
+   * container when a child's min-content does (a session title in the recent
+   * list is one nowrap line, ~400px), which made the whole screen scroll
+   * sideways on a phone. `minmax(0, 1fr)` keeps the track inside the
+   * container and lets the rows ellipsize instead. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   height: 100%;
   padding: 24px;
@@ -454,4 +460,72 @@
 
 .workspace-option.create:hover {
   background: var(--accent-soft);
+}
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Phone: the draft screen stacks its two pickers (each becomes a full-width
+ * field with its label above it) and drops the wide margins. */
+@media (max-width: 600px) {
+  .new-session-center {
+    /* A card taller than the screen (composer plus the recent list) would
+     * have its top clipped by `center`: align it to the start and let the
+     * screen scroll instead. */
+    place-items: start center;
+    padding: 12px;
+  }
+
+  .new-session-card {
+    gap: 10px;
+  }
+
+  .new-session-select-row {
+    flex-direction: column;
+    gap: 8px;
+    max-width: none;
+  }
+
+  .new-session-select {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .new-session-select select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* The list is the screen's own scroll now (it is long on a phone). */
+  .recent-list {
+    max-height: none;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* The workspace row's edit / delete actions are revealed on hover, which a
+ * touch screen never fires: they would be unreachable, so they stay visible
+ * and grow to a fingertip. Rows and triggers are the list's tap targets. */
+@media (hover: none), (pointer: coarse) {
+  .workspace-option-actions {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .workspace-option-actions .icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .recent-item,
+  .workspace-option,
+  .peer-option {
+    padding: 10px 8px;
+  }
+
+  .peer-picker-trigger,
+  .workspace-picker-trigger {
+    padding: 10px;
+  }
 }

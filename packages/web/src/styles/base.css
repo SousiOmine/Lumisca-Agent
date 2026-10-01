@@ -20,6 +20,11 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* Mobile browsers otherwise inflate the text (notably in landscape on
+   * iOS), which would undo the sizes the layouts are designed around; the
+   * page is laid out for the viewport as it is. */
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 button {
@@ -155,4 +160,26 @@ select:focus {
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* The ergonomics of a coarse pointer (see tokens.css for the breakpoint and
+ * touch conventions). Text controls grow to 16px because iOS Safari zooms
+ * the page when a smaller field takes focus — the rule has to be repeated in
+ * the sheets that give a control its own smaller size (the composer, the
+ * question card, the model search). Icon buttons reach the ~40px a fingertip
+ * needs; components that size their own (the workspace row actions) override
+ * this again in their own sheet. */
+@media (hover: none), (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
 }

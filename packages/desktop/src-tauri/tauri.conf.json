@@ -21,8 +21,8 @@
         "title": "Lumisca",
         "width": 1280,
         "height": 860,
-        "minWidth": 800,
-        "minHeight": 600,
+        "minWidth": 360,
+        "minHeight": 480,
         "backgroundColor": "#1b1b1b",
         "decorations": false
       }

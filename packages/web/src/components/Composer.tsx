@@ -430,13 +430,17 @@ export function Composer({
         />
         {mention && caretPos && (
           <div
-            className="mention-popover"
-            style={showMentionAbove
-              ? {
-                left: caretPos.x,
-                bottom: `calc(100% - ${caretPos.y}px + 8px)`,
-              }
-              : { left: caretPos.x, top: `calc(${caretPos.y}px + 20px)` }}
+            className={showMentionAbove
+              ? "mention-popover"
+              : "mention-popover below"}
+            /* The caret position is handed to the stylesheet as variables
+             * rather than as final offsets: the sheet decides where that
+             * puts the list, so a narrow layout can pin it to the composer
+             * (a caret-anchored list would run off the right edge). */
+            style={{
+              "--caret-x": `${caretPos.x}px`,
+              "--caret-y": `${caretPos.y}px`,
+            }}
           >
             {mention.loading && mention.items.length === 0
               ? (

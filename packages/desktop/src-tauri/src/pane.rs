@@ -11,6 +11,9 @@ use tauri::{Manager, WebviewWindow};
 
 /// Pane width in logical pixels. Must match `--pane-width`
 /// in packages/web/src/styles/tokens.css (the Preact UI reserves this space).
+/// Both sides clamp it to the window width — the stylesheet with `100vw`,
+/// [`place`] with the main window's inner width — so a window narrower than
+/// the pane keeps the reserved strip and the native window the same size.
 pub const PANE_WIDTH: f64 = 460.0;
 /// Height of the pane's header strip (rendered by the Preact UI in the
 /// main window) in logical pixels. The pane window is positioned BELOW
@@ -34,12 +37,17 @@ pub fn place(pane: &WebviewWindow, main: &WebviewWindow) {
     let scale = main.scale_factor().unwrap_or(1.0);
     let inner_pos = main.inner_position().unwrap_or_default();
     let inner_size = main.inner_size().unwrap_or_default();
+    // A window narrower than the pane cannot show both side by side: the pane
+    // takes the whole window (the web UI reads the same clamp through
+    // `min(460px, 100vw)`, and lets the app render behind it — see the pane
+    // rules in packages/web/src/styles/layout.css).
+    let width = PANE_WIDTH.min(inner_size.width as f64 / scale);
     let top = APP_TITLEBAR_HEIGHT + PANE_HEADER_HEIGHT;
-    let x = (inner_pos.x as f64 + inner_size.width as f64) / scale - PANE_WIDTH;
+    let x = (inner_pos.x as f64 + inner_size.width as f64) / scale - width;
     let y = inner_pos.y as f64 / scale + top;
     let height = (inner_size.height as f64 / scale - top).max(0.0);
     let _ = pane.set_position(tauri::LogicalPosition::new(x, y));
-    let _ = pane.set_size(tauri::LogicalSize::new(PANE_WIDTH, height));
+    let _ = pane.set_size(tauri::LogicalSize::new(width, height));
 }
 
 /// The pane's logical (CSS-pixel) size — the surface an emulated viewport

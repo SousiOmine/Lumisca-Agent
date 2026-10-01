@@ -2,6 +2,10 @@ import { useEffect, useRef } from "preact/compat";
 import type { ReactNode } from "preact/compat";
 
 interface ModalProps {
+  /** CSS width of the dialog. The value reaches the stylesheet as a variable
+   * rather than as an inline `width` (`--modal-width`, whose token default is
+   * the shared dialog width in tokens.css), so a narrow layout can still
+   * override it — an inline width wins over every rule but `!important`. */
   width?: string;
   className?: string;
   onClose: () => void;
@@ -74,7 +78,7 @@ export function Modal({ width, className, onClose, children }: ModalProps) {
       <div
         ref={dialogRef}
         className={className ? `modal ${className}` : "modal"}
-        style={width ? { width } : undefined}
+        style={width ? { "--modal-width": width } : undefined}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}

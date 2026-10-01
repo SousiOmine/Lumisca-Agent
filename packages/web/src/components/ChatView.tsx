@@ -371,7 +371,7 @@ export function ChatView(
       <div className="chat-scroll" ref={scrollRef}>
         <div className="chat-column">
           {view.messages.length === 0 && view.streamingText.length === 0 && (
-            <div className="chat-empty" style={{ height: "50vh" }}>
+            <div className="chat-empty">
               <div className="chat-empty-inner">
                 {view.info.chat
                   ? (

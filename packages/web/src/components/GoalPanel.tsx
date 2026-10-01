@@ -7,6 +7,7 @@ import {
 } from "@tabler/icons-preact";
 import type { GoalInfo } from "../types.ts";
 import { useT } from "../i18n.ts";
+import { useNarrowViewport } from "../hooks/useMediaQuery.ts";
 
 /** The session's active goal (`/goal` mode), shown as a rounded panel
  * fixed to the top-right of the chat (same stack as todo/tasks). Renders
@@ -16,7 +17,10 @@ export function GoalPanel(
   { goal, onCancel }: { goal?: GoalInfo; onCancel: () => void },
 ) {
   const t = useT();
-  const [collapsed, setCollapsed] = useState(false);
+  // Collapsed on a phone: see TodoPanel (the stack sits above the
+  // transcript there).
+  const narrow = useNarrowViewport();
+  const [collapsed, setCollapsed] = useState(narrow);
   if (goal === undefined) return null;
   const summary = `${goal.iteration}/${goal.maxIterations}${
     goal.status === "judging" ? ` · ${t("panels.goal.judging")}` : ""

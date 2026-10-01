@@ -17,8 +17,10 @@
 }
 
 .modal {
-  width: min(560px, calc(100vw - 48px));
-  max-height: min(720px, calc(100vh - 48px));
+  /* The caller's width (see Modal.tsx) — the token also carries the shared
+   * default, so a dialog is always sized. */
+  width: var(--modal-width);
+  max-height: min(720px, calc(100dvh - 48px));
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border-strong);
@@ -164,4 +166,40 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Phone: a dialog takes the screen. A floating card has no room left behind
+ * it, and the full height is what the scrolling content inside (the settings
+ * panels, the folder browser) needs. */
+@media (max-width: 600px) {
+  .modal-backdrop {
+    place-items: stretch;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding: 14px;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* The dialog's close button is the way out of a full-screen dialog. */
+@media (hover: none), (pointer: coarse) {
+  .modal-header .btn {
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+
+  .model-item {
+    padding: 10px 8px;
+  }
 }

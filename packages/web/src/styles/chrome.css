@@ -364,3 +364,50 @@
 .tab.active .tab-badge {
   color: var(--accent-dim);
 }
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* A phone keeps the horizontal tab scroll, but a tab takes less of the width
+ * so more than one fits; the title-bar buttons shrink with it (46px is the
+ * OS default, and four of them never fit next to tabs in a 360px window). */
+@media (max-width: 600px) {
+  .tabbar {
+    gap: 2px;
+    padding: 0 2px;
+  }
+
+  .tab {
+    min-width: 84px;
+    max-width: 150px;
+    padding: 0 4px 0 8px;
+  }
+
+  .tab-new {
+    width: 34px;
+  }
+
+  .tabbar-actions {
+    padding: 0 4px;
+  }
+
+  .titlebar-btn {
+    width: 38px;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* The tab's close button is a 20px square — well under what a fingertip
+ * hits. The context menu (right-click) has no touch equivalent, but every
+ * action it offers is also on a visible control (close button, app menu), so
+ * it stays a desktop affordance. */
+@media (hover: none), (pointer: coarse) {
+  .tab .tab-close {
+    width: 28px;
+    height: 28px;
+  }
+
+  .titlebar-btn {
+    width: 40px;
+  }
+}

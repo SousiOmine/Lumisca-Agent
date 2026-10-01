@@ -85,3 +85,25 @@
   flex-wrap: wrap;
   align-items: center;
 }
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Phone: the banner's frame shrinks to the screen, and the server-down
+ * actions (up to four buttons) take a line of their own instead of squeezing
+ * the log and the text into a column. */
+@media (max-width: 600px) {
+  .update-banner,
+  .server-down-banner {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+
+  .server-down-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .server-down-log {
+    max-height: 30dvh;
+  }
+}

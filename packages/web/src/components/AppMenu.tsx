@@ -29,7 +29,8 @@ interface AppMenuProps {
 }
 
 /** The pane width in CSS pixels. Must match `--pane-width` in
- * styles/tokens.css and PANE_WIDTH in browser_lab.rs. */
+ * styles/tokens.css and PANE_WIDTH in pane.rs; both sides clamp it to the
+ * window width, so the offset below does too. */
 const PANE_WIDTH = 460;
 
 /** Hamburger app menu (new tab / session history / settings / quit). Shown
@@ -80,7 +81,7 @@ export function AppMenu({
             position: "fixed",
             top: pos.y,
             right: globalThis.innerWidth - pos.x +
-              (paneVisible ? PANE_WIDTH : 0),
+              (paneVisible ? Math.min(PANE_WIDTH, globalThis.innerWidth) : 0),
           }}
         >
           <button

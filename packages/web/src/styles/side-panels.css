@@ -72,7 +72,7 @@
 
 .todo-panel-body {
   border-top: 1px solid var(--border);
-  max-height: min(50vh, 360px);
+  max-height: min(50dvh, 360px);
   overflow-y: auto;
   padding: 6px 10px 10px;
   display: flex;
@@ -155,7 +155,7 @@
 
 .task-panel-body {
   border-top: 1px solid var(--border);
-  max-height: min(50vh, 360px);
+  max-height: min(50dvh, 360px);
   overflow-y: auto;
   padding: 6px 10px 10px;
   display: flex;
@@ -257,7 +257,7 @@
 
 .background-panel-body {
   border-top: 1px solid var(--border);
-  max-height: min(50vh, 360px);
+  max-height: min(50dvh, 360px);
   overflow-y: auto;
   padding: 6px 10px 10px;
   display: flex;
@@ -364,7 +364,7 @@
 
 .goal-panel-body {
   border-top: 1px solid var(--border);
-  max-height: min(50vh, 360px);
+  max-height: min(50dvh, 360px);
   overflow-y: auto;
   padding: 6px 10px 10px;
   display: flex;
@@ -439,7 +439,7 @@
 
 /* The question list is the one part of the input area allowed to grow, so
  * it carries the height cap the progress panels above already use
- * (todo/task/goal: min(50vh, …)) and scrolls inside it. Without the cap a
+ * (todo/task/goal: min(50dvh, …)) and scrolls inside it. Without the cap a
  * long ask (many questions, or many options per question) pushed the
  * composer below the viewport and covered the transcript. The flex
  * properties only matter once .input-area becomes a column flex container
@@ -456,7 +456,7 @@
   gap: 8px;
   flex: 0 1 auto;
   min-height: 0;
-  max-height: min(50vh, 440px);
+  max-height: min(45dvh, 440px);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -596,4 +596,53 @@
 .question-error {
   font-size: 12px;
   color: var(--error);
+}
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Phone: the progress cards leave the top-right corner (264px wide, over the
+ * transcript) for a full-width stack under the tab bar. The stack scrolls
+ * when several panels are open, and each body keeps a cap well under its
+ * desktop one, so the transcript stays the screen's main content. The
+ * components start their bodies collapsed at this width (see the panels). */
+@media (max-width: 600px) {
+  .chat-panels {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: none;
+    max-height: 45dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .todo-panel-body,
+  .task-panel-body,
+  .background-panel-body,
+  .goal-panel-body {
+    max-height: min(30dvh, 220px);
+  }
+
+  .question-card {
+    padding: 10px 12px;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* The ask tool's options are how a question is answered on a phone: they get
+ * a fingertip's height, and the free-text field the 16px that keeps iOS
+ * Safari from zooming the page when it takes focus (base.css). */
+@media (hover: none), (pointer: coarse) {
+  .question-option {
+    padding: 10px 12px;
+  }
+
+  .question-free-input {
+    font-size: 16px;
+  }
+
+  .goal-cancel {
+    padding: 8px 12px;
+  }
 }

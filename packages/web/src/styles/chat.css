@@ -25,7 +25,10 @@
 }
 
 .chat-empty {
-  height: 100%;
+  /* Half the visible height, so the placeholder sits where the conversation
+   * will grow from. The height lives here (not in ChatView's inline style)
+   * to use dvh: a phone's URL bar must not push the composer out of view. */
+  height: 50dvh;
   display: grid;
   place-items: center;
   color: var(--text-faint);
@@ -763,4 +766,72 @@
 
 .tool-result.error {
   color: var(--error);
+}
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* The transcript keeps its reading order; the margins that frame it on a
+ * desktop would eat a tablet's width. */
+@media (max-width: 900px) {
+  .chat-column {
+    gap: 14px;
+    padding: 0 16px;
+  }
+}
+
+/* Phone: the transcript is the screen — tighter margins, and the two things
+ * that would otherwise overflow it (a wide table, a large image) stay inside
+ * the column. */
+@media (max-width: 600px) {
+  .chat-column {
+    padding: 0 12px;
+  }
+
+  .chat-scroll {
+    padding: 12px 0 8px;
+    /* The stable gutter reserves ~20px on both edges for a scrollbar a
+     * phone does not have (overlay or none); that width belongs to the
+     * transcript. */
+    scrollbar-gutter: auto;
+  }
+
+  .msg-image {
+    max-width: 100%;
+  }
+
+  /* Wide content (a comparison table, a file listing) scrolls sideways
+   * inside the message instead of stretching the column past the viewport. */
+  .markdown table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  /* Tool results are indented under their call on a desktop; at this width
+   * the indent costs more lines than it explains. */
+  .tool-detail,
+  .notification-detail {
+    padding-left: 12px;
+  }
+
+  .tool-detail-result,
+  .notification-detail-body {
+    max-height: 45dvh;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* The rewind / copy actions of a user message are revealed on hover, which a
+ * touch screen never fires: without this they are unreachable. */
+@media (hover: none), (pointer: coarse) {
+  .msg-action-btn {
+    opacity: 1;
+    padding: 8px 10px;
+  }
+
+  .deliverable-copy {
+    width: 34px;
+    height: 34px;
+  }
 }

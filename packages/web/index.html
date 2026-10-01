@@ -2,7 +2,14 @@
 <html lang="ja" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `interactive-widget=resizes-content` keeps the layout viewport the
+         same on Android when the software keyboard opens (the app height is
+         then reduced by the browser itself); browsers that do not know the
+         key ignore it, and iOS is handled by hooks/useAppHeight.ts. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
     <title>Lumisca Agent</title>
     <link rel="icon" href="/favicon.png" />
     <link rel="stylesheet" href="/src/styles.css" />

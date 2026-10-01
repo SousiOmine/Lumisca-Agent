@@ -6,6 +6,7 @@ import {
 } from "@tabler/icons-preact";
 import type { TodoPhase, TodoTask } from "../types.ts";
 import { useT } from "../i18n.ts";
+import { useNarrowViewport } from "../hooks/useMediaQuery.ts";
 
 /** Marker glyph per status, mirroring the tool's text rendering. */
 const STATUS_MARKS: Record<TodoTask["status"], string> = {
@@ -28,7 +29,12 @@ function summary(todos: TodoPhase[]): string {
  * the header collapses the body to a compact pill. */
 export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
   const t = useT();
-  const [collapsed, setCollapsed] = useState(false);
+  // At phone width the panel starts collapsed: the stack sits above the
+  // transcript there (side-panels.css), and an expanded body would cover
+  // most of what it describes. Only the initial value is taken from the
+  // viewport — a later resize must not override the user's own toggle.
+  const narrow = useNarrowViewport();
+  const [collapsed, setCollapsed] = useState(narrow);
   if (todos.length === 0) return null;
   return (
     <div className={`todo-panel${collapsed ? " collapsed" : ""}`}>

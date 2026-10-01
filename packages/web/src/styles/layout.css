@@ -7,7 +7,11 @@
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* The visual viewport (see hooks/useAppHeight.ts): while the software
+   * keyboard is open the browser shrinks it, and the app shrinks with it so
+   * the composer stays visible. The token default (`100dvh`) is what
+   * browsers without visualViewport keep. */
+  height: var(--app-height);
 }
 
 /* Everything below the title bar (update banner, chat, new-session
@@ -104,4 +108,31 @@
   flex: none;
   font-size: 11px;
   white-space: nowrap;
+}
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Below this width the docked pane (460px) leaves too little of the window
+ * to be usable side by side, so it takes the window over: the app keeps
+ * rendering behind it (no reserved strip, no offsets to step around) and the
+ * pane's own header — which carries the hide button — stays in front. The
+ * pairs above are neutralized one by one because `.app.pane-open .x` wins on
+ * specificity, not on order. */
+@media (max-width: 720px) {
+  .app.pane-open .app-body {
+    padding-right: 0;
+  }
+
+  .app.pane-open .chat-panels {
+    right: 12px;
+  }
+
+  .app.pane-open .modal-backdrop {
+    margin-right: 0;
+  }
+
+  .app.pane-open .update-banner,
+  .app.pane-open .server-down-banner {
+    padding-right: 16px;
+  }
 }

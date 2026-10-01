@@ -220,3 +220,54 @@
   place-items: center;
   color: var(--text-dim);
 }
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Phone: the panes stack — the places become a horizontal strip above the
+ * listing (a 190px column would leave a sliver for the entries the browser
+ * exists to show), and the box keeps a share of the screen instead of the
+ * desktop's 420px. */
+@media (max-width: 600px) {
+  .folder-browser-panes {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 60dvh;
+  }
+
+  .folder-browser-sidebar {
+    flex-direction: row;
+    gap: 2px;
+    padding: 4px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  /* Sized by their content: the strip scrolls, names are not truncated. */
+  .folder-browser-place {
+    flex: none;
+    width: auto;
+    padding: 8px;
+    white-space: nowrap;
+  }
+
+  /* The heading has no room in a horizontal strip; the icons and names read
+   * on their own. */
+  .folder-browser-sidebar-title {
+    display: none;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* Rows and breadcrumbs are the tap targets of the browser. */
+@media (hover: none), (pointer: coarse) {
+  .folder-browser-row {
+    padding: 10px 8px;
+  }
+
+  .folder-browser-crumb {
+    padding: 6px 8px;
+  }
+}

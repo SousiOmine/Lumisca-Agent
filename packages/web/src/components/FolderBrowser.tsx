@@ -19,6 +19,7 @@ import type { FsBrowse, FsEntry, FsPlace, FsPlaceKind } from "../types.ts";
 import { errorText } from "../providers.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { useT } from "../i18n.ts";
+import { useTouchInput } from "../hooks/useMediaQuery.ts";
 
 /** Sidebar icon of each place: a root is a drive/volume, so it reads as a
  * folder. */
@@ -71,13 +72,18 @@ export function visibleEntries(
 /** One row of the list pane. A folder selects on click and opens on double
  * click (or Enter, handled by the list itself); a file is listed for
  * orientation only — a workspace is built from folders — so it is dimmed and
- * inert. */
+ * inert. On a touch screen (`tapOpens`) the first click opens instead of
+ * selecting: there is no double click to descend with, and the folder the
+ * user is in is what the "select" button adds, so tapping to descend is the
+ * whole interaction. */
 function EntryRow(
-  { entry, selected, onSelect, onOpen }: {
+  { entry, selected, onSelect, onOpen, tapOpens }: {
     entry: FsEntry;
     selected: boolean;
     onSelect: (path: string) => void;
     onOpen: (path: string) => void;
+    /** Whether a single click opens the folder (see above). */
+    tapOpens: boolean;
   },
 ) {
   const t = useT();
@@ -110,7 +116,7 @@ function EntryRow(
       className={`folder-browser-row dir${selected ? " selected" : ""}`}
       role="option"
       aria-selected={selected}
-      onClick={() => onSelect(entry.path)}
+      onClick={() => (tapOpens ? onOpen(entry.path) : onSelect(entry.path))}
       onDblClick={() => onOpen(entry.path)}
     >
       <span className="folder-icon">
@@ -129,7 +135,9 @@ function EntryRow(
  * machine's places (its user folders plus its filesystem roots), the right
  * one the contents of the open folder. A single click selects a folder, a
  * double click (or Enter) opens it; the "select" button adds the selected
- * folder — or the open one while nothing is selected — to the workspace. */
+ * folder — or the open one while nothing is selected — to the workspace. A
+ * touch screen has no double click, so a single tap opens there (see
+ * EntryRow), and the button adds the folder the user is in. */
 export function FolderBrowser(
   { peerId, peerName, onAdd, onBack }: {
     peerId: string;
@@ -139,6 +147,8 @@ export function FolderBrowser(
   },
 ) {
   const t = useT();
+  // A finger has no double click: the rows open on the first tap there.
+  const touch = useTouchInput();
   const [places, setPlaces] = useState<FsPlace[]>([]);
   const [open, setOpen] = useState<FsBrowse | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -369,6 +379,7 @@ export function FolderBrowser(
                 selected={entry.path === selected}
                 onSelect={setSelected}
                 onOpen={(path) => void openFolder(path)}
+                tapOpens={touch}
               />
             ))}
             {open && open.entries.length === 0 && (

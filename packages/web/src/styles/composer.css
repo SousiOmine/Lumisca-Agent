@@ -101,6 +101,12 @@
 .mention-popover {
   position: absolute;
   z-index: 50;
+  /* The caret position arrives as variables (see Composer): the stylesheet
+   * owns the placement, so a narrow layout can pin the list to the composer
+   * instead of following the caret off the screen. */
+  left: var(--caret-x);
+  /* above the caret line by default */
+  bottom: calc(100% - var(--caret-y) + 8px);
   width: min(440px, calc(100vw - 40px));
   max-height: 240px;
   overflow-y: auto;
@@ -113,6 +119,13 @@
   flex-direction: column;
   gap: 1px;
   animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+/* Tall textarea with the caret near its top: open below the caret instead
+ * (Composer decides which, this only places the list). */
+.mention-popover.below {
+  bottom: auto;
+  top: calc(var(--caret-y) + 20px);
 }
 
 .mention-status {
@@ -352,4 +365,68 @@
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1px 4px;
+}
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Phone: the composer spans the screen, so its own frame is the only margin
+ * the input needs; everything that anchors to the caret is pinned to the
+ * composer instead of the caret's x. */
+@media (max-width: 600px) {
+  .input-area {
+    padding: 8px 8px 6px;
+  }
+
+  .input-composer {
+    padding: 8px 10px 6px;
+  }
+
+  /* The caret can sit anywhere on the line, so a caret-anchored list would
+   * run off the right edge; the full width of the composer is what the list
+   * needs to show a name and a path side by side. */
+  .mention-popover {
+    left: 0;
+    right: 0;
+    width: auto;
+  }
+
+  /* The model id in the switch is the flexible part of the row (it
+   * ellipsizes): without these the row would be as wide as the longest
+   * name and push the buttons out. */
+  .model-switch-bar {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .model-switch {
+    min-width: 0;
+  }
+
+  .model-thinking-label {
+    min-width: 0;
+    overflow: hidden;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* Text controls at 16px: iOS Safari zooms the page when a smaller field
+ * takes focus (the generic rule in base.css cannot reach these, they set
+ * their own size here). Attachments and their remove buttons grow to match
+ * the fingertip that drops and removes them. */
+@media (hover: none), (pointer: coarse) {
+  .input-box,
+  .input-box.large {
+    font-size: 16px;
+  }
+
+  .input-image {
+    width: 64px;
+    height: 64px;
+  }
+
+  .input-image-remove {
+    width: 24px;
+    height: 24px;
+  }
 }

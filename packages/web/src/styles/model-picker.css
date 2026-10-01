@@ -486,3 +486,146 @@
   min-height: 1.5em;
   animation: lum-fade var(--lum-dur-fast) var(--lum-ease);
 }
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Phone: the popover becomes a bottom sheet (anchored above the composer it
+ * would be taller than the space it has), and its three panes stack: the
+ * provider column turns into a horizontal strip, the thinking bar moves
+ * under the list and turns horizontal. */
+@media (max-width: 600px) {
+  .model-popover {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 80dvh;
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: none;
+  }
+
+  .model-picker {
+    flex-direction: column;
+    min-height: 0;
+    max-height: 80dvh;
+  }
+
+  /* The provider list runs along the top; a 180px column would take a third
+   * of the screen and leave the model list unreadable. */
+  .mp-providers {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    gap: 2px;
+    padding: 4px 6px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  /* Sized by their content (the strip scrolls, names are not truncated). */
+  .mp-provider,
+  .mp-manage {
+    flex: none;
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .mp-sep {
+    flex: none;
+    width: 1px;
+    height: 18px;
+    margin: 0 4px;
+  }
+
+  .mp-models {
+    min-height: 0;
+  }
+
+  .mp-thinking {
+    width: 100%;
+    padding: 8px 10px;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .mp-thinking.empty {
+    border-top: none;
+  }
+
+  /* The vertical bar (a tall pane by nature) becomes a horizontal one: the
+   * rail is the track wrap itself, the fill grows from the left. */
+  .tls-body {
+    min-height: 0;
+  }
+
+  .tls-track-wrap {
+    width: 100%;
+    height: 40px;
+  }
+
+  .tls-track-wrap::before {
+    left: 12px;
+    right: 12px;
+    top: 50%;
+    bottom: auto;
+    width: auto;
+    height: 14px;
+    transform: translateY(-50%);
+  }
+
+  .tls-fill {
+    left: 12px;
+    top: 50%;
+    bottom: auto;
+    width: calc((100% - 24px) * var(--tls-fill, 0));
+    min-width: 14px;
+    height: 14px;
+    transform: translateY(-50%);
+  }
+
+  .tls-range {
+    writing-mode: horizontal-tb;
+    /* left = weakest (the vertical bar runs bottom-up with `direction:
+     * rtl`; a horizontal one reads left to right). */
+    direction: ltr;
+    width: 100%;
+    height: 40px;
+    min-height: 0;
+  }
+
+  .tls-value {
+    margin-top: 4px;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* The model and provider rows are chosen with a fingertip, and the search
+ * field uses 16px so iOS Safari does not zoom the page when it takes focus
+ * (base.css). */
+@media (hover: none), (pointer: coarse) {
+  .mp-model,
+  .mp-provider,
+  .mp-manage {
+    padding: 10px 8px;
+  }
+
+  /* The provider's chevron is revealed on hover on a desktop; a touch screen
+   * never hovers, so the active entry keeps it (it marks the provider whose
+   * models are listed below). */
+  .mp-chevron {
+    opacity: 1;
+  }
+
+  .mp-model-search {
+    font-size: 16px;
+  }
+
+  .ctx-meter {
+    padding: 8px;
+  }
+}
