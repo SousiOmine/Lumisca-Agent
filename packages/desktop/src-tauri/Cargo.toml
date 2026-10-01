@@ -26,6 +26,19 @@ url = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 getrandom = "0.4"
+# HTTPS health check for a remote server (a Tailscale MagicDNS name served
+# by `tailscale serve`, or any other TLS-terminating front end). The shell
+# probes /api/health with the connection's token BEFORE navigating the
+# window: navigating straight to a dead or foreign https URL would leave
+# the user on an error page with no way back to the settings UI. The TLS
+# stack (hyper + rustls + platform verifier) is already compiled with
+# tauri-plugin-updater's `rustls-no-provider`; only the blocking facade is
+# new. That feature also leaves the crypto provider to the application —
+# server::install_crypto_provider installs it before the first client.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
+# The provider server::install_crypto_provider installs (ring — the same
+# choice tauri-plugin-updater makes).
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # Shared browser-lab protocol pieces (RPC server, probe, URL policy).
 lumisca-browser-rpc = { path = "../../browser-rpc" }
 

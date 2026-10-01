@@ -14,17 +14,24 @@ import { type Locale, translate } from "@lumisca/core/shared";
  * the initial data and auth token are served from /assets/initial-data.js
  * instead of an inline <script>. Inline style attributes (style props)
  * need 'unsafe-inline' for styles. connect-src names the page's own
- * host for the WebSocket event stream — CSP3 would match 'self' for a
- * same-host ws: upgrade, but naming it explicitly is portable — and the
- * shell bridge used by the desktop app (settings → 接続先サーバー): the
- * `lumisca://` custom protocol, which WebView2 (Windows) re-homes to
+ * host for the WebSocket event stream — the client picks ws: or wss:
+ * from `location.protocol` (see api-routing.ts), so a page served over
+ * TLS (a front end such as `tailscale serve` terminating https for a
+ * MagicDNS name) opens wss: to the very host the page came from and both
+ * spellings are allowed. CSP3 would match 'self' for a same-host ws:
+ * upgrade, but naming it explicitly is portable — and the shell bridge
+ * used by the desktop app (settings → 接続先サーバー): the `lumisca://`
+ * custom protocol, which WebView2 (Windows) re-homes to
  * http://lumisca.localhost while WKWebView (macOS) and WebKitGTK (Linux)
  * fetch the custom scheme directly, so both forms are allowed. In a plain
  * browser neither resolves and the bridge is unused.
  */
 export function pageCsp(pageHost: string | undefined): string {
+  // The fallback branch has no host to name, so it covers loopback only:
+  // it is reached when the Host header is missing (never for a page served
+  // over TLS, which always has one).
   const wsSrc = pageHost
-    ? `connect-src 'self' ws://${pageHost} http://lumisca.localhost lumisca:`
+    ? `connect-src 'self' ws://${pageHost} wss://${pageHost} http://lumisca.localhost lumisca:`
     : "connect-src 'self' ws://127.0.0.1:* ws://localhost:* http://lumisca.localhost lumisca:";
   return [
     "default-src 'self'",

@@ -26,7 +26,8 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::server::{
-    ensure_local_server, health_check, local_server_status, page_url, restart_local_server,
+    ensure_local_server, health_check, host_label, local_server_status, page_url,
+    restart_local_server, HealthFailure, Scheme,
 };
 use crate::update::{
     check_for_updates, download_update, install_update, set_auto_update, update_status_json,
@@ -92,29 +93,101 @@ fn bridge_error(status: StatusCode, message: &str) -> BridgeResponse {
     bridge_json(status, serde_json::json!({ "error": message }))
 }
 
-/// Parse a server URL into (host, port). Only http:// is supported
-/// (v1: Tailscale / trusted LAN, no TLS).
-fn parse_remote_url(url: &str) -> Result<(String, u16), String> {
+/// A validated remote server URL: the transport to speak, the target host
+/// and port, and the canonical base URL used for navigation, the health
+/// probe and the "currently showing" state.
+#[derive(Debug)]
+struct RemoteTarget {
+    scheme: Scheme,
+    host: String,
+    port: u16,
+    /// `scheme://host[:port]` — the input normalized to its origin. A
+    /// trailing slash, or the path/query of a URL pasted straight out of
+    /// the server's output, is dropped: the UI is always served at the
+    /// root, and only the fields of this connection carry the token.
+    base: String,
+}
+
+/// Parse a server URL. Both `http://` (a LAN or Tailscale address served
+/// directly) and `https://` (a TLS-terminating front end such as
+/// `tailscale serve` in front of a MagicDNS name) are supported; every
+/// other scheme is rejected instead of being handed to the window. A URL
+/// carrying userinfo is refused rather than silently stripped — those
+/// credentials would end up in the bridge state and never reach the
+/// server.
+fn parse_remote_url(url: &str) -> Result<RemoteTarget, String> {
     let parsed = url::Url::parse(url).map_err(|e| format!("URL が不正です: {e}"))?;
-    if parsed.scheme() != "http" {
-        return Err("http:// URL のみサポートされています".into());
+    let scheme = match parsed.scheme() {
+        "http" => Scheme::Http,
+        "https" => Scheme::Https,
+        _ => return Err("http:// または https:// の URL のみサポートされています".into()),
+    };
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("URL にユーザー情報（user:pass@）は指定できません".into());
     }
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| "URL にホストがありません".to_string())?
-        .to_string();
-    let port = parsed.port().unwrap_or(80);
-    Ok((host, port))
+    // `url::Host` rather than `host_str`: the latter serializes an IPv6
+    // literal with its brackets, and brackets belong to the authority
+    // spelling — `host_label` re-adds them for the Host header and the base
+    // URL where they are required.
+    let host = match parsed.host() {
+        Some(url::Host::Domain(domain)) => domain.to_string(),
+        Some(url::Host::Ipv4(address)) => address.to_string(),
+        Some(url::Host::Ipv6(address)) => address.to_string(),
+        None => return Err("URL にホストがありません".to_string()),
+    };
+    // The port actually used, and the port as spelled in the base URL: an
+    // omitted one is filled in from the scheme's default and dropped from
+    // the base (http://host:443 would be as wrong as https://host:80).
+    let port = parsed.port().unwrap_or(match scheme {
+        Scheme::Http => 80,
+        Scheme::Https => 443,
+    });
+    let label = host_label(&host);
+    let base = match parsed.port() {
+        Some(port) => format!("{}://{label}:{port}", parsed.scheme()),
+        None => format!("{}://{label}", parsed.scheme()),
+    };
+    Ok(RemoteTarget {
+        scheme,
+        host,
+        port,
+        base,
+    })
+}
+
+/// Connect-time failure message for the settings UI. The probe says why it
+/// failed instead of a bare "cannot connect": for a remote server the
+/// likeliest causes are a Host guard 403 (the name is missing from the
+/// server's `--allowed-hosts`) and a token mismatch, and neither is
+/// something the user can see from the URL alone.
+fn connect_failure(url: &str, failure: HealthFailure) -> String {
+    match failure {
+        HealthFailure::Unreachable => format!("サーバーに接続できません: {url}"),
+        HealthFailure::Status(403) => format!(
+            "サーバーに接続できません: {url}（HTTP 403: ホスト名が拒否されました。サーバーの --allowed-hosts にこのホスト名を追加してください）"
+        ),
+        HealthFailure::Status(401) => {
+            format!("サーバーに接続できません: {url}（HTTP 401: トークンが一致しません）")
+        }
+        HealthFailure::Status(status) => {
+            format!("サーバーに接続できません: {url}（HTTP {status}）")
+        }
+    }
 }
 
 fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String, String> {
-    let (host, port) = parse_remote_url(url)?;
-    if !health_check(&host, port, Some(token), Duration::from_secs(5)) {
-        return Err(format!("サーバーに接続できません: {url}"));
+    let target = parse_remote_url(url)?;
+    if let Err(failure) = health_check(
+        target.scheme,
+        &target.host,
+        target.port,
+        Some(token),
+        Duration::from_secs(5),
+    ) {
+        return Err(connect_failure(url, failure));
     }
-    let page = page_url(url, token);
-    *app.state::<AppState>().last_remote.lock_recover() =
-        Some((url.to_string(), token.to_string()));
+    let page = page_url(&target.base, token);
+    *app.state::<AppState>().last_remote.lock_recover() = Some((target.base, token.to_string()));
     navigate_main(app, &page)?;
     Ok(page)
 }
@@ -256,12 +329,15 @@ pub(crate) fn handle_shell_request(
                 (Some(url), token) => (url, token.unwrap_or_default()),
                 _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
             };
-            match parse_remote_url(&url).and_then(|(host, port)| {
-                if health_check(&host, port, Some(&token), Duration::from_secs(5)) {
-                    Ok(())
-                } else {
-                    Err(format!("サーバーに接続できません: {url}"))
-                }
+            match parse_remote_url(&url).and_then(|target| {
+                health_check(
+                    target.scheme,
+                    &target.host,
+                    target.port,
+                    Some(&token),
+                    Duration::from_secs(5),
+                )
+                .map_err(|failure| connect_failure(&url, failure))
             }) {
                 Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
                 Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
@@ -421,5 +497,93 @@ pub(crate) fn handle_shell_request(
             bridge_json(StatusCode::OK, serde_json::json!({ "path": path }))
         }
         _ => bridge_error(StatusCode::NOT_FOUND, "unknown action"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The base URL is the input normalized to its origin: what the window
+    /// is navigated to, what the health probe targets, and what the settings
+    /// UI reports as the current display.
+    #[test]
+    fn parse_remote_url_normalizes_the_base_url() {
+        let https = parse_remote_url("https://host.tailnet.ts.net/").unwrap();
+        assert_eq!(https.scheme, Scheme::Https);
+        assert_eq!(https.host, "host.tailnet.ts.net");
+        assert_eq!(https.port, 443);
+        assert_eq!(https.base, "https://host.tailnet.ts.net");
+
+        let http = parse_remote_url("http://100.64.0.5:8000").unwrap();
+        assert_eq!(http.scheme, Scheme::Http);
+        assert_eq!(http.host, "100.64.0.5");
+        assert_eq!(http.port, 8000);
+        assert_eq!(http.base, "http://100.64.0.5:8000");
+
+        // A URL pasted straight out of the server's output carries a path,
+        // query and fragment the page does not live at (and a token that
+        // belongs in its own field): only the origin is kept.
+        let pasted = parse_remote_url("https://host.tailnet.ts.net/?token=abc#top").unwrap();
+        assert_eq!(pasted.base, "https://host.tailnet.ts.net");
+    }
+
+    #[test]
+    fn parse_remote_url_accepts_and_fills_the_default_ports() {
+        assert_eq!(parse_remote_url("http://host").unwrap().port, 80);
+        assert_eq!(parse_remote_url("https://host").unwrap().port, 443);
+        // An explicit default port is normalized away by the URL parser, so
+        // the base never spells out http://host:80 or https://host:443.
+        let explicit = parse_remote_url("https://host:443").unwrap();
+        assert_eq!(explicit.port, 443);
+        assert_eq!(explicit.base, "https://host");
+    }
+
+    #[test]
+    fn parse_remote_url_brackets_ipv6_literals() {
+        let target = parse_remote_url("https://[::1]:8443").unwrap();
+        assert_eq!(target.host, "::1");
+        assert_eq!(target.port, 8443);
+        assert_eq!(target.base, "https://[::1]:8443");
+    }
+
+    #[test]
+    fn parse_remote_url_rejects_other_schemes() {
+        assert_eq!(
+            parse_remote_url("ftp://host").unwrap_err(),
+            "http:// または https:// の URL のみサポートされています"
+        );
+        // A bare "host:port" parses as the scheme "host" — rejected here
+        // rather than navigated to.
+        assert!(parse_remote_url("homeserver:8000").is_err());
+        assert!(parse_remote_url("file:///tmp").is_err());
+        assert!(parse_remote_url("ws://host:8000").is_err());
+    }
+
+    #[test]
+    fn parse_remote_url_rejects_malformed_urls() {
+        assert!(parse_remote_url("").is_err());
+        assert!(parse_remote_url("https://").is_err());
+        assert_eq!(
+            parse_remote_url("https://user:pass@host").unwrap_err(),
+            "URL にユーザー情報（user:pass@）は指定できません"
+        );
+    }
+
+    /// The failure message names the operationally distinct causes: a 403
+    /// comes from the server's Host guard and is fixed in ITS
+    /// `--allowed-hosts`, not on this side.
+    #[test]
+    fn connect_failure_explains_the_http_status() {
+        let url = "https://host.tailnet.ts.net";
+        assert_eq!(
+            connect_failure(url, HealthFailure::Unreachable),
+            "サーバーに接続できません: https://host.tailnet.ts.net"
+        );
+        let forbidden = connect_failure(url, HealthFailure::Status(403));
+        assert!(forbidden.contains("HTTP 403"));
+        assert!(forbidden.contains("--allowed-hosts"));
+        assert!(connect_failure(url, HealthFailure::Status(401)).contains("HTTP 401"));
+        assert!(connect_failure(url, HealthFailure::Status(502)).contains("HTTP 502"));
     }
 }

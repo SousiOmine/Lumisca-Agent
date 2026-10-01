@@ -23,6 +23,15 @@ function pageUrl(url: string, token: string): string {
   return `${url.replace(/\/+$/, "")}/?token=${encodeURIComponent(token)}`;
 }
 
+/** Whether the URL field holds something a connection can be made to: the
+ * desktop shell accepts http:// (a LAN/Tailscale address served directly)
+ * and https:// (a TLS-terminating front end such as `tailscale serve` in
+ * front of a MagicDNS name). Checked here so a missing scheme — the input
+ * is free text — reports the rule instead of a confusing "cannot reach". */
+function isSupportedUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url.trim());
+}
+
 /** Settings → 接続先サーバー. This list is the federation peer registry:
  * it lives in THIS server's database and is shared by web and desktop
  * clients alike. The desktop shell bridge only handles the local server
@@ -78,15 +87,19 @@ export function ConnectionList() {
 
   const connect = (server: ConnectionEntry) =>
     run(async () => {
+      const url = server.url.trim();
+      if (!isSupportedUrl(url)) {
+        throw new Error(t("settings.connection.badUrl"));
+      }
       if (desktop) {
         // The desktop shell switches the whole WebView.
         await shellCall("connect-remote", {
-          url: server.url,
+          url,
           token: server.token,
         });
       } else {
         // Browser: navigating away IS the switch.
-        location.href = pageUrl(server.url, server.token);
+        location.href = pageUrl(url, server.token);
       }
     });
 
@@ -225,6 +238,8 @@ export function ConnectionList() {
             />
           ))}
 
+          <p className="settings-note">{t("settings.connection.urlHint")}</p>
+
           <div>
             <button type="button" className="btn" disabled={busy} onClick={add}>
               <IconPlus size={14} /> {t("settings.connection.addServer")}
@@ -263,10 +278,15 @@ function ServerCard({
   );
 
   const test = async () => {
+    const url = server.url.trim();
+    if (!isSupportedUrl(url)) {
+      setResult({ ok: false, text: t("settings.connection.badUrl") });
+      return;
+    }
     setResult(null);
     setTesting(true);
     try {
-      setResult(await onProbe(server.url.trim(), server.token));
+      setResult(await onProbe(url, server.token));
     } catch (e) {
       setResult({
         ok: false,
@@ -302,7 +322,7 @@ function ServerCard({
         <input
           value={server.url}
           onChange={(e) => onChange({ url: e.currentTarget.value })}
-          placeholder="http://100.64.0.5:8000"
+          placeholder="https://host.tailnet.ts.net"
           spellcheck={false}
         />
       </Field>

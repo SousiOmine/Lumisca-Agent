@@ -665,6 +665,20 @@ export const settings = {
     ja: "トークン（LUMISCA_TOKEN と同じ値）",
     en: "Token (same value as LUMISCA_TOKEN)",
   },
+  /** Scheme rule of the URL field. The desktop shell can only connect to
+   * http:// (a LAN/Tailscale address served directly) and https:// (a
+   * TLS-terminating front end such as `tailscale serve`); anything else is
+   * refused before a request leaves the app. */
+  "settings.connection.badUrl": {
+    ja: "URL は http:// または https:// で始まる必要があります",
+    en: "The URL must start with http:// or https://",
+  },
+  "settings.connection.urlHint": {
+    ja:
+      "URL は http:// でも https:// でも登録できます。https はサーバーの前段で TLS を終端する構成（例: tailscale serve）で使い、サーバー側の起動引数に --allowed-hosts <MagicDNS 名> を指定してください。",
+    en:
+      "URLs may be http:// or https://. For https, terminate TLS in front of the server (e.g. tailscale serve) and start the server with --allowed-hosts <MagicDNS name>.",
+  },
   "settings.connection.unnamed": { ja: "（無名）", en: "(unnamed)" },
 
   // --- command safety panel --------------------------------------------------
