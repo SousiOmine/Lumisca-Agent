@@ -40,21 +40,12 @@ export const PROBE_SOURCE = String.raw`
     domMutations: 0,
     observedMutations: 0,
     network: { active: 0, completed: 0, failed: 0, lastActivity: null },
-    checkCallbacks: [],
-    waitStarted: 0
+    waitStarted: 0,
+    waitOptions: null
   };
 
   function touch() {
     state.network.lastActivity = Date.now();
-    trigger();
-  }
-
-  function trigger() {
-    if (state.checkCallbacks.length === 0) { return; }
-    var callbacks = state.checkCallbacks.slice();
-    for (var i = 0; i < callbacks.length; i++) {
-      try { callbacks[i](); } catch (e) { /* probe must never throw */ }
-    }
   }
 
   // --- console ------------------------------------------------------------
@@ -196,7 +187,6 @@ export const PROBE_SOURCE = String.raw`
   if (typeof MutationObserver === "function") {
     var observer = new MutationObserver(function (records) {
       state.domMutations += records.length;
-      trigger();
     });
     try {
       observer.observe(document, {
@@ -592,11 +582,14 @@ export const PROBE_SOURCE = String.raw`
     }
   }
 
-  // --- wait -----------------------------------------------------------------
-  // wait() resolves a promise in-page. Windows (WebView2) and macOS
-  // (WKWebView) evals await promises; WebKitGTK does not — on that
-  // platform the host reports an explicit "wait_unsupported" error
-  // instead of falling back to polling.
+  // --- wait (host-driven) ----------------------------------------------------
+  // The host drives the wait from outside the page: it calls waitBegin with
+  // the options, then waitPoll until the answer stops being {pending: true}.
+  // A promise would read better, but not every platform's eval awaits one
+  // (WebKitGTK's does not), and delivering a resolved promise to the host
+  // would need a push channel the lab deliberately does not have. Polling
+  // behaves the same on every platform, and waitCheck stays the single
+  // authority for the conditions, the deadline and the result shape.
   function waitCheck(opts) {
     var now = Date.now();
     if (state.waitStarted === 0) { state.waitStarted = now; }
@@ -629,52 +622,23 @@ export const PROBE_SOURCE = String.raw`
     return pending();
   }
 
-  function wait(opts) {
+  function waitBegin(opts) {
+    state.waitOptions = opts || {};
     state.waitStarted = 0;
-    return new Promise(function (resolve) {
-      opts = opts || {};
-      if (opts.until === "time") {
-        var duration = Math.min(Math.max(0, opts.durationMs || 1000),
-          Math.max(1, opts.timeoutMs || 10000));
-        setTimeout(function () {
-          state.waitStarted = 0;
-          resolve({ ok: true, reason: "time", durationMs: duration });
-        }, duration);
-        return;
-      }
-      var settled = false;
-      var timer = null;
-      function cleanup() {
-        var index = state.checkCallbacks.indexOf(check);
-        if (index !== -1) { state.checkCallbacks.splice(index, 1); }
-        document.removeEventListener("readystatechange", check);
-        if (timer !== null) { clearInterval(timer); }
-      }
-      function finish() {
-        if (settled) { return; }
-        settled = true;
-        cleanup();
-        var r = waitCheck(opts);
-        resolve({ ok: r.ok, reason: r.reason, durationMs: r.durationMs, detail: r.detail });
-      }
-      function check() {
-        if (settled) { return; }
-        var r = waitCheck(opts);
-        if (!r.pending) { finish(); }
-      }
-      state.checkCallbacks.push(check);
-      document.addEventListener("readystatechange", check);
-      // Event-driven triggers (mutations, network, readyState) are the
-      // primary path; this tick covers conditions that change without any
-      // DOM or network event (e.g. a hash-only URL change). Cleaned up on
-      // settle — never runs past the wait.
-      timer = setInterval(check, 500);
-      check();
-    });
+    return waitCheck(state.waitOptions);
+  }
+
+  function waitPoll() {
+    return waitCheck(state.waitOptions || {});
   }
 
   // --- install ---------------------------------------------------------------
-  window.__lumiscaProbe = { snapshot: snapshot, act: act, wait: wait };
+  window.__lumiscaProbe = {
+    snapshot: snapshot,
+    act: act,
+    waitBegin: waitBegin,
+    waitPoll: waitPoll
+  };
 })();
 `;
 /* LUMISCA-PROBE-END */

@@ -12,8 +12,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# The browser lab pane is a separate window overlaid on the main window
-# (browser_lab.rs), so no unstable child-WebView APIs are needed.
+# The browser lab is an ordinary top-level window (browser_lab.rs): its own
+# WebView, its own window, no docking, so no unstable child-WebView APIs are
+# needed.
 tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2"
 tauri-plugin-dialog = "2"
@@ -39,7 +40,12 @@ reqwest = { version = "0.13", default-features = false, features = ["blocking", 
 # The provider server::install_crypto_provider installs (ring — the same
 # choice tauri-plugin-updater makes).
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
-# Shared browser-lab protocol pieces (RPC server, probe, URL policy).
+# The screenshot payloads the platform snapshot APIs return as raw bytes
+# are base64 on the wire (packages/core/browser/types.ts). Windows never
+# touches it — CDP hands back base64 directly.
+base64 = "0.22"
+# Shared browser-lab protocol pieces (viewport math, probe driver, CDP
+# params, RPC server).
 lumisca-browser-rpc = { path = "../../browser-rpc" }
 
 [target.'cfg(windows)'.dependencies]
@@ -49,8 +55,8 @@ lumisca-browser-rpc = { path = "../../browser-rpc" }
 # second copy of the crate is a different type. `cargo update` therefore
 # reports it as "unchanged behind latest" — expected until the framework
 # moves. Used to force-activate the window before a bridge-started caption
-# drag, and for IVirtualDesktopManager (the browser lab pane follows the
-# main window across Windows virtual desktops — see browser_lab.rs).
+# drag, and for GetLocalTime (the timestamp of every captured server log
+# line, server_log.rs).
 windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_System_Com",
@@ -70,12 +76,52 @@ windows = { version = "0.61", features = [
 # rest of the shell uses; the two coexist in the tree); the backend
 # notify-rust (via tauri-plugin-notification) is used on other platforms.
 tauri-winrt-notification = "0.8"
-# Direct WebView2 COM access for the browser lab's CDP screenshot and
-# (future) runtime/console/network events. Must stay on the copy wry
-# resolves to (same reason as `windows` above): the
-# ICoreWebView2Controller our CDP calls arrive on comes from wry's
-# `with_webview`, so another copy of the crate is another type.
+# Direct WebView2 COM access for the browser lab's CDP screenshot
+# (browser_lab.rs). Must stay on the copy wry resolves to (same reason as
+# `windows` above): the ICoreWebView2Controller our CDP calls arrive on
+# comes from wry's `with_webview`, so another copy of the crate is another
+# type.
 webview2-com = "0.38"
+
+# macOS screenshot: `WKWebView.takeSnapshot`. `with_webview` hands over the
+# raw WKWebView pointer, so these crates must resolve to the same versions
+# Tauri/wry build against (their types are what crosses the boundary).
+# Feature sets mirror what browser_lab.rs touches; Tauri's own set is
+# unioned in, and Tauri's docs pin it to a minor version for this reason.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+  "std",
+  # NSImage (TIFFRepresentation) and NSBitmapImageRep (imageRepWithData,
+  # representationUsingType:properties:). NSBitmapImageRep itself needs
+  # NSImageRep: it is the superclass the class export is gated on.
+  "NSImage",
+  "NSBitmapImageRep",
+  "NSImageRep",
+] }
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  # NSData (data.to_vec()), NSDictionary (the empty encode-properties
+  # dictionary) and NSError (the snapshot completion handler's argument).
+  "NSData",
+  "NSDictionary",
+  "NSError",
+] }
+objc2-web-kit = { version = "0.3", default-features = false, features = [
+  "objc2-app-kit",
+  # WKWebView.takeSnapshotWithConfiguration:completionHandler:
+  "WKWebView",
+  "WKSnapshotConfiguration",
+  "block2",
+] }
+# The completion handler passed to takeSnapshot is a block.
+block2 = "0.6"
+
+# Linux screenshot: WebKitGTK's `webkit_web_view_get_snapshot`, called on
+# the webkit2gtk::WebView `with_webview` hands over. Same crate and version
+# Tauri resolves (Tauri's own feature set is unioned in).
+[target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
+webkit2gtk = { version = "2", features = ["v2_40"] }
 
 [target.'cfg(unix)'.dependencies]
 # kill(2) for process-group teardown of the local server (server.rs).

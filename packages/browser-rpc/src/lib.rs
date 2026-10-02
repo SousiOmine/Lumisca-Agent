@@ -1,19 +1,24 @@
 //! lumisca-browser-rpc: protocol pieces for the browser-lab host — the
-//! desktop shell's WebView pane (packages/desktop/src-tauri).
+//! desktop shell's WebView window (packages/desktop/src-tauri).
 //!
 //! The host serves the RPC protocol to the Deno side (see
 //! packages/core/browser/types.ts): POST /rpc with a random-token header,
 //! JSON bodies, strict size limits, explicit errors — no fallbacks. This
 //! crate provides the probe extraction, the URL policy (defense in depth —
-//! the Deno tools enforce it first), and a minimal HTTP/1.1 server.
+//! the Deno tools enforce it first), the viewport geometry, and a minimal
+//! HTTP/1.1 server.
+//!
+//! Nothing here is platform-specific: the probe channel, the viewport and
+//! the wait are the same on Windows, macOS and Linux. The one Windows-only
+//! piece is [`cdp`], used solely for capturing a screenshot.
 
 pub mod cdp;
-pub mod emulation;
 pub mod eval;
 pub mod policy;
 pub mod probe;
 pub mod rpc;
 pub mod server;
+pub mod viewport;
 
 pub use rpc::{RpcError, RpcReply};
 pub use server::{RpcHandler, RpcServer};
@@ -45,8 +50,6 @@ pub mod error_codes {
     pub const PROBE_MISSING: &str = "probe_missing";
     pub const PROBE_ERROR: &str = "probe_error";
     pub const ACTION_FAILED: &str = "action_failed";
-    pub const WAIT_UNSUPPORTED: &str = "wait_unsupported";
-    pub const SCREENSHOT_UNSUPPORTED: &str = "screenshot_unsupported";
     pub const TIMEOUT: &str = "timeout";
     pub const TOO_LARGE: &str = "too_large";
     pub const CLOSED: &str = "closed";

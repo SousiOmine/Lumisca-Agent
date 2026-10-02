@@ -19,8 +19,6 @@
  *
  *   900px  compact: tablet-like widths. Tighten spacing, allow wrapping,
  *                   drop fixed widths that no longer fit.
- *   720px  pane: the docked pane (460px) leaves too little of the window to
- *                be usable side by side, so it covers the app instead.
  *   600px  phone: one column; full-screen modals; the progress panels
  *                stack at the top of the chat.
  *
@@ -50,15 +48,6 @@
    * composer stays above it. The default must stay a length: the shell
    * (`.app`, layout.css) reads it unconditionally. */
   --app-height: 100dvh;
-  /* the docked pane (the agent's browser lab today, hosting a native
-   * surface at the right edge). Must match PANE_WIDTH /
-   * PANE_HEADER_HEIGHT in packages/desktop/src-tauri/src/pane.rs (the
-   * native pane window is positioned against these same numbers).
-   * Clamped to the viewport: a window narrower than the pane cannot show
-   * both, and pane.rs clamps the native window to the same width, so the
-   * reserved strip and the pane keep matching at any window size. */
-  --pane-width: min(460px, 100vw);
-  --pane-header-height: 36px;
   /* Fill factor (0..1) of the thinking-strength slider, written per render
    * by the component (see ThinkingLevelSlider). The zero here keeps the
    * calc() that reads it valid — the same reason as --app-banner-height. */
@@ -106,9 +95,9 @@ html[data-theme="dark"] {
   --user-msg-bg: #141414;
   --input-bg: var(--surface);
   /* selected tab: a raised card floating above the bar (a lighter surface,
-   * like .titlebar-btn.active). The light theme raises the card too, but
-   * its ramp is inverted (white on gray), so the card keeps its own tokens
-   * instead of reusing the surface ramp. */
+   * like a title-bar button on hover). The light theme raises the card too,
+   * but its ramp is inverted (white on gray), so the card keeps its own
+   * tokens instead of reusing the surface ramp. */
   --tab-active-bg: #424242;
   --tab-active-text: #ffffff;
   --tab-active-dim: rgba(255, 255, 255, 0.5);

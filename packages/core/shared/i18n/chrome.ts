@@ -2,22 +2,14 @@ import type { LocalizedText } from "./types.ts";
 
 /**
  * Messages of the app chrome: the title bar and tab bar, the app menu, the
- * pane header, the banners (update, server down) and the pickers that are
- * opened from them (model, workspace, folder, peer).
+ * banners (update, server down) and the pickers that are opened from them
+ * (model, workspace, folder, peer).
  *
  * Keys are `chrome.<surface>.<element>`; the shared actions (close, back,
  * …) live in `common.ts`.
  */
 export const chrome = {
   // --- title bar -----------------------------------------------------------
-  "chrome.titleBar.paneHide": {
-    ja: "サイドパネルを閉じる",
-    en: "Close side panel",
-  },
-  "chrome.titleBar.paneShow": {
-    ja: "サイドパネルを表示",
-    en: "Show side panel",
-  },
   "chrome.titleBar.minimize": { ja: "最小化", en: "Minimize" },
   "chrome.titleBar.maximize": { ja: "最大化", en: "Maximize" },
   "chrome.titleBar.restore": {
@@ -70,13 +62,6 @@ export const chrome = {
     en: "Session history",
   },
   "chrome.appMenu.quit": { ja: "終了", en: "Quit" },
-
-  // --- pane header ---------------------------------------------------------
-  "chrome.paneHeader.unavailable": {
-    ja: "このパネルは現在操作できません",
-    en: "This panel is currently unavailable",
-  },
-  "chrome.paneHeader.close": { ja: "パネルを閉じる", en: "Close panel" },
 
   // --- update banner -------------------------------------------------------
   "chrome.update.downloaded": {

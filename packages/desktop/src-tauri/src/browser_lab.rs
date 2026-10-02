@@ -6,72 +6,64 @@
 //!   127.0.0.1:0, generates the per-run random token, and hands both to
 //!   the local server through `LUMISCA_BROWSER_IPC_URL` /
 //!   `LUMISCA_BROWSER_TOKEN` (server.rs). No window exists yet.
-//! - the `open` RPC creates the single `browser-lab` WebviewWindow on
-//!   demand, OVERLAID on the app's `main` window as the right-side lab
-//!   pane: borderless, taskbar-hidden, resizable-off, and positioned
-//!   exactly over the main window's client area below the title bar and
-//!   the pane header (see `place_pane`). It is NOT a child WebView of
-//!   the main window: multiple WebView2 controllers inside one top-level
-//!   window break mouse routing to the main webview (windows show up as
-//!   an unresponsive title bar), so the lab keeps its own window and is
-//!   kept on top of the main window instead (see `raise` / `sync`). The
-//!   pane is OWNED by the main window (`WebviewWindowBuilder::owner`):
-//!   the Windows shell binds owned windows to the owner's virtual
-//!   desktop, so switching desktops hides the pane with the app instead
-//!   of leaving it visible on every desktop (an unowned, taskbar-less
-//!   window is not tracked per desktop and lingers after the switch).
-//!   `match_main_desktop` re-pins the pane to the main window's desktop
-//!   explicitly as well — right after creation, on every open, when the
-//!   pane is shown, and on every sync.
-//! - observe/act/wait/screenshot drive the page through
-//!   `eval_with_callback` — the probe runs in the page, results come back
-//!   through the eval callback. No polling, no push channel. These work
-//!   whether or not the pane is currently shown: hiding the pane is a UI
-//!   choice (bridge `pane/set-visible` / the header's hide button),
-//!   not a protocol state.
-//! - `close` destroys the window (idempotent); a window closed by the
-//!   user makes every later call fail with `not_open` (no recreation
-//!   behind the caller's back).
+//! - the `open` RPC creates the single `browser-lab` window on demand: an
+//!   ordinary, decorated top-level window titled with the page URL. It is
+//!   deliberately NOT docked to the app window — docking meant a
+//!   borderless window overlaid on the main window's right edge, which
+//!   needed per-platform z-order and virtual-desktop handling
+//!   (SetWindowPos, IVirtualDesktopManager) that macOS and Linux cannot
+//!   provide at all. A window of its own needs none of that, and the OS
+//!   supplies the title bar, focus and placement for free.
+//! - the agent-chosen viewport is reproduced BY the window: its client
+//!   area is sized to the viewport and, when the viewport does not fit the
+//!   display, the webview is zoomed out so the page still lays out at the
+//!   requested CSS size (see `lumisca_browser_rpc::viewport`). No device
+//!   emulation API is involved, so one implementation covers WebView2,
+//!   WKWebView and WebKitGTK.
+//! - observe/act drive the page through `eval_with_callback` — the probe
+//!   runs in the page, results come back through the eval callback. They
+//!   work whether or not the window is currently shown: hiding it is a UI
+//!   choice, not a protocol state.
+//! - wait is host-driven: the probe holds the wait state and the host
+//!   polls it (`waitBegin` / `waitPoll`), because WebView2 executes
+//!   scripts without awaiting and WebKitGTK never resolves promises.
+//! - screenshot is the lab's only platform-specific capability, and each
+//!   platform uses its own public API: WebView2 over the DevTools Protocol
+//!   (Windows), `WKWebView.takeSnapshot` (macOS) and WebKitGTK's
+//!   `webkit_web_view_get_snapshot` (Linux).
+//! - `close` destroys the window (idempotent); a window the user closed
+//!   makes every later call fail with `not_open` — no recreation behind
+//!   the caller's back.
 //! - the main window's destruction and the updater's exit hook shut the
 //!   lab down (destroy window + stop the RPC listener), so no orphaned
 //!   WebView or listener outlives the app.
 //!
 //! Security: the lab window is a separate window (no capability file
-//! covers its label), and its page is always a REMOTE origin — the
-//! "main" capability resolves only for LOCAL origins (the tauri:// app
-//! origin; no `remote` URL patterns are configured), so every Tauri IPC
-//! call from the lab page is denied by the ACL. The lumisca:// shell
-//! bridge is additionally unreachable from the lab page (it requires the
-//! displayed server's token, which the page never has), and `lumisca:`
-//! navigations are blocked outright (BLOCKED_SCHEMES).
-//!
-//! Screenshots use the WebView2 DevTools protocol directly on Windows
-//! (`Page.captureScreenshot` via `CallDevToolsProtocolMethod`). macOS and
-//! Linux have no stable capture API in wry 0.55 — the host answers with
-//! an explicit `screenshot_unsupported` error instead of a blank image.
+//! covers its label), and its page is always a REMOTE origin — the "main"
+//! capability resolves only for LOCAL origins, so every Tauri IPC call
+//! from the lab page is denied by the ACL. The lumisca:// shell bridge is
+//! additionally unreachable from the lab page (it requires the displayed
+//! server's token, which the page never has), and `lumisca:` navigations
+//! are blocked outright (BLOCKED_SCHEMES).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-// Windows only: the CDP transport is WebView2's DevTools Protocol.
 #[cfg(windows)]
 use lumisca_browser_rpc::cdp;
-// Not cfg(windows): DEFAULT_VIEWPORT_* are the protocol-level default for
-// `open` on every platform, and the eval driver serves every platform's
-// observe/act.
-use lumisca_browser_rpc::emulation;
 use lumisca_browser_rpc::eval::{
-    driver, probe_method_of, to_js_literal, EVAL_TIMEOUT, WAIT_HEADROOM,
+    driver, probe_method_of, to_js_literal, wait_pending, wait_timeout_ms, EVAL_TIMEOUT,
+    PROBE_WAIT_BEGIN, PROBE_WAIT_POLL, WAIT_HEADROOM, WAIT_POLL_INTERVAL,
 };
 use lumisca_browser_rpc::server::RpcHandler;
+use lumisca_browser_rpc::viewport;
 use lumisca_browser_rpc::{error_codes, methods, policy, probe, RpcError};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, WebviewWindow, WebviewWindowBuilder};
 
-use crate::AppState;
-use crate::{pane, LockRecover};
+use crate::{AppState, LockRecover};
 
 /// Label of the lab window. Deliberately NOT covered by any capability
 /// file, so the lab page can never call Tauri IPC (see the module docs).
@@ -93,21 +85,15 @@ struct LabCore {
     /// lab is closed (user or RPC) — `open` recreates it, everything else
     /// answers `not_open`.
     window: Mutex<Option<WebviewWindow>>,
-    /// Whether the lab pane is currently shown. UI-only state: hiding the
-    /// pane keeps the lab alive (the agent keeps operating the browser in
-    /// the background); the bridge reads/writes this, RPC close() resets
-    /// it.
+    /// Whether the lab window is currently shown. UI-only state: hiding the
+    /// window keeps the lab alive (the agent keeps operating the browser in
+    /// the background); RPC close() resets it.
     visible: Mutex<bool>,
     /// The agent-chosen viewport in CSS pixels, set by every open() (the
     /// Deno tools always send explicit values; the protocol default is
-    /// 800×600). The page LAYS OUT at this size and the rendering is
-    /// scaled to fit the pane via CDP device emulation (Windows).
+    /// 800×600). The window is sized (and zoomed) to reproduce it, and the
+    /// screenshot clips to it.
     viewport: Mutex<Option<(u32, u32)>>,
-    /// Fit scale of the last applied emulation. Reapplied only when it
-    /// changes, so window-move/focus events do not re-run CDP calls.
-    /// Windows only: the emulation it caches is a CDP feature.
-    #[cfg(windows)]
-    applied_scale: Mutex<Option<f64>>,
     /// One eval at a time (the protocol is strict request/response per
     /// host; a second call while one is in flight is refused, never
     /// queued — a stuck page must not pile requests).
@@ -140,8 +126,6 @@ impl BrowserLab {
             window: Mutex::new(None),
             visible: Mutex::new(false),
             viewport: Mutex::new(None),
-            #[cfg(windows)]
-            applied_scale: Mutex::new(None),
             busy: Mutex::new(()),
             pending: Arc::new(Mutex::new(HashMap::new())),
             next_req: AtomicU64::new(1),
@@ -183,7 +167,7 @@ impl BrowserLab {
 }
 
 /// The RPC dispatcher: runs on the listener's connection threads and
-/// coordinates with the WebView through the main-thread dispatchers.
+/// drives the WebView through the eval channel.
 struct LabHandler {
     core: Arc<LabCore>,
 }
@@ -192,232 +176,17 @@ impl RpcHandler for LabHandler {
     fn handle(&self, method: &str, params: Value) -> Result<Value, RpcError> {
         match method {
             methods::OPEN => self.open(&params),
-            methods::OBSERVE => self.eval_call(methods::OBSERVE, &params, EVAL_TIMEOUT),
-            methods::ACT => self.eval_call(methods::ACT, &params, EVAL_TIMEOUT),
-            methods::WAIT => self.wait(&params),
-            methods::SCREENSHOT => self.screenshot(&params),
+            methods::OBSERVE | methods::ACT => self.core.eval_probe(method, &params, EVAL_TIMEOUT),
+            methods::WAIT => self.core.wait(&params),
+            methods::SCREENSHOT => self.core.screenshot(&params),
             methods::CLOSE => self.close(),
             _ => Err(RpcError::invalid(format!("unknown method: {method}"))),
         }
     }
 }
 
-impl LabCore {
-    /// Create the lab window on demand (idempotent per call — this IS
-    /// open()'s job), or navigate the existing one. Runs on the RPC
-    /// thread: window creation/navigation are message-driven and
-    /// thread-safe; ownership, geometry and the virtual-desktop pin are
-    /// applied at creation (the window starts hidden so it never
-    /// flashes at a default position or on a wrong desktop).
-    fn ensure_window(&self, url: &str, visible: bool) -> Result<WebviewWindow, RpcError> {
-        let parsed =
-            url::Url::parse(url).map_err(|e| RpcError::invalid(format!("URL が不正です: {e}")))?;
-        let main = pane::main_window(&self.app)
-            .ok_or_else(|| RpcError::internal("main ウィンドウがありません"))?;
-        // Self-heal: if the manager no longer knows the lab (destroyed
-        // outside close(), e.g. after a WebView2 crash), forget the stale
-        // handle so the next open builds a fresh window.
-        if self.app.get_webview_window(LAB_WINDOW_LABEL).is_none() {
-            *self.window.lock_recover() = None;
-        }
-        if let Some(window) = self.window.lock_recover().clone() {
-            let _ = window.navigate(parsed);
-            pane::place(&window, &main);
-            pane::match_main_desktop(&window, &main);
-            self.apply_visibility(&window, visible)?;
-            *self.visible.lock_recover() = visible;
-            return Ok(window);
-        }
-        let builder = WebviewWindowBuilder::new(
-            &self.app,
-            LAB_WINDOW_LABEL,
-            tauri::WebviewUrl::External(parsed),
-        )
-        .title("")
-        .decorations(false)
-        .resizable(false)
-        .skip_taskbar(true)
-        .shadow(false)
-        // Start hidden: `place_pane` runs after creation, and an
-        // unplaced flash at the default position would be ugly.
-        .visible(false)
-        .initialization_script(self.probe_source)
-        // The lab page must never open the lumisca:// shell
-        // bridge: block those navigations outright.
-        .on_navigation(|candidate| {
-            !BLOCKED_SCHEMES
-                .iter()
-                .any(|scheme| candidate.as_str().starts_with(scheme))
-        });
-        // Owned by the main window (Windows only). The Windows shell
-        // binds owned windows to the owner's virtual desktop: a
-        // taskbar-less, unowned top-level window is not tracked per
-        // desktop and stays visible on EVERY desktop after a switch
-        // (the pane "lingering" on other desktops while the app does
-        // not). Ownership also keeps the pane above the app and hides
-        // it when the app is minimized — the pane is an overlay docked
-        // to the app, so both match its intended behavior.
-        // Owner windows (MSDN) are a Windows-only concept and the
-        // method does not exist on `WebviewWindowBuilder` for
-        // macOS/Linux, so the binding is compiled for Windows only;
-        // elsewhere the pane stays a fully independent window.
-        #[cfg(windows)]
-        let builder = builder.owner(&main).map_err(|e| {
-            RpcError::internal(format!(
-                "ブラウザパネルをメインウィンドウに紐づけられません: {e}"
-            ))
-        })?;
-        let window = builder
-            .build()
-            .map_err(|e| RpcError::internal(format!("ブラウザパネルを作成できません: {e}")))?;
-        // Pin before the first show: the window is created hidden, so a
-        // desktop switch mid-creation can never flash the borderless
-        // pane on the wrong desktop.
-        pane::place(&window, &main);
-        pane::match_main_desktop(&window, &main);
-        pane::raise(&window);
-        self.apply_visibility(&window, visible)?;
-        *self.window.lock_recover() = Some(window.clone());
-        *self.visible.lock_recover() = visible;
-        Ok(window)
-    }
-
-    /// Show or hide the pane (UI choice). The lab keeps running while
-    /// hidden; the agent's observe/act calls are unaffected. Never
-    /// focuses the window: the agent opens the browser on its own, and
-    /// stealing keyboard focus from the user's input would be rude;
-    /// clicking the page gives it focus naturally.
-    fn apply_visibility(&self, window: &WebviewWindow, visible: bool) -> Result<(), RpcError> {
-        if visible {
-            window
-                .show()
-                .map_err(|e| RpcError::internal(format!("ブラウザパネルを表示できません: {e}")))?;
-            // Re-pin on every show: the pane is owned (and thus bound)
-            // to the main window's desktop, but re-asserting it costs
-            // nothing and covers a main window that moved to another
-            // desktop while the pane was hidden.
-            if let Some(main) = pane::main_window(&self.app) {
-                pane::match_main_desktop(window, &main);
-            }
-            Ok(())
-        } else {
-            window
-                .hide()
-                .map_err(|e| RpcError::internal(format!("ブラウザパネルを閉じられません: {e}")))
-        }
-    }
-
-    /// Keep the pane glued to the main window: re-apply the overlay
-    /// geometry, pin it to the main window's virtual desktop, and —
-    /// while the main window is the focused one — bring the lab above it
-    /// (without stealing activation). Called from lib.rs on the main
-    /// window's Moved / Resized / Focused events.
-    fn sync(&self) {
-        let Some(pane) = self.window.lock_recover().clone() else {
-            return;
-        };
-        let Some(main) = pane::main_window(&self.app) else {
-            return;
-        };
-        pane::place(&pane, &main);
-        pane::match_main_desktop(&pane, &main);
-        self.reapply_emulation(&pane);
-        // Only raise when the main window holds focus: raising while
-        // another app is active would float the lab over that app, and
-        // raising while the lab itself is focused is unnecessary (it is
-        // already on top by virtue of being the active window).
-        if main.is_focused().unwrap_or(false) {
-            pane::raise(&pane);
-        }
-    }
-
-    /// Re-apply the emulated viewport with a fresh fit scale after the
-    /// pane resized. Fire-and-forget: sync() runs on the main thread and
-    /// cannot block on the CDP reply (the reply needs this thread's
-    /// message pump); only a changed scale actually re-sends. A failed
-    /// send loses only the fit update — the next open or resize retries.
-    #[cfg(windows)]
-    fn reapply_emulation(&self, pane: &WebviewWindow) {
-        let (width, height) = match *self.viewport.lock_recover() {
-            Some(vp) => vp,
-            None => return,
-        };
-        let (area_w, area_h) = pane::size(pane);
-        let scale = emulation::fit_scale(width, height, area_w, area_h);
-        if *self.applied_scale.lock_recover() == Some(scale) {
-            return;
-        }
-        self.applied_scale.lock_recover().replace(scale);
-        let params = emulation::device_metrics_params(width, height, scale);
-        let _ = pane.with_webview(move |platform| {
-            use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
-            use windows::core::HSTRING;
-            let Ok(core_webview) = (unsafe { platform.controller().CoreWebView2() }) else {
-                return;
-            };
-            let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
-                move |_status: windows::core::Result<()>, _result: String| Ok(()),
-            ));
-            let method = HSTRING::from("Emulation.setDeviceMetricsOverride");
-            let cdp_params = HSTRING::from(params.to_string());
-            let _ =
-                unsafe { core_webview.CallDevToolsProtocolMethod(&method, &cdp_params, &handler) };
-        });
-    }
-
-    #[cfg(not(windows))]
-    fn reapply_emulation(&self, _pane: &WebviewWindow) {}
-
-    /// Current pane state for the bridge (`pane/state` and friends):
-    /// does the pane exist, is it shown, and which content is hosted.
-    /// The response uses the generic pane protocol shape — a `content`
-    /// object carrying a `kind` and a header `label` — so surfaces other
-    /// than the browser lab can be hosted in the same dock later. The
-    /// lab reports itself as kind "browser" with the loaded page URL as
-    /// the label.
-    fn state_json(&self) -> Value {
-        // One guard for the whole report (the lock order is window →
-        // visible everywhere, see ensure_window/close).
-        let window = self.window.lock_recover();
-        let open = window.is_some();
-        let visible = *self.visible.lock_recover();
-        let content = if open {
-            let label = window
-                .as_ref()
-                .and_then(|w| w.url().ok())
-                .map(|u| u.to_string());
-            Some(json!({ "kind": "browser", "label": label }))
-        } else {
-            None
-        };
-        json!({ "open": open, "visible": visible && open, "content": content })
-    }
-
-    /// Show or hide the pane (UI choice). The lab keeps running while
-    /// hidden; the agent's observe/act calls are unaffected.
-    fn set_pane_visible(&self, visible: bool) -> Value {
-        if let Some(window) = self.window.lock_recover().clone() {
-            // One show/hide path: apply_visibility owns the re-pin and the
-            // error messages. A failure is reported to the caller (the web
-            // UI shows it) instead of being dropped, which would leave the
-            // toggle looking stuck.
-            if let Err(error) = self.apply_visibility(&window, visible) {
-                let mut state = self.state_json();
-                state["error"] = json!(error.message);
-                return state;
-            }
-            *self.visible.lock_recover() = visible;
-        }
-        self.state_json()
-    }
-
-    fn toggle_pane(&self) -> Value {
-        let visible = !*self.visible.lock_recover();
-        self.set_pane_visible(visible)
-    }
-}
-
 impl LabHandler {
+    /// Create or navigate the lab window and report where it landed.
     fn open(&self, params: &Value) -> Result<Value, RpcError> {
         let url = params
             .get("url")
@@ -433,104 +202,259 @@ impl LabHandler {
         let width = params
             .get("width")
             .and_then(Value::as_u64)
-            .unwrap_or(emulation::DEFAULT_VIEWPORT_WIDTH as u64) as u32;
+            .unwrap_or(u64::from(viewport::DEFAULT_VIEWPORT_WIDTH)) as u32;
         let height = params
             .get("height")
             .and_then(Value::as_u64)
-            .unwrap_or(emulation::DEFAULT_VIEWPORT_HEIGHT as u64) as u32;
-        // The agent-chosen viewport: the pane is a fixed-width strip, so
-        // the page lays out at this size and is scaled to fit the pane
-        // (device emulation, Windows only — see apply_emulation).
+            .unwrap_or(u64::from(viewport::DEFAULT_VIEWPORT_HEIGHT)) as u32;
+        // The viewport drives the window geometry, so it is recorded before
+        // the window is created or resized.
         *self.core.viewport.lock_recover() = Some((width, height));
 
         let window = self.core.ensure_window(url, visible)?;
-        self.apply_emulation(&window)?;
-        let info = json!({
-            "url": window.url().map(|u| u.to_string()).unwrap_or_else(|_| url.to_string()),
-            "title": window.title().unwrap_or_default(),
-            "readyState": "",
-        });
-        Ok(info)
+        // Only the URL is reported: the navigation has just been requested,
+        // so the document title and ready state do not exist yet. Both
+        // arrive with the first observe (the probe's snapshot carries
+        // them), which is also where the agent reads page state anyway.
+        Ok(json!({
+            "url": window
+                .url()
+                .map(|u| u.to_string())
+                .unwrap_or_else(|_| url.to_string()),
+        }))
     }
 
-    /// Apply the agent-chosen viewport to the lab window — the page lays
-    /// out at that size, scaled to fit the pane. Windows: WebView2 CDP
-    /// `Emulation.setDeviceMetricsOverride`. macOS/Linux: WebKit exposes
-    /// no emulation API, so the pane size stays the viewport (a no-op).
-    /// An emulation failure fails the open loudly — a silently wrong
-    /// resolution would lie to the agent (observe reports innerWidth).
-    fn apply_emulation(&self, window: &WebviewWindow) -> Result<(), RpcError> {
-        #[cfg(windows)]
-        {
-            let viewport = *self.core.viewport.lock_recover();
-            let (width, height) = match viewport {
-                // open() always sets the viewport before calling.
-                Some(vp) => vp,
-                None => return Ok(()),
-            };
-            let (area_w, area_h) = pane::size(window);
-            let scale = emulation::fit_scale(width, height, area_w, area_h);
-            let params = emulation::device_metrics_params(width, height, scale);
-            self.cdp_call_sync(
-                window,
-                "Emulation.setDeviceMetricsOverride",
-                &params,
-                CDP_TIMEOUT,
-            )?;
-            *self.core.applied_scale.lock_recover() = Some(scale);
+    fn close(&self) -> Result<Value, RpcError> {
+        self.core.close()
+    }
+}
+
+impl LabCore {
+    /// The usable area of the display the lab window lives on, in logical
+    /// pixels. `work_area` excludes the taskbar/dock/menu bar, so a
+    /// viewport that fits there becomes a window that is fully visible.
+    fn work_area(&self) -> (f64, f64) {
+        let monitor = self.app.primary_monitor().ok().flatten().or_else(|| {
+            self.app
+                .available_monitors()
+                .ok()
+                .and_then(|m| m.into_iter().next())
+        });
+        match monitor {
+            Some(monitor) => {
+                let scale = monitor.scale_factor();
+                let area = monitor.work_area();
+                (
+                    f64::from(area.size.width) / scale,
+                    f64::from(area.size.height) / scale,
+                )
+            }
+            // No display information (headless session): nothing constrains
+            // the window, and the zoom stays 1.
+            None => (f64::INFINITY, f64::INFINITY),
         }
-        #[cfg(not(windows))]
-        {
-            let _ = window;
+    }
+
+    /// Create the lab window on demand (idempotent per call — this IS
+    /// open()'s job), or navigate the existing one. Runs on the RPC
+    /// thread: window creation/navigation are message-driven and
+    /// thread-safe. The window starts hidden so it never flashes at a
+    /// default position, and the viewport is applied before the first show.
+    fn ensure_window(&self, url: &str, visible: bool) -> Result<WebviewWindow, RpcError> {
+        let parsed =
+            url::Url::parse(url).map_err(|e| RpcError::invalid(format!("URL が不正です: {e}")))?;
+        // Self-heal: if the manager no longer knows the lab (destroyed
+        // outside close(), e.g. after a WebView crash), forget the stale
+        // handle so the next open builds a fresh window.
+        if self.app.get_webview_window(LAB_WINDOW_LABEL).is_none() {
+            *self.window.lock_recover() = None;
         }
+        if let Some(window) = self.window.lock_recover().clone() {
+            let _ = window.navigate(parsed);
+            self.apply_viewport(&window)?;
+            self.apply_visibility(&window, visible)?;
+            *self.visible.lock_recover() = visible;
+            return Ok(window);
+        }
+        let builder = WebviewWindowBuilder::new(
+            &self.app,
+            LAB_WINDOW_LABEL,
+            tauri::WebviewUrl::External(parsed.clone()),
+        )
+        // The title names the app being debugged: this is an ordinary
+        // window now, so the OS window list and the taskbar show it.
+        .title(parsed.as_str())
+        // The viewport is the agent's choice, so the user cannot resize it
+        // out from under a layout being tested. `open` sizes it instead.
+        .resizable(false)
+        .visible(false)
+        .initialization_script(self.probe_source)
+        // The lab page must never open the lumisca:// shell bridge: block
+        // those navigations outright.
+        .on_navigation(|candidate| {
+            !BLOCKED_SCHEMES
+                .iter()
+                .any(|scheme| candidate.as_str().starts_with(scheme))
+        });
+        let window = builder
+            .build()
+            .map_err(|e| RpcError::internal(format!("ブラウザウィンドウを作成できません: {e}")))?;
+        self.apply_viewport(&window)?;
+        self.apply_visibility(&window, visible)?;
+        *self.window.lock_recover() = Some(window.clone());
+        *self.visible.lock_recover() = visible;
+        Ok(window)
+    }
+
+    /// Make the webview's CSS viewport the agent's requested size.
+    ///
+    /// The window's client area carries the viewport (Tauri's `set_size`
+    /// sets the INNER size), and when the viewport is larger than the
+    /// display the zoom shrinks by the same factor — `window.innerWidth`
+    /// counts client-area CSS pixels, so `client_width / zoom` stays at the
+    /// requested width. This is what device emulation used to do on
+    /// Windows, expressed with an API every platform has.
+    ///
+    /// The client area is only *requested* here; [`Self::settle_client_size`]
+    /// confirms it once the window server has answered.
+    fn apply_viewport(&self, window: &WebviewWindow) -> Result<(), RpcError> {
+        let target = match self.viewport_target() {
+            Some(target) => target,
+            None => return Ok(()),
+        };
+        window
+            .set_size(LogicalSize::new(target.window_width, target.window_height))
+            .map_err(|e| {
+                RpcError::internal(format!("ブラウザウィンドウのサイズを変更できません: {e}"))
+            })?;
+        window
+            .set_zoom(target.zoom)
+            .map_err(|e| RpcError::internal(format!("ブラウザのズームを設定できません: {e}")))?;
         Ok(())
     }
 
-    /// One synchronous probe call through the eval channel.
-    fn eval_call(
+    /// Reconcile the window with the viewport the page actually got.
+    ///
+    /// The window APIs cannot be trusted for this: on macOS `set_size`
+    /// gives the window server a size it reinterprets, and the webview
+    /// comes back one title bar shorter than the size asked for (measured:
+    /// 390×844 requested → 390×816 reported by the page, 390×700 →
+    /// 390×672), while `outer_size` and `inner_size` both keep reporting
+    /// the size that was asked for. The page is the only authority, and
+    /// `observe` already carries the viewport it measured, so the
+    /// correction rides on a call the agent makes anyway: the first
+    /// snapshot may still report the size from before the correction, the
+    /// next reports the settled one. A window that already matches is left
+    /// alone, which is the whole steady state.
+    fn reconcile_viewport(&self, window: &WebviewWindow, answer: &Value) {
+        let Some(asked) = *self.viewport.lock_recover() else {
+            return;
+        };
+        let (Some(width), Some(height)) = (
+            answer
+                .pointer("/viewport/width")
+                .and_then(Value::as_u64)
+                .map(|v| v as u32),
+            answer
+                .pointer("/viewport/height")
+                .and_then(Value::as_u64)
+                .map(|v| v as u32),
+        ) else {
+            return;
+        };
+        if (width, height) == asked {
+            return;
+        }
+        let Some(target) = self.viewport_target() else {
+            return;
+        };
+        // A CSS-pixel shortage converts to window pixels through the zoom
+        // the page is rendered at.
+        let delta_width = (f64::from(asked.0) - f64::from(width)) * target.zoom;
+        let delta_height = (f64::from(asked.1) - f64::from(height)) * target.zoom;
+        let _ = window.set_size(LogicalSize::new(
+            target.window_width + delta_width,
+            target.window_height + delta_height,
+        ));
+    }
+
+    /// The window geometry the current viewport asks for.
+    fn viewport_target(&self) -> Option<viewport::ViewportFit> {
+        let viewport = (*self.viewport.lock_recover())?;
+        let (area_w, area_h) = self.work_area();
+        Some(viewport::fit_viewport(
+            viewport.0, viewport.1, area_w, area_h,
+        ))
+    }
+
+    /// Show or hide the window (a UI choice). The lab keeps running while
+    /// hidden; the agent's observe/act calls are unaffected. Never steals
+    /// keyboard focus: the agent opens the browser on its own, and taking
+    /// focus from the user's input would be rude.
+    fn apply_visibility(&self, window: &WebviewWindow, visible: bool) -> Result<(), RpcError> {
+        if visible {
+            window
+                .show()
+                .map_err(|e| RpcError::internal(format!("ブラウザを表示できません: {e}")))
+        } else {
+            window
+                .hide()
+                .map_err(|e| RpcError::internal(format!("ブラウザを隠せません: {e}")))
+        }
+    }
+
+    /// One probe call under the lab's single-eval lock. A busy lab is an
+    /// error, never a queue — a stuck page must not accumulate requests.
+    fn eval_probe(
         &self,
-        method: &str,
+        rpc_method: &str,
         params: &Value,
         timeout: Duration,
     ) -> Result<Value, RpcError> {
         let window = self.require_window()?;
-        // Strictly one eval in flight. A busy lab is an error, never a
-        // queue — a stuck page must not accumulate requests.
-        let _busy = self.core.busy.try_lock().map_err(|_| {
-            RpcError::new(
-                error_codes::TIMEOUT,
-                "ブラウザは前の操作を処理中です（ページが応答しない可能性があります）",
-            )
-        })?;
-        let req_id = self.core.next_req.fetch_add(1, Ordering::Relaxed);
-        let (tx, rx) = mpsc::channel();
-        self.core.pending.lock_recover().insert(req_id, tx);
+        let _busy = self.busy.try_lock().map_err(|_| busy_error())?;
+        let answer = self.probe_call(&window, probe_method_of(rpc_method), params, timeout)?;
+        // A snapshot carries the viewport the page measured, so the window
+        // is reconciled with it while the answer is already in hand — no
+        // extra round trip, and no window API to trust (see
+        // `reconcile_viewport`).
+        self.reconcile_viewport(&window, &answer);
+        Ok(answer)
+    }
 
+    /// One probe call. The caller owns the lab's single-eval lock.
+    fn probe_call(
+        &self,
+        window: &WebviewWindow,
+        probe_method: &str,
+        params: &Value,
+        timeout: Duration,
+    ) -> Result<Value, RpcError> {
         let probe_call = format!(
             "return p.{probe_method}({args});",
-            probe_method = probe_method_of(method),
             args = to_js_literal(params)
         );
         let script = driver(&probe_call);
-        let pending = self.core.pending.clone();
-        let callback_req_id = req_id;
+        let req_id = self.next_req.fetch_add(1, Ordering::Relaxed);
+        let (tx, rx) = mpsc::channel();
+        self.pending.lock_recover().insert(req_id, tx);
+
+        let pending = self.pending.clone();
         if let Err(e) = window.eval_with_callback(script, move |result| {
             let _ = pending
                 .lock_recover()
-                .remove(&callback_req_id)
+                .remove(&req_id)
                 .map(|tx| tx.send(result));
         }) {
-            self.core.pending.lock_recover().remove(&req_id);
-            return Err(RpcError::not_open(format!(
-                "ブラウザパネルが利用できません: {e}"
+            self.pending.lock_recover().remove(&req_id);
+            return Err(RpcError::probe_missing(format!(
+                "ブラウザウィンドウが利用できません: {e}"
             )));
         }
 
         let result = rx.recv_timeout(timeout).map_err(|_| {
-            self.core.pending.lock_recover().remove(&req_id);
-            RpcError::timeout(format!(
-                "ページが {method} に応答しませんでした（{timeout:?}）"
-            ))
+            self.pending.lock_recover().remove(&req_id);
+            RpcError::timeout(format!("ページが応答しませんでした（{timeout:?}）"))
         })?;
         self.parse_eval_result(&result)
     }
@@ -551,95 +475,208 @@ impl LabHandler {
         }
     }
 
-    /// wait runs the in-page promise. Windows: WebView2's ExecuteScript
-    /// does not await promises, so the wait goes over CDP
-    /// Runtime.evaluate with awaitPromise (see wait_via_cdp). macOS:
-    /// WKWebView's eval resolves promises and the plain eval path works.
-    /// WebKitGTK: explicit `wait_unsupported` — never a poll fallback.
+    /// The wait, driven from here rather than awaited in the page.
+    ///
+    /// A single eval that awaits the promise would be shorter, but WebView2
+    /// executes scripts without awaiting and WebKitGTK never resolves
+    /// promises at all — only CDP could await, which would put the wait
+    /// back behind a Windows-only code path. The probe's `waitCheck` is a
+    /// pure "is the condition met yet?" function, so the host polls it and
+    /// the conditions, the deadline and the result shape stay in one place.
     fn wait(&self, params: &Value) -> Result<Value, RpcError> {
-        let timeout_ms = params
-            .get("timeoutMs")
-            .and_then(Value::as_u64)
-            .unwrap_or(10_000);
-        let headroom = Duration::from_millis(timeout_ms) + WAIT_HEADROOM;
-        #[cfg(windows)]
-        {
-            let window = self.require_window()?;
-            self.wait_via_cdp(&window, params, headroom)
-        }
-        #[cfg(not(windows))]
-        {
-            let result = self.eval_call(methods::WAIT, params, headroom)?;
-            let settled = result.get("ok").and_then(Value::as_bool);
-            match settled {
-                Some(_) => Ok(result),
-                None => Err(RpcError::unsupported(
-                    error_codes::WAIT_UNSUPPORTED,
-                    concat!(
-                        "このプラットフォームの WebView は eval の Promise 解決に",
-                        "対応していません（wait は Windows/macOS のみ）。",
-                    ),
-                )),
+        let window = self.require_window()?;
+        // The lock is held for the whole wait: an observe/act arriving
+        // mid-wait is refused rather than racing the probe's wait state.
+        let _busy = self.busy.try_lock().map_err(|_| busy_error())?;
+        let timeout_ms = wait_timeout_ms(params);
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms) + WAIT_HEADROOM;
+        let mut answer = self.probe_call(&window, PROBE_WAIT_BEGIN, params, EVAL_TIMEOUT)?;
+        while wait_pending(&answer) {
+            if Instant::now() >= deadline {
+                // The page never reached a verdict — a blocked main thread,
+                // or a navigation that dropped the probe's wait state.
+                return Err(RpcError::timeout(format!(
+                    "wait がページ内で完了しませんでした（{timeout_ms} ms）"
+                )));
             }
+            std::thread::sleep(WAIT_POLL_INTERVAL);
+            answer = self.probe_call(&window, PROBE_WAIT_POLL, &json!({}), EVAL_TIMEOUT)?;
         }
+        Ok(answer)
     }
 
-    /// Windows wait: CDP Runtime.evaluate with awaitPromise. The page-side
-    /// wait still runs in the probe; only the eval vehicle differs. Runs
-    /// on the RPC thread (blocking is fine here — the main thread pumps
-    /// the completion handler).
-    #[cfg(windows)]
-    fn wait_via_cdp(
-        &self,
-        window: &WebviewWindow,
-        params: &Value,
-        timeout: Duration,
-    ) -> Result<Value, RpcError> {
-        let probe_call = format!("return p.wait({});", to_js_literal(params));
-        let expression = driver(&probe_call);
-        let cdp_params = cdp::evaluate_params(&expression);
-        let answer = self.cdp_call_sync(window, "Runtime.evaluate", &cdp_params, timeout)?;
-        cdp::evaluate_value(&answer)
-    }
-
-    /// Screenshot: WebView2 CDP on Windows; explicit unsupported error
-    /// elsewhere (wry 0.55 has no stable cross-platform capture API).
+    /// Capture the lab viewport as an image.
+    ///
+    /// The format is validated here so every platform refuses the same
+    /// values with the same error; the capture itself is the lab's one
+    /// platform-specific piece.
     fn screenshot(&self, params: &Value) -> Result<Value, RpcError> {
         let window = self.require_window()?;
-        #[cfg(windows)]
-        {
-            self.cdp_screenshot(&window, params)
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (window, params);
-            Err(RpcError::unsupported(
-                error_codes::SCREENSHOT_UNSUPPORTED,
-                concat!(
-                    "このプラットフォームの WebView スクリーンショットは未実装です ",
-                    "（Windows の WebView2 CDP のみ対応）",
-                ),
-            ))
-        }
-    }
-
-    /// WebView2 CDP `Page.captureScreenshot` straight on the lab
-    /// WebView2 controller — no remote debugging port is ever opened.
-    /// When a viewport is emulated the capture covers the FULL emulated
-    /// viewport at 1:1 (clip + captureBeyondViewport), so the agent sees
-    /// the resolution it asked for instead of the scaled pane view.
-    #[cfg(windows)]
-    fn cdp_screenshot(&self, window: &WebviewWindow, params: &Value) -> Result<Value, RpcError> {
         let format = params
             .get("format")
             .and_then(Value::as_str)
             .unwrap_or("png");
+        if format != "png" && format != "jpeg" {
+            return Err(RpcError::invalid(format!(
+                "不明な format: {format} (png / jpeg)"
+            )));
+        }
         let quality = params.get("quality").and_then(Value::as_u64);
-        let viewport = *self.core.viewport.lock_recover();
+        let viewport = *self.viewport.lock_recover();
+        self.screenshot_impl(&window, format, quality, viewport)
+    }
+
+    /// Windows: WebView2 speaks the DevTools Protocol, and the capture is
+    /// taken straight on the controller — no remote debugging port is ever
+    /// opened. The clip covers the FULL agent viewport at 1:1 (1 CSS px = 1
+    /// image px), so the agent sees the resolution it asked for instead of
+    /// the scaled window view.
+    #[cfg(windows)]
+    fn screenshot_impl(
+        &self,
+        window: &WebviewWindow,
+        format: &str,
+        quality: Option<u64>,
+        viewport: Option<(u32, u32)>,
+    ) -> Result<Value, RpcError> {
         let cdp_params = cdp::screenshot_params(format, quality, viewport)?;
         let answer =
             self.cdp_call_sync(window, "Page.captureScreenshot", &cdp_params, CDP_TIMEOUT)?;
         cdp::screenshot_result(format, viewport, &answer)
+    }
+
+    /// macOS: `WKWebView.takeSnapshot`, the platform's public snapshot API.
+    /// `with_webview` runs the closure on the main thread (where the view
+    /// must be touched); the completion handler also fires there, and this
+    /// RPC thread waits on a channel with a deadline.
+    ///
+    /// JPEG uses the platform's default compression. Choosing a quality
+    /// means handing Cocoa a properties dictionary, and building one for a
+    /// single optional value is not worth the extra unsafe surface.
+    #[cfg(target_os = "macos")]
+    fn screenshot_impl(
+        &self,
+        window: &WebviewWindow,
+        format: &str,
+        _quality: Option<u64>,
+        viewport: Option<(u32, u32)>,
+    ) -> Result<Value, RpcError> {
+        use block2::RcBlock;
+        use objc2::rc::Retained;
+        use objc2::runtime::AnyObject;
+        use objc2_app_kit::{
+            NSBitmapImageFileType, NSBitmapImageRep, NSBitmapImageRepPropertyKey, NSImage,
+        };
+        use objc2_foundation::{NSDictionary, NSError};
+        use objc2_web_kit::WKWebView;
+
+        let jpeg = format == "jpeg";
+        let (tx, rx) = mpsc::channel::<Result<Vec<u8>, String>>();
+        window
+            .with_webview(move |platform| {
+                // Main thread: the WKWebView this window renders with.
+                let view: &WKWebView = unsafe { &*platform.inner().cast() };
+                let handler = RcBlock::new(move |image: *mut NSImage, error: *mut NSError| {
+                    let outcome = (|| -> Result<Vec<u8>, String> {
+                        if !error.is_null() {
+                            return Err("スナップショットに失敗しました".to_string());
+                        }
+                        let image = unsafe { image.as_ref() }
+                            .ok_or_else(|| "画像が返りませんでした".to_string())?;
+                        let tiff = image
+                            .TIFFRepresentation()
+                            .ok_or_else(|| "TIFF 表現を取得できません".to_string())?;
+                        let rep = NSBitmapImageRep::imageRepWithData(&tiff)
+                            .ok_or_else(|| "ビットマップ表現を作成できません".to_string())?;
+                        let kind = if jpeg {
+                            NSBitmapImageFileType::JPEG
+                        } else {
+                            NSBitmapImageFileType::PNG
+                        };
+                        let properties: Retained<
+                            NSDictionary<NSBitmapImageRepPropertyKey, AnyObject>,
+                        > = NSDictionary::new();
+                        let data =
+                            unsafe { rep.representationUsingType_properties(kind, &properties) }
+                                .ok_or_else(|| "画像を符号化できません".to_string())?;
+                        Ok(data.to_vec())
+                    })();
+                    let _ = tx.send(outcome);
+                });
+                unsafe {
+                    view.takeSnapshotWithConfiguration_completionHandler(None, &handler);
+                }
+            })
+            .map_err(|e| RpcError::internal(format!("with_webview に失敗しました: {e}")))?;
+
+        let bytes = rx
+            .recv_timeout(EVAL_TIMEOUT)
+            .map_err(|_| {
+                RpcError::timeout(format!(
+                    "スナップショットが応答しませんでした（{EVAL_TIMEOUT:?}）"
+                ))
+            })?
+            .map_err(|e| RpcError::new(error_codes::ACTION_FAILED, e))?;
+        image_result(format, viewport, bytes)
+    }
+
+    /// Linux: WebKitGTK's `webkit_web_view_get_snapshot`, reached through
+    /// the `webkit2gtk` bindings Tauri itself builds against. The snapshot
+    /// arrives as a cairo surface, which writes PNG directly; the GTK stack
+    /// carries no JPEG encoder, so that one combination is refused
+    /// explicitly instead of silently served as PNG.
+    #[cfg(not(any(windows, target_os = "macos")))]
+    fn screenshot_impl(
+        &self,
+        window: &WebviewWindow,
+        format: &str,
+        _quality: Option<u64>,
+        viewport: Option<(u32, u32)>,
+    ) -> Result<Value, RpcError> {
+        use webkit2gtk::{gio, SnapshotOptions, SnapshotRegion, WebViewExt};
+
+        if format != "png" {
+            return Err(RpcError::invalid(
+                "この environment のスクリーンショットは png のみ対応です（jpeg は Windows/macOS のみ）"
+                    .to_string(),
+            ));
+        }
+        let (tx, rx) = mpsc::channel::<Result<Vec<u8>, String>>();
+        window
+            .with_webview(move |platform| {
+                // Main thread: the WebKitGTK view this window renders with.
+                // The surface's own type is left to inference so no cairo or
+                // glib dependency is needed here.
+                let view = platform.inner();
+                view.snapshot(
+                    SnapshotRegion::Visible,
+                    SnapshotOptions::empty(),
+                    None::<&gio::Cancellable>,
+                    move |result| {
+                        let outcome = (|| -> Result<Vec<u8>, String> {
+                            let surface = result
+                                .map_err(|e| format!("スナップショットに失敗しました: {e}"))?;
+                            let mut png = Vec::new();
+                            surface
+                                .write_to_png(&mut png)
+                                .map_err(|e| format!("画像を符号化できません: {e}"))?;
+                            Ok(png)
+                        })();
+                        let _ = tx.send(outcome);
+                    },
+                );
+            })
+            .map_err(|e| RpcError::internal(format!("with_webview に失敗しました: {e}")))?;
+
+        let bytes = rx
+            .recv_timeout(EVAL_TIMEOUT)
+            .map_err(|_| {
+                RpcError::timeout(format!(
+                    "スナップショットが応答しませんでした（{EVAL_TIMEOUT:?}）"
+                ))
+            })?
+            .map_err(|e| RpcError::new(error_codes::ACTION_FAILED, e))?;
+        image_result(format, viewport, bytes)
     }
 
     /// One CDP method call with a bounded wait. WebView2's controller and
@@ -721,10 +758,9 @@ impl LabHandler {
     }
 
     fn close(&self) -> Result<Value, RpcError> {
-        let window = self.core.window.lock_recover().take();
-        if let Some(window) = window {
+        if let Some(window) = self.window.lock_recover().take() {
             let (tx, rx) = mpsc::channel();
-            let app = self.core.app.clone();
+            let app = self.app.clone();
             app.run_on_main_thread(move || {
                 let result = window.destroy();
                 let _ = tx.send(result);
@@ -732,71 +768,52 @@ impl LabHandler {
             .map_err(|e| RpcError::internal(format!("main thread dispatch に失敗しました: {e}")))?;
             let _ = rx.recv_timeout(EVAL_TIMEOUT);
         }
-        *self.core.visible.lock_recover() = false;
+        *self.visible.lock_recover() = false;
         Ok(json!({ "closed": true }))
     }
 
     fn require_window(&self) -> Result<WebviewWindow, RpcError> {
-        self.core.window.lock_recover().clone().ok_or_else(|| {
+        self.window.lock_recover().clone().ok_or_else(|| {
             RpcError::not_open("ブラウザは開いていません（先に browser_open を呼んでください）")
         })
     }
 }
 
-// --- bridge-facing pane state (pane/state, pane/set-visible, ...) ---
-
-/// The pane state as JSON for the bridge: `open` = the pane window
-/// exists, `visible` = the pane is shown, `content` = the hosted
-/// surface's kind/label (the browser lab) or null. The Preact UI polls
-/// this and drives the pane layout.
-pub fn pane_state(app: &AppHandle) -> Value {
-    match lab_of(app) {
-        Some(core) => core.state_json(),
-        None => json!({ "open": false, "visible": false, "content": null }),
-    }
+/// The one error a call gets while another page operation is in flight.
+fn busy_error() -> RpcError {
+    RpcError::new(
+        error_codes::TIMEOUT,
+        "ブラウザは前の操作を処理中です（ページが応答しない可能性があります）",
+    )
 }
 
-/// Show/hide the pane (the agent's browser keeps running while hidden).
-/// Returns the fresh state.
-pub fn set_pane_visible(app: &AppHandle, visible: bool) -> Value {
-    match lab_of(app) {
-        Some(core) => core.set_pane_visible(visible),
-        None => json!({ "open": false, "visible": false, "content": null }),
+/// Wrap encoded image bytes in the protocol's image result. Windows gets
+/// its base64 straight from CDP, so this is the non-Windows tail.
+/// The size is reported from the agent's viewport (the capture covers it at
+/// 1:1), and an oversized payload is refused rather than truncated.
+#[cfg(not(windows))]
+fn image_result(
+    format: &str,
+    viewport: Option<(u32, u32)>,
+    bytes: Vec<u8>,
+) -> Result<Value, RpcError> {
+    use base64::Engine;
+    let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    if data.len() > lumisca_browser_rpc::limits::MAX_SCREENSHOT_BYTES {
+        return Err(RpcError::too_large(format!(
+            "スクリーンショットが大きすぎます ({} bytes)",
+            data.len()
+        )));
     }
-}
-
-/// Flip the pane's visibility. Returns the fresh state.
-pub fn toggle_pane(app: &AppHandle) -> Value {
-    match lab_of(app) {
-        Some(core) => core.toggle_pane(),
-        None => json!({ "open": false, "visible": false, "content": null }),
+    let mut result = json!({
+        "mimeType": if format == "png" { "image/png" } else { "image/jpeg" },
+        "data": data,
+    });
+    if let Some((width, height)) = viewport {
+        result["width"] = json!(width);
+        result["height"] = json!(height);
     }
-}
-
-/// Keep the pane glued to the main window (geometry + z-order). Called
-/// from lib.rs on the main window's Moved / Resized / Focused events.
-pub fn sync_pane(app: &AppHandle) {
-    if let Some(core) = lab_of(app) {
-        core.sync();
-    }
-}
-
-/// Forget a destroyed lab window (the user closed it, or close() ran).
-/// Called from lib.rs's window-event handler for the lab label.
-pub fn forget_window(app: &AppHandle) {
-    if let Some(core) = lab_of(app) {
-        *core.window.lock_recover() = None;
-        *core.visible.lock_recover() = false;
-    }
-}
-
-/// The lab's core state, if the lab is running (the RPC listener may have
-/// failed to start, in which case the agent has no browser tools and the
-/// pane never exists).
-fn lab_of(app: &AppHandle) -> Option<Arc<LabCore>> {
-    let state = app.try_state::<AppState>()?;
-    let lab = state.browser_lab.lock_recover();
-    lab.as_ref().map(|lab| lab.core.clone())
+    Ok(result)
 }
 
 /// Shut the lab down (app exit). Idempotent.
@@ -804,6 +821,17 @@ pub fn shutdown(app: &AppHandle) {
     if let Some(state) = app.try_state::<AppState>() {
         if let Some(mut lab) = state.browser_lab.lock_recover().take() {
             lab.shutdown();
+        }
+    }
+}
+
+/// Forget a destroyed lab window (the user closed it, or close() ran).
+/// Called from lib.rs's window-event handler for the lab label.
+pub fn forget_window(app: &AppHandle) {
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Some(lab) = state.browser_lab.lock_recover().as_ref() {
+            *lab.core.window.lock_recover() = None;
+            *lab.core.visible.lock_recover() = false;
         }
     }
 }

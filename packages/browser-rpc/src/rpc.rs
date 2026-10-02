@@ -44,11 +44,6 @@ impl RpcError {
         Self::new(crate::error_codes::PROBE_MISSING, message)
     }
 
-    /// Platform limitation — no silent fallback, an explicit error.
-    pub fn unsupported(code: &str, message: impl Into<String>) -> Self {
-        Self::new(code, message)
-    }
-
     pub fn timeout(message: impl Into<String>) -> Self {
         Self::new(crate::error_codes::TIMEOUT, message)
     }

@@ -49,32 +49,11 @@
   width: 46px;
   height: 100%;
   color: var(--text-dim);
-  /* hosts the pane "alive but hidden" dot */
-  position: relative;
 }
 
 .titlebar-btn:hover {
   background: var(--surface-3);
   color: var(--text);
-}
-
-/* the docked pane toggle: lit while the pane's surface exists */
-.titlebar-btn.active {
-  color: var(--text);
-  background: var(--surface-3);
-}
-
-/* the pane is open but hidden (the agent may still be operating the
- * surface in the background) */
-.titlebar-btn-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  pointer-events: none;
 }
 
 /* The close button keeps the Windows red on hover in both themes (the

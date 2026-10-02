@@ -20,18 +20,7 @@ interface AppMenuProps {
   /** Extra class for the trigger button (it lives in the title bar on
    * desktop, in the tab bar in a plain browser). */
   buttonClass?: string;
-  /** The docked pane is visible (shown): shift the menu left by the
-   * pane width so it does not end up underneath the native pane window.
-   * Must track visibility, not mere existence: a hidden-but-alive pane
-   * (`open` without `visible`) has its native window hidden and needs
-   * no avoidance. */
-  paneVisible?: boolean;
 }
-
-/** The pane width in CSS pixels. Must match `--pane-width` in
- * styles/tokens.css and PANE_WIDTH in pane.rs; both sides clamp it to the
- * window width, so the offset below does too. */
-const PANE_WIDTH = 460;
 
 /** Hamburger app menu (new tab / session history / settings / quit). Shown
  * in the desktop title bar next to the window controls, and at the right
@@ -43,7 +32,6 @@ export function AppMenu({
   onQuit,
   isDesktop,
   buttonClass = "icon-btn",
-  paneVisible = false,
 }: AppMenuProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -80,8 +68,7 @@ export function AppMenu({
           style={{
             position: "fixed",
             top: pos.y,
-            right: globalThis.innerWidth - pos.x +
-              (paneVisible ? Math.min(PANE_WIDTH, globalThis.innerWidth) : 0),
+            right: globalThis.innerWidth - pos.x,
           }}
         >
           <button

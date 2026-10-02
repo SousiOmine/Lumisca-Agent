@@ -8,7 +8,6 @@ import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
 import { shellCall, type ShellState, windowApi } from "../shell.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
-import { paneIcon } from "./paneIcons.tsx";
 
 /** Poll interval while the shell is reachable: only the maximize/restore
  * icon depends on the window state, so a modest interval is fine. */
@@ -26,15 +25,6 @@ interface TitleBarProps {
   onOpenRecent: () => void;
   onOpenSettings: () => void;
   onQuit: () => void;
-  /** Docked pane state (desktop): whether the pane's surface exists and
-   * whether the pane is shown. When given, a toggle button is rendered
-   * next to the app menu. */
-  paneOpen?: boolean;
-  paneVisible?: boolean;
-  /** Kind of the content currently hosted in the pane (drives the
-   * toggle's icon); null when the pane is empty. */
-  paneKind?: string | null;
-  onTogglePane?: () => void;
 }
 
 /** Window chrome for the undecorated desktop window (see
@@ -52,10 +42,6 @@ export function TitleBar({
   onOpenRecent,
   onOpenSettings,
   onQuit,
-  paneOpen = false,
-  paneVisible = false,
-  paneKind = null,
-  onTogglePane,
 }: TitleBarProps) {
   const t = useT();
   const [available, setAvailable] = useState(false);
@@ -112,26 +98,6 @@ export function TitleBar({
     >
       {children}
       <div className="titlebar-controls">
-        {onTogglePane && (
-          <button
-            type="button"
-            className={`titlebar-btn${paneOpen ? " active" : ""}`}
-            onClick={onTogglePane}
-            title={paneVisible
-              ? t("chrome.titleBar.paneHide")
-              : t("chrome.titleBar.paneShow")}
-            aria-label={paneVisible
-              ? t("chrome.titleBar.paneHide")
-              : t("chrome.titleBar.paneShow")}
-          >
-            {paneIcon(paneKind ?? "", 15)}
-            {
-              /* A hidden-but-alive surface: the agent may still be
-             * operating it in the background. */
-            }
-            {paneOpen && !paneVisible && <span className="titlebar-btn-dot" />}
-          </button>
-        )}
         <AppMenu
           onNew={onNew}
           onOpenRecent={onOpenRecent}
@@ -139,7 +105,6 @@ export function TitleBar({
           onQuit={onQuit}
           isDesktop
           buttonClass="titlebar-btn"
-          paneVisible={paneVisible}
         />
         <button
           type="button"

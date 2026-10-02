@@ -279,11 +279,12 @@ function createBrowserOpenTool(
       "WebView inside Lumisca — never an external browser). Only " +
       "localhost / 127.0.0.1 / ::1 URLs are allowed. Use browser_observe " +
       "to see the page, browser_act to interact, browser_screenshot to " +
-      "capture it. Opening again navigates the same browser. The viewport " +
-      "defaults to 800×600 and is scaled to fit the pane/window; pass " +
-      "width/height (CSS pixels) to debug other layouts — e.g. 390×844 " +
-      "for a phone — and browser_observe reports the active viewport. If " +
-      "the operation fails, the tools report it — there is no fallback.",
+      "capture it. Opening again navigates the same browser. The page " +
+      "lays out at the requested viewport (default 800×600), in a window " +
+      "of its own; pass width/height (CSS pixels) to debug other layouts — " +
+      "e.g. 390×844 for a phone — and browser_observe reports the active " +
+      "viewport. If the operation fails, the tools report it — there is " +
+      "no fallback.",
     parameters: openSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const allowed = requireAllowedUrl(params.url); // throws with the policy reason
@@ -583,10 +584,8 @@ function createBrowserScreenshotTool(
     label: "Browser Screenshot",
     description:
       "Capture the browser view as an image (PNG or JPEG) and return it " +
-      "as an image result. On Windows this uses the WebView2 " +
-      "DevTools protocol directly; on macOS/Linux the host reports an " +
-      "explicit error where capture is not implemented — never a blank " +
-      "or substituted image.",
+      "as an image result. The image covers the active viewport at 1:1 " +
+      "(1 CSS px = 1 image px), whatever size the window is shown at.",
     parameters: screenshotSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const format = params.format ?? "png";

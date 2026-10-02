@@ -11,7 +11,6 @@ import { useServerHealth } from "./hooks/useServerHealth.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { usePanelInset } from "./hooks/usePanelInset.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
-import { usePane } from "./hooks/usePane.ts";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
 import { quit } from "./shell.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
@@ -28,7 +27,6 @@ import {
 } from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
-import { PaneHeader } from "./components/PaneHeader.tsx";
 
 export interface AppProps {
   /** Preloaded data from the bootstrap script; undefined when not served. */
@@ -138,13 +136,8 @@ export function App({ initialData }: AppProps): ReactElement {
   // open) keeps its unsent input under the draft-tab key.
   const draftKey = activeTab ?? DRAFT_TAB;
   const draft = drafts.get(draftKey) ?? EMPTY_DRAFT;
-  // The docked pane (the agent's browser WebView today, hosted at the
-  // right edge). Polled from the shell bridge: the agent's own tools
-  // open/close it, and the user can hide it (the surface keeps running).
-  const pane = usePane();
-
   return (
-    <div className={pane.visible ? "app pane-open" : "app"} ref={appRef}>
+    <div className="app" ref={appRef}>
       {
         /* The desktop window is undecorated; the title bar strip holds the
        * tab bar, the app menu and the window controls (in a plain browser
@@ -155,10 +148,6 @@ export function App({ initialData }: AppProps): ReactElement {
         onOpenRecent={() => setShowRecent(true)}
         onOpenSettings={() => setSettingsCategory("general")}
         onQuit={quit}
-        paneOpen={pane.open}
-        paneVisible={pane.visible}
-        paneKind={pane.content?.kind ?? null}
-        onTogglePane={pane.toggle}
       >
         <TabBar
           tabs={tabs}
@@ -176,11 +165,7 @@ export function App({ initialData }: AppProps): ReactElement {
           onQuit={quit}
         />
       </TitleBar>
-      {
-        /* Everything below the title bar: shrinks by the pane width while
-       * the pane is visible (the pane is a native window that overlays
-       * the app window's right edge). */
-      }
+      {/* Everything below the title bar. */}
       <div className="app-body">
         <UpdateBanner update={update} onMount={onUpdateBannerMount} />
         <ServerDownBanner health={serverHealth} onMount={onServerBannerMount} />
@@ -253,18 +238,6 @@ export function App({ initialData }: AppProps): ReactElement {
             />
           )}
       </div>
-      {
-        /* The pane's header strip, rendered by this webview directly
-       * above the native pane window (which starts below it, so they
-       * never overlap). */
-      }
-      {pane.visible && pane.content !== null && (
-        <PaneHeader
-          content={pane.content}
-          error={pane.error}
-          onHide={() => pane.setVisible(false)}
-        />
-      )}
       {settingsCategory !== null && (
         <SettingsModal
           theme={theme}

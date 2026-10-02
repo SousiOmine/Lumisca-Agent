@@ -173,7 +173,7 @@ async function* styleSheets(): AsyncGenerator<[string, string]> {
   }
 }
 
-Deno.test("width breakpoints are the documented three", async () => {
+Deno.test("width breakpoints are the documented two", async () => {
   // The narrow-viewport rules are split across the part sheets, so a fourth
   // value would silently fragment the layout. The documented list is in
   // styles/tokens.css (and styles/README.md).
@@ -188,7 +188,7 @@ Deno.test("width breakpoints are the documented three", async () => {
   }
   assertEquals(
     [...used.keys()].sort(),
-    ["600px", "720px", "900px"],
+    ["600px", "900px"],
     `used by: ${
       [...used.entries()].map(([width, files]) =>
         `${width} (${[...files].sort().join(", ")})`

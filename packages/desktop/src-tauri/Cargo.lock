@@ -2097,9 +2097,15 @@ dependencies = [
 name = "lumisca-desktop"
 version = "0.8.5"
 dependencies = [
+ "base64 0.22.1",
+ "block2",
  "getrandom 0.4.3",
  "libc",
  "lumisca-browser-rpc",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "objc2-web-kit",
  "reqwest",
  "rustls",
  "serde",
@@ -2111,6 +2117,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-winrt-notification 0.8.1",
  "url",
+ "webkit2gtk",
  "webview2-com",
  "windows 0.61.3",
 ]

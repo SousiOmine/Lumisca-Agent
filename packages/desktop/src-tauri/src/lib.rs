@@ -13,7 +13,6 @@ use tauri::{Manager, WindowEvent};
 pub mod bridge;
 pub mod browser_lab;
 pub mod notify;
-pub mod pane;
 pub mod server;
 pub mod server_log;
 pub mod update;
@@ -80,10 +79,10 @@ pub(crate) struct AppState {
     /// with the result. connect-local waits on it instead of spawning a
     /// second server while the startup is still running.
     startup_task: Mutex<Option<StartupTask>>,
-    /// The browser lab (the agent's debug WebView, overlaid on the main
-    /// window as the right lab pane): RPC endpoint + on-demand window.
-    /// Created in setup; None when the lab failed to start (logged — the
-    /// agent then simply has no browser tools).
+    /// The browser lab (the agent's debug WebView, an ordinary top-level
+    /// window of its own): RPC endpoint + on-demand window. Created in
+    /// setup; None when the lab failed to start (logged — the agent then
+    /// simply has no browser tools).
     browser_lab: Mutex<Option<browser_lab::BrowserLab>>,
 }
 
@@ -184,37 +183,25 @@ pub fn run() {
             });
         })
         .on_window_event(|window, event| {
-            match event {
-                // The lab pane is a separate window overlaid on the
-                // main window's right edge: keep its geometry glued to
-                // the main window (move/resize/maximize) and, while the
-                // main window holds focus, keep the lab above it.
-                WindowEvent::Moved(_) | WindowEvent::Resized(_) | WindowEvent::Focused(_) => {
-                    if window.label() == "main" {
-                        browser_lab::sync_pane(window.app_handle());
-                    }
+            // The lab window is an ordinary top-level window, so nothing
+            // follows the main window's geometry any more. Its own
+            // destruction is what matters here: the user closed it, so
+            // forget it — later RPCs answer "not_open" instead of using a
+            // dead handle.
+            if matches!(event, WindowEvent::Destroyed) {
+                if window.label() == browser_lab::LAB_WINDOW_LABEL {
+                    browser_lab::forget_window(window.app_handle());
                 }
-                // The lab window died on its own (user closed it, e.g.
-                // Alt+F4): forget it — later RPCs answer "not_open"
-                // instead of using a dead handle.
-                WindowEvent::Destroyed => {
-                    if window.label() == browser_lab::LAB_WINDOW_LABEL {
-                        browser_lab::forget_window(window.app_handle());
-                    }
-                    // The only app window is gone: stop the local server
-                    // so no orphaned process keeps the port/db locked
-                    // after exit, and shut the browser lab (window + RPC
-                    // listener).
-                    if window.label() == "main"
-                        && window.app_handle().try_state::<AppState>().is_some()
-                    {
-                        shutdown_services(
-                            window.app_handle(),
-                            "the main window was destroyed (app exit)",
-                        );
-                    }
+                // The app window is gone: stop the local server so no
+                // orphaned process keeps the port/db locked after exit, and
+                // shut the browser lab (window + RPC listener).
+                if window.label() == "main" && window.app_handle().try_state::<AppState>().is_some()
+                {
+                    shutdown_services(
+                        window.app_handle(),
+                        "the main window was destroyed (app exit)",
+                    );
                 }
-                _ => {}
             }
         })
         .run(tauri::generate_context!())
