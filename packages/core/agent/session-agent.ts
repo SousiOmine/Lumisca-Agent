@@ -791,13 +791,23 @@ export class SessionAgent {
         )
         .map((m) => m.timestamp),
     );
-    let removed: Array<{ role: string; timestamp: number }> = [];
+    let removed: Array<{
+      role: string;
+      timestamp: number;
+      toolCallId?: string;
+    }> = [];
     /** Drop everything at `cut` onward from memory and the database,
-     * recording what was removed for the clients. */
+     * recording what was removed for the clients. Each entry carries the
+     * fields of the app's message identity key (see the web's messageKey):
+     * role + timestamp, and the tool call id for tool results — parallel
+     * results can share a millisecond, and the key must stay unambiguous. */
     const truncateFrom = (cut: number) => {
-      removed = messages.splice(cut).map(({ role, timestamp: ts }) => ({
-        role,
-        timestamp: ts,
+      removed = messages.splice(cut).map((message) => ({
+        role: message.role,
+        timestamp: message.timestamp,
+        ...(message.role === "toolResult"
+          ? { toolCallId: message.toolCallId }
+          : {}),
       }));
       this.transcript.forgetFrom(messages, cut);
     };
@@ -995,8 +1005,6 @@ export class SessionAgent {
           sessionId: this.sessionId,
           toolCallId: event.toolCallId,
           toolName: event.toolName,
-          result: event.result,
-          isError: event.isError,
         });
         break;
       case "turn_end":

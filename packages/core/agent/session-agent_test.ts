@@ -736,6 +736,37 @@ Deno.test("a resend while the rewind runs starts after the truncation", async ()
   );
 });
 
+Deno.test("a rewind names removed tool results by their call id", async () => {
+  // The client keys a tool result by its tool call id — parallel results
+  // can finish within the same millisecond, so role + timestamp is not a
+  // unique identity (see the web's messageKey). The deletion notice must
+  // name the same fields, or the tombstone goes unmatched and a later
+  // resync resurrects the removed result.
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage(
+        [fauxToolCall("mock_tool", {}, "t1")],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage("done"),
+    ]),
+    [mockTool],
+    (event) => events.push(event),
+  );
+
+  await agent.prompt("go");
+  await agent.rewind(agent.messages[0]!.timestamp);
+
+  const truncated = events.filter(
+    (e): e is Extract<ClientEvent, { type: "messages_truncated" }> =>
+      e.type === "messages_truncated",
+  );
+  assertEquals(truncated.length, 1);
+  const result = truncated[0]!.removed.find((m) => m.role === "toolResult");
+  assertEquals(result?.toolCallId, "t1");
+});
+
 // ---- context compaction (see context-compaction.ts) ------------------------
 
 /** A model with a window small enough that a few tool results cross the

@@ -165,8 +165,6 @@ Deno.test("events: tool start/end track running tools", () => {
       sessionId: "s1",
       toolCallId: "t1",
       toolName: "bash",
-      result: {},
-      isError: false,
     },
     v,
   )!;
@@ -194,8 +192,6 @@ Deno.test("events: a live tool result is stored, so the tool line can pair it", 
       sessionId: "s1",
       toolCallId: "t1",
       toolName: "edit",
-      result: {},
-      isError: false,
     },
     v,
   )!;
@@ -210,6 +206,55 @@ Deno.test("events: a live tool result is stored, so the tool line can pair it", 
     addedLines: 3,
     removedLines: 2,
   });
+});
+
+Deno.test("events: tool results are keyed by tool call id, not by timestamp", () => {
+  // A turn's parallel tool calls can finish within the same millisecond:
+  // keyed by role + timestamp, the second message would replace the first
+  // on the live upsert, and the resync merge (which dedups by key) could
+  // never restore it — that tool line would stay without its checkmark.
+  const first = {
+    role: "toolResult",
+    toolCallId: "t1",
+    toolName: "read",
+    content: [{ type: "text", text: "a" }],
+    isError: false,
+    timestamp: 400,
+  } as AgentMessage;
+  const second = {
+    role: "toolResult",
+    toolCallId: "t2",
+    toolName: "read",
+    content: [{ type: "text", text: "b" }],
+    isError: false,
+    timestamp: 400,
+  } as AgentMessage;
+
+  let v = view();
+  v = applyEvent({ type: "message_end", sessionId: "s1", message: first }, v)!;
+  v = applyEvent({ type: "message_end", sessionId: "s1", message: second }, v)!;
+  assertEquals(v.messages.length, 2);
+
+  // A resync that fetches the same two messages neither duplicates nor
+  // drops one.
+  assertEquals(mergeMessages(v.messages, [first, second]).length, 2);
+
+  // A rewind that removed one of them tombstones exactly that one; the
+  // other survives the resync that follows.
+  v = applyEvent(
+    {
+      type: "messages_truncated",
+      sessionId: "s1",
+      removed: [{ role: "toolResult", timestamp: 400, toolCallId: "t1" }],
+    },
+    v,
+  )!;
+  assertEquals(v.messages.length, 1);
+  assertEquals(
+    filterRemoved(mergeMessages(v.messages, [first, second]), v.removed)
+      .map((m) => (m as { toolCallId?: string }).toolCallId),
+    ["t2"],
+  );
 });
 
 Deno.test("events: errors are set on session_error and cleared on agent_start", () => {
@@ -436,8 +481,6 @@ Deno.test("events: question is shown and cleared by tool_end", () => {
       sessionId: "s1",
       toolCallId: "t1",
       toolName: "ask",
-      result: {},
-      isError: false,
     },
     v,
   )!;
@@ -514,8 +557,6 @@ Deno.test("events: two pending asks coexist and resolve independently", () => {
       sessionId: "s1",
       toolCallId: "t1",
       toolName: "ask",
-      result: {},
-      isError: false,
     },
     v,
   )!;

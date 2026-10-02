@@ -184,8 +184,8 @@ export interface SessionView {
    * goal panel. Set by `goal_start`/`goal_progress`, cleared by
    * `goal_done`; the resync replaces it from the server snapshot. */
   goal?: core.GoalInfo;
-  /** Keys (role:timestamp) of messages deleted by rewind. Kept so a later
-   * resync (merge is append-only) cannot resurrect them. */
+  /** Identity keys (see `events.messageKey`) of messages deleted by rewind.
+   * Kept so a later resync (merge is append-only) cannot resurrect them. */
   removed: Set<string>;
   error?: string;
   /** Timestamp when agent_start fired (ms since epoch) — or, for a view

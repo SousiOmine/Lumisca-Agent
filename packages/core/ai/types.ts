@@ -596,12 +596,14 @@ export type AgentEvent =
     toolName: string;
     args: unknown;
   }
+  /** A tool call finished running. The outcome (content, details, isError)
+   * is NOT carried here: it travels as the toolResult message the agent
+   * appends to the transcript and announces with `message_end` (one
+   * payload, one carrier — see the web's tool-line rendering). */
   | {
     type: "tool_execution_end";
     toolCallId: string;
     toolName: string;
-    result: unknown;
-    isError: boolean;
   }
   | { type: "turn_end"; message: AgentMessage }
   | { type: "agent_end"; message?: AssistantMessage };

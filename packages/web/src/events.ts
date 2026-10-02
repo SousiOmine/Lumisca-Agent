@@ -12,9 +12,19 @@ import type {
 } from "./types.ts";
 
 /** Identity key for dedup: messages are keyed by role + timestamp (the
- * same pair used by the persisted rows). The minimal shape also accepts
- * the role+timestamp pairs carried by the messages_truncated event. */
-export function messageKey(m: { role: string; timestamp: number }): string {
+ * same pair used by the persisted rows), except tool results, which are
+ * keyed by their tool call id instead — a turn's parallel tool calls can
+ * finish within the same millisecond, and a shared timestamp would make
+ * the live upsert replace one of them and the resync merge skip it for
+ * good (a message is never re-added once its key is known). The minimal
+ * shape also accepts the entries carried by the messages_truncated event,
+ * which name the same fields. */
+export function messageKey(
+  m: { role: string; timestamp: number; toolCallId?: unknown },
+): string {
+  if (m.role === "toolResult" && typeof m.toolCallId === "string") {
+    return `${m.role}:${m.toolCallId}`;
+  }
   return `${m.role}:${m.timestamp}`;
 }
 

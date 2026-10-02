@@ -22,25 +22,32 @@ export type ClientEvent =
     toolName: string;
     args: unknown;
   }
+  /** A tool call finished running. The outcome is carried by the toolResult
+   * message (`message_end`), not by this event — the event only clears the
+   * tool line's running state. */
   | {
     type: "tool_end";
     sessionId: string;
     toolCallId: string;
     toolName: string;
-    result: unknown;
-    isError: boolean;
   }
   | { type: "agent_end"; sessionId: string }
   | { type: "session_error"; sessionId: string; message: string }
   /** The transcript was rewound from a user message onward. `removed` is
    * the exact list of messages deleted (memory + database); clients drop
    * those keys from the view and remember them so a later resync cannot
-   * resurrect them. Carried as role+timestamp pairs (the app's message
-   * identity key). */
+   * resurrect them. Each entry carries the fields of the app's message
+   * identity key (see the web's `messageKey`): role + timestamp, plus the
+   * tool call id for tool results — parallel results can share a
+   * millisecond, and the key must stay unambiguous. */
   | {
     type: "messages_truncated";
     sessionId: string;
-    removed: Array<{ role: string; timestamp: number }>;
+    removed: Array<{
+      role: string;
+      timestamp: number;
+      toolCallId?: string;
+    }>;
   }
   /** Older history was condensed into a checkpoint message because the
    * conversation reached the model's request limit (see

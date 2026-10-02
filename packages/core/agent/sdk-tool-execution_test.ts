@@ -147,16 +147,12 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
 
   // The result's details survive the trip: the transcript keeps them (the
   // UI rebuilds the badge from the stored message on a reload) and the live
-  // event carries the same value.
+  // message carries the same value — the tool_end event deliberately does
+  // not (one payload, one carrier).
   const recordedResult = messages[resultIndex] as ToolResultMessage;
   assertEquals(recordedResult.details, { matches: 2 });
-  const end = events.find((e) =>
-    e.type === "tool_execution_end" &&
-    (e as { toolCallId?: string }).toolCallId === "t1"
-  ) as { result: { details: unknown } };
-  assertEquals(end.result.details, { matches: 2 });
 
-  // The result is also announced as a message of its own — the live client
+  // The result is announced as a message of its own — the live client
   // renders the checkmark and the `+N -M` badge from the toolResult message,
   // so a result that only exists in the transcript leaves the tool line
   // unmarked until the view happens to re-sync.

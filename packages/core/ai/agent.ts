@@ -408,21 +408,21 @@ export class Agent {
           args: event.args,
         });
       } else if (event.type === "toolcall_result") {
-        // The SDK finished executing this tool. Emit the end event now;
-        // the transcript record waits until after the assistant message
-        // (see pendingResults). The id marks the call as executed so the
+        // The SDK finished executing this tool. Emit the end event now
+        // (the UI clears the tool line's spinner with it); the transcript
+        // record waits until after the assistant message (see
+        // pendingResults). The id marks the call as executed so the
         // exchange loop never runs it a second time.
-        // The result's details travel with the event: they are what the UI
-        // renders beyond the text (the diff badge, the deliverables panel),
-        // and a resync rebuilds them from the same stored message.
+        // The outcome itself (content + details) is carried by the
+        // toolResult message announced below, not by the event: one
+        // payload, one carrier — an event copy would only send the same
+        // result twice (image results are megabytes).
         const details = event.details ?? {};
         executedIds.add(event.toolCallId);
         this.emit({
           type: "tool_execution_end",
           toolCallId: event.toolCallId,
           toolName: event.toolName,
-          result: { content: event.content, details },
-          isError: event.isError,
         });
         pendingResults.push({
           role: "toolResult" as const,
@@ -542,8 +542,6 @@ export class Agent {
         type: "tool_execution_end",
         toolCallId: call.id,
         toolName: call.name,
-        result: outcome,
-        isError: outcome.isError,
       });
       const result: ToolResultMessage = {
         role: "toolResult",
