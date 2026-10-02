@@ -1,13 +1,17 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import {
   applyEvent,
   applyRunState,
+  applySnapshot,
   filterRemoved,
   mergeBackgrounds,
   mergeMessages,
   mergeTasks,
+  messageKey,
+  revisionGap,
   sameBackgrounds,
   sameGoal,
+  sameQuestions,
   sameTodoPlan,
 } from "./events.ts";
 import {
@@ -16,6 +20,7 @@ import {
   type BackgroundView,
   type GoalInfo,
   isViewRunning,
+  type PendingQuestion,
   type SessionView,
   type TaskInfo,
   type TaskView,
@@ -527,6 +532,127 @@ Deno.test("events: sameTodoPlan compares snapshots exactly", () => {
   renamed[0]!.name = "別フェーズ";
   assertEquals(sameTodoPlan(TODOS, renamed), false);
   assertEquals(sameTodoPlan(TODOS, []), false);
+});
+
+Deno.test("events: sameQuestions compares pending asks by tool call id", () => {
+  const ask = (toolCallId: string): PendingQuestion => ({
+    toolCallId,
+    questions: [{
+      id: "q1",
+      question: "Which?",
+      options: [{ label: "A" }, { label: "B" }],
+    }],
+  });
+  assertEquals(sameQuestions([], []), true);
+  // The resync parses fresh objects every time, so identity must not matter
+  // — an unchanged snapshot must not re-render the tab.
+  assertEquals(sameQuestions([ask("c1")], [ask("c1")]), true);
+  assertEquals(sameQuestions([ask("c1")], [ask("c2")]), false);
+  assertEquals(sameQuestions([ask("c1")], []), false);
+  assertEquals(sameQuestions([], [ask("c1")]), false);
+});
+
+Deno.test("events: revisionGap detects a lost frame", () => {
+  // The next event of a session the client has seen up to `known`.
+  assertEquals(revisionGap(7, 8), false);
+  // A skipped count means frames were lost: the view must re-read.
+  assertEquals(revisionGap(7, 9), true);
+  assertEquals(revisionGap(0, 5), true);
+  // A session nothing was seen yet only seeds the marker (nothing was
+  // expected before its first event), and a duplicate delivery is no gap.
+  assertEquals(revisionGap(undefined, 3), false);
+  assertEquals(revisionGap(7, 7), false);
+});
+
+Deno.test("events: applySnapshot applies the live state, or keeps identity", () => {
+  const snapshot = {
+    messages: [message("user", 1), message("assistant", 2, "hi")],
+    running: true,
+    questions: [{
+      toolCallId: "c1",
+      questions: [{
+        id: "q1",
+        question: "Which?",
+        options: [{ label: "A" }],
+      }],
+    }],
+    error: "boom",
+    name: "renamed",
+    rev: 4,
+  };
+  const v = view();
+  const applied = applySnapshot(v, { snapshot }, undefined);
+
+  // A view that (re)connected mid-run renders the run as running, shows the
+  // questions the run is blocked on, the last failure and the fresh title.
+  assertEquals(isViewRunning(applied), true);
+  assertEquals(applied.pendingQuestions, snapshot.questions);
+  assertEquals(applied.error, "boom");
+  assertEquals(applied.info.name, "renamed");
+  assertEquals(applied.messages.length, 2);
+  assert(applied !== v);
+
+  // Re-applying the same snapshot changes nothing: the resync must not
+  // re-render a tab that is already in sync.
+  assertEquals(applySnapshot(applied, { snapshot }, undefined), applied);
+});
+
+Deno.test("events: applySnapshot lets an event win over the snapshot it raced", () => {
+  const v = view();
+  // The fetch started before these events: its snapshot still says the run
+  // is going, but the run ended while the snapshot was in flight.
+  const prior = {
+    started: v.agentStartedAt,
+    ended: v.agentEndedAt,
+    questions: v.pendingQuestions,
+    error: v.error,
+    name: v.info.name,
+  };
+  const running = applyEvent({ type: "agent_start", sessionId: "s1" }, v)!;
+  const ended = applyEvent({ type: "agent_end", sessionId: "s1" }, running)!;
+  const applied = applySnapshot(ended, {
+    snapshot: {
+      messages: [],
+      running: true,
+      questions: [],
+      name: "old-name",
+      rev: 3,
+    },
+  }, prior);
+
+  assertEquals(isViewRunning(applied), false, "the ended run stays ended");
+  assertEquals(applied.agentEndedAt, ended.agentEndedAt);
+  // The pieces no event touched still come from the snapshot.
+  assertEquals(applied.info.name, "old-name");
+});
+
+Deno.test("events: applySnapshot merges panels and respects tombstones", () => {
+  const rewound = message("user", 1);
+  const kept = message("user", 2);
+  const v: SessionView = {
+    ...view(),
+    messages: [kept],
+    removed: new Set([messageKey(rewound)]),
+  };
+  const applied = applySnapshot(v, {
+    snapshot: {
+      messages: [rewound, kept, message("assistant", 3, "hi")],
+      running: false,
+      questions: [],
+      name: "s",
+      rev: 2,
+    },
+    todos: TODOS,
+    goal: null,
+  }, undefined);
+
+  // The append-only merge brings in what was missed, but never the message
+  // a rewind deleted while the socket was down.
+  assertEquals(applied.messages.map(messageKey), [
+    messageKey(kept),
+    messageKey(message("assistant", 3, "hi")),
+  ]);
+  assertEquals(sameTodoPlan(applied.todos, TODOS), true);
 });
 
 Deno.test("events: two pending asks coexist and resolve independently", () => {

@@ -62,7 +62,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // restart + log copy-paste. Declared before useSessionEvents so its
   // noteFailure can be wired as the connection-lost callback.
   const serverHealth = useServerHealth(true);
-  const { views, setViews, setViewError } = useSessionEvents({
+  const { views, setViews, setViewError, seedRevision } = useSessionEvents({
     onConnectionLost: () => serverHealth.noteFailure(),
   });
   const {
@@ -76,7 +76,7 @@ export function App({ initialData }: AppProps): ReactElement {
     closeTabsToLeft,
     closeOtherTabs,
     reopenSession,
-  } = useTabs(setViews);
+  } = useTabs(setViews, seedRevision);
   // Unsent composer content per tab: the chat view remounts on every tab
   // switch (keyed below), so the draft lives here and is fed back into
   // the view when its tab is shown again. Closing a tab discards it.

@@ -81,3 +81,58 @@ Deno.test("federation: without a known origin every peer is listed", () => {
     ["http://127.0.0.1:8000"],
   );
 });
+
+/** Poll until `done()` or a 2s deadline: the streams connect (and drop)
+ * asynchronously. */
+async function waitFor(done: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2000;
+  while (!done() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+Deno.test("federation: a peer's stream state is relayed to the UI", async () => {
+  // A stub peer with one WebSocket endpoint the test can drop. The hub must
+  // announce the stream's state: while its relay to a peer is down, the
+  // peer's sessions miss events, and the UI's own socket to the hub says
+  // nothing about it.
+  const sockets = new Set<WebSocket>();
+  const peerServer = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    // Keep the test output clean: the stub's address is not interesting.
+    onListen: () => {},
+  }, (req) => {
+    if (new URL(req.url).pathname !== "/ws") {
+      return new Response("not found", { status: 404 });
+    }
+    const { socket, response } = Deno.upgradeWebSocket(req);
+    sockets.add(socket);
+    socket.onclose = () => sockets.delete(socket);
+    return response;
+  });
+  const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  const client = new FederationClient(
+    () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
+    // Never this stub (port 1 is unbound), so the peer stays visible.
+    () => "http://127.0.0.1:1",
+  );
+  const states: boolean[] = [];
+  client.subscribe((peerId, event) => {
+    if (event.type === "peer_stream" && event.peerId === peerId) {
+      states.push(event.connected);
+    }
+  });
+  client.start();
+  try {
+    await waitFor(() => states.length >= 1);
+    assertEquals(states[0], true, "the opened relay is announced");
+
+    for (const socket of [...sockets]) socket.close();
+    await waitFor(() => states.length >= 2);
+    assertEquals(states[1], false, "the dropped relay is announced");
+  } finally {
+    client.close();
+    await peerServer.shutdown();
+  }
+});

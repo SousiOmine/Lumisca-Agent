@@ -1,19 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
-import { connectEvents, type MessagesSnapshot, sessionApi } from "../api.ts";
+import { connectEvents, sessionApi, type SessionSnapshot } from "../api.ts";
 import { errorText } from "../providers.ts";
-import {
-  applyEvent,
-  applyRunState,
-  filterRemoved,
-  mergeBackgrounds,
-  mergeMessages,
-  mergeTasks,
-  sameBackgrounds,
-  sameGoal,
-  sameTasks,
-  sameTodoPlan,
-} from "../events.ts";
-import { tabKey } from "../tabs.ts";
+import { applyEvent, applySnapshot, revisionGap } from "../events.ts";
+import { keysForPeer, tabKey } from "../tabs.ts";
 import { maybeNotifyAgentEnd, maybeNotifyQuestion } from "../notify.ts";
 import type {
   BackgroundCommandInfo,
@@ -30,16 +19,26 @@ import type {
  * a re-sync runs. */
 const DISCONNECTED_SYNC_INTERVAL_MS = 10_000;
 
+/** Period between revision probes of the open tabs while connected: one
+ * tiny request per tab, and a snapshot re-read only when a revision moved
+ * (see the probe in useSessionEvents). Catches events that were emitted but
+ * never arrived — a socket that died without a close event, a peer's relay
+ * gap — within one interval instead of at the next reconnect. */
+const REVISION_PROBE_MS = 30_000;
+
 /** Event-stream reconnect backoff: 2s → 4s → 8s … capped at 30s. */
 const RECONNECT_BASE_MS = 2000;
 const RECONNECT_MAX_MS = 30_000;
 
 /** Session views plus the WebSocket event stream that feeds them:
  * reconnect with resync on drop, state sync while disconnected and on
- * tab-return, and per-view error recording. The returned setViews is
- * shared with the tab and session action logic. `onConnectionLost` fires
- * on every WS close (the desktop health monitor uses it to arm its
- * server-down banner); `onConnectionOpen` fires on every (re)connect. */
+ * tab-return, revision-based gap detection and probing while connected, and
+ * per-view error recording. The returned setViews is shared with the tab
+ * and session action logic, and seedRevision lets the tab paths (which
+ * apply a snapshot themselves) seed the revision marker of a restored tab.
+ * `onConnectionLost` fires on every WS close (the desktop health monitor
+ * uses it to arm its server-down banner); `onConnectionOpen` fires on every
+ * (re)connect. */
 export function useSessionEvents(
   options: {
     onConnectionLost?: () => void;
@@ -48,6 +47,13 @@ export function useSessionEvents(
 ) {
   const [views, setViews] = useState<Map<string, SessionView>>(new Map());
   const viewsRef = useRef(views);
+  // Per-tab revision marker: the last event count this client has accounted
+  // for (seeded from a snapshot, advanced by every event). A frame whose
+  // count skips ahead means frames were lost, and a probe that reads a
+  // higher count than this means events never arrived — both re-read the
+  // snapshot (see handleEvent and the probe below). Refs, not view state:
+  // tracking must not re-render, and every event updates it.
+  const revsRef = useRef(new Map<string, number>());
   // Ref writes happen in an effect: writing during render breaks under
   // concurrent rendering. The WS event handler reads the ref, so it always
   // sees the latest views.
@@ -55,33 +61,61 @@ export function useSessionEvents(
     viewsRef.current = views;
   }, [views]);
 
-  /** Re-fetch the transcript snapshot (persisted messages + the run state),
-   * the todo plan, the task snapshots, and the background-command snapshots
-   * for every open tab and merge them in without duplicating what is
-   * already shown. Runs on reconnect, on a short interval while the socket
-   * is down, and when a connected tab returns to the foreground, so a run
-   * that completes while the socket was down — and todo/task/background
-   * mutations whose snapshot events were lost — are not missed until the
-   * next WS drop. The todo plan is a snapshot fetch (the events only fire
-   * on mutations), so the fetched state replaces the view's plan
-   * wholesale; tasks merge per agent id so live deltas are preserved. The
-   * transcript snapshot also carries the server's run state, which is what
-   * tells a view that (re)connected mid-run that the run is still going —
-   * `agent_start` is never replayed (see applyRunState). */
-  const syncState = useCallback(async () => {
-    const ids = [...viewsRef.current.keys()];
-    // The run state as it stood when the fetch started. An event that
-    // changes it while the snapshot is in flight is newer than the
-    // snapshot, so its flag must not be applied on top (a run that just
-    // ended must not be resurrected by a snapshot read a moment earlier).
-    const runStateBefore = new Map(ids.map((id) => {
-      const v = viewsRef.current.get(id)!;
-      return [id, {
+  /** Seed one tab's revision marker from the snapshot its view was built
+   * from. The tab restore and reopen paths apply such a snapshot themselves
+   * (useTabs), outside syncState: without this, a tab restored from a
+   * snapshot would start watching for lost frames only after its next full
+   * sync. A marker is never lowered — an event that arrived meanwhile is
+   * newer than the snapshot it raced. */
+  const seedRevision = useCallback((key: string, rev: number) => {
+    const known = revsRef.current.get(key);
+    if (known === undefined || rev > known) revsRef.current.set(key, rev);
+  }, []);
+
+  /** Re-fetch the session snapshot (the transcript plus the live state the
+   * event stream cannot restore: run state, pending questions, last error,
+   * title), the todo plan, the task snapshots, and the background-command
+   * snapshots for every open tab — or only for `keys`, which the
+   * peer-stream recovery uses to re-read just the peer that came back —
+   * and merge them in without duplicating what is already shown. Runs on
+   * reconnect, on a short interval while the socket is down, and when a
+   * connected tab returns to the foreground, so a run that completes while
+   * the socket was down — and todo/task/background mutations whose snapshot
+   * events were lost — are not missed until the next WS drop. The todo plan
+   * is a snapshot fetch (the events only fire on mutations), so the fetched
+   * state replaces the view's plan wholesale; tasks merge per agent id so
+   * live deltas are preserved. The snapshot also carries the server's run
+   * state, which is what tells a view that (re)connected mid-run that the
+   * run is still going — `agent_start` is never replayed (see
+   * applyRunState). */
+  const syncState = useCallback(async (keys?: string[]) => {
+    const ids = keys ?? [...viewsRef.current.keys()];
+    // The live state as it stood when the fetch started. An event that
+    // changes a piece while the snapshot is in flight is newer than the
+    // snapshot, so that piece must not be applied on top (a run that just
+    // ended must not be resurrected by a snapshot read a moment earlier,
+    // and a question that just arrived must not be dropped by one). A tab
+    // that closed since the call has no entry: its snapshot is applied
+    // wholesale (and the view is gone anyway).
+    const stateBefore = new Map<string, {
+      started: number | undefined;
+      ended: number | undefined;
+      questions: SessionView["pendingQuestions"];
+      error: string | undefined;
+      name: string;
+    }>();
+    for (const id of ids) {
+      const v = viewsRef.current.get(id);
+      if (v === undefined) continue;
+      stateBefore.set(id, {
         started: v.agentStartedAt,
         ended: v.agentEndedAt,
-      }] as const;
-    }));
-    const snapshots = new Map<string, MessagesSnapshot>();
+        questions: v.pendingQuestions,
+        error: v.error,
+        name: v.info.name,
+      });
+    }
+    const snapshots = new Map<string, SessionSnapshot>();
     const todos = new Map<string, TodoPhase[]>();
     const tasks = new Map<string, TaskInfo[]>();
     const backgrounds = new Map<string, BackgroundCommandInfo[]>();
@@ -119,6 +153,12 @@ export function useSessionEvents(
         // Server not reachable yet; keep the current goal.
       }
     }));
+    // Seed the revision marker of every session whose snapshot arrived: a
+    // later gap (or probe) can then tell whether this view has seen
+    // everything.
+    for (const [id, snapshot] of snapshots) {
+      seedRevision(id, snapshot.rev);
+    }
     if (
       snapshots.size === 0 && todos.size === 0 && tasks.size === 0 &&
       backgrounds.size === 0 && goals.size === 0
@@ -138,73 +178,34 @@ export function useSessionEvents(
       ) {
         const v = next.get(id);
         if (!v) continue;
-        const snapshot = snapshots.get(id);
-        const before = runStateBefore.get(id);
-        const runStateMovedByEvent = before !== undefined &&
-          (v.agentStartedAt !== before.started ||
-            v.agentEndedAt !== before.ended);
-        // The run state travels with the transcript (the server read both
-        // in one handler): a view that (re)connected while a run was going
-        // must render it as running, and one whose run ended unwatched must
-        // stop showing it as running. A run-state change that arrived as an
-        // event while this fetch was in flight wins — it is newer than the
-        // snapshot. Identity is kept when nothing changed, so the periodic
-        // sync does not re-render every tab.
-        const withRun = snapshot === undefined || runStateMovedByEvent
-          ? v
-          : applyRunState(v, snapshot.running);
-        // Rewind tombstones: messages deleted while the socket was down
-        // must not come back through the append-only merge.
-        const merged = snapshot === undefined ? v.messages : filterRemoved(
-          mergeMessages(v.messages, snapshot.messages),
-          v.removed,
+        // The rules (live state wins over the snapshot, panels merge or
+        // replace, nothing changed keeps the view's identity) live in
+        // events.applySnapshot, where they are unit-tested.
+        const nextView = applySnapshot(
+          v,
+          {
+            snapshot: snapshots.get(id),
+            todos: todos.get(id),
+            tasks: tasks.get(id),
+            backgrounds: backgrounds.get(id),
+            goal: goals.get(id),
+          },
+          stateBefore.get(id),
         );
-        const todo = todos.get(id);
-        const todoChanged = todo !== undefined &&
-          !sameTodoPlan(todo, v.todos);
-        const fetchedTasks = tasks.get(id);
-        const mergedTasks = fetchedTasks === undefined
-          ? v.tasks
-          : mergeTasks(v.tasks, fetchedTasks);
-        const tasksChanged = fetchedTasks !== undefined &&
-          !sameTasks(mergedTasks, v.tasks);
-        const fetchedBackgrounds = backgrounds.get(id);
-        const mergedBackgrounds = fetchedBackgrounds === undefined
-          ? v.backgrounds
-          : mergeBackgrounds(v.backgrounds, fetchedBackgrounds);
-        const backgroundsChanged = fetchedBackgrounds !== undefined &&
-          !sameBackgrounds(mergedBackgrounds, v.backgrounds);
-        const fetchedGoal = goals.get(id);
-        const goalChanged = fetchedGoal !== undefined &&
-          !sameGoal(fetchedGoal ?? undefined, v.goal);
-        if (
-          merged.length === v.messages.length && !todoChanged &&
-          !tasksChanged &&
-          !backgroundsChanged && !goalChanged &&
-          withRun === v
-        ) {
-          continue;
-        }
-        next.set(id, {
-          ...withRun,
-          messages: merged,
-          ...(todoChanged ? { todos: todo } : {}),
-          ...(tasksChanged ? { tasks: mergedTasks } : {}),
-          ...(backgroundsChanged ? { backgrounds: mergedBackgrounds } : {}),
-          ...(goalChanged ? { goal: fetchedGoal ?? undefined } : {}),
-        });
+        if (nextView !== v) next.set(id, nextView);
       }
       return next;
     });
-  }, []);
+  }, [seedRevision]);
 
   /** Clear per-session transient state (stuck streaming/tool indicators)
-   * and re-fetch the transcript snapshot and the panel snapshots, so
-   * nothing is lost after a WS drop. The run state is deliberately kept:
-   * this view cannot tell a run that died with the socket from one that is
-   * still going, and clearing it is what used to leave a live run rendered
-   * as 作業完了 until its next `agent_start`. syncState reconciles it from
-   * the server's answer (the transcript snapshot carries it). */
+   * and re-fetch the session snapshot and the panel snapshots, so nothing
+   * is lost after a WS drop. The run state, the pending questions and the
+   * last error are deliberately kept: this view cannot tell what happened
+   * while the socket was down, and clearing them is what used to leave a
+   * live run rendered as 作業完了 (and a pending question unanswerable)
+   * until the next `agent_start`. syncState reconciles all of them from the
+   * server's answer (the snapshot carries them). */
   const resync = useCallback(async () => {
     setViews((prev) => {
       const next = new Map(prev);
@@ -213,8 +214,6 @@ export function useSessionEvents(
           ...v,
           streamingText: "",
           runningTools: new Map(),
-          pendingQuestions: [],
-          error: undefined,
           thinkingStartAt: undefined,
         });
       }
@@ -225,15 +224,42 @@ export function useSessionEvents(
 
   /** Apply a WS event to the matching session view (pure reducer). Events
    * carry the peer id ("" = this server); the tab key resolves the view.
+   * Session events also carry the emitting server's revision, which is what
+   * detects a lost frame without another round trip.
    *
    * `agent_end` and `question` events additionally arm an OS notification
    * when the app is hidden (the notify module decides): the reducer below
    * must stay the single writer of view state, so notification sends are
    * fire-and-forget and never block or reorder the state update. */
   const handleEvent = useCallback(
-    (event: ClientEvent & { peerId?: string }) => {
+    (event: ClientEvent & { peerId?: string; rev?: number }) => {
       if (event.type === "session_created") return;
+      // A peer's relay came back: the sessions watched through it may have
+      // missed events while it was down (the peer's own stream drops are
+      // invisible otherwise), so re-read their snapshots — and only theirs.
+      // The gap announcement (`connected: false`) needs no reaction: the
+      // views keep what they have until the relay is back.
+      if (event.type === "peer_stream") {
+        if (event.connected) {
+          const keys = keysForPeer(viewsRef.current.keys(), event.peerId);
+          if (keys.length > 0) void syncState(keys);
+        }
+        return;
+      }
       const key = tabKey(event.peerId ?? "", event.sessionId);
+      // A revision that skips ahead means frames were lost (a socket that
+      // died without a close event, a peer's relay gap): this tab's view
+      // cannot be trusted, so re-read its snapshot. Only the client's own
+      // open tabs are tracked — the stream carries every session's events,
+      // and the first frame of an untracked session only seeds the marker
+      // (nothing was expected before it).
+      if (event.rev !== undefined && viewsRef.current.has(key)) {
+        const known = revsRef.current.get(key);
+        if (revisionGap(known, event.rev)) {
+          void syncState([key]);
+        }
+        revsRef.current.set(key, event.rev);
+      }
       if (event.type === "agent_end" || event.type === "question") {
         const view = viewsRef.current.get(key);
         const name = view?.info.name ?? event.sessionId;
@@ -266,7 +292,7 @@ export function useSessionEvents(
         return next;
       });
     },
-    [],
+    [syncState],
   );
 
   /** Record an error on a session view (no-op when the tab is gone). The
@@ -306,6 +332,28 @@ export function useSessionEvents(
         syncState();
       }, DISCONNECTED_SYNC_INTERVAL_MS);
     };
+
+    // While connected, verify on a low interval that this view has seen
+    // every event of its open tabs (see revsRef): one tiny request per tab,
+    // and a snapshot re-read only when a count moved. A socket that died
+    // without a close event, or a peer relay gap, is then noticed within an
+    // interval instead of at the next reconnect.
+    const probeTimer = setInterval(async () => {
+      if (disposed || !connected) return;
+      for (const key of [...revsRef.current.keys()]) {
+        if (!viewsRef.current.has(key)) continue;
+        try {
+          const { rev } = await sessionApi(key).getRevision();
+          if (disposed) return;
+          // The marker may have moved while the request was in flight (an
+          // event arrived): compare against the fresh value.
+          if (rev !== revsRef.current.get(key)) void syncState([key]);
+        } catch {
+          // Opportunistic: a failed probe is not a state change. The
+          // socket's own liveness is the heartbeat watchdog's business.
+        }
+      }
+    }, REVISION_PROBE_MS);
 
     /** Cancel any pending reconnect and close the existing socket, so
      * connect() always starts from a clean slate (prevents double-open). */
@@ -390,6 +438,7 @@ export function useSessionEvents(
       disposed = true;
       cleanup();
       stopSyncTimer();
+      clearInterval(probeTimer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
     // options.* are stable callbacks from the caller (App wires the health
@@ -398,5 +447,5 @@ export function useSessionEvents(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleEvent, resync, syncState]);
 
-  return { views, setViews, setViewError };
+  return { views, setViews, setViewError, seedRevision };
 }

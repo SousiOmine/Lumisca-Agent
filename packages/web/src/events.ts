@@ -5,11 +5,13 @@ import type {
   BackgroundView,
   ClientEvent,
   GoalInfo,
+  PendingQuestion,
   SessionView,
   TaskInfo,
   TaskView,
   TodoPhase,
 } from "./types.ts";
+import type { SessionSnapshot } from "./api-local.ts";
 
 /** Identity key for dedup: messages are keyed by role + timestamp (the
  * same pair used by the persisted rows), except tool results, which are
@@ -60,7 +62,7 @@ export function mergeMessages(
 }
 
 /** Reconcile a view's run state with the transcript snapshot's `running`
- * flag (`GET /sessions/:id/messages`; see api-local's MessagesSnapshot).
+ * flag (`GET /sessions/:id/messages`; see api-local's SessionSnapshot).
  * The events are the live source of the run state, but they are never
  * replayed: a view that (re)connects while a run is going — a page load, a
  * WS drop, a tab reopened on this session — never saw its `agent_start`,
@@ -129,6 +131,143 @@ export function sameTodoPlan(a: TodoPhase[], b: TodoPhase[]): boolean {
         task.status === otherTask.status;
     });
   });
+}
+
+/** True when two pending-question lists are identical: the same asks in the
+ * same order. A pending ask's questions never change (they are fixed when
+ * the tool asks), so the tool call ids are the whole identity — the resync
+ * replaces the list and must not re-render a tab whose asks are unchanged. */
+export function sameQuestions(
+  a: PendingQuestion[],
+  b: PendingQuestion[],
+): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((entry, i) => entry.toolCallId === b[i]!.toolCallId);
+}
+
+/** Whether an event's revision skips past what this view has seen: the
+ * stream is ordered and reliable while it is up, so a count that jumps
+ * means frames were lost (a socket that died without a close event, a
+ * peer's relay gap) and the view must re-read its snapshot. `known`
+ * undefined means nothing was seen yet for that session (its first event
+ * only seeds the marker: nothing was expected before it), and a count that
+ * does not advance (a duplicate delivery) is not a gap. */
+export function revisionGap(known: number | undefined, rev: number): boolean {
+  return known !== undefined && rev > known + 1;
+}
+
+/** The fetched snapshots of one session, as the resync collects them. Any
+ * piece may be missing (its request failed); the rest are still applied. */
+export interface SnapshotParts {
+  snapshot?: SessionSnapshot;
+  todos?: TodoPhase[];
+  tasks?: TaskInfo[];
+  backgrounds?: BackgroundCommandInfo[];
+  goal?: GoalInfo | null;
+}
+
+/** A view's live state (run state, questions, error, title) as it stood
+ * when a resync fetch started. An event that changes a piece while the
+ * fetch is in flight is newer than the snapshot it raced, so the piece must
+ * not be overwritten by it. */
+export interface LiveStateBefore {
+  started: number | undefined;
+  ended: number | undefined;
+  questions: PendingQuestion[];
+  error: string | undefined;
+  name: string;
+}
+
+/** Apply fetched snapshots to a view. Returns the same view when nothing
+ * changed — the resync must not re-render a tab that is already in sync.
+ *
+ * The pieces split in two kinds:
+ * - live state (run state, pending questions, last error, title) travels
+ *   with the transcript snapshot and is applied only when no event changed
+ *   it meanwhile (see LiveStateBefore);
+ * - panels are their own fetches: the todo plan replaces the view's plan
+ *   wholesale (its events only fire on mutations), tasks and background
+ *   commands merge per id so live deltas are preserved, and the goal
+ *   replaces the snapshot.
+ * Messages merge append-only, minus the rewind tombstones: a message
+ * deleted while the socket was down must not come back. */
+export function applySnapshot(
+  view: SessionView,
+  parts: SnapshotParts,
+  before: LiveStateBefore | undefined,
+): SessionView {
+  const { snapshot } = parts;
+  const movedByEvent = {
+    runState: before !== undefined &&
+      (view.agentStartedAt !== before.started ||
+        view.agentEndedAt !== before.ended),
+    questions: before !== undefined &&
+      view.pendingQuestions !== before.questions,
+    error: before !== undefined && view.error !== before.error,
+    name: before !== undefined && view.info.name !== before.name,
+  };
+  // The run state travels with the transcript (the server read both in one
+  // handler): a view that (re)connected while a run was going must render
+  // it as running, and one whose run ended unwatched must stop showing it
+  // as running (see applyRunState).
+  const withRun = snapshot === undefined || movedByEvent.runState
+    ? view
+    : applyRunState(view, snapshot.running);
+  const questions = snapshot === undefined || movedByEvent.questions
+    ? view.pendingQuestions
+    : snapshot.questions;
+  const error = snapshot === undefined || movedByEvent.error
+    ? view.error
+    : snapshot.error;
+  const name = snapshot === undefined || movedByEvent.name
+    ? view.info.name
+    : snapshot.name;
+  const questionsChanged = snapshot !== undefined &&
+    !movedByEvent.questions &&
+    !sameQuestions(questions, view.pendingQuestions);
+  const errorChanged = snapshot !== undefined && !movedByEvent.error &&
+    error !== view.error;
+  const nameChanged = snapshot !== undefined && !movedByEvent.name &&
+    name !== view.info.name;
+  const messages = snapshot === undefined ? view.messages : filterRemoved(
+    mergeMessages(view.messages, snapshot.messages),
+    view.removed,
+  );
+  const todo = parts.todos;
+  const todoChanged = todo !== undefined && !sameTodoPlan(todo, view.todos);
+  const fetchedTasks = parts.tasks;
+  const tasks = fetchedTasks === undefined
+    ? view.tasks
+    : mergeTasks(view.tasks, fetchedTasks);
+  const tasksChanged = fetchedTasks !== undefined &&
+    !sameTasks(tasks, view.tasks);
+  const fetchedBackgrounds = parts.backgrounds;
+  const backgrounds = fetchedBackgrounds === undefined
+    ? view.backgrounds
+    : mergeBackgrounds(view.backgrounds, fetchedBackgrounds);
+  const backgroundsChanged = fetchedBackgrounds !== undefined &&
+    !sameBackgrounds(backgrounds, view.backgrounds);
+  const fetchedGoal = parts.goal;
+  const goalChanged = fetchedGoal !== undefined &&
+    !sameGoal(fetchedGoal ?? undefined, view.goal);
+  if (
+    messages.length === view.messages.length && !todoChanged &&
+    !tasksChanged && !backgroundsChanged && !goalChanged &&
+    withRun === view && !questionsChanged && !errorChanged && !nameChanged
+  ) {
+    return view;
+  }
+  return {
+    ...withRun,
+    messages,
+    ...(questionsChanged ? { pendingQuestions: questions } : {}),
+    ...(errorChanged ? { error } : {}),
+    ...(nameChanged ? { info: { ...withRun.info, name } } : {}),
+    ...(todoChanged ? { todos: todo } : {}),
+    ...(tasksChanged ? { tasks } : {}),
+    ...(backgroundsChanged ? { backgrounds } : {}),
+    ...(goalChanged ? { goal: fetchedGoal ?? undefined } : {}),
+  };
 }
 
 /** True when two task lists are identical (ids, types, descriptions, and

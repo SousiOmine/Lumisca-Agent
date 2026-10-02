@@ -13,16 +13,20 @@ import {
   LANGUAGE_KEY,
 } from "@lumisca/core/shared";
 import {
+  type AppOptions,
   createApp,
   disposeServer,
   startServer,
   validateHostConfig,
 } from "./app.ts";
 import { removeDirRetry } from "@lumisca/core/test-utils";
-function setup(env?: () => Record<string, string>) {
+function setup(
+  env?: () => Record<string, string>,
+  options?: AppOptions,
+) {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider], env);
-  const server = startServer(core, 0);
+  const server = startServer(core, 0, options);
   const port = server.addr.port;
   const base = `http://127.0.0.1:${port}`;
   return { core, server, faux, base };
@@ -246,12 +250,17 @@ Deno.test("session prompt roundtrip via API", async () => {
       base,
       `/api/sessions/${session.id}/messages`,
     );
-    const { messages, running } = await messagesRes.json();
-    assertEquals(messages.length, 2);
-    assertEquals(messages[1].role, "assistant");
+    const snapshot = await messagesRes.json();
+    assertEquals(snapshot.messages.length, 2);
+    assertEquals(snapshot.messages[1].role, "assistant");
     // The snapshot carries the run state next to the transcript: the run
     // finished before it was taken.
-    assertEquals(running, false);
+    assertEquals(snapshot.running, false);
+    // The rest of the live state travels with it: nothing is pending, the
+    // session has not failed, and the title is current.
+    assertEquals(snapshot.questions, []);
+    assertEquals(snapshot.error, undefined);
+    assertEquals(snapshot.name, "api-test");
 
     await removeDirRetry(root);
   } finally {
@@ -328,6 +337,85 @@ Deno.test("messages snapshot reports a run that is still going", async () => {
     ).json();
     assertEquals(snapshot.running, false, "the finished run is not");
     assertEquals(snapshot.messages.length, 2);
+
+    await removeDirRetry(root);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("messages snapshot carries a pending ask for a reconnecting client", async () => {
+  // The ask tool blocks the run until the user answers, and `question`
+  // events are never replayed: a client that (re)connects while the run is
+  // blocked learns about the questions from this snapshot — without them
+  // the run would wait forever with no visible way to answer.
+  const { core, server, faux, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const ws = await (await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    })).json();
+
+    const questions = [{
+      id: "q1",
+      question: "Which language?",
+      options: [{ label: "Deno" }, { label: "Node" }],
+    }];
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall("ask", { questions })], {
+        stopReason: "toolUse",
+      }),
+      fauxAssistantMessage("thanks"),
+    ]);
+    const session = await (await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    })).json();
+
+    await json(base, `/api/sessions/${session.id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "Hi" }),
+    });
+
+    // Wait for the run to reach the ask and block there.
+    let snapshot: {
+      running: boolean;
+      questions: Array<{ toolCallId: string; questions: unknown[] }>;
+    } = { running: false, questions: [] };
+    for (let i = 0; i < 100; i++) {
+      snapshot = await (await json(
+        base,
+        `/api/sessions/${session.id}/messages`,
+      )).json();
+      if (snapshot.questions.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assertEquals(snapshot.running, true, "the blocked run is reported");
+    assertEquals(snapshot.questions.length, 1);
+    assertEquals(snapshot.questions[0]!.questions, questions);
+
+    // Answering through the API (what the reconnected client does) lets the
+    // blocked run continue; the ask then leaves the snapshot.
+    await json(base, `/api/sessions/${session.id}/answer`, {
+      method: "POST",
+      body: JSON.stringify({
+        toolCallId: snapshot.questions[0]!.toolCallId,
+        answers: [{ id: "q1", values: ["Deno"] }],
+      }),
+    });
+    await core.getAgent(session.id)!.waitForIdle();
+    snapshot = await (await json(
+      base,
+      `/api/sessions/${session.id}/messages`,
+    )).json();
+    assertEquals(snapshot.questions, []);
+    assertEquals(snapshot.running, false);
 
     await removeDirRetry(root);
   } finally {
@@ -559,6 +647,103 @@ Deno.test("websocket streams agent events", async () => {
     assertEquals(result.toolName, "edit");
     assertEquals(result.details?.addedLines, 1);
     assertEquals(result.details?.removedLines, 0);
+
+    // Every frame for the session carries the emitting server's revision,
+    // one step per event: a client compares it against what it has seen and
+    // re-reads the snapshot when it jumps (see LumiscaCore's revision).
+    const revs = events
+      .filter((e) => e.sessionId === session.id && typeof e.rev === "number")
+      .map((e) => e.rev as number);
+    assertEquals(revs.length > 0, true);
+    assertEquals(
+      revs.every((rev, i) => rev === i + 1),
+      true,
+      `revisions must advance by one: ${revs.join(", ")}`,
+    );
+
+    await removeDirRetry(root);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("the event stream carries heartbeat frames while it is idle", async () => {
+  // An idle stream looks exactly like a dead socket (nothing arrives either
+  // way), so the server proves it is still there on a fixed cadence; the
+  // client's watchdog treats silence past its deadline as a dead socket
+  // (see core/shared/heartbeat.ts). The cadence is shortened here so the
+  // test does not wait 15 seconds.
+  const { core, server } = await setup(undefined, { heartbeatMs: 20 });
+  try {
+    const socket = new WebSocket(`ws://127.0.0.1:${server.addr.port}/ws`);
+    const frames: Array<Record<string, unknown>> = [];
+    await new Promise<void>((resolve) => {
+      socket.onmessage = (e) => {
+        const frame = JSON.parse(String(e.data)) as Record<string, unknown>;
+        frames.push(frame);
+        // Two frames prove the cadence repeats, not just that one was sent.
+        if (frames.filter((f) => f.type === "heartbeat").length === 2) {
+          resolve();
+        }
+      };
+    });
+    socket.close();
+    // Nothing else happens on an idle stream, and the heartbeat frame is
+    // transport-level: it carries no peer id and no session id.
+    assertEquals(frames.every((f) => f.type === "heartbeat"), true);
+    assertEquals(frames[0], { type: "heartbeat" });
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("revision endpoint tracks the events of a session", async () => {
+  // The web's probe reads this on a low interval and re-reads the snapshot
+  // only when the count moved; it must therefore start at 0, grow with the
+  // run, and agree with the snapshot's own `rev` (the client seeds its
+  // marker from that).
+  const { core, server, faux, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const ws = await (await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    })).json();
+    const session = await (await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    })).json();
+
+    const revision = async (): Promise<number> =>
+      (await (await json(base, `/api/sessions/${session.id}/revision`))
+        .json()).rev;
+    // The probe deliberately does not open the session: a count with no
+    // events behind it is 0.
+    assertEquals(await revision(), 0);
+
+    faux.setResponses([fauxAssistantMessage("hi")]);
+    await json(base, `/api/sessions/${session.id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "Hi" }),
+    });
+    await core.getAgent(session.id)!.waitForIdle();
+
+    const afterRun = await revision();
+    assert(afterRun > 0, "the run's events advanced the revision");
+    const snapshot = await (await json(
+      base,
+      `/api/sessions/${session.id}/messages`,
+    )).json();
+    assertEquals(snapshot.rev > 0, true);
+    // The count only grows, so the snapshot (read first) cannot be ahead of
+    // the revision read after it.
+    assertEquals(snapshot.rev <= afterRun, true);
 
     await removeDirRetry(root);
   } finally {

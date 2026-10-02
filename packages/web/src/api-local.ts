@@ -11,6 +11,7 @@ import type {
   ModelInfo,
   ModePrompt,
   PendingImage,
+  PendingQuestion,
   ProviderAuthType,
   ProviderInfo,
   ProviderLoginSnapshot,
@@ -30,15 +31,30 @@ import { promptBody, request, sessionPath } from "./api-client.ts";
 /** Session info as served by the API: includes the last run error, if any. */
 export type SessionInfoDto = SessionInfo & { lastError?: string };
 
-/** What GET /sessions/:id/messages serves: the session's transcript plus
- * whether a run is active right now. The two travel together because they
- * must describe the same instant — a client that (re)connects mid-run
- * (page load, WS drop) needs the flag to tell a still-running turn from a
- * finished one (see events.applyRunState), and the server reads both in
- * one handler exactly so they cannot disagree. */
-export interface MessagesSnapshot {
+/** What GET /sessions/:id/messages serves: the session's live state that
+ * the event stream cannot restore on its own. Events are never replayed, so
+ * a client that (re)connects (page load, WS drop) learns the run state, the
+ * pending ask questions, the last failure, and the current title only from
+ * here — and the server reads every piece in one handler so they cannot
+ * disagree with the transcript they travel with (see events.applyRunState
+ * for `running`). */
+export interface SessionSnapshot {
   messages: AgentMessage[];
+  /** A run is active right now (its `agent_start` was never replayed). */
   running: boolean;
+  /** Questions the agent is waiting on (the ask tool); empty when none is
+   * pending. The run stays blocked until they are answered. */
+  questions: PendingQuestion[];
+  /** The last run failure, if any (cleared when a new run starts). Absent
+   * when the session has not failed. */
+  error?: string;
+  /** The session's current title (it may have been generated after the
+   * client last read the session info). */
+  name: string;
+  /** The session's revision at the moment of this snapshot (see
+   * `api.getRevision`): the client seeds its "everything seen up to here"
+   * marker from it, so a later probe can tell whether anything was missed. */
+  rev: number;
 }
 
 export const api = {
@@ -104,11 +120,18 @@ export const api = {
     request<{ ok: boolean }>(`/api${sessionPath(id, "/close")}`, {
       method: "POST",
     }),
-  /** The session's transcript snapshot (persisted messages + the run state
-   * event replay cannot restore); re-fetched after a WS drop or page reload
-   * to restore a tab. */
+  /** The session's live-state snapshot (the transcript plus the run state,
+   * pending questions, last error, title and revision that event replay
+   * cannot restore); re-fetched after a WS drop or page reload to restore a
+   * tab. */
   getMessages: (id: string) =>
-    request<MessagesSnapshot>(`/api${sessionPath(id, "/messages")}`),
+    request<SessionSnapshot>(`/api${sessionPath(id, "/messages")}`),
+  /** The session's revision: how many events the owning server has emitted
+   * for it. Cheap (a counter read, no session open), so the client polls it
+   * on a low interval and re-reads the snapshot only when it moved — a
+   * missed frame is then noticed without re-reading anything. */
+  getRevision: (id: string) =>
+    request<{ rev: number }>(`/api${sessionPath(id, "/revision")}`),
   /** The session's current todo plan (the todo tool); re-fetched after a
    * WS drop or page reload to restore the progress panel (todo events are
    * snapshots, but only mutations emit them, so they are not replayed). */

@@ -386,15 +386,47 @@ class FakeWebSocket {
   }
 }
 
-/** Run `body` with the page globals replaced by a stand-in page: both are
- * plain properties on globalThis in Deno, and the descriptors are put back
- * in a `finally` so nothing leaks into another test or file. */
-function withPage(
+/** A stand-in for the page's `document`: the visibility API the heartbeat
+ * watchdog reads (`hidden`) and the listener `connectEvents` wires for it. */
+class FakeDocument {
+  hidden = false;
+  private readonly listeners = new Set<() => void>();
+
+  addEventListener(type: string, listener: () => void): void {
+    if (type === "visibilitychange") this.listeners.add(listener);
+  }
+
+  removeEventListener(type: string, listener: () => void): void {
+    if (type === "visibilitychange") this.listeners.delete(listener);
+  }
+
+  /** Change the visibility and fire the listeners, as the browser does. */
+  setHidden(hidden: boolean): void {
+    this.hidden = hidden;
+    if (!hidden) { for (const listener of [...this.listeners]) listener(); }
+  }
+}
+
+/** Wait `ms` so the watchdog's real timers can run (tests drive it with
+ * millisecond values instead of the production seconds). */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Run `body` with the page globals replaced by a stand-in page: location,
+ * WebSocket and the visibility API are plain properties on globalThis in
+ * Deno, and the descriptors are put back in a `finally` so nothing leaks
+ * into another test or file. The stand-in document is passed to the body so
+ * a test can drive the page's visibility. */
+async function withPage(
   page: { protocol: string; host: string },
-  body: () => void,
-): void {
+  body: (doc: FakeDocument) => void | Promise<void>,
+): Promise<void> {
   const location = Object.getOwnPropertyDescriptor(globalThis, "location")!;
   const socket = Object.getOwnPropertyDescriptor(globalThis, "WebSocket")!;
+  // Deno has no `document`: the stub is added, then removed again.
+  const docDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const doc = new FakeDocument();
   FakeWebSocket.created.length = 0;
   Object.defineProperty(globalThis, "location", {
     value: page,
@@ -404,18 +436,27 @@ function withPage(
     value: FakeWebSocket,
     configurable: true,
   });
+  Object.defineProperty(globalThis, "document", {
+    value: doc,
+    configurable: true,
+  });
   try {
-    body();
+    await body(doc);
   } finally {
     Object.defineProperty(globalThis, "location", location);
     Object.defineProperty(globalThis, "WebSocket", socket);
+    if (docDescriptor !== undefined) {
+      Object.defineProperty(globalThis, "document", docDescriptor);
+    } else {
+      delete (globalThis as { document?: unknown }).document;
+    }
   }
 }
 
-Deno.test("api-routing: connectEvents opens /ws of the page origin with the token", () => {
+Deno.test("api-routing: connectEvents opens /ws of the page origin with the token", async () => {
   // Same origin as the page that served the UI, upgraded for https — the
   // server serves UI, API and event stream together.
-  withPage({ protocol: "https:", host: "hub:8443" }, () => {
+  await withPage({ protocol: "https:", host: "hub:8443" }, () => {
     connectEvents(() => {}, () => {});
     assertEquals(
       FakeWebSocket.last().url,
@@ -423,7 +464,7 @@ Deno.test("api-routing: connectEvents opens /ws of the page origin with the toke
     );
   });
 
-  withPage({ protocol: "http:", host: "127.0.0.1:8000" }, () => {
+  await withPage({ protocol: "http:", host: "127.0.0.1:8000" }, () => {
     connectEvents(() => {}, () => {});
     assertEquals(
       FakeWebSocket.last().url,
@@ -432,8 +473,8 @@ Deno.test("api-routing: connectEvents opens /ws of the page origin with the toke
   });
 });
 
-Deno.test("api-routing: connectEvents parses events, ignores garbage and reports one drop", () => {
-  withPage({ protocol: "http:", host: "hub:8000" }, () => {
+Deno.test("api-routing: connectEvents parses events, ignores garbage and reports one drop", async () => {
+  await withPage({ protocol: "http:", host: "hub:8000" }, () => {
     const events: unknown[] = [];
     let opens = 0;
     let closes = 0;
@@ -463,5 +504,70 @@ Deno.test("api-routing: connectEvents parses events, ignores garbage and reports
     close();
     assertEquals(socket.closed, true);
     assertEquals(closes, 1, "a deliberate close must not report a drop");
+  });
+});
+
+Deno.test("api-routing: connectEvents swallows heartbeat frames", async () => {
+  await withPage({ protocol: "http:", host: "hub:8000" }, () => {
+    const events: unknown[] = [];
+    const close = connectEvents((event) => events.push(event), () => {});
+    const socket = FakeWebSocket.last();
+
+    socket.onopen?.();
+    // The liveness frame is transport-level: it refreshes the watchdog and
+    // never reaches the caller (no reducer may see it).
+    socket.onmessage?.({ data: '{"type":"heartbeat"}' });
+    assertEquals(events, []);
+    assertEquals(socket.closed, false, "it is not a reason to reconnect");
+
+    socket.onmessage?.({ data: '{"type":"agent_end","sessionId":"s1"}' });
+    assertEquals(events.length, 1);
+    close();
+  });
+});
+
+Deno.test("api-routing: connectEvents closes a socket that stays silent", async () => {
+  await withPage({ protocol: "http:", host: "hub:8000" }, async () => {
+    let closes = 0;
+    const close = connectEvents(() => {}, () => closes++, undefined, {
+      heartbeatTimeoutMs: 15,
+      heartbeatCheckMs: 5,
+    });
+    const socket = FakeWebSocket.last();
+    socket.onopen?.();
+
+    // Silence past the deadline means the link died without a close event
+    // (a NAT timeout, a suspended page): the socket is closed so the normal
+    // drop path re-syncs and reconnects.
+    await sleep(80);
+    assertEquals(socket.closed, true);
+    assertEquals(closes, 1);
+    close();
+  });
+});
+
+Deno.test("api-routing: a hidden page does not judge, and judges on return", async () => {
+  await withPage({ protocol: "http:", host: "hub:8000" }, async (doc) => {
+    let closes = 0;
+    const close = connectEvents(() => {}, () => closes++, undefined, {
+      heartbeatTimeoutMs: 15,
+      heartbeatCheckMs: 5,
+    });
+    const socket = FakeWebSocket.last();
+    socket.onopen?.();
+
+    // A hidden page's timers are throttled, so its silence is not evidence:
+    // the socket may well be alive, and a spurious reconnect would cost a
+    // full re-sync.
+    doc.setHidden(true);
+    await sleep(80);
+    assertEquals(socket.closed, false);
+
+    // Returning to the foreground looks immediately: the socket died while
+    // the page was hidden, and the first look must notice.
+    doc.setHidden(false);
+    assertEquals(socket.closed, true);
+    assertEquals(closes, 1);
+    close();
   });
 });

@@ -16,7 +16,12 @@ import {
   type ThemeSetting,
 } from "@lumisca/core";
 import type { InitialData } from "@lumisca/core/shared";
-import { hostForUrl, isLoopbackHost } from "@lumisca/core/shared";
+import {
+  hostForUrl,
+  isLoopbackHost,
+  WS_HEARTBEAT_INTERVAL_MS,
+  WS_HEARTBEAT_TYPE,
+} from "@lumisca/core/shared";
 import { Assets } from "./assets.ts";
 import { TOKEN_COOKIE_OPTIONS, tokenCookieName } from "./auth-cookie.ts";
 import { renderHtmlDocument, renderTokenRequiredPage } from "./render.ts";
@@ -70,6 +75,10 @@ export interface AppOptions {
   /** The federation client, injected by startServer so it can start the
    * peer event streams once the origin is known. */
   fed?: FederationClient;
+  /** Heartbeat cadence of the event stream (defaults to
+   * `WS_HEARTBEAT_INTERVAL_MS`). Tests shorten it so a heartbeat frame
+   * arrives within the test's lifetime; production never sets it. */
+  heartbeatMs?: number;
 }
 
 /** Startup validation: a non-loopback bind without a token would expose
@@ -443,6 +452,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const ws = upgradeWebSocket(() => {
     let unsubscribe: (() => void) | undefined;
     let unsubscribeFed: (() => void) | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     const send = (ws: { send(data: string): void }, payload: unknown) => {
       // The socket may have closed between the event and the send (the
       // unsubscribe below runs on close, but a concurrent event can race
@@ -457,8 +467,14 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       onOpen(_evt, ws) {
         unsubscribe = core.subscribe((event) => {
           // Every event carries the peer id ("" = this server) so the UI
-          // routes it to the right session tab.
-          send(ws, { peerId: "", ...event });
+          // routes it to the right session tab, and — for session events —
+          // the emitting session's revision, which lets the client detect a
+          // lost frame without another round trip (see
+          // core.getSessionRevision).
+          const rev = "sessionId" in event
+            ? { rev: core.getSessionRevision(event.sessionId) }
+            : {};
+          send(ws, { peerId: "", ...rev, ...event });
         });
         // Federated peers' events, tagged with their id. The peer's own
         // `peerId` marker ("" on its side) is stripped first, so the tag
@@ -467,8 +483,18 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
           const { peerId: _stale, ...rest } = event as Record<string, unknown>;
           send(ws, { peerId, ...rest });
         });
+        // Liveness of an idle stream: silence is indistinguishable from a
+        // socket that died without a close event (a NAT/proxy timeout, a
+        // suspended page), so the server proves it is still there on a
+        // fixed cadence (see core/shared/heartbeat.ts). The frame is
+        // transport-level, not a ClientEvent: the client swallows it and
+        // only refreshes its watchdog.
+        heartbeat = setInterval(() => {
+          send(ws, { type: WS_HEARTBEAT_TYPE });
+        }, options.heartbeatMs ?? WS_HEARTBEAT_INTERVAL_MS);
       },
       onClose() {
+        if (heartbeat !== undefined) clearInterval(heartbeat);
         unsubscribe?.();
         unsubscribeFed?.();
       },

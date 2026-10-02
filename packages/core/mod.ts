@@ -113,6 +113,7 @@ export { parseSkillFrontmatter } from "./skills/frontmatter.ts";
 export { builtinSkills } from "./skills/builtin/mod.ts";
 export type { BuiltinContext } from "./skills/builtin/mod.ts";
 export { AskHub } from "./tools/ask.ts";
+export type { PendingQuestion } from "./tools/ask.ts";
 export { TodoHub } from "./tools/todo.ts";
 export { TaskHub } from "./tools/task-hub.ts";
 export type { ParentDelivery } from "./tools/task-hub.ts";

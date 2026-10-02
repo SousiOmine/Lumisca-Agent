@@ -132,6 +132,48 @@ Deno.test("session prompt persists messages and restores them", async () => {
   core.close();
 });
 
+Deno.test("session revisions count the events a session emitted", async () => {
+  // The count is what the web's probe compares against (see
+  // LumiscaCore.getSessionRevision): 0 before anything happened, then one
+  // step per announced event — a jump is what tells a client it lost a
+  // frame.
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelId,
+    modelProvider: providerId,
+  });
+  try {
+    // Nothing has been announced for this session yet.
+    assertEquals(core.getSessionRevision(session.id), 0);
+
+    const seen: number[] = [];
+    const unsubscribe = core.subscribe((event) => {
+      if ("sessionId" in event && event.sessionId === session.id) {
+        seen.push(core.getSessionRevision(session.id));
+      }
+    });
+    faux.setResponses([fauxAssistantMessage("hi")]);
+    await promptSession(core, session.id, "hello");
+    unsubscribe();
+
+    // The count advances by exactly one per event, so a subscriber sees 1,
+    // 2, 3 … — the property the client's gap detection relies on.
+    assert(seen.length > 0, "the run announced no events");
+    assertEquals(seen[0], 1);
+    assertEquals(seen.every((rev, i) => rev === i + 1), true);
+    assert(core.getSessionRevision(session.id) >= seen.length);
+
+    // Closing drops the count with the session's in-memory state: a client
+    // still holding the old value sees a difference and re-reads.
+    await core.closeSession(session.id);
+    assertEquals(core.getSessionRevision(session.id), 0);
+  } finally {
+    core.close();
+  }
+});
+
 Deno.test("sessions are listed and deleted", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);

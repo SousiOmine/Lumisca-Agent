@@ -30,6 +30,16 @@ export function splitTabKey(
   };
 }
 
+/** The tab keys that belong to one peer ("" = this server). Used to re-sync
+ * only the sessions of a peer whose event stream just came back, instead of
+ * re-reading every open tab. */
+export function keysForPeer(
+  keys: Iterable<string>,
+  peerId: string,
+): string[] {
+  return [...keys].filter((key) => splitTabKey(key).peerId === peerId);
+}
+
 /** `%` → `%25` first, then `:` → `%3A`, so an id that already reads as an
  * escape sequence cannot decode into a separator. */
 function escapePeerId(peerId: string): string {

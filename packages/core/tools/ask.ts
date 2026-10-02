@@ -20,6 +20,15 @@ interface PendingAsk {
   reject: (error: Error) => void;
 }
 
+/** One ask still waiting for the user's answers, as the resync snapshot
+ * carries it (the web's PendingQuestion is the same pair). A `question`
+ * event is never replayed, so a client that (re)connects while a run is
+ * blocked on an ask has no other way to learn about it. */
+export interface PendingQuestion {
+  toolCallId: string;
+  questions: AskQuestion[];
+}
+
 /**
  * Owns the questions the agent asked (via the ask tool) in one session.
  * Each ask blocks the agent loop until the user answers: the tool registers
@@ -58,6 +67,16 @@ export class AskHub {
     return new Promise<AskAnswer[]>((resolve, reject) => {
       this.pending.set(toolCallId, { questions, resolve, reject });
     });
+  }
+
+  /** The asks still waiting for an answer, oldest first. The resync
+   * snapshot carries them so a client that (re)connects while the run is
+   * blocked on a question can still answer it. */
+  pendingQuestions(): PendingQuestion[] {
+    return [...this.pending].map(([toolCallId, ask]) => ({
+      toolCallId,
+      questions: ask.questions,
+    }));
   }
 
   /** Resolve a pending ask with the user's answers. Throws when the ask is

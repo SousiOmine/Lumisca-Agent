@@ -28,7 +28,7 @@ import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
-import type { AskHub } from "../tools/ask.ts";
+import type { AskHub, PendingQuestion } from "../tools/ask.ts";
 import type { AskAnswer } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type {
@@ -705,6 +705,14 @@ export class SessionAgent {
    * pending questions; throws when the ask is gone or malformed. */
   answerQuestion(toolCallId: string, answers: AskAnswer[]): void {
     this.askHub.answer(toolCallId, answers);
+  }
+
+  /** The questions this session is still waiting on (the ask tool), for the
+   * resync snapshot: `question` events are never replayed, so a client that
+   * (re)connects while the run is blocked on an ask has no other way to
+   * learn about it — and the run stays blocked until someone answers. */
+  getPendingQuestions(): PendingQuestion[] {
+    return this.askHub.pendingQuestions();
   }
 
   /** Reject every pending ask. The run that asked them is ending or the

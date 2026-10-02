@@ -7,9 +7,9 @@ import {
   useState,
 } from "preact/compat";
 import {
-  type MessagesSnapshot,
   sessionApi,
   type SessionInfoDto,
+  type SessionSnapshot,
 } from "../api.ts";
 import { applyRunState } from "../events.ts";
 import { emptyView, type SessionView, type TodoPhase } from "../types.ts";
@@ -21,20 +21,24 @@ export const DRAFT_TAB = "__new__";
 const TABS_KEY = "lumisca.tabs";
 const ACTIVE_TAB_KEY = "lumisca.activeTab";
 
-/** View state for a restored tab: show the last run error (if any) so a
- * failure that happened without a connected UI is not silently hidden, and
- * seed the run state from the transcript snapshot's `running` flag — a tab
- * restored (or a page reloaded) while a run is still going must not render
- * that run as finished, and its `agent_start` is never replayed (see
+/** View state for a restored tab: every piece of live state comes from the
+ * snapshot (the same instant as its transcript), so a failure or a question
+ * that happened without a connected UI is not silently hidden, a title
+ * generated meanwhile is shown, and a run that is still going does not
+ * render as finished — its `agent_start` is never replayed (see
  * applyRunState). */
 function restoreView(
   info: SessionInfoDto,
-  snapshot: MessagesSnapshot,
+  snapshot: SessionSnapshot,
   todos: TodoPhase[] = [],
 ): SessionView {
   const v = emptyView(info, snapshot.messages);
-  if (info.lastError) v.error = info.lastError;
+  v.error = snapshot.error;
   v.todos = todos;
+  v.pendingQuestions = snapshot.questions;
+  if (v.info.name !== snapshot.name) {
+    v.info = { ...v.info, name: snapshot.name };
+  }
   return applyRunState(v, snapshot.running);
 }
 
@@ -44,6 +48,10 @@ function restoreView(
  * entries. */
 export function useTabs(
   setViews: Dispatch<SetStateAction<Map<string, SessionView>>>,
+  /** Seed the revision marker of a tab from the snapshot it was built from
+   * (see useSessionEvents.seedRevision): a restored tab must watch for lost
+   * frames from the snapshot it started with, not from its next full sync. */
+  seedRevision: (key: string, rev: number) => void,
 ) {
   const [tabs, setTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -76,6 +84,8 @@ export function useTabs(
             sessionApi(id).getTodo(),
           ]);
           restoredViews.set(id, restoreView(info, snapshot, todo.todos));
+          // The tab starts watching for lost frames from this snapshot.
+          seedRevision(id, snapshot.rev);
         } catch {
           // The session no longer exists; skip it.
         }
@@ -97,7 +107,7 @@ export function useTabs(
     return () => {
       disposed = true;
     };
-  }, [setViews]);
+  }, [setViews, seedRevision]);
 
   // Persist the open tabs so they can be restored after a restart.
   useEffect(() => {
@@ -189,13 +199,14 @@ export function useTabs(
         next.set(key, restoreView(info, snapshot, todo.todos));
         return next;
       });
+      seedRevision(key, snapshot.rev);
       setActiveTab(key);
     } catch (error) {
       // The session was deleted (or the owning peer is unreachable) since
       // the list was built; never crash over a stale entry.
       console.error(error);
     }
-  }, [tabs, setTabs, setViews, setActiveTab]);
+  }, [tabs, setTabs, setViews, setActiveTab, seedRevision]);
 
   return {
     tabs,

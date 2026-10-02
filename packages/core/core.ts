@@ -41,6 +41,7 @@ import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
 import type { CommandApproval } from "./shared/mod.ts";
 import type { CompactionPolicyInput } from "./shared/mod.ts";
 import type { BackgroundCommandInfo } from "./tools/background.ts";
+import type { PendingQuestion } from "./tools/ask.ts";
 import {
   CONNECTIONS_KEY,
   formatSessionName,
@@ -113,6 +114,9 @@ export class LumiscaCore {
    * the tests run on. */
   private readonly globalSkillDirs: string[] | undefined;
   private readonly listeners = new Set<(event: ClientEvent) => void>();
+  /** Per-session count of the events this core has emitted; see
+   * getSessionRevision. Entries are dropped with their session. */
+  private readonly sessionRevisions = new Map<string, number>();
 
   private constructor(
     db: LumiscaDb,
@@ -307,6 +311,16 @@ export class LumiscaCore {
   }
 
   private emit(event: ClientEvent): void {
+    // One choke point for every session event (the agent, the ask/todo
+    // hubs, the background manager and the task hub all emit through here),
+    // so the revision below counts each of them exactly once.
+    if ("sessionId" in event) {
+      const sessionId = event.sessionId;
+      this.sessionRevisions.set(
+        sessionId,
+        (this.sessionRevisions.get(sessionId) ?? 0) + 1,
+      );
+    }
     for (const listener of this.listeners) {
       try {
         listener(event);
@@ -314,6 +328,23 @@ export class LumiscaCore {
         // ignore sink failures
       }
     }
+  }
+
+  /** How many events this server has emitted for the session over the life
+   * of the process (0 when none, or after the session was closed and
+   * reopened). The count travels with every frame of the event stream and
+   * with the session snapshot, so a client can tell "I have seen
+   * everything" from "I missed something": the stream is ordered and
+   * reliable while it is up, so a jump in the count means frames were lost,
+   * and a count behind the server's means the view is stale. The web's
+   * revision probe uses it to re-read the snapshot only when needed (see
+   * useSessionEvents).
+   *
+   * This is a *delivery* check, not a content check: it cannot see state
+   * that changed without an event (the snapshot's completeness is what
+   * covers those). */
+  getSessionRevision(id: string): number {
+    return this.sessionRevisions.get(id) ?? 0;
   }
 
   // --- settings -----------------------------------------------------------
@@ -637,6 +668,11 @@ export class LumiscaCore {
 
   async closeSession(id: string): Promise<void> {
     await this.pool.close(id);
+    // The session's in-memory state (and with it the revision count) is
+    // gone: a client still holding the old count sees a difference and
+    // re-reads the snapshot — the right reaction, since the reopened agent
+    // starts from what was persisted.
+    this.sessionRevisions.delete(id);
   }
 
   async deleteSession(id: string): Promise<void> {
@@ -645,6 +681,7 @@ export class LumiscaCore {
     // synchronously gone for callers that do not await.
     const closing = this.pool.delete(id);
     this.sessions.delete(id);
+    this.sessionRevisions.delete(id);
     await closing;
   }
 
@@ -671,6 +708,14 @@ export class LumiscaCore {
    * the background panel after a WS drop or page reload. */
   getBackground(id: string): BackgroundCommandInfo[] {
     return this.pool.getBackground(id);
+  }
+
+  /** The questions the session is still waiting on (the ask tool); empty
+   * when nothing is pending. Read with the transcript by the resync
+   * snapshot so a client that (re)connects while a run is blocked on an
+   * ask can still answer it (question events are never replayed). */
+  getPendingQuestions(id: string): PendingQuestion[] {
+    return this.pool.getPendingQuestions(id);
   }
 
   /** The skills a session in this workspace would get: the same discovery

@@ -19,7 +19,7 @@ import type {
   WorkspaceFileEntry,
 } from "./types.ts";
 import { fedRequest, promptBody, request, sessionPath } from "./api-client.ts";
-import type { MessagesSnapshot, SessionInfoDto } from "./api-local.ts";
+import type { SessionInfoDto, SessionSnapshot } from "./api-local.ts";
 
 /** Federated (hub-and-spoke) API: resources owned by a peer server. The
  * agent runs on the peer; the hub only proxies. Every method here mirrors a
@@ -86,7 +86,14 @@ export const fed = {
   getSession: (peerId: string, sessionId: string) =>
     fedRequest<SessionInfoDto>(peerId, sessionPath(sessionId)),
   getMessages: (peerId: string, sessionId: string) =>
-    fedRequest<MessagesSnapshot>(peerId, sessionPath(sessionId, "/messages")),
+    fedRequest<SessionSnapshot>(peerId, sessionPath(sessionId, "/messages")),
+  /** The peer's revision for the session (see the local api.getRevision):
+   * the probe follows the session's owner. */
+  getRevision: (peerId: string, sessionId: string) =>
+    fedRequest<{ rev: number }>(
+      peerId,
+      sessionPath(sessionId, "/revision"),
+    ),
   /** All sessions of a peer, newest first (for the recent sessions list). */
   listSessions: (peerId: string) =>
     fedRequest<SessionInfo[]>(peerId, "/sessions"),

@@ -30,6 +30,9 @@ class PeerEventStream {
     private readonly peer: ConnectionEntry,
     private readonly relay: (peerId: string, event: ClientEvent) => void,
     private readonly isClosed: () => boolean,
+    /** Announce the stream's state to the hub's UI clients (true when the
+     * relay is up, false when it dropped — see ClientEvent's peer_stream). */
+    private readonly onState: (connected: boolean) => void,
   ) {}
 
   /** Open the stream (no-op when already connected or the client closed). */
@@ -50,6 +53,9 @@ class PeerEventStream {
     this.ws = ws;
     ws.onopen = () => {
       this.attempts = 0;
+      // The relay is up: a client that was watching this peer's sessions
+      // through a gap re-reads their snapshots (see peer_stream).
+      this.onState(true);
     };
     ws.onmessage = (evt) => {
       try {
@@ -62,6 +68,9 @@ class PeerEventStream {
     ws.onclose = () => {
       this.ws = null;
       log.debug(`peer ${this.peer.id}: stream closed, reconnecting`);
+      // Events are lost until the reconnect: tell the UI so its views of
+      // this peer's sessions can be re-read instead of silently stale.
+      this.onState(false);
       this.scheduleReconnect();
     };
     ws.onerror = () => {
@@ -220,6 +229,12 @@ export class FederationClient {
           peer,
           (peerId, event) => this.relay(peerId, event),
           () => this.closed,
+          (connected) =>
+            this.relay(peer.id, {
+              type: "peer_stream",
+              peerId: peer.id,
+              connected,
+            }),
         );
         this.streams.set(peer.id, stream);
       }

@@ -6,6 +6,7 @@ import type {
   CreateSessionInput,
   ImageContent,
   ModePrompt,
+  PendingQuestion,
   SessionAgent,
   SessionInfo,
   TaskInfo,
@@ -218,6 +219,12 @@ export interface SessionApi {
   /** Snapshots of the session's background commands (empty when there are
    * none). */
   getBackground(id: string): BackgroundCommandInfo[];
+  /** The questions the session is still waiting on (the ask tool); empty
+   * when none is pending. */
+  getPendingQuestions(id: string): PendingQuestion[];
+  /** The session's revision: how many events this server has emitted for
+   * it (see LumiscaCore.getSessionRevision). */
+  getSessionRevision(id: string): number;
   /** The session's active goal, if any (the `/goal` mode). */
   getGoal(id: string): import("@lumisca/core").GoalInfo | undefined;
   /** Cancel the session's active goal (no-op when none runs). */
@@ -252,19 +259,23 @@ export function sessionRoutes(core: SessionApi): Hono {
     return c.json(sessionJson(requireSession(c.req.param("id"))));
   });
 
-  /** The session's transcript snapshot, together with whether a run is
-   * active right now. Clients re-fetch this after a page (re)load or a WS
-   * drop (the web's tab restore and syncState) and need both halves to
-   * render a run honestly: the transcript alone cannot say whether its
-   * last turn is still being produced, and the event stream carries no
-   * snapshot — a client that connected mid-run never saw `agent_start`, so
-   * without the flag it would present a live run as finished (work log
-   * collapsed under 作業完了). Both are read in this one handler, with no
-   * await between them, so the flag and the transcript describe the same
-   * instant. */
+  /** The session's live-state snapshot: the transcript plus everything a
+   * client needs to render the session honestly after a page (re)load or a
+   * WS drop (the web's tab restore and syncState). The event stream carries
+   * no snapshot, and events are never replayed, so each piece here has a
+   * client that would otherwise be shown a lie:
+   * - `running`: a client that connected mid-run never saw `agent_start`,
+   *   so without the flag it would present a live run as finished (work log
+   *   collapsed under 作業完了);
+   * - `questions`: a run blocked on the ask tool would show no way to
+   *   answer it;
+   * - `error`: a failure emitted while the socket was down would vanish;
+   * - `name`: a title generated while the socket was down would stay stale.
+   * Everything is read in this one handler, with no await between the
+   * reads, so the pieces describe the same instant. */
   app.get("/sessions/:id/messages", async (c) => {
     const id = c.req.param("id");
-    requireSession(id);
+    const session = requireSession(id);
     await core.openSession(id);
     const agent = core.getAgent(id);
     if (!agent) {
@@ -274,7 +285,32 @@ export function sessionRoutes(core: SessionApi): Hono {
     }
     const messages = agent.messages;
     const running = agent.isStreaming;
-    return c.json({ messages, running });
+    const questions = core.getPendingQuestions(id);
+    const error = core.getSessionLastError(id);
+    // The revision travels with the snapshot: the client seeds its
+    // "everything seen up to here" marker from it (see the web's revision
+    // probe).
+    const rev = core.getSessionRevision(id);
+    return c.json({
+      messages,
+      running,
+      questions,
+      error,
+      name: session.name,
+      rev,
+    });
+  });
+
+  /** The session's revision: how many events this server has emitted for it
+   * (see LumiscaCore.getSessionRevision). The web reads this on a low
+   * interval and re-reads the snapshot only when it moved — the cheap way
+   * to notice events that were emitted but never delivered (a socket that
+   * died without a close event, a peer's relay gap). Deliberately does not
+   * open the session: the count lives outside the agent. */
+  app.get("/sessions/:id/revision", (c) => {
+    const id = c.req.param("id");
+    requireSession(id);
+    return c.json({ rev: core.getSessionRevision(id) });
   });
 
   /** The session's current todo plan (the todo tool). todo events are

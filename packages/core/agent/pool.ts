@@ -11,6 +11,7 @@ import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { BackgroundProcessManager } from "../tools/background.ts";
 import type { TodoHub } from "../tools/todo.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
+import type { PendingQuestion } from "../tools/ask.ts";
 import type { TaskInfo } from "../shared/mod.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
@@ -214,6 +215,14 @@ export class SessionPool {
    * are not replayed). */
   getBackground(id: string): BackgroundCommandInfo[] {
     return this.sessions.get(id)?.background?.list() ?? [];
+  }
+
+  /** The questions the session is still waiting on (the ask tool); empty
+   * when the session is not open or nothing is pending. Restores the
+   * question panel after a WS drop or page reload: `question` events are
+   * never replayed, and the blocked run cannot continue without an answer. */
+  getPendingQuestions(id: string): PendingQuestion[] {
+    return this.sessions.get(id)?.agent?.getPendingQuestions() ?? [];
   }
 
   /** Build the agent of a session (replacing any existing one) and keep it

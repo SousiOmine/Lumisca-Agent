@@ -40,6 +40,31 @@ Deno.test("ask emits a question event and resolves with the answers", async () =
   assertEquals(result.details, { answers: [{ id: "q1", values: ["Deno"] }] });
 });
 
+Deno.test("pendingQuestions lists the asks that are still waiting", async () => {
+  const { hub } = makeHub();
+  const questions = [{
+    id: "q1",
+    question: "Which language?",
+    options: [{ label: "Deno" }, { label: "Node" }],
+  }];
+  assertEquals(hub.pendingQuestions(), []);
+
+  // The resync snapshot reads this: a client that (re)connects while the
+  // run is blocked on an ask must be able to show the questions again.
+  const pending = hub.ask("call-1", questions);
+  assertEquals(hub.pendingQuestions(), [{ toolCallId: "call-1", questions }]);
+
+  // Answering (or the run being torn down) removes the ask from the list.
+  hub.answer("call-1", [{ id: "q1", values: ["Deno"] }]);
+  assertEquals(hub.pendingQuestions(), []);
+  await pending;
+
+  const rejected = hub.ask("call-2", questions);
+  hub.rejectAll();
+  assertEquals(hub.pendingQuestions(), []);
+  await assertRejects(() => rejected);
+});
+
 Deno.test("ask with multiple questions resolves with all answers", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);

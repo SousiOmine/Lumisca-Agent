@@ -147,4 +147,12 @@ export type ClientEvent =
     text: string;
     achieved: boolean;
     reason: string;
-  };
+  }
+  /** The hub's event stream to one peer closed or (re)opened. The hub
+   * relays each peer's stream to its UI clients; while that relay is down
+   * the peer's sessions miss events (an `agent_end`, a tool result, a todo
+   * mutation) and nothing else would tell a client watching one of them.
+   * `connected: false` announces the gap, `connected: true` says the relay
+   * is back — clients then re-read the snapshots of that peer's open
+   * sessions. Peer-scoped, not session-scoped: it carries no sessionId. */
+  | { type: "peer_stream"; peerId: string; connected: boolean };

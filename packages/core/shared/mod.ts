@@ -32,3 +32,4 @@ export * from "./context-usage.ts";
 export * from "./token-estimate.ts";
 export * from "./misc.ts";
 export * from "./loopback.ts";
+export * from "./heartbeat.ts";

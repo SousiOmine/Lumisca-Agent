@@ -1,5 +1,21 @@
 import { assertEquals } from "@std/assert";
-import { splitTabKey, tabKey } from "./tabs.ts";
+import { keysForPeer, splitTabKey, tabKey } from "./tabs.ts";
+
+Deno.test("keysForPeer picks exactly one peer's tabs", () => {
+  const keys = [
+    "sess-1", // this server
+    tabKey("peer-1", "sess-2"),
+    tabKey("peer:1", "sess-3"), // an escaped peer id
+    tabKey("peer-1", "sess:4"),
+  ];
+  assertEquals(keysForPeer(keys, "peer-1"), [
+    tabKey("peer-1", "sess-2"),
+    tabKey("peer-1", "sess:4"),
+  ]);
+  assertEquals(keysForPeer(keys, ""), ["sess-1"]);
+  assertEquals(keysForPeer(keys, "peer:1"), [tabKey("peer:1", "sess-3")]);
+  assertEquals(keysForPeer(keys, "missing"), []);
+});
 
 Deno.test("tabKey/splitTabKey round-trip every id shape", () => {
   // The peer id comes from the connection registry (the user writes it), so
