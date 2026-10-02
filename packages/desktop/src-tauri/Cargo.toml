@@ -123,6 +123,13 @@ block2 = "0.6"
 # Tauri resolves (Tauri's own feature set is unioned in).
 [target.'cfg(any(target_os = "linux", target_os = "dragonfly", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
 webkit2gtk = { version = "2", features = ["v2_40"] }
+# `Surface::write_to_png` — the only encoder the GTK snapshot path has
+# (browser_lab.rs) — lives behind cairo-rs's `png` feature, and nothing in
+# the tree turns it on (webkit2gtk takes cairo-rs's defaults). The feature
+# is what reaches the `cairo` crate webkit2gtk re-exports, so it must be
+# requested on the same 0.18 line; a feature set is unified per crate
+# version, so this entry enables it for the whole Linux build.
+cairo-rs = { version = "0.18", features = ["png"] }
 
 [target.'cfg(unix)'.dependencies]
 # kill(2) for process-group teardown of the local server (server.rs).
