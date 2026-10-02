@@ -43,21 +43,22 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # The screenshot payloads the platform snapshot APIs return as raw bytes
 # are base64 on the wire (packages/core/browser/types.ts). Windows never
 # touches it — CDP hands back base64 directly.
-base64 = "0.22"
+base64 = "0.23"
 # Shared browser-lab protocol pieces (viewport math, probe driver, CDP
 # params, RPC server).
 lumisca-browser-rpc = { path = "../../browser-rpc" }
 
 [target.'cfg(windows)'.dependencies]
-# Tracks the line tao/tauri/wry/webview2-com resolve to (0.61 today) and
+# Tracks the line tao/tauri/wry/webview2-com resolve to (0.62 today) and
 # must not be bumped on its own: their `HWND`/`windows-core` types cross
 # into our calls (Window::hwnd(), the CDP handler in browser_lab.rs), so a
 # second copy of the crate is a different type. `cargo update` therefore
-# reports it as "unchanged behind latest" — expected until the framework
-# moves. Used to force-activate the window before a bridge-started caption
+# reports it as "unchanged behind latest" until the framework moves, and
+# the pin moves with it (wry 0.57 → windows 0.62 / webview2-com 0.39).
+# Used to force-activate the window before a bridge-started caption
 # drag, and for GetLocalTime (the timestamp of every captured server log
 # line, server_log.rs).
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
@@ -72,16 +73,16 @@ windows = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 # WinRT toasts under our own AppUserModelID with a click-to-focus handler
-# (notify.rs). 0.8 tracks the windows 0.62 line (newer than the 0.61 the
-# rest of the shell uses; the two coexist in the tree); the backend
-# notify-rust (via tauri-plugin-notification) is used on other platforms.
+# (notify.rs). 0.8 tracks the windows 0.62 line — the same copy the rest of
+# the shell now resolves; the backend notify-rust (via
+# tauri-plugin-notification) is used on other platforms.
 tauri-winrt-notification = "0.8"
 # Direct WebView2 COM access for the browser lab's CDP screenshot
 # (browser_lab.rs). Must stay on the copy wry resolves to (same reason as
 # `windows` above): the ICoreWebView2Controller our CDP calls arrive on
 # comes from wry's `with_webview`, so another copy of the crate is another
 # type.
-webview2-com = "0.38"
+webview2-com = "0.39"
 
 # macOS screenshot: `WKWebView.takeSnapshot`. `with_webview` hands over the
 # raw WKWebView pointer, so these crates must resolve to the same versions

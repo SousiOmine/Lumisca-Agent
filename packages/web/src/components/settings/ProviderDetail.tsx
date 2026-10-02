@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "preact/compat";
+// Since preact 11 the JSX namespace carries only the intrinsic elements;
+// targeted event types live in the module root.
+import type { TargetedEvent, TargetedKeyboardEvent } from "preact";
 import {
   IconArrowLeft,
   IconCheck,
@@ -347,20 +350,29 @@ export function ProviderDetail({
     const submit = () => {
       if (promptValue.trim()) respond(prompt.id, promptValue.trim());
     };
-    const type = prompt.type === "secret" ? "password" : "text";
+    // A secret prompt is a password field, any other an ordinary text
+    // field. The two elements share every attribute but `type`, which is
+    // written as a literal in each branch: preact's JSX types make the
+    // input attributes a union discriminated by `type` (its ARIA role
+    // rules), and a `"text" | "password"` value cannot pick one member.
+    const field = {
+      placeholder: prompt.placeholder,
+      value: promptValue,
+      onChange: (event: TargetedEvent<HTMLInputElement, Event>) =>
+        setPromptValue(event.currentTarget.value),
+      onKeyDown: (event: TargetedKeyboardEvent<HTMLInputElement>) => {
+        if (event.key === "Enter") submit();
+      },
+      style: { flex: 1 },
+    };
     return (
       <div
         key={prompt.id}
         style={{ display: "flex", gap: 6, alignItems: "flex-start" }}
       >
-        <input
-          type={type}
-          placeholder={prompt.placeholder}
-          value={promptValue}
-          onChange={(e) => setPromptValue(e.currentTarget.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          style={{ flex: 1 }}
-        />
+        {prompt.type === "secret"
+          ? <input type="password" {...field} />
+          : <input type="text" {...field} />}
         <button
           type="button"
           className="btn primary"

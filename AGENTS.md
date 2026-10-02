@@ -100,7 +100,7 @@ cargo update --manifest-path packages/browser-rpc/Cargo.toml
 npm outdated                                                   # packages/desktop で実行（@tauri-apps/cli）
 ```
 
-* **24時間ゲート**: Deno 2.9 以降、公開から24時間以内のバージョンは既定で採用されません。`deno outdated --latest` が最新版を表示しても `deno update --latest` が据え置くことがあります（`--minimum-dependency-age 0` で無効化できますが、リリース直前の更新では既定のままにします）。
+* **24時間ゲート**: Deno 2.9 以降、公開から24時間以内のバージョンは既定で採用されません。`deno update --latest` はそれらを据え置き、`deno outdated --latest` も既定では一覧に出しません（保留中の版は `deno outdated -r --latest --minimum-dependency-age 0` との差分で分かります）。`--minimum-dependency-age 0` での取り込みは事情がある場合に限り、リリース直前の更新では既定のままにします。
 * **`packages/desktop` はワークスペース外**のため（本ファイル 1 節）、`deno update -r` の対象に含まれません。`@tauri-apps/cli` の実体は `package-lock.json` です。
 * **`uses:` も依存です**: ワークフローで使うアクションは、メジャー更新時にランナーの要件（例: `actions/cache@v5` 以降は Node 24 と runner 2.327.1 以上）が変わります。更新時はリリースノートを確認してください。
 
