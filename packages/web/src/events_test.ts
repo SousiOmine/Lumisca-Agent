@@ -173,6 +173,45 @@ Deno.test("events: tool start/end track running tools", () => {
   assertEquals(v.runningTools.size, 0);
 });
 
+Deno.test("events: a live tool result is stored, so the tool line can pair it", () => {
+  // The tool line's checkmark and its `+N -M` badge come from the toolResult
+  // message (ChatView's toolResults map) — the tool_end event only clears
+  // the spinner. The core announces the message when it appends it to the
+  // transcript, so a client that is watching live must store it.
+  let v = view();
+  const result = {
+    role: "toolResult",
+    toolCallId: "t1",
+    toolName: "edit",
+    content: [{ type: "text", text: "Edited a.ts" }],
+    details: { path: "a.ts", addedLines: 3, removedLines: 2 },
+    isError: false,
+    timestamp: 200,
+  } as AgentMessage;
+  v = applyEvent(
+    {
+      type: "tool_end",
+      sessionId: "s1",
+      toolCallId: "t1",
+      toolName: "edit",
+      result: {},
+      isError: false,
+    },
+    v,
+  )!;
+  v = applyEvent({ type: "message_end", sessionId: "s1", message: result }, v)!;
+
+  const stored = v.messages.find((m) => m.role === "toolResult") as
+    | { toolCallId?: string; details?: unknown }
+    | undefined;
+  assertEquals(stored?.toolCallId, "t1");
+  assertEquals(stored?.details, {
+    path: "a.ts",
+    addedLines: 3,
+    removedLines: 2,
+  });
+});
+
 Deno.test("events: errors are set on session_error and cleared on agent_start", () => {
   let v = view();
   v = applyEvent(

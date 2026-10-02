@@ -261,10 +261,11 @@ export class Agent {
   }
 
   /** Append a user/mode/notification/context message to the transcript.
-   * The caller (session agent) announces these to clients; the agent only
-   * emits assistant message events (in step). Context snapshots are
-   * appended this way outside of a run (see SessionAgent.publishContexts):
-   * they are history for the next LLM call, not a reason to start one. */
+   * The caller (session agent) announces these to clients; the agent itself
+   * announces only the messages it builds (the assistant messages of step()
+   * and the tool results — see announce). Context snapshots are appended
+   * this way outside of a run (see SessionAgent.publishContexts): they are
+   * history for the next LLM call, not a reason to start one. */
   private append(message: AgentMessage): void {
     this.state.messages.push(message);
   }
@@ -468,7 +469,26 @@ export class Agent {
     }
     this.state.errorMessage = errorMessage ?? this.state.errorMessage;
     this.emit({ type: "message_end", message: final! });
+    // The turn's tool results are messages of the transcript like any
+    // other, so they are announced too — after their assistant message, the
+    // order they hold in the transcript. The live UI pairs each result with
+    // its call (the tool line's checkmark and its `+N -M` badge are built
+    // from the toolResult message); without this announcement those marks
+    // only appear when the view happens to re-read the transcript snapshot
+    // (a reload, a WS reconnect, or a return to the foreground).
+    for (const result of pendingResults) {
+      this.announce(result);
+    }
     return { assistant: final!, executedIds };
+  }
+
+  /** Announce a message this agent appended to the transcript (the session
+   * agent announces the prompt-side messages it builds). Only `message_end`
+   * is emitted: nothing streams for these messages, and the client upserts
+   * the finished message on that event — a message_start would only send
+   * the same payload twice (tool results can carry images). */
+  private announce(message: AgentMessage): void {
+    this.emit({ type: "message_end", message });
   }
 
   /** Fallback: execute tool calls the SDK did not run. Only test doubles
@@ -535,6 +555,7 @@ export class Agent {
         timestamp: Date.now(),
       };
       this.state.messages.push(result);
+      this.announce(result);
     }
   }
 }

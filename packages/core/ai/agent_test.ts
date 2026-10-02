@@ -1,5 +1,12 @@
 import { assert, assertEquals } from "@std/assert";
-import type { AgentMessage, AgentTool, Api, Model, StreamFn } from "./types.ts";
+import type {
+  AgentEvent,
+  AgentMessage,
+  AgentTool,
+  Api,
+  Model,
+  StreamFn,
+} from "./types.ts";
 import { Agent } from "./agent.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "./faux.ts";
@@ -73,6 +80,71 @@ function assistantText(message: AgentMessage | undefined): string {
   if (message === undefined || message.role !== "assistant") return "";
   return contentText(message.content);
 }
+
+/** The roles of the messages a run announced as `message_end` events. */
+function announcedRoles(events: AgentEvent[]): string[] {
+  return events
+    .filter((event) => event.type === "message_end")
+    .map((event) => (event as { message: AgentMessage }).message.role);
+}
+
+Deno.test("a turn's tool results are announced after their assistant message", async () => {
+  const events: AgentEvent[] = [];
+  const toolCall = fauxToolCall("edit", { path: "a.ts" }, "t1");
+  const toolTurn = fauxAssistantMessage([toolCall], { stopReason: "toolUse" });
+  let calls = 0;
+  const streamFn: StreamFn = () => {
+    const stream = createAssistantMessageEventStream();
+    calls++;
+    if (calls === 1) {
+      // The shape the real transport yields for one SDK-executed turn.
+      stream.push({ type: "start", partial: toolTurn });
+      stream.push({
+        type: "toolcall_start",
+        toolCallId: "t1",
+        toolName: "edit",
+        args: { path: "a.ts" },
+      });
+      stream.push({
+        type: "toolcall_result",
+        toolCallId: "t1",
+        toolName: "edit",
+        content: [{ type: "text", text: "Edited a.ts" }],
+        details: { path: "a.ts", addedLines: 3, removedLines: 2 },
+        isError: false,
+      });
+      stream.push({ type: "done", message: toolTurn });
+      stream.end(toolTurn);
+      return stream;
+    }
+    const done = fauxAssistantMessage("done");
+    stream.push({ type: "start", partial: done });
+    stream.push({ type: "done", message: done });
+    stream.end(done);
+    return stream;
+  };
+  const agent = new Agent({
+    initialState: { systemPrompt: "test", model: fakeModel(), tools: [] },
+    streamFn,
+    sessionId: "s1",
+  });
+  agent.subscribe((event) => events.push(event));
+
+  await agent.prompt("edit a.ts");
+
+  // Every message of the transcript is announced to subscribers, not only
+  // the assistant's: the client pairs a tool result with its call to render
+  // the tool line's checkmark and its `+N -M` badge, and a client that is
+  // never told about the result stays without them until it happens to
+  // re-sync the transcript (the desktop's "switch away and back" refresh).
+  // The results come after their assistant message, the order they hold in
+  // the transcript.
+  assertEquals(announcedRoles(events), [
+    "assistant",
+    "toolResult",
+    "assistant",
+  ]);
+});
 
 Deno.test("an abort does not leak into later runs (the signal is per run)", async () => {
   const { streamFn, calls } = abortAwareStreamFn(["held", "second answer"]);

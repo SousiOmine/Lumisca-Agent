@@ -78,6 +78,8 @@
   * **overflow 回復**: プロバイダーがウィンドウ超過を返した場合（`retry-policy.ts` の `isContextOverflowError`）、しきい値と保持予算を無視した強制圧縮を1回だけ行い、成功した場合のみ再試行します。2回目の拒否はプロバイダーの元エラーをそのまま提示します。
   * **設定**: `compaction_enabled` / `compaction_reserve_tokens` / `compaction_keep_recent_tokens`（`shared/settings-keys.ts`）。`LumiscaCore.getCompactionPolicy()` が読み出し、エージェントは検査のたびに読むため再起動なしで反映されます（設定ダイアログのモデルセクションに UI があります）。
   * **適用範囲**: メインセッション（DB永続化＋`messages_checkpoint` イベント）とサブエージェント（メモリのみの splice）の双方が同じ `ContextCompactor` を使います。
+- **`ai/agent.ts`（Agent ランタイム）**  
+  交換ループ（`exchangeLoop`）は 1 ステップ = 1 LLM 呼び出しで、SDK が実行したツール呼び出しの結果を `assistant → toolResult` の順でトランスクリプトへ追記します。**追記したメッセージは `message_end` で必ず配信**します —— アシスタントの本文だけではなく**ツール結果も 1 メッセージとして**通知されるため、クライアントはトランスクリプトを読み直さなくてもツール行のチェックマークと `+N -M` バッジ（`ToolCall.tsx` が toolResult メッセージから組み立てます）を即座に描画できます。配信が無いと、次にスナップショットを取得する瞬間（再読込・WS 再接続・可視化復帰）まで表示が欠けたままになります。結果本文を運ぶのはこのメッセージで、`tool_execution_end`（`tool_end`）イベントは実行中スピナーの解除だけを担います。
 - **`ai/rate-limit.ts`**  
   HTTP 429（レート制限）の判定、指数バックオフ、リトライループを担う唯一の実装です。通信トランスポート、セッション、サブエージェントの間で共有されています。`agent/llm-retry.ts` は本モジュールへ処理を委譲する形で assistant メッセージのリトライを行います。
 - **`goal/loop.ts`**  

@@ -6,7 +6,7 @@ import {
   fauxToolCall,
   type StreamRequest,
 } from "@lumisca/core";
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore, type TodoPhase } from "@lumisca/core";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,
@@ -488,13 +488,29 @@ Deno.test("websocket streams agent events", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    await Deno.writeTextFile(join(root, "a.txt"), "one\n");
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
     });
     const ws = await create.json();
 
-    faux.setResponses([fauxAssistantMessage("Streamed!")]);
+    // One tool turn, then the answer: a tool result must reach the client as
+    // a message of its own. The UI builds the tool line's checkmark and its
+    // `+N -M` badge from that message (a transcript message), so a client
+    // that is told about `tool_end` alone leaves the line unmarked until it
+    // happens to re-read the transcript snapshot.
+    faux.setResponses([
+      fauxAssistantMessage(
+        [fauxToolCall("edit", {
+          path: `${basename(root)}/a.txt`,
+          old_string: "one",
+          new_string: "one\ntwo",
+        })],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage("Streamed!"),
+    ]);
     const sessionRes = await json(base, "/api/sessions", {
       method: "POST",
       body: JSON.stringify({
@@ -506,11 +522,11 @@ Deno.test("websocket streams agent events", async () => {
     const session = await sessionRes.json();
 
     const socket = new WebSocket(`ws://127.0.0.1:${server.addr.port}/ws`);
-    const events: string[] = [];
+    const events: Array<Record<string, unknown>> = [];
     const done = new Promise<void>((resolve) => {
       socket.onmessage = (e) => {
         const event = JSON.parse(String(e.data));
-        events.push(event.type);
+        events.push(event);
         if (event.type === "agent_end") resolve();
       };
       socket.onopen = () => {
@@ -523,9 +539,26 @@ Deno.test("websocket streams agent events", async () => {
 
     await done;
     socket.close();
-    assertEquals(events.includes("agent_start"), true);
-    assertEquals(events.includes("message_end"), true);
-    assertEquals(events.includes("agent_end"), true);
+    const types = events.map((e) => e.type);
+    assertEquals(types.includes("agent_start"), true);
+    assertEquals(types.includes("message_end"), true);
+    assertEquals(types.includes("agent_end"), true);
+
+    const resultEnd = events.find((e) =>
+      e.type === "message_end" &&
+      (e.message as { role?: string }).role === "toolResult"
+    );
+    assert(
+      resultEnd !== undefined,
+      "no tool result message reached the client",
+    );
+    const result = resultEnd.message as {
+      toolName?: string;
+      details?: { addedLines?: number; removedLines?: number };
+    };
+    assertEquals(result.toolName, "edit");
+    assertEquals(result.details?.addedLines, 1);
+    assertEquals(result.details?.removedLines, 0);
 
     await removeDirRetry(root);
   } finally {

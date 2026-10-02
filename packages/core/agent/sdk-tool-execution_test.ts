@@ -155,6 +155,15 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
     (e as { toolCallId?: string }).toolCallId === "t1"
   ) as { result: { details: unknown } };
   assertEquals(end.result.details, { matches: 2 });
+
+  // The result is also announced as a message of its own — the live client
+  // renders the checkmark and the `+N -M` badge from the toolResult message,
+  // so a result that only exists in the transcript leaves the tool line
+  // unmarked until the view happens to re-sync.
+  const announced = events
+    .filter((e) => e.type === "message_end" && e.message.role === "toolResult")
+    .map((e) => (e as { message: unknown }).message);
+  assertEquals(announced, [recordedResult]);
 });
 
 Deno.test("tool calls without SDK results still run via the fallback", async () => {
@@ -192,6 +201,16 @@ Deno.test("tool calls without SDK results still run via the fallback", async () 
 
   assertEquals(counter.calls, 1);
   assertEquals(toolStartArgs(events), [{ text: "yo" }]);
+  // The fallback path announces its result too: the live UI builds the tool
+  // line's checkmark and its `+N -M` badge from the toolResult message, so a
+  // result the client is never told about leaves the line unmarked until the
+  // next transcript resync.
+  assertEquals(
+    events.filter((e) =>
+      e.type === "message_end" && e.message.role === "toolResult"
+    ).length,
+    1,
+  );
 });
 
 // ---- real transport --------------------------------------------------------
