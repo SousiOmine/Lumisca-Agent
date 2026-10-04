@@ -1,5 +1,6 @@
 import type { SkillDef } from "../discover.ts";
 import { webBrowserSkill } from "./web-browser.ts";
+import { computerUseSkill } from "./computer-use.ts";
 
 /**
  * App-embedded skills: shipped with the application itself, always
@@ -11,10 +12,11 @@ import { webBrowserSkill } from "./web-browser.ts";
  *
  * A built-in skill may teach tools that only exist when a runtime
  * capability is attached (the browser-lab tools are seeded into the
- * session's tool registry only when a browser backend is present). Such
- * skills are gated through `context`, so a session that can never run
- * them does not advertise them — an agent must not be pointed at a dead
- * end.
+ * session's tool registry only when a browser backend is present, and the
+ * computer-use tools only when this machine can be driven AND the user
+ * enabled the feature). Such skills are gated through `context`, so a
+ * session that can never run them does not advertise them — an agent must
+ * not be pointed at a dead end.
  */
 
 /** Runtime capabilities a session may or may not have. */
@@ -23,11 +25,16 @@ export interface BuiltinContext {
    * WebView host of a server started by the desktop shell). The
    * web-browser skill is included only when true. */
   browser: boolean;
+  /** Whether the session may drive this machine (a computer host is
+   * attached AND the user enabled the feature in settings). The
+   * computer-use skill is included only when true. */
+  computer: boolean;
 }
 
 /** The app-embedded skill set for a session context. */
 export function builtinSkills(context: BuiltinContext): SkillDef[] {
   return [
     ...(context.browser ? [webBrowserSkill()] : []),
+    ...(context.computer ? [computerUseSkill()] : []),
   ];
 }

@@ -75,6 +75,32 @@ Deno.test("sessionSkills advertises the web-browser skill only with a browser ba
   }
 });
 
+Deno.test("sessionSkills advertises the computer-use skill only when the machine can be driven", () => {
+  const withComputer = sessionSkills([], { computerAvailable: true });
+  assert(
+    withComputer.some((s) => s.name === "computer-use"),
+    "computer-use must be advertised when the session may drive the machine",
+  );
+  for (
+    const opts of [
+      undefined,
+      {},
+      { computerAvailable: false },
+      { browserAvailable: true },
+    ]
+  ) {
+    const without = sessionSkills(
+      [],
+      opts as { computerAvailable?: boolean; browserAvailable?: boolean },
+    );
+    assertEquals(
+      without.some((s) => s.name === "computer-use"),
+      false,
+      `computer-use must not be advertised for ${JSON.stringify(opts)}`,
+    );
+  }
+});
+
 // --- prompt contents ---------------------------------------------------------
 
 Deno.test("coding prompt carries the workspace and the tool guidance it has", () => {

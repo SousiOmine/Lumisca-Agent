@@ -1,5 +1,9 @@
 import { Hono } from "hono";
-import type { CommandApproval, SavedPrompt } from "@lumisca/core/shared";
+import {
+  type CommandApproval,
+  COMPUTER_USE_ENABLED_KEY,
+  type SavedPrompt,
+} from "@lumisca/core/shared";
 import {
   AppError,
   parseBody,
@@ -12,6 +16,11 @@ import {
 export interface SettingsApi {
   listSettings(): Map<string, string>;
   setSetting(key: string, value: string): void;
+  /** Enable or disable computer use. Not a plain setting write: the flag
+   * decides which tools every session gets, so the core validates that this
+   * machine has a host and rebuilds the open sessions (refused while one is
+   * streaming). */
+  setComputerUseEnabled(enabled: boolean): void;
   getPersonalization(): { path: string; content: string };
   setPersonalization(content: string): void;
   /** The recorded approvals of the fast-model safety check. Entries carry a
@@ -43,7 +52,15 @@ export function settingRoutes(core: SettingsApi): Hono {
     // have their own endpoint (/providers/:id/api-key).
     const body = await parseBody<{ value?: unknown }>(c);
     const value = requireString(body?.value, "value (string)");
-    core.setSetting(c.req.param("key"), value);
+    const key = c.req.param("key");
+    if (key === COMPUTER_USE_ENABLED_KEY) {
+      // A capability toggle, not a plain value: the core checks that this
+      // machine has a host (503 with its reason otherwise) and rebuilds the
+      // open sessions, so the tools appear or disappear immediately.
+      core.setComputerUseEnabled(value === "1");
+      return c.json({ ok: true });
+    }
+    core.setSetting(key, value);
     return c.json({ ok: true });
   });
 

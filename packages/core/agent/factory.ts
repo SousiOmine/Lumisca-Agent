@@ -19,6 +19,7 @@ import {
   BROWSER_TOOL_NAMES,
   createBrowserToolsFrom,
 } from "../browser/tools.ts";
+import { COMPUTER_TOOL_NAMES, createComputerTools } from "../computer/tools.ts";
 import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { createLogger } from "../log.ts";
@@ -155,6 +156,24 @@ export class AgentFactory {
     } else {
       registry.removeTools(BROWSER_TOOL_NAMES);
     }
+    // The computer-use tools follow the same contract as the browser-lab
+    // ones: seeded into the session's registry (never preloaded), removed
+    // when the session must not drive the machine. The getter is the single
+    // gate — it answers undefined when no host is attached on this platform
+    // or the user has not enabled the feature — so enabling applies to the
+    // sessions opened afterwards and disabling stops an already-seeded
+    // session on its next call.
+    const computer = this.deps.computer !== undefined
+      ? this.deps.computer()
+      : undefined;
+    const computerAvailable = computer !== undefined;
+    if (computer !== undefined) {
+      registry.addTools(
+        createComputerTools({ resolveHost: () => this.deps.computer?.() }),
+      );
+    } else {
+      registry.removeTools(COMPUTER_TOOL_NAMES);
+    }
     // Chat sessions ("simple chat" without a workspace) have no shell or
     // sub-agent surface: the background-command manager, the task hub and
     // the runtime resolver are skipped, and the tool set is the chat one.
@@ -254,6 +273,7 @@ export class AgentFactory {
       // in — re-read on every open, like the rest.
       tasks.setMcp(mcp, registry);
       tasks.setBrowserAvailable(browserAvailable);
+      tasks.setComputerAvailable(computerAvailable);
       tasks.setLanguage(this.deps.getLanguage());
     } else {
       tasks = undefined;
@@ -264,6 +284,7 @@ export class AgentFactory {
         todo,
         safety: this.deps.commandSafety,
         browserAvailable,
+        computerAvailable,
       })
       : createCodingTools(workspace, {
         background,
@@ -272,6 +293,7 @@ export class AgentFactory {
         task: tasks,
         safety: this.deps.commandSafety,
         browserAvailable,
+        computerAvailable,
       });
     // The system prompt is generated once per session, from the tool set
     // the session actually has (its guidelines are keyed on the preloaded
@@ -298,6 +320,7 @@ export class AgentFactory {
       createSkillCatalogProvider({
         folders: workspace.folders,
         browserAvailable,
+        computerAvailable,
         globalDirs: this.deps.globalSkillDirs,
       }),
       createInstructionsProvider({

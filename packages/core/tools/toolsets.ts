@@ -32,18 +32,26 @@ import type { CommandSafety } from "../safety/command-safety.ts";
  * advertised when a browser backend is attached to the session, so a
  * session that can never run browser tools does not point the agent at
  * them. Undefined → the browser skill is not advertised (callers that
- * know the backend state must say so). `globalDirs` overrides the global
- * skills directory (~/.agents/skills); tests pass a fixture directory so
- * they never read the developer's own skills. */
+ * know the backend state must say so). `computerAvailable` gates the
+ * built-in computer-use skill the same way: it is only advertised when the
+ * machine can actually be driven AND the user enabled the feature.
+ * `globalDirs` overrides the global skills directory (~/.agents/skills);
+ * tests pass a fixture directory so they never read the developer's own
+ * skills. */
 export function sessionSkills(
   folders: string[],
-  options: { browserAvailable?: boolean; globalDirs?: string[] } = {},
+  options: {
+    browserAvailable?: boolean;
+    computerAvailable?: boolean;
+    globalDirs?: string[];
+  } = {},
 ): SkillDef[] {
   const plugins = discoverPlugins(folders);
   return discoverSkills(folders, {
     pluginSkills: plugins.flatMap((p) => p.skills),
     builtinSkills: builtinSkills({
       browser: options.browserAvailable === true,
+      computer: options.computerAvailable === true,
     }),
     globalDirs: options.globalDirs,
   });
@@ -99,6 +107,11 @@ export interface ToolFactoryOptions {
    * built-in web-browser skill: it is only advertised when true.
    * Omitted/undefined → the skill is not advertised. */
   browserAvailable?: boolean;
+  /** Whether the session may drive this machine's screen, mouse and
+   * keyboard (a computer host is attached AND the user enabled the
+   * feature). Gates the built-in computer-use skill the same way.
+   * Omitted/undefined → the skill is not advertised. */
+  computerAvailable?: boolean;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -123,6 +136,7 @@ export function createCodingTools(
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
         browserAvailable: options.browserAvailable,
+        computerAvailable: options.computerAvailable,
       }),
     }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
@@ -146,6 +160,7 @@ export function createChatTools(
     createSkillTool({
       skills: sessionSkills([], {
         browserAvailable: options.browserAvailable,
+        computerAvailable: options.computerAvailable,
       }),
     }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),

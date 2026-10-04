@@ -80,12 +80,16 @@ const log = createLogger("task");
 function exploreTools(
   workspace: Workspace,
   browserAvailable: boolean,
+  computerAvailable: boolean,
 ): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
     ...readOnlyInvestigationTools(sandbox),
     createSkillTool({
-      skills: sessionSkills(workspace.folders, { browserAvailable }),
+      skills: sessionSkills(workspace.folders, {
+        browserAvailable,
+        computerAvailable,
+      }),
     }),
   ];
 }
@@ -101,6 +105,7 @@ function generalTools(
   workspace: Workspace,
   safety: CommandSafety | undefined,
   browserAvailable: boolean,
+  computerAvailable: boolean,
 ): Tool[] {
   const sandbox = new Sandbox(workspace.folders);
   return [
@@ -108,7 +113,10 @@ function generalTools(
     createBashTool({ sandbox, safety }),
     createEvalTool({ safety }),
     createSkillTool({
-      skills: sessionSkills(workspace.folders, { browserAvailable }),
+      skills: sessionSkills(workspace.folders, {
+        browserAvailable,
+        computerAvailable,
+      }),
     }),
   ];
 }
@@ -198,6 +206,10 @@ export class TaskHub {
    * every open). Gates the built-in web-browser skill in the sub-agent tool
    * sets, matching the main agent's tool set and prompt listing. */
   private browserAvailable = false;
+  /** Whether the session may drive this machine (set by the pool on every
+   * open, like browserAvailable). Gates the built-in computer-use skill in
+   * the sub-agent tool sets. */
+  private computerAvailable = false;
   /** The session's tool registry (set by the pool on every open): holds
    * every discoverable tool (MCP tools, browser-lab tools, future
    * extensions) whose definitions stay out of the LLM context. General
@@ -241,6 +253,12 @@ export class TaskHub {
    * holds a stale value across attach/detach). */
   setBrowserAvailable(browserAvailable: boolean): void {
     this.browserAvailable = browserAvailable;
+  }
+
+  /** Set whether the session may drive this machine (called on every
+   * session open/rebuild like setBrowserAvailable). */
+  setComputerAvailable(computerAvailable: boolean): void {
+    this.computerAvailable = computerAvailable;
   }
 
   /** Attach the session's shared MCP attachment and tool registry: general
@@ -365,8 +383,13 @@ export class TaskHub {
           runtime.workspace,
           this.safety,
           this.browserAvailable,
+          this.computerAvailable,
         )
-        : exploreTools(runtime.workspace, this.browserAvailable)),
+        : exploreTools(
+          runtime.workspace,
+          this.browserAvailable,
+          this.computerAvailable,
+        )),
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),
     ];

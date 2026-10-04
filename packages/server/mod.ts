@@ -1,5 +1,6 @@
 import { dirname } from "node:path";
 import {
+  createComputerHost,
   HttpBrowserBackend,
   LumiscaCore,
   refreshCatalogInBackground,
@@ -163,6 +164,27 @@ function attachBrowserBackend(core: LumiscaCore): void {
   core.setBrowserBackend(new HttpBrowserBackend({ url, token }));
 }
 
+/**
+ * Computer use: the agent may drive the machine this server runs on. The
+ * host is attached once at startup — its availability is a property of the
+ * machine, not of a client — and the settings toggle decides whether
+ * sessions may use it, so enabling later needs no restart. A machine
+ * without a host (another platform, no display) stores the reason, which
+ * the settings dialog shows when someone tries to enable it.
+ */
+function attachComputerHost(core: LumiscaCore): void {
+  const result = createComputerHost();
+  core.setComputerHost(result);
+  if (result.available) {
+    console.log(
+      `Computer use: available (${result.host.describe()})` +
+        (core.isComputerUseEnabled() ? "" : " — disabled in settings"),
+    );
+  } else {
+    console.log(`Computer use: 利用不可 (${result.reason})`);
+  }
+}
+
 // Optional auth token (the desktop shell sets one): /api, /ws and — unless
 // a local dev server — the page then require it, so only clients that
 // know the token can drive the agent.
@@ -214,6 +236,7 @@ try {
   Deno.exit(1);
 }
 attachBrowserBackend(core);
+attachComputerHost(core);
 // The model catalog starts as the bundled snapshot; refresh it in the
 // background so new models.dev entries appear without blocking startup
 // (or failing it when offline — the snapshot simply stays active).

@@ -1139,6 +1139,37 @@ Deno.test("settings API refuses to write credentials", async () => {
   }
 });
 
+Deno.test("computer use toggle goes through the capability path", async () => {
+  const { core, server, base } = await setup();
+  try {
+    // This core has no computer host attached (only the server's launcher
+    // attaches one), so enabling must be refused with the machine's reason
+    // and store nothing. A plain settings write would have answered 200 —
+    // the 503 is what proves the toggle reaches setComputerUseEnabled.
+    const enable = await json(base, "/api/settings/computer_use_enabled", {
+      method: "PUT",
+      body: JSON.stringify({ value: "1" }),
+    });
+    assertEquals(enable.status, 503);
+    assertEquals((await enable.json()).error.length > 0, true);
+    const settings = await (await fetch(`${base}/api/settings`))
+      .json() as Record<string, string>;
+    assertEquals(settings["computer_use_enabled"], undefined);
+
+    // Disabling is always accepted: it is the safe direction, and a session
+    // that was seeded while the feature was on must be able to lose it.
+    const disable = await json(base, "/api/settings/computer_use_enabled", {
+      method: "PUT",
+      body: JSON.stringify({ value: "" }),
+    });
+    assertEquals(disable.status, 200);
+    assertEquals(core.isComputerUseEnabled(), false);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("command safety approvals API lists, deletes and clears", async () => {
   const { core, server, base } = await setup();
   try {

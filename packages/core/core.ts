@@ -43,6 +43,7 @@ import type { CompactionPolicyInput } from "./shared/mod.ts";
 import type { BackgroundCommandInfo } from "./tools/background.ts";
 import type { PendingQuestion } from "./tools/ask.ts";
 import {
+  COMPUTER_USE_ENABLED_KEY,
   CONNECTIONS_KEY,
   formatSessionName,
   LANGUAGE_KEY,
@@ -70,6 +71,7 @@ import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
 import { CommandSafety } from "./safety/command-safety.ts";
 import type { BrowserBackend } from "./browser/types.ts";
+import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
 
 export interface CreateSessionInput {
   /** The session's workspace; omitted → a chat session in the folder-less
@@ -109,6 +111,15 @@ export class LumiscaCore {
    * undefined in plain server mode — the agent then gets no browser
    * tools. Attached by the server (server/mod.ts) before sessions open. */
   private browserBackend: BrowserBackend | undefined;
+  /** Computer-use host (this machine's screen, mouse and keyboard), or
+   * undefined when no host could be attached. Attached by the server
+   * (server/mod.ts) before sessions open; whether sessions may actually
+   * drive it is the settings toggle (isComputerUseEnabled). */
+  private computerHost: ComputerHost | undefined;
+  /** Why there is no host on this machine (the platform, a missing
+   * display, ...). Reported when the user tries to enable the feature, so
+   * the settings dialog can say what is wrong instead of failing silently. */
+  private computerUnavailableReason: string | undefined;
   /** Global skills directory override (see SessionPoolDeps): tests pass an
    * empty list so a fixture's skill catalog never depends on the machine
    * the tests run on. */
@@ -206,6 +217,7 @@ export class LumiscaCore {
       requireWorkspace: (id) => this.requireWorkspace(id),
       emit: (event) => this.emit(event),
       browser: () => this.browserBackend,
+      computer: () => this.computerHostForSession(),
       globalSkillDirs: this.globalSkillDirs,
     });
     this.mcp = overrides.mcp ?? new McpService({
@@ -302,6 +314,59 @@ export class LumiscaCore {
   /** The attached browser backend, if any. */
   getBrowserBackend(): BrowserBackend | undefined {
     return this.browserBackend;
+  }
+
+  // --- computer use (this machine's screen, mouse and keyboard) ------------
+
+  /** Attach (or detach, with an unavailable result) the computer-use host.
+   * The server does this once at startup; the seeded tools resolve the host
+   * at execute time, so a later detach fails their next call with a clear
+   * error. Whether sessions may use it at all is the settings toggle — see
+   * setComputerUseEnabled. */
+  setComputerHost(result: ComputerHostResult): void {
+    this.computerHost = result.available ? result.host : undefined;
+    this.computerUnavailableReason = result.available
+      ? undefined
+      : result.reason;
+  }
+
+  /** The attached host, if this machine has one (regardless of the toggle). */
+  getComputerHost(): ComputerHost | undefined {
+    return this.computerHost;
+  }
+
+  /** Whether the user enabled computer use (the settings toggle; "1" = on,
+   * anything else = off, including unset — the feature is opt-in because a
+   * run can click and type anywhere on the machine). */
+  isComputerUseEnabled(): boolean {
+    return this.settings.get(COMPUTER_USE_ENABLED_KEY) === "1";
+  }
+
+  /** Enable or disable computer use (the settings toggle). The flag decides
+   * which tools every session gets, so the open sessions are rebuilt — the
+   * same contract as every other capability change (refused with `conflict`
+   * while a session is streaming). Enabling on a machine without a host
+   * throws `unavailable` with that machine's reason: accepting the toggle
+   * there would advertise tools that cannot run. */
+  setComputerUseEnabled(enabled: boolean): void {
+    if (enabled && this.computerHost === undefined) {
+      throw new CoreError(
+        this.computerUnavailableReason ??
+          "computer use is not available on this machine",
+        "unavailable",
+      );
+    }
+    this.pool.applyChange(this.sessions.list(), () => {
+      this.settings.set(COMPUTER_USE_ENABLED_KEY, enabled ? "1" : "");
+    });
+  }
+
+  /** The host a session may drive: attached only when this machine has one
+   * AND the user enabled the feature. Read at agent open (which tools a
+   * session gets) and at every tool call, so disabling stops an
+   * already-seeded session on its next call. */
+  private computerHostForSession(): ComputerHost | undefined {
+    return this.isComputerUseEnabled() ? this.computerHost : undefined;
   }
 
   /** Subscribe to agent events. Returns an unsubscribe function. */
@@ -730,6 +795,7 @@ export class LumiscaCore {
       : this.requireWorkspace(workspaceId).folders;
     return sessionSkills(folders, {
       browserAvailable: this.browserBackend !== undefined,
+      computerAvailable: this.computerHostForSession() !== undefined,
       globalDirs: this.globalSkillDirs,
     }).map(skillInfo);
   }

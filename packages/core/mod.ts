@@ -140,6 +140,33 @@ export type {
 export { formatSnapshot } from "./browser/tools.ts";
 export { HttpBrowserBackend } from "./browser/client.ts";
 export { checkBrowserUrl, requireAllowedUrl } from "./browser/policy.ts";
+export { createComputerHost } from "./computer/host.ts";
+export {
+  COMPUTER_TOOL_NAMES,
+  createComputerTools,
+  MAX_CAPTURE_DIMENSION,
+  MAX_TYPE_CHARS,
+  MAX_WAIT_MS,
+  MAX_WINDOW_LINES,
+} from "./computer/tools.ts";
+export {
+  DEFAULT_MAX_DIMENSION,
+  encodeCapture,
+  MAX_MAX_DIMENSION,
+  MIN_MAX_DIMENSION,
+} from "./computer/image.ts";
+export type {
+  ComputerAction,
+  ComputerActionResult,
+  ComputerHost,
+  ComputerHostResult,
+  DisplayInfo,
+  MouseButton,
+  Point,
+  RawCapture,
+  Rect,
+  WindowInfo,
+} from "./computer/types.ts";
 export { PROBE_SOURCE } from "./browser/probe.ts";
 export type {
   ActionResult,

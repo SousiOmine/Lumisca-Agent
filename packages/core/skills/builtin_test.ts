@@ -34,9 +34,14 @@ async function fixtureRoot(withUserBrowser: boolean): Promise<string> {
   return root;
 }
 
-/** The built-in skills a browser-enabled session sees. */
+/** The built-in skills a browser-enabled session sees (computer use off). */
 function browserBuiltins() {
-  return builtinSkills({ browser: true });
+  return builtinSkills({ browser: true, computer: false });
+}
+
+/** The built-in skills a session that may drive this machine sees. */
+function computerBuiltins() {
+  return builtinSkills({ browser: false, computer: true });
 }
 
 // --- the built-in registry ---------------------------------------------------
@@ -54,7 +59,50 @@ Deno.test("builtinSkills advertises web-browser when the browser is available", 
 });
 
 Deno.test("builtinSkills hides web-browser without a browser backend", () => {
-  assertEquals(builtinSkills({ browser: false }), []);
+  assertEquals(builtinSkills({ browser: false, computer: false }), []);
+});
+
+Deno.test("builtinSkills advertises computer-use only when the machine can be driven", () => {
+  const skills = computerBuiltins();
+  assertEquals(skills.map((s) => s.name), ["computer-use"]);
+  const skill = skills[0]!;
+  assertEquals(skill.source, "builtin");
+  assert(skill.description.includes("tool_search"));
+  assert(skill.description.includes("Windows only"));
+  assertEquals(skill.path, undefined);
+  assertEquals(typeof skill.read, "function");
+
+  // A session that must not drive the machine never sees the skill.
+  assertEquals(builtinSkills({ browser: false, computer: false }), []);
+  assertEquals(browserBuiltins().some((s) => s.name === "computer-use"), false);
+});
+
+Deno.test("both built-in skills are advertised when both capabilities are present", () => {
+  assertEquals(
+    builtinSkills({ browser: true, computer: true }).map((s) => s.name),
+    ["web-browser", "computer-use"],
+  );
+});
+
+Deno.test("loadSkillContent reads the embedded computer-use guide", () => {
+  const [skill] = computerBuiltins();
+  assert(skill !== undefined);
+  const content = loadSkillContent(skill);
+  // The guide's key teaching must be present.
+  assert(content.includes("tool_search"));
+  assert(content.includes("computer_screenshot"));
+  assert(content.includes("computer_act"));
+  assert(content.includes("no screenshot yet"));
+});
+
+Deno.test("the computer-use guide has no follow-up files", async () => {
+  const [skill] = computerBuiltins();
+  assert(skill !== undefined);
+  await assertRejects(
+    () => Promise.resolve().then(() => loadSkillContent(skill, "reference.md")),
+    Error,
+    'No such file in skill "computer-use"',
+  );
 });
 
 // --- loading ----------------------------------------------------------------

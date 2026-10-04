@@ -28,6 +28,7 @@ import { ConnectionList } from "./settings/ConnectionList.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { AppearancePanel } from "./settings/AppearancePanel.tsx";
 import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
+import { ComputerUsePanel } from "./settings/ComputerUsePanel.tsx";
 import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import type { Locale, ThemeSetting } from "../types.ts";
@@ -279,7 +280,12 @@ export function SettingsModal({
             </>
           )}
           {category === "mcp" && <McpList />}
-          {category === "security" && <CommandSafetyPanel />}
+          {category === "security" && (
+            <>
+              <CommandSafetyPanel />
+              <ComputerUsePanel />
+            </>
+          )}
           {category === "servers" && <ConnectionList />}
           {category === "personalize" && <PersonalizePanel />}
           {category === "appearance" && (

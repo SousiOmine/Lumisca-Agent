@@ -34,6 +34,13 @@ export const TOOL_BROWSER_ACT = "browser_act";
 export const TOOL_BROWSER_WAIT = "browser_wait";
 export const TOOL_BROWSER_SCREENSHOT = "browser_screenshot";
 export const TOOL_BROWSER_CLOSE = "browser_close";
+/** Computer-use tools (the machine's screen, mouse and keyboard; present
+ * only when a computer host is attached AND the user enabled the feature —
+ * discoverable via tool_search, never preloaded, the same contract as MCP,
+ * browser-lab and PDF tools). */
+export const TOOL_COMPUTER_SCREENSHOT = "computer_screenshot";
+export const TOOL_COMPUTER_ACT = "computer_act";
+export const TOOL_COMPUTER_LIST_WINDOWS = "computer_list_windows";
 /** PDF page-as-image tool (renders workspace PDF pages to PNG images for
  * vision models; discoverable via tool_search, never preloaded — the same
  * contract as MCP and browser-lab tools). */

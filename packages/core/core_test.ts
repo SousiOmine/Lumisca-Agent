@@ -9,7 +9,16 @@ import {
   type StreamRequest,
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
-import type { AgentMessage, BrowserBackend, ClientEvent } from "./mod.ts";
+import type {
+  AgentMessage,
+  BrowserBackend,
+  ClientEvent,
+  ComputerAction,
+  ComputerActionResult,
+  ComputerHost,
+  RawCapture,
+  Rect,
+} from "./mod.ts";
 import { CoreError, LumiscaCore } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
 import { COMPACTION_KEEP_RECENT_TOKENS_KEY } from "./shared/settings-keys.ts";
@@ -21,6 +30,7 @@ import {
   serializeModelPreference,
   TOOL_BROWSER_OPEN,
   TOOL_CALL,
+  TOOL_COMPUTER_SCREENSHOT,
   TOOL_PDF_READ_PAGES,
   TOOL_SEARCH,
 } from "./shared/mod.ts";
@@ -2074,6 +2084,235 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
       true,
       "re-attached session must have the search/call pair again",
     );
+  } finally {
+    core.close();
+  }
+});
+
+// --- computer use (画面・マウス・キーボード) --------------------------------
+
+/** In-memory computer host: serves one tiny display and records what the
+ * tools asked it to do (the unused methods are never reachable here). */
+class FakeComputerHost implements ComputerHost {
+  readonly captures: Rect[] = [];
+  readonly actions: ComputerAction[] = [];
+
+  describe(): string {
+    return "fake, 256×144 primary";
+  }
+  displays() {
+    return [{
+      index: 0,
+      primary: true,
+      bounds: { x: 0, y: 0, width: 256, height: 144 },
+    }];
+  }
+  cursor() {
+    return { x: 3, y: 4 };
+  }
+  windows() {
+    return [];
+  }
+  capture(region: Rect): Promise<RawCapture> {
+    this.captures.push(region);
+    return Promise.resolve({
+      screen: region,
+      pixels: new Uint8Array(region.width * region.height * 4),
+      width: region.width,
+      height: region.height,
+    });
+  }
+  act(action: ComputerAction): Promise<ComputerActionResult> {
+    this.actions.push(action);
+    return Promise.resolve({
+      cursor: { x: 3, y: 4 },
+      steps: 8,
+      durationMs: 104,
+    });
+  }
+  close(): void {
+    // nothing to release
+  }
+}
+
+Deno.test("computer use: the tools are seeded via tool_search only when enabled", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  const host = new FakeComputerHost();
+  core.setComputerHost({ available: true, host });
+  try {
+    // Disabled by default: nothing seeded, no skill advertised.
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const disabled = core.getAgent(session.id)!;
+    assertEquals(
+      disabled.agent.state.tools.some((t) => t.name.startsWith("computer_")),
+      false,
+      "definitions must never be preloaded",
+    );
+    assertEquals(
+      core.listSkills(ws.id).some((s) => s.name === "computer-use"),
+      false,
+      "the skill must not be advertised while the feature is off",
+    );
+    assertEquals(core.isComputerUseEnabled(), false);
+
+    // Enabling applies to the open session immediately (the pool rebuilds
+    // it) and its registry now holds the family.
+    core.setComputerUseEnabled(true);
+    const enabled = core.getAgent(session.id)!;
+    assert(enabled !== disabled, "enabling must rebuild the open agent");
+    assertEquals(core.isComputerUseEnabled(), true);
+    assertEquals(
+      enabled.agent.state.tools.some((t) => t.name.startsWith("computer_")),
+      false,
+      "the family stays out of the preloaded tool set",
+    );
+    assertEquals(
+      enabled.agent.state.tools.some((t) => t.name === TOOL_SEARCH) &&
+        enabled.agent.state.tools.some((t) => t.name === TOOL_CALL),
+      true,
+      "the search/call pair must be attached for the computer tools",
+    );
+    assertEquals(
+      enabled.agent.state.systemPrompt.includes("tool_search"),
+      true,
+      "the prompt must teach on-demand tool loading",
+    );
+    assertEquals(
+      core.listSkills(ws.id).some((s) => s.name === "computer-use"),
+      true,
+      "the built-in skill must be advertised once the feature is on",
+    );
+
+    // The model finds the tool through tool_search and drives the host
+    // through tool_call.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "computer" }),
+      ]),
+      fauxAssistantMessage([
+        fauxText("Capturing."),
+        fauxToolCall(TOOL_CALL, {
+          name: TOOL_COMPUTER_SCREENSHOT,
+          args: {},
+        }),
+      ]),
+      fauxAssistantMessage("Done."),
+    ]);
+    await promptSession(core, session.id, "Look at the screen");
+
+    assertEquals(host.captures, [{ x: 0, y: 0, width: 256, height: 144 }]);
+    const toolResults = core.getAgent(session.id)!.messages.filter(
+      (m) => m.role === "toolResult",
+    );
+    assertEquals(toolResults.length, 2);
+    const tr = toolResults[1] as {
+      isError: boolean;
+      content: Array<{ type: string; text: string }>;
+    };
+    assertEquals(tr.isError, false, `tool call failed: ${tr.content[0]?.text}`);
+    assert(
+      tr.content[0]!.text.includes("image 256×144"),
+      `unexpected screenshot result: ${tr.content[0]!.text}`,
+    );
+    // The skill catalog published before the run lists the built-in skill.
+    const catalog = core.getAgent(session.id)!.messages.find(
+      (m) => m.role === "context" && m.provider === "skills",
+    );
+    assert(
+      catalog !== undefined && catalog.role === "context" &&
+        catalog.body.includes("- computer-use:"),
+      "the built-in computer-use skill must be listed while enabled",
+    );
+
+    // Disabling removes the family from the registry again (the rebuild),
+    // while the PDF tool keeps the search/call pair attached.
+    core.setComputerUseEnabled(false);
+    const off = core.getAgent(session.id)!;
+    assertEquals(core.isComputerUseEnabled(), false);
+    assertEquals(
+      off.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
+      true,
+      "the PDF tool keeps the search/call pair attached",
+    );
+    assertEquals(
+      core.listSkills(ws.id).some((s) => s.name === "computer-use"),
+      false,
+      "the skill disappears with the capability",
+    );
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("computer use: enabling without a host reports the machine's reason", async () => {
+  const { core, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+  core.setComputerHost({
+    available: false,
+    reason: "computer use is not supported on this platform yet (test)",
+  });
+  try {
+    assertThrows(
+      () => core.setComputerUseEnabled(true),
+      Error,
+      "not supported on this platform yet",
+    );
+    assertEquals(
+      core.isComputerUseEnabled(),
+      false,
+      "a refused enable stores nothing",
+    );
+    assertEquals(
+      core.getAgent(session.id)!.agent.state.tools.some((t) =>
+        t.name === TOOL_SEARCH
+      ),
+      true,
+      "the refusal must not disturb the session",
+    );
+    // Disabling is always accepted: it is the safe direction.
+    core.setComputerUseEnabled(false);
+    assertEquals(core.isComputerUseEnabled(), false);
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("computer use: toggling while a session streams is refused", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  core.setComputerHost({ available: true, host: new FakeComputerHost() });
+  try {
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    faux.setResponses([
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        return fauxAssistantMessage("slow");
+      },
+    ]);
+    core.startPrompt(session.id, "go");
+    assertThrows(
+      () => core.setComputerUseEnabled(true),
+      Error,
+      "already running",
+    );
+    await core.getAgent(session.id)!.waitForIdle();
+    // The refused toggle stored nothing.
+    assertEquals(core.isComputerUseEnabled(), false);
   } finally {
     core.close();
   }

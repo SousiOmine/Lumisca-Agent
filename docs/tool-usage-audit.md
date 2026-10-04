@@ -40,6 +40,7 @@
 
 - ブラウザラボ 6 個（`browser_open` `browser_observe` `browser_act` `browser_wait` `browser_screenshot` `browser_close`）。デスクトップのブラウザ backend があるときだけ
 - `pdf_read_pages` 1 個（コーディングセッションのみ）
+- computer use 3 個（`computer_screenshot` `computer_act` `computer_list_windows`）。Windows で、かつ設定（セキュリティ）で有効化されているときだけ（既定は無効。ホストの無い機械での有効化は理由付きで拒否される）。操作できるのはサーバーが動作しているマシンである
 - MCP ツール（設定依存）
 
 本セッションで `tool_search` を引いた実測では **165 ツール / 9 グループ**（powerpoint 156、exa 2、ブラウザ 6、PDF 1）だった。この規模のスキーマを毎リクエストに載せないことがレジストリの目的である。
@@ -52,6 +53,8 @@
 | `general` | `read` `write` `edit` `list_dir` `grep` `glob` `bash` `eval` `skill` `send_message`。深さ制限内なら `task` `task_output`（孫エージェント）、レジストリに中身があれば `tool_search` / `tool_call` |
 
 どちらも `ask` `todo` `async_bash*` `present` を持たない。UI への往復（`ask`）、自分の計画パネル（`todo`）、自分より長生きするプロセス（`async_bash`）、そして宣言（`present`）は、サブエージェントの仕事ではないためである。サブエージェントの成果物は親への報告文である。
+
+レジストリの中身は MCP ツールだけではない。ブラウザラボと computer use のツールもセッション共有の同じレジストリに入っており、`general` は親と同じ `tool_search` / `tool_call` でそれらを発見して実行する（computer use は 1.3 と同じゲートのときだけ種が蒔かれる。定義はサブエージェントのツール配列にもプリロードされない）。`explore` は検索・呼び出しのペアを持たないので、どちらにも到達しない。
 
 ---
 

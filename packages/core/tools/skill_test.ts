@@ -95,7 +95,7 @@ Deno.test("skill tool rejects follow-up reads that escape the skill directory", 
 
 function makeBuiltinTool(browser: boolean) {
   return createSkillTool({
-    skills: builtinSkills({ browser }),
+    skills: builtinSkills({ browser, computer: false }),
   });
 }
 

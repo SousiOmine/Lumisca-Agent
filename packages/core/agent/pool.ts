@@ -20,6 +20,7 @@ import type { CommandSafety } from "../safety/command-safety.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { BrowserBackend } from "../browser/types.ts";
+import type { ComputerHost } from "../computer/types.ts";
 import { AgentFactory } from "./factory.ts";
 
 /** Model resolution the agent factory needs (catalog + stored levels). */
@@ -113,6 +114,12 @@ export interface AgentRuntime {
    * no browser tools. A getter so a backend attached after the pool was
    * built still reaches new agents. */
   browser?: () => BrowserBackend | undefined;
+  /** The machine's computer host (screen, mouse, keyboard), or undefined
+   * when this session must not drive it — no host on this platform, or the
+   * user has not enabled the feature. A getter so a feature toggled after
+   * the pool was built still reaches new agents, and so a session whose
+   * tools were seeded stops acting the moment the feature is turned off. */
+  computer?: () => ComputerHost | undefined;
   /** Global skills directory override (default ~/.agents/skills).
    * LumiscaCore.forTesting passes an empty list, so a test's skill catalog
    * is built from its own fixture only. */

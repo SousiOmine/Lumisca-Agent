@@ -720,4 +720,26 @@ export const settings = {
     ja: "承認を削除",
     en: "Remove approval",
   },
+
+  // --- computer use panel ----------------------------------------------------
+  "settings.computerUse.title": {
+    ja: "computer use（画面操作）",
+    en: "Computer use (screen control)",
+  },
+  "settings.computerUse.description": {
+    ja:
+      "エージェントがこのマシンの画面を撮影し、マウスとキーボードを操作できるようにします。有効にすると computer use ツールが tool_search で見つかるようになり、computer use スキルが使い方を案内します。変更はすぐに反映されます（実行中のセッションがあると変更できません）。Windows のみ対応です。",
+    en:
+      "Lets the agent capture this machine's screen and control its mouse and keyboard. When enabled, the computer-use tools become discoverable through tool_search and the computer-use skill explains how to use them. Changes apply immediately (they are refused while a session is running). Windows only.",
+  },
+  "settings.computerUse.tooltip": {
+    ja:
+      "computer use: エージェントが実画面を撮影し、クリックや入力を行います。既定は無効です。",
+    en:
+      "Computer use: the agent captures the real screen and clicks or types on it. Disabled by default.",
+  },
+  "settings.computerUse.operationFailed": {
+    ja: "変更に失敗しました: {error}",
+    en: "Failed to change: {error}",
+  },
 } satisfies Record<string, LocalizedText>;

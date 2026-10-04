@@ -27,6 +27,9 @@ export interface SkillCatalogOptions {
   /** Whether the session has a browser backend attached (gates the built-in
    * web-browser skill, like the skill tool's own catalog). */
   browserAvailable?: boolean;
+  /** Whether the session may drive this machine (gates the built-in
+   * computer-use skill, like the skill tool's own catalog). */
+  computerAvailable?: boolean;
   /** Global skills directory override (tests); see sessionSkills. */
   globalDirs?: string[];
 }
@@ -52,6 +55,7 @@ export function createSkillCatalogProvider(
     next(): ContextUpdate[] {
       const skills = sessionSkills(options.folders, {
         browserAvailable: options.browserAvailable,
+        computerAvailable: options.computerAvailable,
         globalDirs: options.globalDirs,
       });
       const listing = formatAvailableSkills(skills);
