@@ -2,6 +2,7 @@ import { useRef, useState } from "preact/compat";
 import { IconChevronDown, IconServer } from "@tabler/icons-preact";
 import type { FederatedWorkspace, PeerStatus } from "../types.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
+import { peerLabel } from "../peers.ts";
 import { useT } from "../i18n.ts";
 
 interface PeerPickerProps {
@@ -39,7 +40,7 @@ export function PeerPicker({
 
   const displayName = (peerId: string): string => {
     if (peerId === "") return t("chrome.peerPicker.local");
-    return peerMap.get(peerId)?.name ?? peerId;
+    return peerLabel(peerMap.get(peerId), peerId);
   };
 
   const isReachable = (peerId: string): boolean => {

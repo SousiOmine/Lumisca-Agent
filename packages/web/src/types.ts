@@ -65,6 +65,10 @@ export interface FederatedWorkspace {
 export interface PeerStatus {
   id: string;
   name: string;
+  /** The registered base URL (`scheme://host[:port]`). Kept alongside the
+   * name so a registry entry without one — the name field is free text —
+   * still has an identifiable label (see `peers.ts`). */
+  url: string;
   ok: boolean;
   error?: string;
 }

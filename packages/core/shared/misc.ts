@@ -97,7 +97,13 @@ export function formatModelMeta(contextWindow?: number): string {
  * (`/assets/initial-data.js`). Lives here (not in the web package) so the
  * server never imports from `@lumisca/web`: the dependency stays
  * `server → core ← web`. The web package re-exports this type for its own
- * consumers. */
+ * consumers.
+ *
+ * Deliberately incomplete: it carries what THIS server can answer without
+ * waiting on anyone (its own workspaces). The federated half — the
+ * registered peers and their workspaces — is only knowable by asking the
+ * peers, so the client always fetches it itself (`/api/fed/workspaces`);
+ * a peer that is down must never delay the first paint. */
 export interface InitialData {
   workspaces: Workspace[];
   theme: ThemeSetting;

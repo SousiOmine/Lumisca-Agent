@@ -54,6 +54,9 @@ export function federationRoutes(
           return {
             peerId: peer.id,
             peerName: peer.name,
+            // The registered base URL: the picker's label for a registry
+            // entry that has no name (the field is free text).
+            peerUrl: peer.url,
             workspaces: list,
             ok: true as const,
             error: undefined as string | undefined,
@@ -62,6 +65,7 @@ export function federationRoutes(
           return {
             peerId: peer.id,
             peerName: peer.name,
+            peerUrl: peer.url,
             workspaces: [] as Workspace[],
             ok: false as const,
             error: errorMessage(error),
@@ -82,6 +86,7 @@ export function federationRoutes(
     const peers = remote.map((r) => ({
       id: r.peerId,
       name: r.peerName,
+      url: r.peerUrl,
       ok: r.ok,
       error: r.error,
     }));

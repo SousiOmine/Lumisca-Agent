@@ -1823,7 +1823,13 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
           peerName: string;
           workspace: { id: string; name: string };
         }>;
-        peers: Array<{ id: string; name: string; ok: boolean; error?: string }>;
+        peers: Array<{
+          id: string;
+          name: string;
+          url: string;
+          ok: boolean;
+          error?: string;
+        }>;
       };
       assertEquals(merged.workspaces.length, 2);
       const hubEntry = merged.workspaces.find((w) => w.peerId === "");
@@ -1833,6 +1839,9 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
       assertEquals(peerEntry?.peerName, "自宅");
       assertEquals(merged.peers.length, 1);
       assertEquals(merged.peers[0]?.ok, true);
+      // The URL travels with the peer: the UI labels a nameless registry
+      // entry by its host instead of leaving the row blank.
+      assertEquals(merged.peers[0]?.url, peerBase);
 
       // Create a workspace on the peer through the hub.
       const remoteCreate = await json(hubBase, "/api/fed/peer1/workspaces", {

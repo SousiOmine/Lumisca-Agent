@@ -5,6 +5,7 @@ import type { ConnectionEntry } from "../../types.ts";
 import { api } from "../../api.ts";
 import { shellAvailable, shellCall, type ShellState } from "../../shell.ts";
 import { errorText } from "../../providers.ts";
+import { notifyConnectionsUpdated } from "../../hooks/useWorkspaces.ts";
 import { Field } from "../Field.tsx";
 import { useT } from "../../i18n.ts";
 
@@ -110,6 +111,8 @@ export function ConnectionList() {
         : [...servers, server];
       await api.putConnections(next);
       setServers(next);
+      // The new/renamed peer must show up in the picker right away.
+      notifyConnectionsUpdated();
     });
 
   const remove = (id: string) =>
@@ -118,6 +121,7 @@ export function ConnectionList() {
       const next = servers.filter((s) => s.id !== id);
       await api.putConnections(next);
       setServers(next);
+      notifyConnectionsUpdated();
     });
 
   const update = (id: string, patch: Partial<ConnectionEntry>) =>

@@ -14,6 +14,7 @@ import { useSkills } from "../hooks/useSkills.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { useT } from "../i18n.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
+import { peerLabel } from "../peers.ts";
 import { splitTabKey, tabKey } from "../tabs.ts";
 import {
   actionCommandFromText,
@@ -548,9 +549,11 @@ export function NewSessionView(
         <WorkspaceModal
           workspace={modalWorkspace?.workspace}
           peerId={modalPeerId}
-          peerName={modalWorkspace?.peerName ??
-            peers.find((p) => p.id === modalPeerId)?.name ??
-            modalPeerId}
+          peerName={modalWorkspace?.peerName ||
+            peerLabel(
+              peers.find((p) => p.id === modalPeerId),
+              modalPeerId,
+            )}
           onSaved={(ws) => {
             const fws = {
               peerId: modalPeerId,
