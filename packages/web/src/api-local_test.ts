@@ -473,6 +473,15 @@ const SETTINGS_CASES: Case[] = [
     body: '{"mcpServers":{}}',
   },
   {
+    // Same raw-text contract: the probed server is exactly what a PUT of
+    // this body would store.
+    name: "testMcpServer (raw text body)",
+    method: "POST",
+    path: "/api/mcp/test",
+    call: () => api.testMcpServer('{"mcpServers":{"probe":{"command":"npx"}}}'),
+    body: '{"mcpServers":{"probe":{"command":"npx"}}}',
+  },
+  {
     name: "getSettings",
     method: "GET",
     path: "/api/settings",

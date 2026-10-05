@@ -13,23 +13,12 @@ import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import { useT } from "../../i18n.ts";
 import { McpDetail } from "./McpDetail.tsx";
+import { mcpConfigFields } from "./mcpDraft.ts";
 
-/** Config-relevant fields only; ignores live status/toolCount so the
- * stale-edit comparison stays stable. */
+/** Config-relevant key of a whole server list; the live status fields are
+ * ignored so the stale-edit comparison stays stable (see mcpConfigFields). */
 function configKey(servers: McpServerInfo[]): string {
-  return JSON.stringify(
-    servers.map((s) => ({
-      name: s.name,
-      type: s.type,
-      enabled: s.enabled,
-      command: s.command,
-      args: s.args,
-      env: s.env,
-      cwd: s.cwd,
-      url: s.url,
-      headers: s.headers,
-    })),
-  );
+  return JSON.stringify(servers.map((s) => mcpConfigFields(s)));
 }
 
 /** Settings → MCP servers. Manages the app-level (global) config, which

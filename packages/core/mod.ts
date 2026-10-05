@@ -228,6 +228,7 @@ export type {
   McpServerConfig,
   McpServerInfo,
 } from "./mcp/config.ts";
+export type { McpTestResult, McpTestTool } from "./mcp/service.ts";
 export { McpManager } from "./mcp/manager.ts";
 export type { McpServerStatus, McpToolDef } from "./mcp/manager.ts";
 export { McpAttachment } from "./mcp/attachment.ts";

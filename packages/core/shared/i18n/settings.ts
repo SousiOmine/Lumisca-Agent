@@ -620,6 +620,31 @@ export const settings = {
     en: "HTTP headers (key=value, one per line)",
   },
 
+  // --- mcp connection test --------------------------------------------------
+  "settings.mcp.test": { ja: "テスト", en: "Test" },
+  "settings.mcp.testing": { ja: "テスト中…", en: "Testing…" },
+  "settings.mcp.testRequired": {
+    ja: "テストが成功すると追加できます",
+    en: "Test the server to unlock adding",
+  },
+  "settings.mcp.testOk": {
+    ja: "ツールを {count} 件取得しました",
+    en: "Fetched {count} tools",
+  },
+  "settings.mcp.testNoTools": {
+    ja: "接続に成功しました。公開されているツールはありません",
+    en: "Connected. The server exposes no tools",
+  },
+  "settings.mcp.testFailed": {
+    ja: "テストに失敗しました: {error}",
+    en: "Test failed: {error}",
+  },
+  "settings.mcp.testStale": {
+    ja: "内容が変更されています",
+    en: "The form has changed",
+  },
+  "settings.mcp.testTools": { ja: "ツール一覧", en: "Tools" },
+
   // --- connection list -------------------------------------------------------
   /** Panel heading (the settings nav reuses `settings.nav.servers`). */
   "settings.connection.title": { ja: "接続先サーバー", en: "Servers" },

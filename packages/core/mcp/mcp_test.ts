@@ -1,16 +1,18 @@
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { errorMessage } from "../errors.ts";
+import { CoreError, errorMessage } from "../errors.ts";
 import {
   loadMcpConfig,
   McpConfigError,
   parseMcpConfig,
   serializeMcpConfig,
 } from "./config.ts";
+import type { McpServerConfig } from "./config.ts";
 import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
 import { McpManager } from "./manager.ts";
 import { createMcpTools, sanitizeServerName } from "./tools.ts";
 import { McpService } from "./service.ts";
+import { probeMcpServer } from "./client.ts";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import type { Workspace } from "../types/workspace.ts";
@@ -496,4 +498,160 @@ Deno.test("loadMergedConfig merges app, workspace and plugin MCP servers", async
   assertEquals(merged.errors, [
     'Plugin "demo": MCP server "broken" is invalid; entry skipped',
   ]);
+});
+
+// --- connection test (the settings UI's "test" button) ----------------------
+
+const FAKE_HANG = join(
+  import.meta.dirname!,
+  "..",
+  "..",
+  "..",
+  "scripts",
+  "fake-mcp-hang.ts",
+);
+
+/** A minimal stdio server config for the probe tests. */
+function probeTarget(command: string, args: string[]): McpServerConfig {
+  return {
+    name: "probe",
+    type: "stdio",
+    command,
+    args,
+    env: {},
+    headers: {},
+    enabled: true,
+  };
+}
+
+/** An McpService for the testServer tests: only the parse/probe path is
+ * exercised, so the configuration surface stays empty. */
+function makeTestService(): McpService {
+  return new McpService({
+    settings: createInMemorySettingsRepo(),
+    listSessions: () => [],
+    agentMcpStatus: () => null,
+    requireWorkspace: () => {
+      throw new Error("not used");
+    },
+    applySessionChange: () => {},
+  });
+}
+
+Deno.test("probeMcpServer lists the server's tools", async () => {
+  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-probe-" });
+  try {
+    const tools = await probeMcpServer(
+      probeTarget(Deno.execPath(), ["run", FAKE_SERVER]),
+      cwd,
+    );
+    assertEquals(tools.map((t) => t.name).sort(), [
+      "crash",
+      "echo",
+      "fail",
+      "image",
+      "slow",
+    ]);
+    const echo = tools.find((t) => t.name === "echo")!;
+    assert(echo.description?.includes("Echo the given text") ?? false);
+  } finally {
+    await removeDirRetry(cwd);
+  }
+});
+
+Deno.test("probeMcpServer fails for a server that cannot start", async () => {
+  await assertRejects(() =>
+    probeMcpServer(
+      probeTarget("lumisca-definitely-missing-command", []),
+      Deno.cwd(),
+      5_000,
+    )
+  );
+});
+
+Deno.test("a timed-out probe leaves no server process behind", async () => {
+  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-hang-" });
+  const marker = join(cwd, "exited");
+  try {
+    await assertRejects(() =>
+      probeMcpServer(
+        probeTarget(Deno.execPath(), [
+          "run",
+          "--allow-write",
+          FAKE_HANG,
+          marker,
+        ]),
+        cwd,
+        500,
+      )
+    );
+    // Closing the transport ends the fixture's stdin and waits for the
+    // child, so its exit marker is there by the time the probe settled.
+    assertEquals(await Deno.readTextFile(marker), "exited");
+  } finally {
+    await removeDirRetry(cwd);
+  }
+});
+
+Deno.test("testServer reports a server with its tools", async () => {
+  const service = makeTestService();
+  const result = await service.testServer(
+    JSON.stringify({
+      mcpServers: {
+        fake: { command: Deno.execPath(), args: ["run", FAKE_SERVER] },
+      },
+    }),
+  );
+  assertEquals(result.ok, true);
+  assertEquals(result.error, undefined);
+  assertEquals(result.tools.length, 5);
+  assertEquals(result.tools.some((t) => t.name === "echo"), true);
+});
+
+Deno.test("testServer tests a disabled server too", async () => {
+  const service = makeTestService();
+  const result = await service.testServer(
+    JSON.stringify({
+      mcpServers: {
+        fake: {
+          command: Deno.execPath(),
+          args: ["run", FAKE_SERVER],
+          enabled: false,
+        },
+      },
+    }),
+  );
+  // Enabling is a separate decision: the point of the test is to see
+  // whether the server works before turning it on.
+  assertEquals(result.ok, true);
+});
+
+Deno.test("testServer reports an unreachable server as a result", async () => {
+  const service = makeTestService();
+  const result = await service.testServer(
+    JSON.stringify({
+      mcpServers: { broken: { command: "lumisca-definitely-missing-command" } },
+    }),
+    5_000,
+  );
+  assertEquals(result.ok, false);
+  assertEquals(result.tools, []);
+  assert((result.error?.length ?? 0) > 0);
+});
+
+Deno.test("testServer rejects invalid text and multi-server bodies", async () => {
+  const service = makeTestService();
+  // A malformed body is a caller error, not a test result.
+  await assertRejects(() => service.testServer("not json"), CoreError);
+  // One request describes one candidate server; a whole config would spawn
+  // a process per entry.
+  await assertRejects(
+    () =>
+      service.testServer(
+        JSON.stringify({
+          mcpServers: { a: { command: "x" }, b: { command: "y" } },
+        }),
+      ),
+    CoreError,
+  );
 });

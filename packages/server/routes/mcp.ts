@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import type { McpInfo } from "@lumisca/core";
+import type { McpInfo, McpTestResult } from "@lumisca/core";
 import { requireNonEmptyString } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -12,6 +12,11 @@ export interface McpApi {
    * app-level config). */
   getMcpInfo(workspaceId: string): McpInfo;
   setMcpConfig(workspaceId: string, text: string): McpInfo;
+  /** One-shot connection test of a single server config: connect, list the
+   * tools, disconnect. Runs here because the server owns the child
+   * processes a stdio server needs. Reaching the server is reported as a
+   * result (`ok:false`), an invalid body still throws. */
+  testMcpServer(text: string): Promise<McpTestResult>;
 }
 
 async function putConfig(
@@ -37,6 +42,14 @@ export function mcpRoutes(core: McpApi): Hono {
 
   app.put("/mcp", async (c) => {
     return await putConfig(c, (text) => core.setAppMcpConfig(text));
+  });
+
+  // The settings UI's "test" button: the body is the same single-server
+  // JSON a PUT would store, so the probe sees exactly what would be saved.
+  app.post("/mcp/test", async (c) => {
+    const text = await c.req.text();
+    requireNonEmptyString(text.trim(), "JSON body");
+    return c.json(await core.testMcpServer(text));
   });
 
   app.get("/workspaces/:id/mcp", (c) => {

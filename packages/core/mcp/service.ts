@@ -9,13 +9,31 @@ import {
   APP_MCP_SOURCE,
   loadMcpConfig,
   MCP_CONFIG_FILE,
+  MCP_TEST_SOURCE,
   type McpConfig,
   type McpInfo,
   parseMcpConfig,
 } from "./config.ts";
 import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
 import type { McpServerStatus } from "./manager.ts";
+import { probeMcpServer } from "./client.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
+
+/** One tool reported by the settings UI's one-shot connection test. */
+export interface McpTestTool {
+  name: string;
+  description?: string;
+}
+
+/** Result of the settings UI's one-shot connection test. A server that
+ * cannot be reached (bad command, timeout, HTTP error) is reported as
+ * data, not as an API error: that is an expected outcome of pressing the
+ * "test" button. Invalid config text still throws. */
+export interface McpTestResult {
+  ok: boolean;
+  tools: McpTestTool[];
+  error?: string;
+}
 
 /** The core surface this service needs (implemented by LumiscaCore). */
 export interface McpServiceDeps {
@@ -198,11 +216,53 @@ export class McpService {
 
   /** Parse-validate config text; throws CoreError("invalid") on failure. */
   private validateConfig(text: string, source: string): void {
+    this.parseConfig(text, source);
+  }
+
+  /** Parse config text, mapping parse failures to CoreError("invalid")
+   * (the API maps that kind to 400). */
+  private parseConfig(text: string, source: string): McpConfig {
     try {
-      // Validate before storing; the result is discarded.
-      parseMcpConfig(text, source);
+      return parseMcpConfig(text, source);
     } catch (error) {
       throw new CoreError(errorMessage(error), "invalid");
+    }
+  }
+
+  /**
+   * One-shot connection test of a single-server config (the settings UI's
+   * "test" button): connect, list the tools, disconnect. Connection
+   * failures come back as `{ ok: false, error }`; only the config text
+   * itself is rejected with `invalid`.
+   *
+   * The config is what the UI would save, so a disabled server is tested
+   * too — the point of the button is to check a server before enabling it.
+   * The probe runs in the server process's working directory, which is
+   * where a relative `cwd` resolves (the settings UI edits the app-level
+   * config, which has no workspace of its own).
+   */
+  async testServer(text: string, timeoutMs?: number): Promise<McpTestResult> {
+    const config = this.parseConfig(text, MCP_TEST_SOURCE);
+    if (config.servers.length !== 1) {
+      throw new CoreError(
+        `MCP test needs exactly one server, got ${config.servers.length}`,
+        "invalid",
+      );
+    }
+    const server = config.servers[0]!;
+    try {
+      const tools = await probeMcpServer(server, Deno.cwd(), timeoutMs);
+      return {
+        ok: true,
+        tools: tools.map((tool) => ({
+          name: tool.name,
+          ...(tool.description !== undefined
+            ? { description: tool.description }
+            : {}),
+        })),
+      };
+    } catch (error) {
+      return { ok: false, tools: [], error: errorMessage(error) };
     }
   }
 }

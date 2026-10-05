@@ -25,6 +25,8 @@ export type {
   Locale,
   McpInfo,
   McpServerInfo,
+  McpTestResult,
+  McpTestTool,
   ModelInfo,
   ModeMessage,
   ModePrompt,

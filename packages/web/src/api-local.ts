@@ -8,6 +8,7 @@ import type {
   FsPlace,
   GoalInfo,
   McpInfo,
+  McpTestResult,
   ModelInfo,
   ModePrompt,
   PendingImage,
@@ -318,6 +319,14 @@ export const api = {
   putMcpConfig: (text: string) =>
     request<McpInfo>("/api/mcp", {
       method: "PUT",
+      body: text,
+    }),
+  /** Test one candidate server before saving it: the server connects,
+   * lists its tools, and disconnects. `text` is the same single-server
+   * config a PUT would store (the server reads the body as raw text). */
+  testMcpServer: (text: string) =>
+    request<McpTestResult>("/api/mcp/test", {
+      method: "POST",
       body: text,
     }),
   getSettings: () => request<Record<string, string>>("/api/settings"),

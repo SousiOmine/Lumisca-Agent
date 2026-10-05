@@ -69,6 +69,7 @@ import type { SkillInfo } from "./skills/discover.ts";
 import { skillInfo } from "./skills/discover.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
+import type { McpTestResult } from "./mcp/service.ts";
 import { CommandSafety } from "./safety/command-safety.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
@@ -639,6 +640,14 @@ export class LumiscaCore {
    * `conflict` while any session is streaming. */
   setMcpConfig(workspaceId: string, text: string): McpInfo {
     return this.mcp.setMcpConfig(workspaceId, text);
+  }
+
+  /** One-shot connection test of a single-server config, used by the
+   * settings UI before it saves a new server. Reaching the server and
+   * listing its tools happens here: the browser cannot spawn the stdio
+   * child processes this app owns. */
+  testMcpServer(text: string): Promise<McpTestResult> {
+    return this.mcp.testServer(text);
   }
 
   // --- sessions -----------------------------------------------------------
