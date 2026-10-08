@@ -34,7 +34,9 @@ import {
   TOOL_PDF_READ_PAGES,
   TOOL_SEARCH,
 } from "./shared/mod.ts";
-import { MCP_TOOLS_PROMPT_NOTE } from "./mcp/tools.ts";
+import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
+import { DATE_PROVIDER } from "./agent/date-context.ts";
+import { today } from "./environment.ts";
 import { bytesToBase64 } from "./base64.ts";
 import {
   makeRealTempDir,
@@ -88,6 +90,17 @@ function instructionsMessages(agent: { messages: AgentMessage[] }) {
   return contextMessages(agent, "instructions");
 }
 
+/** The conversation of a session: every message the session and the model
+ * exchanged, without the dynamic-context publications (skill catalog,
+ * instructions, date, on-demand tools). Those are prepended before the
+ * first user message of a run and are not part of a turn, so a test that
+ * counts or positions turns must count this array. */
+function conversationMessages(
+  agent: { messages: AgentMessage[] },
+): AgentMessage[] {
+  return agent.messages.filter((m) => m.role !== "context");
+}
+
 Deno.test("workspace creation resolves folders and rejects missing ones", async () => {
   const { core } = setup();
   const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
@@ -121,7 +134,9 @@ Deno.test("session prompt persists messages and restores them", async () => {
 
   const agent = core.getAgent(session.id);
   assertEquals(agent !== undefined, true);
-  const messages = agent!.messages;
+  // The conversation is the exchange; the date and the on-demand-tools
+  // note are publications that precede it (see conversationMessages).
+  const messages = conversationMessages(agent!);
   assertEquals(messages.length, 2);
   assertEquals(messages[0]!.role, "user");
   assertEquals(messages[1]!.role, "assistant");
@@ -135,7 +150,7 @@ Deno.test("session prompt persists messages and restores them", async () => {
   core.closeSession(session.id);
   const reopened = await core.openSession(session.id);
   assertEquals(reopened.id, session.id);
-  const restored = core.getAgent(session.id)!.messages;
+  const restored = conversationMessages(core.getAgent(session.id)!);
   assertEquals(restored.length, 2);
   assertEquals(restored[1]!.role, "assistant");
 
@@ -477,17 +492,25 @@ Deno.test("rewind deletes a user message and everything after it", async () => {
   await promptSession(core, session.id, "two");
 
   const agent = core.getAgent(session.id)!;
-  assertEquals(agent.messages.length, 4);
+  assertEquals(conversationMessages(agent).length, 4);
 
-  // Rewind the first user message: later turns are removed too.
-  const firstUser = agent.messages[0]!;
+  // Rewind the first user message: later turns are removed too. The
+  // context publications that went in before it are not part of a turn,
+  // so they stay in the transcript.
+  const firstUser = agent.messages.find((m) => m.role === "user")!;
   await core.rewind(session.id, firstUser.timestamp);
-  assertEquals(agent.messages.length, 0);
+  assertEquals(conversationMessages(agent).length, 0);
+  assert(
+    agent.messages.every((m) => m.role === "context"),
+    `only the context publications may remain: ${
+      agent.messages.map((m) => m.role).join(",")
+    }`,
+  );
 
   // Close and reopen: the database was truncated as well.
   core.closeSession(session.id);
   core.openSession(session.id);
-  assertEquals(core.getAgent(session.id)!.messages.length, 0);
+  assertEquals(conversationMessages(core.getAgent(session.id)!).length, 0);
 
   core.close();
 });
@@ -516,17 +539,18 @@ Deno.test("rewind deletes a mode message (slash-command prompt) and everything a
   const agent = core.getAgent(session.id)!;
   const modeMessage = agent.messages.find((m) => m.role === "mode");
   assertEquals(modeMessage !== undefined, true);
-  assertEquals(agent.messages.length, 2);
+  assertEquals(conversationMessages(agent).length, 2);
 
   // Rewind the mode message: the whole turn goes away (the UI's rewind
-  // action on a mode message targets it like a user message).
+  // action on a mode message targets it like a user message). The context
+  // publications that preceded it stay — they belong to no turn.
   await core.rewind(session.id, modeMessage!.timestamp);
-  assertEquals(agent.messages.length, 0);
+  assertEquals(conversationMessages(agent).length, 0);
 
   // Close and reopen: the database was truncated as well.
   core.closeSession(session.id);
   core.openSession(session.id);
-  assertEquals(core.getAgent(session.id)!.messages.length, 0);
+  assertEquals(conversationMessages(core.getAgent(session.id)!).length, 0);
 
   core.close();
 });
@@ -560,7 +584,7 @@ Deno.test("rewind mid-history keeps earlier turns and persists without duplicate
   });
 
   const agent = core.getAgent(session.id)!;
-  const secondUser = agent.messages[2]!;
+  const secondUser = agent.messages.filter((m) => m.role === "user")[1]!;
   await core.rewind(session.id, secondUser.timestamp);
 
   // Only the first turn remains; the truncation event was emitted.
@@ -577,7 +601,7 @@ Deno.test("rewind mid-history keeps earlier turns and persists without duplicate
   await promptSession(core, session.id, "one (fixed)");
   core.closeSession(session.id);
   core.openSession(session.id);
-  const restored = core.getAgent(session.id)!.messages;
+  const restored = conversationMessages(core.getAgent(session.id)!);
   assertEquals(restored.length, 4);
   assertEquals(textsOf(restored), [
     "one",
@@ -625,11 +649,19 @@ Deno.test("rewind while running aborts the run and truncates cleanly", async () 
   await core.rewind(session.id, userTimestamps[0]!);
   assertEquals(agent.isStreaming, false);
   // The aborted run's failure message is removed with the rewound turn.
-  assertEquals(agent.messages.length, 0);
+  // Only the context publications that preceded it (date, on-demand tools)
+  // survive: they are not part of the turn.
+  assertEquals(conversationMessages(agent).length, 0);
+  assert(
+    agent.messages.every((m) => m.role === "context"),
+    `only the context publications may remain: ${
+      agent.messages.map((m) => m.role).join(",")
+    }`,
+  );
 
   core.closeSession(session.id);
   core.openSession(session.id);
-  assertEquals(core.getAgent(session.id)!.messages.length, 0);
+  assertEquals(conversationMessages(core.getAgent(session.id)!).length, 0);
 
   core.close();
 });
@@ -1042,7 +1074,7 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
   // The chat session runs like any other.
   faux.setResponses([fauxAssistantMessage("hello from chat")]);
   await promptSession(core, session.id, "Hi");
-  const messages = core.getAgent(session.id)!.messages;
+  const messages = conversationMessages(core.getAgent(session.id)!);
   assertEquals(messages.length, 2);
   assertEquals(
     (messages[1] as { content: Array<{ type: string; text: string }> })
@@ -1056,7 +1088,7 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
   assertEquals(reopened.chat, true);
   const reopenedAgent = core.getAgent(session.id)!;
   assertEquals(reopenedAgent.agent.state.systemPrompt, prompt);
-  assertEquals(reopenedAgent.messages.length, 2);
+  assertEquals(conversationMessages(reopenedAgent).length, 2);
 
   core.close();
 });
@@ -1534,6 +1566,67 @@ Deno.test("personalization (machine AGENTS.md) is published with the workspace i
   await removeDirRetry(root);
 });
 
+Deno.test("the date is published once as a context message, not rewritten into the prompt", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws, root } = await makeWorkspace(core);
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+  const agent = core.getAgent(session.id)!;
+
+  // The prompt is a creation-time snapshot, so a fact that changes while
+  // the session lives (the date) must not be baked into it.
+  assertEquals(
+    agent.agent.state.systemPrompt.includes("Date:"),
+    false,
+    "the date must stay out of the prompt snapshot",
+  );
+  assertEquals(
+    agent.messages.length,
+    0,
+    "nothing is published before the first run",
+  );
+
+  // The first run publishes the date once, before its own user message.
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "first");
+  const published = contextMessages(agent, DATE_PROVIDER);
+  assertEquals(published.length, 1, "the date is published exactly once");
+  assertEquals(published[0]!.title, `Date: ${today()}`);
+  assertEquals(
+    published[0]!.body,
+    `The current date is ${today()}.`,
+    "the model-facing body carries the reading",
+  );
+  assert(
+    agent.messages.indexOf(published[0]!) <
+      agent.messages.findIndex((m) => m.role === "user"),
+    "the date must precede the run's user message",
+  );
+
+  // Another run on the same day does not republish it...
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "second");
+  assertEquals(contextMessages(agent, DATE_PROVIDER).length, 1);
+
+  // ...and neither does reopening the session: the publication is still in
+  // the history the model reads, so the provider has nothing to add — and
+  // the prompt snapshot is untouched.
+  core.closeSession(session.id);
+  await core.openSession(session.id);
+  const reopened = core.getAgent(session.id)!;
+  const prompt = agent.agent.state.systemPrompt;
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "third");
+  assertEquals(contextMessages(reopened, DATE_PROVIDER).length, 1);
+  assertEquals(reopened.agent.state.systemPrompt, prompt);
+
+  core.close();
+  await removeDirRetry(root);
+});
+
 Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
@@ -1576,10 +1669,13 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
       false,
       "MCP definitions must stay out of the agent tool set",
     );
+    // The on-demand-tools contract never enters the prompt — its first
+    // tokens are the provider's cached prefix — so the note travels as a
+    // context message, published by the run below (checked after it).
     assertEquals(
       agent.agent.state.systemPrompt.includes("tool_search"),
-      true,
-      "system prompt must teach on-demand tool loading",
+      false,
+      "the prompt must stay free of the on-demand-tools note",
     );
 
     // The model searches for the tool, then calls it through tool_call.
@@ -1598,6 +1694,18 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
       fauxAssistantMessage("Done."),
     ]);
     await promptSession(core, session.id, "Echo hi");
+
+    // The run published the note as a context message ahead of its own
+    // user message, and published it exactly once (the registry held tools
+    // on the first check, so there is nothing to correct later).
+    const notes = contextMessages(agent, MCP_TOOLS_PROVIDER);
+    assertEquals(notes.length, 1, "the note is published exactly once");
+    assertEquals(notes[0]!.body, ON_DEMAND_TOOLS_NOTE);
+    assert(
+      agent.messages.indexOf(notes[0]!) <
+        agent.messages.findIndex((m) => m.role === "user"),
+      "the note must precede the run's user message",
+    );
 
     const messages = core.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
@@ -1633,7 +1741,7 @@ async function waitForSearchTools(
 }
 
 Deno.test("app-level MCP config persists and applies to sessions", async () => {
-  const { core, faux: _faux, providerId, modelId } = setup();
+  const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
     import.meta.dirname!,
@@ -1679,10 +1787,22 @@ Deno.test("app-level MCP config persists and applies to sessions", async () => {
       false,
       "MCP definitions must stay out of the agent tool set",
     );
+    // The on-demand-tools contract is never appended to the prompt, whose
+    // first tokens are the provider's cached prefix: the run below
+    // publishes it as a context message ahead of its user message.
     assertEquals(
       agent.agent.state.systemPrompt.includes("tool_search"),
-      true,
-      "system prompt must teach on-demand tool loading",
+      false,
+      "the prompt must stay free of the on-demand-tools note",
+    );
+    faux.setResponses([fauxAssistantMessage("ok")]);
+    await promptSession(core, session.id, "hello");
+    const notes = contextMessages(agent, MCP_TOOLS_PROVIDER);
+    assertEquals(notes.length, 1, "the note is published exactly once");
+    assertEquals(
+      notes[0]!.body,
+      ON_DEMAND_TOOLS_NOTE,
+      "the on-demand-tools note must be published as context",
     );
 
     // The generic settings surface refuses the MCP key (secrets may live
@@ -1899,17 +2019,12 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
     );
     // The registry is seeded synchronously at open (no MCP servers here,
     // so discovery contributes nothing) — the search/call pair is already
-    // attached and the prompt teaches on-demand tool loading.
+    // attached and the on-demand-tools note is published as context.
     assertEquals(
       agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH) &&
         agent.agent.state.tools.some((t) => t.name === TOOL_CALL),
       true,
       "search/call pair must be attached for the browser tools",
-    );
-    assertEquals(
-      agent.agent.state.systemPrompt.includes("tool_search"),
-      true,
-      "system prompt must teach on-demand tool loading",
     );
     // The built-in web-browser skill is advertised in the session's skill
     // catalog (a context message published before the first run), not in
@@ -1937,6 +2052,23 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
       fauxAssistantMessage("Done."),
     ]);
     await promptSession(core, session.id, "Open the app in the browser");
+
+    // The on-demand-tools note is published by that run as a context
+    // message, before its user message — never appended to the prompt.
+    const running = core.getAgent(session.id)!;
+    const notes = contextMessages(running, MCP_TOOLS_PROVIDER);
+    assertEquals(notes.length, 1, "the note is published exactly once");
+    assertEquals(notes[0]!.body, ON_DEMAND_TOOLS_NOTE);
+    assert(
+      running.messages.indexOf(notes[0]!) <
+        running.messages.findIndex((m) => m.role === "user"),
+      "the note must precede the run's user message",
+    );
+    assertEquals(
+      running.agent.state.systemPrompt.includes("tool_search"),
+      false,
+      "the prompt must stay free of the on-demand-tools note",
+    );
 
     // The skill catalog went in before the user message and lists the
     // built-in browser skill.
@@ -2021,7 +2153,7 @@ Deno.test("pdf tool is seeded into the session registry via tool_search", async 
 });
 
 Deno.test("detaching the browser backend removes browser tools on rebuild", async () => {
-  const { core, faux: _faux, providerId, modelId } = setup();
+  const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   core.setBrowserBackend(new FakeBrowserBackend());
   try {
@@ -2040,9 +2172,9 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
     // Detach and rebuild (a model switch rebuilds the agent of an open
     // session): the seeded browser tools are removed from the registry.
     // The registry is not empty afterwards — the PDF page-as-image tool
-    // is seeded for every workspace session — so the search/call pair
-    // and the on-demand-tools note stay attached; only the browser tools
-    // are gone.
+    // is seeded for every workspace session — so the search/call pair is
+    // still attached and the on-demand-tools note is still published;
+    // only the browser tools are gone.
     core.setBrowserBackend(undefined);
     core.setSessionModel(session.id, providerId, modelId);
     const detached = core.getAgent(session.id)!;
@@ -2064,15 +2196,28 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
       false,
       "the PDF tool must stay out of the agent tool set (discoverable via tool_search)",
     );
-    // The rebuilt agent starts from the creation-time snapshot, which —
-    // created while the backend was attached — still lists the built-in
-    // web-browser skill (its description mentions tool_search). The
-    // runtime-appended on-demand tools note follows the registry: it
-    // stays as long as the registry holds the PDF tool.
+    // The on-demand-tools note follows the registry: it stays as long as
+    // the registry holds the PDF tool. It is published as a context
+    // message by the next run of the rebuilt session (never appended to
+    // the prompt snapshot), so one prompt is run to observe it.
+    faux.setResponses([fauxAssistantMessage("ok")]);
+    await promptSession(core, session.id, "after detaching");
+    const notes = contextMessages(
+      core.getAgent(session.id)!,
+      MCP_TOOLS_PROVIDER,
+    );
+    assertEquals(notes.length, 1, "the note is published exactly once");
     assertEquals(
-      detached.agent.state.systemPrompt.includes(MCP_TOOLS_PROMPT_NOTE),
-      true,
+      notes[0]!.body,
+      ON_DEMAND_TOOLS_NOTE,
       "the on-demand-tools note stays while the registry holds tools",
+    );
+    assertEquals(
+      core.getAgent(session.id)!.agent.state.systemPrompt.includes(
+        "tool_search",
+      ),
+      false,
+      "the rebuilt prompt must stay free of the on-demand-tools note",
     );
 
     // Re-attaching restores the browser tools on the next rebuild.
@@ -2178,11 +2323,6 @@ Deno.test("computer use: the tools are seeded via tool_search only when enabled"
       "the search/call pair must be attached for the computer tools",
     );
     assertEquals(
-      enabled.agent.state.systemPrompt.includes("tool_search"),
-      true,
-      "the prompt must teach on-demand tool loading",
-    );
-    assertEquals(
       core.listSkills(ws.id).some((s) => s.name === "computer-use"),
       true,
       "the built-in skill must be advertised once the feature is on",
@@ -2205,6 +2345,22 @@ Deno.test("computer use: the tools are seeded via tool_search only when enabled"
       fauxAssistantMessage("Done."),
     ]);
     await promptSession(core, session.id, "Look at the screen");
+
+    // The run published the on-demand-tools note as a context message,
+    // ahead of its user message — the prompt stays free of it.
+    const notes = contextMessages(
+      core.getAgent(session.id)!,
+      MCP_TOOLS_PROVIDER,
+    );
+    assertEquals(notes.length, 1, "the note is published exactly once");
+    assertEquals(notes[0]!.body, ON_DEMAND_TOOLS_NOTE);
+    assertEquals(
+      core.getAgent(session.id)!.agent.state.systemPrompt.includes(
+        "tool_search",
+      ),
+      false,
+      "the prompt must stay free of the on-demand-tools note",
+    );
 
     assertEquals(host.captures, [{ x: 0, y: 0, width: 256, height: 144 }]);
     const toolResults = core.getAgent(session.id)!.messages.filter(
@@ -2408,8 +2564,13 @@ Deno.test("text-only model: user images are analyzed and passed as text", async 
     true,
   );
   // The text-only main model got the analysis text instead of the image.
+  // The run's context publications (date, on-demand tools) reach the
+  // provider as user-role messages of their own (see toLlmMessages), so
+  // the actual prompt is the newest user message of the request.
   assertEquals(captured[1]!.model, "text-only");
-  const mainContent = captured[1]!.messages[0]!.content;
+  const mainUser = captured[1]!.messages.filter((m) => m.role === "user")
+    .at(-1)!;
+  const mainContent = mainUser.content;
   assertEquals(mainContent.some((b) => b.type === "image"), false);
   assertEquals(
     mainContent.some(
@@ -2418,7 +2579,9 @@ Deno.test("text-only model: user images are analyzed and passed as text", async 
     true,
   );
   // The transcript (what the UI shows and the DB stores) keeps the image.
-  const userMessage = core.getAgent(session.id)!.messages[0]!;
+  const userMessage = core.getAgent(session.id)!.messages.find((m) =>
+    m.role === "user"
+  )!;
   const userContent = (userMessage as { content: Array<{ type: string }> })
     .content;
   assertEquals(userContent.some((b) => b.type === "image"), true);
@@ -2910,7 +3073,15 @@ Deno.test("compaction persists the checkpoint and survives a reopen", async () =
   assertEquals(restored.map((m) => m.role), roles);
   const checkpointIndex = roles.findIndex((role) => role === "checkpoint");
   assertEquals(checkpointIndex > 0, true);
-  assertEquals(restored[0]!.role, "user");
+  // The conversation still starts with the user's first message; the head
+  // of the transcript is the run's dynamic context (date, on-demand
+  // tools), which belongs to no turn.
+  assertEquals(conversationMessages({ messages: restored })[0]!.role, "user");
+  assertEquals(
+    restored[0]!.role,
+    "context",
+    "the transcript head is a context publication",
+  );
 
   await core.close();
 });
@@ -2927,7 +3098,7 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
   core.openSession(session.id);
 
   await fillHistory(core, faux, session.id, 3);
-  const before = core.getAgent(session.id)!.messages.length;
+  const before = conversationMessages(core.getAgent(session.id)!);
   // The manual call summarizes whatever the retention budget leaves out:
   // with the default 20K kept (against a 30K window) the retained tail
   // would cover the whole history, so the session is tuned to keep only
@@ -2941,13 +3112,25 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
   assertEquals(compacted !== undefined && compacted > 0, true);
   const agent = core.getAgent(session.id)!;
   // Nothing was deleted: the transcript GREW by the checkpoint, which sits
-  // at the cut — the summarized messages are still stored.
-  assertEquals(agent.messages.length, before + 1);
+  // at the cut — the summarized messages are still stored. Only the
+  // conversation is counted: the head context publications (date,
+  // on-demand tools) are not turn messages.
+  const after = conversationMessages(agent);
+  assertEquals(after.length, before.length + 1);
   const checkpointIndex = agent.messages.findIndex((m) =>
     m.role === "checkpoint"
   );
   assertEquals(checkpointIndex > 0, true);
-  assertEquals(agent.messages[0]!.role, "user");
+  assertEquals(after[0]!.role, "user");
+  // The model's view starts at the checkpoint, so the head publications are
+  // republished after it when the checkpoint left them behind: the model
+  // still reads the date it works from.
+  assert(
+    agent.messages.slice(checkpointIndex).some((m) =>
+      m.role === "context" && m.provider === DATE_PROVIDER
+    ),
+    "the date must stay in the model's view after a compaction",
+  );
 
   await core.close();
 });

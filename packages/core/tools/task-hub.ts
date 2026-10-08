@@ -16,11 +16,8 @@ import {
 } from "../ai/rate-limit.ts";
 import { isRetryableRateLimit } from "../agent/llm-retry.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import {
-  addToolsToAgent,
-  appendMcpToolsNote,
-  registryToolPair,
-} from "../mcp/tools.ts";
+import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
+import { withOnDemandToolsNote } from "../mcp/context.ts";
 import type { ToolRegistry } from "./registry.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import { toLlmMessages } from "../types/notification.ts";
@@ -287,7 +284,14 @@ export class TaskHub {
    * every running general sub-agent that spawned before the registry held
    * anything. Callbacks of older attachments (a config change replaced the
    * manager mid-discovery) return here: only the current attachment may
-   * write the registry. */
+   * write the registry.
+   *
+   * This is the one place where a prompt is still rewritten while an agent
+   * runs (the session's own prompt never changes — see mcp/context.ts).
+   * It stays because the alternative silently strips a capability: a child
+   * spawned before discovery could never reach the MCP tools, and a child
+   * that just started pays one request's prefix for the pair it needs for
+   * the rest of its work. */
   private attachMcpToRunning(attachment: McpAttachment, tools: Tool[]): void {
     if (attachment !== this.handledAttachment) return;
     if (this.registry === null) return;
@@ -298,7 +302,7 @@ export class TaskHub {
       if (sub.status !== "running" || sub.type !== "general") continue;
       if (sub.agent === null) continue;
       addToolsToAgent(sub.agent, pair);
-      sub.agent.state.systemPrompt = appendMcpToolsNote(
+      sub.agent.state.systemPrompt = withOnDemandToolsNote(
         sub.agent.state.systemPrompt,
       );
     }
@@ -401,7 +405,7 @@ export class TaskHub {
       this.language,
     );
     const systemPrompt = searchable.length > 0
-      ? appendMcpToolsNote(basePrompt)
+      ? withOnDemandToolsNote(basePrompt)
       : basePrompt;
     const agent = new Agent({
       initialState: {

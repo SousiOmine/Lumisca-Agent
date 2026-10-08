@@ -15,7 +15,13 @@ import { killProcessTree } from "./process-tree.ts";
 import { shellCommand } from "./shell.ts";
 import { requireResolved } from "./resolve.ts";
 import { safetyBlockResult } from "./safety.ts";
-import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
+import {
+  MAX_TOOL_OUTPUT,
+  OutputSpiller,
+  spilledNote,
+  truncate,
+  truncatedNote,
+} from "./truncate.ts";
 
 const bashSchema = object({
   cwd: string(
@@ -37,6 +43,21 @@ export interface BashToolOptions {
    * runs; a blocked command returns the reason as the tool result).
    * Omitted → the command runs unchecked. */
   safety?: CommandSafety;
+  /** Where a truncated stream spills its complete output. Defaults to the
+   * OS temp dir (`defaultSpillDir()`); tests point it at a per-test
+   * directory so a run never shares (or cleans up) the real one. */
+  spillDir?: string;
+}
+
+/** How to read a spilled file back. The `read`/`grep` tools resolve paths
+ * through the workspace sandbox, so only a spill inside the workspace is
+ * reachable that way — the default spill directory lives in the OS temp
+ * dir, where bash is the way in. */
+async function spillRecovery(sandbox: Sandbox, path: string): Promise<string> {
+  if ((await sandbox.resolve(path)).ok) {
+    return "use read with offset/limit, or grep this path";
+  }
+  return "outside the workspace: read it with bash (sed -n '1,200p') or grep";
 }
 
 /**
@@ -44,11 +65,26 @@ export interface BashToolOptions {
  * else Windows PowerShell), elsewhere /bin/sh. The working directory is a
  * required argument, resolved against the workspace; the command itself is
  * not sandboxed beyond that (same policy as pi).
+ *
+ * A stream longer than MAX_TOOL_OUTPUT keeps its last 64KiB inline and
+ * spills the complete text to a file (see {@link OutputSpiller}), which the
+ * truncation note points at — so the model can read the part that was cut
+ * instead of re-running the command.
  */
 export function createBashTool(
   options: BashToolOptions,
 ): Tool<typeof bashSchema> {
   const defaultTimeoutSec = options.defaultTimeoutSec ?? 120;
+  const spiller = new OutputSpiller(options.spillDir);
+
+  /** Note for a cut stream: spill the full text and point at it, or fall
+   * back to the plain note when the spill could not be written (the result
+   * must survive a failed spill). */
+  const cutNote = async (kind: string, full: string): Promise<string> => {
+    const path = await spiller.save(kind, full);
+    if (path === undefined) return truncatedNote(kind, MAX_TOOL_OUTPUT);
+    return spilledNote(kind, path, await spillRecovery(options.sandbox, path));
+  };
 
   return {
     name: TOOL_BASH,
@@ -59,8 +95,11 @@ export function createBashTool(
       "`[exit code: N]` — a kill reports the kill's exit code — followed by " +
       "`[duration: X]`, how long the command ran (`850ms`, `1.4s`, `12s`, " +
       "`2m 05s`). stdout and stderr are capped separately: a cut stream " +
-      "ends with `[stdout truncated to the last 65536 bytes]` / " +
-      "`[stderr truncated to the last 65536 bytes]`. On Windows the shell " +
+      "keeps its last 65536 bytes and ends with `[stdout truncated to the " +
+      "last 65536 bytes; full output: <path>]` — that file holds the whole " +
+      "stream, so read it back (bash: `sed -n '1,200p' <path>` or grep; " +
+      "`read` with offset/limit when the path is inside the workspace) " +
+      "instead of re-running the command. On Windows the shell " +
       "is PowerShell (7 if installed, else Windows PowerShell, with Git Bash " +
       "or cmd.exe as a fallback); on macOS/Linux it is /bin/sh.",
     parameters: bashSchema,
@@ -114,11 +153,11 @@ export function createBashTool(
           MAX_TOOL_OUTPUT,
         );
         let body = outTrimmed;
-        if (outTruncated) body += truncatedNote("stdout");
+        if (outTruncated) body += await cutNote("stdout", outText);
         if (errTrimmed.length > 0) {
           body += body.length > 0 ? "\n\n[stderr]\n" : "";
           body += errTrimmed;
-          if (errTruncated) body += truncatedNote("stderr");
+          if (errTruncated) body += await cutNote("stderr", errText);
         }
         body += `\n[exit code: ${code}]`;
         body += `\n[duration: ${formatDuration(durationMs)}]`;

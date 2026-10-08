@@ -10,14 +10,6 @@ import { object } from "../tools/schema.ts";
 /** Argument schemas larger than this are omitted from the description. */
 const MAX_SCHEMA_CHARS = 8192;
 
-/** The system-prompt note teaching agents about on-demand tool loading and
- * the MCP out-of-workspace boundary. Shared by every attachment site
- * (session agent, sub-agents) so the contract text stays in one place. */
-export const MCP_TOOLS_PROMPT_NOTE =
-  "\n\nNote: tools beyond the preloaded set (MCP servers, extensions, the " +
-  "browser lab) are found with tool_search and run with tool_call; `mcp__` " +
-  "tools can access resources outside the workspace.";
-
 /** Make server names safe for provider function-name rules
  * (`^[a-zA-Z0-9_-]{1,64}$`); tool names are already constrained by the
  * MCP protocol, but user-chosen server names may contain dots/spaces. */
@@ -59,18 +51,6 @@ export function registryToolPair(getRegistry: () => ToolRegistry): Tool[] {
     createToolSearchTool(getRegistry),
     createToolCallTool(getRegistry),
   ];
-}
-
-/** Append the MCP tools note to a system prompt unless already present
- * (appending only once keeps the prompt's prefix-cache block stable).
- * The idempotency check keys on the note itself — never on a substring
- * like "tool_search", which can legitimately appear in a prompt from
- * other sources (e.g. a skill description) without the note being
- * there. */
-export function appendMcpToolsNote(systemPrompt: string): string {
-  return systemPrompt.includes(MCP_TOOLS_PROMPT_NOTE)
-    ? systemPrompt
-    : systemPrompt + MCP_TOOLS_PROMPT_NOTE;
 }
 
 function createMcpTool(manager: McpManager, def: McpToolDef): Tool {

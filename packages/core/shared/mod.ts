@@ -16,6 +16,7 @@
  * - `./context-usage.ts` — context accounting and formatting,
  * - `./token-estimate.ts` — fixed-heuristic token estimates for history,
  * - `./misc.ts` — errorMessage, InitialData, decode/parse/format helpers,
+ * - `./digest.ts` — FNV-1a change-detection digests and canonical JSON,
  * - `./loopback.ts` — loopback host detection and URL host spellings,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
@@ -31,5 +32,6 @@ export * from "./mcp-config.ts";
 export * from "./context-usage.ts";
 export * from "./token-estimate.ts";
 export * from "./misc.ts";
+export * from "./digest.ts";
 export * from "./loopback.ts";
 export * from "./heartbeat.ts";

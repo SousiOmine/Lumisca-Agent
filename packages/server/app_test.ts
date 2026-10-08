@@ -43,6 +43,14 @@ function json(
   });
 }
 
+/** The transcript without the dynamic-context publications (skill catalog,
+ * instructions, date, on-demand tools) a session publishes ahead of the
+ * first user message of a run. Those are not part of a turn, so the tests
+ * that count or position turns count this array. */
+function conversationOf<T extends { role: string }>(messages: T[]): T[] {
+  return messages.filter((m) => m.role !== "context");
+}
+
 Deno.test("health and workspaces API", async () => {
   const { core, server, base } = await setup();
   try {
@@ -251,8 +259,19 @@ Deno.test("session prompt roundtrip via API", async () => {
       `/api/sessions/${session.id}/messages`,
     );
     const snapshot = await messagesRes.json();
-    assertEquals(snapshot.messages.length, 2);
-    assertEquals(snapshot.messages[1].role, "assistant");
+    // The snapshot is the whole transcript: the context publications the
+    // run prepended (date, on-demand tools) are part of it, so the turn is
+    // counted without them.
+    const conversation = conversationOf(
+      snapshot.messages as Array<{ role: string }>,
+    );
+    assertEquals(conversation.length, 2);
+    assertEquals(conversation[1]!.role, "assistant");
+    assertEquals(
+      snapshot.messages.some((m: { role: string }) => m.role === "context"),
+      true,
+      "the context publications travel with the transcript",
+    );
     // The snapshot carries the run state next to the transcript: the run
     // finished before it was taken.
     assertEquals(snapshot.running, false);
@@ -324,11 +343,17 @@ Deno.test("messages snapshot reports a run that is still going", async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     assertEquals(snapshot.running, true, "the live run is reported");
+    // The live transcript carries the user message the run is answering,
+    // with the context publications that precede it (counted separately).
+    const live = conversationOf(
+      snapshot.messages as Array<{ role: string }>,
+    );
     assertEquals(
-      snapshot.messages.length,
+      live.length,
       1,
       "the snapshot carries the transcript too",
     );
+    assertEquals(live[0]!.role, "user");
 
     release();
     await core.getAgent(session.id)!.waitForIdle();
@@ -336,7 +361,10 @@ Deno.test("messages snapshot reports a run that is still going", async () => {
       await json(base, `/api/sessions/${session.id}/messages`)
     ).json();
     assertEquals(snapshot.running, false, "the finished run is not");
-    assertEquals(snapshot.messages.length, 2);
+    assertEquals(
+      conversationOf(snapshot.messages as Array<{ role: string }>).length,
+      2,
+    );
 
     await removeDirRetry(root);
   } finally {
@@ -464,8 +492,17 @@ Deno.test("chat session API: no workspaceId creates a chat session", async () =>
       `/api/sessions/${session.id}/messages`,
     );
     const messages = await messagesRes.json();
-    assertEquals(messages.messages.length, 2);
-    assertEquals(messages.messages[1].content[0].text, "chat reply");
+    const chatConversation = conversationOf(
+      messages.messages as Array<{
+        role: string;
+        content: Array<{ text: string }>;
+      }>,
+    );
+    assertEquals(chatConversation.length, 2);
+    assertEquals(
+      chatConversation[1]!.content[0]!.text,
+      "chat reply",
+    );
 
     // The chat workspace refuses update/delete through the API.
     const del = await json(base, `/api/workspaces/${chatWs.id}`, {
@@ -522,15 +559,20 @@ Deno.test("rewind truncates messages via the API and rejects bad bodies", async 
       body: JSON.stringify({ text: "two" }),
     });
     let messages: Array<{ role: string; timestamp: number }> = [];
-    for (let i = 0; i < 100 && messages.length < 4; i++) {
+    // The transcript also carries the context publications the runs
+    // prepended (date, on-demand tools): the turns are counted without
+    // them.
+    let conversation: Array<{ role: string; timestamp: number }> = [];
+    for (let i = 0; i < 100 && conversation.length < 4; i++) {
       messages = (await (
         await json(base, `/api/sessions/${session.id}/messages`)
       ).json()).messages;
-      if (messages.length < 4) {
+      conversation = conversationOf(messages);
+      if (conversation.length < 4) {
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
     }
-    assertEquals(messages.length, 4);
+    assertEquals(conversation.length, 4);
 
     // Bad bodies are rejected with 400.
     const noTimestamp = await json(base, `/api/sessions/${session.id}/rewind`, {
@@ -545,18 +587,22 @@ Deno.test("rewind truncates messages via the API and rejects bad bodies", async 
     );
     assertEquals(stringTimestamp.status, 400);
 
-    // Rewind the second turn: only the first turn remains.
+    // Rewind the second turn: only the first turn remains. The rewind
+    // targets the second user message (the publications at the head of the
+    // transcript are not turns).
+    const secondUser = conversation.filter((m) => m.role === "user")[1]!;
     const rewindRes = await json(base, `/api/sessions/${session.id}/rewind`, {
       method: "POST",
-      body: JSON.stringify({ timestamp: messages[2]!.timestamp }),
+      body: JSON.stringify({ timestamp: secondUser.timestamp }),
     });
     assertEquals(rewindRes.status, 200);
     const { messages: truncated } = await (
       await json(base, `/api/sessions/${session.id}/messages`)
     ).json();
-    assertEquals(truncated.length, 2);
-    assertEquals(truncated[0].role, "user");
-    assertEquals(truncated[1].role, "assistant");
+    const remaining = conversationOf(truncated);
+    assertEquals(remaining.length, 2);
+    assertEquals(remaining[0]!.role, "user");
+    assertEquals(remaining[1]!.role, "assistant");
 
     // Unknown timestamps map to 404.
     const unknown = await json(base, `/api/sessions/${session.id}/rewind`, {
@@ -1927,10 +1973,15 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
         { headers: auth },
       );
       const { messages: msgs } = await messages.json();
-      assertEquals(msgs.length, 2);
-      assertEquals(msgs[1].role, "assistant");
+      // The proxied transcript carries the context publications of the
+      // peer's run too; the turn is counted without them.
+      const fedConversation = conversationOf(
+        msgs as Array<{ role: string; content: Array<{ text: string }> }>,
+      );
+      assertEquals(fedConversation.length, 2);
+      assertEquals(fedConversation[1]!.role, "assistant");
       assertEquals(
-        msgs[1].content[0].text,
+        fedConversation[1]!.content[0]!.text,
         "Hi from peer!",
         "the peer's prompt roundtrip must produce the real answer",
       );

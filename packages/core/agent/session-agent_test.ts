@@ -885,7 +885,16 @@ Deno.test("compaction condenses the history before a request crosses the window"
   assertEquals(checkpoints[0]!.index, checkpointIndex);
   assertEquals(checkpoints[0]!.message.role, "checkpoint");
   // The newest turn survived: the model still sees the work in progress.
-  assertEquals(agent.messages.at(-2)!.role, "toolResult");
+  // The loop's own advisory for the repeated call (a notification appended
+  // after the third identical tool call) rides at the end of that turn, so
+  // the newest tool result is looked up inside the model's view (the
+  // messages from the checkpoint on) rather than at a fixed offset.
+  const modelView = agent.messages.slice(checkpointIndex + 1);
+  assertEquals(
+    modelView.some((m) => m.role === "toolResult"),
+    true,
+    "the newest turn's tool result must stay in the model's view",
+  );
 });
 
 Deno.test("compaction keeps the transcript and the stored rows in step", async () => {

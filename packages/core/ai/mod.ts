@@ -63,6 +63,7 @@ export type {
   OAuthCredential,
   Provider,
   ProviderAuth,
+  RequestShape,
   StopReason,
   StreamEvent,
   StreamFn,

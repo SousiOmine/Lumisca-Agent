@@ -107,6 +107,28 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
         AND (json_extract(content, '$.message.usage.cacheRead') > 0
           OR json_extract(content, '$.message.usage.cacheWrite') > 0)
     `),
+  // Request-shape record: what the model was sent, as far as prompt-cache
+  // reuse is concerned. The loop reports every request (ai/agent.ts); only
+  // the first request of a session and the ones that changed the head
+  // (system prompt or tool schemas) or rewrote the history (compaction,
+  // rewind) are stored — the events that cost the provider's cached prefix
+  // (see session/request-shapes.ts). Debugging only: nothing reads it
+  // during a run, and the row count is proportional to a session's cache
+  // breaks, not to its steps.
+  (db) =>
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS request_shapes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL,
+        change TEXT NOT NULL,
+        head_hash TEXT NOT NULL,
+        messages_hash TEXT NOT NULL,
+        message_count INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_request_shapes_session
+        ON request_shapes(session_id, id);
+    `),
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

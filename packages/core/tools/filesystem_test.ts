@@ -347,24 +347,66 @@ Deno.test("edit throws when old_string is missing", async () => {
   }
 });
 
-Deno.test("edit replaces only the first occurrence and warns", async () => {
+Deno.test("edit fails on an ambiguous old_string and leaves the file", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
-    await Deno.writeTextFile(file, "a\nb\na\nb\n");
-    const result = await makeFs(root).edit.execute("id", {
+    const original = "a\nb\na\nb\n";
+    await Deno.writeTextFile(file, original);
+    const edit = makeFs(root).edit;
+    const error = await assertRejects(
+      () =>
+        edit.execute("id", {
+          path: `${folder}/sample.txt`,
+          old_string: "a\nb",
+          new_string: "A\nB",
+        }),
+      Error,
+      "old_string appears 2 times",
+    );
+    // The message names the path so the model can act on it.
+    assert(error.message.includes(`${folder}/sample.txt`), error.message);
+    // Nothing was written: picking one of the two matches would risk
+    // rewriting the wrong place.
+    assertEquals(await Deno.readTextFile(file), original);
+
+    // The prescribed fix — more surrounding context — makes it unique.
+    const result = await edit.execute("id", {
       path: `${folder}/sample.txt`,
-      old_string: "a\nb",
+      old_string: "a\nb\na\nb",
       new_string: "A\nB",
     });
-    assertEquals(
-      await Deno.readTextFile(file),
-      "A\nB\na\nb\n",
+    assert(toolText(result).startsWith("Edited"), toolText(result));
+    assertEquals(await Deno.readTextFile(file), "A\nB\n");
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("edit fails on an ambiguous old_string in a CRLF file", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    await writeCrlf(file, [
+      "const a = 1;",
+      "const b = 2;",
+      "const a = 1;",
+      "const b = 2;",
+    ]);
+    const original = await Deno.readTextFile(file);
+    // The LF old_string matches the CRLF file leniently, so the count must
+    // see both matches and refuse the edit.
+    await assertRejects(
+      () =>
+        makeFs(root).edit.execute("id", {
+          path: `${folder}/sample.txt`,
+          old_string: "const a = 1;\nconst b = 2;",
+          new_string: "const a = 1;\nconst b = 20;",
+        }),
+      Error,
+      "old_string appears 2 times",
     );
-    assert(
-      toolText(result).includes("appeared 2 times"),
-      toolText(result),
-    );
+    assertEquals(await Deno.readTextFile(file), original);
   } finally {
     await removeDirRetry(root);
   }

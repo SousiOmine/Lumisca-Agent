@@ -1,15 +1,26 @@
-import { basename } from "node:path";
+import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
 import { assert, assertEquals } from "@std/assert";
 import { createBashTool } from "./bash.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { formatDuration } from "./duration.ts";
+import { defaultSpillDir, MAX_TOOL_OUTPUT } from "./truncate.ts";
 import { removeDirRetry, toolText } from "../test-utils.ts";
 
 function makeTool() {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const sandbox = new Sandbox([root]);
-  return { tool: createBashTool({ sandbox }), root, sandbox };
+  // Truncated output spills into a per-test directory instead of the shared
+  // OS temp dir. It sits inside the workspace here, which is also the case
+  // the note's read hint is written for.
+  const spillDir = join(root, "spill");
+  return {
+    tool: createBashTool({ sandbox, spillDir }),
+    root,
+    sandbox,
+    spillDir,
+  };
 }
 
 Deno.test("bash tool reports exit code", async () => {
@@ -262,6 +273,172 @@ Deno.test("bash tool runs normally when the check approves", async () => {
     );
     assertEquals(result.details?.blocked, undefined);
     assertEquals(toolText(result).includes("approved"), true);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+// --- spilled output (DSH-style "spill") ------------------------------------
+//
+// A stream longer than MAX_TOOL_OUTPUT keeps its last 64KiB inline and the
+// complete text is saved to a file under the spill directory, so the model
+// can read what was cut instead of re-running the command.
+
+const BIG_HEAD = "START-OF-OUTPUT";
+const BIG_TAIL = "END-OF-OUTPUT";
+
+/** ~240 KiB with a marker at each end: far past MAX_TOOL_OUTPUT, so only the
+ * tail reaches the model and the head survives in the spill alone. */
+function bigOutput(): string {
+  return `${BIG_HEAD}\n${"filler line\n".repeat(20_000)}${BIG_TAIL}\n`;
+}
+
+/** The spill path of a truncation note (`…; full output: <path> — <how>]`). */
+function spillPathFrom(text: string): string {
+  const match = text.match(/full output: (.+?) — /);
+  assert(match !== null, `no spill path in: ${text.slice(-200)}`);
+  return match[1]!;
+}
+
+/** Run a command whose output is far larger than the inline cap. `cat` is a
+ * Get-Content alias in PowerShell and a real binary on POSIX, so one command
+ * covers both shells; the file itself is written by the test. */
+async function runBigCommand(
+  tool: ReturnType<typeof createBashTool>,
+  root: string,
+  command = "cat big.txt",
+) {
+  await Deno.writeTextFile(join(root, "big.txt"), bigOutput());
+  return await tool.execute("1", { cwd: root, command }, undefined);
+}
+
+Deno.test("bash tool spills the complete stdout when it is truncated", async () => {
+  const { tool, root, spillDir } = makeTool();
+  try {
+    const text = toolText(await runBigCommand(tool, root));
+    // The standard wording stays, followed by the spill path on the same
+    // line; the inline result keeps the tail and has lost the head.
+    assert(
+      text.includes("[stdout truncated to the last 65536 bytes;"),
+      `note missing: ${text.slice(-200)}`,
+    );
+    assert(text.includes(BIG_TAIL), `tail missing: ${text.slice(-200)}`);
+    assertEquals(text.includes(BIG_HEAD), false);
+
+    const path = spillPathFrom(text);
+    assertEquals(path.startsWith(spillDir), true, `path: ${path}`);
+    assertEquals(path.endsWith("-stdout.txt"), true, `path: ${path}`);
+    // The spill holds the FULL output: both ends, well past the inline cap.
+    const spilled = await Deno.readTextFile(path);
+    assert(spilled.includes(BIG_HEAD), `head missing in spill: ${path}`);
+    assert(spilled.includes(BIG_TAIL), `tail missing in spill: ${path}`);
+    assert(
+      spilled.length > MAX_TOOL_OUTPUT,
+      `spill too small: ${spilled.length}`,
+    );
+    // Spilled inside the workspace: the sandboxed read/grep tools reach it.
+    assert(
+      text.includes("use read with offset/limit, or grep this path"),
+      `read hint missing: ${text.slice(-200)}`,
+    );
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("bash tool spills the complete stderr when it is truncated", async () => {
+  const { tool, root } = makeTool();
+  try {
+    const command = Deno.build.os === "windows"
+      ? "[Console]::Error.WriteLine((Get-Content big.txt -Raw))"
+      : "cat big.txt 1>&2";
+    const text = toolText(await runBigCommand(tool, root, command));
+    assert(
+      text.includes("[stderr truncated to the last 65536 bytes;"),
+      `note missing: ${text.slice(-200)}`,
+    );
+    assertEquals(text.includes(BIG_HEAD), false);
+    const path = spillPathFrom(text);
+    assertEquals(path.endsWith("-stderr.txt"), true, `path: ${path}`);
+    assert((await Deno.readTextFile(path)).includes(BIG_HEAD));
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("bash tool spills nothing when the output fits", async () => {
+  const { tool, root, spillDir } = makeTool();
+  try {
+    const result = await tool.execute(
+      "1",
+      { cwd: root, command: "echo small" },
+      undefined,
+    );
+    const text = toolText(result);
+    assertEquals(text.includes("full output:"), false);
+    assertEquals(text.includes("truncated"), false);
+    // The directory is created lazily: a run that cut nothing leaves none.
+    const created = await Deno.stat(spillDir).then(() => true, () => false);
+    assertEquals(created, false, `spill directory was created: ${spillDir}`);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("bash tool keeps the result when the spill fails", async () => {
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
+  // A regular file where the spill directory would go: the mkdir fails, so
+  // the note must lose only the path — never the result itself.
+  const blocked = join(root, "blocked.txt");
+  await Deno.writeTextFile(blocked, "x");
+  const tool = createBashTool({
+    sandbox: new Sandbox([root]),
+    spillDir: join(blocked, "spill"),
+  });
+  try {
+    const text = toolText(await runBigCommand(tool, root));
+    assert(
+      text.includes("[stdout truncated to the last 65536 bytes]"),
+      `plain note missing: ${text.slice(-200)}`,
+    );
+    assertEquals(text.includes("full output:"), false);
+    assert(text.includes("[exit code: 0]"), `result lost: ${text.slice(-200)}`);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("bash tool points at bash when the spill is outside the workspace", async () => {
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
+  // The production shape: the spill dir is the OS temp dir, which the
+  // sandboxed read/grep tools cannot reach — bash is the way in, and the
+  // note must say so instead of sending the model to a rejected path.
+  const spillDir = Deno.makeTempDirSync({ prefix: "lumisca-bash-spill-" });
+  const tool = createBashTool({ sandbox: new Sandbox([root]), spillDir });
+  try {
+    const text = toolText(await runBigCommand(tool, root));
+    const path = spillPathFrom(text);
+    assertEquals(path.startsWith(spillDir), true, `path: ${path}`);
+    assert(
+      text.includes("outside the workspace: read it with bash"),
+      `bash hint missing: ${text.slice(-200)}`,
+    );
+    assert((await Deno.readTextFile(path)).includes(BIG_HEAD));
+  } finally {
+    await removeDirRetry(root);
+    await removeDirRetry(spillDir);
+  }
+});
+
+Deno.test("spill files default to the OS temp dir", () => {
+  assertEquals(defaultSpillDir(), join(tmpdir(), "lumisca-tool-output"));
+});
+
+Deno.test("bash tool description documents the spilled full output", async () => {
+  const { tool, root } = makeTool();
+  try {
+    assert(tool.description.includes("full output: <path>"));
+    assert(tool.description.includes("truncated to the last 65536 bytes;"));
   } finally {
     await removeDirRetry(root);
   }

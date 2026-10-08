@@ -260,7 +260,10 @@ const WORKFLOW_SECTION: PromptSection = {
     "shims behind.\n" +
     "- Do not stop halfway: carry the work through until the deliverable is\n" +
     "  complete.\n" +
-    "- Do not hand in TODOs or placeholder implementations as finished work.",
+    "- Do not hand in TODOs or placeholder implementations as finished work.\n" +
+    "- Finish by saying what you did and how you verified it, and report " +
+    "only\n  what this session's tool results establish — say so when " +
+    "something could\n  not be checked.",
 };
 
 // --- chat-only ---------------------------------------------------------------

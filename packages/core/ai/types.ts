@@ -204,7 +204,7 @@ export interface ModeMessage {
 
 export interface NotificationMessage {
   role: "notification";
-  kind: "background" | "task" | "message" | "retry";
+  kind: "background" | "task" | "message" | "retry" | "notice";
   title: string;
   body: string;
   status: "success" | "error" | "neutral";
@@ -607,6 +607,28 @@ export type AgentEvent =
   }
   | { type: "turn_end"; message: AgentMessage }
   | { type: "agent_end"; message?: AssistantMessage };
+
+/** The model-visible shape of one request, reported by the agent loop for
+ * every request it sends (see AgentInit.onRequest).
+ *
+ * The provider's prompt cache serves a request only from the prefix it
+ * shares with the previous one, so the two hashes and the change reason are
+ * what explains a cache-read drop: `head-changed` means the system prompt or
+ * the tool schemas differ (nothing of the old prefix is reusable),
+ * `history-rewritten` means the message list no longer extends the previous
+ * one (compaction, rewind), and no `change` means the request is an
+ * append-extension whose shared prefix is reusable. */
+export interface RequestShape {
+  /** FNV-1a of the system prompt and the tool schemas. */
+  headHash: string;
+  /** FNV-1a folded over the per-message hashes of the request. */
+  messagesHash: string;
+  /** Number of wire messages the request carried. */
+  messageCount: number;
+  /** Why this request differs from the preceding one of the same agent;
+   * absent when it is an append-extension of it. */
+  change?: "initial" | "head-changed" | "history-rewritten";
+}
 
 export interface AgentState {
   systemPrompt: string;

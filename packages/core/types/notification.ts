@@ -3,10 +3,19 @@ import { modeFullPromptText, type ModeMessage } from "./mode-message.ts";
 
 /** Kind of a system notification injected into an agent loop: background
  * command completions (async_bash), sub-agent task completions (task),
- * agent-to-agent messages (send_message), and empty-response retries (the
+ * agent-to-agent messages (send_message), empty-response retries (the
  * session agent retries a response that produced neither text nor a tool
- * call). */
-export type NotificationKind = "background" | "task" | "message" | "retry";
+ * call), and the loop's own advisories (the repeat guard's reminder — see
+ * ai/agent.ts). */
+export type NotificationKind =
+  | "background"
+  | "task"
+  | "message"
+  | "retry"
+  /** An advisory the loop or the session agent appends to the transcript
+   * itself — the repeat guard's reminder (see ai/agent.ts) — rather than a
+   * completion delivered from outside. */
+  | "notice";
 
 /** Outcome of the event a notification reports. The UI shows a check for
  * success, an error badge for failure, and nothing for neutral. */

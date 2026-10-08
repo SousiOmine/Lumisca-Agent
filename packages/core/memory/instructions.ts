@@ -2,6 +2,7 @@ import type {
   ContextProvider,
   ContextUpdate,
 } from "../agent/context-providers.ts";
+import { fnv1a } from "../shared/digest.ts";
 import {
   instructionHeading,
   loadProjectMemoryFiles,
@@ -39,18 +40,6 @@ export interface InstructionsOptions {
 
 interface InstructionsState {
   files: Array<{ path: string; hash: string }>;
-}
-
-/** 64-bit FNV-1a of one file's content: change detection only, so a fast
- * non-cryptographic hash is the right tool (and it must be synchronous —
- * the provider is called inline before a run). */
-function contentHash(text: string): string {
-  let hash = 0xcbf29ce484222325n;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= BigInt(text.charCodeAt(i));
-    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
-  }
-  return hash.toString(16);
 }
 
 /** The state carried by a published message, or undefined when the state is
@@ -165,7 +154,7 @@ export function createInstructionsProvider(
     next(): ContextUpdate[] {
       const files = currentFiles();
       const current = new Map(
-        files.map((file) => [file.path, contentHash(file.content)]),
+        files.map((file) => [file.path, fnv1a(file.content)]),
       );
       if (known === undefined) {
         known = current;

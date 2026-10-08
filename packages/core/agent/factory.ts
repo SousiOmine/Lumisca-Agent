@@ -13,6 +13,8 @@ import { McpAttachment } from "../mcp/attachment.ts";
 import { ToolRegistry } from "../tools/registry.ts";
 import { createSkillCatalogProvider } from "../skills/catalog.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
+import { createDateProvider } from "./date-context.ts";
+import { createMcpToolsProvider } from "../mcp/context.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import {
@@ -313,9 +315,11 @@ export class AgentFactory {
       );
       this.deps.updateSystemPrompt(session.id, systemPrompt);
     }
-    // Dynamic context (skill catalog, workspace instructions) is published
-    // as transcript messages when it changes, so an edit reaches an open
-    // session and the prompt above stays stable.
+    // Dynamic context (skill catalog, workspace instructions, the date and
+    // the on-demand-tools note) is published as transcript messages when it
+    // changes, so an edit reaches an open session and the prompt above
+    // stays stable — the request's first tokens are what the provider's
+    // prompt cache serves.
     const contextProviders = [
       createSkillCatalogProvider({
         folders: workspace.folders,
@@ -326,6 +330,14 @@ export class AgentFactory {
       createInstructionsProvider({
         folders: workspace.folders,
         personal: this.deps.personalInstructions,
+      }),
+      createDateProvider(),
+      // The tool_search / tool_call pair exists exactly while the
+      // session's registry holds something to discover; the note follows
+      // the same condition, so a late MCP discovery publishes it instead
+      // of rewriting the prompt.
+      createMcpToolsProvider({
+        searchable: () => !registry.isEmpty,
       }),
     ];
     const agent = new SessionAgentImpl({
@@ -340,6 +352,28 @@ export class AgentFactory {
       ),
       streamFn: this.deps.streamFn,
       messageRepo: this.deps.messageRepo,
+      // Record what the model was sent, as far as prompt-cache reuse is
+      // concerned: the first request of the session and every request whose
+      // head changed or whose history was rewritten (see
+      // session/request-shapes.ts). Append-extensions are not stored — they
+      // reuse the previous prefix by construction.
+      onRequestShape: (shape) => {
+        if (shape.change === undefined) return;
+        this.deps.requestShapeRepo.record(session.id, shape);
+        if (shape.change === "initial") {
+          log.debug(
+            `session ${session.id}: first request recorded (${shape.messageCount} messages)`,
+          );
+          return;
+        }
+        // The two shapes that cost the provider's whole cached prefix are
+        // worth a log line: they explain a cache-read drop on the next
+        // assistant message.
+        log.info(
+          `session ${session.id}: request ${shape.change} ` +
+            `(${shape.messageCount} messages, head ${shape.headHash})`,
+        );
+      },
       backgroundManager: background,
       askHub,
       taskHub: tasks,

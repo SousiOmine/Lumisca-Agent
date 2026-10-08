@@ -4,6 +4,7 @@ import {
   IconCheck,
   IconChevronRight,
   IconRefresh,
+  IconRepeat,
   IconSend,
   IconTerminal2,
 } from "@tabler/icons-preact";
@@ -22,6 +23,8 @@ export function notificationKindIcon(kind: NotificationKind) {
       return <IconSend size={13} />;
     case "retry":
       return <IconRefresh size={13} />;
+    case "notice":
+      return <IconRepeat size={13} />;
   }
 }
 

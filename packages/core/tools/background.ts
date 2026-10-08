@@ -35,7 +35,12 @@ export const MAX_BACKGROUND_COMMANDS = 8;
 /** How many completed commands stay queryable (status/list/tail) per
  * session; older entries are dropped. */
 const MAX_COMPLETED_COMMANDS = 50;
-/** Raw output retained per command (bytes). */
+/** Raw output retained per command (bytes): the same cap the bash tool
+ * applies inline. Unlike bash, a background command's tail is shown without
+ * a truncation note and without a spill file — this buffer already dropped
+ * what precedes it and the command stays queryable through
+ * status/tail/notification, so `truncate.ts`'s note + spill path (used by
+ * bash) has no counterpart to share here. */
 const MAX_OUTPUT_BUFFER = MAX_TOOL_OUTPUT;
 /** Decoded output shown by status and completion notifications. */
 export const BACKGROUND_TAIL_LIMIT = 8 * 1024;

@@ -60,6 +60,10 @@ import { PersonalizationService } from "./personalization.ts";
 import { SavedPromptsService } from "./saved-prompts.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
+import {
+  createRequestShapeRepo,
+  type RequestShapeRepo,
+} from "./session/request-shapes.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
 import { SessionPool } from "./agent/pool.ts";
 import { withProviderRetryDefaults } from "./agent/llm-retry.ts";
@@ -105,6 +109,7 @@ export class LumiscaCore {
   private readonly savedPrompts: SavedPromptsService;
   private readonly sessions: SessionRepo;
   private readonly messages: MessageRepo;
+  private readonly requestShapes: RequestShapeRepo;
   private readonly pool: SessionPool;
   private readonly mcp: McpService;
   private readonly commandSafety: CommandSafety;
@@ -139,6 +144,7 @@ export class LumiscaCore {
       savedPrompts?: SavedPromptsService;
       sessions?: SessionRepo;
       messages?: MessageRepo;
+      requestShapes?: RequestShapeRepo;
       commandSafety?: CommandSafety;
       pool?: SessionPool;
       mcp?: McpService;
@@ -162,6 +168,8 @@ export class LumiscaCore {
       new SavedPromptsService(this.settings);
     this.sessions = overrides.sessions ?? createSessionRepo(db);
     this.messages = overrides.messages ?? createMessageRepo(db);
+    this.requestShapes = overrides.requestShapes ??
+      createRequestShapeRepo(db);
     const streamFn = withProviderRetryDefaults(
       this.models.models.streamFn((providerId) =>
         this.models.getProviderWithRetired(providerId)
@@ -194,6 +202,7 @@ export class LumiscaCore {
         this.sessions.updateSystemPrompt(id, systemPrompt),
       streamFn,
       messageRepo: this.messages,
+      requestShapeRepo: this.requestShapes,
       loadGoal: (id) => this.sessions.getGoal(id),
       saveGoal: (id, text, maxIterations) => {
         this.sessions.setGoal(id, text, maxIterations);

@@ -7,6 +7,7 @@ import type {
   ImageContent,
   Message,
   Model,
+  RequestShape,
   StreamFn,
   TextContent,
 } from "../ai/types.ts";
@@ -19,11 +20,7 @@ import type { MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import {
-  addToolsToAgent,
-  appendMcpToolsNote,
-  registryToolPair,
-} from "../mcp/tools.ts";
+import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
@@ -120,6 +117,10 @@ export interface SessionAgentOptions {
    * applies without rebuilding the agent; omitted → the compactor's
    * defaults. */
   compactionPolicy?: () => CompactionPolicyInput;
+  /** Called for every request the agent loop sends, with the shape the
+   * provider sees (see RequestShape). The pool records the shapes that cost
+   * the prompt cache; omitted → nothing is observed. */
+  onRequestShape?: (shape: RequestShape) => void;
 }
 
 /**
@@ -262,6 +263,9 @@ export class SessionAgent {
       sessionId: options.sessionId,
       convertToLlm: (messages) => this.convertToLlm(messages),
       beforeStep: (signal) => this.compactBeforeStep(signal),
+      ...(options.onRequestShape !== undefined
+        ? { onRequest: options.onRequestShape }
+        : {}),
     });
     // Condense the history before a request would exceed the model's window
     // (see context-compaction.ts). The compactor reads the live prompt and
@@ -937,17 +941,16 @@ export class SessionAgent {
   }
 
   /** When the session's registry holds tools, attach the tool_search /
-   * tool_call pair — the only discoverable-tool surface the LLM ever
-   * sees — and teach it in the system prompt. Idempotent: called at
-   * attach time (the registry may already hold browser-lab tools seeded
-   * by the pool) and from addMcpTools when discovery fills the registry
-   * later. */
+   * tool_call pair — the only discoverable-tool surface the LLM ever sees.
+   * Idempotent: called at attach time (the registry may already hold
+   * browser-lab tools seeded by the pool) and from addMcpTools when
+   * discovery fills the registry later. The prompt is NOT touched: the
+   * contract for the pair is published as a context message when the pair
+   * appears (see mcp/context.ts), so the request's first tokens — the
+   * provider's cached prefix — never change under a running session. */
   private ensureSearchTools(): void {
     if (this.toolRegistry === null || this.toolRegistry.isEmpty) return;
     addToolsToAgent(this.agent, registryToolPair(() => this.toolRegistry!));
-    this.agent.state.systemPrompt = appendMcpToolsNote(
-      this.agent.state.systemPrompt,
-    );
   }
 
   async waitForIdle(): Promise<void> {

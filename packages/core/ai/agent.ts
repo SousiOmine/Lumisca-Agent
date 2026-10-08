@@ -20,10 +20,13 @@ import type {
   ImageContent,
   Model,
   ModelThinkingLevel,
+  RequestShape,
   StopReason,
   ToolCall,
   ToolResultMessage,
 } from "./types.ts";
+import type { NotificationMessage } from "../types/notification.ts";
+import { canonicalJson, fnv1a } from "../shared/digest.ts";
 
 export interface AgentDefaults {
   systemPrompt: string;
@@ -47,6 +50,13 @@ export interface AgentInit {
    * request that follows already reflects the replacement; a long
    * tool-heavy turn therefore cannot grow past the window mid-turn. */
   beforeStep?: (signal: AbortSignal) => Promise<void>;
+  /** Observe the model-visible shape of each request this loop sends (see
+   * RequestShape): the first request of the agent, and every later request
+   * whose head changed or whose message list is not an append-extension of
+   * its predecessor — exactly the events that cost the provider's prompt
+   * cache. The session agent records the shape; sub-agents leave it unset
+   * (their transcript is memory-only). */
+  onRequest?: (shape: RequestShape) => void;
 }
 
 /** A completion (tool result) of one tool call. */
@@ -91,12 +101,31 @@ export class Agent {
   /** The thinking level used by the current run, snapshotted at run start so
    * a mid-run level change never leaks into the in-flight exchange. */
   private runThinkingLevel: ModelThinkingLevel = "off";
+  private readonly onRequest: ((shape: RequestShape) => void) | undefined;
+  /** Fingerprint of the request sent last (see noteRequest): the head hash,
+   * the per-message hashes and their fold. Kept so the next request can be
+   * classified as an append-extension without re-hashing the messages the
+   * provider already saw. */
+  private previousHeadHash: string | undefined;
+  private previousMessageHashes: string[] | undefined;
+  private previousMessagesHash: string | undefined;
+  private readonly messageHashes = new WeakMap<object, string>();
+  /** The head hash of the current system prompt + tool set: recomputed only
+   * when one of them is replaced (identity compare), never per step. */
+  private headFingerprint:
+    | { prompt: string; tools: AgentTool[]; hash: string }
+    | undefined;
+  /** The last tool call seen and how many times it has repeated back to
+   * back (see noteToolCalls); reset by any other call and by a new prompt. */
+  private repeatSignature: string | undefined;
+  private repeatCount = 0;
 
   constructor(init: AgentInit) {
     this.streamFn = init.streamFn;
     this.sessionId = init.sessionId;
     this.convertToLlm = init.convertToLlm ?? ((m) => m as unknown[]);
     this.beforeStep = init.beforeStep;
+    this.onRequest = init.onRequest;
     this.state = {
       systemPrompt: init.initialState.systemPrompt,
       model: init.initialState.model,
@@ -267,6 +296,13 @@ export class Agent {
    * this way outside of a run (see SessionAgent.publishContexts): they are
    * history for the next LLM call, not a reason to start one. */
   private append(message: AgentMessage): void {
+    // A new prompt is a fresh instruction: it must never be read as a loop,
+    // so the repeat guard's counter resets (a notification or a tool result
+    // does not reset it — those are the loop's own output).
+    if (message.role === "user" || message.role === "mode") {
+      this.repeatSignature = undefined;
+      this.repeatCount = 0;
+    }
     this.state.messages.push(message);
   }
 
@@ -322,6 +358,9 @@ export class Agent {
       if (missing.length > 0) {
         await this.executeTools(missing);
       }
+      // Advisory loop hygiene, after the calls' results landed (so the
+      // reminder is the last thing the model reads before the next request).
+      this.noteToolCalls(pending);
       if (this.abortRequested) return;
     }
   }
@@ -352,6 +391,7 @@ export class Agent {
     const pendingResults: ToolResultMessage[] = [];
 
     const llmMessages = await this.convertToLlm(this.state.messages);
+    this.noteRequest(llmMessages as unknown[]);
     const stream = this.streamFn(
       model,
       {
@@ -491,6 +531,108 @@ export class Agent {
     this.emit({ type: "message_end", message });
   }
 
+  /** Fingerprint the request that is about to be sent (see RequestShape) and
+   * report it to the observer. A request is an append-extension of its
+   * predecessor when the head (system prompt + tool schemas) is unchanged
+   * and the message list starts with exactly the previous one: only then can
+   * the provider serve the shared prefix from its cache. A changed head and
+   * a rewritten history (compaction, rewind) are the two events that cost
+   * the whole cached prefix, and each is reported with its reason. */
+  private noteRequest(messages: unknown[]): void {
+    if (this.onRequest === undefined) return;
+    const headHash = this.headHash();
+    const hashes = messages.map((message) => this.messageHash(message));
+    const previous = this.previousMessageHashes;
+    const previousFold = this.previousMessagesHash;
+    const extended = previous !== undefined && isPrefix(previous, hashes);
+    let change: RequestShape["change"];
+    if (this.previousHeadHash === undefined) change = "initial";
+    else if (headHash !== this.previousHeadHash) change = "head-changed";
+    else if (!extended) change = "history-rewritten";
+    // Fold incrementally: a request is normally its predecessor plus a few
+    // messages, so only that tail is folded again.
+    let messagesHash: string;
+    if (extended && previous !== undefined && previousFold !== undefined) {
+      messagesHash = fnv1a(
+        previousFold + hashes.slice(previous.length).join(""),
+      );
+    } else {
+      messagesHash = fnv1a(hashes.join(""));
+    }
+    this.previousHeadHash = headHash;
+    this.previousMessageHashes = hashes;
+    this.previousMessagesHash = messagesHash;
+    this.onRequest({
+      headHash,
+      messagesHash,
+      messageCount: hashes.length,
+      ...(change !== undefined ? { change } : {}),
+    });
+  }
+
+  /** The head hash of the current request (system prompt + tool schemas).
+   * Cached by identity: the prompt string and the tools array are replaced
+   * only when they actually change, so the hash is computed once per
+   * revision instead of once per step. */
+  private headHash(): string {
+    const cached = this.headFingerprint;
+    if (
+      cached !== undefined && cached.prompt === this.state.systemPrompt &&
+      cached.tools === this.state.tools
+    ) {
+      return cached.hash;
+    }
+    const hash = fnv1a(
+      `${this.state.systemPrompt}\u0000${canonicalJson(this.state.tools)}`,
+    );
+    this.headFingerprint = {
+      prompt: this.state.systemPrompt,
+      tools: this.state.tools,
+      hash,
+    };
+    return hash;
+  }
+
+  /** Hash of one wire message. Cached per object: the messages the converter
+   * passes through keep their identity between steps, so only the messages
+   * derived for this step (a context snapshot, a notification, a checkpoint)
+   * are hashed again. */
+  private messageHash(message: unknown): string {
+    if (message === null || typeof message !== "object") {
+      return fnv1a(JSON.stringify(message) ?? "null");
+    }
+    const key = message as object;
+    const cached = this.messageHashes.get(key);
+    if (cached !== undefined) return cached;
+    const hash = fnv1a(JSON.stringify(message) ?? "null");
+    this.messageHashes.set(key, hash);
+    return hash;
+  }
+
+  /** Loop hygiene: count consecutive calls of the same tool with identical
+   * arguments and, at the configured repeat counts, append one advisory
+   * reminder — never blocking the call (the DeepSeek Harness's
+   * repeat-tool-reminder; a stuck model is nudged to inspect the result it
+   * already has and change approach). Runs after the calls' results landed,
+   * so the reminder follows them in the transcript and in the next request.
+   * Any other call resets the count, and so does a new prompt (see append). */
+  private noteToolCalls(calls: readonly ToolCall[]): void {
+    let reminder: NotificationMessage | undefined;
+    for (const call of calls) {
+      const signature = `${call.name}\u0000${canonicalJson(call.arguments)}`;
+      this.repeatCount = signature === this.repeatSignature
+        ? this.repeatCount + 1
+        : 1;
+      this.repeatSignature = signature;
+      if (REPEAT_REMINDER_AT.includes(this.repeatCount)) {
+        reminder = repeatReminder(call, this.repeatCount);
+      }
+    }
+    if (reminder === undefined) return;
+    this.state.messages.push(reminder);
+    this.announce(reminder);
+  }
+
   /** Fallback: execute tool calls the SDK did not run. Only test doubles
    * (faux provider) that bypass the SDK's tool loop reach here — the real
    * Vercel transport executes via the tools' execute functions. */
@@ -556,6 +698,54 @@ export class Agent {
       this.announce(result);
     }
   }
+}
+
+/** Consecutive identical tool calls that earn an advisory reminder. The
+ * escalation mirrors the DeepSeek Harness's repeat-tool-reminder: a gentle
+ * nudge on the third, a detailed one (naming the call and its arguments) on
+ * the fifth and eighth. */
+const REPEAT_REMINDER_AT: readonly number[] = [3, 5, 8];
+
+/** Characters of the repeated arguments shown by the detailed reminder. */
+const REPEAT_ARGUMENTS_PREVIEW = 500;
+
+/** The advisory message for a repeated call (see Agent.noteToolCalls). */
+function repeatReminder(call: ToolCall, count: number): NotificationMessage {
+  const repeated = `${count} times in a row with identical arguments`;
+  const body = count >= REPEAT_REMINDER_AT[1]!
+    ? `You called ${call.name} ${repeated}. The repeats are not making ` +
+      "progress: inspect the latest result and choose a different action, " +
+      "different arguments, or finish the task instead of calling it " +
+      "again.\n- arguments: " +
+      canonicalJson(call.arguments).slice(0, REPEAT_ARGUMENTS_PREVIEW)
+    : `You called ${call.name} ${repeated}. Inspect the previous result ` +
+      "before calling it again: if the task is not complete, change the " +
+      "approach or the arguments instead of repeating the call.";
+  return {
+    role: "notification",
+    kind: "notice",
+    title: `[Repeated tool call: ${call.name}]`,
+    body,
+    status: "neutral",
+    // The loop appends it while the run is active: it joins that run's turn
+    // like a tool result (see the web's buildTurns — a message that did not
+    // start a run must not split the running turn).
+    steered: true,
+    timestamp: Date.now(),
+  };
+}
+
+/** True when `previous` is a prefix of `current` (same length or shorter,
+ * every element equal in order). */
+function isPrefix(
+  previous: readonly string[],
+  current: readonly string[],
+): boolean {
+  if (previous.length > current.length) return false;
+  for (let i = 0; i < previous.length; i++) {
+    if (previous[i] !== current[i]) return false;
+  }
+  return true;
 }
 
 /** Normalize a prompt input into a transcript message. */

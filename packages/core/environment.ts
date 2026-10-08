@@ -126,9 +126,9 @@ function detectTerminal(): string | undefined {
   return undefined;
 }
 
-/** e.g. "2026-08-11 (Tuesday)". */
-function today(): string {
-  const now = new Date();
+/** e.g. "2026-08-11 (Tuesday)". `now` is injectable so a caller (or a test)
+ * can ask for another day's reading. */
+export function today(now: Date = new Date()): string {
   const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
   return `${now.toISOString().slice(0, 10)} (${weekday})`;
 }
@@ -138,10 +138,13 @@ function modelLabel(model: EnvironmentModel | undefined): string | undefined {
   return model.name ?? `${model.provider}/${model.modelId}`;
 }
 
-/** The environment section of the system prompt: machine facts, the model
- * and today's date, so the agent knows what it runs on and when. Bullets
- * whose facts could not be detected are omitted; the date is always
- * included (it is the only fact the model cannot observe). */
+/** The environment section of the system prompt: the machine facts and the
+ * model, so the agent knows what it runs on. Bullets whose facts could not
+ * be detected are omitted. Everything here is stable for the session's life
+ * (the prompt is snapshotted at creation), which is exactly what the
+ * provider's prompt cache needs; the date is NOT part of it — it changes
+ * daily and is published as a context message instead (see
+ * agent/date-context.ts). */
 export function buildEnvironmentSection(model?: EnvironmentModel): string {
   const bullets = [`- OS: ${detectOs()}`];
   const cpu = detectCpu();
@@ -152,6 +155,5 @@ export function buildEnvironmentSection(model?: EnvironmentModel): string {
   if (terminal) bullets.push(`- Terminal: ${terminal}`);
   const label = modelLabel(model);
   if (label) bullets.push(`- Model: ${label}`);
-  bullets.push(`- Date: ${today()}`);
   return `\n\nEnvironment:\n${bullets.join("\n")}`;
 }

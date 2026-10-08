@@ -406,14 +406,13 @@ export function createEditFileTool(
     name: TOOL_EDIT,
     label: "Edit File",
     description:
-      "Replace the first occurrence of `old_string` with `new_string` in a " +
-      "file. `old_string` must appear at least once, else the call fails " +
-      "with `old_string not found in <path>`; line endings (CRLF vs LF) are " +
+      "Replace `old_string` with `new_string` in a file. `old_string` must " +
+      "appear exactly once: a missing match fails with `old_string not " +
+      "found in <path>`, and an ambiguous match fails with `old_string " +
+      "appears N times in <path>` without changing the file — include more " +
+      "surrounding context to make it unique. Line endings (CRLF vs LF) are " +
       "matched leniently and the replacement keeps the file's existing " +
-      "line-ending style. When `old_string` is ambiguous it is replaced " +
-      "once and the result carries `[warning: old_string appeared N times; " +
-      "only the first was replaced]`; pass a longer, unique `old_string` " +
-      "when that is not what you want.",
+      "line-ending style.",
     parameters: editSchema,
     execute: async (_id, params) => {
       const filePath = await requireResolved(ctx.sandbox, params.path);
@@ -432,24 +431,28 @@ export function createEditFileTool(
           throw new Error(`old_string not found in ${params.path}`);
         }
         const occurrences = normalized.split(needle).length - 1;
+        // Ambiguous matches are refused, never resolved by picking one:
+        // replacing the first of several matches can silently rewrite the
+        // wrong place, while failing makes the model retry with enough
+        // context to identify the intended one.
+        if (occurrences > 1) {
+          throw new Error(
+            `old_string appears ${occurrences} times in ${params.path}; ` +
+              "include more surrounding context to make it unique",
+          );
+        }
         const origIndex = mapOffset(content, normIndex);
         const origEnd = mapOffset(content, normIndex + needle.length);
         const updated = content.slice(0, origIndex) +
           toFileNewlines(params.new_string, content) +
           content.slice(origEnd);
         await Deno.writeTextFile(filePath, updated);
-        const note = occurrences > 1
-          ? `\n[warning: old_string appeared ${occurrences} times; only the first was replaced]`
-          : "";
         const { addedLines, removedLines } = diffLineCounts(
           params.old_string,
           params.new_string,
         );
         return {
-          content: [{
-            type: "text",
-            text: `Edited ${filePath}${note}`,
-          }],
+          content: [{ type: "text", text: `Edited ${filePath}` }],
           details: {
             path: filePath,
             replacements: 1,
