@@ -12,12 +12,19 @@ import {
   MCP_TEST_SOURCE,
   type McpConfig,
   type McpInfo,
+  type McpServerConfig,
   parseMcpConfig,
 } from "./config.ts";
 import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
 import type { McpServerStatus } from "./manager.ts";
 import { probeMcpServer } from "./client.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
+import {
+  connectionOAuthProvider,
+  isMcpAuthRequired,
+  McpOAuthStore,
+} from "./oauth.ts";
+import { McpAuthSessions, type McpAuthSnapshot } from "./oauth-session.ts";
 
 /** One tool reported by the settings UI's one-shot connection test. */
 export interface McpTestTool {
@@ -33,6 +40,10 @@ export interface McpTestResult {
   ok: boolean;
   tools: McpTestTool[];
   error?: string;
+  /** The server answered 401 (or asked for a sign-in the connection could
+   * not complete): the UI offers the OAuth sign-in instead of reading this
+   * as a broken server. */
+  needsAuth?: boolean;
 }
 
 /** The core surface this service needs (implemented by LumiscaCore). */
@@ -45,6 +56,14 @@ export interface McpServiceDeps {
   /** Guarded session mutation: refuses while any listed session is
    * streaming, applies the mutation, then rebuilds the agents. */
   applySessionChange(sessions: SessionInfo[], mutate: () => void): void;
+  /** Rebuild the sessions' MCP attachments from scratch (fresh connections
+   * and tool discovery), for a change no config write expresses — a
+   * completed OAuth sign-in. Also refuses while streaming. */
+  refreshSessionMcp(sessions: SessionInfo[]): void;
+  /** Where OAuth grants are kept. Injected so the session connections read
+   * the very store this service's sign-in writes (see mcp/oauth.ts);
+   * created from `settings` when absent. */
+  oauth?: McpOAuthStore;
 }
 
 /**
@@ -53,7 +72,14 @@ export interface McpServiceDeps {
  * write and reported to the settings UI with live per-session statuses.
  */
 export class McpService {
-  constructor(private readonly deps: McpServiceDeps) {}
+  /** The OAuth grants of every configured HTTP server. Shared with the
+   * session connections (see McpServiceDeps.oauth). */
+  readonly oauth: McpOAuthStore;
+  private readonly authSessions = new McpAuthSessions();
+
+  constructor(private readonly deps: McpServiceDeps) {
+    this.oauth = deps.oauth ?? new McpOAuthStore(deps.settings);
+  }
 
   /** Build the McpInfo surface (config + live statuses) for a config. */
   private toMcpInfo(
@@ -75,6 +101,7 @@ export class McpService {
           toolCount: status?.toolCount ?? 0,
           status: status?.status ?? "not_started",
           ...(status?.error !== undefined ? { error: status.error } : {}),
+          ...(status?.needsAuth === true ? { needsAuth: true } : {}),
         };
       }),
     };
@@ -229,6 +256,20 @@ export class McpService {
     }
   }
 
+  /** Parse config text that describes exactly one server; throws
+   * CoreError("invalid") when it does not. The settings UI's test and
+   * sign-in flows both send a single server. */
+  private parseSingleServer(text: string): McpServerConfig {
+    const config = this.parseConfig(text, MCP_TEST_SOURCE);
+    if (config.servers.length !== 1) {
+      throw new CoreError(
+        `MCP config needs exactly one server, got ${config.servers.length}`,
+        "invalid",
+      );
+    }
+    return config.servers[0]!;
+  }
+
   /**
    * One-shot connection test of a single-server config (the settings UI's
    * "test" button): connect, list the tools, disconnect. Connection
@@ -240,18 +281,21 @@ export class McpService {
    * The probe runs in the server process's working directory, which is
    * where a relative `cwd` resolves (the settings UI edits the app-level
    * config, which has no workspace of its own).
+   *
+   * A server that answers 401 is reported as `needsAuth`, not as a
+   * failure: the server is fine, it just wants the user to sign in first
+   * (see startAuth).
    */
   async testServer(text: string, timeoutMs?: number): Promise<McpTestResult> {
-    const config = this.parseConfig(text, MCP_TEST_SOURCE);
-    if (config.servers.length !== 1) {
-      throw new CoreError(
-        `MCP test needs exactly one server, got ${config.servers.length}`,
-        "invalid",
-      );
-    }
-    const server = config.servers[0]!;
+    const server = this.parseSingleServer(text);
+    // A stored grant is what makes the probe connect *as* the signed-in
+    // user (and refresh the token when it has expired). Without one the
+    // plain 401 is the answer, and it carries needsAuth below.
+    const authProvider = connectionOAuthProvider(this.oauth, server);
     try {
-      const tools = await probeMcpServer(server, Deno.cwd(), timeoutMs);
+      const tools = await probeMcpServer(server, Deno.cwd(), timeoutMs, {
+        ...(authProvider !== undefined ? { authProvider } : {}),
+      });
       return {
         ok: true,
         tools: tools.map((tool) => ({
@@ -262,7 +306,101 @@ export class McpService {
         })),
       };
     } catch (error) {
-      return { ok: false, tools: [], error: errorMessage(error) };
+      return {
+        ok: false,
+        tools: [],
+        error: errorMessage(error),
+        ...(isMcpAuthRequired(error) ? { needsAuth: true } : {}),
+      };
+    }
+  }
+
+  /**
+   * Start an interactive OAuth sign-in for one HTTP server. The flow runs
+   * in the background; the resolved snapshot carries the authorization URL
+   * the UI opens (or the reason the flow could not start).
+   */
+  async startAuth(
+    text: string,
+    redirectUri: string,
+  ): Promise<McpAuthSnapshot> {
+    const server = this.parseSingleServer(text);
+    if (server.type !== "http" || server.url === undefined) {
+      throw new CoreError(
+        "OAuth sign-in needs an HTTP server (one with a url)",
+        "invalid",
+      );
+    }
+    return await this.authSessions.create(server, this.oauth, redirectUri)
+      .started();
+  }
+
+  /** The current state of one sign-in, or undefined once it is forgotten. */
+  getAuth(sessionId: string): McpAuthSnapshot | undefined {
+    return this.authSessions.get(sessionId)?.snapshot();
+  }
+
+  /** Give up on a sign-in (the user cancelled it). */
+  cancelAuth(sessionId: string): boolean {
+    const session = this.authSessions.get(sessionId);
+    if (session === undefined) return false;
+    session.cancel();
+    return true;
+  }
+
+  /**
+   * Finish the sign-in the browser came back to: `state` names the flow,
+   * and either `code` (to exchange for tokens) or `error` (the
+   * authorization server's refusal) says how it went. Undefined when no
+   * sign-in waits on that state — an expired, cancelled or forged callback.
+   */
+  async completeAuth(input: {
+    state: string;
+    code?: string;
+    error?: string;
+  }): Promise<McpAuthSnapshot | undefined> {
+    const session = this.authSessions.getByState(input.state);
+    if (session === undefined) return undefined;
+    if (input.error !== undefined) {
+      session.fail(`authorization failed: ${input.error}`);
+    } else if (input.code !== undefined) {
+      await session.complete(input.code);
+    } else {
+      session.fail(
+        "the authorization response carried neither a code nor an error",
+      );
+    }
+    const snapshot = session.snapshot();
+    if (snapshot.status === "done") {
+      this.refreshSessionsUsing(session.serverUrl);
+    }
+    return snapshot;
+  }
+
+  /** Reconnect the sessions whose merged config uses `serverUrl`, so the
+   * grant this sign-in just stored reaches them without an unrelated config
+   * edit (see McpServiceDeps.refreshSessionMcp). A session that is running
+   * cannot be rebuilt; it picks the grant up at its next rebuild. */
+  private refreshSessionsUsing(serverUrl: string): void {
+    const sessions: SessionInfo[] = [];
+    for (const session of this.deps.listSessions()) {
+      let workspace: Workspace;
+      try {
+        workspace = this.deps.requireWorkspace(session.workspaceId);
+      } catch {
+        continue; // the workspace is gone: nothing to rebuild
+      }
+      const usesServer = this.loadMergedConfig(workspace).config.servers.some(
+        (server) => server.url === serverUrl,
+      );
+      if (usesServer) sessions.push(session);
+    }
+    if (sessions.length === 0) return;
+    try {
+      this.deps.refreshSessionMcp(sessions);
+    } catch {
+      // Streaming sessions refuse the rebuild (conflict); the grant is
+      // stored either way and applies the next time they are rebuilt.
     }
   }
 }

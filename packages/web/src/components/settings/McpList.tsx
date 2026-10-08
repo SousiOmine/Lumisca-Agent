@@ -1,8 +1,13 @@
 import { useEffect, useState } from "preact/compat";
 import {
   IconAlertTriangle,
+  IconCheck,
   IconChevronRight,
   IconCircleDashed,
+  IconCopy,
+  IconExternalLink,
+  IconLoader2,
+  IconLogin2,
   IconPlugConnected,
   IconPlus,
   IconTrash,
@@ -12,6 +17,7 @@ import type { McpInfo, McpServerInfo } from "../../types.ts";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import { useT } from "../../i18n.ts";
+import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { McpDetail } from "./McpDetail.tsx";
 import { mcpConfigFields } from "./mcpDraft.ts";
 
@@ -51,6 +57,13 @@ export function McpList() {
   useEffect(() => {
     void load();
   }, []);
+
+  /** Sign-in of a saved server (its status says the grant is missing or no
+   * longer accepted); the list reloads once the browser came back, so the
+   * badge shows what the session sees now. */
+  const signIn = useMcpSignIn(() => {
+    void load();
+  });
 
   /** Persist a full server list; asks before clobbering external edits. */
   const save = async (servers: McpServerInfo[]): Promise<boolean> => {
@@ -122,6 +135,7 @@ export function McpList() {
 
       <div className="stack-8">
         {error && <p className="error-text">{error}</p>}
+        {signIn.error && <p className="error-text">{signIn.error}</p>}
         {loading && <p className="settings-note">{t("common.loading")}</p>}
         {!loading && config && config.servers.length === 0 && (
           <div className="faint-box">
@@ -153,8 +167,12 @@ export function McpList() {
                     : s.status === "error"
                     ? (
                       <>
-                        <IconAlertTriangle size={12} />
-                        {t("settings.mcp.error")}
+                        {s.needsAuth
+                          ? <IconLogin2 size={12} />
+                          : <IconAlertTriangle size={12} />}
+                        {s.needsAuth
+                          ? t("settings.mcp.authNeeded")
+                          : t("settings.mcp.error")}
                       </>
                     )
                     : (
@@ -182,6 +200,36 @@ export function McpList() {
                 />
                 {t("settings.mcp.enabled")}
               </label>
+              {s.needsAuth && (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={signIn.pending}
+                  onClick={() => void signIn.start(s)}
+                >
+                  {signIn.pending
+                    ? <IconLoader2 size={13} className="spin" />
+                    : <IconExternalLink size={13} />}
+                  {signIn.pending
+                    ? t("settings.mcp.authWaiting")
+                    : t("settings.mcp.authStart")}
+                </button>
+              )}
+              {s.needsAuth && signIn.pending &&
+                signIn.authorizationUrl !== null && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void signIn.copyUrl()}
+                >
+                  {signIn.copied
+                    ? <IconCheck size={13} />
+                    : <IconCopy size={13} />}
+                  {signIn.copied
+                    ? t("settings.mcp.authCopied")
+                    : t("settings.mcp.authCopyUrl")}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn"

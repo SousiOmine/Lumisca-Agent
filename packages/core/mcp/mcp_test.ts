@@ -13,6 +13,7 @@ import { McpManager } from "./manager.ts";
 import { createMcpTools, sanitizeServerName } from "./tools.ts";
 import { McpService } from "./service.ts";
 import { probeMcpServer } from "./client.ts";
+import { startFakeMcpServer } from "./fake-http.ts";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import type { Workspace } from "../types/workspace.ts";
@@ -481,6 +482,7 @@ Deno.test("loadMergedConfig merges app, workspace and plugin MCP servers", async
     agentMcpStatus: () => null,
     requireWorkspace: () => workspace,
     applySessionChange: () => {},
+    refreshSessionMcp: () => {},
   });
 
   const merged = service.loadMergedConfig(workspace);
@@ -535,6 +537,7 @@ function makeTestService(): McpService {
       throw new Error("not used");
     },
     applySessionChange: () => {},
+    refreshSessionMcp: () => {},
   });
 }
 
@@ -654,4 +657,51 @@ Deno.test("testServer rejects invalid text and multi-server bodies", async () =>
       ),
     CoreError,
   );
+});
+
+// --- HTTP transport (headers and the 401 answer) ----------------------------
+
+Deno.test("an HTTP server receives the configured headers", async () => {
+  const server = startFakeMcpServer();
+  try {
+    const tools = await probeMcpServer(
+      {
+        name: "probe",
+        type: "http",
+        args: [],
+        env: {},
+        url: server.url,
+        headers: { Authorization: "Bearer test-token", "X-Extra": "1" },
+        enabled: true,
+      },
+      Deno.cwd(),
+      10_000,
+    );
+    assertEquals(tools.map((t) => t.name), ["echo"]);
+    // The headers ride in `requestInit`: passing them as a top-level
+    // transport option silently drops them (the SDK has no such option).
+    const sent = server.requests[0]!;
+    assertEquals(sent.headers.authorization, "Bearer test-token");
+    assertEquals(sent.headers["x-extra"], "1");
+  } finally {
+    await server.close();
+  }
+});
+
+Deno.test("testServer reports a 401 as needing a sign-in", async () => {
+  const server = startFakeMcpServer({ token: "secret" });
+  try {
+    const service = makeTestService();
+    const result = await service.testServer(
+      JSON.stringify({ mcpServers: { probe: { url: server.url } } }),
+      10_000,
+    );
+    // The server is reachable and healthy; it just wants the user to sign
+    // in (see mcp/oauth.ts). The UI offers that instead of a raw 401 body.
+    assertEquals(result.ok, false);
+    assertEquals(result.needsAuth, true);
+    assertEquals(result.tools, []);
+  } finally {
+    await server.close();
+  }
 });

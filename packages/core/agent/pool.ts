@@ -14,6 +14,7 @@ import type { TaskHub } from "../tools/task-hub.ts";
 import type { PendingQuestion } from "../tools/ask.ts";
 import type { TaskInfo } from "../shared/mod.ts";
 import type { McpConfig } from "../mcp/config.ts";
+import type { McpOAuthStore } from "../mcp/oauth.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
@@ -113,6 +114,10 @@ export interface AgentRuntime {
   /** Merged MCP config (app-level + workspace .mcp.json + plugins) for a
    * workspace, with collected config errors. */
   loadMergedMcp(workspace: Workspace): { config: McpConfig; errors: string[] };
+  /** Where MCP OAuth grants live: a session's connections use (and refresh)
+   * the tokens the settings sign-in stored. Absent in tests that build the
+   * pool by hand and never sign in. */
+  mcpOAuth?: McpOAuthStore;
   /** Forward an agent event to every frontend listener. */
   emit(event: ClientEvent): void;
   /** The session's browser-lab backend (Desktop WebView host), or
@@ -338,6 +343,30 @@ export class SessionPool {
     }
     mutate();
     for (const session of sessions) {
+      this.rebuild(session);
+    }
+  }
+
+  /** Rebuild the listed sessions' MCP attachments from scratch: a fresh
+   * manager reconnects every server and re-discovers its tools. Needed when
+   * what changed is not the config but the credentials — an interactive
+   * OAuth sign-in, which an attachment reused across agent rebuilds (and
+   * its already-failed connections) would never see. Streaming sessions
+   * refuse the rebuild, like every other agent replacement. */
+  refreshMcp(sessions: SessionInfo[]): void {
+    for (const session of sessions) {
+      this.assertNotStreaming(session.id);
+    }
+    for (const session of sessions) {
+      const resources = this.sessions.get(session.id);
+      if (resources?.agent === undefined) continue;
+      const previous = resources.mcp;
+      // Dropping the attachment makes the factory build a new one (with a
+      // fresh manager); the registry follows it, since a rebuild builds
+      // fresh tools.
+      resources.mcp = undefined;
+      resources.registry = undefined;
+      if (previous !== undefined) void previous.manager.close();
       this.rebuild(session);
     }
   }

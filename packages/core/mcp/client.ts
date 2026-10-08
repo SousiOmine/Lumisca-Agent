@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { McpServerConfig } from "./config.ts";
 import { resolveServerCwd } from "./config.ts";
 
@@ -15,23 +16,40 @@ export interface McpToolInfo {
  * the server package before it answers. */
 export const MCP_TEST_TIMEOUT_MS = 30_000;
 
+/** What a caller may add to a connection. */
+export interface McpTransportOptions {
+  /** OAuth client of an HTTP server (see mcp/oauth.ts). Omitted when the
+   * server has no stored grant: without one the 401 itself is the answer
+   * ("sign in to this server"), where a provider would walk discovery and
+   * registration only to end in an authorization nobody can finish. */
+  authProvider?: OAuthClientProvider;
+}
+
 /** Build the SDK transport for a server config. Single home of the
- * stdio/HTTP selection so the session client and the one-shot test probe
- * connect exactly the same way. */
-function createTransport(
+ * stdio/HTTP selection so the session client, the sign-in flow and the
+ * one-shot test probe connect exactly the same way. */
+export function createMcpTransport(
   config: McpServerConfig,
   workspaceRoot: string,
+  options: McpTransportOptions = {},
 ): StdioClientTransport | StreamableHTTPClientTransport {
-  return config.type === "stdio"
-    ? new StdioClientTransport({
+  if (config.type === "stdio") {
+    return new StdioClientTransport({
       command: config.command!,
       args: config.args,
       env: config.env,
       cwd: resolveServerCwd(config, workspaceRoot),
-    })
-    : new StreamableHTTPClientTransport(new URL(config.url!), {
-      headers: config.headers,
     });
+  }
+  return new StreamableHTTPClientTransport(new URL(config.url!), {
+    // Configured headers ride in `requestInit`: the transport builds its
+    // request headers from `requestInit.headers`, and an unknown top-level
+    // `headers` option is silently ignored (the SDK has no such option).
+    requestInit: { headers: config.headers },
+    ...(options.authProvider !== undefined
+      ? { authProvider: options.authProvider }
+      : {}),
+  });
 }
 
 /** Normalize an SDK tool entry into this module's shape (shared by the
@@ -96,8 +114,9 @@ export class McpServerClient {
     config: McpServerConfig,
     workspaceRoot: string,
     timeoutMs?: number,
+    options?: McpTransportOptions,
   ): Promise<McpServerClient> {
-    const transport = createTransport(config, workspaceRoot);
+    const transport = createMcpTransport(config, workspaceRoot, options);
     const client = new Client({ name: "lumisca", version: "0.1" });
     await client.connect(transport, { timeout: timeoutMs });
     return new McpServerClient(client);
@@ -193,8 +212,9 @@ export async function probeMcpServer(
   config: McpServerConfig,
   workspaceRoot: string,
   timeoutMs: number = MCP_TEST_TIMEOUT_MS,
+  options?: McpTransportOptions,
 ): Promise<McpToolInfo[]> {
-  const transport = createTransport(config, workspaceRoot);
+  const transport = createMcpTransport(config, workspaceRoot, options);
   // Installed before connect(): Protocol.connect chains whatever handler
   // the transport already carries, so this survives its own wiring.
   const closed = new Promise<void>((resolve) => {

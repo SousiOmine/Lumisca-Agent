@@ -229,6 +229,21 @@ export type {
   McpServerInfo,
 } from "./mcp/config.ts";
 export type { McpTestResult, McpTestTool } from "./mcp/service.ts";
+export {
+  connectionOAuthProvider,
+  isMcpAuthRequired,
+  MCP_AUTH_REQUIRED_MESSAGE,
+  MCP_OAUTH_CALLBACK_PATH,
+  MCP_OAUTH_KEY_PREFIX,
+  McpAuthRequiredError,
+  McpOAuthProvider,
+  type McpOAuthRecord,
+  McpOAuthStore,
+} from "./mcp/oauth.ts";
+export { McpAuthSession, McpAuthSessions } from "./mcp/oauth-session.ts";
+export type { McpAuthSnapshot, McpAuthStatus } from "./mcp/oauth-session.ts";
+export { createMcpTransport } from "./mcp/client.ts";
+export type { McpTransportOptions } from "./mcp/client.ts";
 export { McpManager } from "./mcp/manager.ts";
 export type { McpServerStatus, McpToolDef } from "./mcp/manager.ts";
 export { McpAttachment } from "./mcp/attachment.ts";

@@ -482,6 +482,27 @@ const SETTINGS_CASES: Case[] = [
     body: '{"mcpServers":{"probe":{"command":"npx"}}}',
   },
   {
+    // The sign-in flow takes the same raw single-server body.
+    name: "startMcpAuth (raw text body)",
+    method: "POST",
+    path: "/api/mcp/auth",
+    call: () =>
+      api.startMcpAuth('{"mcpServers":{"probe":{"url":"https://x"}}}'),
+    body: '{"mcpServers":{"probe":{"url":"https://x"}}}',
+  },
+  {
+    name: "getMcpAuth",
+    method: "GET",
+    path: "/api/mcp/auth/s-1",
+    call: () => api.getMcpAuth("s-1"),
+  },
+  {
+    name: "cancelMcpAuth",
+    method: "POST",
+    path: "/api/mcp/auth/s-1/cancel",
+    call: () => api.cancelMcpAuth("s-1"),
+  },
+  {
     name: "getSettings",
     method: "GET",
     path: "/api/settings",

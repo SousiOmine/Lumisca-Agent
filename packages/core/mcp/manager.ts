@@ -6,6 +6,8 @@ import {
   McpToolError,
   type McpToolInfo,
 } from "./client.ts";
+import { connectionOAuthProvider, isMcpAuthRequired } from "./oauth.ts";
+import type { McpOAuthStore } from "./oauth.ts";
 
 /** A tool exposed by an MCP server, ready to be wrapped as an AgentTool:
  * the shape reported by {@link McpServerClient.listTools} plus the owning
@@ -26,6 +28,10 @@ export interface McpServerStatus {
   toolCount: number;
   status: "ok" | "error" | "not_started";
   error?: string;
+  /** The failure is "this server wants an OAuth sign-in" rather than a
+   * broken server, so the settings UI can offer the sign-in instead of only
+   * showing the message. */
+  needsAuth?: boolean;
 }
 
 /**
@@ -44,12 +50,19 @@ export class McpManager {
     string,
     Promise<McpServerClient>
   >();
+  /** Servers whose last failure was a missing/expired OAuth grant, so the
+   * settings UI can offer a sign-in (see McpServerStatus.needsAuth). */
+  private readonly authRequired = new Set<string>();
   private toolsCache: McpToolDef[] | null = null;
   private closed = false;
 
   constructor(
     private readonly config: McpConfig,
     private readonly cwd: string,
+    /** Where a server's OAuth grant lives. Absent only where no sign-in can
+     * happen at all (tests); a server with a grant gets an OAuth client, so
+     * its tokens are used and refreshed like any other connection. */
+    private readonly oauth?: McpOAuthStore,
   ) {}
 
   private get enabledServers(): McpServerConfig[] {
@@ -74,7 +87,15 @@ export class McpManager {
     // instead of leaking its child process.
     let pending = this.pendingConnects.get(server.name);
     if (pending === undefined) {
-      pending = McpServerClient.connect(server, this.cwd).then(
+      // Only a server that already has a grant is connected through OAuth:
+      // the tokens are then used (and refreshed) transparently, while a
+      // server without one fails with the 401 that reports "sign in".
+      const authProvider = this.oauth === undefined
+        ? undefined
+        : connectionOAuthProvider(this.oauth, server);
+      pending = McpServerClient.connect(server, this.cwd, undefined, {
+        ...(authProvider !== undefined ? { authProvider } : {}),
+      }).then(
         (client) => {
           this.pendingConnects.delete(server.name);
           this.clients.set(server.name, client);
@@ -106,6 +127,7 @@ export class McpManager {
       try {
         const client = await this.getClient(server);
         const infos = await client.listTools();
+        this.authRequired.delete(server.name);
         for (const info of infos) {
           tools.push({ server: server.name, ...info });
         }
@@ -114,6 +136,11 @@ export class McpManager {
           server.name,
           errorMessage(error),
         );
+        if (isMcpAuthRequired(error)) {
+          this.authRequired.add(server.name);
+        } else {
+          this.authRequired.delete(server.name);
+        }
         this.dropClient(server.name); // allow a clean reconnect later
       }
     }
@@ -164,6 +191,7 @@ export class McpManager {
         toolCount: toolCounts.get(server.name) ?? 0,
         status: error !== undefined ? "error" : "ok",
         ...(error !== undefined ? { error } : {}),
+        ...(this.authRequired.has(server.name) ? { needsAuth: true } : {}),
       };
     });
   }

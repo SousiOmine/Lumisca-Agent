@@ -645,6 +645,47 @@ export const settings = {
   },
   "settings.mcp.testTools": { ja: "ツール一覧", en: "Tools" },
 
+  // --- mcp OAuth sign-in ----------------------------------------------------
+  /** Shown in place of a failure when the server asked for a sign-in. */
+  "settings.mcp.authRequired": {
+    ja: "このサーバーは OAuth 認証が必要です",
+    en: "This server requires an OAuth sign-in",
+  },
+  "settings.mcp.authStart": {
+    ja: "ブラウザで認証する",
+    en: "Sign in with browser",
+  },
+  "settings.mcp.authWaiting": {
+    ja: "ブラウザでの認証を待っています…",
+    en: "Waiting for the browser sign-in…",
+  },
+  "settings.mcp.authFailed": {
+    ja: "認証に失敗しました: {error}",
+    en: "Sign-in failed: {error}",
+  },
+  "settings.mcp.authStartFailed": {
+    ja: "認証を開始できませんでした",
+    en: "Could not start the sign-in",
+  },
+  "settings.mcp.authNeeded": {
+    ja: "要認証",
+    en: "Sign-in",
+  },
+  "settings.mcp.authHint": {
+    ja: "ブラウザでツールを認証",
+    en: "Authorize tools in your browser",
+  },
+  /** ウィンドウを開けない WebView（デスクトップアプリ）向けの回避策:
+   * 認証 URL をコピーして、ユーザー自身のブラウザで開いてもらいます。 */
+  "settings.mcp.authCopyUrl": {
+    ja: "認証 URL をコピー",
+    en: "Copy the sign-in URL",
+  },
+  "settings.mcp.authCopied": {
+    ja: "コピーしました",
+    en: "Copied",
+  },
+
   // --- connection list -------------------------------------------------------
   /** Panel heading (the settings nav reuses `settings.nav.servers`). */
   "settings.connection.title": { ja: "接続先サーバー", en: "Servers" },

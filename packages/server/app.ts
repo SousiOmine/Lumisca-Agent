@@ -8,6 +8,7 @@ import {
   LANGUAGE_KEY,
   type Locale,
   type LumiscaCore,
+  MCP_OAUTH_CALLBACK_PATH,
   parseAcceptLanguage,
   parseLocale,
   resolveLocale,
@@ -191,12 +192,15 @@ function installSecurityMiddleware(
   // keeps after such a visit (auth-cookie.ts) — that last form is what
   // saves a remote user from pasting the token into the address bar every
   // time. Static assets stay public (they contain no secrets) so the page
-  // can load them without a token query.
+  // can load them without a token query, and so does the MCP OAuth callback
+  // — the browser that comes back from the authorization server may be a
+  // different one than the app is open in, and it carries only the `state`
+  // of a sign-in this server started (see routes/mcp.ts).
   if (options.token) {
     const token = options.token;
     const publicPath = (path: string) =>
       path === "/assets/app.js" || path === "/styles.css" ||
-      path === "/favicon.png";
+      path === "/favicon.png" || path === MCP_OAUTH_CALLBACK_PATH;
     app.use("*", async (c, next) => {
       if (!publicPath(c.req.path)) {
         const cookieName = tokenCookieName(c.req.header("host"));
@@ -435,7 +439,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", fsRoutes());
   app.route("/api", workspaceRoutes(core));
   app.route("/api", skillRoutes(core));
-  app.route("/api", mcpRoutes(core));
+  app.route("/api", mcpRoutes(core, languageFor));
   app.route("/api", sessionRoutes(core));
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));

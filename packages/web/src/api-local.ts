@@ -7,6 +7,7 @@ import type {
   FsBrowse,
   FsPlace,
   GoalInfo,
+  McpAuthSnapshot,
   McpInfo,
   McpTestResult,
   ModelInfo,
@@ -329,6 +330,24 @@ export const api = {
       method: "POST",
       body: text,
     }),
+  /** Start an OAuth sign-in for one HTTP server (the same single-server
+   * config testMcpServer takes). Resolves once the flow waits for the
+   * browser, so the caller can open `authorizationUrl` right away. */
+  startMcpAuth: (text: string) =>
+    request<McpAuthSnapshot>("/api/mcp/auth", {
+      method: "POST",
+      body: text,
+    }),
+  /** How a running sign-in is doing (the flow itself lives server-side). */
+  getMcpAuth: (sessionId: string) =>
+    request<McpAuthSnapshot>(
+      `/api/mcp/auth/${encodeURIComponent(sessionId)}`,
+    ),
+  cancelMcpAuth: (sessionId: string) =>
+    request<{ ok: boolean }>(
+      `/api/mcp/auth/${encodeURIComponent(sessionId)}/cancel`,
+      { method: "POST" },
+    ),
   getSettings: () => request<Record<string, string>>("/api/settings"),
   setSetting: (key: string, value: string) =>
     request<{ ok: boolean }>(`/api/settings/${key}`, {

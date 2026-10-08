@@ -1661,6 +1661,36 @@ Deno.test("token auth remembers a presented token in a cookie", async () => {
   }
 });
 
+Deno.test("the MCP OAuth callback is reachable without the token", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const app = createApp(core, { token: "secret-token" });
+  const HOST = { host: "127.0.0.1:8000" };
+  try {
+    // The browser that comes back from the authorization server may not be
+    // the one the app is open in, so it carries no token cookie. The state
+    // in the URL is the only credential the callback needs; an unknown one
+    // is answered with the sign-in page, not with the guard's 401.
+    const callback = await app.fetch(
+      new Request(
+        "http://127.0.0.1:8000/api/mcp/oauth/callback?state=unknown&code=x",
+        { headers: { ...HOST, accept: "text/html" } },
+      ),
+    );
+    assertEquals(callback.status, 404);
+    const page = await callback.text();
+    assert(page.includes("MCP の認証") || page.includes("MCP sign-in"));
+
+    // Every other MCP path stays behind the token.
+    const guarded = await app.fetch(
+      new Request("http://127.0.0.1:8000/api/mcp/auth/s1", { headers: HOST }),
+    );
+    assertEquals(guarded.status, 401);
+  } finally {
+    core.close();
+  }
+});
+
 Deno.test("host guard rejects non-loopback hosts by default", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);

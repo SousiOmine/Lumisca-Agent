@@ -94,7 +94,11 @@ export class AgentFactory {
         log.debug(`session ${session.id}: MCP config changed, rebuilding`);
       }
       mcp = new McpAttachment(
-        new McpManager(mergedMcp.config, workspace.folders[0] ?? Deno.cwd()),
+        new McpManager(
+          mergedMcp.config,
+          workspace.folders[0] ?? Deno.cwd(),
+          this.deps.mcpOAuth,
+        ),
         mergedMcp.config,
       );
       resources.mcp = mcp;

@@ -63,6 +63,26 @@ export const common = {
       "The token value is in the server's configuration (LUMISCA_TOKEN / service.env). This screen also appears when the browser rejects cookies.",
   },
 
+  // --- MCP OAuth callback page (server/render.ts) ---------------------------
+  /** The page the browser lands on after the authorization server redirects
+   * it back (see server/routes/mcp.ts). Served without the app, so it
+   * renders in the language the server resolved for that request. */
+  "common.mcpAuth.title": { ja: "MCP の認証", en: "MCP sign-in" },
+  "common.mcpAuth.done": {
+    ja: "認証が完了しました。このタブを閉じて Lumisca に戻ってください。",
+    en: "Signed in. Close this tab and return to Lumisca.",
+  },
+  "common.mcpAuth.failed": {
+    ja: "認証に失敗しました: {error}",
+    en: "Sign-in failed: {error}",
+  },
+  "common.mcpAuth.missing": {
+    ja:
+      "この認証リクエストは見つかりませんでした（期限切れか、すでに完了しています）。Lumisca に戻り、もう一度お試しください。",
+    en:
+      "This sign-in request was not found (it expired or already finished). Return to Lumisca and try again.",
+  },
+
   // --- core-generated transcript text --------------------------------------
   /** Provisional name of a session, before the title generator names it
    * (see shared/misc.ts formatSessionName). */

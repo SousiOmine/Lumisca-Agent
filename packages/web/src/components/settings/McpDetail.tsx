@@ -1,11 +1,18 @@
 import { useState } from "preact/compat";
 import type { CSSProperties } from "preact/compat";
-import { IconArrowLeft } from "@tabler/icons-preact";
+import {
+  IconArrowLeft,
+  IconCheck,
+  IconCopy,
+  IconExternalLink,
+  IconLoader2,
+} from "@tabler/icons-preact";
 import { serializeMcpServers } from "@lumisca/core/shared";
 import type { McpServerInfo, McpTestTool } from "../../types.ts";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import { useT } from "../../i18n.ts";
+import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { Field } from "../Field.tsx";
 import { mcpDraftKey } from "./mcpDraft.ts";
 
@@ -43,6 +50,9 @@ interface McpTestState {
   status: "testing" | "ok" | "error";
   tools: McpTestTool[];
   error?: string;
+  /** The server answered "sign in first": the form offers the OAuth flow
+   * instead of reading the 401 as a broken server. */
+  needsAuth?: boolean;
 }
 
 /** Edit (or create) one MCP server. Saving calls back with the assembled
@@ -51,7 +61,11 @@ interface McpTestState {
  * A new server can be tested before it is added: the primary button stays
  * disabled until a test has reached the server and listed its tools, so a
  * broken command cannot enter the config unnoticed. Editing is not gated —
- * the server is already saved and its status is visible in the list. */
+ * the server is already saved and its status is visible in the list.
+ *
+ * An HTTP server that answers 401 is not a failure but a server that wants
+ * an OAuth sign-in: the form then offers the sign-in flow and re-tests by
+ * itself once the browser came back (see useMcpSignIn). */
 export function McpDetail({
   initial,
   existingNames,
@@ -147,6 +161,7 @@ export function McpDetail({
         status: answer.ok ? "ok" : "error",
         tools: answer.tools,
         ...(answer.error !== undefined ? { error: answer.error } : {}),
+        ...(answer.needsAuth === true ? { needsAuth: true } : {}),
       });
       setPassed(answer.ok);
     } catch (e) {
@@ -156,6 +171,12 @@ export function McpDetail({
       setPassed(false);
     }
   };
+
+  /** Sign-in of the draft server; the test runs again by itself once the
+   * browser came back, so the button's promise is what the user sees. */
+  const signIn = useMcpSignIn(() => {
+    void runTest();
+  });
 
   return (
     <>
@@ -305,10 +326,66 @@ export function McpDetail({
           </div>
         )}
 
-        {result?.status === "error" && (
+        {result?.status === "error" && !result.needsAuth && (
           <p className="error-text" style={{ margin: 0 }}>
             {t("settings.mcp.testFailed", { error: result.error ?? "" })}
           </p>
+        )}
+
+        {result?.status === "error" && result.needsAuth && (
+          <div className="stack-6">
+            <p className="error-text" style={{ margin: 0 }}>
+              {t("settings.mcp.authRequired")}
+            </p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={signIn.pending}
+                onClick={() => void signIn.start(draft)}
+              >
+                {signIn.pending
+                  ? <IconLoader2 size={14} className="spin" />
+                  : <IconExternalLink size={14} />}
+                {signIn.pending
+                  ? t("settings.mcp.authWaiting")
+                  : t("settings.mcp.authStart")}
+              </button>
+              {signIn.pending && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void signIn.cancel()}
+                >
+                  {t("common.cancel")}
+                </button>
+              )}
+              {signIn.pending && signIn.authorizationUrl !== null && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void signIn.copyUrl()}
+                >
+                  {signIn.copied
+                    ? <IconCheck size={14} />
+                    : <IconCopy size={14} />}
+                  {signIn.copied
+                    ? t("settings.mcp.authCopied")
+                    : t("settings.mcp.authCopyUrl")}
+                </button>
+              )}
+              {!signIn.pending && (
+                <span className="settings-note">
+                  {t("settings.mcp.authHint")}
+                </span>
+              )}
+            </div>
+            {signIn.error && (
+              <p className="error-text" style={{ margin: 0 }}>
+                {signIn.error}
+              </p>
+            )}
+          </div>
         )}
 
         {test !== null && result === null && (

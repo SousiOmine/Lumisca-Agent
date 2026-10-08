@@ -166,3 +166,48 @@ export function renderTokenRequiredPage(language: Locale): string {
   </body>
 </html>`;
 }
+
+/** How an MCP sign-in ended, as far as the browser that comes back can be
+ * told (see routes/mcp.ts). */
+export type McpAuthOutcome = "done" | "failed" | "missing";
+
+/** The page the browser lands on when the authorization server redirects it
+ * back. It is served outside the app — the tab is usually a different one,
+ * and the client bundle may never load there — so, like the token-required
+ * page, it carries its own minimal styling and renders in the language the
+ * server resolved for that request. It names no host, token or server. */
+export function renderMcpAuthPage(
+  language: Locale,
+  outcome: McpAuthOutcome,
+  detail?: string,
+): string {
+  const message = outcome === "done"
+    ? translate(language, "common.mcpAuth.done")
+    : outcome === "failed"
+    ? translate(language, "common.mcpAuth.failed", { error: detail ?? "" })
+    : translate(language, "common.mcpAuth.missing");
+  const title = translate(language, "common.mcpAuth.title");
+  return `<!doctype html>
+<html lang="${language}">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lumisca Agent — ${escapeHtml(title)}</title>
+    <style>
+      :root { color-scheme: dark light; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0; padding: 48px 24px; line-height: 1.7;
+      }
+      main { max-width: 640px; margin: 0 auto; }
+      h1 { font-size: 20px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(message)}</p>
+    </main>
+  </body>
+</html>`;
+}

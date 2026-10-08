@@ -23,6 +23,8 @@ export type {
   ContextMessage,
   GoalInfo,
   Locale,
+  McpAuthSnapshot,
+  McpAuthStatus,
   McpInfo,
   McpServerInfo,
   McpTestResult,

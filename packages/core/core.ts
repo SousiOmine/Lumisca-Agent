@@ -74,6 +74,8 @@ import { skillInfo } from "./skills/discover.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
 import type { McpTestResult } from "./mcp/service.ts";
+import { McpOAuthStore } from "./mcp/oauth.ts";
+import type { McpAuthSnapshot } from "./mcp/oauth-session.ts";
 import { CommandSafety } from "./safety/command-safety.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
@@ -112,6 +114,8 @@ export class LumiscaCore {
   private readonly requestShapes: RequestShapeRepo;
   private readonly pool: SessionPool;
   private readonly mcp: McpService;
+  /** MCP OAuth grants (see mcp/oauth.ts), shared with the session pool. */
+  private readonly mcpOAuth: McpOAuthStore;
   private readonly commandSafety: CommandSafety;
   /** Browser-lab backend (Desktop WebView host), or
    * undefined in plain server mode — the agent then gets no browser
@@ -182,7 +186,12 @@ export class LumiscaCore {
         getFastModel: () => this.models.getFastModel(),
         streamFn,
       });
+    // One store of MCP OAuth grants, shared by the sign-in flow (settings)
+    // and the session connections (pool), so a sign-in is immediately what
+    // the next connection uses.
+    this.mcpOAuth = new McpOAuthStore(this.settings);
     this.pool = overrides.pool ?? new SessionPool({
+      mcpOAuth: this.mcpOAuth,
       requireModel: (provider, modelId) => this.requireModel(provider, modelId),
       getImageAnalysisModel: () => this.models.getImageAnalysisModel(),
       getFastModel: () => this.models.getFastModel(),
@@ -232,12 +241,14 @@ export class LumiscaCore {
     });
     this.mcp = overrides.mcp ?? new McpService({
       settings: this.settings,
+      oauth: this.mcpOAuth,
       listSessions: (workspaceId) => this.sessions.list(workspaceId),
       agentMcpStatus: (sessionId) =>
         this.pool.get(sessionId)?.getMcpStatus() ?? null,
       requireWorkspace: (id) => this.requireWorkspace(id),
       applySessionChange: (sessions, mutate) =>
         this.pool.applyChange(sessions, mutate),
+      refreshSessionMcp: (sessions) => this.pool.refreshMcp(sessions),
     });
     this.workspaces = overrides.workspaces ??
       new WorkspaceService(createWorkspaceRepo(db), {
@@ -657,6 +668,35 @@ export class LumiscaCore {
    * child processes this app owns. */
   testMcpServer(text: string): Promise<McpTestResult> {
     return this.mcp.testServer(text);
+  }
+
+  /** Start an interactive OAuth sign-in for one HTTP MCP server (the
+   * settings UI's "sign in" flow). `redirectUri` is where the browser is
+   * sent back — a path of this server, so the callback reaches the process
+   * that holds the PKCE verifier. Resolves once the flow either waits for
+   * the browser (the snapshot carries the authorization URL) or fails to
+   * start. */
+  startMcpAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
+    return this.mcp.startAuth(text, redirectUri);
+  }
+
+  /** Live state of one sign-in, for the UI's poll. */
+  getMcpAuth(sessionId: string): McpAuthSnapshot | undefined {
+    return this.mcp.getAuth(sessionId);
+  }
+
+  /** Abandon a sign-in. False once it is gone (already settled/expired). */
+  cancelMcpAuth(sessionId: string): boolean {
+    return this.mcp.cancelAuth(sessionId);
+  }
+
+  /** Finish the sign-in the browser came back to: `state` names the flow,
+   * `code` is exchanged for tokens, an `error` records the authorization
+   * server's refusal. Undefined when no sign-in waits on that state. */
+  completeMcpAuth(
+    input: { state: string; code?: string; error?: string },
+  ): Promise<McpAuthSnapshot | undefined> {
+    return this.mcp.completeAuth(input);
   }
 
   // --- sessions -----------------------------------------------------------
