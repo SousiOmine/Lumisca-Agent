@@ -12,6 +12,7 @@ import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { usePanelInset } from "./hooks/usePanelInset.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
+import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
 import { quit } from "./shell.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
 import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
@@ -38,6 +39,10 @@ export function App({ initialData }: AppProps): ReactElement {
   // Follow the visual viewport: the software keyboard on a phone shrinks it,
   // and the app shrinks with it so the composer stays reachable.
   useAppHeight();
+  // Backspace outside a text field would navigate the WebView back (macOS
+  // WebKit), reloading the app and discarding whatever is open — a settings
+  // dialog with a half-typed server, for one.
+  useBackspaceGuard();
   const { theme, setTheme, error: themeError } = useTheme(
     initialData?.theme ?? "dark",
   );
