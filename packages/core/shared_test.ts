@@ -19,7 +19,7 @@ import {
   summarizeContextUsage,
 } from "./shared/mod.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "./ai/faux.ts";
-import type { AgentMessage } from "./ai/types.ts";
+import type { AgentMessage, ImageContent } from "./ai/types.ts";
 
 Deno.test("model preference keys are distinct settings keys", () => {
   assertEquals(FAST_MODEL_KEY, "model_fast");
@@ -223,6 +223,42 @@ Deno.test("estimateMessageTokens: images are priced by a fixed visual budget", (
   // would overstate a screenshot by orders of magnitude.
   assertEquals(tokens < 10_000, true);
   assertEquals(tokens >= IMAGE_TOKEN_ESTIMATE, true);
+});
+
+Deno.test("estimateMessageTokens: a mode message costs its full prompt and its images", () => {
+  const mode: Extract<AgentMessage, { role: "mode" }> = {
+    role: "mode",
+    modeId: "plan",
+    optionId: "",
+    modeLabel: "プランモード",
+    // The UI shows the short text; the model reads the full prompt only.
+    shortText: "x".repeat(400),
+    fullPrompt: "abcd",
+    images: [],
+    timestamp: 1,
+  };
+  const user: Extract<AgentMessage, { role: "user" }> = {
+    role: "user",
+    content: [{ type: "text", text: "abcd" }],
+    timestamp: 1,
+  };
+  const image: ImageContent = {
+    type: "image",
+    data: "A".repeat(100_000),
+    mimeType: "image/png",
+  };
+
+  // The mode message is priced exactly like the user message the model
+  // receives in its place (see toLlmMessages): the same text, the same
+  // per-image visual budget.
+  assertEquals(estimateMessageTokens(mode), estimateMessageTokens(user));
+  assertEquals(
+    estimateMessageTokens({ ...mode, images: [image] }),
+    estimateMessageTokens({
+      ...user,
+      content: [{ type: "text", text: "abcd" }, image],
+    }),
+  );
 });
 
 Deno.test("estimateMessageTokens: tool calls are priced by their arguments", () => {

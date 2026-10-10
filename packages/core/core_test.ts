@@ -16,6 +16,7 @@ import type {
   ComputerAction,
   ComputerActionResult,
   ComputerHost,
+  ImageContent,
   RawCapture,
   Rect,
 } from "./mod.ts";
@@ -552,6 +553,61 @@ Deno.test("rewind deletes a mode message (slash-command prompt) and everything a
   core.openSession(session.id);
   assertEquals(conversationMessages(core.getAgent(session.id)!).length, 0);
 
+  core.close();
+});
+
+Deno.test("mode prompt keeps the images attached in the composer", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  // Capture what the model is asked: the messages of the run's request.
+  let sent: StreamRequest["messages"] | undefined;
+  faux.setResponses([
+    (context: StreamRequest) => {
+      sent = context.messages;
+      return fauxAssistantMessage("plan reply");
+    },
+  ]);
+
+  // The web path (startPrompt) with a mode and a pasted image: plan mode
+  // entered on the draft composer (`/plan 依頼文`) after attaching a
+  // screenshot. Attaching images to a mode prompt must work exactly like
+  // attaching them to a plain message.
+  const image: ImageContent = {
+    type: "image",
+    data: bytesToBase64(MINI_PNG),
+    mimeType: "image/png",
+  };
+  const fullPrompt = "あなたは実装プランナーです。履歴機能を追加して";
+  core.startPrompt(session.id, fullPrompt, [image], {
+    modeId: "plan",
+    optionId: "",
+    modeLabel: "プランモード",
+    shortText: "履歴機能を追加して",
+  });
+  await core.getAgent(session.id)!.waitForIdle();
+
+  // The transcript stores the image on the mode message (the UI renders it
+  // in the bubble; the rewind action restores it to the composer).
+  const modeMessage = core.getAgent(session.id)!.messages.find(
+    (m): m is Extract<AgentMessage, { role: "mode" }> => m.role === "mode",
+  )!;
+  assertEquals(modeMessage.images, [image]);
+
+  // The model receives the full prompt text together with the image.
+  const prompt = sent!.filter((m) => m.role === "user").at(-1)!;
+  assert(Array.isArray(prompt.content));
+  assertEquals(
+    prompt.content.some((b) => b.type === "text" && b.text === fullPrompt),
+    true,
+  );
+  assertEquals(prompt.content.some((b) => b.type === "image"), true);
   core.close();
 });
 

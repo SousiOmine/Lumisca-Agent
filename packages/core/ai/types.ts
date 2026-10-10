@@ -196,6 +196,10 @@ export interface ModeMessage {
   shortText: string;
   /** The full prompt sent to the LLM (via toLlmMessages). */
   fullPrompt: string;
+  /** Images attached to the prompt in the composer, sent to the LLM after
+   * the full prompt; see the canonical, documented definition in
+   * types/mode-message.ts — keep the two in sync. */
+  images: ImageContent[];
   /** Steered-into-a-running-run stamp; see the canonical, documented
    * definition in types/mode-message.ts — keep the two in sync. */
   steered?: boolean;

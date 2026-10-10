@@ -35,7 +35,7 @@ export interface MessageRepo {
 /** Version of the stored message envelope. Bump when the AgentMessage
  * shape changes (e.g. after a pi major upgrade) and add a normalizer to
  * decodeStoredMessage so older rows keep decoding. */
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 
 interface StoredEnvelope {
   v: number;
@@ -64,14 +64,25 @@ function decodeStoredMessage(content: string): AgentMessage {
     const envelope = parsed as StoredEnvelope;
     switch (envelope.v) {
       case 1:
+        return upgradeFromV1(envelope.message);
+      case 2:
         return envelope.message;
       default:
         // Unknown (future) version: keep the payload rather than losing it.
         return envelope.message;
     }
   }
-  // Legacy row: raw AgentMessage JSON (pre-stamping).
-  return parsed as AgentMessage;
+  // Legacy row: raw AgentMessage JSON (pre-stamping) — shaped like v1, so
+  // it runs the same normalizer.
+  return upgradeFromV1(parsed as AgentMessage);
+}
+
+/** Bring a v1 message up to the current shape: mode messages gained
+ * `images` (the pictures attached to the prompt in the composer; empty
+ * when none were attached), which rows written before it do not carry.
+ * Every other role is unchanged. */
+function upgradeFromV1(message: AgentMessage): AgentMessage {
+  return message.role === "mode" ? { ...message, images: [] } : message;
 }
 
 export function createMessageRepo(db: LumiscaDb): MessageRepo {

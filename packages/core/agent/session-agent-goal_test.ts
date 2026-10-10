@@ -210,6 +210,7 @@ Deno.test("rewinding the goal declaration cancels the goal", async () => {
     modeLabel: "ゴールモード",
     shortText: "g",
     fullPrompt: "full",
+    images: [],
     timestamp: goalTimestamp,
   } as unknown as AgentMessage);
   (agent.messages as AgentMessage[]).push({

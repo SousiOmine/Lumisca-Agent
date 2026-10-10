@@ -186,7 +186,7 @@
 - **esbuild（本番環境）と Vite（開発環境）のデュアル構成**  
   本番用配布物のバンドル生成（`deno compile` への内包）は `server/bundle.ts`（esbuild）が担当し、開発時の HMR（Hot Module Replacement）および API プロキシ機能は `packages/web/vite.config.ts`（Vite）が担います。なお、CSS の `@import` 解決順序の仕様は両環境で厳密に一致させています（詳細は `packages/web/src/styles/README.md` を参照）。
 - **履歴メッセージのロール**  
-  モデルに見せる形（`toLlmMessages`）は `user` / `assistant` / `toolResult` の3種のみです。Lumisca 固有のロール（`notification` / `context` / `mode` / `checkpoint`）はいずれも user メッセージへ変換されます。新しいロールを追加する場合は、この変換・`estimateMessageTokens`（トークン見積り）・web 側の `MessageRow` / `buildTurns` の3か所を同時に更新してください（1か所でも漏れると、そのメッセージがモデルに届かないか、UIで描画されません）。
+  モデルに見せる形（`toLlmMessages`）は `user` / `assistant` / `toolResult` の3種のみです。Lumisca 固有のロール（`notification` / `context` / `mode` / `checkpoint`）はいずれも user メッセージへ変換されます。`mode` メッセージ（`/plan` などのモードプロンプト）は、変換時に `fullPrompt` のテキストブロックへ続けて**コンポーザーで添付した画像**（`ModeMessage.images`）をそのまま並べます —— 添付はプロンプトの一部であり、モードかどうかで経路が分かれてはいけないためです（同じ理由で web 側の吹き出しと巻き戻しも画像を扱います）。新しいロールを追加する場合は、この変換・`estimateMessageTokens`（トークン見積り）・web 側の `MessageRow` / `buildTurns` の3か所を同時に更新してください（1か所でも漏れると、そのメッセージがモデルに届かないか、UIで描画されません）。
 - **`MessageRepo.insertAt`**  
   履歴の途中に1件を挿入する唯一の DB 操作です（圧縮が使用）。行はトランスクリプト順に挿入されるため rowid が位置と一致する、という `deleteFrom` と同じ前提に依存しています。SQLite の rowid は全セッションで共有されるため、+1 シフトは他セッションの行と衝突し得ます。そこで挿入位置以降の自セッションの行を読み出して削除し、新しい行を挿入してから元の id・内容・timestamp のまま挿入し直します（1トランザクション、失敗時はロールバック）。挿入後の永続化済み件数（`SessionAgent.savedCount`）は「挿入位置が保存済み範囲内なら +1」で更新します。単純にトランスクリプト長にすると、まだ保存されていない末尾のメッセージが二重に挿入されます。
 

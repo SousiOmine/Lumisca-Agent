@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import type { AgentMessage } from "@lumisca/core";
+import type { AgentMessage, ImageContent } from "@lumisca/core";
 import {
   type NotificationMessage,
   notificationText,
@@ -89,6 +89,7 @@ Deno.test("toLlmMessages converts mode messages to user messages with the full p
     modeLabel: "レビューモード",
     shortText: "未コミットの変更をレビューしてください",
     fullPrompt: "あなたはコードレビュアーです。…(長文)",
+    images: [],
     timestamp: 1700000000000,
   };
   const converted = toLlmMessages([modeMsg]);
@@ -96,6 +97,34 @@ Deno.test("toLlmMessages converts mode messages to user messages with the full p
   assertEquals(converted[0], {
     role: "user",
     content: [{ type: "text", text: modeMsg.fullPrompt }],
+    timestamp: modeMsg.timestamp,
+  });
+});
+
+Deno.test("toLlmMessages passes the images attached to a mode message", () => {
+  // A picture attached in the composer before the mode prompt was sent:
+  // the model must receive the same content blocks a plain user message
+  // with an image would carry.
+  const image: ImageContent = {
+    type: "image",
+    data: "QUJD",
+    mimeType: "image/png",
+  };
+  const modeMsg: ModeMessage = {
+    role: "mode",
+    modeId: "plan",
+    optionId: "",
+    modeLabel: "プラン作成モード",
+    shortText: "履歴機能を追加して",
+    fullPrompt: "あなたは実装プランナーです。…(長文)",
+    images: [image],
+    timestamp: 1700000000000,
+  };
+  const converted = toLlmMessages([modeMsg]);
+  assertEquals(converted.length, 1);
+  assertEquals(converted[0], {
+    role: "user",
+    content: [{ type: "text", text: modeMsg.fullPrompt }, image],
     timestamp: modeMsg.timestamp,
   });
 });

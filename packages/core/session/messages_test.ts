@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "./messages.ts";
-import type { AgentMessage } from "@lumisca/core";
+import type { AgentMessage, ImageContent, ModeMessage } from "@lumisca/core";
 
 function sampleMessage(): AgentMessage {
   return {
@@ -85,6 +85,66 @@ Deno.test("messages: legacy rows (raw AgentMessage JSON) still decode", () => {
     const listed = repo.list("s1");
     assertEquals(listed.length, 1);
     assertEquals(listed[0]!.message, message);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: mode rows written before the images field decode as imageless", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    // A v1 row: mode messages did not carry `images` yet (the shape is the
+    // current one minus that field). Decoding must fill the field instead
+    // of leaving it undefined — the UI renders that array and
+    // toLlmMessages spreads it into the request.
+    const modeMessage: Omit<ModeMessage, "images"> = {
+      role: "mode",
+      modeId: "plan",
+      optionId: "",
+      modeLabel: "プラン作成モード",
+      shortText: "履歴機能を追加して",
+      fullPrompt: "あなたは実装プランナーです。…",
+      timestamp: 1700000000000,
+    };
+    const insert = db.db.prepare(
+      "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+    );
+    insert.run(
+      "v1-1",
+      "s1",
+      "mode",
+      JSON.stringify({ v: 1, message: modeMessage }),
+      modeMessage.timestamp,
+    );
+    // The legacy (pre-stamping) form has the same shape as v1.
+    insert.run(
+      "legacy-1",
+      "s1",
+      "mode",
+      JSON.stringify(modeMessage),
+      modeMessage.timestamp,
+    );
+
+    const repo = createMessageRepo(db);
+    assertEquals(repo.listMessages("s1"), [
+      { ...modeMessage, images: [] },
+      { ...modeMessage, images: [] },
+    ]);
+
+    // A current row keeps the images it was stored with.
+    const image: ImageContent = {
+      type: "image",
+      data: "QUJD",
+      mimeType: "image/png",
+    };
+    const withImage: ModeMessage = {
+      ...modeMessage,
+      images: [image],
+      timestamp: modeMessage.timestamp + 1,
+    };
+    repo.append("s1", withImage);
+    assertEquals(repo.listMessages("s1").at(-1), withImage);
   } finally {
     db.close();
   }

@@ -23,7 +23,11 @@ function user(timestamp: number, steered?: boolean): AgentMessage {
   };
 }
 
-function mode(timestamp: number, steered?: boolean): AgentMessage {
+function mode(
+  timestamp: number,
+  steered?: boolean,
+  images: { type: "image"; data: string; mimeType: string }[] = [],
+): AgentMessage {
   return {
     role: "mode",
     modeId: "plan",
@@ -31,6 +35,7 @@ function mode(timestamp: number, steered?: boolean): AgentMessage {
     modeLabel: "プランモード",
     shortText: "履歴機能を追加して",
     fullPrompt: "あなたは実装プランナーです。...",
+    images,
     // Same delivery stamp as a plain prompt: a mode prompt sent while the
     // run was active joined it.
     ...(steered === true ? { steered } : {}),
@@ -610,6 +615,30 @@ Deno.test("ConversationTurn: a turn that declared nothing renders no cards", () 
     onRewind: () => {},
   }));
   assert(!html.includes("deliverables"), html);
+});
+
+Deno.test("ConversationTurn: a mode prompt renders the images attached to it", () => {
+  // A picture pasted into the composer before sending `/plan 依頼文` is
+  // part of that prompt: the mode bubble shows it like a user message's,
+  // so the transcript reflects what the model received.
+  const image = {
+    type: "image" as const,
+    data: "QUJD",
+    mimeType: "image/png",
+  };
+  const turns = buildTurns([mode(1, false, [image]), assistant(2)]);
+  const html = renderToString(createElement(ConversationTurn, {
+    turn: turns[0]!,
+    toolResults: new Map(),
+    runningTools: new Map(),
+    running: false,
+    onRewind: () => {},
+  }));
+  assertStringIncludes(html, 'class="msg-images"');
+  assertStringIncludes(html, "data:image/png;base64,QUJD");
+  // The short text and the mode badge keep describing the prompt.
+  assertStringIncludes(html, "履歴機能を追加して");
+  assertStringIncludes(html, "プランモード");
 });
 
 Deno.test("ConversationTurn: cards stay with the turn that declared them", () => {

@@ -439,7 +439,7 @@ export class SessionAgent {
    * When `mode` is provided, a ModeMessage is stored in the transcript
    * instead of a regular user message: the UI renders the short text +
    * mode badge, while the LLM receives the full prompt (via
-   * toLlmMessages). */
+   * toLlmMessages). Attached `images` ride along either way. */
   promptWhileRunning(
     text: string,
     images?: ImageContent[],
@@ -450,7 +450,7 @@ export class SessionAgent {
     // delivery below, and the condition is the one deliverPrompt re-checks.
     const steered = this.joinsActiveRun();
     const message = mode
-      ? buildModeMessage(mode, text, Date.now(), steered)
+      ? buildModeMessage(mode, text, images ?? [], Date.now(), steered)
       : this.buildUserMessage(text, images, steered);
     this.publishContexts();
     this.announceMessage(message);

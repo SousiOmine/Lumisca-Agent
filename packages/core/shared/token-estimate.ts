@@ -88,7 +88,8 @@ function argumentsText(args: unknown): string {
  * Estimated tokens of one transcript message, including the structural
  * overhead its role adds to a request. Every role of {@link AgentMessage}
  * is priced as the model receives it: notification/context/checkpoint
- * messages cost their model-facing text, a mode message its full prompt.
+ * messages cost their model-facing text, a mode message its full prompt
+ * plus the images attached to it.
  */
 export function estimateMessageTokens(message: AgentMessage): number {
   switch (message.role) {
@@ -115,7 +116,12 @@ export function estimateMessageTokens(message: AgentMessage): number {
       return estimateContentTokens(message.content) +
         estimateTextTokens(message.toolName) + MESSAGE_OVERHEAD_TOKENS;
     case "mode":
-      return estimateTextTokens(message.fullPrompt) + MESSAGE_OVERHEAD_TOKENS;
+      // Priced as the user message it becomes (see toLlmMessages): the full
+      // prompt as a text block plus the images attached to it.
+      return estimateContentTokens([
+        { type: "text", text: message.fullPrompt },
+        ...message.images,
+      ]) + MESSAGE_OVERHEAD_TOKENS;
     case "notification":
       return estimateTextTokens(message.title) +
         estimateTextTokens(message.body) + MESSAGE_OVERHEAD_TOKENS;
