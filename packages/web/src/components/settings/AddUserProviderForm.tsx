@@ -9,11 +9,8 @@ import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";
 import type { UserProviderSummary } from "../../types.ts";
-
-const ALLOWED_OPENAI_APIS = [
-  "openai-completions",
-  "openai-responses",
-] as const;
+// The picker and the core's validation read one list (shared/providers.ts).
+import { ALLOWED_OPENAI_APIS } from "@lumisca/core/shared";
 
 /** One model row in the form. Mirrors UserProviderModel; empty-string
  * numeric fields mean "use provider default". */

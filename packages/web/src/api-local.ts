@@ -28,7 +28,14 @@ import type {
   WorkspaceFileEntry,
 } from "./types.ts";
 import type { CommandApproval, SavedPrompt } from "@lumisca/core/shared";
-import { promptBody, request, sessionPath } from "./api-client.ts";
+import {
+  promptBody,
+  request,
+  sessionCalls,
+  sessionPath,
+  sessionRequest,
+  type SessionRoute,
+} from "./api-client.ts";
 
 /** Session info as served by the API: includes the last run error, if any. */
 export type SessionInfoDto = SessionInfo & { lastError?: string };
@@ -58,6 +65,135 @@ export interface SessionSnapshot {
    * marker from it, so a later probe can tell whether anything was missed. */
   rev: number;
 }
+
+/** Every session-scoped endpoint, in one table: the peer id of the machine
+ * that owns the session ("" = this server, see sessionRequest), the session
+ * id, then the call's own args. `api` (this server), `fed` (a peer) and
+ * `sessionApi` (the peer a tab routes to) are all built from it, so an
+ * endpoint's path, method and body are written once. Paths are the
+ * `sessionPath` form: whether they are reached as `/api/...` or through the
+ * fed proxy is the transport's business, not the route's. */
+export const sessionRoutes = {
+  getSession: (peerId: string, sessionId: string) =>
+    sessionRequest<SessionInfoDto>(peerId, sessionPath(sessionId)),
+  /** The session's live-state snapshot (the transcript plus the run state,
+   * pending questions, last error, title and revision that event replay
+   * cannot restore); re-fetched after a WS drop or page reload to restore a
+   * tab. */
+  getMessages: (peerId: string, sessionId: string) =>
+    sessionRequest<SessionSnapshot>(
+      peerId,
+      sessionPath(sessionId, "/messages"),
+    ),
+  /** The session's revision: how many events the owning server has emitted
+   * for it. Cheap (a counter read, no session open), so the client polls it
+   * on a low interval and re-reads the snapshot only when it moved — a
+   * missed frame is then noticed without re-reading anything. */
+  getRevision: (peerId: string, sessionId: string) =>
+    sessionRequest<{ rev: number }>(
+      peerId,
+      sessionPath(sessionId, "/revision"),
+    ),
+  /** The session's current todo plan (the todo tool); re-fetched after a
+   * WS drop or page reload to restore the progress panel (todo events are
+   * snapshots, but only mutations emit them, so they are not replayed). */
+  getTodo: (peerId: string, sessionId: string) =>
+    sessionRequest<{ todos: TodoPhase[] }>(
+      peerId,
+      sessionPath(sessionId, "/todo"),
+    ),
+  /** Snapshots of the session's sub-agent tasks (the task tool); re-fetched
+   * after a WS drop or page reload to restore the tasks panel (task events
+   * are not replayed). */
+  getTasks: (peerId: string, sessionId: string) =>
+    sessionRequest<{ tasks: TaskInfo[] }>(
+      peerId,
+      sessionPath(sessionId, "/tasks"),
+    ),
+  /** Snapshots of the session's background commands (the async_bash tool);
+   * re-fetched after a WS drop or page reload to restore the background
+   * panel (background events are not replayed). */
+  getBackground: (peerId: string, sessionId: string) =>
+    sessionRequest<{ backgrounds: BackgroundCommandInfo[] }>(
+      peerId,
+      sessionPath(sessionId, "/background"),
+    ),
+  /** The session's active goal (`/goal` mode); re-fetched after a WS drop
+   * or page reload to restore the right-side goal panel (goal events are
+   * not replayed). Null when no goal runs. */
+  getGoal: (peerId: string, sessionId: string) =>
+    sessionRequest<{ goal: GoalInfo | null }>(
+      peerId,
+      sessionPath(sessionId, "/goal"),
+    ),
+  /** Cancel the session's active goal (the goal panel's cancel button). */
+  cancelGoal: (peerId: string, sessionId: string) =>
+    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/goal"), {
+      method: "DELETE",
+    }),
+  closeSession: (peerId: string, sessionId: string) =>
+    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/close"), {
+      method: "POST",
+    }),
+  prompt: (
+    peerId: string,
+    sessionId: string,
+    text: string,
+    images?: PendingImage[],
+    mode?: ModePrompt,
+  ) =>
+    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/prompt"), {
+      method: "POST",
+      body: JSON.stringify(promptBody(text, images, mode)),
+    }),
+  abort: (peerId: string, sessionId: string) =>
+    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/abort"), {
+      method: "POST",
+    }),
+  rewind: (peerId: string, sessionId: string, timestamp: number) =>
+    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/rewind"), {
+      method: "POST",
+      body: JSON.stringify({ timestamp }),
+    }),
+  /** Condense older history into a checkpoint on demand (the `/compact`
+   * command). `instructions` is the user's extra focus for the summary.
+   * `compacted` is the number of summarized messages; absent when nothing
+   * could be condensed. */
+  compact: (peerId: string, sessionId: string, instructions?: string) =>
+    sessionRequest<{ ok: boolean; compacted?: number }>(
+      peerId,
+      sessionPath(sessionId, "/compact"),
+      {
+        method: "POST",
+        ...(instructions !== undefined && instructions.length > 0
+          ? { body: JSON.stringify({ instructions }) }
+          : {}),
+      },
+    ),
+  /** Answer a pending ask (the ask tool) with the user's selections. */
+  answer: (
+    peerId: string,
+    sessionId: string,
+    toolCallId: string,
+    answers: AskAnswer[],
+  ) =>
+    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/answer"), {
+      method: "POST",
+      body: JSON.stringify({ toolCallId, answers }),
+    }),
+  /** Switch the session's model; the route answers the plain session record
+   * (unlike getSession, it carries no last run error). */
+  updateSessionModel: (
+    peerId: string,
+    sessionId: string,
+    provider: string,
+    modelId: string,
+  ) =>
+    sessionRequest<SessionInfo>(peerId, sessionPath(sessionId, "/model"), {
+      method: "POST",
+      body: JSON.stringify({ provider, modelId }),
+    }),
+} satisfies Record<string, SessionRoute>;
 
 export const api = {
   listWorkspaces: () => request<Workspace[]>("/api/workspaces"),
@@ -114,93 +250,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  getSession: (id: string) => request<SessionInfoDto>(`/api${sessionPath(id)}`),
   /** All sessions of this server, newest first (the source of the recent
    * sessions list). */
   listSessions: () => request<SessionInfo[]>("/api/sessions"),
-  closeSession: (id: string) =>
-    request<{ ok: boolean }>(`/api${sessionPath(id, "/close")}`, {
-      method: "POST",
-    }),
-  /** The session's live-state snapshot (the transcript plus the run state,
-   * pending questions, last error, title and revision that event replay
-   * cannot restore); re-fetched after a WS drop or page reload to restore a
-   * tab. */
-  getMessages: (id: string) =>
-    request<SessionSnapshot>(`/api${sessionPath(id, "/messages")}`),
-  /** The session's revision: how many events the owning server has emitted
-   * for it. Cheap (a counter read, no session open), so the client polls it
-   * on a low interval and re-reads the snapshot only when it moved — a
-   * missed frame is then noticed without re-reading anything. */
-  getRevision: (id: string) =>
-    request<{ rev: number }>(`/api${sessionPath(id, "/revision")}`),
-  /** The session's current todo plan (the todo tool); re-fetched after a
-   * WS drop or page reload to restore the progress panel (todo events are
-   * snapshots, but only mutations emit them, so they are not replayed). */
-  getTodo: (id: string) =>
-    request<{ todos: TodoPhase[] }>(`/api${sessionPath(id, "/todo")}`),
-  /** Snapshots of the session's sub-agent tasks (the task tool); re-fetched
-   * after a WS drop or page reload to restore the tasks panel (task events
-   * are not replayed). */
-  getTasks: (id: string) =>
-    request<{ tasks: TaskInfo[] }>(`/api${sessionPath(id, "/tasks")}`),
-  /** Snapshots of the session's background commands (the async_bash tool);
-   * re-fetched after a WS drop or page reload to restore the background
-   * panel (background events are not replayed). */
-  getBackground: (id: string) =>
-    request<{ backgrounds: BackgroundCommandInfo[] }>(
-      `/api${sessionPath(id, "/background")}`,
-    ),
-  /** The session's active goal (`/goal` mode); re-fetched after a WS drop
-   * or page reload to restore the right-side goal panel (goal events are
-   * not replayed). Null when no goal runs. */
-  getGoal: (id: string) =>
-    request<{ goal: GoalInfo | null }>(`/api${sessionPath(id, "/goal")}`),
-  /** Cancel the session's active goal (the goal panel's cancel button). */
-  cancelGoal: (id: string) =>
-    request<{ ok: boolean }>(`/api${sessionPath(id, "/goal")}`, {
-      method: "DELETE",
-    }),
-  prompt: (
-    id: string,
-    text: string,
-    images?: PendingImage[],
-    mode?: ModePrompt,
-  ) =>
-    request<{ ok: boolean }>(`/api${sessionPath(id, "/prompt")}`, {
-      method: "POST",
-      body: JSON.stringify(promptBody(text, images, mode)),
-    }),
-  abort: (id: string) =>
-    request<{ ok: boolean }>(`/api${sessionPath(id, "/abort")}`, {
-      method: "POST",
-    }),
-  rewind: (id: string, timestamp: number) =>
-    request<{ ok: boolean }>(`/api${sessionPath(id, "/rewind")}`, {
-      method: "POST",
-      body: JSON.stringify({ timestamp }),
-    }),
-  /** Condense older history into a checkpoint on demand (the `/compact`
-   * command). `instructions` is the user's extra focus for the summary.
-   * `compacted` is the number of summarized messages; absent when nothing
-   * could be condensed. */
-  compact: (id: string, instructions?: string) =>
-    request<{ ok: boolean; compacted?: number }>(
-      `/api${sessionPath(id, "/compact")}`,
-      {
-        method: "POST",
-        ...(instructions !== undefined && instructions.length > 0
-          ? { body: JSON.stringify({ instructions }) }
-          : {}),
-      },
-    ),
-  /** Answer a pending ask (the ask tool) with the user's selections. */
-  answer: (id: string, toolCallId: string, answers: AskAnswer[]) =>
-    request<{ ok: boolean }>(`/api${sessionPath(id, "/answer")}`, {
-      method: "POST",
-      body: JSON.stringify({ toolCallId, answers }),
-    }),
-
   listProviders: () => request<ProviderInfo[]>("/api/providers"),
   listModels: (providerId: string) =>
     request<ModelInfo[]>(`/api/providers/${providerId}/models`),
@@ -290,11 +342,6 @@ export const api = {
   deleteUserProvider: (id: string) =>
     request<{ ok: boolean }>(`/api/providers/user/${id}`, {
       method: "DELETE",
-    }),
-  updateSessionModel: (sessionId: string, provider: string, modelId: string) =>
-    request<SessionInfo>(`/api${sessionPath(sessionId, "/model")}`, {
-      method: "POST",
-      body: JSON.stringify({ provider, modelId }),
     }),
   setModelThinkingLevel: (
     providerId: string,
@@ -414,4 +461,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ connections }),
     }),
+
+  /** The session-scoped endpoints (`getSession`, `prompt`, …), from the
+   * table every surface shares (see sessionRoutes; "" is this server). */
+  ...sessionCalls(sessionRoutes, ""),
 };

@@ -106,21 +106,82 @@ export function peerRouted<T, A extends unknown[]>(
   return (...args) => peerId === "" ? local(...args) : remote(peerId, ...args);
 }
 
-/** Bind a session-scoped call to its owner: `local`/`remote` take the
- * session id first, the returned function takes only the call args. Collapses
- * the `(sessionId) => ...` / `(p, sessionId) => ...` closures every
- * sessionApi entry repeats. */
-export function sessionRouted<T, A extends unknown[]>(
+/** Send one session-scoped request to the machine that owns the session:
+ * `""` is this server — the empty peer id `peerRouted` and the tab keys use
+ * for it — whose routes are served under `/api`; any other id goes through
+ * the hub's fed proxy. The session route table (see api-local.ts) is the one
+ * definition of those routes, so which path addresses the machine lives in
+ * the transport all three surfaces share. */
+export function sessionRequest<T>(
+  peerId: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  return peerId === ""
+    ? request<T>(`/api${path}`, init)
+    : fedRequest<T>(peerId, path, init);
+}
+
+/** One session-scoped endpoint, as the table (api-local.ts) declares it: the
+ * peer id ("" = this server, see sessionRequest), the session id, then the
+ * call's own args. The rest is `never[]` so every entry stays free to
+ * declare the args it takes — the surfaces below recover them. */
+export type SessionRoute = (
   peerId: string,
   sessionId: string,
-  local: (sessionId: string, ...args: A) => Promise<T>,
-  remote: (peerId: string, sessionId: string, ...args: A) => Promise<T>,
-): (...args: A) => Promise<T> {
-  return peerRouted(
-    peerId,
-    (...args) => local(sessionId, ...args),
-    (p, ...args) => remote(p, sessionId, ...args),
-  );
+  ...args: never[]
+) => Promise<unknown>;
+
+/** The table as `api` takes it: this server is the only machine, so every
+ * method keeps the session id and the call's own args. */
+export type SessionScoped<T> = {
+  [K in keyof T]: T[K] extends (
+    peerId: string,
+    ...args: infer P
+  ) => Promise<infer R> ? (...args: P) => Promise<R>
+    : never;
+};
+
+/** The table as `sessionApi` takes it: the tab key already names the peer
+ * and the session, so every method keeps only the call's own args. */
+export type TabScoped<T> = {
+  [K in keyof T]: T[K] extends (
+    peerId: string,
+    sessionId: string,
+    ...args: infer A
+  ) => Promise<infer R> ? (...args: A) => Promise<R>
+    : never;
+};
+
+/** The table's session-scoped calls for one machine, with the peer id fixed
+ * (this server is "", see sessionRequest) — what `api` spreads in. A mapped
+ * type has no runtime counterpart, so the object is built entry by entry and
+ * asserted once here: each entry's own signature is the table's, uncast. */
+export function sessionCalls<T extends Record<string, SessionRoute>>(
+  routes: T,
+  peerId: string,
+): SessionScoped<T> {
+  const calls: Record<string, unknown> = {};
+  for (const [name, route] of Object.entries(routes)) {
+    calls[name] = (sessionId: string, ...args: never[]) =>
+      route(peerId, sessionId, ...args);
+  }
+  return calls as SessionScoped<T>;
+}
+
+/** The same table for one tab (see sessionApi): its key already named the
+ * peer and the session, so the methods keep only the call's own args — built
+ * and asserted exactly like sessionCalls. */
+export function tabCalls<T extends Record<string, SessionRoute>>(
+  routes: T,
+  peerId: string,
+  sessionId: string,
+): TabScoped<T> {
+  const calls: Record<string, unknown> = {};
+  for (const [name, route] of Object.entries(routes)) {
+    calls[name] = (...args: never[]) => route(peerId, sessionId, ...args);
+  }
+  return calls as TabScoped<T>;
 }
 
 /** Build a prompt request body. Images are data URLs; the payload sent to

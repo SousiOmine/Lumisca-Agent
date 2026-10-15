@@ -1,107 +1,30 @@
-import type {
-  AskAnswer,
-  ClientEvent,
-  ModePrompt,
-  PendingImage,
-  ThinkingLevel,
-} from "./types.ts";
+import type { ClientEvent, ThinkingLevel } from "./types.ts";
 import { WS_HEARTBEAT_TYPE } from "@lumisca/core/shared";
 import { createHeartbeatWatchdog } from "./heartbeat.ts";
-import { peerRouted, sessionRouted, token } from "./api-client.ts";
-import { api, type SessionInfoDto } from "./api-local.ts";
+import { peerRouted, tabCalls, token } from "./api-client.ts";
+import { api, sessionRoutes } from "./api-local.ts";
 import { fed } from "./api-federation.ts";
 import { splitTabKey } from "./tabs.ts";
 
 /** Per-session API routed to the peer that owns the session ("" = this
- * server). Every call targets the machine running the agent. */
+ * server). Every call targets the machine running the agent: the methods are
+ * the shared session table (api-local.ts) with the tab's two ids already
+ * fixed, so a tab, `api` and `fed` cannot drift apart. */
 export function sessionApi(key: string) {
   const { peerId, sessionId } = splitTabKey(key);
+  const { closeSession, updateSessionModel, ...sessions } = tabCalls(
+    sessionRoutes,
+    peerId,
+    sessionId,
+  );
   return {
     peerId,
     sessionId,
-    getSession: sessionRouted(
-      peerId,
-      sessionId,
-      api.getSession,
-      fed.getSession,
-    ),
-    getMessages: sessionRouted(
-      peerId,
-      sessionId,
-      api.getMessages,
-      fed.getMessages,
-    ),
-    getRevision: sessionRouted(
-      peerId,
-      sessionId,
-      api.getRevision,
-      fed.getRevision,
-    ),
-    getTodo: sessionRouted(peerId, sessionId, api.getTodo, fed.getTodo),
-    getTasks: sessionRouted(peerId, sessionId, api.getTasks, fed.getTasks),
-    getBackground: sessionRouted(
-      peerId,
-      sessionId,
-      api.getBackground,
-      fed.getBackground,
-    ),
-    getGoal: sessionRouted(peerId, sessionId, api.getGoal, fed.getGoal),
-    cancelGoal: sessionRouted(
-      peerId,
-      sessionId,
-      api.cancelGoal,
-      fed.cancelGoal,
-    ),
-    close: sessionRouted(
-      peerId,
-      sessionId,
-      api.closeSession,
-      fed.closeSession,
-    ),
-    prompt: sessionRouted(
-      peerId,
-      sessionId,
-      api.prompt,
-      fed.prompt,
-    ) as (
-      text: string,
-      images?: PendingImage[],
-      mode?: ModePrompt,
-    ) => Promise<{ ok: boolean }>,
-    abort: sessionRouted(peerId, sessionId, api.abort, fed.abort),
-    rewind: sessionRouted(
-      peerId,
-      sessionId,
-      api.rewind,
-      fed.rewind,
-    ) as (timestamp: number) => Promise<{ ok: boolean }>,
-    /** Condense older history into a checkpoint on demand (`/compact`).
-     * `instructions` is the user's extra focus for the summary.
-     * `compacted` is absent when nothing could be condensed. */
-    compact: sessionRouted(
-      peerId,
-      sessionId,
-      api.compact,
-      fed.compact,
-    ) as (instructions?: string) => Promise<{
-      ok: boolean;
-      compacted?: number;
-    }>,
-    answer: sessionRouted(
-      peerId,
-      sessionId,
-      api.answer,
-      fed.answer,
-    ) as (
-      toolCallId: string,
-      answers: AskAnswer[],
-    ) => Promise<{ ok: boolean }>,
-    updateModel: sessionRouted(
-      peerId,
-      sessionId,
-      api.updateSessionModel,
-      fed.updateSessionModel,
-    ) as (provider: string, modelId: string) => Promise<SessionInfoDto>,
+    ...sessions,
+    // The tab's short names for the two entries that carry the session in
+    // their own name: `sessionApi(key)` already named the session.
+    close: closeSession,
+    updateModel: updateSessionModel,
   };
 }
 

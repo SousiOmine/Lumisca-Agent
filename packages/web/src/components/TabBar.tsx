@@ -1,14 +1,34 @@
-import { type MouseEvent, useEffect, useRef, useState } from "preact/compat";
+import {
+  memo,
+  type MouseEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "preact/compat";
 import { IconChevronRight, IconPlus, IconX } from "@tabler/icons-preact";
-import { isViewRunning, type SessionView } from "../types.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
 
+/** What the bar renders of one tab. The App derives it from the live view
+ * map, so the bar re-renders only when a label or a run state changes —
+ * the map itself is replaced on every streamed event. */
+export interface TabSummary {
+  id: string;
+  /** Session name; null while the session has none yet (the bar shows its
+   * own "new session" label instead). */
+  name: string | null;
+  /** Model id, shown as the tab's tooltip. */
+  modelId: string | null;
+  active: boolean;
+  running: boolean;
+  /** The tool the running agent is executing now (badge); absent when no
+   * tool is in flight. */
+  runningTool?: string;
+}
+
 interface TabBarProps {
-  tabs: string[];
-  views: Map<string, SessionView>;
-  activeTab: string | null;
+  tabs: TabSummary[];
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onCloseToRight: (id: string) => void;
@@ -31,10 +51,14 @@ interface TabMenu {
 
 const MENU_MARGIN = 8;
 
-export function TabBar({
+/** The tab strip. Memoized: the App hands it a summarized list and stable
+ * callbacks, so an event that only appends to a session's message log does
+ * not re-render the bar (the session views it renders from are rebuilt on
+ * every event). */
+export const TabBar = memo(TabBarView);
+
+function TabBarView({
   tabs,
-  views,
-  activeTab,
   onSelect,
   onClose,
   onCloseToRight,
@@ -98,7 +122,7 @@ export function TabBar({
     onBlur: true,
   });
 
-  const menuIndex = menu ? tabs.indexOf(menu.tabId) : -1;
+  const menuIndex = menu ? tabs.findIndex((tab) => tab.id === menu.tabId) : -1;
   const isRightmost = menuIndex === tabs.length - 1;
   const isLeftmost = menuIndex === 0;
 
@@ -108,32 +132,27 @@ export function TabBar({
       role="tablist"
       aria-label={t("chrome.tabBar.label")}
     >
-      {tabs.map((id) => {
-        const view = views.get(id);
-        const isActive = id === activeTab;
-        const isRunning = view !== undefined && isViewRunning(view);
-        const runningTool = view?.runningTools.values().next().value as
-          | string
-          | undefined;
-        const name = view?.info.name ?? t("chrome.tabBar.newSession");
+      {tabs.map(({ id, name, modelId, active, running, runningTool }) => {
         return (
           <div
             key={id}
             role="tab"
-            aria-selected={isActive}
-            className={`tab${isActive ? " active" : ""}`}
+            aria-selected={active}
+            className={`tab${active ? " active" : ""}`}
             onClick={() => onSelect(id)}
             onContextMenu={(e) => openMenu(id, e)}
-            title={view?.info.modelId ?? t("chrome.tabBar.newSession")}
+            title={modelId ?? t("chrome.tabBar.newSession")}
           >
-            {isRunning && (
+            {running && (
               <span
                 className="live-dot"
                 aria-label={t("chrome.tabBar.processing")}
               />
             )}
-            <span className="tab-name">{name}</span>
-            {isRunning && runningTool && (
+            <span className="tab-name">
+              {name ?? t("chrome.tabBar.newSession")}
+            </span>
+            {running && runningTool && (
               <span className="tab-badge">{runningTool}</span>
             )}
             <button

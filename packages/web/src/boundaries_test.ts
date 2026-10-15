@@ -1,4 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
+import { BROWSER_CORE_ENTRIES } from "@lumisca/core/browser-entries";
 
 /**
  * The web bundle's dependency rule (ARCHITECTURE.md 1): at runtime it may
@@ -13,13 +14,11 @@ import { assert, assertEquals } from "@std/assert";
  * reads the package's own sources and fails on the first such import.
  */
 
-/** Core entry points the bundle may use at runtime. Keep in sync with the
- * esbuild/Vite aliases and with ARCHITECTURE.md 1. */
-const RUNTIME_ALLOWED = [
-  "@lumisca/core/shared",
-  "@lumisca/core/modes",
-  "@lumisca/core/skills/slash",
-];
+/** Core entry points the bundle may use at runtime, from the list the core
+ * declares (packages/core/browser-entries.ts). Vite's dev aliases and the
+ * server's esbuild aliases read that same list, so this test cannot drift
+ * away from what the bundlers actually resolve. */
+const RUNTIME_ALLOWED = BROWSER_CORE_ENTRIES.map((entry) => entry.specifier);
 
 /** The core barrel: types only, so the whole package is never bundled. */
 const TYPES_ONLY = ["@lumisca/core"];
@@ -77,10 +76,17 @@ Deno.test("the web bundle imports only the core's pure modules", async () => {
 
     for (const statement of statements(source)) {
       const specifier = specifierOf(statement);
-      if (specifier === undefined || !specifier.startsWith(CORE_PREFIX)) {
+      if (specifier === undefined) continue;
+      if (/^(?:import|export)\s+type\b/.test(statement)) continue;
+      // A relative import reaches the core without ever naming it
+      // (`../../core/browser/types.ts`), which every check below would miss.
+      if (specifier.startsWith(".")) {
+        if (new URL(specifier, file.url).href.includes("/packages/core/")) {
+          report(specifier, "a relative import into the core is not allowed");
+        }
         continue;
       }
-      if (/^(?:import|export)\s+type\b/.test(statement)) continue;
+      if (!specifier.startsWith(CORE_PREFIX)) continue;
       if (TYPES_ONLY.includes(specifier)) {
         report(specifier, "a value import of the core barrel is not allowed");
         continue;

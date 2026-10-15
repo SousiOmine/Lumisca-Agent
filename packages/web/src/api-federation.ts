@@ -1,30 +1,25 @@
 import type {
-  AskAnswer,
-  BackgroundCommandInfo,
   FederatedWorkspace,
   FsBrowse,
   FsPlace,
-  GoalInfo,
   ModelInfo,
-  ModePrompt,
   PeerStatus,
-  PendingImage,
   ProviderInfo,
   SessionInfo,
   SkillInfo,
-  TaskInfo,
   ThinkingLevel,
-  TodoPhase,
   Workspace,
   WorkspaceFileEntry,
 } from "./types.ts";
-import { fedRequest, promptBody, request, sessionPath } from "./api-client.ts";
-import type { SessionInfoDto, SessionSnapshot } from "./api-local.ts";
+import { fedRequest, request } from "./api-client.ts";
+import { sessionRoutes } from "./api-local.ts";
 
 /** Federated (hub-and-spoke) API: resources owned by a peer server. The
  * agent runs on the peer; the hub only proxies. Every method here mirrors a
  * local `api.*` method through the single `/api/fed/:peerId` proxy (paths
- * are the "/api"-relative form with the peer id added by fedRequest). */
+ * are the "/api"-relative form with the peer id added by fedRequest), and
+ * the session-scoped ones are the shared table (see sessionRoutes), which
+ * takes the peer id as its first argument for exactly that reason. */
 export const fed = {
   /** Merged workspace list (hub + peers) with peer reachability. */
   workspaces: () =>
@@ -83,111 +78,9 @@ export const fed = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  getSession: (peerId: string, sessionId: string) =>
-    fedRequest<SessionInfoDto>(peerId, sessionPath(sessionId)),
-  getMessages: (peerId: string, sessionId: string) =>
-    fedRequest<SessionSnapshot>(peerId, sessionPath(sessionId, "/messages")),
-  /** The peer's revision for the session (see the local api.getRevision):
-   * the probe follows the session's owner. */
-  getRevision: (peerId: string, sessionId: string) =>
-    fedRequest<{ rev: number }>(
-      peerId,
-      sessionPath(sessionId, "/revision"),
-    ),
   /** All sessions of a peer, newest first (for the recent sessions list). */
   listSessions: (peerId: string) =>
     fedRequest<SessionInfo[]>(peerId, "/sessions"),
-  getTodo: (peerId: string, sessionId: string) =>
-    fedRequest<{ todos: TodoPhase[] }>(peerId, sessionPath(sessionId, "/todo")),
-  getTasks: (peerId: string, sessionId: string) =>
-    fedRequest<{ tasks: TaskInfo[] }>(
-      peerId,
-      sessionPath(sessionId, "/tasks"),
-    ),
-  getBackground: (peerId: string, sessionId: string) =>
-    fedRequest<{ backgrounds: BackgroundCommandInfo[] }>(
-      peerId,
-      sessionPath(sessionId, "/background"),
-    ),
-  getGoal: (peerId: string, sessionId: string) =>
-    fedRequest<{ goal: GoalInfo | null }>(
-      peerId,
-      sessionPath(sessionId, "/goal"),
-    ),
-  cancelGoal: (peerId: string, sessionId: string) =>
-    fedRequest<{ ok: boolean }>(
-      peerId,
-      sessionPath(sessionId, "/goal"),
-      { method: "DELETE" },
-    ),
-  closeSession: (peerId: string, sessionId: string) =>
-    fedRequest<{ ok: boolean }>(
-      peerId,
-      sessionPath(sessionId, "/close"),
-      { method: "POST" },
-    ),
-  prompt: (
-    peerId: string,
-    sessionId: string,
-    text: string,
-    images?: PendingImage[],
-    mode?: ModePrompt,
-  ) =>
-    fedRequest<{ ok: boolean }>(
-      peerId,
-      sessionPath(sessionId, "/prompt"),
-      { method: "POST", body: JSON.stringify(promptBody(text, images, mode)) },
-    ),
-  abort: (peerId: string, sessionId: string) =>
-    fedRequest<{ ok: boolean }>(
-      peerId,
-      sessionPath(sessionId, "/abort"),
-      { method: "POST" },
-    ),
-  rewind: (peerId: string, sessionId: string, timestamp: number) =>
-    fedRequest<{ ok: boolean }>(
-      peerId,
-      sessionPath(sessionId, "/rewind"),
-      { method: "POST", body: JSON.stringify({ timestamp }) },
-    ),
-  /** Condense a remote session's older history into a checkpoint on demand
-   * (the `/compact` command; the agent runs on the peer). `instructions` is
-   * the user's extra focus for the summary. */
-  compact: (peerId: string, sessionId: string, instructions?: string) =>
-    fedRequest<{ ok: boolean; compacted?: number }>(
-      peerId,
-      sessionPath(sessionId, "/compact"),
-      {
-        method: "POST",
-        ...(instructions !== undefined && instructions.length > 0
-          ? { body: JSON.stringify({ instructions }) }
-          : {}),
-      },
-    ),
-  /** Answer a pending ask of a remote session (the agent runs on the peer;
-   * the answer is forwarded to the machine holding the question). */
-  answer: (
-    peerId: string,
-    sessionId: string,
-    toolCallId: string,
-    answers: AskAnswer[],
-  ) =>
-    fedRequest<{ ok: boolean }>(
-      peerId,
-      sessionPath(sessionId, "/answer"),
-      { method: "POST", body: JSON.stringify({ toolCallId, answers }) },
-    ),
-  updateSessionModel: (
-    peerId: string,
-    sessionId: string,
-    provider: string,
-    modelId: string,
-  ) =>
-    fedRequest<SessionInfo>(
-      peerId,
-      sessionPath(sessionId, "/model"),
-      { method: "POST", body: JSON.stringify({ provider, modelId }) },
-    ),
   /** The peer's providers/models (model picker data for remote sessions). */
   listProviders: (peerId: string) =>
     fedRequest<ProviderInfo[]>(peerId, "/providers"),
@@ -209,4 +102,8 @@ export const fed = {
       }/thinking-level`,
       { method: "PUT", body: JSON.stringify({ level }) },
     ),
+
+  /** The session-scoped endpoints of a peer (`getSession`, `prompt`, …),
+   * from the table every surface shares (see sessionRoutes). */
+  ...sessionRoutes,
 };

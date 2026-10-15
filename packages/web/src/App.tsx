@@ -1,4 +1,9 @@
-import { type ReactElement, useState } from "preact/compat";
+import {
+  type ReactElement,
+  useCallback,
+  useMemo,
+  useState,
+} from "preact/compat";
 import type { InitialData } from "./types.ts";
 import { isViewRunning, type SessionView } from "./types.ts";
 import { closeTargets, splitTabKey } from "./tabs.ts";
@@ -17,7 +22,7 @@ import { quit } from "./shell.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
 import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
 import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
-import { TabBar } from "./components/TabBar.tsx";
+import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { CloseTabsDialog } from "./components/CloseTabsDialog.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
@@ -97,7 +102,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // dialog's "keep running" answer closes the tab without the session.
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
   /** Close the given tabs, asking first when one of them is running. */
-  const requestClose = (ids: string[]) => {
+  const requestClose = useCallback((ids: string[]) => {
     const running = ids.filter((id) => {
       const view = views.get(id);
       return view !== undefined && isViewRunning(view);
@@ -113,7 +118,7 @@ export function App({ initialData }: AppProps): ReactElement {
         views.get(id)?.info.name || t("chrome.tabBar.newSession")
       ),
     });
-  };
+  }, [views, closeTabs, t]);
   /** Answer the dialog: close the tabs, with the running sessions stopped
    * (`keepRunning` false) or left to finish on the server. */
   const resolveClose = (keepRunning: boolean) => {
@@ -181,6 +186,46 @@ export function App({ initialData }: AppProps): ReactElement {
   // open) keeps its unsent input under the draft-tab key.
   const draftKey = activeTab ?? DRAFT_TAB;
   const draft = drafts.get(draftKey) ?? EMPTY_DRAFT;
+
+  // What the tab bar renders, derived here so its memoized component stays
+  // out of the streaming hot path: the view map is replaced on every event,
+  // while this list changes only when a label or a run state does.
+  const tabSummaries = useMemo<TabSummary[]>(
+    () =>
+      tabs.map((id) => {
+        const view = views.get(id);
+        return {
+          id,
+          name: view?.info.name ?? null,
+          modelId: view?.info.modelId ?? null,
+          active: id === activeTab,
+          running: view !== undefined && isViewRunning(view),
+          runningTool: view?.runningTools.values().next().value as
+            | string
+            | undefined,
+        };
+      }),
+    [tabs, views, activeTab],
+  );
+  // Stable callbacks (the memoized bar re-renders on their identity).
+  const closeTab = useCallback(
+    (id: string) => requestClose(closeTargets("tab", tabs, id)),
+    [requestClose, tabs],
+  );
+  const closeTabsToRight = useCallback(
+    (id: string) => requestClose(closeTargets("toRight", tabs, id)),
+    [requestClose, tabs],
+  );
+  const closeTabsToLeft = useCallback(
+    (id: string) => requestClose(closeTargets("toLeft", tabs, id)),
+    [requestClose, tabs],
+  );
+  const closeOtherTabs = useCallback(
+    (id: string) => requestClose(closeTargets("others", tabs, id)),
+    [requestClose, tabs],
+  );
+  const openRecent = useCallback(() => setShowRecent(true), []);
+  const openSettings = useCallback(() => setSettingsCategory("general"), []);
   return (
     <div className="app" ref={appRef}>
       {
@@ -190,23 +235,20 @@ export function App({ initialData }: AppProps): ReactElement {
       }
       <TitleBar
         onNew={openDraftTab}
-        onOpenRecent={() => setShowRecent(true)}
-        onOpenSettings={() => setSettingsCategory("general")}
+        onOpenRecent={openRecent}
+        onOpenSettings={openSettings}
         onQuit={quit}
       >
         <TabBar
-          tabs={tabs}
-          views={views}
-          activeTab={activeTab}
+          tabs={tabSummaries}
           onSelect={setActiveTab}
-          onClose={(id) => requestClose(closeTargets("tab", tabs, id))}
-          onCloseToRight={(id) =>
-            requestClose(closeTargets("toRight", tabs, id))}
-          onCloseToLeft={(id) => requestClose(closeTargets("toLeft", tabs, id))}
-          onCloseOthers={(id) => requestClose(closeTargets("others", tabs, id))}
+          onClose={closeTab}
+          onCloseToRight={closeTabsToRight}
+          onCloseToLeft={closeTabsToLeft}
+          onCloseOthers={closeOtherTabs}
           onNew={openDraftTab}
-          onOpenRecent={() => setShowRecent(true)}
-          onOpenSettings={() => setSettingsCategory("general")}
+          onOpenRecent={openRecent}
+          onOpenSettings={openSettings}
           isDesktop={update.source === "shell"}
           onQuit={quit}
         />
