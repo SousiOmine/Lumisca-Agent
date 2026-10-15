@@ -17,6 +17,7 @@ const SKIP_DIRS = new Set([
   ".git",
   ".lumisca-cache",
   ".playwright-mcp",
+  ".vite",
   ".vscode",
   ".zcode",
   "coverage",
