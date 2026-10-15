@@ -52,6 +52,12 @@ export function useTabs(
    * (see useSessionEvents.seedRevision): a restored tab must watch for lost
    * frames from the snapshot it started with, not from its next full sync. */
   seedRevision: (key: string, rev: number) => void,
+  /** Fetch and merge one tab's panel snapshots (see
+   * useSessionEvents.resyncPanels). A tab reopened on a session whose run is
+   * still going needs them: a run left going by "close and keep running" can
+   * have sub-agent tasks and background commands that no event has described
+   * to this page yet. */
+  resyncPanels: (key: string) => void,
 ) {
   const [tabs, setTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -70,6 +76,10 @@ export function useTabs(
         return;
       }
       const restoredViews = new Map<string, SessionView>();
+      // Restored tabs whose run is still going: their panel snapshots are
+      // not in the transcript snapshot and no event has described them to
+      // this page yet (see the resyncPanels call below).
+      const running: string[] = [];
       await Promise.all(ids.map(async (id) => {
         try {
           // GET /sessions/:id (not /open) for the info: the messages
@@ -84,6 +94,7 @@ export function useTabs(
             sessionApi(id).getTodo(),
           ]);
           restoredViews.set(id, restoreView(info, snapshot, todo.todos));
+          if (snapshot.running) running.push(id);
           // The tab starts watching for lost frames from this snapshot.
           seedRevision(id, snapshot.rev);
         } catch {
@@ -102,12 +113,17 @@ export function useTabs(
           ? active
           : (restoredTabs.at(-1) ?? null),
       );
+      // Fill in the panels of the tabs that are still running (see
+      // resyncPanels). The reconnect resync may have run before these views
+      // existed — this page never saw the events of a run that kept going
+      // while it was closed — so a tab restored on a live run asks here.
+      for (const key of running) resyncPanels(key);
     };
     restore();
     return () => {
       disposed = true;
     };
-  }, [setViews, seedRevision]);
+  }, [setViews, seedRevision, resyncPanels]);
 
   // Persist the open tabs so they can be restored after a restart.
   useEffect(() => {
@@ -133,13 +149,21 @@ export function useTabs(
     setActiveTab(DRAFT_TAB);
   }, []);
 
-  /** Close the given tabs: tell the owning server about real sessions and
-   * drop the tabs and views. When the active tab is among them, fall back
-   * to the last remaining tab (kept in the existing order). */
-  const closeTabs = useCallback((ids: string[]) => {
+  /** Close the given tabs: drop the tabs and their views, and tell the
+   * owning server about the sessions among them — except the ones named in
+   * `keepRunning`, whose `POST /close` is skipped, so a run that is still
+   * going keeps working on the server (the tab is gone, the session stays
+   * open, and reopening it from the session history rejoins the run). The
+   * App asks before it takes the `POST /close` route for a running tab (see
+   * CloseTabsDialog). When the active tab is among the closed ones, fall
+   * back to the last remaining tab (kept in the existing order). */
+  const closeTabs = useCallback((
+    ids: string[],
+    keepRunning?: ReadonlySet<string>,
+  ) => {
     const toClose = new Set(ids);
     for (const id of ids) {
-      if (id !== DRAFT_TAB) {
+      if (id !== DRAFT_TAB && !keepRunning?.has(id)) {
         sessionApi(id).close().catch(console.error);
       }
     }
@@ -155,33 +179,13 @@ export function useTabs(
     });
   }, [tabs, setViews]);
 
-  const closeTab = useCallback((sessionId: string) => {
-    closeTabs([sessionId]);
-  }, [closeTabs]);
-
-  /** Close every tab to the right of the given one. */
-  const closeTabsToRight = useCallback((sessionId: string) => {
-    const index = tabs.indexOf(sessionId);
-    if (index === -1) return;
-    closeTabs(tabs.slice(index + 1));
-  }, [tabs, closeTabs]);
-
-  /** Close every tab to the left of the given one. */
-  const closeTabsToLeft = useCallback((sessionId: string) => {
-    const index = tabs.indexOf(sessionId);
-    if (index === -1) return;
-    closeTabs(tabs.slice(0, index));
-  }, [tabs, closeTabs]);
-
-  /** Close every tab except the given one. */
-  const closeOtherTabs = useCallback((sessionId: string) => {
-    closeTabs(tabs.filter((id) => id !== sessionId));
-  }, [tabs, closeTabs]);
-
   /** Reopen a previously closed session in a tab: load its info, transcript
    * snapshot (messages + run state) and todo plan (the same data the
    * restart restore fetches) and open the tab; an already-open session is
-   * just focused. */
+   * just focused. A session whose run is still going — one left running by
+   * "close and keep running" — additionally asks for its panel snapshots,
+   * which the transcript snapshot does not carry and no event has described
+   * to this page yet. */
   const reopenSession = useCallback(async (key: string) => {
     if (tabs.includes(key)) {
       setActiveTab(key);
@@ -201,12 +205,13 @@ export function useTabs(
       });
       seedRevision(key, snapshot.rev);
       setActiveTab(key);
+      if (snapshot.running) resyncPanels(key);
     } catch (error) {
       // The session was deleted (or the owning peer is unreachable) since
       // the list was built; never crash over a stale entry.
       console.error(error);
     }
-  }, [tabs, setTabs, setViews, setActiveTab, seedRevision]);
+  }, [tabs, setTabs, setViews, setActiveTab, seedRevision, resyncPanels]);
 
   return {
     tabs,
@@ -214,10 +219,7 @@ export function useTabs(
     activeTab,
     setActiveTab,
     openDraftTab,
-    closeTab,
-    closeTabsToRight,
-    closeTabsToLeft,
-    closeOtherTabs,
+    closeTabs,
     reopenSession,
   };
 }

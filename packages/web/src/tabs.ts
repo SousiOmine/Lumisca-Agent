@@ -40,6 +40,28 @@ export function keysForPeer(
   return [...keys].filter((key) => splitTabKey(key).peerId === peerId);
 }
 
+/** The close operations the tab bar offers: the × button and the context
+ * menu's plain "close" ("tab"), plus the bulk actions of its submenu. */
+export type CloseOperation = "tab" | "toRight" | "toLeft" | "others";
+
+/** The tab ids a close operation targets, in tab order. Pure, so the App
+ * can ask the user before running one that would stop a running session —
+ * the alternative (each close function checking the views itself) would
+ * spread the "which tabs does this operation mean" rule over two modules.
+ * A bulk operation whose anchor is no longer open (a stale context menu)
+ * targets nothing. */
+export function closeTargets(
+  op: CloseOperation,
+  tabs: readonly string[],
+  anchorId: string,
+): string[] {
+  if (op === "tab") return [anchorId];
+  if (op === "others") return tabs.filter((id) => id !== anchorId);
+  const index = tabs.indexOf(anchorId);
+  if (index === -1) return [];
+  return op === "toRight" ? tabs.slice(index + 1) : tabs.slice(0, index);
+}
+
 /** `%` → `%25` first, then `:` → `%3A`, so an id that already reads as an
  * escape sequence cannot decode into a separator. */
 function escapePeerId(peerId: string): string {

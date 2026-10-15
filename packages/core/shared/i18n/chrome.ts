@@ -51,6 +51,35 @@ export const chrome = {
     en: "Close all other tabs",
   },
 
+  // --- close confirmation (running tab) ------------------------------------
+  "chrome.tabClose.title": {
+    ja: "実行中のタブを閉じますか？",
+    en: "Close a running tab?",
+  },
+  "chrome.tabClose.body": {
+    ja:
+      "「{name}」は実行中です。閉じると実行は中止され、バックグラウンドコマンドとサブエージェントも停止します。",
+    en:
+      '"{name}" is running. Closing it stops the run, along with its background commands and sub-agents.',
+  },
+  "chrome.tabClose.bodyMany": {
+    ja:
+      "対象のタブのうち {count} 件が実行中です。閉じるとそれらの実行は中止され、バックグラウンドコマンドとサブエージェントも停止します。",
+    en:
+      "The close includes {count} running tabs. Closing stops their runs, their background commands and their sub-agents.",
+  },
+  "chrome.tabClose.keepRunningNote": {
+    ja:
+      "「実行を続けて閉じる」なら、実行中のセッションはサーバー側で続きます（他のタブは閉じます。セッション履歴から開き直せます）。",
+    en:
+      'With "Close and keep running", the running sessions continue on the server (the other tabs still close; reopen them from the session history).',
+  },
+  "chrome.tabClose.stop": { ja: "中止して閉じる", en: "Stop and close" },
+  "chrome.tabClose.keepRunning": {
+    ja: "実行を続けて閉じる",
+    en: "Close and keep running",
+  },
+
   // --- app menu ------------------------------------------------------------
   "chrome.appMenu.title": {
     ja: "アプリケーションメニュー",

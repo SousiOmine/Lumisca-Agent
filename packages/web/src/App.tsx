@@ -1,7 +1,7 @@
 import { type ReactElement, useState } from "preact/compat";
 import type { InitialData } from "./types.ts";
-import type { SessionView } from "./types.ts";
-import { splitTabKey } from "./tabs.ts";
+import { isViewRunning, type SessionView } from "./types.ts";
+import { closeTargets, splitTabKey } from "./tabs.ts";
 import { useT } from "./i18n.ts";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useLanguage } from "./hooks/useLanguage.ts";
@@ -18,6 +18,7 @@ import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
 import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
 import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
 import { TabBar } from "./components/TabBar.tsx";
+import { CloseTabsDialog } from "./components/CloseTabsDialog.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
@@ -32,6 +33,16 @@ import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 export interface AppProps {
   /** Preloaded data from the bootstrap script; undefined when not served. */
   initialData?: InitialData;
+}
+
+/** A close operation waiting for the user's answer (CloseTabsDialog): the
+ * tabs it targets, and the running ones among them — those are what the
+ * dialog warns about and what "keep running" exempts from `POST /close`. */
+interface PendingClose {
+  ids: string[];
+  running: Set<string>;
+  /** Display names of the running tabs, in tab order. */
+  names: string[];
 }
 
 export function App({ initialData }: AppProps): ReactElement {
@@ -67,21 +78,50 @@ export function App({ initialData }: AppProps): ReactElement {
   // restart + log copy-paste. Declared before useSessionEvents so its
   // noteFailure can be wired as the connection-lost callback.
   const serverHealth = useServerHealth(true);
-  const { views, setViews, setViewError, seedRevision } = useSessionEvents({
-    onConnectionLost: () => serverHealth.noteFailure(),
-  });
+  const { views, setViews, setViewError, seedRevision, resyncPanels } =
+    useSessionEvents({
+      onConnectionLost: () => serverHealth.noteFailure(),
+    });
   const {
     tabs,
     setTabs,
     activeTab,
     setActiveTab,
     openDraftTab,
-    closeTab,
-    closeTabsToRight,
-    closeTabsToLeft,
-    closeOtherTabs,
+    closeTabs,
     reopenSession,
-  } = useTabs(setViews, seedRevision);
+  } = useTabs(setViews, seedRevision, resyncPanels);
+  // Closing a tab closes its session, which stops the run (and the
+  // session's background commands and sub-agents). A close that would do
+  // that to a running tab therefore asks first (CloseTabsDialog); the
+  // dialog's "keep running" answer closes the tab without the session.
+  const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
+  /** Close the given tabs, asking first when one of them is running. */
+  const requestClose = (ids: string[]) => {
+    const running = ids.filter((id) => {
+      const view = views.get(id);
+      return view !== undefined && isViewRunning(view);
+    });
+    if (running.length === 0) {
+      closeTabs(ids);
+      return;
+    }
+    setPendingClose({
+      ids,
+      running: new Set(running),
+      names: running.map((id) =>
+        views.get(id)?.info.name || t("chrome.tabBar.newSession")
+      ),
+    });
+  };
+  /** Answer the dialog: close the tabs, with the running sessions stopped
+   * (`keepRunning` false) or left to finish on the server. */
+  const resolveClose = (keepRunning: boolean) => {
+    if (pendingClose === null) return;
+    const { ids, running } = pendingClose;
+    setPendingClose(null);
+    closeTabs(ids, keepRunning ? running : undefined);
+  };
   // Unsent composer content per tab: the chat view remounts on every tab
   // switch (keyed below), so the draft lives here and is fed back into
   // the view when its tab is shown again. Closing a tab discards it.
@@ -159,10 +199,11 @@ export function App({ initialData }: AppProps): ReactElement {
           views={views}
           activeTab={activeTab}
           onSelect={setActiveTab}
-          onClose={closeTab}
-          onCloseToRight={closeTabsToRight}
-          onCloseToLeft={closeTabsToLeft}
-          onCloseOthers={closeOtherTabs}
+          onClose={(id) => requestClose(closeTargets("tab", tabs, id))}
+          onCloseToRight={(id) =>
+            requestClose(closeTargets("toRight", tabs, id))}
+          onCloseToLeft={(id) => requestClose(closeTargets("toLeft", tabs, id))}
+          onCloseOthers={(id) => requestClose(closeTargets("others", tabs, id))}
           onNew={openDraftTab}
           onOpenRecent={() => setShowRecent(true)}
           onOpenSettings={() => setSettingsCategory("general")}
@@ -263,6 +304,14 @@ export function App({ initialData }: AppProps): ReactElement {
           openKeys={new Set(tabs)}
           onOpen={(key) => void reopenSession(key)}
           onClose={() => setShowRecent(false)}
+        />
+      )}
+      {pendingClose !== null && (
+        <CloseTabsDialog
+          names={pendingClose.names}
+          onCancel={() => setPendingClose(null)}
+          onStopAndClose={() => resolveClose(false)}
+          onKeepRunning={() => resolveClose(true)}
         />
       )}
     </div>

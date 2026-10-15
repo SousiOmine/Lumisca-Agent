@@ -140,18 +140,31 @@ export async function isAppHidden(): Promise<boolean> {
   }
 }
 
-/** Forward one event's display text to the shell when the app is hidden.
+/** The session name a notification shows: the tab's title when the caller
+ * has it, or a function that reads it on demand. A session whose tab was
+ * closed while its run kept going ("close and keep running") has no title
+ * in this page — only the server knows it — and the raw session id the
+ * event carries is not a name a user recognizes. The function is called
+ * after the checks that drop the notification, so the extra request is
+ * never made for a toast nobody would see. */
+type SessionName = string | (() => Promise<string>);
+
+/** Forward one notification to the shell when the app is hidden.
  * Fire-and-forget: every failure (disabled, visible, no shell, denied OS
  * permission) resolves silently — the event itself was already applied to
  * the UI state by the caller. */
 async function maybeNotify(
-  title: string,
-  body: string,
+  sessionName: SessionName,
   urgent: boolean,
+  build: (name: string) => { title: string; body: string },
 ): Promise<void> {
   try {
     if (!isNotifyEnabled()) return;
     if (!await isAppHidden()) return;
+    const name = typeof sessionName === "string"
+      ? sessionName
+      : await sessionName();
+    const { title, body } = build(name);
     await notifyApi.notify(title, body, urgent);
   } catch {
     // Best-effort only.
@@ -159,18 +172,20 @@ async function maybeNotify(
 }
 
 /** Notify that a session's run ended. Call on every `agent_end` event. */
-export function maybeNotifyAgentEnd(sessionName: string): Promise<void> {
-  const { title, body } = buildAgentEndNotification(sessionName);
-  return maybeNotify(title, body, false);
+export function maybeNotifyAgentEnd(sessionName: SessionName): Promise<void> {
+  return maybeNotify(sessionName, false, buildAgentEndNotification);
 }
 
 /** Notify that the agent asked the user a question. Call on every
  * `question` event (the run is still waiting, so this one is urgent —
  * the toast stays on screen longer). */
 export function maybeNotifyQuestion(
-  sessionName: string,
+  sessionName: SessionName,
   questions: AskQuestion[],
 ): Promise<void> {
-  const { title, body } = buildQuestionNotification(sessionName, questions);
-  return maybeNotify(title, body, true);
+  return maybeNotify(
+    sessionName,
+    true,
+    (name) => buildQuestionNotification(name, questions),
+  );
 }

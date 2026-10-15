@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { connectEvents, sessionApi, type SessionSnapshot } from "../api.ts";
 import { errorText } from "../providers.ts";
-import { applyEvent, applySnapshot, revisionGap } from "../events.ts";
+import {
+  applyEvent,
+  applySnapshot,
+  revisionGap,
+  type SnapshotParts,
+} from "../events.ts";
 import { keysForPeer, tabKey } from "../tabs.ts";
 import { maybeNotifyAgentEnd, maybeNotifyQuestion } from "../notify.ts";
-import type {
-  BackgroundCommandInfo,
-  ClientEvent,
-  GoalInfo,
-  SessionView,
-  TaskInfo,
-  TodoPhase,
-} from "../types.ts";
+import type { ClientEvent, SessionView, TodoPhase } from "../types.ts";
 
 /** Period between opportunistic state re-syncs while the WebSocket is
  * disconnected (see syncState). While the socket is up the events are the
@@ -30,12 +28,63 @@ const REVISION_PROBE_MS = 30_000;
 const RECONNECT_BASE_MS = 2000;
 const RECONNECT_MAX_MS = 30_000;
 
+/** Fetch one session's panel snapshots — the parts of a view that are not in
+ * the transcript snapshot: the sub-agent tasks, the background commands and
+ * the active goal. Each piece is fetched independently (one failing — a
+ * deleted session, an unreachable peer — must not drop the others), and a
+ * failed piece is absent rather than empty, so the caller keeps what it
+ * shows. Panels only, so a caller that merges the result never touches the
+ * transcript or the live state (see events.applySnapshot). Undefined when
+ * every piece failed: there is nothing to apply. */
+async function fetchPanels(id: string): Promise<SnapshotParts | undefined> {
+  const session = sessionApi(id);
+  const panels: SnapshotParts = {};
+  let fetched = false;
+  try {
+    panels.tasks = (await session.getTasks()).tasks;
+    fetched = true;
+  } catch {
+    // Server not reachable yet; keep the current tasks.
+  }
+  try {
+    panels.backgrounds = (await session.getBackground()).backgrounds;
+    fetched = true;
+  } catch {
+    // Server not reachable yet; keep the current backgrounds.
+  }
+  try {
+    panels.goal = (await session.getGoal()).goal;
+    fetched = true;
+  } catch {
+    // Server not reachable yet; keep the current goal.
+  }
+  return fetched ? panels : undefined;
+}
+
+/** The display name of a session this page has no tab for — one that was
+ * left running ("close and keep running", see CloseTabsDialog) or one it
+ * never opened. Only the server knows the title, and the session id an event
+ * carries is not a name a user recognizes, so the notification path reads
+ * the title on demand. Best-effort: a session that is gone (or a peer that
+ * is unreachable) falls back to the id, which is what notifications named
+ * before. */
+async function detachedSessionName(key: string): Promise<string> {
+  const session = sessionApi(key);
+  try {
+    return (await session.getSession()).name;
+  } catch {
+    return session.sessionId;
+  }
+}
+
 /** Session views plus the WebSocket event stream that feeds them:
  * reconnect with resync on drop, state sync while disconnected and on
  * tab-return, revision-based gap detection and probing while connected, and
  * per-view error recording. The returned setViews is shared with the tab
  * and session action logic, and seedRevision lets the tab paths (which
- * apply a snapshot themselves) seed the revision marker of a restored tab.
+ * apply a snapshot themselves) seed the revision marker of a restored tab;
+ * resyncPanels fetches the panel snapshots of a single tab (a tab reopened
+ * on a session whose run is still going has them missing).
  * `onConnectionLost` fires on every WS close (the desktop health monitor
  * uses it to arm its server-down banner); `onConnectionOpen` fires on every
  * (re)connect. */
@@ -117,9 +166,7 @@ export function useSessionEvents(
     }
     const snapshots = new Map<string, SessionSnapshot>();
     const todos = new Map<string, TodoPhase[]>();
-    const tasks = new Map<string, TaskInfo[]>();
-    const backgrounds = new Map<string, BackgroundCommandInfo[]>();
-    const goals = new Map<string, GoalInfo | null>();
+    const panels = new Map<string, SnapshotParts>();
     await Promise.all(ids.map(async (id) => {
       // Fetch independently: one failing (e.g. the session was deleted)
       // must not drop the other.
@@ -134,24 +181,8 @@ export function useSessionEvents(
       } catch {
         // Server not reachable yet; keep the current plan.
       }
-      try {
-        const { tasks: snapshot } = await sessionApi(id).getTasks();
-        tasks.set(id, snapshot);
-      } catch {
-        // Server not reachable yet; keep the current tasks.
-      }
-      try {
-        const { backgrounds: snapshot } = await sessionApi(id).getBackground();
-        backgrounds.set(id, snapshot);
-      } catch {
-        // Server not reachable yet; keep the current backgrounds.
-      }
-      try {
-        const { goal } = await sessionApi(id).getGoal();
-        goals.set(id, goal);
-      } catch {
-        // Server not reachable yet; keep the current goal.
-      }
+      const entry = await fetchPanels(id);
+      if (entry !== undefined) panels.set(id, entry);
     }));
     // Seed the revision marker of every session whose snapshot arrived: a
     // later gap (or probe) can then tell whether this view has seen
@@ -159,44 +190,58 @@ export function useSessionEvents(
     for (const [id, snapshot] of snapshots) {
       seedRevision(id, snapshot.rev);
     }
-    if (
-      snapshots.size === 0 && todos.size === 0 && tasks.size === 0 &&
-      backgrounds.size === 0 && goals.size === 0
-    ) {
+    if (snapshots.size === 0 && todos.size === 0 && panels.size === 0) {
       return;
     }
     setViews((prev) => {
-      const next = new Map(prev);
-      for (
-        const id of new Set([
-          ...snapshots.keys(),
-          ...todos.keys(),
-          ...tasks.keys(),
-          ...backgrounds.keys(),
-          ...goals.keys(),
-        ])
-      ) {
-        const v = next.get(id);
-        if (!v) continue;
+      // Nothing changed keeps the map's identity (so App does not re-render
+      // on a sync that learned nothing new).
+      let next: Map<string, SessionView> | null = null;
+      for (const id of ids) {
         // The rules (live state wins over the snapshot, panels merge or
         // replace, nothing changed keeps the view's identity) live in
         // events.applySnapshot, where they are unit-tested.
+        const v = (next ?? prev).get(id);
+        if (v === undefined) continue;
         const nextView = applySnapshot(
           v,
           {
+            ...panels.get(id),
             snapshot: snapshots.get(id),
             todos: todos.get(id),
-            tasks: tasks.get(id),
-            backgrounds: backgrounds.get(id),
-            goal: goals.get(id),
           },
           stateBefore.get(id),
         );
-        if (nextView !== v) next.set(id, nextView);
+        if (nextView === v) continue;
+        next ??= new Map(prev);
+        next.set(id, nextView);
       }
-      return next;
+      return next ?? prev;
     });
   }, [seedRevision]);
+
+  /** Re-read one open tab's panel snapshots (sub-agent tasks, background
+   * commands, goal) and merge them in. Asked for when a tab is opened on a
+   * session whose run is still going — a session left running with "close
+   * and keep running" and reopened from the session history: the transcript
+   * snapshot does not carry the panels, and the task/background events only
+   * update rows that are already there, so a background command running
+   * since before the reopen would stay invisible until the next resync.
+   * Panels only, so the live state a run may have changed meanwhile is never
+   * overwritten (see events.applySnapshot). */
+  const resyncPanels = useCallback(async (key: string) => {
+    const panels = await fetchPanels(key);
+    if (panels === undefined) return;
+    setViews((prev) => {
+      const v = prev.get(key);
+      if (v === undefined) return prev;
+      const nextView = applySnapshot(v, panels, undefined);
+      if (nextView === v) return prev;
+      const next = new Map(prev);
+      next.set(key, nextView);
+      return next;
+    });
+  }, [setViews]);
 
   /** Clear per-session transient state (stuck streaming/tool indicators)
    * and re-fetch the session snapshot and the panel snapshots, so nothing
@@ -262,7 +307,11 @@ export function useSessionEvents(
       }
       if (event.type === "agent_end" || event.type === "question") {
         const view = viewsRef.current.get(key);
-        const name = view?.info.name ?? event.sessionId;
+        // A notification for a session with no open tab must still name it:
+        // the title then comes from the server, and only if the toast is
+        // actually shown (see notify.SessionName).
+        const name: string | (() => Promise<string>) = view?.info.name ??
+          (() => detachedSessionName(key));
         if (event.type === "agent_end") {
           // A duplicate delivery (same run's end seen twice) must not
           // notify twice: the first end stamps agentEndedAt, and only a
@@ -447,5 +496,5 @@ export function useSessionEvents(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleEvent, resync, syncState]);
 
-  return { views, setViews, setViewError, seedRevision };
+  return { views, setViews, setViewError, seedRevision, resyncPanels };
 }

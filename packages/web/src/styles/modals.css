@@ -110,6 +110,23 @@
   gap: 8px;
 }
 
+/* The running-tab confirmation (CloseTabsDialog): the warning paragraph,
+ * with the names of the running tabs listed under it. The consequences
+ * below it reuse .settings-note, the dialogs' small print. */
+.confirm-body {
+  margin: 0;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.confirm-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
 .model-list {
   display: flex;
   flex-direction: column;
