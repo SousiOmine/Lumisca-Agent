@@ -136,3 +136,42 @@ Deno.test("federation: a peer's stream state is relayed to the UI", async () => 
     await peerServer.shutdown();
   }
 });
+
+Deno.test("federation: restart leaves one live stream per peer", async () => {
+  // The registry was re-saved: restart() drops the old streams and opens new
+  // ones. A dropped stream must not schedule a reconnect of its own — the
+  // orphan socket relays the peer's events a second time and nothing keeps a
+  // reference to close it.
+  let connections = 0;
+  const peerServer = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: () => {},
+  }, (req) => {
+    if (new URL(req.url).pathname !== "/ws") {
+      return new Response("not found", { status: 404 });
+    }
+    connections++;
+    return Deno.upgradeWebSocket(req).response;
+  });
+  const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  const client = new FederationClient(
+    () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
+    // Never this stub, so the peer stays visible.
+    () => "http://127.0.0.1:1",
+  );
+  try {
+    client.start();
+    await waitFor(() => connections === 1);
+    client.restart();
+    await waitFor(() => connections === 2);
+    assertEquals(connections, 2, "the restarted peer is connected once");
+    // Past the stream's 2s reconnect backoff: an orphaned stream would dial
+    // in again here, and keep doing so.
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    assertEquals(connections, 2, "the dropped stream must not reconnect");
+  } finally {
+    client.close();
+    await peerServer.shutdown();
+  }
+});

@@ -25,6 +25,13 @@ class PeerEventStream {
   private ws: WebSocket | null = null;
   private attempts = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Set by close(): this stream is gone and must never reconnect. Kept
+   * apart from the client's own `closed` flag, which stays false across a
+   * restart (the client keeps relaying through a fresh set of streams) —
+   * without this flag the dropped stream's `onclose` would schedule a
+   * reconnect that opens a socket nobody holds a reference to: the peer's
+   * events would arrive twice and the orphan could never be closed. */
+  private closed = false;
 
   constructor(
     private readonly peer: ConnectionEntry,
@@ -35,9 +42,10 @@ class PeerEventStream {
     private readonly onState: (connected: boolean) => void,
   ) {}
 
-  /** Open the stream (no-op when already connected or the client closed). */
+  /** Open the stream (no-op when already connected, dropped, or the client
+   * closed). */
   connect(): void {
-    if (this.isClosed() || this.ws !== null) return;
+    if (this.closed || this.isClosed() || this.ws !== null) return;
     // The registry stores http:// URLs; the event stream speaks ws(s)://.
     const wsUrl = `${
       this.peer.url.replace(/^http/, "ws").replace(/\/+$/, "")
@@ -83,8 +91,12 @@ class PeerEventStream {
     };
   }
 
-  /** Drop the connection and cancel pending reconnects. */
+  /** Drop the connection, cancel pending reconnects, and retire the stream:
+   * a closed stream never connects again (see the `closed` field). */
   close(): void {
+    // Before the socket is closed, so the `onclose` this triggers cannot
+    // schedule a reconnect for a stream its owner has already dropped.
+    this.closed = true;
     if (this.timer !== null) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -94,7 +106,7 @@ class PeerEventStream {
   }
 
   private scheduleReconnect(): void {
-    if (this.isClosed() || this.timer !== null) return;
+    if (this.closed || this.isClosed() || this.timer !== null) return;
     const delay = Math.min(
       RECONNECT_BASE_MS * 2 ** this.attempts,
       RECONNECT_MAX_MS,
