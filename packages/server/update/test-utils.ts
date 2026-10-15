@@ -9,7 +9,6 @@
  *
  * This module is test-only: nothing in the server's module graph imports it.
  */
-import { blake2b } from "@noble/hashes/blake2.js";
 import { hashFileBlake2b512, MINISIGN_LAYOUT } from "./verify.ts";
 
 export interface FixtureFile {
@@ -246,9 +245,4 @@ export async function createSigningKeys(): Promise<SigningKeys> {
       return base64(new TextEncoder().encode(text));
     },
   };
-}
-
-/** BLAKE2b-512 of a byte string (used by tests that sign in-memory). */
-export function digestOf(bytes: Uint8Array): Uint8Array {
-  return blake2b(bytes, { dkLen: 64 });
 }

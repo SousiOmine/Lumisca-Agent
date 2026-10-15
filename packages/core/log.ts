@@ -13,8 +13,6 @@
  * `info`/`warn`/`error` always print.
  */
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
-
 function debugEnabled(): boolean {
   try {
     const flag = Deno.env.get("LUMISCA_DEBUG") ?? "";

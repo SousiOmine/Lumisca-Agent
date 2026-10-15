@@ -3,11 +3,7 @@ import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type { GoalStore } from "../goal/loop.ts";
-import {
-  finishGoal,
-  resolveMaxGoalIterations,
-  runGoalLoop,
-} from "../goal/loop.ts";
+import { finishGoal, runGoalLoop } from "../goal/loop.ts";
 import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";
 import type { ModePrompt } from "../types/mode-message.ts";
 
@@ -109,10 +105,10 @@ export class GoalRunner {
     if (mode.modeId !== "goal") return;
     const text = mode.shortText.trim();
     if (text.length === 0) return;
-    const maxIterations = resolveMaxGoalIterations(
+    const goal = this.deps.goalStore.saveGoal(
+      text,
       DEFAULT_MAX_GOAL_ITERATIONS,
     );
-    const goal = this.deps.goalStore.saveGoal(text, maxIterations);
     this.deps.emit({
       type: "goal_start",
       sessionId: this.deps.sessionId,

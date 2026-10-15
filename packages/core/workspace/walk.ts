@@ -23,7 +23,6 @@ export interface WalkEntry {
   path: string;
   rel: string;
   isDir: boolean;
-  depth: number;
 }
 
 export interface WalkOptions {
@@ -68,7 +67,7 @@ export async function* walkEntries(
     const full = join(dir, name);
     const rel = relative(root, full);
     if (options.gitignore?.ignores(root, rel, false)) return undefined;
-    return { path: full, rel, isDir: false, depth: 0 };
+    return { path: full, rel, isDir: false };
   };
 
   async function* walk(dir: string, depth: number): AsyncGenerator<WalkEntry> {
@@ -112,7 +111,7 @@ export async function* walkEntries(
         const rel = relative(root, full);
         if (options.gitignore?.ignores(root, rel, true)) continue;
         emitted++;
-        yield { path: full, rel, isDir: true, depth };
+        yield { path: full, rel, isDir: true };
         yield* walk(full, depth + 1);
       }
       return;

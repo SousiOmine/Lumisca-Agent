@@ -3,7 +3,6 @@ import type { AgentMessage, StreamFn } from "../ai/types.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
-import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";
 import { GoalJudge, lastAssistantOutput } from "./judge.ts";
 
 /** Session-bound goal persistence (the sessions table, via the pool).
@@ -183,18 +182,4 @@ export async function runGoalLoop(
     if (deps.isCancelled()) return { stopped: "cancelled" };
     await deps.runTurn(verdict.nextPrompt);
   }
-}
-
-/** Resolve the loop's max iterations: explicit per-goal value or the mode
- * default. Exported for the session agent's goal-start path. */
-export function resolveMaxGoalIterations(
-  maxIterations?: number,
-): number {
-  if (
-    maxIterations !== undefined && Number.isInteger(maxIterations) &&
-    maxIterations > 0
-  ) {
-    return maxIterations;
-  }
-  return DEFAULT_MAX_GOAL_ITERATIONS;
 }

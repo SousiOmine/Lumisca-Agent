@@ -10,7 +10,7 @@ import type {
   Provider,
 } from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
-import type { ThinkingLevel } from "../shared/mod.ts";
+import type { ModelInfo, ThinkingLevel } from "../shared/mod.ts";
 import { CoreError } from "../errors.ts";
 import type {
   UserProviderConfig,
@@ -38,7 +38,7 @@ import {
   resolveCatalogSource,
   snapshotCatalog,
 } from "./catalog-source.ts";
-import { clampThinkingLevel } from "./thinking.ts";
+import { clampThinkingLevel, getSupportedThinkingLevels } from "./thinking.ts";
 import { setApiKey } from "../settings/credentials.ts";
 import {
   FAST_MODEL_KEY,
@@ -516,6 +516,34 @@ export class ModelManager {
       `${MODEL_THINKING_PREFIX}${providerId}:${modelId}`,
     );
     return clampThinkingLevel(model, stored as ThinkingLevel ?? "off");
+  }
+
+  /** The catalog metadata of one model, shaped for the UI (context window,
+   * reasoning flag, input modalities). The session decoration and the
+   * detailed model list both publish this block, so clients see one shape. */
+  describeModel(model: Model<Api>): ModelInfo {
+    return {
+      id: model.id,
+      name: model.name,
+      contextWindow: model.contextWindow,
+      reasoning: model.reasoning,
+      input: model.input,
+    };
+  }
+
+  /** The thinking state the UI renders for one model: the stored level and
+   * the levels the model supports ("off" alone when the model is unknown).
+   * `modelId` is the caller's own id (a session keeps its ids after the
+   * model is retired), `model` the catalog entry when one is known. */
+  thinkingState(
+    providerId: string,
+    modelId: string,
+    model: Model<Api> | undefined,
+  ): { thinkingLevel: ThinkingLevel; thinkingLevels: ThinkingLevel[] } {
+    return {
+      thinkingLevel: this.getThinkingLevel(providerId, modelId),
+      thinkingLevels: getSupportedThinkingLevels(model),
+    };
   }
 
   /** Store a thinking level for a model. Unsupported levels are clamped to

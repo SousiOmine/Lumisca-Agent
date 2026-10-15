@@ -33,10 +33,7 @@ import type {
   UserProviderInput,
   UserProviderSummary,
 } from "./models/user-providers.ts";
-import {
-  getSupportedThinkingLevels,
-  isThinkingLevel,
-} from "./models/thinking.ts";
+import { isThinkingLevel } from "./models/thinking.ts";
 import type { ThinkingLevel } from "./shared/mod.ts";
 import type { AskAnswer } from "./shared/mod.ts";
 import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
@@ -750,11 +747,9 @@ export class LumiscaCore {
       const model = await this.resolveDefaultModel();
       return {
         ...model,
-        thinkingLevel: this.models.getThinkingLevel(
+        ...this.models.thinkingState(
           model.provider,
           model.modelId,
-        ),
-        thinkingLevels: getSupportedThinkingLevels(
           this.models.getModel(model.provider, model.modelId),
         ),
       };
@@ -1127,14 +1122,9 @@ export class LumiscaCore {
     thinkingLevels: ThinkingLevel[];
   }> {
     return this.models.getModels(providerId).map((m) => ({
-      id: m.id,
-      name: m.name,
-      contextWindow: m.contextWindow,
-      reasoning: m.reasoning,
-      input: m.input,
+      ...this.models.describeModel(m),
       enabled: this.isModelEnabled(providerId, m.id),
-      thinkingLevel: this.models.getThinkingLevel(providerId, m.id),
-      thinkingLevels: getSupportedThinkingLevels(m),
+      ...this.models.thinkingState(providerId, m.id, m),
     }));
   }
 
@@ -1290,24 +1280,16 @@ export class LumiscaCore {
     );
     return {
       ...session,
-      thinkingLevel: this.models.getThinkingLevel(
+      ...this.models.thinkingState(
         session.modelProvider,
         session.modelId,
+        model,
       ),
-      thinkingLevels: getSupportedThinkingLevels(model),
       // The model's catalog metadata (context window etc.) rides along so
       // clients can render model-specific UI without a model-list fetch —
       // the session's own model is authoritative even when the catalog
       // changes afterwards.
-      model: model !== undefined
-        ? {
-          id: model.id,
-          name: model.name,
-          contextWindow: model.contextWindow,
-          reasoning: model.reasoning,
-          input: model.input,
-        }
-        : undefined,
+      model: model !== undefined ? this.models.describeModel(model) : undefined,
       chat: this.getWorkspace(session.workspaceId)?.chat ?? false,
     };
   }

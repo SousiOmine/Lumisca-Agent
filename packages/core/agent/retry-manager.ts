@@ -17,7 +17,7 @@ import {
   sleepAbortable,
 } from "../ai/rate-limit.ts";
 import { isRetryableRateLimit } from "./llm-retry.ts";
-import type { NotificationMessage } from "../types/notification.ts";
+import type { NotificationMessage } from "../ai/types.ts";
 
 /** Outcome of classifying one assistant turn for retry. */
 export type RetryDecision =

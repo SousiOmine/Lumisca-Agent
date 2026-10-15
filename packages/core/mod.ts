@@ -2,7 +2,7 @@ export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
 export { CoreError, errorMessage } from "./errors.ts";
 export { createLogger } from "./log.ts";
-export type { Logger, LogLevel } from "./log.ts";
+export type { Logger } from "./log.ts";
 export { refreshCatalogInBackground } from "./models/catalog-refresh.ts";
 export type { CatalogRefresher } from "./models/catalog-refresh.ts";
 export { Sandbox } from "./workspace/sandbox.ts";
@@ -17,17 +17,18 @@ export type { Workspace } from "./types/workspace.ts";
 export type { SessionInfo } from "./types/session.ts";
 export type { ClientEvent } from "./types/event.ts";
 export { notificationText, toLlmMessages } from "./types/notification.ts";
+export type { NotificationPayload } from "./types/notification.ts";
 export type {
   NotificationKind,
   NotificationMessage,
-  NotificationPayload,
   NotificationStatus,
-} from "./types/notification.ts";
+} from "./ai/types.ts";
 export type {
   ContextProvider,
   ContextUpdate,
 } from "./agent/context-providers.ts";
-export type { ModeMessage, ModePrompt } from "./types/mode-message.ts";
+export type { ModeMessage } from "./ai/types.ts";
+export type { ModePrompt } from "./types/mode-message.ts";
 export { Agent, type AgentDefaults, type AgentInit } from "./ai/agent.ts";
 export { LumiscaModels, type LumiscaModelsOptions } from "./ai/models.ts";
 export { languageModelFor } from "./ai/lang-model.ts";
@@ -125,11 +126,11 @@ export {
   createBrowserTools,
   createBrowserToolsFrom,
 } from "./browser/tools.ts";
+export { findCanvasIcuDataFile } from "./pdf/icu-data.ts";
 export {
   createPdfTools,
   createUnpdfRenderer,
   DEFAULT_PDF_DPI,
-  findCanvasIcuDataFile,
   MAX_PDF_PAGES_PER_CALL,
   PDF_TOOL_NAMES,
 } from "./pdf/tools.ts";
@@ -142,10 +143,10 @@ export { formatSnapshot } from "./browser/tools.ts";
 export { HttpBrowserBackend } from "./browser/client.ts";
 export { checkBrowserUrl, requireAllowedUrl } from "./browser/policy.ts";
 export { createComputerHost } from "./computer/host.ts";
+export { MAX_CAPTURE_DIMENSION } from "./computer/image.ts";
 export {
   COMPUTER_TOOL_NAMES,
   createComputerTools,
-  MAX_CAPTURE_DIMENSION,
   MAX_TYPE_CHARS,
   MAX_WAIT_MS,
   MAX_WINDOW_LINES,
@@ -308,7 +309,7 @@ export {
 export { resolveSettingsPath, SETTINGS_DIR_NAME } from "./settings/path.ts";
 export { CONNECTIONS_KEY } from "./shared/settings-keys.ts";
 export type { ConnectionEntry } from "./settings/connections.ts";
-export { formatModelMeta } from "./models/meta.ts";
+export { formatModelMeta } from "./shared/mod.ts";
 export {
   clampThinkingLevel,
   getSupportedThinkingLevels,
@@ -317,8 +318,8 @@ export {
 export type { ThinkingLevel } from "./shared/mod.ts";
 export type { ModelInfo, ProviderInfo } from "./shared/mod.ts";
 export type { CatalogStatus } from "./shared/mod.ts";
+export { ALLOWED_OPENAI_APIS } from "./shared/mod.ts";
 export {
-  ALLOWED_OPENAI_APIS,
   type UserProviderConfig,
   type UserProviderInput,
   type UserProviderModel,

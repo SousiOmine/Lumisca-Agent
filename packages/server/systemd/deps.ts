@@ -15,7 +15,11 @@
  * launcher's unhandled-rejection handler, print, and let the process drain
  * its event loop into a silent exit 0.
  */
-import { DESKTOP_ENV_KEY, isDesktopManaged } from "../startup.ts";
+import {
+  DESKTOP_ENV_KEY,
+  type EnvironmentSource,
+  isDesktopManaged,
+} from "../startup.ts";
 import { generateToken } from "./document.ts";
 import { type ServiceHost, ServiceUsageError } from "./plan.ts";
 import { createSystemdRunner, type ServiceRunner } from "./runner.ts";
@@ -43,15 +47,20 @@ export interface ServiceDeps {
   interfaces: () => Deno.NetworkInterfaceInfo[];
 }
 
-/** The real machine, the real systemd, and the real network. */
-export function defaultServiceDeps(): ServiceDeps {
-  const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME") ?? "";
+/** The real machine, the real systemd, and the real network. `env` is a
+ * parameter rather than a direct read: Deno.env is shared by every test file
+ * the runner executes in parallel, so a test that needs another environment
+ * (no HOME, say) passes one instead of clearing the real one. */
+export function defaultServiceDeps(
+  env: EnvironmentSource = Deno.env,
+): ServiceDeps {
+  const home = env.get("USERPROFILE") ?? env.get("HOME") ?? "";
   if (home === "") {
     throw new ServiceUsageError(
       "HOME が設定されていません (ユニットの HOME を決められません)",
     );
   }
-  const user = Deno.env.get("USER") ?? Deno.env.get("USERNAME") ?? "";
+  const user = env.get("USER") ?? env.get("USERNAME") ?? "";
   if (user === "") {
     throw new ServiceUsageError(
       "ユーザー名を取得できません (USER / USERNAME が未設定です)",
@@ -61,12 +70,12 @@ export function defaultServiceDeps(): ServiceDeps {
     host: {
       os: Deno.build.os,
       standalone: Deno.build.standalone,
-      desktopManaged: isDesktopManaged(Deno.env.get(DESKTOP_ENV_KEY)),
+      desktopManaged: isDesktopManaged(env.get(DESKTOP_ENV_KEY)),
       execPath: Deno.execPath(),
       home,
       user,
       cwd: Deno.cwd(),
-      xdgConfigHome: Deno.env.get("XDG_CONFIG_HOME") || undefined,
+      xdgConfigHome: env.get("XDG_CONFIG_HOME") || undefined,
     },
     runner: createSystemdRunner(),
     probe: probeHealth,

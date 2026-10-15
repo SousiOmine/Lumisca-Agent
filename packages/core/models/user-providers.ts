@@ -1,7 +1,7 @@
 import type { ApiKeyAuth, Credential, Provider } from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import { CoreError } from "../errors.ts";
-import { safeJsonParse } from "../shared/mod.ts";
+import { ALLOWED_OPENAI_APIS, safeJsonParse } from "../shared/mod.ts";
 import { USER_PROVIDERS_KEY } from "../shared/mod.ts";
 import { isRecord } from "../fs.ts";
 import { buildModel, buildProvider } from "./custom.ts";
@@ -19,15 +19,8 @@ import { buildModel, buildProvider } from "./custom.ts";
  * existing auth / configured checks apply unchanged.
  */
 
-/** APIs a user-defined OpenAI-compatible provider may use. Restricted to
- * the OpenAI-compatible surface (not the proprietary Anthropic / Google /
- * AWS protocols) so the endpoint contract the user is configuring actually
- * matches what pi-ai will send. */
-export const ALLOWED_OPENAI_APIS = [
-  "openai-completions",
-  "openai-responses",
-] as const;
-
+/** The API ids this store accepts, derived from the shared list so the
+ * validation messages and the settings UI's picker cannot disagree. */
 type AllowedApi = (typeof ALLOWED_OPENAI_APIS)[number];
 
 /** One model of a user-defined provider. A structural subset of the

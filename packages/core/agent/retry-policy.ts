@@ -1,5 +1,5 @@
 import type { AssistantMessage } from "../ai/types.ts";
-import type { NotificationMessage } from "../types/notification.ts";
+import type { NotificationMessage } from "../ai/types.ts";
 import { notificationMessage } from "../tools/subagent-format.ts";
 
 /** Maximum consecutive vacant responses (no text, no tool call) to retry

@@ -51,7 +51,7 @@ export const SERVER_STARTUP_ENV_KEYS = [
 
 type ServerEnvKey = (typeof SERVER_STARTUP_ENV_KEYS)[number];
 
-interface EnvironmentSource {
+export interface EnvironmentSource {
   get(key: string): string | undefined;
   delete(key: string): void;
 }

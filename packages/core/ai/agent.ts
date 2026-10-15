@@ -25,7 +25,7 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "./types.ts";
-import type { NotificationMessage } from "../types/notification.ts";
+import type { NotificationMessage } from "../ai/types.ts";
 import { canonicalJson, fnv1a } from "../shared/digest.ts";
 
 export interface AgentDefaults {

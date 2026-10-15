@@ -1,8 +1,9 @@
 import type { LumiscaDb } from "../db/mod.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { GoalInfo, GoalStatus } from "../shared/goal.ts";
+import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";
 
-export interface SessionRecord extends SessionInfo {}
+export type SessionRecord = SessionInfo;
 
 export interface GoalUpdate {
   iteration?: number;
@@ -60,7 +61,7 @@ function toGoal(row: SessionRow): GoalInfo | undefined {
   return {
     text,
     iteration: row.goal_iteration ?? 0,
-    maxIterations: row.goal_max_iterations ?? 10,
+    maxIterations: row.goal_max_iterations ?? DEFAULT_MAX_GOAL_ITERATIONS,
     status,
     ...(row.goal_last_reason ? { lastReason: row.goal_last_reason } : {}),
   };
@@ -204,7 +205,8 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
       const next: GoalInfo = {
         text: current.goal_text,
         iteration: patch.iteration ?? current.goal_iteration ?? 0,
-        maxIterations: current.goal_max_iterations ?? 10,
+        maxIterations: current.goal_max_iterations ??
+          DEFAULT_MAX_GOAL_ITERATIONS,
         status: patch.status ?? (
           current.goal_status === "judging" ? "judging" : "active"
         ),

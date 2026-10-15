@@ -33,6 +33,7 @@ import { runConfig } from "./config.ts";
 import { defaultServiceDeps, type ServiceDeps } from "./deps.ts";
 import { ServiceDefinitionError } from "./document.ts";
 import { runInstall } from "./install.ts";
+import type { EnvironmentSource } from "../startup.ts";
 import {
   parseServiceArgs,
   SERVICE_USAGE,
@@ -54,6 +55,9 @@ import { runUninstall } from "./uninstall.ts";
 export async function runServiceCommand(
   args: readonly string[],
   deps?: ServiceDeps,
+  /** The environment the machine is resolved from; see
+   * {@link defaultServiceDeps}. */
+  env: EnvironmentSource = Deno.env,
 ): Promise<number> {
   let invocation: ServiceInvocation;
   try {
@@ -73,7 +77,7 @@ export async function runServiceCommand(
 
   let service: ServiceDeps | undefined;
   try {
-    service = deps ?? defaultServiceDeps();
+    service = deps ?? defaultServiceDeps(env);
     const { verb } = invocation;
     if (verb === "config") return await runConfig(invocation, service);
     if (verb === "install") return await runInstall(invocation, service);

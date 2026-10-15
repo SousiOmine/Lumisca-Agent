@@ -6,7 +6,7 @@
     "./shared": "./shared/mod.ts",
     "./modes": "./modes/mod.ts",
     "./skills/slash": "./skills/slash.ts",
-    "./log": "./log.ts",
+    "./browser-entries": "./browser-entries.ts",
     "./test-utils": "./test-utils.ts"
   }
 }

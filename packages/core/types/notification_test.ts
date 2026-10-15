@@ -1,11 +1,11 @@
 import { assertEquals } from "@std/assert";
-import type { AgentMessage, ImageContent } from "@lumisca/core";
-import {
-  type NotificationMessage,
-  notificationText,
-  toLlmMessages,
-} from "./notification.ts";
-import type { ModeMessage } from "./mode-message.ts";
+import type {
+  AgentMessage,
+  ImageContent,
+  ModeMessage,
+  NotificationMessage,
+} from "@lumisca/core";
+import { notificationText, toLlmMessages } from "./notification.ts";
 
 function notification(
   overrides: Partial<NotificationMessage> = {},

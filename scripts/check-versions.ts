@@ -1,13 +1,14 @@
 /**
  * Assert that every manifest carrying the app version agrees.
  *
- * The version lives in eight files (three workspace `deno.json`s, the
- * desktop `deno.json`, the desktop `package.json`, `tauri.conf.json`,
- * `Cargo.toml`, and `packages/server/version.ts` — the constant a packaged
- * server reads at runtime, since the compiled binary has no manifests)
- * because each toolchain reads its own manifest. This script is the single
- * checker, run by CI on every change and by the release workflow against
- * the pushed tag, so a mismatch is caught before a release is published.
+ * The version lives in nine files (three workspace `deno.json`s, the
+ * desktop `deno.json`, the desktop `package.json`, the desktop
+ * `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, and
+ * `packages/server/version.ts` — the constant a packaged server reads at
+ * runtime, since the compiled binary has no manifests) because each
+ * toolchain reads its own manifest. This script is the single checker, run
+ * by CI on every change and by the release workflow against the pushed tag,
+ * so a mismatch is caught before a release is published.
  *
  * Usage:
  *   deno run --allow-read scripts/check-versions.ts [expected]
@@ -53,6 +54,9 @@ const MANIFESTS: Manifest[] = [
   { path: "packages/web/deno.json", read: jsonVersion },
   { path: "packages/desktop/deno.json", read: jsonVersion },
   { path: "packages/desktop/package.json", read: jsonVersion },
+  // The lockfile carries the same version twice (its own and the root
+  // entry's) and drifts silently otherwise: npm does not validate it.
+  { path: "packages/desktop/package-lock.json", read: jsonVersion },
   {
     path: "packages/desktop/src-tauri/Cargo.toml",
     read: cargoVersion,

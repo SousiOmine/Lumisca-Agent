@@ -1,55 +1,10 @@
-import type { AgentMessage, Message } from "../ai/types.ts";
-import { modeFullPromptText, type ModeMessage } from "./mode-message.ts";
-
-/** Kind of a system notification injected into an agent loop: background
- * command completions (async_bash), sub-agent task completions (task),
- * agent-to-agent messages (send_message), empty-response retries (the
- * session agent retries a response that produced neither text nor a tool
- * call), and the loop's own advisories (the repeat guard's reminder — see
- * ai/agent.ts). */
-export type NotificationKind =
-  | "background"
-  | "task"
-  | "message"
-  | "retry"
-  /** An advisory the loop or the session agent appends to the transcript
-   * itself — the repeat guard's reminder (see ai/agent.ts) — rather than a
-   * completion delivered from outside. */
-  | "notice";
-
-/** Outcome of the event a notification reports. The UI shows a check for
- * success, an error badge for failure, and nothing for neutral. */
-export type NotificationStatus = "success" | "error" | "neutral";
-
-/**
- * A system notification delivered to an agent as a first-class message
- * (injected by the session agent or steered into a sub-agent). The agent
- * sees it as a user message — see toLlmMessages — whose text starts with
- * the prefix contract taught in the system prompt ("[Background command
- * ...]", "[Task ...]", "[Message from ...]"). The UI renders it as a
- * compact one-line row instead of a user message.
- */
-export interface NotificationMessage {
-  role: "notification";
-  kind: NotificationKind;
-  /** Head line shown by the UI and used as the first line of the
-   * agent-visible text (e.g. "[Background command #2 finished after 12s
-   * (exit code 0)]"). */
-  title: string;
-  /** Detail text (output tail / task result / message body); empty when
-   * there is nothing beyond the title. */
-  body: string;
-  status: NotificationStatus;
-  /** True when the notification was steered into the run that was already
-   * active instead of starting its own run (see SessionAgent.deliverPrompt);
-   * absent when it started its own run. The UI keeps a steered notification
-   * inside that run's turn instead of starting a new one (see web's
-   * buildTurns): it is a system event of the ongoing work, like a tool
-   * result, so it must not split the turn — the running turn's work log
-   * would collapse mid-run. */
-  steered?: boolean;
-  timestamp: number;
-}
+import type {
+  AgentMessage,
+  Message,
+  ModeMessage,
+  NotificationMessage,
+} from "../ai/types.ts";
+import { modeFullPromptText } from "./mode-message.ts";
 
 /** What the generators (background / task) produce; the session agent
  * stamps role, timestamp and `steered` when injecting — only the delivery

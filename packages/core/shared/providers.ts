@@ -48,6 +48,16 @@ export interface ProviderInfo {
  * choose the right control. */
 export type ProviderAuthType = "api_key" | "oauth";
 
+/** APIs a user-defined OpenAI-compatible provider may use. Restricted to the
+ * OpenAI-compatible surface (not the proprietary Anthropic / Google / AWS
+ * protocols) so the endpoint contract the user is configuring actually
+ * matches what the transport will send. The settings UI's picker and the
+ * core's validation read this one list. */
+export const ALLOWED_OPENAI_APIS = [
+  "openai-completions",
+  "openai-responses",
+] as const;
+
 /** One event a login flow notifies the UI about (device code, auth URL,
  * info, progress). Mirrors the minimal shape the web client needs to drive
  * the user through the OAuth flow; independent of the pi-ai's own event

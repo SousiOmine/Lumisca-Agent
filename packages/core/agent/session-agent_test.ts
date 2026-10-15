@@ -17,7 +17,7 @@ import type {
 } from "../tools/background.ts";
 import { object, type Tool } from "../tools/schema.ts";
 import type { ClientEvent } from "../types/event.ts";
-import type { NotificationMessage } from "../types/notification.ts";
+import type { NotificationMessage } from "../ai/types.ts";
 import {
   buildRetryNotification,
   hasNoVisibleOutput,

@@ -4,7 +4,7 @@ import type { Api, AssistantMessageEventStream, Model } from "@lumisca/core";
 import type { AgentMessage, StreamFn } from "@lumisca/core";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
-import { resolveMaxGoalIterations, runGoalLoop } from "./loop.ts";
+import { runGoalLoop } from "./loop.ts";
 
 function fakeModel(): Model<Api> {
   return { id: "fast", name: "fast" } as unknown as Model<Api>;
@@ -153,10 +153,4 @@ Deno.test("goal loop: unparseable judge reply stops with an error", async () => 
     store.events.some((e) => e.type === "session_error"),
     true,
   );
-});
-
-Deno.test("resolveMaxGoalIterations: falls back to the default", () => {
-  assertEquals(resolveMaxGoalIterations(5), 5);
-  assertEquals(resolveMaxGoalIterations(0) > 0, true);
-  assertEquals(resolveMaxGoalIterations(undefined) > 0, true);
 });

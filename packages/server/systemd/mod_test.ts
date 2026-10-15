@@ -639,19 +639,16 @@ Deno.test("a machine this command cannot resolve is reported, never a silent exi
   const errored: string[] = [];
   const original = { error: console.error };
   console.error = (line: string) => void errored.push(String(line));
-  const env = { HOME: Deno.env.get("HOME"), USER: Deno.env.get("USER") };
   try {
-    Deno.env.delete("HOME");
-    Deno.env.delete("USER");
-    Deno.env.delete("USERPROFILE");
-    Deno.env.delete("USERNAME");
-    const code = await runServiceCommand(["config", "--defaults"]);
+    // An empty environment is injected instead of clearing the real one: the
+    // runner shares Deno.env with every test file it parallels.
+    const code = await runServiceCommand(["config", "--defaults"], undefined, {
+      get: () => undefined,
+      delete: () => {},
+    });
     assertEquals(code, 2);
     assertStringIncludes(errored.join("\n"), "HOME が設定されていません");
   } finally {
     console.error = original.error;
-    for (const [key, value] of Object.entries(env)) {
-      if (value !== undefined) Deno.env.set(key, value);
-    }
   }
 });

@@ -27,6 +27,7 @@
  */
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildAssetsManifest } from "../packages/server/assets.ts";
+import { findCanvasIcuDataFile } from "../packages/core/pdf/icu-data.ts";
 import { binaryName, repoRoot, reportUsage } from "./lib.ts";
 
 /**
@@ -152,7 +153,9 @@ async function stageCanvasIcuData(outDir: string): Promise<void> {
     await Deno.remove(target).catch(() => {});
     return;
   }
-  const source = await findCanvasIcuDataFile(repoRoot);
+  // The search the server itself runs at startup (packages/core/pdf/
+  // icu-data.ts): the build stages exactly the file the runtime picks.
+  const source = findCanvasIcuDataFile();
   if (source === undefined) {
     console.warn(
       "WARNING: icudtl.dat not found in the installed Windows " +
@@ -165,76 +168,6 @@ async function stageCanvasIcuData(outDir: string): Promise<void> {
   await Deno.copyFile(source, target);
   const { size } = await Deno.stat(target);
   console.log(`ICU data: ${target} (${size} bytes, from ${source})`);
-}
-
-/**
- * npm target triple whose ICU data file this host's Skia binary expects.
- * Only the Windows packages bundle `icudtl.dat` (see the staging step
- * above).
- */
-function preferredCanvasTarget(): string {
-  return Deno.build.arch === "aarch64" ? "win32-arm64-msvc" : "win32-x64-msvc";
-}
-
-/**
- * Locate the Windows `icudtl.dat` inside the installed
- * `@napi-rs/canvas-<platform>` packages. Both of Deno's node_modules
- * layouts are searched (the isolated `.deno` tree and the classic flat
- * tree) without pinning a canvas version. Returns undefined when no
- * platform package is installed.
- */
-async function findCanvasIcuDataFile(
-  root: string,
-): Promise<string | undefined> {
-  const found: string[] = [];
-  const collectFromScope = async (scopeDir: string): Promise<void> => {
-    try {
-      for await (const pkg of Deno.readDir(scopeDir)) {
-        if (!pkg.isDirectory || !pkg.name.startsWith("canvas-")) continue;
-        const candidate = join(scopeDir, pkg.name, "icudtl.dat");
-        try {
-          if (
-            (await Deno.stat(candidate)).isFile && !found.includes(candidate)
-          ) {
-            found.push(candidate);
-          }
-        } catch {
-          // No data file in this package; keep looking.
-        }
-      }
-    } catch {
-      // No scope directory here; keep looking.
-    }
-  };
-  // Deno's isolated layout:
-  // node_modules/.deno/@napi-rs+canvas-<target>@<v>/node_modules/@napi-rs/canvas-<target>/icudtl.dat
-  try {
-    for await (
-      const entry of Deno.readDir(join(root, "node_modules", ".deno"))
-    ) {
-      if (
-        !entry.isDirectory || !entry.name.startsWith("@napi-rs+canvas-")
-      ) continue;
-      await collectFromScope(
-        join(
-          root,
-          "node_modules",
-          ".deno",
-          entry.name,
-          "node_modules",
-          "@napi-rs",
-        ),
-      );
-    }
-  } catch {
-    // No .deno directory; the flat layout below may still match.
-  }
-  // Classic flat layout: node_modules/@napi-rs/canvas-<target>/icudtl.dat
-  await collectFromScope(join(root, "node_modules", "@napi-rs"));
-  if (found.length === 0) return undefined;
-  found.sort();
-  const preferred = preferredCanvasTarget();
-  return found.find((path) => path.includes(preferred)) ?? found[0];
 }
 
 const options = parseArgs(Deno.args);

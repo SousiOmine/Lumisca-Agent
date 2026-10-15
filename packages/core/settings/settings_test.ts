@@ -174,34 +174,29 @@ Deno.test("file settings repo exposes its directory; in-memory has none", async 
 // --- resolveSettingsPath ----------------------------------------------------
 
 Deno.test("resolveSettingsPath honors XDG_CONFIG_HOME", () => {
-  const prev = Deno.env.get("XDG_CONFIG_HOME");
-  try {
-    Deno.env.set("XDG_CONFIG_HOME", join("C:", "xdg"));
-    assertEquals(
-      resolveSettingsPath(),
-      join("C:", "xdg", "lumisca-agent", "settings.jsonc"),
-    );
-  } finally {
-    if (prev === undefined) Deno.env.delete("XDG_CONFIG_HOME");
-    else Deno.env.set("XDG_CONFIG_HOME", prev);
-  }
+  // The environment is passed in, never mutated: Deno.env is shared by every
+  // test file the runner parallels.
+  assertEquals(
+    resolveSettingsPath(() => ({ XDG_CONFIG_HOME: join("C:", "xdg") })),
+    join("C:", "xdg", "lumisca-agent", "settings.jsonc"),
+  );
 });
 
 Deno.test("resolveSettingsPath defaults to ~/.config", () => {
-  const prev = Deno.env.get("XDG_CONFIG_HOME");
-  try {
-    Deno.env.delete("XDG_CONFIG_HOME");
-    assertEquals(
-      resolveSettingsPath(),
-      join(
-        Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME")!,
-        ".config",
-        "lumisca-agent",
-        "settings.jsonc",
-      ),
-    );
-  } finally {
-    if (prev === undefined) Deno.env.delete("XDG_CONFIG_HOME");
-    else Deno.env.set("XDG_CONFIG_HOME", prev);
-  }
+  assertEquals(
+    resolveSettingsPath(() => ({ HOME: join("C:", "users", "me") })),
+    join("C:", "users", "me", ".config", "lumisca-agent", "settings.jsonc"),
+  );
+  // Windows resolves the home directory from USERPROFILE.
+  assertEquals(
+    resolveSettingsPath(() => ({ USERPROFILE: join("C:", "Users", "me") })),
+    join("C:", "Users", "me", ".config", "lumisca-agent", "settings.jsonc"),
+  );
+  // Neither set: the path cannot be resolved, and that is an error rather
+  // than a path under the current directory.
+  assertThrows(
+    () => resolveSettingsPath(() => ({})),
+    Error,
+    "Cannot resolve the home directory",
+  );
 });

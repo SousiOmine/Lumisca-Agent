@@ -54,8 +54,6 @@ export type {
   Message,
   Model,
   ModelCost,
-  ModelsStore,
-  ModelsStoreEntry,
   ModelThinkingLevel,
   ModeMessage,
   NotificationMessage,

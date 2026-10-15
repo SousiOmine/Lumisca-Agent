@@ -21,23 +21,3 @@ export function webStylesPath(repoRoot: string): string {
 export function webFaviconPath(repoRoot: string): string {
   return join(repoRoot, "packages", "web", "public", "favicon.png");
 }
-
-/** esbuild alias target for `@lumisca/core/shared` (the browser-safe
- * helper modules behind the shared barrel; esbuild does not read
- * deno.json workspace exports). */
-export function coreSharedPath(repoRoot: string): string {
-  return join(repoRoot, "packages", "core", "shared", "mod.ts");
-}
-
-/** esbuild alias target for `@lumisca/core/modes` (the agent-mode
- * registry; pure data + prompt building, browser-safe like shared). */
-export function coreModesPath(repoRoot: string): string {
-  return join(repoRoot, "packages", "core", "modes", "mod.ts");
-}
-
-/** esbuild alias target for `@lumisca/core/skills/slash` (the `/skill`
- * command's prompt builder the composer imports; browser-safe like the two
- * above — see the module's own note). */
-export function coreSkillsSlashPath(repoRoot: string): string {
-  return join(repoRoot, "packages", "core", "skills", "slash.ts");
-}
