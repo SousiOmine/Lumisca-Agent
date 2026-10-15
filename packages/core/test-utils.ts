@@ -118,6 +118,24 @@ export async function makeRealTempDir(prefix: string): Promise<string> {
   return realpathSync(await Deno.makeTempDir({ prefix }));
 }
 
+/** Poll `check` until it holds, or fail naming what was awaited: a test that
+ * waits for a process to do something must fail on a hang, never run
+ * forever. */
+export async function waitUntil(
+  check: () => boolean,
+  label: string,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (check()) return;
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out after ${timeoutMs}ms waiting for ${label}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 /** Run `fn` with a fresh realpath'd temp dir, always cleaning it up
  * afterwards (via {@link removeDirRetry}). Replaces the
  * `makeTempDir → body → remove` try/finally boilerplate:

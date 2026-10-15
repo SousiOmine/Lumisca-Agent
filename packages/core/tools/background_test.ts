@@ -19,7 +19,12 @@ import type { ClientEvent } from "../types/event.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { LumiscaCore } from "../mod.ts";
 import { decodeUtf8 } from "../shared/mod.ts";
-import { promptSession, removeDirRetry, toolText } from "../test-utils.ts";
+import {
+  promptSession,
+  removeDirRetry,
+  toolText,
+  waitUntil,
+} from "../test-utils.ts";
 
 /** Cross-platform commands. The Windows shell has no sleep; ping is the
  * classic stand-in.
@@ -307,6 +312,60 @@ Deno.test("timeout kills the command and notifies with reason timeout", async ()
   assertEquals(done.commandId, commandId);
   assertEquals(done.reason, "timeout");
   assertEquals(manager.get(commandId)!.state, "killed");
+});
+
+// Regression test for a real incident: kill() signalled the shell only, so a
+// killed command reported "killed" while the command's own processes kept
+// running (and holding their pipes — a killed dev server stayed alive and
+// took its pipes with it). POSIX-only: the Windows kill walks the tree via
+// taskkill /T, and the command syntax below is /bin/sh's.
+Deno.test({
+  name: "kill stops the command's own process, not only its shell",
+  ignore: Deno.build.os === "windows",
+  fn: async () => {
+    const root = Deno.makeTempDirSync({ prefix: "lumisca-kill-tree-" });
+    const marker = "marker";
+    const manager = new BackgroundProcessManager();
+    try {
+      const exitPromise = waitForExit(manager);
+      // The shell backgrounds a child that keeps writing, then waits: a kill
+      // that reaches only the shell leaves that child appending.
+      const { commandId } = await manager.start({
+        cwd: root,
+        command:
+          `sh -c 'while :; do echo tick >> ${marker}; sleep 0.2; done' & wait`,
+      });
+      await waitUntil(
+        () => {
+          try {
+            return Deno.statSync(`${root}/${marker}`).size > 0;
+          } catch {
+            return false;
+          }
+        },
+        "the command's child to write its first tick",
+      );
+
+      const killed = await manager.kill(commandId);
+      assertEquals(killed.timedOut, false);
+      assertEquals((await exitPromise).reason, "killed");
+
+      // A survivor (or a zombie) cannot append: let any write already in
+      // flight land, then require the file to keep that size for longer than
+      // the writer's interval.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const size = Deno.statSync(`${root}/${marker}`).size;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      assertEquals(
+        Deno.statSync(`${root}/${marker}`).size,
+        size,
+        "the command's own process is still writing: the kill reached only its shell",
+      );
+    } finally {
+      await manager.killAll();
+      await removeDirRetry(root);
+    }
+  },
 });
 
 Deno.test("killAll stops every running command", async () => {

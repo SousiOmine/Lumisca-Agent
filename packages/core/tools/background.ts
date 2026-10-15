@@ -45,11 +45,14 @@ const MAX_OUTPUT_BUFFER = MAX_TOOL_OUTPUT;
 /** Decoded output shown by status and completion notifications. */
 export const BACKGROUND_TAIL_LIMIT = 8 * 1024;
 /** How long a finished process's pipe readers get to flush the last output
- * before the completion notification is built. Descendants that keep the
- * pipe open must not block completion, so this never waits longer. */
-const FINAL_FLUSH_GRACE_MS = 250;
-/** Upper bound for kill() to wait for the process to actually die. */
-const KILL_WAIT_MS = 3000;
+ * before the operation that ended the process reports what it has (the
+ * completion notification here, the tool result in bash). Descendants that
+ * keep the pipe open must not block that report, so nothing waits longer. */
+export const FINAL_FLUSH_GRACE_MS = 250;
+/** Upper bound for a kill to wait for the process to actually die: what
+ * kill() waits for here, and what the bash tool waits for a command it
+ * had to kill. */
+export const KILL_WAIT_MS = 3000;
 /** Upper bound for a kill to SETTLE: the process death (KILL_WAIT_MS) plus
  * the final output flush that precedes the state transition. Waiting for
  * the death alone would resolve kill()/killAll() while the record still

@@ -23,6 +23,31 @@ function makeTool() {
   };
 }
 
+/** Await a tool call with a bound: the regressions this file guards against
+ * were calls that never returned, so a hang must fail the test instead of
+ * running forever. */
+async function bounded<T>(
+  promise: Promise<T>,
+  label: string,
+  timeoutMs = 10000,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(new Error(`${label} did not return within ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 Deno.test("bash tool reports exit code", async () => {
   const { tool, root } = makeTool();
   try {
@@ -439,6 +464,96 @@ Deno.test("bash tool description documents the spilled full output", async () =>
   try {
     assert(tool.description.includes("full output: <path>"));
     assert(tool.description.includes("truncated to the last 65536 bytes;"));
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+// Regression test for the call that froze a session: a command that
+// backgrounds a process inheriting the output pipes made the tool wait for
+// an EOF that never comes. The call must end with the command's own exit,
+// report the output it read, and say that a process still holds the streams.
+Deno.test({
+  name: "bash tool returns when a descendant holds the output streams",
+  ignore: Deno.build.os === "windows",
+  fn: async () => {
+    const { tool, root } = makeTool();
+    try {
+      const result = await bounded(
+        tool.execute(
+          "1",
+          { cwd: root, command: "sleep 30 & echo pid=$!" },
+          undefined,
+        ),
+        "a command whose descendant holds the pipes",
+      );
+      const text = toolText(result);
+      assert(text.includes("pid="), `output: ${text}`);
+      assert(
+        text.includes(
+          "[command left a process holding its output streams; later output is not reported]",
+        ),
+        `output: ${text}`,
+      );
+      assertEquals(text.includes("[exit code: 0]"), true, `output: ${text}`);
+      // The call answers for the command only; the test must not leave the
+      // process it reported behind either.
+      const pid = Number(text.match(/pid=(\d+)/)?.[1]);
+      try {
+        Deno.kill(pid, "SIGKILL");
+      } catch {
+        // already gone
+      }
+    } finally {
+      await removeDirRetry(root);
+    }
+  },
+});
+
+Deno.test("bash tool kills a command that outlives its timeout", async () => {
+  const { tool, root } = makeTool();
+  try {
+    const command = Deno.build.os === "windows"
+      ? "Write-Output before; Start-Sleep 30"
+      : "echo before; sleep 30";
+    const result = await bounded(
+      tool.execute("1", { cwd: root, command, timeout: 1 }, undefined),
+      "a command that outlives its timeout",
+    );
+    const text = toolText(result);
+    assert(text.includes("before"), `output: ${text}`);
+    const durationMs = result.details?.durationMs;
+    assert(
+      typeof durationMs === "number" && durationMs < 10000,
+      `the timeout did not end the call: durationMs ${durationMs}`,
+    );
+    // The kill's exit code: a signal death on POSIX; Windows reports
+    // whatever taskkill leaves and is not pinned here.
+    if (Deno.build.os !== "windows") {
+      assertEquals(result.details?.exitCode, 137, `output: ${text}`);
+    }
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("bash tool returns when the run is aborted", async () => {
+  const { tool, root } = makeTool();
+  try {
+    const command = Deno.build.os === "windows" ? "Start-Sleep 30" : "sleep 30";
+    const controller = new AbortController();
+    const call = tool.execute("1", { cwd: root, command }, controller.signal);
+    setTimeout(() => controller.abort(), 300);
+    const result = await bounded(call, "a command whose run was aborted");
+    const durationMs = result.details?.durationMs;
+    // The 120s default timeout never came: the abort ended the call.
+    assert(
+      typeof durationMs === "number" && durationMs < 10000,
+      `the abort did not end the call: durationMs ${durationMs}`,
+    );
+    if (Deno.build.os !== "windows") {
+      assertEquals(result.details?.exitCode, 137);
+    }
   } finally {
     await removeDirRetry(root);
   }
