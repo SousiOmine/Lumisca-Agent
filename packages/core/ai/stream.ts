@@ -29,6 +29,7 @@ import {
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
+import { contentText } from "../shared/mod.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
@@ -139,6 +140,14 @@ async function* runStream(
     // tool calls (via the execute functions above); the Agent's outer loop
     // decides whether another turn follows.
     stopWhen: isStepCount(1),
+    // The SDK's own retry loop for the initial provider request (exponential
+    // backoff; the provider's Retry-After is honoured). The agent seeds it
+    // for every LLM call (agent/llm-retry.ts), so a transient 429/5xx does
+    // not fail the turn on its first attempt. Left unset, the SDK's default
+    // (2) applies.
+    ...(options?.maxRetries !== undefined
+      ? { maxRetries: options.maxRetries }
+      : {}),
     ...(options?.signal !== undefined ? { abortSignal: options.signal } : {}),
   };
   // Reasoning levels: map the model's stored thinking level to a Vercel
@@ -867,10 +876,18 @@ function toExecutableToolSet(
 
 // ---- accumulate-text helper -------------------------------------------------
 
-/** Stream one request and accumulate its text deltas into a single string.
+/** Stream one request and return the turn's text.
+ *
+ * The deltas are accumulated as they arrive; when the stream carried none at
+ * all, the turn's text is read from the `done` event instead — that is where
+ * a cached / non-streaming provider path puts it, and the transport settles
+ * on exactly this rule (see runStream: the streamed text wins, the step text
+ * is the fallback).
+ *
  * Throws on stream errors (the stream's message, else `failureLabel`).
- * Shared by the title generator, the image analyzer, and the safety checker.
- * Transient rate-limit (429) errors are retried with exponential backoff. */
+ * Shared by the title generator, the image analyzer, the goal judge, the
+ * compaction summarizer and the safety checker. Transient rate-limit (429)
+ * errors are retried with exponential backoff. */
 export async function streamText(
   streamFn: StreamFn,
   model: Model<Api>,
@@ -885,6 +902,8 @@ export async function streamText(
     for await (const event of stream) {
       if (event.type === "text_delta") {
         text += event.delta;
+      } else if (event.type === "done") {
+        if (text.length === 0) text = contentText(event.message.content);
       } else if (event.type === "error") {
         const errorEvent = event as {
           errorMessage?: string;

@@ -52,6 +52,26 @@ Deno.test("streamText accumulates text deltas", async () => {
   assertEquals(text, "hi");
 });
 
+Deno.test("streamText reads the done message when no delta arrived", async () => {
+  // A cached / non-streaming provider path streams no deltas: the done
+  // message carries the turn's text, and the transport documents that as the
+  // fallback (see runStream). Accumulating the deltas alone returned "" here,
+  // which made every auxiliary caller report "no text".
+  const doneOnly: StreamFn = () => {
+    const events = (async function* () {
+      yield { type: "done", message: fauxAssistantMessage("hello") };
+    })();
+    return events as unknown as AssistantMessageEventStream;
+  };
+  const text = await streamText(
+    doneOnly,
+    fakeModel(),
+    { messages: [] },
+    "label",
+  );
+  assertEquals(text, "hello");
+});
+
 Deno.test("streamText retries a 429 then succeeds", async () => {
   let calls = 0;
   const fn = fakeStreamFn([

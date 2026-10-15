@@ -5,7 +5,6 @@ import {
   applyProviderRetryDefaults,
   isRetryableRateLimit,
   PROVIDER_DEFAULT_MAX_RETRIES,
-  PROVIDER_DEFAULT_MAX_RETRY_DELAY_MS,
 } from "./llm-retry.ts";
 
 function rateLimited(message: string): ReturnType<typeof fauxAssistantMessage> {
@@ -95,23 +94,18 @@ Deno.test("isRetryableRateLimit: non-rate errors do not", () => {
 Deno.test("applyProviderRetryDefaults fills an unset budget", () => {
   assertEquals(applyProviderRetryDefaults(undefined), {
     maxRetries: PROVIDER_DEFAULT_MAX_RETRIES,
-    maxRetryDelayMs: PROVIDER_DEFAULT_MAX_RETRY_DELAY_MS,
   });
-  // A caller that set neither field gets both defaults, keeping its own
-  // fields (here: the abort signal) intact.
+  // A caller that set no budget gets the default, keeping its own fields
+  // (here: the abort signal) intact.
   const signal = new AbortController().signal;
   assertEquals(applyProviderRetryDefaults({ signal }), {
     signal,
     maxRetries: PROVIDER_DEFAULT_MAX_RETRIES,
-    maxRetryDelayMs: PROVIDER_DEFAULT_MAX_RETRY_DELAY_MS,
   });
 });
 
-Deno.test("applyProviderRetryDefaults leaves a partial budget alone", () => {
-  // Either field being set means the caller owns the budget: filling in
-  // only the other one would make the pair inconsistent.
+Deno.test("applyProviderRetryDefaults leaves a caller's budget alone", () => {
+  // A caller that owns the budget keeps it.
   const onlyRetries: StreamOptions = { maxRetries: 1 };
   assertEquals(applyProviderRetryDefaults(onlyRetries), onlyRetries);
-  const onlyDelay: StreamOptions = { maxRetryDelayMs: 100 };
-  assertEquals(applyProviderRetryDefaults(onlyDelay), onlyDelay);
 });

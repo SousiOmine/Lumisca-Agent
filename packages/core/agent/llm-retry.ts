@@ -2,10 +2,10 @@ import type { AssistantMessage } from "../ai/types.ts";
 import type { StreamFn } from "../ai/types.ts";
 import { isRetryableRateLimitMessage } from "../ai/rate-limit.ts";
 
-/** Provider-default retry budget for the initial HTTP request. */
+/** Retry budget the agent seeds for every LLM call: the AI SDK's own retry
+ * loop for the initial provider request, with the SDK's backoff (see
+ * StreamOptions.maxRetries). */
 export const PROVIDER_DEFAULT_MAX_RETRIES = 5;
-/** Cap for provider-requested Retry-After delays (ms). */
-export const PROVIDER_DEFAULT_MAX_RETRY_DELAY_MS = 60_000;
 
 /** True when an error-stopped assistant message is a transient rate-limit
  * failure worth retrying. Quota/billing exhaustion is excluded so
@@ -17,31 +17,22 @@ export function isRetryableRateLimit(message: AssistantMessage): boolean {
   return isRetryableRateLimitMessage(message.errorMessage);
 }
 
-/** Wrap a stream function so the initial HTTP request retries on transient
- * errors with backoff, enabling provider retry defaults for every LLM call. */
+/** Wrap a stream function so every LLM call carries the provider retry
+ * budget (the SDK's own loop — see StreamOptions.maxRetries). */
 export function withProviderRetryDefaults(base: StreamFn): StreamFn {
   return (model, context, options) =>
     base(model, context, applyProviderRetryDefaults(options));
 }
 
-/** Fill in provider retry defaults when the caller left them unset. */
+/** Fill in the provider retry default when the caller left it unset. */
 export function applyProviderRetryDefaults(
   options: Parameters<StreamFn>[2],
 ): Parameters<StreamFn>[2] {
   if (options === undefined) {
-    return {
-      maxRetries: PROVIDER_DEFAULT_MAX_RETRIES,
-      maxRetryDelayMs: PROVIDER_DEFAULT_MAX_RETRY_DELAY_MS,
-    };
+    return { maxRetries: PROVIDER_DEFAULT_MAX_RETRIES };
   }
-  if (
-    options.maxRetries === undefined && options.maxRetryDelayMs === undefined
-  ) {
-    return {
-      ...options,
-      maxRetries: PROVIDER_DEFAULT_MAX_RETRIES,
-      maxRetryDelayMs: PROVIDER_DEFAULT_MAX_RETRY_DELAY_MS,
-    };
+  if (options.maxRetries === undefined) {
+    return { ...options, maxRetries: PROVIDER_DEFAULT_MAX_RETRIES };
   }
   return options;
 }
