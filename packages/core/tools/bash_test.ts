@@ -23,13 +23,20 @@ function makeTool() {
   };
 }
 
+/** The bound these tests give a call they expect to return. What they guard
+ * against is a call that never returns, so the bound only has to sit well
+ * under the tool's 120s default timeout. Windows gets a looser one: its
+ * kill walks the process tree with PowerShell + WMI (taskkill needs the
+ * pids), which a loaded CI runner stretches to several seconds. */
+const CALL_BOUND_MS = Deno.build.os === "windows" ? 30_000 : 10_000;
+
 /** Await a tool call with a bound: the regressions this file guards against
  * were calls that never returned, so a hang must fail the test instead of
  * running forever. */
 async function bounded<T>(
   promise: Promise<T>,
   label: string,
-  timeoutMs = 10000,
+  timeoutMs = CALL_BOUND_MS,
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -524,7 +531,7 @@ Deno.test("bash tool kills a command that outlives its timeout", async () => {
     assert(text.includes("before"), `output: ${text}`);
     const durationMs = result.details?.durationMs;
     assert(
-      typeof durationMs === "number" && durationMs < 10000,
+      typeof durationMs === "number" && durationMs < CALL_BOUND_MS,
       `the timeout did not end the call: durationMs ${durationMs}`,
     );
     // The kill's exit code: a signal death on POSIX; Windows reports
@@ -548,7 +555,7 @@ Deno.test("bash tool returns when the run is aborted", async () => {
     const durationMs = result.details?.durationMs;
     // The 120s default timeout never came: the abort ended the call.
     assert(
-      typeof durationMs === "number" && durationMs < 10000,
+      typeof durationMs === "number" && durationMs < CALL_BOUND_MS,
       `the abort did not end the call: durationMs ${durationMs}`,
     );
     if (Deno.build.os !== "windows") {

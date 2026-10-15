@@ -97,10 +97,13 @@ export function toolText(result: ToolResultLike): string {
 }
 
 /** Remove a directory, retrying briefly: Windows can hold a directory
- * handle for a moment after a spawned child exits, so a single remove
- * flakes there. The last attempt surfaces errors. */
+ * handle for a moment after a spawned child exits — and a force-killed one
+ * holds its working directory until the system tears the process down,
+ * which a loaded CI runner stretches — so a single remove flakes there. The
+ * window matches the one the background tests already use for a killed
+ * process's directory. The last attempt surfaces errors. */
 export async function removeDirRetry(path: string): Promise<void> {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 50; i++) {
     try {
       await Deno.remove(path, { recursive: true });
       return;
