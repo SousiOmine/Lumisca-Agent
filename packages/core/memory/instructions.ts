@@ -3,6 +3,7 @@ import type {
   ContextUpdate,
 } from "../agent/context-providers.ts";
 import { fnv1a } from "../shared/digest.ts";
+import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 import {
   instructionHeading,
   loadProjectMemoryFiles,
@@ -126,11 +127,10 @@ function delta(
 /** Cap one file's published content (a delta is not part of the baseline
  * budget, but a single message must stay bounded). */
 function cap(content: string): string {
-  return content.length <= MAX_MEMORY_BYTES
-    ? content
-    : `${
-      content.slice(0, MAX_MEMORY_BYTES)
-    }\n\n… (truncated at ${MAX_MEMORY_BYTES} bytes)`;
+  const { text, truncated } = truncateHead(content, MAX_MEMORY_BYTES);
+  return truncated
+    ? text + truncatedHeadNote("instructions", MAX_MEMORY_BYTES)
+    : text;
 }
 
 export function createInstructionsProvider(

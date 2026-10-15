@@ -14,7 +14,7 @@ import {
   truncate,
   truncatedNote,
 } from "./truncate.ts";
-import { requireResolved } from "./resolve.ts";
+import { requireExistingFile, requireResolved } from "./resolve.ts";
 import { bytesToBase64 } from "../base64.ts";
 import type { FsToolContext } from "./context.ts";
 
@@ -235,9 +235,12 @@ export function createReadFileTool(
     parameters: readSchema,
     execute: async (_id, params, _signal) => {
       const { path, spec, ranges } = splitRangeSuffix(params.path);
-      const filePath = await requireResolved(ctx.sandbox, path);
+      // The range suffix is not part of the file path, so the existence and
+      // type check runs on the path alone (its message then names the file).
+      const filePath = await requireExistingFile(ctx.sandbox, path);
+      // Still needed below: the image branch compares the size against
+      // MAX_IMAGE_BYTES, and the "file continues" note against what was read.
       const stat = await Deno.stat(filePath);
-      if (stat.isDirectory) throw new Error(`Is a directory: ${params.path}`);
 
       if (ranges !== undefined) {
         const { lines, endOfFile, lastLine } = await readLineRanges(

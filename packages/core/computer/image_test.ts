@@ -8,7 +8,7 @@ import {
   resizeRgb,
 } from "./image.ts";
 import type { RawCapture } from "./types.ts";
-import { findCanvasIcuDataFile } from "../pdf/tools.ts";
+import { findCanvasIcuDataFile } from "../pdf/icu-data.ts";
 import { inflateSync } from "node:zlib";
 
 /** @napi-rs/canvas is a real, independent PNG decoder already in the stack

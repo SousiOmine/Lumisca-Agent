@@ -1,4 +1,14 @@
 import { assert, assertEquals } from "@std/assert";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import type { Api, Model, StreamFn } from "../ai/types.ts";
+import type { Workspace } from "../types/workspace.ts";
+import { SessionVisualStore } from "../session/visuals.ts";
+import { AskHub } from "./ask.ts";
+import { BackgroundProcessManager } from "./background.ts";
+import { TodoHub } from "./todo.ts";
+import { TaskHub } from "./task-hub.ts";
+import { createCodingTools } from "./toolsets.ts";
 import {
   CHAT_PROMPT_SECTIONS,
   CODING_PROMPT_SECTIONS,
@@ -9,7 +19,8 @@ import {
 import { subagentSystemPrompt } from "./subagent-format.ts";
 import {
   TOOL_ASK,
-  TOOL_ASYNC_BASH,
+  TOOL_ASYNC_BASH_KILL,
+  TOOL_ASYNC_BASH_STATUS,
   TOOL_BASH,
   TOOL_EDIT,
   TOOL_EVAL,
@@ -26,23 +37,78 @@ import {
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
 
-/** Every tool a coding session preloads. */
-const CODING_TOOLS = [
-  TOOL_READ,
-  TOOL_WRITE,
-  TOOL_EDIT,
-  TOOL_GREP,
-  TOOL_GLOB,
+/** Every tool a coding session preloads, built the way the session factory
+ * builds it (agent/factory.ts) instead of being copied by hand: the
+ * hand-written list this replaced had already drifted (it was missing the
+ * present tool and the async_bash status/kill pair). */
+const CODING_TOOLS = codingToolNames();
+
+/** Preloaded tools that deliberately have no guideline section: their
+ * contract (arguments, result markers) is stated in full by the tool's own
+ * description and there is no cross-call guidance to add — see the split of
+ * responsibilities in prompt-sections.ts. Adding a name here is a statement
+ * that the tool needs no section, never a way to quiet a forgotten one. */
+const NO_SECTION_TOOLS: readonly string[] = [
   TOOL_LIST_DIR,
-  TOOL_BASH,
-  TOOL_ASYNC_BASH,
-  TOOL_EVAL,
-  TOOL_ASK,
-  TOOL_TODO,
-  TOOL_SKILL,
-  TOOL_TASK,
-  TOOL_VISUAL,
+  TOOL_ASYNC_BASH_STATUS,
+  TOOL_ASYNC_BASH_KILL,
+  TOOL_TASK_OUTPUT,
 ];
+
+/** Build the coding tool set the way the session factory does, and return
+ * its tool names. The hubs are the real (cheap) ones; the sub-agent runtime
+ * resolver is a stub that never spawns anything, because the tool *set* is
+ * what is under test here. */
+function codingToolNames(): string[] {
+  const workspace: Workspace = {
+    id: "w1",
+    name: "ws",
+    folders: [Deno.cwd()],
+    createdAt: 0,
+    chat: false,
+  };
+  return createCodingTools(workspace, {
+    background: new BackgroundProcessManager(),
+    ask: new AskHub("s1", () => {}),
+    todo: new TodoHub("s1", () => {}),
+    task: new TaskHub({
+      sessionId: "s1",
+      resolveRuntime: () => ({
+        workspace,
+        model: { id: "m", name: "m" } as unknown as Model<Api>,
+        thinkingLevel: "off",
+      }),
+      streamFn: (() => {
+        throw new Error("no sub-agent run in this test");
+      }) as unknown as StreamFn,
+      emit: () => {},
+    }),
+    visuals: {
+      store: new SessionVisualStore(join(tmpdir(), "lumisca-sections-test")),
+      sessionId: "s1",
+    },
+  }).map((tool) => tool.name);
+}
+
+Deno.test("every tool a coding session preloads has a guideline section", () => {
+  const covered = new Set(
+    CODING_PROMPT_SECTIONS.flatMap((section) => section.requires ?? []),
+  );
+  const unguided = CODING_TOOLS.filter(
+    (name) => !covered.has(name) && !NO_SECTION_TOOLS.includes(name),
+  );
+  assertEquals(
+    unguided,
+    [],
+    "a preloaded tool needs a guideline section, or an entry in " +
+      "NO_SECTION_TOOLS saying why it needs none",
+  );
+  // The invariant is only meaningful while the built set is the full one
+  // (an option-gated tool silently missing would make this test vacuous).
+  for (const gated of [TOOL_ASK, TOOL_TODO, TOOL_TASK, TOOL_VISUAL]) {
+    assertEquals(CODING_TOOLS.includes(gated), true, `${gated} must be built`);
+  }
+});
 
 /** The tools of a `general` sub-agent that can delegate further. */
 const GENERAL_TOOLS = [

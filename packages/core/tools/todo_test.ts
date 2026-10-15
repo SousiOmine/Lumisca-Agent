@@ -244,8 +244,8 @@ Deno.test("todo rejects malformed plans", async () => {
   });
   assertEquals(
     badStatus?.message,
-    "Unknown status: done (expected pending, in_progress, completed, " +
-      "abandoned, blocked)",
+    "status must be one of pending, in_progress, completed, " +
+      "abandoned, blocked (got done)",
   );
   // A rejected plan leaves the previous one untouched.
   assertEquals(hub.getPlan(), []);

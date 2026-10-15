@@ -38,15 +38,6 @@ export interface DisplayInfo {
   bounds: Rect;
 }
 
-/** What a capture covers: the host captures a rect; which rect (a display,
- * an explicit region) is the tool layer's policy — it owns the display list
- * and the error messages that name it. */
-export interface CaptureOptions {
-  /** Region in virtual-desktop coordinates (negative allowed). Must
-   * intersect at least one display. */
-  region: Rect;
-}
-
 /** A captured frame at 1:1: BGRA pixels plus the screen region they cover.
  * Scaling and encoding happen in computer/image.ts, so every host returns
  * the same shape regardless of platform. */

@@ -4,6 +4,7 @@ import {
   BROWSER_TOOL_NAMES,
   createBrowserTools,
   createBrowserToolsFrom,
+  formatSnapshot,
 } from "./tools.ts";
 import { createChatTools, createCodingTools } from "../tools/mod.ts";
 import { ToolRegistry } from "../tools/registry.ts";
@@ -166,7 +167,7 @@ Deno.test("browser tools resolve the backend at execute time", async () => {
   const error = await expectThrow(() =>
     open.execute("3", { url: "http://127.0.0.1:5173/" }, undefined)
   );
-  assertMatch(error.message, /ブラウザバックエンドが利用できません/);
+  assertMatch(error.message, /browser backend is not available/);
 });
 
 Deno.test("browser_open validates the URL against the policy and calls the backend", async () => {
@@ -215,7 +216,7 @@ Deno.test("browser_open validates the URL against the policy and calls the backe
         undefined,
       )
     )).message,
-    /width\/height は 1〜10000 の範囲/,
+    /width must be an integer between 1 and 10000/,
   );
   assertEquals(backend2.calls.length, 2);
 
@@ -225,7 +226,7 @@ Deno.test("browser_open validates the URL against the policy and calls the backe
         url: "https://example.com/",
       }, undefined)
     )).message,
-    /ローカルホスト/,
+    /refused: cannot open a non-localhost URL/,
   );
   // The rejected URL must never reach the backend.
   assertEquals(backend.calls.length, 0);
@@ -261,6 +262,33 @@ Deno.test("browser_observe formats the snapshot for the LLM", async () => {
     /network: idle 12ms · 3 completed · 1 failed · DOM changed/,
   );
   assertEquals(result.details?.elementCount, 3);
+});
+
+Deno.test("browser_observe says so when the page has no actionable elements", async () => {
+  const empty = { ...snapshot(), elements: [], pageText: "" };
+  const backend = new FakeBackend({ observe: empty });
+  const observe = createBrowserTools(backend).find(
+    (t) => t.name === TOOL_BROWSER_OBSERVE,
+  )!;
+  const result = await observe.execute("1", {}, undefined);
+  const text = result.content[0]!.type === "text"
+    ? result.content[0]!.text
+    : "";
+  assertMatch(text, /\(no actionable elements\)/);
+});
+
+Deno.test("browser_observe announces a snapshot cut at the cap", () => {
+  // A snapshot over the 48 KiB cap keeps its head and carries the note: the
+  // model must never receive a silently shortened result.
+  const text = formatSnapshot({
+    ...snapshot(),
+    elements: [],
+    pageText: "x".repeat(64 * 1024),
+  });
+  assert(
+    text.endsWith("[snapshot truncated to the first 49152 bytes]"),
+    `missing truncation note: ${text.slice(-80)}`,
+  );
 });
 
 Deno.test("browser_observe include_text=false skips the digest", async () => {
@@ -334,11 +362,11 @@ Deno.test("browser_act validates its arguments", async () => {
   const { byName } = toolMap();
   const act = byName.get(TOOL_BROWSER_ACT)!;
   const cases: Array<[Record<string, unknown>, RegExp]> = [
-    [{ action: "click" }, /ref が必要/],
-    [{ action: "fill", ref: "e1" }, /value が必要/],
-    [{ action: "press", ref: "e1" }, /key が必要/],
-    [{ action: "scroll" }, /ref か x\/y/],
-    [{ action: "fly" }, /不明な action/],
+    [{ action: "click" }, /requires a ref from browser_observe/],
+    [{ action: "fill", ref: "e1" }, /requires a value/],
+    [{ action: "press", ref: "e1" }, /press requires key/],
+    [{ action: "scroll" }, /scroll requires ref or x\/y/],
+    [{ action: "fly" }, /action must be one of click, fill, type, press/],
   ];
   for (const [params, pattern] of cases) {
     const error = await expectThrow(() =>
@@ -366,7 +394,7 @@ Deno.test("browser_wait passes options through and reports the result", async ()
   const text = result.content[0]!.type === "text"
     ? result.content[0]!.text
     : "";
-  assertMatch(text, /ネットワークがアイドル/);
+  assertMatch(text, /Network idle/);
 
   // Validation: url needs url_contains; time needs duration_ms; timeout range.
   for (
@@ -405,7 +433,7 @@ Deno.test("browser_screenshot returns the image as ToolResult content", async ()
   const bad = await expectThrow(() =>
     shot.execute("2", { format: "gif" }, undefined)
   );
-  assertMatch(bad.message, /不明な format/);
+  assertMatch(bad.message, /format must be one of png, jpeg/);
 });
 
 Deno.test("browser_close is forwarded and backend.close is called", async () => {

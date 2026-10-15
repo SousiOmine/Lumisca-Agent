@@ -28,24 +28,24 @@ export function checkBrowserUrl(input: string): string | undefined {
   try {
     parsed = new URL(input);
   } catch {
-    return `URL を解析できません: ${input}`;
+    return `cannot parse the URL: ${input}`;
   }
   const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
   if (scheme !== "http" && scheme !== "https") {
-    return `拒否: スキーム "${scheme}" は開けません (http/https のみ)`;
+    return `refused: cannot open scheme "${scheme}" (http/https only)`;
   }
   if (parsed.username !== "" || parsed.password !== "") {
-    return "拒否: URL に認証情報を含めることはできません";
+    return "refused: the URL must not contain credentials";
   }
   // Fragments are harmless; hashes are the page's own business.
   if (!isLoopbackHost(parsed.hostname)) {
-    return `拒否: ローカルホスト (localhost / 127.0.0.1 / ::1) 以外の URL は開けません: ${input}`;
+    return `refused: cannot open a non-localhost URL (only localhost / 127.0.0.1 / ::1): ${input}`;
   }
   const port = parsed.port === "" ? (scheme === "https" ? 443 : 80) : Number(
     parsed.port,
   );
   if (Number.isNaN(port)) {
-    return `拒否: ポートが不正です: ${input}`;
+    return `refused: invalid port: ${input}`;
   }
   return undefined;
 }

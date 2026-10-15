@@ -34,6 +34,7 @@
  * implementation by platform).
  */
 import { CoreError, errorMessage } from "../errors.ts";
+import { MAX_CAPTURE_DIMENSION } from "./image.ts";
 import type {
   ComputerAction,
   ComputerActionResult,
@@ -1107,10 +1108,12 @@ class WindowsComputerHost implements ComputerHost {
   private grabRegion(region: Rect): RawCapture {
     if (
       region.width < 1 || region.height < 1 ||
-      region.width > 16384 || region.height > 16384
+      region.width > MAX_CAPTURE_DIMENSION ||
+      region.height > MAX_CAPTURE_DIMENSION
     ) {
       throw new CoreError(
-        `capture size ${region.width}×${region.height} is out of range (1..16384)`,
+        `capture size ${region.width}×${region.height} is out of range ` +
+          `(1..${MAX_CAPTURE_DIMENSION})`,
         "invalid",
       );
     }

@@ -1,6 +1,6 @@
 import { TOOL_PRESENT } from "../shared/mod.ts";
 import { array, object, optional, string, type Tool } from "./schema.ts";
-import { requireResolved } from "./resolve.ts";
+import { requireExistingFile } from "./resolve.ts";
 import type { FsToolContext } from "./context.ts";
 
 const presentSchema = object({
@@ -42,11 +42,9 @@ export function createPresentTool(
       const files: Array<{ path: string; description?: string }> = [];
 
       for (const file of params.files) {
-        const filePath = await requireResolved(ctx.sandbox, file.path);
-        const stat = await Deno.stat(filePath);
-        if (stat.isDirectory) {
-          throw new Error(`Is a directory: ${file.path}`);
-        }
+        // The resolved path is not kept: the list records the path the
+        // caller gave, and only its existence and type are checked here.
+        await requireExistingFile(ctx.sandbox, file.path);
         files.push(
           file.description === undefined
             ? { path: file.path }

@@ -156,7 +156,7 @@ Deno.test("visual refuses what it cannot show", async () => {
     await assertRejects(
       () => tool.execute("id", { path: `${folder}/missing.png` }),
       Error,
-      "File does not exist",
+      "Path does not exist",
     );
     await assertRejects(
       () => tool.execute("id", { path: folder }),

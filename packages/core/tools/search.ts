@@ -152,7 +152,12 @@ interface SearchRoot {
  * (validated inside the sandbox, and only that one), or every workspace
  * root that still exists. Shared by grep and glob so the root policy — what
  * an explicit `path` means, and that a missing one fails with the same
- * message — cannot drift between them. */
+ * message — cannot drift between them.
+ *
+ * Deliberately not `requireExistingFile`: a directory is a valid root here
+ * (only a file is searched directly), and a workspace root that no longer
+ * exists is skipped rather than refused — a search must not fail because a
+ * folder was unregistered or moved away under it. */
 async function* searchRoots(
   ctx: FsToolContext,
   requested: string | undefined,
@@ -246,7 +251,9 @@ function appendLines(out: string[], hits: string[], maxResults: number) {
 /** Grep a single file; returns its matching lines (`path:line: text`).
  * Returns an empty array when the file is skipped: missing, not a regular
  * file, larger than MAX_GREP_FILE_SIZE, binary (NUL byte anywhere in its
- * decoded content) or unreadable. */
+ * decoded content) or unreadable. Skipping is the point — a search walks a
+ * tree that can change under it, so a vanished file is not an error (unlike
+ * the tools that read one specific file the caller named). */
 async function grepFileLines(
   path: string,
   re: RegExp,

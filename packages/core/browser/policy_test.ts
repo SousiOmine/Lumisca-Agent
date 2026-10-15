@@ -33,7 +33,7 @@ Deno.test("policy rejects everything that is not a loopback http(s) URL", () => 
     const reason = checkBrowserUrl(url);
     assertMatch(
       reason ?? "",
-      /拒否|解析できません/,
+      /refused|cannot parse the URL/,
       `expected "${url}" to be rejected, got: ${reason}`,
     );
   }
@@ -59,5 +59,5 @@ Deno.test("requireAllowedUrl throws with the policy message", () => {
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
-  assertMatch(message, /ローカルホスト/);
+  assertMatch(message, /refused: cannot open a non-localhost URL/);
 });

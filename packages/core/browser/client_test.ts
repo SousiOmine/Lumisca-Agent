@@ -279,13 +279,13 @@ Deno.test("the endpoint must be loopback (security)", () => {
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
-  assertMatch(message, /ループバック/);
+  assertMatch(message, /must be loopback/);
   try {
     new HttpBrowserBackend({ url: "http://example.com:9000", token: "t" });
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
-  assertMatch(message, /ループバック/);
+  assertMatch(message, /must be loopback/);
   // HTTPS loopback is accepted (defense in depth: a local TLS endpoint).
   const httpsBackend = new HttpBrowserBackend({
     url: "https://127.0.0.1:9000",

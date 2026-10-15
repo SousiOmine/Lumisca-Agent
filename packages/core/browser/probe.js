@@ -531,7 +531,7 @@ export const PROBE_SOURCE = String.raw`
           window.scrollTo(action.x || 0, action.y || 0);
           return { ok: true };
         }
-        return { ok: false, code: "invalid", error: "scroll には ref か x/y が必要です" };
+        return { ok: false, code: "invalid", error: "scroll requires ref or x/y" };
       }
       var el = action.ref ? findRef(action.ref) : null;
       if (action.ref && !el) {

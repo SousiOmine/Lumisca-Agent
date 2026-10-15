@@ -620,7 +620,7 @@ Deno.test("the task tool rejects an unknown subagent type", () => {
           description: "調査",
           prompt: "Do research",
         }, undefined),
-      'Unknown subagent_type "intern": expected "general" or "explore"',
+      "subagent_type must be one of general, explore (got intern)",
       "invalid",
     );
   } finally {
@@ -637,7 +637,7 @@ Deno.test("the task_output tool validates timeout_sec and unknown ids", async ()
       () =>
         tool.execute("1", { agent_id: "agent_1", timeout_sec: 0 }, undefined),
       CoreError,
-      "timeout_sec must be between 1 and 300",
+      "timeout_sec must be an integer between 1 and 300",
     );
     await assertRejects(
       () => tool.execute("2", { agent_id: "agent_9" }, undefined),

@@ -1,9 +1,9 @@
-import { CoreError } from "../errors.ts";
 import {
   TOOL_SEND_MESSAGE,
   TOOL_TASK,
   TOOL_TASK_OUTPUT,
 } from "../shared/mod.ts";
+import type { SubagentType } from "../shared/mod.ts";
 import type { TaskHub } from "./task-hub.ts";
 import {
   boolean,
@@ -15,7 +15,11 @@ import {
   type ToolResult,
 } from "./schema.ts";
 import { formatTaskOutput } from "./subagent-format.ts";
+import { requireIntegerInRange, requireOneOf } from "./validate.ts";
 // --- tools -------------------------------------------------------------------
+
+/** Sub-agent kinds the task tool accepts, in the order it documents them. */
+const SUBAGENT_TYPES: readonly SubagentType[] = ["general", "explore"];
 
 const taskSchema = object({
   subagent_type: string(
@@ -50,20 +54,15 @@ export function createTaskTool(
       "demand through `task_output`.",
     parameters: taskSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
-      if (
-        params.subagent_type !== "general" &&
-        params.subagent_type !== "explore"
-      ) {
-        throw new CoreError(
-          `Unknown subagent_type "${params.subagent_type}": expected ` +
-            `"general" or "explore"`,
-          "invalid",
-        );
-      }
+      const subagentType = requireOneOf(
+        "subagent_type",
+        params.subagent_type,
+        SUBAGENT_TYPES,
+      );
       const info = hub.spawn(
         agentId,
         depth,
-        params.subagent_type,
+        subagentType,
         params.description,
         params.prompt,
       );
@@ -116,13 +115,12 @@ export function createTaskOutputTool(
       "`[partial output before the failure]`.",
     parameters: taskOutputSchema,
     async execute(_toolCallId, params, signal): Promise<ToolResult> {
-      const timeoutSec = params.timeout_sec ?? 30;
-      if (timeoutSec < 1 || timeoutSec > 300) {
-        throw new CoreError(
-          `timeout_sec must be between 1 and 300 (got ${timeoutSec})`,
-          "invalid",
-        );
-      }
+      const timeoutSec = requireIntegerInRange(
+        "timeout_sec",
+        params.timeout_sec ?? 30,
+        1,
+        300,
+      );
       const info = params.wait === true
         ? await hub.wait(params.agent_id, agentId, timeoutSec, signal)
         : hub.info(params.agent_id);

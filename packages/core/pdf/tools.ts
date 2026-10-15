@@ -18,8 +18,7 @@
  * abort the whole server process with `STATUS_ILLEGAL_INSTRUCTION`, which no
  * try/catch can contain.
  */
-import { dirname, join } from "node:path";
-import { createRequire } from "node:module";
+import { findCanvasIcuDataFile } from "./icu-data.ts";
 import { getDocumentProxy, renderPageAsImage } from "unpdf";
 import { errorMessage } from "../errors.ts";
 import { bytesToBase64 } from "../base64.ts";
@@ -33,7 +32,8 @@ import {
   string,
   type Tool,
 } from "../tools/schema.ts";
-import { requireResolved } from "../tools/resolve.ts";
+import { requireExistingFile } from "../tools/resolve.ts";
+import { requireIntegerInRange } from "../tools/validate.ts";
 
 /** The tool names of the PDF family. The session pool removes the seeded
  * tools with this list for chat sessions (no workspace folders to resolve
@@ -204,114 +204,6 @@ export function createUnpdfRenderer(options?: {
   };
 }
 
-/** Platform suffixes of the `@napi-rs/canvas-<platform>` npm packages
- * (the optionalDependencies of @napi-rs/canvas plus the extra branches of
- * its js-binding loader). Probed with require.resolve only — resolving a
- * path never executes the native binding. */
-const CANVAS_PLATFORM_SUFFIXES: readonly string[] = [
-  "win32-x64-msvc",
-  "win32-x64-gnu",
-  "win32-ia32-msvc",
-  "win32-arm64-msvc",
-  "darwin-x64",
-  "darwin-arm64",
-  "darwin-universal",
-  "linux-x64-gnu",
-  "linux-x64-musl",
-  "linux-arm64-gnu",
-  "linux-arm64-musl",
-  "linux-arm-gnueabihf",
-  "linux-riscv64-gnu",
-  "android-arm64",
-  "android-arm-eabi",
-  "freebsd-x64",
-  "freebsd-arm64",
-];
-
-/**
- * Locate Skia's ICU data file (`icudtl.dat`) without loading Skia itself.
- * Windows-only: Windows Skia binaries load the data file (see
- * createUnpdfRenderer), while macOS/Linux binaries embed it. The lookup
- * must stay load-free: merely importing the platform package would
- * initialize Skia and abort the process when the file is missing —
- * exactly what this guard exists to prevent.
- *
- * Order: (1) explicit `LUMISCA_ICU_DATA` override, (2) the `server/`
- * resource directory shipped by the desktop installer (next to the
- * deno-compiled binary), (3) next to an already-loaded canvas native
- * binding, (4) next to any installed `@napi-rs/canvas-<platform>`
- * package, resolved without loading it.
- */
-export function findCanvasIcuDataFile(): string | undefined {
-  const override = (() => {
-    try {
-      return Deno.env.get("LUMISCA_ICU_DATA")?.trim() || undefined;
-    } catch {
-      return undefined;
-    }
-  })();
-  if (override) {
-    try {
-      if (Deno.statSync(override).isFile) return override;
-    } catch {
-      // A stale override must not crash the process; fall through to the
-      // normal search, which refuses cleanly when nothing is found.
-    }
-  }
-  for (const dir of canvasIcuSearchDirs()) {
-    const candidate = join(dir, "icudtl.dat");
-    try {
-      if (Deno.statSync(candidate).isFile) return candidate;
-    } catch {
-      // Not here; try the next directory.
-    }
-  }
-  return undefined;
-}
-
-function canvasIcuSearchDirs(): string[] {
-  const dirs: string[] = [];
-  // The deno-compiled server ships icudtl.dat next to its own binary
-  // (the `server/icudtl.dat` Tauri resource).
-  try {
-    dirs.push(dirname(Deno.execPath()));
-  } catch {
-    // execPath unavailable; the searches below may still match.
-  }
-  try {
-    const bindingRequire = createRequire(
-      import.meta.resolve("@napi-rs/canvas/js-binding.js"),
-    );
-    // Next to an already-loaded native binding (require.cache exposes
-    // the `.node` path once @napi-rs/canvas was imported earlier).
-    const cache = (bindingRequire as unknown as {
-      cache?: Record<string, unknown>;
-    }).cache;
-    if (cache) {
-      for (const path of Object.keys(cache)) {
-        if (path.endsWith(".node")) dirs.push(dirname(path));
-      }
-    }
-    // Next to any installed platform package. require.resolve only
-    // resolves the path — it never executes the native binding, so this
-    // stays safe even when the data file is missing.
-    for (const suffix of CANVAS_PLATFORM_SUFFIXES) {
-      try {
-        dirs.push(
-          dirname(
-            bindingRequire.resolve(`@napi-rs/canvas-${suffix}/package.json`),
-          ),
-        );
-      } catch {
-        // That platform's package is not installed; keep looking.
-      }
-    }
-  } catch {
-    // node resolution unavailable; fall through with what we have.
-  }
-  return [...new Set(dirs)];
-}
-
 const pdfReadPagesSchema = object({
   path: string("Workspace path to the PDF file (e.g. `Docs/report.pdf`)"),
   pages: array(
@@ -351,12 +243,12 @@ function createPdfReadPagesTool(
       "image per page plus the total page count.",
     parameters: pdfReadPagesSchema,
     execute: async (_id, params, signal) => {
-      const dpi = params.dpi ?? DEFAULT_PDF_DPI;
-      if (!Number.isInteger(dpi) || dpi < MIN_PDF_DPI || dpi > MAX_PDF_DPI) {
-        throw new Error(
-          `dpi must be an integer ${MIN_PDF_DPI}-${MAX_PDF_DPI} (got ${params.dpi})`,
-        );
-      }
+      const dpi = requireIntegerInRange(
+        "dpi",
+        params.dpi ?? DEFAULT_PDF_DPI,
+        MIN_PDF_DPI,
+        MAX_PDF_DPI,
+      );
       if (params.pages.length === 0) {
         throw new Error("pages must not be empty (e.g. [1])");
       }
@@ -374,9 +266,7 @@ function createPdfReadPagesTool(
             "call again for the remaining pages",
         );
       }
-      const filePath = await requireResolved(options.sandbox, params.path);
-      const stat = await Deno.stat(filePath);
-      if (stat.isDirectory) throw new Error(`Is a directory: ${params.path}`);
+      const filePath = await requireExistingFile(options.sandbox, params.path);
 
       const { totalPages, pages: rendered } = await renderer.render(
         filePath,

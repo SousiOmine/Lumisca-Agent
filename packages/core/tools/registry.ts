@@ -1,4 +1,5 @@
 import type { Tool, ToolResult } from "./schema.ts";
+import { truncatedHeadNote, truncateHead } from "./truncate.ts";
 
 /**
  * Tools that are not preloaded into the LLM context, discoverable through
@@ -58,14 +59,6 @@ function score(tool: Tool, terms: string[]): number {
     if (description.includes(term)) score += 10;
   }
   return score;
-}
-
-/** Cut `text` down to its head for display, appending a marker. Deliberately
- * separate from `truncate` in ./truncate.ts, which keeps the TAIL for tool
- * output — a search description is only useful from the start. */
-function truncateHead(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return `${text.slice(0, max)}\n… (truncated)`;
 }
 
 export class ToolRegistry {
@@ -155,11 +148,13 @@ export class ToolRegistry {
         }): ${names.join(", ")}`,
       );
     }
-    let out = lines.join("\n");
-    if (out.length > MAX_BROWSE_LISTING_CHARS) {
-      out = truncateHead(out, MAX_BROWSE_LISTING_CHARS);
-    }
-    return out;
+    const { text, truncated } = truncateHead(
+      lines.join("\n"),
+      MAX_BROWSE_LISTING_CHARS,
+    );
+    return truncated
+      ? text + truncatedHeadNote("listing", MAX_BROWSE_LISTING_CHARS)
+      : text;
   }
 
   /** The search-result metadata of one tool: the description plus its
@@ -170,13 +165,16 @@ export class ToolRegistry {
    * schemas (browser-lab, future extensions) get the schema appended here
    * so every registry tool reports its arguments the same way. */
   describe(tool: Tool): ToolSearchEntry {
+    const { text, truncated } = truncateHead(
+      tool.description + parameterSchemaText(tool.parameters),
+      MAX_SEARCH_DESCRIPTION_CHARS,
+    );
     return {
       name: tool.name,
       label: tool.label,
-      description: truncateHead(
-        tool.description + parameterSchemaText(tool.parameters),
-        MAX_SEARCH_DESCRIPTION_CHARS,
-      ),
+      description: truncated
+        ? text + truncatedHeadNote("description", MAX_SEARCH_DESCRIPTION_CHARS)
+        : text,
     };
   }
 

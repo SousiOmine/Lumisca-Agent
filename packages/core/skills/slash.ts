@@ -6,9 +6,10 @@
  * of being left to the catalog's "matches this work" judgement.
  *
  * Browser-safe by contract (no disk / node builtins): the web bundle imports
- * this module through `@lumisca/core/skills/slash` (see coreSkillsSlashPath
- * in the server and the vite alias in packages/web). Keep it that way — a
- * runtime import of discover.ts would drag `node:path` into the client.
+ * this module through `@lumisca/core/skills/slash` — one of the entry points
+ * declared in browser-entries.ts, the list the web boundary test, the Vite
+ * dev aliases and the server's esbuild aliases all read. Keep it that way —
+ * a runtime import of discover.ts would drag `node:path` into the client.
  */
 
 /** Build the user message that invokes a skill: the agent loads the skill

@@ -301,6 +301,9 @@ const SUBAGENT_MESSAGE_SECTION: PromptSection = {
   name: "subagent:message",
   order: ORDER.notification,
   requires: [TOOL_SEND_MESSAGE],
+  // Keyed on the tool, not on the agent kind: the main coding session has
+  // send_message too (it receives "[Message from ...]" notifications from
+  // its sub-agents), so CODING_PROMPT_SECTIONS carries this section as well.
   text: '- A message starting with "[Message from ...]" is a message from ' +
     "another agent,\n  not from the user: answer it with send_message or " +
     "fold it into your work.",
@@ -359,6 +362,11 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   VISUAL_IMAGE_SECTION,
   TASK_SECTION,
   NOTIFICATION_SECTION,
+  // The same rule a sub-agent gets: a "[Message from ...]" notification is
+  // another agent talking, not the user (the session's sub-agents message it
+  // back). Gated on send_message, so a session without the task tools never
+  // renders it.
+  SUBAGENT_MESSAGE_SECTION,
   QUALITY_SECTION,
   WORKFLOW_SECTION,
 ];

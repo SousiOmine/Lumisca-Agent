@@ -33,6 +33,12 @@ import {
 } from "./types.ts";
 import { requireAllowedUrl } from "./policy.ts";
 import { CoreError } from "../errors.ts";
+import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
+import {
+  requireInteger,
+  requireIntegerInRange,
+  requireOneOf,
+} from "../tools/validate.ts";
 import {
   TOOL_BROWSER_ACT,
   TOOL_BROWSER_CLOSE,
@@ -42,9 +48,10 @@ import {
   TOOL_BROWSER_WAIT,
 } from "../shared/mod.ts";
 
-/** Text cap for one observe result (the format below), applied before the
- * shared MAX_TOOL_OUTPUT truncation so the agent never sees a mid-element
- * cut. */
+/** Text cap for one observe result (the format below). The cut keeps the
+ * head — the page header and the first elements carry the meaning — and the
+ * appended {@link truncatedHeadNote} tells the model that the snapshot it
+ * got is incomplete. */
 const OBSERVE_TEXT_CAP = 48 * 1024;
 
 // --- formatting ------------------------------------------------------------
@@ -91,7 +98,7 @@ export function formatSnapshot(snapshot: PageSnapshot): string {
       `(${state} · ${snapshot.viewport.width}×${snapshot.viewport.height})`,
   );
   if (snapshot.elements.length === 0) {
-    lines.push("(操作可能な要素なし)");
+    lines.push("(no actionable elements)");
   } else {
     for (const el of snapshot.elements) lines.push(formatElement(el));
   }
@@ -136,10 +143,13 @@ export function formatSnapshot(snapshot: PageSnapshot): string {
       `(truncated: ${snapshot.truncated.join(", ")})`,
     );
   }
-  const text = lines.join("\n");
-  return text.length <= OBSERVE_TEXT_CAP
-    ? text
-    : text.slice(0, OBSERVE_TEXT_CAP);
+  const { text, truncated } = truncateHead(
+    lines.join("\n"),
+    OBSERVE_TEXT_CAP,
+  );
+  return truncated
+    ? text + truncatedHeadNote("snapshot", OBSERVE_TEXT_CAP)
+    : text;
 }
 
 // --- tools -----------------------------------------------------------------
@@ -237,8 +247,8 @@ function requireBackend(
   const backend = resolveBackend();
   if (backend === undefined) {
     throw new CoreError(
-      "ブラウザバックエンドが利用できません (browser tools are not " +
-        "attached to this session)",
+      "browser backend is not available (browser tools are not attached " +
+        "to this session)",
       "unavailable",
     );
   }
@@ -288,18 +298,18 @@ function createBrowserOpenTool(
     parameters: openSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const allowed = requireAllowedUrl(params.url); // throws with the policy reason
-      const width = params.width ?? DEFAULT_VIEWPORT_WIDTH;
-      const height = params.height ?? DEFAULT_VIEWPORT_HEIGHT;
-      if (
-        width < 1 || width > MAX_VIEWPORT_DIMENSION ||
-        height < 1 || height > MAX_VIEWPORT_DIMENSION
-      ) {
-        throw new CoreError(
-          `width/height は 1〜${MAX_VIEWPORT_DIMENSION} の範囲です ` +
-            `(width=${width}, height=${height})`,
-          "invalid",
-        );
-      }
+      const width = requireIntegerInRange(
+        "width",
+        params.width ?? DEFAULT_VIEWPORT_WIDTH,
+        1,
+        MAX_VIEWPORT_DIMENSION,
+      );
+      const height = requireIntegerInRange(
+        "height",
+        params.height ?? DEFAULT_VIEWPORT_HEIGHT,
+        1,
+        MAX_VIEWPORT_DIMENSION,
+      );
       const info = await requireBackend(resolveBackend).open(
         {
           url: allowed.url,
@@ -366,8 +376,8 @@ function actResultOrThrow(
 ): void {
   if (result.ok) return;
   throw new CoreError(
-    `browser_act 失敗 (${result.code ?? "action_failed"}): ${
-      result.error ?? "不明な理由"
+    `browser_act failed (${result.code ?? "action_failed"}): ${
+      result.error ?? "unknown reason"
     }`,
     "unavailable",
   );
@@ -405,6 +415,20 @@ function createBrowserActTool(
   };
 }
 
+/** Every action `browser_act` accepts, in the order the schema documents
+ * them (the message for an unknown action lists this set). */
+const BROWSER_ACTIONS = [
+  "click",
+  "fill",
+  "type",
+  "press",
+  "select",
+  "check",
+  "uncheck",
+  "scroll",
+  "reload",
+] as const;
+
 function buildAction(params: {
   action: string;
   ref?: string;
@@ -414,7 +438,9 @@ function buildAction(params: {
   y?: number;
 }): BrowserAction {
   const ref = params.ref;
-  switch (params.action) {
+  // Narrowing through the helper keeps the switch exhaustive: an unknown
+  // action is rejected before any kind is built.
+  switch (requireOneOf("action", params.action, BROWSER_ACTIONS)) {
     case "click":
       requireRef(params, ref);
       return { kind: "click", ref: ref! };
@@ -428,7 +454,7 @@ function buildAction(params: {
       return { kind: "type", ref: ref!, value: params.value! };
     case "press":
       if (params.key === undefined) {
-        throw new CoreError("press には key が必要です (例: Enter)", "invalid");
+        throw new CoreError("press requires key (e.g. Enter)", "invalid");
       }
       return ref === undefined ? { kind: "press", key: params.key } : {
         kind: "press",
@@ -450,11 +476,9 @@ function buildAction(params: {
       if (params.x !== undefined || params.y !== undefined) {
         return { kind: "scroll", x: params.x ?? 0, y: params.y ?? 0 };
       }
-      throw new CoreError("scroll には ref か x/y が必要です", "invalid");
+      throw new CoreError("scroll requires ref or x/y", "invalid");
     case "reload":
       return { kind: "reload" };
-    default:
-      throw new CoreError(`不明な action: ${params.action}`, "invalid");
   }
 }
 
@@ -464,7 +488,7 @@ function requireRef(
 ): asserts ref is string {
   if (ref === undefined) {
     throw new CoreError(
-      `${params.action} には browser_observe の ref が必要です`,
+      `${params.action} requires a ref from browser_observe`,
       "invalid",
     );
   }
@@ -476,7 +500,7 @@ function requireValue(
 ): asserts value is string {
   if (value === undefined) {
     throw new CoreError(
-      `${params.action} には value が必要です`,
+      `${params.action} requires a value`,
       "invalid",
     );
   }
@@ -505,6 +529,10 @@ function createBrowserWaitTool(
   };
 }
 
+/** Every `browser_wait` condition, in the order the schema documents them
+ * (the message for an unknown one lists this set). */
+const WAIT_UNTIL_VALUES = ["load", "idle", "url", "time"] as const;
+
 function buildWait(params: {
   until: string;
   timeout_ms?: number;
@@ -512,14 +540,11 @@ function buildWait(params: {
   url_contains?: string;
   duration_ms?: number;
 }) {
-  const timeoutMs = params.timeout_ms;
-  if (timeoutMs !== undefined && (timeoutMs < 1 || timeoutMs > 300_000)) {
-    throw new CoreError(
-      `timeout_ms は 1〜300000 の範囲です (got ${timeoutMs})`,
-      "invalid",
-    );
-  }
-  switch (params.until) {
+  const until = requireOneOf("until", params.until, WAIT_UNTIL_VALUES);
+  const timeoutMs = params.timeout_ms === undefined
+    ? undefined
+    : requireIntegerInRange("timeout_ms", params.timeout_ms, 1, 300_000);
+  switch (until) {
     case "load":
       return {
         until: "load" as const,
@@ -534,7 +559,7 @@ function buildWait(params: {
     case "url":
       if (params.url_contains === undefined || params.url_contains === "") {
         throw new CoreError(
-          "until=url には url_contains が必要です",
+          "until=url requires url_contains",
           "invalid",
         );
       }
@@ -543,38 +568,47 @@ function buildWait(params: {
         urlContains: params.url_contains,
         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       };
-    case "time":
-      if (params.duration_ms === undefined || params.duration_ms < 0) {
+    case "time": {
+      if (params.duration_ms === undefined) {
         throw new CoreError(
-          "until=time には duration_ms (0以上) が必要です",
+          "until=time requires duration_ms",
+          "invalid",
+        );
+      }
+      // Only a lower bound exists: a duration beyond timeout_ms is not an
+      // error, the wait simply ends with a timeout.
+      const durationMs = requireInteger("duration_ms", params.duration_ms);
+      if (durationMs < 0) {
+        throw new CoreError(
+          `duration_ms must be 0 or greater (got ${durationMs})`,
           "invalid",
         );
       }
       return {
         until: "time" as const,
-        durationMs: params.duration_ms,
+        durationMs,
         ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       };
-    default:
-      throw new CoreError(
-        `不明な until: ${params.until} (load / idle / url / time)`,
-        "invalid",
-      );
+    }
   }
 }
 
 function formatWaitResult(result: WaitResult): string {
   const state = result.ok
     ? result.reason === "loaded"
-      ? "ページが読み込まれました"
+      ? "Page loaded"
       : result.reason === "idle"
-      ? "ネットワークがアイドルになりました"
+      ? "Network idle"
       : result.reason === "url"
-      ? `URL が一致しました: ${result.detail ?? ""}`
-      : "待機時間が経過しました"
-    : `タイムアウト (${result.durationMs}ms)`;
+      ? `URL matched: ${result.detail ?? ""}`
+      : "Wait duration elapsed"
+    : `Timeout (${result.durationMs}ms)`;
   return `${state} (${result.durationMs}ms)`;
 }
+
+/** Image formats `browser_screenshot` accepts; the message for an unknown
+ * one lists this set. */
+const SCREENSHOT_FORMATS = ["png", "jpeg"] as const;
 
 function createBrowserScreenshotTool(
   resolveBackend: () => BrowserBackend | undefined,
@@ -588,14 +622,14 @@ function createBrowserScreenshotTool(
       "(1 CSS px = 1 image px), whatever size the window is shown at.",
     parameters: screenshotSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
-      const format = params.format ?? "png";
-      if (format !== "png" && format !== "jpeg") {
-        throw new CoreError(`不明な format: ${format} (png / jpeg)`, "invalid");
-      }
-      const quality = params.quality;
-      if (quality !== undefined && (quality < 1 || quality > 100)) {
-        throw new CoreError("quality は 1〜100 の範囲です", "invalid");
-      }
+      const format = requireOneOf(
+        "format",
+        params.format ?? "png",
+        SCREENSHOT_FORMATS,
+      );
+      const quality = params.quality === undefined
+        ? undefined
+        : requireIntegerInRange("quality", params.quality, 1, 100);
       const image = await requireBackend(resolveBackend).screenshot(
         { format, ...(quality !== undefined ? { quality } : {}) },
         signal,
@@ -638,7 +672,7 @@ function createBrowserCloseTool(
       return {
         content: [{
           type: "text",
-          text: "Browser closed. browser_open でもう一度開けます。",
+          text: "Browser closed. Run browser_open to open it again.",
         }],
         details: { closed: true },
       };

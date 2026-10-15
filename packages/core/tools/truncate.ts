@@ -76,3 +76,22 @@ export function truncate(text: string, max = MAX_TOOL_OUTPUT): {
   if (text.length <= max) return { text, truncated: false };
   return { text: text.slice(-max), truncated: true };
 }
+
+/** Standard note appended when output was cut from the END and the head is
+ * kept — the mirror of {@link truncatedNote}, e.g. `description` →
+ * "[description truncated to the first 512 bytes]". */
+export function truncatedHeadNote(kind: string, max: number): string {
+  return `\n[${kind} truncated to the first ${max} bytes]`;
+}
+
+/** Keep the head of `text` (the mirror of {@link truncate}, which keeps the
+ * tail): for a listing, a description or a snapshot the beginning is what
+ * carries the meaning, so the cut removes the end. Callers append
+ * {@link truncatedHeadNote} when `truncated` is true. */
+export function truncateHead(text: string, max: number): {
+  text: string;
+  truncated: boolean;
+} {
+  if (text.length <= max) return { text, truncated: false };
+  return { text: text.slice(0, max), truncated: true };
+}

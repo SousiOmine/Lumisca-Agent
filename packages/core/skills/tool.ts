@@ -42,8 +42,9 @@ export function createSkillTool(
     description:
       "Load one skill: its SKILL.md instructions plus, optionally, one " +
       "file from the skill directory (`read_followup`). The result is the " +
-      "file's text, truncated with a `… (file truncated at N bytes)` note " +
-      `when it exceeds ${MAX_SKILL_FILE_BYTES} bytes. An unknown name ` +
+      "file's text, truncated with a " +
+      "`[file truncated to the first N bytes]` note when it exceeds " +
+      `${MAX_SKILL_FILE_BYTES} bytes. An unknown name ` +
       `fails with \`Unknown skill "<name>"\` followed by the skill names ` +
       "that exist. The session skill catalog lists every available skill " +
       "with its description.",

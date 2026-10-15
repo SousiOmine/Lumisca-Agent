@@ -7,11 +7,11 @@ import { createToolCallTool } from "../tools/call-tool.ts";
 import { createChatTools, createCodingTools } from "../tools/mod.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
+import { findCanvasIcuDataFile } from "./icu-data.ts";
 import {
   createPdfTools,
   createUnpdfRenderer,
   DEFAULT_PDF_DPI,
-  findCanvasIcuDataFile,
   MAX_PDF_PAGES_PER_CALL,
   PDF_TOOL_NAMES,
   type PdfRenderer,
@@ -381,31 +381,30 @@ Deno.test("pdf renderer honors the LUMISCA_ICU_DATA override", {
   ignore: Deno.build.os !== "windows",
 }, async () => {
   const { root, folder } = await fixture();
-  const previous = Deno.env.get("LUMISCA_ICU_DATA");
   try {
     await Deno.copyFile(
       join(import.meta.dirname!, "testdata", "two-pages.pdf"),
       join(root, "doc.pdf"),
     );
-    const real = findCanvasIcuDataFile();
+    const real = findCanvasIcuDataFile(() => ({}));
     assert(real !== undefined, "expected a bundled icudtl.dat on this host");
-    Deno.env.set("LUMISCA_ICU_DATA", real);
-    const tools = createPdfTools({ sandbox: new Sandbox([root]) });
+    // The override is read from the *injected* environment: Deno.env is
+    // shared by every test file the runner parallels, so it is never mutated
+    // here.
+    assertEquals(
+      findCanvasIcuDataFile(() => ({ LUMISCA_ICU_DATA: real })),
+      real,
+    );
+    const tools = createPdfTools({
+      sandbox: new Sandbox([root]),
+      renderer: createUnpdfRenderer({ findIcuDataFile: () => real }),
+    });
     const result = await tools[0]!.execute("id", {
       path: `${folder}/doc.pdf`,
       pages: [1],
     });
     assert(toolText(result).includes("pages 1 of 2"), toolText(result));
   } finally {
-    if (previous === undefined) {
-      try {
-        Deno.env.delete("LUMISCA_ICU_DATA");
-      } catch {
-        // Already absent; nothing to restore.
-      }
-    } else {
-      Deno.env.set("LUMISCA_ICU_DATA", previous);
-    }
     await removeDirRetry(root);
   }
 });

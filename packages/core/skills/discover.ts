@@ -5,6 +5,7 @@ import {
   readIfExists,
   resolveGlobalDirs as resolveGlobalDirsBase,
 } from "../fs.ts";
+import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 import { parseSkillFrontmatter } from "./frontmatter.ts";
 
 /** Directory holding skills inside a repository level or in the home
@@ -127,13 +128,12 @@ export function loadSkillContent(
   skill: SkillDef,
   relativePath?: string,
 ): string {
-  const text = skill.read !== undefined
+  const content = skill.read !== undefined
     ? skill.read(relativePath)
     : readSkillFile(skill, relativePath);
-  return text.length > MAX_SKILL_FILE_BYTES
-    ? `${
-      text.slice(0, MAX_SKILL_FILE_BYTES)
-    }\n\n… (file truncated at ${MAX_SKILL_FILE_BYTES} bytes)`
+  const { text, truncated } = truncateHead(content, MAX_SKILL_FILE_BYTES);
+  return truncated
+    ? text + truncatedHeadNote("file", MAX_SKILL_FILE_BYTES)
     : text;
 }
 

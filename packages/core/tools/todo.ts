@@ -10,6 +10,7 @@ import {
   type Tool,
   type ToolResult,
 } from "./schema.ts";
+import { requireOneOf } from "./validate.ts";
 
 /** The statuses a task can take, in the order the tool accepts them. */
 const STATUSES: TodoStatus[] = [
@@ -178,14 +179,10 @@ function normalizePlan(
         );
       }
       taskNames.add(taskName);
-      const status = task.status;
-      if (status !== undefined && !STATUSES.includes(status as TodoStatus)) {
-        throw new CoreError(
-          `Unknown status: ${status} (expected ${STATUSES.join(", ")})`,
-          "invalid",
-        );
-      }
-      return { name: taskName, status: status as TodoStatus | undefined };
+      const status = task.status === undefined
+        ? undefined
+        : requireOneOf("status", task.status, STATUSES);
+      return { name: taskName, status };
     });
     return { name, tasks };
   });

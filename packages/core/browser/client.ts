@@ -59,19 +59,19 @@ function parseEndpoint(url: string): URL {
   } catch {
     throw new BrowserBackendError(
       TRANSPORT_BAD_REPLY,
-      `browser RPC エンドポイントの URL が不正です: ${url}`,
+      `invalid browser RPC endpoint URL: ${url}`,
     );
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new BrowserBackendError(
       TRANSPORT_BAD_REPLY,
-      `browser RPC エンドポイントは http(s) のみです: ${url}`,
+      `browser RPC endpoint must be http(s): ${url}`,
     );
   }
   if (!isLoopbackHost(parsed.hostname)) {
     throw new BrowserBackendError(
       TRANSPORT_BAD_REPLY,
-      `browser RPC エンドポイントはループバックのみ許可されます: ${url}`,
+      `browser RPC endpoint must be loopback (localhost / 127.0.0.1 / ::1): ${url}`,
     );
   }
   return parsed;
@@ -169,7 +169,7 @@ export class HttpBrowserBackend implements BrowserBackend {
     if (payload.length > MAX_RPC_REQUEST_BYTES) {
       throw new BrowserBackendError(
         "too_large",
-        `browser RPC リクエストが大きすぎます (${payload.length} bytes)`,
+        `browser RPC request is too large (${payload.length} bytes)`,
       );
     }
     let response: Response;
@@ -187,37 +187,37 @@ export class HttpBrowserBackend implements BrowserBackend {
       if (signal?.aborted) {
         throw new BrowserBackendError(
           TRANSPORT_ABORTED,
-          "browser 操作が中断されました",
+          "browser operation aborted",
         );
       }
       throw new BrowserBackendError(
         TRANSPORT_REFUSED,
-        `browser host に接続できません (${describeFetchError(error)})`,
+        `cannot reach the browser host (${describeFetchError(error)})`,
       );
     }
     if (response.status === 401) {
       throw new BrowserBackendError(
         "auth",
-        "ブラウザ連携機能への接続に失敗しました（認証情報が一致しません）",
+        "browser host authentication failed (token mismatch)",
       );
     }
     if (response.status === 413) {
       throw new BrowserBackendError(
         "too_large",
-        "browser host がリクエストを大きすぎるとして拒否しました",
+        "browser host rejected the request as too large",
       );
     }
     if (!response.ok) {
       throw new BrowserBackendError(
         TRANSPORT_HTTP,
-        `browser host が HTTP ${response.status} を返しました`,
+        `browser host returned HTTP ${response.status}`,
       );
     }
     const text = await response.text();
     if (text.length > MAX_PARSE_BYTES) {
       throw new BrowserBackendError(
         "too_large",
-        `browser host の応答が大きすぎます (${text.length} bytes)`,
+        `browser host response is too large (${text.length} bytes)`,
       );
     }
     let parsed: unknown;
@@ -226,21 +226,21 @@ export class HttpBrowserBackend implements BrowserBackend {
     } catch {
       throw new BrowserBackendError(
         TRANSPORT_BAD_REPLY,
-        "browser host の応答を JSON として解析できません",
+        "browser host response is not valid JSON",
       );
     }
     const rpc = parsed as RpcResponse;
     if (typeof rpc !== "object" || rpc === null || rpc.id !== id) {
       throw new BrowserBackendError(
         TRANSPORT_BAD_REPLY,
-        "browser host の応答が不正です (id 不一致または形式不正)",
+        "browser host response is malformed (id mismatch or bad shape)",
       );
     }
     if (rpc.ok === false) {
       const failure = rpc as RpcFailure;
       throw new BrowserBackendError(
         failure.error.code ?? "internal",
-        failure.error.message ?? "browser host エラー",
+        failure.error.message ?? "browser host error",
       );
     }
     const result = (rpc as RpcSuccess).result;
@@ -263,7 +263,7 @@ export class HttpBrowserBackend implements BrowserBackend {
       ) {
         throw new BrowserBackendError(
           String(failure.code ?? failure.error?.code ?? "action_failed"),
-          String(failure.error?.message ?? "ページ操作に失敗しました"),
+          String(failure.error?.message ?? "page operation failed"),
         );
       }
     }

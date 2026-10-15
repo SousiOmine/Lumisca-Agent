@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { readIfExists } from "../fs.ts";
+import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 
 /** Combined project memory budget (matches Codex's project_doc_max_bytes). */
 export const MAX_MEMORY_BYTES = 32 * 1024;
@@ -62,7 +63,7 @@ export function instructionHeading(path: string): string {
  * the folder is read; an AGENTS.override.md in a directory replaces the
  * AGENTS.md beside it. The list is capped so the rendered instruction block
  * stays within MAX_MEMORY_BYTES: the file that crosses the cap is truncated
- * and ends the list.
+ * with a note saying so, and ends the list.
  */
 export function loadProjectMemoryFiles(folders: string[]): MemoryFile[] {
   const seen = new Set<string>();
@@ -87,7 +88,15 @@ export function loadProjectMemoryFiles(folders: string[]): MemoryFile[] {
       const room = budget - overhead;
       if (room <= 0) return files;
       if (content.length > room) {
-        files.push({ path, content: content.slice(0, room) });
+        // The cut is announced to the model, and the note itself counts
+        // against the cap (a room too small for the note publishes the note
+        // alone — dropping the file silently would be worse).
+        const note = truncatedHeadNote("instructions", room);
+        const { text } = truncateHead(
+          content,
+          Math.max(0, room - note.length),
+        );
+        files.push({ path, content: text + note });
         return files;
       }
       files.push({ path, content });

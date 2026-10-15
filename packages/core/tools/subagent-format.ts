@@ -1,9 +1,7 @@
 import type { AgentMessage } from "../ai/types.ts";
 import { contentText } from "../shared/mod.ts";
-import type {
-  NotificationMessage,
-  NotificationPayload,
-} from "../types/notification.ts";
+import type { NotificationMessage } from "../ai/types.ts";
+import type { NotificationPayload } from "../types/notification.ts";
 import type { SubagentType, TaskInfo } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";

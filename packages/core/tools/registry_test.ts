@@ -109,7 +109,14 @@ Deno.test("describe reports name, label and a truncated description", () => {
       .length,
     "description must be truncated",
   );
-  assert(entry.description.endsWith("(truncated)"));
+  // The cut is announced with the shared note, so the model can tell the
+  // description it got is not the whole one.
+  assert(
+    entry.description.endsWith(
+      `[description truncated to the first ${MAX_SEARCH_DESCRIPTION_CHARS} bytes]`,
+    ),
+    entry.description.slice(-80),
+  );
 });
 
 Deno.test("describe appends the parameter schema when it carries explicit properties", () => {

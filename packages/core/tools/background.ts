@@ -21,10 +21,8 @@ import { requireResolved } from "./resolve.ts";
 import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
 import { CoreError } from "../errors.ts";
-import type {
-  NotificationPayload,
-  NotificationStatus,
-} from "../types/notification.ts";
+import type { NotificationPayload } from "../types/notification.ts";
+import type { NotificationStatus } from "../ai/types.ts";
 import type { ClientEvent } from "../types/event.ts";
 
 /** Concurrent background commands per session. Bounds resource usage; the

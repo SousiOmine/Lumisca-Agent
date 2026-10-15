@@ -420,7 +420,7 @@ Deno.test("act validates its arguments", async () => {
   await assertRejects(
     () => act({ action: "wait", duration_ms: MAX_WAIT_MS + 1 }),
     Error,
-    "duration_ms must be 0..",
+    "duration_ms must be an integer between 0 and",
   );
   await assertRejects(
     () => act({ action: "type", text: "" }),
@@ -445,12 +445,12 @@ Deno.test("act validates its arguments", async () => {
   await assertRejects(
     () => act({ action: "click", x: 1, y: 2, button: "side" }),
     Error,
-    'unknown button "side"',
+    "button must be one of left, right, middle",
   );
   await assertRejects(
     () => act({ action: "click", x: 1, y: 2, count: 3 }),
     Error,
-    "count must be 1 or 2",
+    "count must be an integer between 1 and 2",
   );
   await assertRejects(
     () => act({ action: "click", x: 1 }),

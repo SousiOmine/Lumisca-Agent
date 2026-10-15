@@ -10,7 +10,7 @@ import {
 import type { Sandbox } from "../workspace/sandbox.ts";
 import type { SessionVisualStore } from "../session/visuals.ts";
 import { object, optional, string, type Tool } from "./schema.ts";
-import { requireResolved } from "./resolve.ts";
+import { requireExistingFile } from "./resolve.ts";
 
 const visualSchema = object({
   path: string(
@@ -54,21 +54,12 @@ export function createVisualTool(
       "missing file, a non-image file, and an oversized file fail.",
     parameters: visualSchema,
     execute: async (_id, params) => {
-      const filePath = await requireResolved(sandbox, params.path);
-      let stat: Deno.FileInfo;
-      try {
-        stat = await Deno.stat(filePath);
-      } catch (error) {
-        // The sandbox resolves a path that does not exist yet (the file
-        // tools create files that way); this tool only reads.
-        if (error instanceof Deno.errors.NotFound) {
-          throw new Error(`File does not exist: ${params.path}`);
-        }
-        throw error;
-      }
-      if (stat.isDirectory) {
-        throw new Error(`Is a directory: ${params.path}`);
-      }
+      // The sandbox resolves a path that does not exist yet (the file tools
+      // create files that way); this tool only reads, so a missing file is
+      // refused here.
+      const filePath = await requireExistingFile(sandbox, params.path);
+      // Still needed below: the size limit is checked before the file is read.
+      const stat = await Deno.stat(filePath);
       const extension = extname(filePath).toLowerCase();
       if (!isVisualExtension(extension)) {
         throw new Error(

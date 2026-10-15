@@ -36,8 +36,14 @@ import {
   type ToolResult,
 } from "../tools/schema.ts";
 import {
+  requireInteger,
+  requireIntegerInRange,
+  requireOneOf,
+} from "../tools/validate.ts";
+import {
   DEFAULT_MAX_DIMENSION,
   encodeCapture,
+  MAX_CAPTURE_DIMENSION,
   MAX_MAX_DIMENSION,
   MIN_MAX_DIMENSION,
 } from "./image.ts";
@@ -68,8 +74,9 @@ export const MAX_WAIT_MS = 30_000;
 /** Windows listed in one result (the rest are announced, never dropped
  * silently). */
 export const MAX_WINDOW_LINES = 100;
-/** Largest region a screenshot may ask for, per side. */
-export const MAX_CAPTURE_DIMENSION = 16384;
+
+/** Mouse buttons `computer_act` accepts (`left` is the default). */
+const MOUSE_BUTTONS: readonly MouseButton[] = ["left", "right", "middle"];
 
 /** What the last screenshot covered, in screen pixels, plus the scale of
  * the image the model saw. */
@@ -118,11 +125,12 @@ function requireHost(
   return host;
 }
 
-function requireInteger(value: number | undefined, name: string): number {
-  if (value === undefined || !Number.isInteger(value)) {
-    throw new CoreError(`${name} must be an integer (got ${value})`, "invalid");
-  }
-  return value;
+/** A numeric argument the current action needs: the schema marks every
+ * pointer field optional (each action uses a different subset of them), so
+ * an absent one is handed to the shared check as NaN, which rejects it
+ * under the field's name instead of letting it through. */
+function requireIntegerArg(name: string, value: number | undefined): number {
+  return requireInteger(name, value ?? Number.NaN);
 }
 
 function requireView(state: ComputerToolState): CaptureView {
@@ -227,17 +235,12 @@ function createScreenshotTool(
     parameters: screenshotSchema,
     execute: async (_id, params): Promise<ToolResult> => {
       const host = requireHost(options.resolveHost);
-      const maxDimension = params.max_dimension ?? DEFAULT_MAX_DIMENSION;
-      if (
-        !Number.isInteger(maxDimension) || maxDimension < MIN_MAX_DIMENSION ||
-        maxDimension > MAX_MAX_DIMENSION
-      ) {
-        throw new CoreError(
-          `max_dimension must be an integer ${MIN_MAX_DIMENSION}..` +
-            `${MAX_MAX_DIMENSION} (got ${params.max_dimension})`,
-          "invalid",
-        );
-      }
+      const maxDimension = requireIntegerInRange(
+        "max_dimension",
+        params.max_dimension ?? DEFAULT_MAX_DIMENSION,
+        MIN_MAX_DIMENSION,
+        MAX_MAX_DIMENSION,
+      );
       const displays = host.displays();
       const { region, display } = resolveCaptureRegion(params, displays);
       const raw = await host.capture(region);
@@ -305,7 +308,7 @@ function resolveCaptureRegion(
         ["region.height", region.height],
       ] as const
     ) {
-      requireInteger(value, name);
+      requireInteger(name, value);
     }
     if (
       region.width < 1 || region.height < 1 ||
@@ -519,14 +522,16 @@ function buildAction(
   },
   state: ComputerToolState,
 ): BuiltAction {
-  const button = parseButton(params.button);
+  const button = params.button === undefined
+    ? "left"
+    : requireOneOf("button", params.button, MOUSE_BUTTONS);
   // Argument checks run before the view is required: a bad coordinate is a
   // clearer complaint than "no screenshot yet", and it does not depend on
   // state at all.
   const point = (): { image: Point; screen: Point } => {
     const image = {
-      x: requireInteger(params.x, "x"),
-      y: requireInteger(params.y, "y"),
+      x: requireIntegerArg("x", params.x),
+      y: requireIntegerArg("y", params.y),
     };
     const view = requireView(state);
     return { image, screen: toScreen(view, image) };
@@ -542,13 +547,7 @@ function buildAction(
       };
     }
     case "click": {
-      const count = params.count ?? 1;
-      if (count !== 1 && count !== 2) {
-        throw new CoreError(
-          `count must be 1 or 2 (got ${params.count})`,
-          "invalid",
-        );
-      }
+      const count = requireIntegerInRange("count", params.count ?? 1, 1, 2);
       const { image, screen } = point();
       return {
         action: { kind: "click", x: screen.x, y: screen.y, button, count },
@@ -559,12 +558,12 @@ function buildAction(
     }
     case "drag": {
       const from = {
-        x: requireInteger(params.x, "x"),
-        y: requireInteger(params.y, "y"),
+        x: requireIntegerArg("x", params.x),
+        y: requireIntegerArg("y", params.y),
       };
       const to = {
-        x: requireInteger(params.to_x, "to_x"),
-        y: requireInteger(params.to_y, "to_y"),
+        x: requireIntegerArg("to_x", params.to_x),
+        y: requireIntegerArg("to_y", params.to_y),
       };
       const view = requireView(state);
       const fromScreen = toScreen(view, from);
@@ -584,10 +583,8 @@ function buildAction(
       };
     }
     case "scroll": {
-      const deltaX = params.delta_x ?? 0;
-      const deltaY = params.delta_y ?? 0;
-      requireInteger(deltaX, "delta_x");
-      requireInteger(deltaY, "delta_y");
+      const deltaX = requireInteger("delta_x", params.delta_x ?? 0);
+      const deltaY = requireInteger("delta_y", params.delta_y ?? 0);
       if (deltaX === 0 && deltaY === 0) {
         throw new CoreError(
           "scroll needs delta_x and/or delta_y",
@@ -634,13 +631,12 @@ function buildAction(
       return { action: { kind: "focus_window", window } };
     }
     case "wait": {
-      const durationMs = requireInteger(params.duration_ms, "duration_ms");
-      if (durationMs < 0 || durationMs > MAX_WAIT_MS) {
-        throw new CoreError(
-          `duration_ms must be 0..${MAX_WAIT_MS} (got ${params.duration_ms})`,
-          "invalid",
-        );
-      }
+      const durationMs = requireIntegerInRange(
+        "duration_ms",
+        params.duration_ms ?? Number.NaN,
+        0,
+        MAX_WAIT_MS,
+      );
       return { action: { kind: "wait", durationMs } };
     }
     default:
@@ -650,17 +646,6 @@ function buildAction(
         "invalid",
       );
   }
-}
-
-function parseButton(button: string | undefined): MouseButton {
-  if (button === undefined) return "left";
-  if (button === "left" || button === "right" || button === "middle") {
-    return button;
-  }
-  throw new CoreError(
-    `unknown button "${button}" (left / right / middle)`,
-    "invalid",
-  );
 }
 
 // --- computer_list_windows --------------------------------------------------
