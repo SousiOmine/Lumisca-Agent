@@ -12,7 +12,7 @@
 
 ### 依存関係の原則
 - `core` は他の内部パッケージに依存しません。
-- `web` が `core` から直接取り込むモジュールは純粋関数に限定されます（`shared/`、`modes/`、`skills/slash`）。これらはビルド時のエイリアス設定で解決されます。バレルモジュール（`@lumisca/core`）の参照は型定義のみとし、実行時バンドルには含めません。この境界ルールは `packages/web/src/boundaries_test.ts` で機械的に検証します。
+- `web` が `core` から直接取り込むモジュールは純粋関数に限定されます（`shared/`、`modes/`、`skills/slash`）。これらはビルド時のエイリアス設定で解決されます。バレルモジュール（`@lumisca/core`）の参照は型定義のみとし、実行時バンドルには含めません。許可するエントリは `packages/core/browser-entries.ts` の 1 箇所で宣言し、境界テスト（`packages/web/src/boundaries_test.ts`）・Vite のエイリアス・サーバーの esbuild エイリアスが同じリストを読みます。
 
 ---
 
@@ -143,16 +143,17 @@
 
 ## 7. バージョン管理
 
-アプリケーションのバージョン番号は、以下の 8 箇所のマニフェストファイルで管理しています。
+アプリケーションのバージョン番号は、以下の 9 箇所のマニフェストファイルで管理しています。
 
 1. `packages/core/deno.json`
 2. `packages/server/deno.json`
 3. `packages/web/deno.json`
 4. `desktop/deno.json`
 5. `desktop/package.json`
-6. `tauri.conf.json`
-7. `Cargo.toml`
-8. `packages/server/version.ts`
+6. `desktop/package-lock.json`
+7. `tauri.conf.json`
+8. `Cargo.toml`
+9. `packages/server/version.ts`
 
 `packages/server/version.ts` の定義値は、コンパイル後の単体サーバーが自身のバージョンを把握し、自動更新時のバージョン比較に使用します。
 

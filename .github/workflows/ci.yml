@@ -62,8 +62,9 @@ jobs:
       - name: Type check
         run: deno task check
 
-      # The version lives in eight manifests (four deno.json, package.json,
-      # tauri.conf.json, Cargo.toml, and packages/server/version.ts — the
+      # The version lives in nine manifests (four deno.json, package.json,
+      # package-lock.json, tauri.conf.json, Cargo.toml, and
+      # packages/server/version.ts — the
       # constant a compiled server reports and updates against). The release
       # workflow pins them to the tag; checking them on every change catches
       # a half-done bump at the PR instead of at the tag.
