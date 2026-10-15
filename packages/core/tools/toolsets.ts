@@ -12,6 +12,7 @@ import type { BackgroundProcessManager } from "./background.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import { createEvalTool } from "./eval.ts";
 import { createPresentTool } from "./present.ts";
+import { createVisualTool, type VisualTarget } from "./visual.ts";
 import type { Tool } from "./schema.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
@@ -112,6 +113,10 @@ export interface ToolFactoryOptions {
    * feature). Gates the built-in computer-use skill the same way.
    * Omitted/undefined → the skill is not advertised. */
   computerAvailable?: boolean;
+  /** Where the visual tool publishes (the session's asset store and id).
+   * Omitted → the tool is not built: a tool set without a store has nowhere
+   * to put a published image, and the reply could not link it. */
+  visuals?: VisualTarget;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -133,6 +138,9 @@ export function createCodingTools(
       : []),
     createEvalTool({ safety: options.safety }),
     createPresentTool({ sandbox }),
+    ...(options.visuals !== undefined
+      ? [createVisualTool({ sandbox, ...options.visuals })]
+      : []),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
         browserAvailable: options.browserAvailable,

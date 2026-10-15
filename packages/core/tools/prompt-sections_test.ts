@@ -22,6 +22,7 @@ import {
   TOOL_TASK,
   TOOL_TASK_OUTPUT,
   TOOL_TODO,
+  TOOL_VISUAL,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
 
@@ -40,6 +41,7 @@ const CODING_TOOLS = [
   TOOL_TODO,
   TOOL_SKILL,
   TOOL_TASK,
+  TOOL_VISUAL,
 ];
 
 /** The tools of a `general` sub-agent that can delegate further. */
@@ -109,6 +111,26 @@ Deno.test("renderPromptSections renders only the sections the tools satisfy", ()
   assertEquals(
     renderPromptSections(CODING_PROMPT_SECTIONS, []).includes("Tool"),
     false,
+  );
+});
+
+Deno.test("the visual sections follow the tools they need", () => {
+  // The diagram needs no tool (the client renders the fence), so its bullet
+  // reaches every session; the image bullet needs the visual tool that
+  // publishes the file, and must not point a session at a tool it lacks.
+  const chat = renderPromptSections(CHAT_PROMPT_SECTIONS, [TOOL_ASK]);
+  assert(chat.includes("tagged `svg`"), "the diagram bullet is unconditional");
+  assertEquals(chat.includes("publish it with the visual"), false);
+
+  const coding = renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS);
+  assert(coding.includes("publish it with the visual"));
+  assertEquals(
+    renderPromptSections(
+      CODING_PROMPT_SECTIONS,
+      CODING_TOOLS.filter((name) => name !== TOOL_VISUAL),
+    ).includes("publish it with the visual"),
+    false,
+    "the image bullet requires the visual tool",
   );
 });
 

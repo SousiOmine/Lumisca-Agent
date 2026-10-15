@@ -13,6 +13,7 @@ import {
   TOOL_SKILL,
   TOOL_TASK,
   TOOL_TODO,
+  TOOL_VISUAL,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
 
@@ -205,6 +206,25 @@ const PRESENT_SECTION: PromptSection = {
     "naming its path is not\n  enough.",
 };
 
+/** Both halves of the visual feature, each a section of its own: a diagram
+ * needs no tool, an image file needs the visual tool. */
+const VISUAL_DIAGRAM_SECTION: PromptSection = {
+  name: "visual:diagram",
+  order: ORDER.tool + 115,
+  text: "- To show a diagram in your reply, put a complete `<svg>` element " +
+    "in a fence\n  tagged `svg` (no script, up to 256 KiB): it renders as an " +
+    "image there.",
+};
+
+const VISUAL_IMAGE_SECTION: PromptSection = {
+  name: "visual:image",
+  order: ORDER.tool + 125,
+  requires: [TOOL_VISUAL],
+  text: "- To show an image file in your reply, publish it with the visual " +
+    "tool and\n  paste the markdown snippet it returns where the image " +
+    "belongs.",
+};
+
 const TASK_SECTION: PromptSection = {
   name: "tool:task",
   order: ORDER.tool + 130,
@@ -335,6 +355,8 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   TODO_SECTION,
   SKILL_SECTION,
   PRESENT_SECTION,
+  VISUAL_DIAGRAM_SECTION,
+  VISUAL_IMAGE_SECTION,
   TASK_SECTION,
   NOTIFICATION_SECTION,
   QUALITY_SECTION,
@@ -348,6 +370,7 @@ export const CHAT_PROMPT_SECTIONS: readonly PromptSection[] = [
   ASK_SECTION,
   TODO_SECTION,
   SKILL_SECTION,
+  VISUAL_DIAGRAM_SECTION,
   QUALITY_SECTION,
   CHAT_ANSWERS_SECTION,
 ];

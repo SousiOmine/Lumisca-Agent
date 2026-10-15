@@ -19,16 +19,19 @@ import type { UserMessageImage } from "./types.ts";
 
 /** One message of a turn: user messages get the action row, notifications
  * are compact rows, mode messages show the short text + badge, assistant
- * messages render text + tool calls. */
+ * messages render text + tool calls. `visualBase` is the session's asset
+ * base, forwarded to the markdown renderer (see MarkdownBlock). */
 export function MessageRow({
   message,
   toolResults,
   runningTools,
+  visualBase,
   onRewind,
 }: {
   message: AgentMessage;
   toolResults: Map<string, ToolResultMessage>;
   runningTools: Map<string, string>;
+  visualBase: string;
   onRewind?: (
     timestamp: number,
     text: string,
@@ -96,7 +99,7 @@ export function MessageRow({
   return (
     <div className="msg">
       <div className="msg-body markdown">
-        {text && <MarkdownBlock text={text} />}
+        {text && <MarkdownBlock text={text} visualBase={visualBase} />}
         {toolCalls.map((tc) => (
           <ToolCall
             key={tc.id}

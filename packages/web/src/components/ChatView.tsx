@@ -15,6 +15,7 @@ import {
   summarizeContextUsage,
 } from "@lumisca/core/shared";
 import { api } from "../api.ts";
+import { sessionVisualBase } from "../api-client.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
@@ -119,6 +120,11 @@ export function ChatView(
   // messages. While false the view stays pinned to the newest content.
   const userScrolledUp = useRef(false);
   const isRunning = isViewRunning(view);
+
+  // Where this session's `visual:` image references resolve. The assets live
+  // where the agent runs, so a peer's session is read through the hub's
+  // federation proxy (the same base the per-session API calls use).
+  const visualBase = sessionVisualBase(peerId ?? "", view.info.id);
 
   // --- saved prompts (shared hook so the menu refreshes after the settings
   // panel mutates the list) ----------------------------------------------
@@ -393,6 +399,7 @@ export function ChatView(
               turn={turn}
               toolResults={toolResults}
               runningTools={view.runningTools}
+              visualBase={visualBase}
               running={isRunning && index === turns.length - 1}
               endedAt={index === turns.length - 1
                 ? view.agentEndedAt
@@ -403,7 +410,10 @@ export function ChatView(
           {view.streamingText.length > 0 && (
             <div className="msg">
               <div className="msg-body markdown">
-                <MarkdownBlock text={view.streamingText} />
+                <MarkdownBlock
+                  text={view.streamingText}
+                  visualBase={visualBase}
+                />
                 <span className="cursor" />
               </div>
             </div>

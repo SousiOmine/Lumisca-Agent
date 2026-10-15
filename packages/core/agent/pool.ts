@@ -19,6 +19,7 @@ import type { McpAttachment } from "../mcp/attachment.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import type { SessionAgent } from "./session-agent.ts";
+import type { SessionVisualStore } from "../session/visuals.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { RequestShapeRepo } from "../session/request-shapes.ts";
 import type { BrowserBackend } from "../browser/types.ts";
@@ -118,6 +119,10 @@ export interface AgentRuntime {
    * the tokens the settings sign-in stored. Absent in tests that build the
    * pool by hand and never sign in. */
   mcpOAuth?: McpOAuthStore;
+  /** Where the visual tool publishes (see tools/visual.ts). Always present
+   * in a core (the store is a directory beside the database); a hand-built
+   * pool without one simply gets no visual tool. */
+  visuals: SessionVisualStore;
   /** Forward an agent event to every frontend listener. */
   emit(event: ClientEvent): void;
   /** The session's browser-lab backend (Desktop WebView host), or

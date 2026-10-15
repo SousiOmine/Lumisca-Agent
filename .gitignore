@@ -147,6 +147,8 @@ lumisca.db
 lumisca.db-*
 *.db-shm
 *.db-wal
+# Published visuals of a dev server (the store sits beside the database).
+.lumisca-visuals/
 packages/desktop/src-tauri/target/
 packages/browser-rpc/target/
 packages/desktop/src-tauri/gen/

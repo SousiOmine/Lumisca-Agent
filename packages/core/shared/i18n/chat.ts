@@ -173,6 +173,25 @@ export const chat = {
   "chat.deliverables.kind.audio": { ja: "音声", en: "Audio" },
   "chat.deliverables.kind.video": { ja: "動画", en: "Video" },
 
+  // --- visuals (diagrams and images the agent puts in its reply) ----------
+  "chat.visual.error.title": {
+    ja: "図を表示できません",
+    en: "Diagram not shown",
+  },
+  "chat.visual.error.root": {
+    ja: "中身が <svg> 要素ではありません",
+    en: "Its content is not an <svg> element",
+  },
+  "chat.visual.error.script": {
+    ja: "スクリプトを含む図は表示できません",
+    en: "Diagrams may not contain scripts",
+  },
+  "chat.visual.error.size": {
+    ja: "図が大きすぎます（上限 {limit}）",
+    en: "Diagram is too large (limit {limit})",
+  },
+  "chat.visual.error.source": { ja: "ソースを表示", en: "Show source" },
+
   // --- error banner --------------------------------------------------------
   "chat.error.copyTitle": {
     ja: "クリックしてエラー内容をコピー",

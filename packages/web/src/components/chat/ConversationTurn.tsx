@@ -103,6 +103,7 @@ export const ConversationTurn = memo(function ConversationTurn({
   turn,
   toolResults,
   runningTools,
+  visualBase,
   running,
   endedAt,
   onRewind,
@@ -110,6 +111,8 @@ export const ConversationTurn = memo(function ConversationTurn({
   turn: ConversationTurnData;
   toolResults: Map<string, ToolResultMessage>;
   runningTools: Map<string, string>;
+  /** Asset base of the session this turn belongs to (see MarkdownBlock). */
+  visualBase: string;
   running: boolean;
   endedAt?: number;
   onRewind: (
@@ -128,6 +131,7 @@ export const ConversationTurn = memo(function ConversationTurn({
           message={turn.user}
           toolResults={toolResults}
           runningTools={runningTools}
+          visualBase={visualBase}
         />
       </section>
     );
@@ -169,6 +173,7 @@ export const ConversationTurn = memo(function ConversationTurn({
         message={turn.user}
         toolResults={toolResults}
         runningTools={runningTools}
+        visualBase={visualBase}
         onRewind={onRewind}
       />
       {(running || turn.responses.length > 0) && (
@@ -191,6 +196,7 @@ export const ConversationTurn = memo(function ConversationTurn({
               message={message}
               toolResults={toolResults}
               runningTools={runningTools}
+              visualBase={visualBase}
               onRewind={onRewind}
             />
           ))}
@@ -204,7 +210,7 @@ export const ConversationTurn = memo(function ConversationTurn({
         </div>
       )}
       {finalAssistant && contentText(finalAssistant.content) && (
-        <AssistantText message={finalAssistant} />
+        <AssistantText message={finalAssistant} visualBase={visualBase} />
       )}
       <Deliverables deliverables={deliverables} />
     </section>

@@ -82,6 +82,18 @@ export function sessionPath(sessionId: string, suffix = ""): string {
   return `/sessions/${encodeURIComponent(sessionId)}${suffix}`;
 }
 
+/** URL base of a session's visual assets (`visual:` image references in its
+ * messages resolve against it, always ending with "/"). The machine running
+ * the agent owns the assets, so a peer's session is read through the hub's
+ * federation proxy: the peer's route under the `/api/fed/<peerId>` prefix —
+ * the same shape as every other federated call. */
+export function sessionVisualBase(peerId: string, sessionId: string): string {
+  const path = `${sessionPath(sessionId, "/visual/")}`;
+  return peerId === ""
+    ? `/api${path}`
+    : `/api/fed/${encodeURIComponent(peerId)}${path}`;
+}
+
 /** Bind one API call to a peer or this server: `local` runs against this
  * server (peerId === ""), `remote` against the peer. Used by the per-session
  * / workspace / model dispatchers so each method is a one-liner instead of

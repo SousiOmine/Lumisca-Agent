@@ -12,6 +12,7 @@
  * - `./goal.ts` — goal snapshot shapes,
  * - `./providers.ts` — thinking levels, provider/login/model summaries,
  * - `./content.ts` — message content helpers,
+ * - `./visual.ts` — published visuals (the `visual:` image references),
  * - `./mcp-config.ts` — MCP server config serialization,
  * - `./context-usage.ts` — context accounting and formatting,
  * - `./token-estimate.ts` — fixed-heuristic token estimates for history,
@@ -27,6 +28,7 @@ export * from "./interaction.ts";
 export * from "./goal.ts";
 export * from "./providers.ts";
 export * from "./content.ts";
+export * from "./visual.ts";
 export * from "./diff-stat.ts";
 export * from "./mcp-config.ts";
 export * from "./context-usage.ts";

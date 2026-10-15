@@ -374,6 +374,7 @@ Deno.test("ConversationTurn: a steered notification renders in the work log", ()
   ];
   const html = renderToString(createElement(ConversationTurn, {
     turn: { user: user(1), responses },
+    visualBase: "/api/sessions/s/visual/",
     toolResults: new Map(),
     runningTools: new Map(),
     running: true,
@@ -412,6 +413,7 @@ Deno.test("ConversationTurn: a context snapshot renders in the work log", () => 
   ];
   const html = renderToString(createElement(ConversationTurn, {
     turn: { user: user(1), responses },
+    visualBase: "/api/sessions/s/visual/",
     toolResults: new Map(),
     runningTools: new Map(),
     running: true,
@@ -551,6 +553,7 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
     const turns = buildTurns(view.messages);
     return renderToString(createElement(ConversationTurn, {
       turn: turns[turns.length - 1]!,
+      visualBase: "/api/sessions/s/visual/",
       toolResults: new Map(),
       runningTools: new Map(),
       running: isViewRunning(view),
@@ -587,6 +590,7 @@ Deno.test("ConversationTurn: the present tool's files are listed at the turn's e
   ];
   const html = renderToString(createElement(ConversationTurn, {
     turn: { user: user(1), responses },
+    visualBase: "/api/sessions/s/visual/",
     toolResults: new Map([["tc-1", result]]),
     runningTools: new Map(),
     running: false,
@@ -609,6 +613,7 @@ Deno.test("ConversationTurn: the present tool's files are listed at the turn's e
 Deno.test("ConversationTurn: a turn that declared nothing renders no cards", () => {
   const html = renderToString(createElement(ConversationTurn, {
     turn: { user: user(1), responses: [assistant(2, "done")] },
+    visualBase: "/api/sessions/s/visual/",
     toolResults: new Map(),
     runningTools: new Map(),
     running: false,
@@ -629,6 +634,7 @@ Deno.test("ConversationTurn: a mode prompt renders the images attached to it", (
   const turns = buildTurns([mode(1, false, [image]), assistant(2)]);
   const html = renderToString(createElement(ConversationTurn, {
     turn: turns[0]!,
+    visualBase: "/api/sessions/s/visual/",
     toolResults: new Map(),
     runningTools: new Map(),
     running: false,
@@ -650,6 +656,7 @@ Deno.test("ConversationTurn: cards stay with the turn that declared them", () =>
   const toolResults = new Map([["tc-1", result]]);
   const declaring = renderToString(createElement(ConversationTurn, {
     turn: { user: user(1), responses: [presentCall(2, "tc-1")] },
+    visualBase: "/api/sessions/s/visual/",
     toolResults,
     runningTools: new Map(),
     running: false,
@@ -660,6 +667,7 @@ Deno.test("ConversationTurn: cards stay with the turn that declared them", () =>
 
   const later = renderToString(createElement(ConversationTurn, {
     turn: { user: user(3), responses: [result] },
+    visualBase: "/api/sessions/s/visual/",
     toolResults,
     runningTools: new Map(),
     running: false,

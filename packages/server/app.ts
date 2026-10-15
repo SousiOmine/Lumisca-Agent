@@ -30,6 +30,7 @@ import { fsRoutes } from "./routes/fs.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
 import { skillRoutes } from "./routes/skills.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
+import { visualRoutes } from "./routes/visuals.ts";
 import { providerRoutes } from "./routes/providers.ts";
 import { settingRoutes } from "./routes/settings.ts";
 import { mcpRoutes } from "./routes/mcp.ts";
@@ -441,6 +442,9 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", skillRoutes(core));
   app.route("/api", mcpRoutes(core, languageFor));
   app.route("/api", sessionRoutes(core));
+  // The images a session published for its replies. Mounted after the
+  // session routes (its path is its own `/sessions/:id/visual/:name`).
+  app.route("/api", visualRoutes(core));
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
   app.route("/api", connectionRoutes(core, () => fed.restart()));

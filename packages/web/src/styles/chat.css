@@ -141,6 +141,62 @@
   object-fit: contain;
 }
 
+/* ---- agent-authored visuals (diagrams and published images) --------------- */
+
+/* Every image an assistant message embeds, whether a diagram it wrote in an
+ * `svg` fence or a published asset it linked with `visual:`. Both reach the
+ * document as a plain <img>, so both scale to the column. */
+.markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+/* A diagram is content, not an icon between words: it stands on its own
+ * line. */
+.markdown img.visual-svg {
+  display: block;
+  margin: 10px 0;
+}
+
+/* The card a diagram that cannot be shown renders: the reason, and the
+ * source it came from (collapsed, so nothing the agent wrote is lost). */
+.visual-error {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.visual-error-title {
+  color: var(--error);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.visual-error-reason {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+.visual-error-source {
+  margin-top: 8px;
+}
+
+.visual-error-source summary {
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.visual-error-source pre {
+  max-height: 40dvh;
+  margin-top: 6px;
+}
+
 .msg-body pre {
   font-family: var(--mono);
   font-size: 12.5px;

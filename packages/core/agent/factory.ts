@@ -300,6 +300,7 @@ export class AgentFactory {
         safety: this.deps.commandSafety,
         browserAvailable,
         computerAvailable,
+        visuals: { store: this.deps.visuals, sessionId: session.id },
       });
     // The system prompt is generated once per session, from the tool set
     // the session actually has (its guidelines are keyed on the preloaded

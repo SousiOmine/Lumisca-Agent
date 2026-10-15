@@ -1,4 +1,6 @@
 import { LumiscaDb } from "./db/mod.ts";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import type { ClientEvent } from "./types/event.ts";
 import type { SessionInfo } from "./types/session.ts";
 import type { Workspace } from "./types/workspace.ts";
@@ -60,6 +62,7 @@ import { PersonalizationService } from "./personalization.ts";
 import { SavedPromptsService } from "./saved-prompts.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
+import { SessionVisualStore, VISUALS_DIR_NAME } from "./session/visuals.ts";
 import {
   createRequestShapeRepo,
   type RequestShapeRepo,
@@ -114,6 +117,10 @@ export class LumiscaCore {
   private readonly requestShapes: RequestShapeRepo;
   private readonly pool: SessionPool;
   private readonly mcp: McpService;
+  /** Where the sessions' published visuals live (the images an agent shows
+   * inside its reply — see session/visuals.ts). Shared with the session pool
+   * (the visual tool publishes here) and read by the server's asset route. */
+  private readonly visuals: SessionVisualStore;
   /** MCP OAuth grants (see mcp/oauth.ts), shared with the session pool. */
   private readonly mcpOAuth: McpOAuthStore;
   private readonly commandSafety: CommandSafety;
@@ -153,6 +160,7 @@ export class LumiscaCore {
       pool?: SessionPool;
       mcp?: McpService;
       workspaces?: WorkspaceService;
+      visuals?: SessionVisualStore;
       globalSkillDirs?: string[];
       /** Environment the model layer reads (custom providers, ambient API
        * keys). Defaults to the real process environment; tests pass their
@@ -190,6 +198,16 @@ export class LumiscaCore {
     // and the session connections (pool), so a sign-in is immediately what
     // the next connection uses.
     this.mcpOAuth = new McpOAuthStore(this.settings);
+    // Visual assets live beside the database (open() passes that root), so a
+    // database and the images its sessions showed travel together. An
+    // in-memory core has no such directory: it gets a path under the temp
+    // directory, which nothing creates until a session actually publishes
+    // (SessionVisualStore.put), so a core that never shows an image leaves
+    // nothing behind.
+    this.visuals = overrides.visuals ??
+      new SessionVisualStore(
+        join(tmpdir(), `lumisca-visuals-${crypto.randomUUID()}`),
+      );
     this.pool = overrides.pool ?? new SessionPool({
       mcpOAuth: this.mcpOAuth,
       requireModel: (provider, modelId) => this.requireModel(provider, modelId),
@@ -229,6 +247,7 @@ export class LumiscaCore {
         return goal?.text;
       },
       commandSafety: this.commandSafety,
+      visuals: this.visuals,
       // Resolved lazily (open) so the circular wiring stays one-way:
       // the pool references the service, the service references the pool
       // via the injected applySessionChange / agentMcpStatus below.
@@ -255,7 +274,10 @@ export class LumiscaCore {
         listSessions: (workspaceId) => this.sessions.list(workspaceId),
         applyChange: (sessions, mutate) =>
           this.pool.applyChange(sessions, mutate),
-        deleteSession: (id) => this.pool.delete(id),
+        // The core's own delete: deleting a workspace drops its sessions'
+        // rows AND their visual assets, exactly like deleting a session
+        // directly (the pool alone would leave the assets behind).
+        deleteSession: (id) => this.deleteSession(id),
       });
   }
 
@@ -271,7 +293,15 @@ export class LumiscaCore {
     return new LumiscaCore(
       LumiscaDb.open(dbPath),
       createFileSettingsRepo(settingsPath),
-      { env },
+      {
+        env,
+        // The visual assets sit beside the database file: the same directory
+        // the session rows live in, and the one the operator chose with
+        // --db.
+        visuals: new SessionVisualStore(
+          join(dirname(dbPath), VISUALS_DIR_NAME),
+        ),
+      },
     );
   }
 
@@ -775,6 +805,18 @@ export class LumiscaCore {
     return session ? this.decorateSession(session) : undefined;
   }
 
+  /** The file one of a session's published visuals names, with the content
+   * type to serve it as (`GET /api/sessions/:id/visual/:name`). Undefined
+   * when the session has no such asset — an unknown name, or one whose file
+   * is gone. The store validates the name, so a caller cannot ask for
+   * anything outside the session's own directory. */
+  resolveSessionVisual(
+    sessionId: string,
+    name: string,
+  ): Promise<{ path: string; mimeType: string } | undefined> {
+    return this.visuals.resolve(sessionId, name);
+  }
+
   /** Load a persisted session into memory (restores message history). */
   openSession(id: string): SessionInfo {
     const session = this.sessions.get(id);
@@ -806,6 +848,9 @@ export class LumiscaCore {
     this.sessions.delete(id);
     this.sessionRevisions.delete(id);
     await closing;
+    // The published visuals belong to the session: once it is gone nothing
+    // can reference them (a message that did is gone too).
+    await this.visuals.deleteSession(id);
   }
 
   getAgent(id: string): SessionAgent | undefined {

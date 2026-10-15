@@ -21,6 +21,7 @@ import type {
   Rect,
 } from "./mod.ts";
 import { CoreError, LumiscaCore } from "./mod.ts";
+import { VISUALS_DIR_NAME } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
 import { COMPACTION_KEEP_RECENT_TOKENS_KEY } from "./shared/settings-keys.ts";
 import { SCHEMA_VERSION } from "./db/schema.ts";
@@ -3189,4 +3190,135 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
   );
 
   await core.close();
+});
+
+// --- published visuals (応答に埋め込む画像) ---------------------------------
+
+/** Directory one session's visual assets live in (the store's layout: a
+ * per-session directory beside the database). */
+function visualDir(dbDir: string, sessionId: string): string {
+  return join(dbDir, VISUALS_DIR_NAME, sessionId);
+}
+
+/** A file-backed core with a faux provider, a workspace, and one coding
+ * session — the shape a real server runs. */
+async function openFileBackedCore(
+  dir: string,
+): Promise<{ core: LumiscaCore; workspaceId: string; sessionId: string }> {
+  const core = LumiscaCore.open(
+    join(dir, "lumisca.db"),
+    join(dir, "settings.jsonc"),
+  );
+  const faux = fauxProvider();
+  core.models.models.setProvider(faux.provider);
+  const workspaceDir = join(dir, "repo");
+  await Deno.mkdir(workspaceDir, { recursive: true });
+  const ws = await core.createWorkspace("ws", [workspaceDir]);
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: faux.provider.id,
+    modelId: faux.getModel().id,
+  });
+  return { core, workspaceId: ws.id, sessionId: session.id };
+}
+
+Deno.test("a file-backed core keeps the visuals beside its database", async () => {
+  const dir = await makeRealTempDir("lumisca-visuals-core-");
+  const { core } = await openFileBackedCore(dir);
+  try {
+    const name = "9f3c2a1b4d5e.png";
+    await Deno.mkdir(visualDir(dir, "s1"), { recursive: true });
+    await Deno.writeFile(join(visualDir(dir, "s1"), name), MINI_PNG);
+
+    const found = await core.resolveSessionVisual("s1", name);
+    assertEquals(found?.mimeType, "image/png");
+    assertEquals(
+      (await Deno.readFile(found!.path)).byteLength,
+      MINI_PNG.byteLength,
+    );
+    // A database and its assets travel together: the root is the directory
+    // of the database file, whatever path the operator chose.
+    assertEquals(found!.path.startsWith(join(dir, VISUALS_DIR_NAME)), true);
+    // Nothing the store would not have named is resolvable, and one
+    // session's assets are not another's.
+    assertEquals(
+      await core.resolveSessionVisual("s1", "../lumisca.db"),
+      undefined,
+    );
+    assertEquals(await core.resolveSessionVisual("s2", name), undefined);
+  } finally {
+    await core.close();
+    await removeDirRetry(dir);
+  }
+});
+
+Deno.test("deleting a session drops its visuals", async () => {
+  const dir = await makeRealTempDir("lumisca-visuals-core-");
+  const { core, sessionId } = await openFileBackedCore(dir);
+  try {
+    await Deno.mkdir(visualDir(dir, sessionId), { recursive: true });
+    await Deno.writeFile(
+      join(visualDir(dir, sessionId), "9f3c2a1b4d5e.png"),
+      MINI_PNG,
+    );
+    await core.deleteSession(sessionId);
+    // The images belonged to the conversation: nothing can reference them
+    // once it is gone.
+    assertEquals(
+      await core.resolveSessionVisual(sessionId, "9f3c2a1b4d5e.png"),
+      undefined,
+    );
+  } finally {
+    await core.close();
+    await removeDirRetry(dir);
+  }
+});
+
+Deno.test("deleting a workspace drops its sessions' visuals", async () => {
+  const dir = await makeRealTempDir("lumisca-visuals-core-");
+  const { core, workspaceId, sessionId } = await openFileBackedCore(dir);
+  try {
+    await Deno.mkdir(visualDir(dir, sessionId), { recursive: true });
+    await Deno.writeFile(
+      join(visualDir(dir, sessionId), "9f3c2a1b4d5e.png"),
+      MINI_PNG,
+    );
+    // A workspace deletion removes its sessions; their assets must go with
+    // them (the same core path, not the pool's close).
+    await core.deleteWorkspace(workspaceId);
+    assertEquals(
+      await core.resolveSessionVisual(sessionId, "9f3c2a1b4d5e.png"),
+      undefined,
+    );
+  } finally {
+    await core.close();
+    await removeDirRetry(dir);
+  }
+});
+
+Deno.test("a coding session gets the visual tool; a chat session does not", async () => {
+  const dir = await makeRealTempDir("lumisca-visuals-core-");
+  const { core, sessionId } = await openFileBackedCore(dir);
+  try {
+    // The visual tool is preloaded (the prompt's image bullet requires it),
+    // so the session was told it may publish an image.
+    const coding = core.getSession(sessionId)!.systemPrompt ?? "";
+    assert(coding.includes("publish it with the visual tool"));
+    assert(coding.includes("tagged `svg`"));
+
+    // A chat session has no workspace to publish from, so it must not be
+    // pointed at the tool — but the fence works everywhere.
+    const faux = fauxProvider();
+    core.models.models.setProvider(faux.provider);
+    const chat = await core.createSession({
+      modelProvider: faux.provider.id,
+      modelId: faux.getModel().id,
+    });
+    const chatPrompt = core.getSession(chat.id)!.systemPrompt ?? "";
+    assertEquals(chatPrompt.includes("publish it with the visual tool"), false);
+    assert(chatPrompt.includes("tagged `svg`"));
+  } finally {
+    await core.close();
+    await removeDirRetry(dir);
+  }
 });
