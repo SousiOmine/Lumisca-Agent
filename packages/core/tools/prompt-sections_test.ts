@@ -40,7 +40,7 @@ import {
 /** Every tool a coding session preloads, built the way the session factory
  * builds it (agent/factory.ts) instead of being copied by hand: the
  * hand-written list this replaced had already drifted (it was missing the
- * present tool and the async_bash status/kill pair). */
+ * async_bash status/kill pair). */
 const CODING_TOOLS = codingToolNames();
 
 /** Preloaded tools that deliberately have no guideline section: their

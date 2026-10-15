@@ -45,8 +45,6 @@ export const TOOL_COMPUTER_LIST_WINDOWS = "computer_list_windows";
  * vision models; discoverable via tool_search, never preloaded — the same
  * contract as MCP and browser-lab tools). */
 export const TOOL_PDF_READ_PAGES = "pdf_read_pages";
-/** Declare existing files as final deliverables the user should receive. */
-export const TOOL_PRESENT = "present";
 /** Publish an image file so it can be shown inside the agent's reply (the
  * `visual:` image references). Coding sessions only: a chat session has no
  * workspace to publish from. */

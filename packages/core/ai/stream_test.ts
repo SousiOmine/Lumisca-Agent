@@ -117,8 +117,8 @@ Deno.test("an SDK-executed tool result keeps its details", async () => {
   const result = events.find((e) => e.type === "toolcall_result");
   assertEquals(result?.toolCallId, "t1");
   assertEquals(result?.content, [{ type: "text", text: "Edited a.ts" }]);
-  // The UI reads the structured details (the diff badge, the deliverables
-  // panel); the transport must not drop them on the way to the transcript.
+  // The UI reads the structured details (the diff badge); the transport
+  // must not drop them on the way to the transcript.
   assertEquals(result?.details, { addedLines: 3, removedLines: 2 });
 });
 

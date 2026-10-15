@@ -6,7 +6,6 @@ import type {
   AgentMessage,
   NotificationKind,
   NotificationMessage,
-  ToolResultMessage,
 } from "../../types.ts";
 import { applyEvent, applyRunState } from "../../events.ts";
 import { emptyView, isViewRunning } from "../../types.ts";
@@ -64,32 +63,6 @@ function notification(
 
 function assistant(timestamp: number, text = "hi"): AgentMessage {
   return fauxAssistantMessage(text, { timestamp }) as AgentMessage;
-}
-
-/** Build an assistant message that calls the present tool (the declared
- * files live in the tool's result, so the arguments carry none). */
-function presentCall(timestamp: number, toolCallId: string): AgentMessage {
-  return fauxAssistantMessage(
-    [fauxToolCall("present", { files: [] }, toolCallId)],
-    { timestamp },
-  ) as AgentMessage;
-}
-
-/** Build the successful result of a present call, as the loop records it. */
-function presentResult(
-  timestamp: number,
-  toolCallId: string,
-  files: Array<{ path: string; description?: string }>,
-): ToolResultMessage {
-  return {
-    role: "toolResult",
-    toolCallId,
-    toolName: "present",
-    content: [{ type: "text", text: "ok" }],
-    details: { files },
-    isError: false,
-    timestamp,
-  };
 }
 
 Deno.test("buildTurns: user prompts and notifications start a turn", () => {
@@ -575,53 +548,6 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
   assertEquals(stale.includes("agent-work-log"), false);
 });
 
-Deno.test("ConversationTurn: the present tool's files are listed at the turn's end", () => {
-  // The agent answered, declared its files on the way, and wrote its final
-  // text. The cards belong to that answer: they render inside the turn and
-  // after the final text, so the next prompt scrolls them away instead of
-  // leaving them under the whole conversation.
-  const result = presentResult(3, "tc-1", [
-    { path: "Lumisca-Agent/out/report.pdf", description: "調査レポート" },
-  ]);
-  const responses: AgentMessage[] = [
-    presentCall(2, "tc-1"),
-    result,
-    assistant(4, "できました"),
-  ];
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: { user: user(1), responses },
-    visualBase: "/api/sessions/s/visual/",
-    toolResults: new Map([["tc-1", result]]),
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-  }));
-
-  // The run ended, so the work log folded up — the cards stay outside it.
-  assert(!html.includes("agent-work-log"), html);
-  assertStringIncludes(html, 'class="deliverables"');
-  assertStringIncludes(html, "report.pdf");
-  assertStringIncludes(html, "調査レポート");
-  const turnStart = html.indexOf('class="conversation-turn"');
-  const finalText = html.indexOf("できました");
-  const cards = html.indexOf('class="deliverables"');
-  assert(turnStart !== -1 && finalText !== -1 && cards !== -1, html);
-  assert(turnStart < finalText, html); // the text belongs to the turn
-  assert(finalText < cards, html); // and the cards follow it
-});
-
-Deno.test("ConversationTurn: a turn that declared nothing renders no cards", () => {
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: { user: user(1), responses: [assistant(2, "done")] },
-    visualBase: "/api/sessions/s/visual/",
-    toolResults: new Map(),
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-  }));
-  assert(!html.includes("deliverables"), html);
-});
-
 Deno.test("ConversationTurn: a mode prompt renders the images attached to it", () => {
   // A picture pasted into the composer before sending `/plan 依頼文` is
   // part of that prompt: the mode bubble shows it like a user message's,
@@ -645,33 +571,4 @@ Deno.test("ConversationTurn: a mode prompt renders the images attached to it", (
   // The short text and the mode badge keep describing the prompt.
   assertStringIncludes(html, "履歴機能を追加して");
   assertStringIncludes(html, "プランモード");
-});
-
-Deno.test("ConversationTurn: cards stay with the turn that declared them", () => {
-  // The user steered a message in while the present tool was running, so
-  // the result landed in the turn that message started. The declaring
-  // turn's cards pair the call with its result by id and render anyway;
-  // the turn that merely holds the result row renders none.
-  const result = presentResult(5, "tc-1", [{ path: "Lumisca-Agent/out.md" }]);
-  const toolResults = new Map([["tc-1", result]]);
-  const declaring = renderToString(createElement(ConversationTurn, {
-    turn: { user: user(1), responses: [presentCall(2, "tc-1")] },
-    visualBase: "/api/sessions/s/visual/",
-    toolResults,
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-  }));
-  assertStringIncludes(declaring, 'class="deliverables"');
-  assertStringIncludes(declaring, "out.md");
-
-  const later = renderToString(createElement(ConversationTurn, {
-    turn: { user: user(3), responses: [result] },
-    visualBase: "/api/sessions/s/visual/",
-    toolResults,
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-  }));
-  assert(!later.includes("deliverables"), later);
 });

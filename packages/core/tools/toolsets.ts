@@ -11,7 +11,6 @@ import { createAsyncBashTools } from "./background.ts";
 import type { BackgroundProcessManager } from "./background.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import { createEvalTool } from "./eval.ts";
-import { createPresentTool } from "./present.ts";
 import { createVisualTool, type VisualTarget } from "./visual.ts";
 import type { Tool } from "./schema.ts";
 import { createSkillTool } from "../skills/tool.ts";
@@ -137,7 +136,6 @@ export function createCodingTools(
       })
       : []),
     createEvalTool({ safety: options.safety }),
-    createPresentTool({ sandbox }),
     ...(options.visuals !== undefined
       ? [createVisualTool({ sandbox, ...options.visuals })]
       : []),

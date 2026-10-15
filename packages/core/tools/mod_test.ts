@@ -128,7 +128,6 @@ Deno.test("coding prompt never mentions a tool the session does not have", () =>
       "[Task ...]",
       "todo tool",
       "send_message",
-      "present tool",
     ]
   ) {
     assertEquals(

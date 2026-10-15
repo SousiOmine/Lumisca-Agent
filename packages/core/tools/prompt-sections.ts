@@ -7,7 +7,6 @@ import {
   TOOL_GLOB,
   TOOL_GREP,
   TOOL_LIST_DIR,
-  TOOL_PRESENT,
   TOOL_READ,
   TOOL_SEND_MESSAGE,
   TOOL_SKILL,
@@ -197,15 +196,6 @@ const SKILL_SECTION: PromptSection = {
     "catalog.",
 };
 
-const PRESENT_SECTION: PromptSection = {
-  name: "tool:present",
-  order: ORDER.tool + 120,
-  requires: [TOOL_PRESENT],
-  text: "- When a file you create or update is an output the user asked to " +
-    "receive, declare\n  it with the present tool before your final reply — " +
-    "naming its path is not\n  enough.",
-};
-
 /** Both halves of the visual feature, each a section of its own: a diagram
  * needs no tool, an image file needs the visual tool. */
 const VISUAL_DIAGRAM_SECTION: PromptSection = {
@@ -357,7 +347,6 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   ASK_SECTION,
   TODO_SECTION,
   SKILL_SECTION,
-  PRESENT_SECTION,
   VISUAL_DIAGRAM_SECTION,
   VISUAL_IMAGE_SECTION,
   TASK_SECTION,

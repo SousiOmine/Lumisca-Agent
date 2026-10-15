@@ -151,28 +151,6 @@ export const chat = {
     en: "Chat (no workspace)",
   },
 
-  // --- deliverables (the present tool, listed at the turn's end) -----------
-  "chat.deliverables.title": { ja: "成果物", en: "Deliverables" },
-  "chat.deliverables.copyPath": {
-    ja: "パスをコピー: {path}",
-    en: "Copy path: {path}",
-  },
-  "chat.deliverables.copied": { ja: "コピーしました", en: "Copied" },
-  "chat.deliverables.kind.document": { ja: "ドキュメント", en: "Document" },
-  "chat.deliverables.kind.spreadsheet": {
-    ja: "表計算",
-    en: "Spreadsheet",
-  },
-  "chat.deliverables.kind.presentation": {
-    ja: "プレゼンテーション",
-    en: "Presentation",
-  },
-  "chat.deliverables.kind.image": { ja: "画像", en: "Image" },
-  "chat.deliverables.kind.code": { ja: "コード", en: "Code" },
-  "chat.deliverables.kind.archive": { ja: "アーカイブ", en: "Archive" },
-  "chat.deliverables.kind.audio": { ja: "音声", en: "Audio" },
-  "chat.deliverables.kind.video": { ja: "動画", en: "Video" },
-
   // --- visuals (diagrams and images the agent puts in its reply) ----------
   "chat.visual.error.title": {
     ja: "図を表示できません",

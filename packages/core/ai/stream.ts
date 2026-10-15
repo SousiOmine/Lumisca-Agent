@@ -239,9 +239,9 @@ async function* runStream(
             toolCallId: String(p.toolCallId ?? ""),
             toolName: String(p.toolName ?? ""),
             content: [{ type: "text" as const, text: output.text }],
-            // The details are the UI's half of the result (the diff badge,
-            // the deliverables panel) —the Agent keeps them in the
-            // transcript instead of dropping them at the transport.
+            // The details are the UI's half of the result (the diff badge):
+            // the Agent keeps them in the transcript instead of dropping
+            // them at the transport.
             details: output.details,
             isError: false,
           };
@@ -651,10 +651,10 @@ function toArgsRecord(input: unknown): Record<string, unknown> {
 
 /** What a Lumisca tool's `execute` hands to the AI SDK's tool loop: the
  * transcript text plus the structured details the UI reads (the `+3 -2`
- * diff badge, the deliverables panel, ...). The SDK carries the whole
- * object on its `tool-result` part, and `toModelOutput` keeps the
- * model-facing result to the text alone —the details are local
- * presentation and must not be sent to the provider. */
+ * diff badge). The SDK carries the whole object on its `tool-result`
+ * part, and `toModelOutput` keeps the model-facing result to the text
+ * alone —the details are local presentation and must not be sent to the
+ * provider. */
 export interface ToolOutput {
   text: string;
   details: Record<string, unknown>;

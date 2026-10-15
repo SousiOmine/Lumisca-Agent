@@ -14,10 +14,10 @@ export async function requireResolved(
 }
 
 /** Resolve `requested` and require an existing file — the pair of checks
- * every file-oriented tool needs (read, grep, pdf_read_pages, visual,
- * present): the path must resolve inside the sandbox and must not be a
- * directory. Keeping both here means the wording and the error kind
- * (`not_found` / `invalid`) cannot drift between those tools. */
+ * every file-oriented tool needs (read, grep, pdf_read_pages, visual): the
+ * path must resolve inside the sandbox and must not be a directory. Keeping
+ * both here means the wording and the error kind (`not_found` / `invalid`)
+ * cannot drift between those tools. */
 export async function requireExistingFile(
   sandbox: Sandbox,
   requested: string,
