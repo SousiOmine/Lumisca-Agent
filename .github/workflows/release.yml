@@ -193,6 +193,14 @@ jobs:
         with:
           node-version: lts/*
 
+      # The tag version must match every place the app version lives, exactly
+      # as the desktop job checks it. Without this the job could upload a
+      # server package whose manifest disagrees with the compiled binary's
+      # `--version`, which the updater rejects on the user's machine (see
+      # update/install.ts) — an update that can never be applied.
+      - name: Check version consistency
+        run: deno run --allow-read scripts/check-versions.ts "${{ github.ref_name }}"
+
       # Stages assets.json (+ icudtl.dat on Windows) and compiles the server
       # with the shared build path (packages/desktop runs the same script
       # for its bundled binary).
@@ -208,6 +216,12 @@ jobs:
       # The archive carries a single top-level directory
       # (lumisca-server-<version>-<platform>/) so unpacking never scatters
       # files into the user's current directory.
+      #
+      # What ships is exactly what `build:server` staged: the stage is the
+      # single definition of a package's file set (the runtime reads the same
+      # set back through installedFileNames in update/install.ts). A
+      # hand-written list here silently dropped a file on a platform that
+      # needed one more, so nothing is enumerated by hand.
       - name: Package (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -216,7 +230,8 @@ jobs:
           NAME="lumisca-server-${VERSION}-${{ matrix.platform }}"
           STAGE="dist/server/stage/${{ matrix.stage }}"
           mkdir -p "dist/server/release/${NAME}"
-          cp "$STAGE/lumisca-server" "$STAGE/assets.json" "dist/server/release/${NAME}/"
+          cp "$STAGE"/* "dist/server/release/${NAME}/"
+          ls -l "dist/server/release/${NAME}"
           tar -C dist/server/release -czf "dist/server/${NAME}.tar.gz" "$NAME"
           echo "ARCHIVE=dist/server/${NAME}.tar.gz" >> "$GITHUB_ENV"
           ls -l "dist/server/${NAME}.tar.gz"
@@ -229,7 +244,8 @@ jobs:
           $name = "lumisca-server-${version}-${{ matrix.platform }}"
           $stage = "dist/server/stage/${{ matrix.stage }}"
           New-Item -ItemType Directory -Force -Path "dist/server/release/$name" | Out-Null
-          Copy-Item "$stage/lumisca-server.exe", "$stage/assets.json", "$stage/icudtl.dat" "dist/server/release/$name/"
+          Copy-Item "$stage/*" "dist/server/release/$name/"
+          Get-ChildItem "dist/server/release/$name" | Select-Object Name, Length
           Compress-Archive -Path "dist/server/release/$name" -DestinationPath "dist/server/$name.zip" -Force
           "ARCHIVE=dist/server/$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Get-Item "dist/server/$name.zip" | Select-Object Name, Length

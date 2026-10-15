@@ -1,8 +1,8 @@
 /**
  * Verify a packaged server archive the way the updater will: check its
  * signature against the compiled-in release key, then extract it with the
- * shipped extractor and compare the result with the staged build the archive
- * was made from.
+ * shipped extractor, compare the result with the staged build the archive
+ * was made from, and check that every staged file is in the archive.
  *
  * The release workflow runs this for every published archive (both
  * platforms), so a container the updater cannot read, a signature it cannot
@@ -98,8 +98,9 @@ try {
 
 // 2. The container the updater reads, and the files inside it.
 const extractDir = await Deno.makeTempDir({ prefix: "lumisca-archive-check-" });
+let extracted: string[] | undefined;
 try {
-  const extracted = await extractArchive(options.archive, format, extractDir);
+  extracted = await extractArchive(options.archive, format, extractDir);
   check(
     "archive extracts",
     true,
@@ -136,6 +137,34 @@ try {
   );
 } finally {
   await Deno.remove(extractDir, { recursive: true }).catch(() => {});
+}
+
+// 3. Completeness, the direction the per-file comparison cannot see: every
+// file the build staged must be in the archive. The updater learns a
+// package's file set from the archive alone, so a file the packaging step
+// dropped installs as a server that cannot run (a missing `icudtl.dat` is
+// exactly that on Windows).
+if (extracted !== undefined) {
+  try {
+    const stagedFiles: string[] = [];
+    for await (const entry of Deno.readDir(options.stage)) {
+      if (entry.isFile) stagedFiles.push(entry.name);
+    }
+    const missing = stagedFiles.filter((name) => !extracted.includes(name));
+    check(
+      "the archive carries every staged file",
+      missing.length === 0,
+      missing.length > 0
+        ? `missing: ${missing.join(", ")}`
+        : `${stagedFiles.length} file(s)`,
+    );
+  } catch (error) {
+    check(
+      "the archive carries every staged file",
+      false,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 if (failures.length > 0) {

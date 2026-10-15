@@ -23,6 +23,7 @@ import { basename, join } from "node:path";
 import { extractArchive } from "./archive.ts";
 import {
   EXTRACT_DIR_NAME,
+  STAGED_METADATA_FILE,
   type StagedUpdate,
   stagingDir,
   writeAppliedUpdate,
@@ -235,7 +236,7 @@ export async function applyStagedUpdate(
   //    the running process — measured on Windows for the binary itself).
   await Deno.remove(extractDir, { recursive: true }).catch(() => {});
   await removeQuietly(options.staged.archivePath);
-  await removeQuietly(join(stagingDir(installDir), "staged.json"));
+  await removeQuietly(join(stagingDir(installDir), STAGED_METADATA_FILE));
   await writeAppliedUpdate(installDir, options.staged.version);
 
   return {
