@@ -53,7 +53,7 @@ impl RpcServer {
         connect_timeout: Duration,
     ) -> Result<Self, String> {
         let listener = TcpListener::bind(("127.0.0.1", port))
-            .map_err(|e| format!("browser RPC サーバーを起動できません: {e}"))?;
+            .map_err(|e| format!("cannot start the browser RPC server: {e}"))?;
         // Non-blocking accept + flag polling: stop() must be able to join
         // this thread even while it is waiting for connections (a blocking
         // accept could never be woken).
@@ -256,7 +256,7 @@ fn dispatch(
         let error = RpcReply::failure(
             request.id,
             RpcError::too_large(format!(
-                "browser host の応答が大きすぎます ({} bytes)",
+                "browser host response is too large ({} bytes)",
                 json.len()
             )),
         );

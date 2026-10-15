@@ -469,7 +469,7 @@ impl LabCore {
                 let snippet: String = result.chars().take(200).collect();
                 Err(RpcError::new(
                     error_codes::PROBE_ERROR,
-                    format!("プローブの応答を解析できません: {snippet}"),
+                    format!("cannot parse the probe response: {snippet}"),
                 ))
             }
         }
@@ -518,7 +518,7 @@ impl LabCore {
             .unwrap_or("png");
         if format != "png" && format != "jpeg" {
             return Err(RpcError::invalid(format!(
-                "不明な format: {format} (png / jpeg)"
+                "unknown format: {format} (png / jpeg)"
             )));
         }
         let quality = params.get("quality").and_then(Value::as_u64);
@@ -745,7 +745,7 @@ impl LabCore {
         let answer: Value = serde_json::from_str(&answer).map_err(|e| {
             RpcError::new(
                 error_codes::PROBE_ERROR,
-                format!("CDP の応答を解析できません: {e}"),
+                format!("cannot parse the CDP response: {e}"),
             )
         })?;
         if let Some(error) = answer.get("error") {
@@ -801,7 +801,7 @@ fn image_result(
     let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
     if data.len() > lumisca_browser_rpc::limits::MAX_SCREENSHOT_BYTES {
         return Err(RpcError::too_large(format!(
-            "スクリーンショットが大きすぎます ({} bytes)",
+            "screenshot is too large ({} bytes)",
             data.len()
         )));
     }

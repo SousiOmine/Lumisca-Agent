@@ -8,15 +8,15 @@
 /// http/https on localhost / 127.0.0.1 / ::1 only; no credentials in the
 /// URL; no other hosts, schemes or forms.
 pub fn check(url: &str) -> Result<(), String> {
-    let parsed = url::Url::parse(url).map_err(|e| format!("URL を解析できません: {url} ({e})"))?;
+    let parsed = url::Url::parse(url).map_err(|e| format!("cannot parse the URL: {url} ({e})"))?;
     let scheme = parsed.scheme();
     if scheme != "http" && scheme != "https" {
         return Err(format!(
-            "拒否: スキーム \"{scheme}\" は開けません (http/https のみ)"
+            "refused: cannot open scheme \"{scheme}\" (http/https only)"
         ));
     }
     if !parsed.username().is_empty() || parsed.password().is_some() {
-        return Err("拒否: URL に認証情報を含めることはできません".to_string());
+        return Err("refused: the URL must not contain credentials".to_string());
     }
     let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
     let bare = host
@@ -31,11 +31,11 @@ pub fn check(url: &str) -> Result<(), String> {
         && bare != "::1"
     {
         return Err(format!(
-            "拒否: ローカルホスト (localhost / 127.0.0.1 / ::1) 以外の URL は開けません: {url}"
+            "refused: not a loopback URL (localhost / 127.0.0.1 / ::1 only): {url}"
         ));
     }
     if parsed.port().is_none() && parsed.port_or_known_default().is_none() {
-        return Err(format!("拒否: ポートが不正です: {url}"));
+        return Err(format!("refused: invalid port: {url}"));
     }
     Ok(())
 }
@@ -75,7 +75,7 @@ mod tests {
         ] {
             let message = check(url).expect_err(&format!("{url} must be rejected"));
             assert!(
-                message.contains("拒否") || message.contains("解析"),
+                message.starts_with("refused") || message.starts_with("cannot parse"),
                 "rejection must be explicit for {url}: {message}"
             );
         }

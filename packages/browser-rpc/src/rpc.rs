@@ -107,12 +107,11 @@ impl RpcReply {
 pub fn parse_request(body: &[u8], max_bytes: usize) -> Result<RpcRequest, RpcError> {
     if body.len() > max_bytes {
         return Err(RpcError::too_large(format!(
-            "browser RPC リクエストが大きすぎます ({} bytes)",
+            "browser RPC request is too large ({} bytes)",
             body.len()
         )));
     }
-    serde_json::from_slice(body)
-        .map_err(|e| RpcError::invalid(format!("リクエストが不正です: {e}")))
+    serde_json::from_slice(body).map_err(|e| RpcError::invalid(format!("invalid request: {e}")))
 }
 
 #[cfg(test)]

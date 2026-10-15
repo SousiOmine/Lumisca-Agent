@@ -27,7 +27,7 @@ pub fn screenshot_params(
 ) -> Result<Value, RpcError> {
     if format != "png" && format != "jpeg" {
         return Err(RpcError::invalid(format!(
-            "不明な format: {format} (png / jpeg)"
+            "unknown format: {format} (png / jpeg)"
         )));
     }
     let mut params = json!({ "format": format, "fromSurface": true });
@@ -60,13 +60,15 @@ pub fn screenshot_result(
     viewport: Option<(u32, u32)>,
     answer: &Value,
 ) -> Result<Value, RpcError> {
-    let data = answer
-        .get("data")
-        .and_then(Value::as_str)
-        .ok_or_else(|| RpcError::new(error_codes::ACTION_FAILED, "CDP は画像を返しませんでした"))?;
+    let data = answer.get("data").and_then(Value::as_str).ok_or_else(|| {
+        RpcError::new(
+            error_codes::ACTION_FAILED,
+            "the CDP response carried no image data",
+        )
+    })?;
     if data.len() > limits::MAX_SCREENSHOT_BYTES {
         return Err(RpcError::too_large(format!(
-            "スクリーンショットが大きすぎます ({} bytes)",
+            "screenshot is too large ({} bytes)",
             data.len()
         )));
     }
