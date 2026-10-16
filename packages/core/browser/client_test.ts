@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertMatch } from "@std/assert";
 import { HttpBrowserBackend } from "./client.ts";
+import { unusedPort } from "../test-utils.ts";
 import {
   BrowserBackendError,
   RPC_TOKEN_HEADER,
@@ -207,10 +208,9 @@ Deno.test("malformed replies are explicit errors, not silent values", async () =
 });
 
 Deno.test("connect-refused hosts produce transport_refused", async () => {
-  // Bind a listener and close it, so the port is known-dead.
-  const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
-  const port = (listener.addr as Deno.NetAddr).port;
-  listener.close();
+  // A number nothing listens on, and that nothing else can be handed while
+  // the connection is attempted: the connection has to be refused.
+  const port = unusedPort();
   const backend = new HttpBrowserBackend({
     url: `http://127.0.0.1:${port}`,
     token: "t",

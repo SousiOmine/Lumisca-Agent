@@ -6,6 +6,7 @@ import { runServiceCommand } from "./mod.ts";
 import { DOCUMENT_NAME, UNIT_NAME } from "./plan.ts";
 import type { CommandResult, ServiceRunner } from "./runner.ts";
 import { SETTINGS_DIR_NAME } from "@lumisca/core";
+import { unusedPort } from "@lumisca/core/test-utils";
 
 /** A systemd that keeps the state the verbs ask about, so the whole command
  * can run without a user manager. */
@@ -95,13 +96,14 @@ interface Harness {
   systemd: FakeSystemd;
   lines: string[];
   errors: string[];
-  /** A port nothing holds right now. `install` refuses a port another
-   * process already owns — before it reaches the systemd steps most of these
-   * tests are about — so a test that exercises those steps must ask for a
-   * free port instead of inheriting the default one. The default (8000) is
-   * commonly taken on a developer machine by a running server (the desktop
-   * app's own, or `deno task dev:server`), which used to fail those tests
-   * for a reason that has nothing to do with what they cover. */
+  /** A port nothing holds, and that the kernel will not hand to another
+   * socket while this test runs (`unusedPort`). `install` refuses a port
+   * another process already owns — before it reaches the systemd steps most
+   * of these tests are about — so a test that exercises those steps must ask
+   * for a free port instead of inheriting the default one. The default
+   * (8000) is commonly taken on a developer machine by a running server (the
+   * desktop app's own, or `deno task dev:server`), which used to fail those
+   * tests for a reason that has nothing to do with what they cover. */
   port: number;
   cleanup: () => Promise<void>;
 }
@@ -160,7 +162,7 @@ async function harness(
     systemd,
     lines,
     errors,
-    port: freePort(),
+    port: unusedPort(),
     cleanup: () => Deno.remove(root, { recursive: true }).catch(() => {}),
   };
 }
@@ -171,14 +173,6 @@ async function readIfPresent(path: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-}
-
-/** A port nothing is listening on right now. */
-function freePort(): number {
-  const listener = Deno.listen({ hostname: "127.0.0.1", port: 0 });
-  const { port } = listener.addr as Deno.NetAddr;
-  listener.close();
-  return port;
 }
 
 Deno.test("install writes the definition and starts the service", async () => {
@@ -290,7 +284,7 @@ Deno.test("explicit flags override the installed layer", async () => {
 
 Deno.test("install refuses a port another process holds", async () => {
   const test = await harness();
-  const port = freePort();
+  const port = unusedPort();
   const listener = Deno.listen({ hostname: "127.0.0.1", port });
   try {
     const code = await runServiceCommand(
@@ -309,7 +303,7 @@ Deno.test("install refuses a port another process holds", async () => {
 
 Deno.test("an active unit owns its port, so a reinstall does not test it", async () => {
   const test = await harness();
-  const port = freePort();
+  const port = unusedPort();
   const listener = Deno.listen({ hostname: "127.0.0.1", port });
   test.systemd.active = true;
   try {

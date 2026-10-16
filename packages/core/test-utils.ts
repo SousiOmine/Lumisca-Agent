@@ -180,3 +180,62 @@ export async function promptSession(
   }
   await agent.prompt(text, images);
 }
+
+/** The lowest port a kernel assigns to a `port: 0` bind on the platforms
+ * this project tests on (Linux 32768, macOS and Windows 49152). Nothing
+ * below it is ever handed out implicitly. */
+const FIRST_EPHEMERAL_PORT = 32768;
+
+/** The band {@link unusedPort} picks from: below the ephemeral range above
+ * (with a margin, so a platform whose range starts a little lower is still
+ * covered) and above the ports a development machine tends to hold (the dev
+ * server's 8000), so the check below rarely has to walk far. */
+const UNUSED_PORT_FIRST = 20000;
+const UNUSED_PORT_LAST = FIRST_EPHEMERAL_PORT - 1000;
+
+/** A port number that stays unused while a test uses it. The number itself
+ * is the reservation, which is what a test needs when the consumer binds
+ * the port (a command under test) or must find nobody listening on it (a
+ * connection that has to be refused).
+ *
+ * `Deno.listen({ port: 0 })` cannot serve that: the kernel picks out of the
+ * ephemeral range and the port is free for anyone the moment the listener
+ * closes, so with the suite running in parallel another test's socket can
+ * be handed that exact number in between. A loaded CI runner did exactly
+ * that to the systemd install tests (`ポート 49353 は既に使用中です`). A
+ * number from the band above is never handed out implicitly, so between the
+ * check here and the test's use only an explicit bind of that exact port
+ * could take it; the check — on the wildcard address, so a listener on any
+ * interface is caught — proves nothing holds it now.
+ *
+ * The scan starts at a random point: tests in other files run in parallel
+ * and would otherwise be handed the same number. */
+export function unusedPort(): number {
+  const span = UNUSED_PORT_LAST - UNUSED_PORT_FIRST;
+  const start = UNUSED_PORT_FIRST + Math.floor(Math.random() * span);
+  for (let step = 0; step < span; step++) {
+    const port = UNUSED_PORT_FIRST + ((start + step) % span);
+    let listener: Deno.Listener;
+    try {
+      listener = Deno.listen({ hostname: "0.0.0.0", port });
+    } catch (error) {
+      // "Someone holds this number" — the next one may be free. Anything
+      // else is a problem with the bind itself and must surface. The name
+      // check mirrors the server's own classifier
+      // (packages/server/startup.ts), which allows for a listen failure
+      // that arrives as a plain Error.
+      if (
+        error instanceof Deno.errors.AddrInUse ||
+        (error instanceof Error && error.name === "AddrInUse")
+      ) {
+        continue;
+      }
+      throw error;
+    }
+    listener.close();
+    return port;
+  }
+  throw new Error(
+    `unusedPort: every port in ${UNUSED_PORT_FIRST}-${UNUSED_PORT_LAST} is held`,
+  );
+}
