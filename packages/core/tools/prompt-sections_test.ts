@@ -185,7 +185,7 @@ Deno.test("the visual sections follow the tools they need", () => {
   // reaches every session; the image bullet needs the visual tool that
   // publishes the file, and must not point a session at a tool it lacks.
   const chat = renderPromptSections(CHAT_PROMPT_SECTIONS, [TOOL_ASK]);
-  assert(chat.includes("tagged `svg`"), "the diagram bullet is unconditional");
+  assert(chat.includes("```svg"), "the diagram bullet is unconditional");
   assertEquals(chat.includes("publish it with the visual"), false);
 
   const coding = renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS);

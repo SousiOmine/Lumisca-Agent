@@ -201,9 +201,11 @@ const SKILL_SECTION: PromptSection = {
 const VISUAL_DIAGRAM_SECTION: PromptSection = {
   name: "visual:diagram",
   order: ORDER.tool + 115,
-  text: "- To show a diagram in your reply, put a complete `<svg>` element " +
-    "in a fence\n  tagged `svg` (no script, up to 256 KiB): it renders as an " +
-    "image there.",
+  text: "- To show a diagram in your reply, put the complete `<svg>` element " +
+    "inside a\n  fenced block opened with ```svg and closed with ``` (no " +
+    "script, up to\n  256 KiB). The fence is what makes it a picture: an " +
+    "`<svg>` element written\n  outside a fence reaches the reader as source " +
+    "text.",
 };
 
 const VISUAL_IMAGE_SECTION: PromptSection = {

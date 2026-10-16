@@ -3428,7 +3428,7 @@ Deno.test("a coding session gets the visual tool; a chat session does not", asyn
     // so the session was told it may publish an image.
     const coding = core.getSession(sessionId)!.systemPrompt ?? "";
     assert(coding.includes("publish it with the visual tool"));
-    assert(coding.includes("tagged `svg`"));
+    assert(coding.includes("```svg"));
 
     // A chat session has no workspace to publish from, so it must not be
     // pointed at the tool — but the fence works everywhere.
@@ -3440,7 +3440,7 @@ Deno.test("a coding session gets the visual tool; a chat session does not", asyn
     });
     const chatPrompt = core.getSession(chat.id)!.systemPrompt ?? "";
     assertEquals(chatPrompt.includes("publish it with the visual tool"), false);
-    assert(chatPrompt.includes("tagged `svg`"));
+    assert(chatPrompt.includes("```svg"));
   } finally {
     await core.close();
     await removeDirRetry(dir);
