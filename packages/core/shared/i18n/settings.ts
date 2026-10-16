@@ -798,9 +798,9 @@ export const settings = {
   },
   "settings.computerUse.description": {
     ja:
-      "エージェントがこのマシンの画面を撮影し、マウスとキーボードを操作できるようにします。有効にすると computer use ツールが tool_search で見つかるようになり、computer use スキルが使い方を案内します。変更はすぐに反映されます（実行中のセッションがあると変更できません）。Windows のみ対応です。",
+      "エージェントがこのマシンの画面を撮影し、マウスとキーボードを操作できるようにします。有効にすると computer use ツールが tool_search で見つかるようになり、computer use スキルが使い方を案内します。変更はすぐに反映されます（実行中のセッションがあると変更できません）。Windows と Linux（Wayland セッション）に対応します。Linux では初回のみ、画面撮影と画面共有の許可をデスクトップが確認します。",
     en:
-      "Lets the agent capture this machine's screen and control its mouse and keyboard. When enabled, the computer-use tools become discoverable through tool_search and the computer-use skill explains how to use them. Changes apply immediately (they are refused while a session is running). Windows only.",
+      "Lets the agent capture this machine's screen and control its mouse and keyboard. When enabled, the computer-use tools become discoverable through tool_search and the computer-use skill explains how to use them. Changes apply immediately (they are refused while a session is running). Windows and Linux (Wayland sessions); on Linux the desktop asks for screenshot and screen-sharing permission once.",
   },
   "settings.computerUse.tooltip": {
     ja:

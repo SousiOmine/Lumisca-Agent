@@ -1,21 +1,23 @@
 /**
- * The computer-use image pipeline: raw BGRA frames from a host become a
- * PNG the model can read, scaled to stay inside the vision providers'
- * image budget.
+ * The computer-use image pipeline. Raw BGRA frames from a host become a PNG
+ * the model can read, scaled to stay inside the vision providers' image
+ * budget; the PNG a Wayland compositor hands over is decoded back into the
+ * same format.
  *
  * Deliberately independent of @napi-rs/canvas (the PDF renderer's Skia
  * binding): Windows Skia loads `icudtl.dat` at library load and aborts the
  * whole process when it is missing (see pdf/tools.ts), which must never be
  * a failure mode of a screenshot. The encoder here is ~100 lines of PNG
  * (IHDR/IDAT/IEND with zlib from CompressionStream) with no native
- * dependency at all.
+ * dependency at all, and the decoder is the same idea in reverse.
  *
  * The scale is the one piece of information the agent needs to convert
  * what it sees into screen coordinates, so it is computed here and carried
  * in the result: `screen = round(image / scale) + (screen.x, screen.y)`.
  */
+import { CoreError } from "../errors.ts";
 import type { RawCapture } from "./types.ts";
-import { deflateSync } from "node:zlib";
+import { deflateSync, inflateSync } from "node:zlib";
 
 /** Longest side of the image a capture produces by default. Chosen to stay
  * inside the vision providers' image budget (1568 px long edge / ~1.15 MP):
@@ -70,9 +72,14 @@ export function encodeCapture(
     png: encodePng(scaled, width, height),
     width,
     height,
-    // The x ratio, recomputed from the rounded size so the mapping the tool
-    // reports is exactly the one the image has.
-    scale: width / raw.width,
+    // The x ratio of the IMAGE to the screen units the capture covers, which
+    // is the number the caller divides its image coordinates by. On Windows
+    // the raw pixels are the screen's own pixels (ratio 1); on Wayland they
+    // are the screenshot's pixel grid, which the compositor paints at
+    // max(monitor scales) pixels per screen unit. Recomputed from the
+    // rounded size so the mapping the tool reports is exactly the one the
+    // image has.
+    scale: width / raw.screen.width,
   };
 }
 
@@ -256,4 +263,185 @@ function concat(parts: Uint8Array[]): Uint8Array {
     offset += part.length;
   }
   return out;
+}
+
+// --- decoding ---------------------------------------------------------------
+// The Wayland host is handed a PNG file instead of raw pixels, so the
+// pipeline needs the inverse of the encoder above. The subset is the one a
+// compositor's screenshot uses: 8-bit truecolor (RGB or RGBA), no interlace —
+// anything else is reported as unsupported rather than decoded wrongly.
+
+/** A decoded image in the pipeline's own pixel format (BGRA). */
+export interface DecodedImage {
+  width: number;
+  height: number;
+  /** 32-bit BGRA, top-down, tightly packed (width × height × 4 bytes). */
+  pixels: Uint8Array;
+}
+
+/**
+ * Decode an 8-bit truecolor PNG into a BGRA buffer.
+ *
+ * Chunk CRCs are not verified: the data already passes zlib's checksum, the
+ * file comes from the compositor on this machine, and another pass over a
+ * multi-megabyte screenshot per step would cost more than it can catch.
+ */
+export function decodePngToBgra(png: Uint8Array): DecodedImage {
+  if (png.length < PNG_SIGNATURE.length) {
+    throw new CoreError("the image is not a PNG (too short)", "unavailable");
+  }
+  for (let i = 0; i < PNG_SIGNATURE.length; i++) {
+    if (png[i] !== PNG_SIGNATURE[i]) {
+      throw new CoreError("the image is not a PNG", "unavailable");
+    }
+  }
+
+  let offset = PNG_SIGNATURE.length;
+  let header: { width: number; height: number; channels: number } | undefined;
+  const chunks: Uint8Array[] = [];
+  while (offset + 12 <= png.length) {
+    const length = readUint32(png, offset);
+    const type = String.fromCharCode(
+      png[offset + 4]!,
+      png[offset + 5]!,
+      png[offset + 6]!,
+      png[offset + 7]!,
+    );
+    const dataStart = offset + 8;
+    if (dataStart + length + 4 > png.length) {
+      throw new CoreError("the PNG is truncated", "unavailable");
+    }
+    const data = png.subarray(dataStart, dataStart + length);
+    if (type === "IHDR") header = decodeHeader(data);
+    else if (type === "IDAT") chunks.push(data);
+    else if (type === "IEND") break;
+    offset = dataStart + length + 4; // length + type + data + crc
+  }
+  if (header === undefined) {
+    throw new CoreError("the PNG has no header chunk", "unavailable");
+  }
+  if (chunks.length === 0) {
+    throw new CoreError("the PNG has no image data", "unavailable");
+  }
+
+  const raw = inflateSync(concat(chunks));
+  const stride = header.width * header.channels;
+  const expected = (stride + 1) * header.height;
+  if (raw.length < expected) {
+    throw new CoreError(
+      `the PNG's image data is short (${raw.length} of ${expected} bytes)`,
+      "unavailable",
+    );
+  }
+
+  const pixels = new Uint8Array(header.width * header.height * 4);
+  const previous = new Uint8Array(stride);
+  const current = new Uint8Array(stride);
+  for (let y = 0; y < header.height; y++) {
+    const rowStart = y * (stride + 1);
+    current.set(raw.subarray(rowStart + 1, rowStart + 1 + stride));
+    unfilterRow(raw[rowStart]!, current, previous, header.channels);
+    toBgra(current, pixels, y * header.width * 4, header.channels);
+    previous.set(current);
+  }
+  return { width: header.width, height: header.height, pixels };
+}
+
+function decodeHeader(data: Uint8Array): {
+  width: number;
+  height: number;
+  channels: number;
+} {
+  if (data.length < 13) {
+    throw new CoreError("the PNG header is truncated", "unavailable");
+  }
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const width = view.getUint32(0);
+  const height = view.getUint32(4);
+  const bitDepth = data[8]!;
+  const colorType = data[9]!;
+  const interlace = data[12]!;
+  const channels = colorType === 2 ? 3 : colorType === 6 ? 4 : 0;
+  if (bitDepth !== 8 || channels === 0 || interlace !== 0) {
+    throw new CoreError(
+      `the screenshot is a PNG this server cannot decode (bit depth ` +
+        `${bitDepth}, color type ${colorType}, interlace ${interlace})`,
+      "unavailable",
+    );
+  }
+  if (width === 0 || height === 0) {
+    throw new CoreError("the screenshot is empty", "unavailable");
+  }
+  return { width, height, channels };
+}
+
+/** Reverse one PNG scanline filter in place (PNG spec, "Filter types"). */
+function unfilterRow(
+  filter: number,
+  row: Uint8Array,
+  previous: Uint8Array,
+  bpp: number,
+): void {
+  const paeth = (a: number, b: number, c: number): number => {
+    const p = a + b - c;
+    const pa = Math.abs(p - a);
+    const pb = Math.abs(p - b);
+    const pc = Math.abs(p - c);
+    if (pa <= pb && pa <= pc) return a;
+    return pb <= pc ? b : c;
+  };
+  switch (filter) {
+    case 0:
+      return;
+    case 1:
+      for (let i = bpp; i < row.length; i++) {
+        row[i] = (row[i]! + row[i - bpp]!) & 0xff;
+      }
+      return;
+    case 2:
+      for (let i = 0; i < row.length; i++) {
+        row[i] = (row[i]! + previous[i]!) & 0xff;
+      }
+      return;
+    case 3:
+      for (let i = 0; i < row.length; i++) {
+        const left = i >= bpp ? row[i - bpp]! : 0;
+        row[i] = (row[i]! + ((left + previous[i]!) >> 1)) & 0xff;
+      }
+      return;
+    case 4:
+      for (let i = 0; i < row.length; i++) {
+        const left = i >= bpp ? row[i - bpp]! : 0;
+        const aboveLeft = i >= bpp ? previous[i - bpp]! : 0;
+        row[i] = (row[i]! + paeth(left, previous[i]!, aboveLeft)) & 0xff;
+      }
+      return;
+    default:
+      throw new CoreError(
+        `the screenshot uses PNG filter type ${filter}, which this server ` +
+          "cannot decode",
+        "unavailable",
+      );
+  }
+}
+
+/** RGB(A) scanline → BGRA, the format RawCapture carries. */
+function toBgra(
+  row: Uint8Array,
+  out: Uint8Array,
+  outOffset: number,
+  channels: number,
+): void {
+  const step = channels === 3 ? 3 : 4;
+  for (let i = 0, o = outOffset; i + step <= row.length; i += step, o += 4) {
+    out[o] = row[i + 2]!;
+    out[o + 1] = row[i + 1]!;
+    out[o + 2] = row[i]!;
+    out[o + 3] = channels === 4 ? row[i + 3]! : 0xff;
+  }
+}
+
+function readUint32(bytes: Uint8Array, offset: number): number {
+  return ((bytes[offset]! << 24) | (bytes[offset + 1]! << 16) |
+    (bytes[offset + 2]! << 8) | bytes[offset + 3]!) >>> 0;
 }

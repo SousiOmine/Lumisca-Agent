@@ -17,6 +17,7 @@ import type {
   ComputerActionResult,
   ComputerHost,
   ImageContent,
+  Point,
   RawCapture,
   Rect,
 } from "./mod.ts";
@@ -2423,6 +2424,8 @@ class FakeComputerHost implements ComputerHost {
   readonly captures: Rect[] = [];
   readonly actions: ComputerAction[] = [];
 
+  capabilities = { windows: true, cursor: true };
+
   describe(): string {
     return "fake, 256×144 primary";
   }
@@ -2433,7 +2436,7 @@ class FakeComputerHost implements ComputerHost {
       bounds: { x: 0, y: 0, width: 256, height: 144 },
     }];
   }
-  cursor() {
+  cursor(): Point | undefined {
     return { x: 3, y: 4 };
   }
   windows() {

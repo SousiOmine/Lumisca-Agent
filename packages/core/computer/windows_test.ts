@@ -6,17 +6,13 @@ import {
   buildUnicodeInputs,
   concatInputs,
   createWindowsComputerHost,
-  DRAG_MS,
   formatWindowId,
   inputSize,
-  interpolatePoint,
   MAX_WINDOW_TITLE_CHARS,
-  MOVE_MS,
   normalizeAbsolute,
   parseWindowId,
   pointerSizeFor,
   resolveKeyChord,
-  splitTypeText,
 } from "./windows.ts";
 
 /** The layout lookup a test stands in for VkKeyScanW: the virtual key of a
@@ -36,27 +32,6 @@ const probe = Deno.build.os === "windows"
   : undefined;
 const liveHost = probe?.available === true ? probe.host : undefined;
 if (probe?.available === true) probe.host.close();
-
-// --- interpolation ----------------------------------------------------------
-
-Deno.test("interpolatePoint walks the straight line and hits both ends", () => {
-  const from = { x: 10, y: 20 };
-  const to = { x: 110, y: 70 };
-  assertEquals(interpolatePoint(from, to, 0), { x: 10, y: 20 });
-  assertEquals(interpolatePoint(from, to, 1), { x: 110, y: 70 });
-  assertEquals(interpolatePoint(from, to, 0.5), { x: 60, y: 45 });
-  // Out-of-range ratios clamp: a late timer tick must not overshoot the
-  // target (the last step is the one that decides where a click lands).
-  assertEquals(interpolatePoint(from, to, 1.5), { x: 110, y: 70 });
-  assertEquals(interpolatePoint(from, to, -1), { x: 10, y: 20 });
-});
-
-Deno.test("interpolatePoint rounds to whole pixels", () => {
-  assertEquals(
-    interpolatePoint({ x: 0, y: 0 }, { x: 3, y: 3 }, 1 / 3),
-    { x: 1, y: 1 },
-  );
-});
 
 // --- absolute coordinate normalization --------------------------------------
 
@@ -224,38 +199,6 @@ Deno.test("resolveKeyChord refuses chords it cannot honour", () => {
   );
 });
 
-Deno.test("splitTypeText turns newlines into Enter presses", () => {
-  assertEquals(splitTypeText("a\nb"), [
-    { kind: "text", value: "a" },
-    { kind: "enter" },
-    { kind: "text", value: "b" },
-  ]);
-  // CRLF and a lone CR are the same newline (a Unicode CR/LF character is
-  // dropped by the controls, so it must become a real Enter).
-  assertEquals(splitTypeText("a\r\nb\rc"), [
-    { kind: "text", value: "a" },
-    { kind: "enter" },
-    { kind: "text", value: "b" },
-    { kind: "enter" },
-    { kind: "text", value: "c" },
-  ]);
-  // Empty lines become consecutive Enters.
-  assertEquals(splitTypeText("a\n\nb"), [
-    { kind: "text", value: "a" },
-    { kind: "enter" },
-    { kind: "enter" },
-    { kind: "text", value: "b" },
-  ]);
-  // A trailing newline still presses Enter (the caret ends on a fresh line).
-  assertEquals(splitTypeText("trailing\n"), [
-    { kind: "text", value: "trailing" },
-    { kind: "enter" },
-  ]);
-  assertEquals(splitTypeText("plain"), [{ kind: "text", value: "plain" }]);
-  assertEquals(splitTypeText(""), []);
-  assertEquals(splitTypeText("\n"), [{ kind: "enter" }]);
-});
-
 // --- window ids -------------------------------------------------------------
 
 Deno.test("window ids round-trip through the hex form", () => {
@@ -355,14 +298,4 @@ Deno.test("closing the host twice is safe", {
   assert(host.available);
   host.host.close();
   host.host.close();
-});
-
-// --- timings ----------------------------------------------------------------
-
-Deno.test("the movement timings stay human-scale and ordered", () => {
-  // The values are the contract the tool description and the skill state:
-  // ~0.1s for a move, longer for a drag path.
-  assertEquals(MOVE_MS, 100);
-  assertEquals(DRAG_MS, 300);
-  assert(DRAG_MS > MOVE_MS);
 });

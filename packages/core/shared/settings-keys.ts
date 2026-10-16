@@ -46,6 +46,13 @@ export const COMMAND_SAFETY_APPROVALS_KEY = "command_safety_approvals";
  * changing it rebuilds the open sessions (see LumiscaCore.setComputerUseEnabled). */
 export const COMPUTER_USE_ENABLED_KEY = "computer_use_enabled";
 
+/** Settings-table key for the Wayland screen-sharing permission (the
+ * portal's restore token). Machine state, not a secret: the token only lets
+ * the portal skip its consent dialog for this user's own session, and it is
+ * useless to anyone who cannot already reach this machine's D-Bus. Stored so
+ * that a restart does not ask the user again. */
+export const COMPUTER_USE_SESSION_TOKEN_KEY = "computer_use_session_token";
+
 /** Settings-table key for the standalone server's automatic updates: the
  * periodic check, the download, and applying a verified package (the new
  * version takes effect at the next start). "1" = on (the default),

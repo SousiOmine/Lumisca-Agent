@@ -95,5 +95,6 @@ npm outdated                                                   # packages/deskto
 - `deno task demo`: faux プロバイダで動くデモサーバーを起動します（API キーやネットワークなしで UI とツール呼び出しを確認できます）。
 - `deno task seed:history <sessionId> [nPairs]`: 指定セッションに長い履歴を流し込みます（多数メッセージでのレイアウト確認用）。
 - `deno task probe:token`: 認証トークンのガード（`/api/health` がトークン無しで 401、付与で 200）を確認します。
+- `deno task probe:computer`: このマシンで computer use が使えるかを確認し、スクリーンショットを 1 枚保存します（Linux では初回にデスクトップが許可ダイアログを出します）。`--click x,y` などを付けると 1 回だけ操作も行います。
 
 いずれも手動操作用で、CI からは実行しません。引数の詳細は各スクリプトの先頭コメントにあります。

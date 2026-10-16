@@ -256,10 +256,12 @@ function createScreenshotTool(
           display.primary ? " (primary)" : ""
         }: screen ${region.width}×${region.height} at ` +
           `(${region.x}, ${region.y})`;
+      const pointer = cursor === undefined
+        ? " The pointer position is not reported on this platform."
+        : ` Cursor at screen (${cursor.x}, ${cursor.y}).`;
       const text = [
         `${header}; image ${encoded.width}×${encoded.height} ` +
-        `(scale ${encoded.scale.toFixed(3)}). Cursor at screen ` +
-        `(${cursor.x}, ${cursor.y}).`,
+        `(scale ${encoded.scale.toFixed(3)}).${pointer}`,
         `Displays: ${
           displays.map((entry) =>
             describeDisplay(entry) +
@@ -285,7 +287,7 @@ function createScreenshotTool(
           screen: region,
           image: { width: encoded.width, height: encoded.height },
           scale: encoded.scale,
-          cursor,
+          ...(cursor !== undefined ? { cursor } : {}),
           bytes: encoded.png.length,
         },
       };
@@ -430,7 +432,7 @@ function createActTool(
       if (result.window !== undefined) {
         lines.push(`Focused window: ${describeWindow(result.window)}.`);
       }
-      if (isMouseAction(built.action)) {
+      if (isMouseAction(built.action) && result.cursor !== undefined) {
         lines.push(describeCursor(result.cursor));
       }
       return {
@@ -443,7 +445,7 @@ function createActTool(
           ...(built.screenPoint !== undefined
             ? { screen: built.screenPoint }
             : {}),
-          cursor: result.cursor,
+          ...(result.cursor !== undefined ? { cursor: result.cursor } : {}),
           steps: result.steps,
           durationMs: result.durationMs,
           ...(result.window !== undefined
@@ -672,6 +674,19 @@ function createListWindowsTool(
     parameters: listWindowsSchema,
     execute: (_id, params): Promise<ToolResult> => {
       const host = requireHost(options.resolveHost);
+      if (!host.capabilities.windows) {
+        return Promise.resolve({
+          content: [{
+            type: "text",
+            text: "This host cannot list windows: the desktop does not " +
+              "publish which windows exist (Wayland keeps them private). " +
+              "Take a computer_screenshot to see what is on screen, and " +
+              'switch windows with computer_act action "key" and key ' +
+              '"alt+tab".',
+          }],
+          details: { windows: 0, total: 0, unsupported: true },
+        });
+      }
       const all = host.windows();
       const filter = params.title_contains?.toLowerCase();
       const matches = filter === undefined

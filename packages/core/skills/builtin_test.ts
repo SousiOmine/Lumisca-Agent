@@ -68,7 +68,7 @@ Deno.test("builtinSkills advertises computer-use only when the machine can be dr
   const skill = skills[0]!;
   assertEquals(skill.source, "builtin");
   assert(skill.description.includes("tool_search"));
-  assert(skill.description.includes("Windows only"));
+  assert(skill.description.includes("Windows and Linux (Wayland)"));
   assertEquals(skill.path, undefined);
   assertEquals(typeof skill.read, "function");
 

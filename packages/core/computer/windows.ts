@@ -35,9 +35,24 @@
  */
 import { CoreError, errorMessage } from "../errors.ts";
 import { MAX_CAPTURE_DIMENSION } from "./image.ts";
+import {
+  CLICK_HOLD_MS,
+  DRAG_HOLD_MS,
+  DRAG_MS,
+  FOCUS_SETTLE_MS,
+  HOVER_SETTLE_MS,
+  interpolatePoint,
+  type ModifierName,
+  MOVE_MS,
+  MOVE_TICK_MS,
+  parseKeyChord,
+  sleep,
+  splitTypeText,
+} from "./motion.ts";
 import type {
   ComputerAction,
   ComputerActionResult,
+  ComputerCapabilities,
   ComputerHost,
   ComputerHostResult,
   DisplayInfo,
@@ -48,29 +63,9 @@ import type {
   WindowInfo,
 } from "./types.ts";
 
-// --- fixed timings ----------------------------------------------------------
-// All in milliseconds. They exist so a pointer movement looks like a hand
-// moving rather than a jump; see the module docs.
-
-/** Duration of a pointer move (a plain move, the approach before a click,
- * the reposition before a wheel). */
-export const MOVE_MS = 100;
-/** Duration of a drag path. Longer than MOVE_MS because a drop target has
- * to see the button held down while the pointer travels. */
-export const DRAG_MS = 300;
-/** Stillness after arriving, before pressing: lets hover state settle. */
-export const HOVER_SETTLE_MS = 60;
-/** How long a button stays down for one click. */
-export const CLICK_HOLD_MS = 40;
-/** Stillness after pressing, before a drag starts: lets the app enter drag
- * mode. */
-export const DRAG_HOLD_MS = 100;
-/** Interval between two interpolation steps (Windows' timer granularity
- * makes the real step ~15ms; the total still honors the requested
- * duration because the loop is deadline-based). */
-export const MOVE_TICK_MS = 10;
-/** Stillness after activating a window, before its handle is verified. */
-export const FOCUS_SETTLE_MS = 60;
+// The timings, the interpolation, the key chord syntax and the typing split
+// live in motion.ts: they are the same for every platform, and the tool
+// description quotes them.
 /** Characters sent per SendInput call while typing (two events each). */
 export const TYPE_CHUNK_CHARS = 128;
 /** Longest window title reported (WCHARs; longer titles are cut). */
@@ -230,17 +225,6 @@ function unionOffset(pointerSize: number): number {
 
 // --- pure helpers (unit-tested without touching the OS) ---------------------
 
-/** The point at `ratio` along the straight line from `from` to `to`. The
- * endpoints are exact (ratio 0 and 1), which is what makes the last step of
- * an interpolated movement land precisely on the target. */
-export function interpolatePoint(from: Point, to: Point, ratio: number): Point {
-  const t = Math.min(1, Math.max(0, ratio));
-  return {
-    x: Math.round(from.x + (to.x - from.x) * t),
-    y: Math.round(from.y + (to.y - from.y) * t),
-  };
-}
-
 /** One absolute-coordinate component for SendInput: the value is mapped
  * onto 0..65535 across the whole virtual desktop (VIRTUALDESK), where
  * 65535 is the far edge (extent - 1). */
@@ -323,25 +307,8 @@ export function buildUnicodeInputs(
   return concatInputs(parts);
 }
 
-/** One piece of a `type` action: literal text sent as Unicode, or a real
- * Enter press. A newline cannot ride along as a Unicode character — the
- * controls drop a CR/LF code unit (measured: "a\r\nb" arrives as "ab") — so
- * it becomes an Enter key press, which is also what a person would do. */
-export type TypeSegment =
-  | { kind: "text"; value: string }
-  | { kind: "enter" };
-
-/** Split typed text into Unicode runs and Enter presses. */
-export function splitTypeText(text: string): TypeSegment[] {
-  const segments: TypeSegment[] = [];
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    if (i > 0) segments.push({ kind: "enter" });
-    const line = lines[i]!;
-    if (line.length > 0) segments.push({ kind: "text", value: line });
-  }
-  return segments;
-}
+/** One piece of a `type` action, split into Unicode runs and Enter presses
+ * (see motion.ts's splitTypeText). */
 
 /** Pressing one key with its modifiers held: modifiers down, key down, key
  * up, modifiers up (in reverse order). */
@@ -394,14 +361,11 @@ const KEY_NAMES: Record<string, number> = {
   ),
 };
 
-/** Modifier names accepted in a key chord (lower case). */
-const MODIFIER_NAMES: Record<string, number> = {
+/** Virtual keys of the modifiers a chord may name. */
+const MODIFIER_VKS: Record<ModifierName, number> = {
   ctrl: VK_CONTROL,
-  control: VK_CONTROL,
   shift: VK_SHIFT,
   alt: VK_MENU,
-  win: VK_LWIN,
-  meta: VK_LWIN,
   super: VK_LWIN,
 };
 
@@ -424,65 +388,37 @@ export function resolveKeyChord(
   chord: string,
   scanChar: (char: string) => number | undefined,
 ): KeyChord {
-  const trimmed = chord.trim();
-  if (trimmed.length === 0) {
-    throw new CoreError("key must not be empty", "invalid");
+  const parsed = parseKeyChord(chord);
+  const modifiers = parsed.modifiers.map((name) => MODIFIER_VKS[name]);
+  const lower = parsed.key.toLowerCase();
+  const named = KEY_NAMES[lower];
+  if (named !== undefined) {
+    return { vk: named, modifiers };
   }
-  // A lone character is the key itself — including "+", which could not be
-  // written as a chord (it is the separator).
-  const parts = trimmed.length === 1 ? [trimmed] : trimmed.split("+");
-  const modifiers: number[] = [];
-  let vk: number | undefined;
-  for (const rawPart of parts) {
-    const part = rawPart.trim();
-    if (part.length === 0) continue;
-    const lower = part.toLowerCase();
-    const modifier = MODIFIER_NAMES[lower];
-    if (modifier !== undefined) {
-      if (!modifiers.includes(modifier)) modifiers.push(modifier);
-      continue;
-    }
-    if (vk !== undefined) {
-      throw new CoreError(
-        `key chord "${chord}" names more than one key`,
-        "invalid",
-      );
-    }
-    const named = KEY_NAMES[lower];
-    if (named !== undefined) {
-      vk = named;
-      continue;
-    }
-    if (part.length !== 1) {
-      throw new CoreError(
-        `unknown key "${part}" in chord "${chord}"`,
-        "invalid",
-      );
-    }
-    // The character is looked up as written: its case is what decides
-    // whether Shift belongs to the chord ("A" needs it, "a" does not).
-    const scanned = scanChar(part);
-    if (scanned === undefined) {
-      throw new CoreError(
-        `no key produces "${part}" on this keyboard layout`,
-        "invalid",
-      );
-    }
-    vk = scanned & 0xff;
-    // VkKeyScanW's high byte: 1 = shift, 2 = ctrl, 4 = alt (AltGr).
-    const state = (scanned >> 8) & 0xff;
-    if (state & 1 && !modifiers.includes(VK_SHIFT)) modifiers.push(VK_SHIFT);
-    if (state & 2 && !modifiers.includes(VK_CONTROL)) {
-      modifiers.push(VK_CONTROL);
-    }
-    if (state & 4 && !modifiers.includes(VK_MENU)) modifiers.push(VK_MENU);
-  }
-  if (vk === undefined) {
+  const part = parsed.key;
+  if (part.length !== 1) {
     throw new CoreError(
-      `key chord "${chord}" has modifiers but no key`,
+      `unknown key "${part}" in chord "${chord}"`,
       "invalid",
     );
   }
+  // The character is looked up as written: its case is what decides
+  // whether Shift belongs to the chord ("A" needs it, "a" does not).
+  const scanned = scanChar(part);
+  if (scanned === undefined) {
+    throw new CoreError(
+      `no key produces "${part}" on this keyboard layout`,
+      "invalid",
+    );
+  }
+  const vk = scanned & 0xff;
+  // VkKeyScanW's high byte: 1 = shift, 2 = ctrl, 4 = alt (AltGr).
+  const state = (scanned >> 8) & 0xff;
+  if (state & 1 && !modifiers.includes(VK_SHIFT)) modifiers.push(VK_SHIFT);
+  if (state & 2 && !modifiers.includes(VK_CONTROL)) {
+    modifiers.push(VK_CONTROL);
+  }
+  if (state & 4 && !modifiers.includes(VK_MENU)) modifiers.push(VK_MENU);
   return { vk, modifiers };
 }
 
@@ -502,10 +438,6 @@ export function parseWindowId(id: string): Deno.PointerValue {
 export function formatWindowId(handle: Deno.PointerValue): string {
   const value = handle === null ? 0n : Deno.UnsafePointer.value(handle);
   return `0x${value.toString(16).toUpperCase().padStart(8, "0")}`;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // --- host -------------------------------------------------------------------
@@ -653,6 +585,8 @@ function enumerateDisplays(user32: User32): DisplayInfo[] {
 class WindowsComputerHost implements ComputerHost {
   private readonly pointerSize: number;
   private closed = false;
+
+  readonly capabilities: ComputerCapabilities = { windows: true, cursor: true };
 
   constructor(
     private readonly user32: User32,

@@ -9,6 +9,7 @@ import {
 import type {
   ComputerAction,
   ComputerActionResult,
+  ComputerCapabilities,
   ComputerHost,
   DisplayInfo,
   Point,
@@ -33,6 +34,9 @@ class FakeHost implements ComputerHost {
   readonly captures: Rect[] = [];
   readonly actions: ComputerAction[] = [];
   cursorAt: Point = { x: 5, y: 7 };
+  /** Flipped by the tests that cover a platform which cannot list windows
+   * or report the pointer (Wayland). */
+  capabilities: ComputerCapabilities = { windows: true, cursor: true };
   displayList: DisplayInfo[] = [
     {
       index: 0,
@@ -72,12 +76,12 @@ class FakeHost implements ComputerHost {
     return this.displayList;
   }
 
-  cursor(): Point {
-    return this.cursorAt;
+  cursor(): Point | undefined {
+    return this.capabilities.cursor ? this.cursorAt : undefined;
   }
 
   windows(): WindowInfo[] {
-    return this.windowList;
+    return this.capabilities.windows ? this.windowList : [];
   }
 
   capture(region: Rect): Promise<RawCapture> {
@@ -95,7 +99,7 @@ class FakeHost implements ComputerHost {
     const mouse = action.kind === "move" || action.kind === "click" ||
       action.kind === "drag" || action.kind === "scroll";
     return Promise.resolve({
-      cursor: this.cursorAt,
+      cursor: this.cursor(),
       steps: mouse ? 8 : 0,
       durationMs: mouse ? 104 : 5,
       ...(action.kind === "type" || action.kind === "key" ||
@@ -516,6 +520,40 @@ Deno.test("list_windows announces the windows it did not list", async () => {
     lines.at(-1),
     "… (+7 more; narrow the list with title_contains)",
   );
+});
+
+// --- platforms that cannot do everything ------------------------------------
+
+Deno.test("list_windows explains a host that cannot enumerate windows", async () => {
+  const host = new FakeHost();
+  host.capabilities = { windows: false, cursor: false };
+  const result = await tools(host).windows.execute("id", {});
+  const text = toolText(result);
+  assert(text.includes("cannot list windows"), text);
+  assert(text.includes("alt+tab"), text);
+  assertEquals(result.details.unsupported, true);
+});
+
+Deno.test("screenshot says when the pointer position is not reported", async () => {
+  const host = new FakeHost();
+  host.capabilities = { windows: true, cursor: false };
+  const text = toolText(await tools(host).screenshot.execute("id", {}));
+  assert(text.includes("pointer position is not reported"), text);
+  assert(!text.includes("Cursor at screen"), text);
+});
+
+Deno.test("a mouse action claims no cursor position when there is none", async () => {
+  const host = new FakeHost();
+  host.capabilities = { windows: true, cursor: false };
+  const family = tools(host);
+  await family.screenshot.execute("id", {});
+  const result = await family.act.execute("id", {
+    action: "move",
+    x: 10,
+    y: 10,
+  });
+  assert(!toolText(result).includes("Cursor now at screen"));
+  assertEquals(result.details.cursor, undefined);
 });
 
 // --- registry contract ------------------------------------------------------

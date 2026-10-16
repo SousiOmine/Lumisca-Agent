@@ -6,6 +6,7 @@ import {
   refreshCatalogInBackground,
   resolveSettingsPath,
 } from "@lumisca/core";
+import { COMPUTER_USE_SESSION_TOKEN_KEY } from "@lumisca/core/shared";
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
 import {
   consumeServerStartupEnvironment,
@@ -169,11 +170,23 @@ function attachBrowserBackend(core: LumiscaCore): void {
  * host is attached once at startup — its availability is a property of the
  * machine, not of a client — and the settings toggle decides whether
  * sessions may use it, so enabling later needs no restart. A machine
- * without a host (another platform, no display) stores the reason, which
- * the settings dialog shows when someone tries to enable it.
+ * without a host (another platform, no display, no desktop portal) stores
+ * the reason, which the settings dialog shows when someone tries to enable
+ * it.
+ *
+ * On Linux this asks the desktop's portal over D-Bus, hence the await. The
+ * screen-sharing permission the portal hands out is kept in the settings
+ * table: re-asking the user on every server start would be worse than
+ * storing machine state, and the token is worthless to anyone who cannot
+ * already reach this machine's session bus.
  */
-function attachComputerHost(core: LumiscaCore): void {
-  const result = createComputerHost();
+async function attachComputerHost(core: LumiscaCore): Promise<void> {
+  const result = await createComputerHost({
+    store: {
+      load: () => core.getSetting(COMPUTER_USE_SESSION_TOKEN_KEY),
+      save: (token) => core.setSetting(COMPUTER_USE_SESSION_TOKEN_KEY, token),
+    },
+  });
   core.setComputerHost(result);
   if (result.available) {
     console.log(
@@ -236,7 +249,7 @@ try {
   Deno.exit(1);
 }
 attachBrowserBackend(core);
-attachComputerHost(core);
+await attachComputerHost(core);
 // The model catalog starts as the bundled snapshot; refresh it in the
 // background so new models.dev entries appear without blocking startup
 // (or failing it when offline — the snapshot simply stays active).
