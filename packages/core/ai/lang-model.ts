@@ -116,7 +116,44 @@ function compatibleSettings(
     baseURL: model.baseUrl ?? "https://api.openai.com/v1",
     apiKey: settings.apiKey,
     headers: settings.headers,
+    // Tool results keep their image blocks as image parts of the tool
+    // message. The SDK leaves this off by default (its docs: "enable this
+    // for providers that extend the OpenAI Chat Completions API with
+    // structured tool-result content"), which makes a tool result with an
+    // image degrade to JSON — the model reads a base64 wall of text instead
+    // of the picture. Lumisca turns it on for every compatible endpoint on
+    // purpose: the images of a tool result only ever travel to a model that
+    // declares image input (see ai/stream.ts toCoreMessages), and a gateway
+    // that rejects image parts in a tool message is the exception this
+    // default accepts (no metadata describes that capability; models.dev
+    // publishes nothing for it).
+    supportsMultiPartToolContent: true,
   });
+}
+
+/** Whether the provider conversion of this model keeps an image part inside
+ * a tool result (see ai/stream.ts toCoreMessages). It mirrors
+ * {@link languageModelFor}, because the answer is the transport's:
+ * @ai-sdk/anthropic, the OpenAI Responses models (Azure's included),
+ * @ai-sdk/google and Bedrock map a file part of a tool result onto their
+ * native image form, and the compatible factory above takes image parts
+ * too — while the first-party OpenAI chat model (api.openai.com) and
+ * @ai-sdk/mistral serialize a content output as JSON. Those two get their
+ * images in a user message of their own instead (see toCoreMessages). */
+export function toolResultTakesImages(model: Model<Api>): boolean {
+  switch (model.api) {
+    case "openai-completions":
+      // First-party OpenAI uses the official chat model, which has no
+      // multi-part tool content option; every other chat-completions model
+      // goes through the compatible factory.
+      return !isFirstPartyOpenAI(model);
+    case "mistral-conversations":
+      return false;
+    default:
+      // The remaining apis are native image carriers (anthropic, responses,
+      // google, bedrock) or the compatible factory (any unknown api string).
+      return true;
+  }
 }
 
 /** OpenCode Go's managed-inference API requires a stable per-conversation id

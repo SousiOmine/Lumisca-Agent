@@ -1,7 +1,11 @@
 import { assertEquals } from "@std/assert";
+import { join } from "node:path";
 import { Agent } from "../ai/agent.ts";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
+import { languageModelFor } from "../ai/lang-model.ts";
+import { bytesToBase64 } from "../base64.ts";
+import { MINI_PNG, withTempDir } from "../test-utils.ts";
 import type {
   AgentEvent,
   AgentMessage,
@@ -14,8 +18,10 @@ import type {
   ToolResultMessage,
 } from "../ai/types.ts";
 import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
+import { createReadFileTool } from "../tools/filesystem.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import { object, string, type Tool } from "../tools/schema.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 
 function fakeModel(): Model<Api> {
   return {
@@ -339,3 +345,166 @@ Deno.test("the tool result keeps its details for the UI and stays text for the m
   assertEquals(secondPrompt.includes("Edited a.ts"), true);
   assertEquals(secondPrompt.includes("addedLines"), false);
 });
+
+// ---- read tool images through the whole path ------------------------------
+
+/** An OpenAI-compatible streaming chunk. */
+function chatChunk(
+  delta: Record<string, unknown>,
+  finish: string | null,
+): Record<string, unknown> {
+  return {
+    id: "chatcmpl-tool-image",
+    object: "chat.completion.chunk",
+    created: 0,
+    model: "m",
+    choices: [{ index: 0, delta, finish_reason: finish }],
+  };
+}
+
+/** An SSE body of the given chunks. */
+function sse(chunks: Array<Record<string, unknown>>): Response {
+  return new Response(
+    `${chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("")}` +
+      "data: [DONE]\n\n",
+    { headers: { "content-type": "text/event-stream" } },
+  );
+}
+
+/** The answer of a model that calls `name` with `args`. */
+function toolCallAnswer(
+  id: string,
+  name: string,
+  args: Record<string, unknown>,
+): Response {
+  return sse([
+    chatChunk({
+      role: "assistant",
+      tool_calls: [{
+        index: 0,
+        id,
+        type: "function",
+        function: { name, arguments: JSON.stringify(args) },
+      }],
+    }, null),
+    chatChunk({}, "tool_calls"),
+  ]);
+}
+
+/** The answer of a model that just says `text`. */
+function textAnswer(text: string): Response {
+  return sse([
+    chatChunk({ role: "assistant", content: text }, null),
+    chatChunk({}, "stop"),
+  ]);
+}
+
+/** A local OpenAI-compatible endpoint serving one scripted answer per
+ * request and recording every request body (what the provider was really
+ * asked). Its requests go through the app's own provider construction (see
+ * languageModelFor), so whatever options that sets are under test too. */
+function scriptedEndpoint(scripts: Response[]): {
+  baseUrl: string;
+  bodies: Array<Record<string, unknown>>;
+  close: () => Promise<void>;
+} {
+  const bodies: Array<Record<string, unknown>> = [];
+  const server = Deno.serve({ port: 0, onListen: () => {} }, async (req) => {
+    bodies.push(await req.json() as Record<string, unknown>);
+    return scripts[Math.min(bodies.length - 1, scripts.length - 1)]!;
+  });
+  // The port is assigned by the listener, which Deno starts with the
+  // server: `addr` is readable right away (see browser/client_test.ts).
+  const { port } = server.addr as Deno.NetAddr;
+  return {
+    baseUrl: `http://127.0.0.1:${port}/v1`,
+    bodies,
+    close: () => server.shutdown(),
+  };
+}
+
+/** The read tool's image through the whole path: the model asks for an
+ * image file, the tool returns the pixels, and both audiences get them —
+ * the transcript (UI, DB, image analysis) and the next request, where the
+ * image must arrive as an image and not merely as its text marker. */
+Deno.test("a read tool image reaches the model and the transcript", async () => {
+  await withTempDir("lumisca-read-image-", async (root) => {
+    const imagePath = join(root, "pic.png");
+    await Deno.writeFile(imagePath, MINI_PNG);
+    const endpoint = scriptedEndpoint([
+      toolCallAnswer("t1", "read", { path: imagePath }),
+      textAnswer("I can see it."),
+    ]);
+    try {
+      const model: Model<Api> = {
+        id: "m",
+        name: "m",
+        api: "openai-completions",
+        provider: "tool-image-e2e",
+        baseUrl: endpoint.baseUrl,
+        // A vision model: this is the very case that used to lose the image.
+        input: ["text", "image"],
+      };
+      const agent = new Agent({
+        initialState: {
+          systemPrompt: "test",
+          model,
+          tools: [
+            toAgentTool(
+              createReadFileTool({ sandbox: new Sandbox([root]) }),
+            ),
+          ],
+          thinkingLevel: "off",
+        },
+        streamFn: createStreamFn({
+          languageModelFor: () =>
+            Promise.resolve(
+              languageModelFor(model, { apiKey: "test-key", source: "test" }),
+            ),
+        }),
+        sessionId: "s1",
+      });
+
+      await agent.prompt(`read ${imagePath}`);
+
+      // The transcript carries the image: the UI renders it under the tool
+      // line, the DB keeps it across a reload, and the image analysis of a
+      // text-only model reads it.
+      const result = agent.messages.find((m) =>
+        m.role === "toolResult"
+      ) as ToolResultMessage;
+      assertEquals(result.content.map((b) => b.type), ["text", "image"]);
+      assertEquals(result.content[1], {
+        type: "image",
+        data: bytesToBase64(MINI_PNG),
+        mimeType: "image/png",
+      });
+
+      // The second request hands the picture to the model — inside the tool
+      // message itself (the compatible provider is built with multi-part
+      // tool content), not as a text marker only.
+      assertEquals(endpoint.bodies.length, 2);
+      const messages = endpoint.bodies[1]!.messages as Array<
+        Record<string, unknown>
+      >;
+      const toolMessage = messages.find((m) => m.role === "tool")!;
+      assertEquals(toolMessage.content, [
+        { type: "text", text: expectImageMarker(imagePath) },
+        {
+          type: "image_url",
+          image_url: {
+            url: `data:image/png;base64,${bytesToBase64(MINI_PNG)}`,
+          },
+        },
+      ]);
+    } finally {
+      await endpoint.close();
+    }
+  });
+});
+
+/** The read tool's text for a whole-file image read. */
+function expectImageMarker(path: string): string {
+  const name = path.split(/[\\/]/).pop() ?? path;
+  return `[image: ${name} (${MINI_PNG.byteLength} bytes)]`;
+}

@@ -1,7 +1,16 @@
 import { assertEquals } from "@std/assert";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { summarizeContextUsage } from "../shared/mod.ts";
-import type { AgentTool, Api, Model, StreamRequest } from "./types.ts";
+import { bytesToBase64 } from "../base64.ts";
+import { MINI_PNG } from "../test-utils.ts";
+import type {
+  AgentTool,
+  Api,
+  LlmMessage,
+  Model,
+  StreamRequest,
+} from "./types.ts";
 import {
   clampMaxTokensToContext,
   CONTEXT_SAFETY_TOKENS,
@@ -120,6 +129,352 @@ Deno.test("an SDK-executed tool result keeps its details", async () => {
   // The UI reads the structured details (the diff badge); the transport
   // must not drop them on the way to the transcript.
   assertEquals(result?.details, { addedLines: 3, removedLines: 2 });
+});
+
+// ---- tool result images ----------------------------------------------------
+
+/** The base64 of {@link MINI_PNG}, as the read tool hands it over. */
+const MINI_PNG_BASE64 = bytesToBase64(MINI_PNG);
+
+/** The image block a tool result carries, in the app's own shape. */
+const IMAGE_BLOCK = {
+  type: "image" as const,
+  data: MINI_PNG_BASE64,
+  mimeType: "image/png",
+};
+
+/** The same image as the chat wire carries it. */
+const IMAGE_URL_PART = {
+  type: "image_url",
+  image_url: { url: `data:image/png;base64,${MINI_PNG_BASE64}` },
+};
+
+/** An image-returning tool, as read / pdf_read_pages / the browser and
+ * computer screenshots are. */
+function shotTool(): AgentTool {
+  return {
+    name: "shot",
+    label: "Shot",
+    description: "Take a screenshot.",
+    parameters: { type: "object", properties: {} },
+    execute: () =>
+      Promise.resolve({
+        content: [
+          { type: "text" as const, text: "[image: shot.png (67 bytes)]" },
+          IMAGE_BLOCK,
+        ],
+        details: { bytes: 67 },
+      }),
+  };
+}
+
+/** The tool result message such a tool leaves in the transcript. */
+function toolResultWithImage(
+  toolCallId = "t1",
+  toolName = "shot",
+): LlmMessage {
+  return {
+    role: "toolResult",
+    toolCallId,
+    toolName,
+    content: [
+      { type: "text", text: "[image: shot.png (67 bytes)]" },
+      IMAGE_BLOCK,
+    ],
+    details: {},
+    isError: false,
+    timestamp: 0,
+  } as unknown as LlmMessage;
+}
+
+/** An OpenAI-compatible SSE answer carrying `text`. */
+function chatAnswer(text: string): Response {
+  const chunks = [
+    {
+      id: "chatcmpl-image-test",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "m",
+      choices: [{
+        index: 0,
+        delta: { role: "assistant", content: text },
+        finish_reason: null,
+      }],
+    },
+    {
+      id: "chatcmpl-image-test",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "m",
+      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+    },
+  ];
+  return new Response(
+    `${chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join("")}` +
+      "data: [DONE]\n\n",
+    { headers: { "content-type": "text/event-stream" } },
+  );
+}
+
+type FetchLike = (input: unknown, init?: RequestInit) => Promise<Response>;
+
+/** The chat model a compatible provider gets (see languageModelFor): the
+ * app builds its compatible providers with multi-part tool content, so an
+ * image block of a tool result survives as an image part of the tool
+ * message. */
+function compatibleChatModel(fetchFn: FetchLike, model: Model<Api>) {
+  return createOpenAICompatible({
+    name: model.provider,
+    apiKey: "test-key",
+    baseURL: model.baseUrl ?? "https://example.invalid/v1",
+    supportsMultiPartToolContent: true,
+    fetch: fetchFn,
+  }).chatModel(model.id);
+}
+
+/** The official OpenAI chat model (api.openai.com) — the one chat transport
+ * without a multi-part tool content option. */
+function firstPartyChatModel(fetchFn: FetchLike, model: Model<Api>) {
+  return createOpenAI({
+    apiKey: "test-key",
+    baseURL: model.baseUrl,
+    fetch: fetchFn,
+  }).chat(model.id);
+}
+
+/** Run one request through the transport and return the chat messages the
+ * provider received. */
+async function runToChatBody(
+  model: Model<Api>,
+  messages: LlmMessage[],
+  buildModel: (fetchFn: FetchLike, model: Model<Api>) => unknown =
+    compatibleChatModel,
+): Promise<Array<Record<string, unknown>>> {
+  let sentBody: Record<string, unknown> | undefined;
+  const fetchFn: FetchLike = (_input, init) => {
+    sentBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Promise.resolve(chatAnswer("seen"));
+  };
+  const streamFn = createStreamFn({
+    languageModelFor: () =>
+      Promise.resolve(buildModel(fetchFn, model) as never),
+  });
+  for await (const _ of streamFn(model, { messages }, undefined)) {
+    // drain
+  }
+  return sentBody!.messages as Array<Record<string, unknown>>;
+}
+
+/** Shorthand for the parameters the image tests share. */
+function imageModel(
+  overrides: Partial<Model<Api>> = {},
+): Model<Api> {
+  return {
+    id: "m",
+    name: "m",
+    api: "openai-completions",
+    provider: "tool-image-test",
+    // An image-capable model: the transport may hand it pictures.
+    input: ["text", "image"],
+    ...overrides,
+  } as Model<Api>;
+}
+
+/** A fake LanguageModel at the specification the installed providers use
+ * (v4): `doStream` receives the prompt exactly as a provider does, so the
+ * test sees what would go to the wire without emulating one provider's own
+ * SSE format. */
+function recordingV4LanguageModel(): { model: unknown; prompts: unknown[] } {
+  const prompts: unknown[] = [];
+  const model = {
+    specificationVersion: "v4",
+    provider: "fake",
+    modelId: "m",
+    supportedUrls: {},
+    doGenerate: () => {
+      throw new Error("not used");
+    },
+    doStream: (options: { prompt?: unknown }) => {
+      prompts.push(options.prompt);
+      return {
+        stream: streamOf(v4AnswerParts("ok")),
+        request: {},
+        response: {},
+      };
+    },
+  };
+  return { model, prompts };
+}
+
+/** The v4 stream parts of one plain answer. */
+function v4AnswerParts(text: string): unknown[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "t1" },
+    { type: "text-delta", id: "t1", delta: text },
+    { type: "text-end", id: "t1" },
+    {
+      type: "finish",
+      finishReason: { unified: "stop", raw: "stop" },
+      usage: {
+        inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 5, text: 5, reasoning: 0 },
+      },
+    },
+  ];
+}
+
+Deno.test("an SDK-executed tool result keeps its image blocks", async () => {
+  const events = await runStream(
+    toolCallParts("t1", "shot", {}),
+    {
+      messages: [{ role: "user", content: "screenshot" }],
+      tools: [shotTool()],
+    },
+  );
+
+  const result = events.find((e) => e.type === "toolcall_result");
+  // The transcript (and with it the DB, the UI's thumbnails and the image
+  // analysis of a text-only model) gets the tool's own content back —
+  // image blocks included, not just the text around them.
+  assertEquals(result?.content, [
+    { type: "text", text: "[image: shot.png (67 bytes)]" },
+    IMAGE_BLOCK,
+  ]);
+  assertEquals(result?.details, { bytes: 67 });
+});
+
+Deno.test("a tool image rides inside the tool message of a compatible model", async () => {
+  const messages = await runToChatBody(
+    // A gateway endpoint: what languageModelFor routes to the compatible
+    // factory (the first-party OpenAI chat model is the test below).
+    imageModel({ baseUrl: "https://api.example.com/v1" }),
+    [toolResultWithImage()],
+  );
+
+  // The tool message itself carries the picture: the compatible provider is
+  // built with supportsMultiPartToolContent (see languageModelFor), so the
+  // content output reaches the wire as parts instead of a JSON string.
+  const toolMessage = messages.find((m) => m.role === "tool")!;
+  assertEquals(toolMessage.content, [
+    { type: "text", text: "[image: shot.png (67 bytes)]" },
+    IMAGE_URL_PART,
+  ]);
+  // No extra message: nothing follows the tool result.
+  assertEquals(messages.filter((m) => m.role === "user").length, 0);
+});
+
+Deno.test("a tool image of the OpenAI chat model follows in a user message", async () => {
+  // api.openai.com's tool messages are text-only (its SDK model has no
+  // multi-part option), so the picture follows in the one role every
+  // provider takes an image in — instead of being dropped.
+  const messages = await runToChatBody(
+    imageModel({
+      provider: "openai",
+      baseUrl: "https://api.openai.com/v1",
+    }),
+    [toolResultWithImage()],
+    firstPartyChatModel,
+  );
+
+  const toolMessage = messages.find((m) => m.role === "tool")!;
+  assertEquals(toolMessage.content, "[image: shot.png (67 bytes)]");
+  const imageMessage = messages.find((m) =>
+    m.role === "user" && Array.isArray(m.content)
+  )!;
+  assertEquals(imageMessage.content, [
+    { type: "text", text: "[image from shot]" },
+    IMAGE_URL_PART,
+  ]);
+});
+
+Deno.test("images of parallel tool results leave the tool messages contiguous", async () => {
+  // Two tools answered the same assistant turn. A user message between
+  // their results would split the run of tool messages a provider reads as
+  // the direct answer to that turn, so both images follow the pair.
+  const messages = await runToChatBody(
+    imageModel({ provider: "openai", baseUrl: "https://api.openai.com/v1" }),
+    [
+      toolResultWithImage("t1", "shot"),
+      toolResultWithImage("t2", "read"),
+    ],
+    firstPartyChatModel,
+  );
+
+  assertEquals(messages.map((m) => m.role), ["tool", "tool", "user"]);
+  assertEquals(messages[2]!.content, [
+    { type: "text", text: "[image from shot]\n[image from read]" },
+    IMAGE_URL_PART,
+    IMAGE_URL_PART,
+  ]);
+});
+
+Deno.test("an api that carries tool images gets them inside the tool result", async () => {
+  // Anthropic / OpenAI Responses / Google / Bedrock tool results take image
+  // blocks natively, so the image needs no message of its own there.
+  const { model, prompts } = recordingV4LanguageModel();
+  const streamFn = createStreamFn(transportFor(model));
+  for await (
+    const _ of streamFn(
+      imageModel({ api: "anthropic-messages", provider: "fake" }),
+      { messages: [toolResultWithImage()] },
+      undefined,
+    )
+  ) {
+    // drain
+  }
+
+  const prompt = prompts[0] as Array<Record<string, unknown>>;
+  const toolMessage = prompt.find((m) => m.role === "tool")!;
+  const [part] = toolMessage.content as Array<Record<string, unknown>>;
+  // (Round-tripped through JSON: the SDK's prompt normalization carries
+  // `filename` / `providerOptions` keys on every file part, undefined
+  // here.)
+  assertEquals(JSON.parse(JSON.stringify(part!.output)), {
+    type: "content",
+    value: [
+      { type: "text", text: "[image: shot.png (67 bytes)]" },
+      {
+        type: "file",
+        mediaType: "image/png",
+        data: { type: "data", data: MINI_PNG_BASE64 },
+      },
+    ],
+  });
+  // No extra message: nothing follows the tool result.
+  assertEquals(prompt.some((m) => m.role === "user"), false);
+});
+
+Deno.test("a text-only model is never handed a tool image", async () => {
+  // The image analysis replaces the images before the transport sees them
+  // (see agent/image-analysis.ts); an image that survived a failed analysis
+  // must not reach a model that cannot take one — the provider would reject
+  // the whole request instead of reading the text around it.
+  const { model, prompts } = recordingV4LanguageModel();
+  const streamFn = createStreamFn(transportFor(model));
+  for await (
+    const _ of streamFn(
+      imageModel({
+        api: "anthropic-messages",
+        provider: "fake",
+        input: ["text"],
+      }),
+      { messages: [toolResultWithImage()] },
+      undefined,
+    )
+  ) {
+    // drain
+  }
+
+  const prompt = prompts[0] as Array<Record<string, unknown>>;
+  const toolMessage = prompt.find((m) => m.role === "tool")!;
+  const [part] = toolMessage.content as Array<Record<string, unknown>>;
+  assertEquals(part!.output, {
+    type: "text",
+    value: "[image: shot.png (67 bytes)]",
+  });
+  assertEquals(prompt.some((m) => m.role === "user"), false);
+  assertEquals(JSON.stringify(prompt).includes(MINI_PNG_BASE64), false);
 });
 
 /** v2 provider stream parts: finish carries the v2 usage shape. */

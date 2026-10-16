@@ -1,5 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { languageModelFor, sessionHeadersFor } from "./lang-model.ts";
+import {
+  languageModelFor,
+  sessionHeadersFor,
+  toolResultTakesImages,
+} from "./lang-model.ts";
 import { opencodeGoProvider } from "../models/dev-catalog.ts";
 import { reasoningForceOption } from "./stream.ts";
 import type { Api, Model } from "./types.ts";
@@ -154,4 +158,73 @@ Deno.test("muse-spark actually sends reasoning.effort on the wire", async () => 
     effort: "xhigh",
     summary: "detailed",
   });
+});
+
+Deno.test("toolResultTakesImages follows the transport that carries the result", () => {
+  const gateway = (api: Api, provider: string, baseUrl?: string): Model<Api> =>
+    ({ id: "m", name: "m", api, provider, baseUrl }) as Model<Api>;
+
+  // The native transports map an image part of a tool result onto their
+  // own image form...
+  assertEquals(
+    toolResultTakesImages(
+      gateway("anthropic-messages", "anthropic", "https://api.anthropic.com"),
+    ),
+    true,
+  );
+  assertEquals(
+    toolResultTakesImages(
+      gateway("openai-responses", "opencode-go", "https://opencode.ai/zen/v1"),
+    ),
+    true,
+  );
+  assertEquals(
+    toolResultTakesImages(
+      gateway(
+        "google-generative-ai",
+        "google",
+        "https://generativelanguage.googleapis.com",
+      ),
+    ),
+    true,
+  );
+  assertEquals(
+    toolResultTakesImages(
+      gateway("bedrock-converse-stream", "amazon-bedrock"),
+    ),
+    true,
+  );
+  // ...and so does the compatible factory, which this app builds with
+  // supportsMultiPartToolContent (see compatibleSettings) — the reason a
+  // tool image reaches a gateway's chat model inside the tool message.
+  assertEquals(
+    toolResultTakesImages(
+      gateway("openai-completions", "groq", "https://api.groq.com/openai/v1"),
+    ),
+    true,
+  );
+  // A model without a base URL is served by the official OpenAI chat model
+  // (see isFirstPartyOpenAI), which has no multi-part tool content: the
+  // images follow in a user message instead.
+  assertEquals(
+    toolResultTakesImages(gateway("openai-completions", "openai")),
+    false,
+  );
+  assertEquals(
+    toolResultTakesImages(
+      gateway(
+        "openai-completions",
+        "custom",
+        "https://api.openai.com/v1",
+      ),
+    ),
+    false,
+  );
+  // @ai-sdk/mistral serializes a content output as JSON.
+  assertEquals(
+    toolResultTakesImages(
+      gateway("mistral-conversations", "mistral", "https://api.mistral.ai"),
+    ),
+    false,
+  );
 });

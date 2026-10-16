@@ -23,7 +23,7 @@ import type {
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
-import { sessionHeadersFor } from "./lang-model.ts";
+import { sessionHeadersFor, toolResultTakesImages } from "./lang-model.ts";
 import {
   estimateLlmMessagesTokens,
   estimateTextTokens,
@@ -238,7 +238,20 @@ async function* runStream(
             type: "toolcall_result",
             toolCallId: String(p.toolCallId ?? ""),
             toolName: String(p.toolName ?? ""),
-            content: [{ type: "text" as const, text: output.text }],
+            // The tool's own content again: its text plus any image blocks
+            // the tool returned (read / pdf / browser / computer). The
+            // transcript keeps them all — the UI renders the images under
+            // the tool line, the image analysis of a text-only model reads
+            // them, and the next request is derived from the transcript
+            // (see toCoreMessages).
+            content: [
+              { type: "text" as const, text: output.text },
+              ...output.images.map((image) => ({
+                type: "image" as const,
+                data: image.data,
+                mimeType: image.mimeType,
+              })),
+            ],
             // The details are the UI's half of the result (the diff badge):
             // the Agent keeps them in the transcript instead of dropping
             // them at the transport.
@@ -649,23 +662,35 @@ function toArgsRecord(input: unknown): Record<string, unknown> {
   return {};
 }
 
+/** One image a tool returned, in the app's own block shape (`data` is
+ * base64, `mimeType` a full media type such as `image/png`). */
+export interface ToolImage {
+  data: string;
+  mimeType: string;
+}
+
 /** What a Lumisca tool's `execute` hands to the AI SDK's tool loop: the
- * transcript text plus the structured details the UI reads (the `+3 -2`
- * diff badge). The SDK carries the whole object on its `tool-result`
- * part, and `toModelOutput` keeps the model-facing result to the text
- * alone —the details are local presentation and must not be sent to the
- * provider. */
+ * transcript text, the structured details the UI reads (the `+3 -2` diff
+ * badge), and the images the tool returned. The SDK carries the whole
+ * object on its `tool-result` part; the transport then splits it for its
+ * two audiences — details for the UI, text and images for the model (see
+ * toModelOutput and toCoreMessages). */
 export interface ToolOutput {
   text: string;
   details: Record<string, unknown>;
+  images: readonly ToolImage[];
 }
 
 /** Read a `tool-result` part's output as {@link ToolOutput}: our own
  * envelope, or the text of any other result (a provider-executed or
- * test-double result carries no details). */
+ * test-double result carries neither details nor images). */
 export function readToolOutput(output: unknown): ToolOutput {
   if (typeof output === "object" && output !== null) {
-    const candidate = output as { text?: unknown; details?: unknown };
+    const candidate = output as {
+      text?: unknown;
+      details?: unknown;
+      images?: unknown;
+    };
     if (
       typeof candidate.text === "string" &&
       typeof candidate.details === "object" &&
@@ -674,10 +699,31 @@ export function readToolOutput(output: unknown): ToolOutput {
       return {
         text: candidate.text,
         details: candidate.details as Record<string, unknown>,
+        images: toolImages(candidate.images),
       };
     }
   }
-  return { text: outputText(output), details: {} };
+  return { text: outputText(output), details: {}, images: [] };
+}
+
+/** The images of a tool result envelope, filtered to the well-formed ones:
+ * a block without base64 data or without a media type would only fail
+ * deeper in the provider (or render as a broken `<img>`). */
+function toolImages(value: unknown): ToolImage[] {
+  if (!Array.isArray(value)) return [];
+  const images: ToolImage[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const image = entry as { data?: unknown; mimeType?: unknown };
+    if (
+      typeof image.data !== "string" || image.data === "" ||
+      typeof image.mimeType !== "string" || image.mimeType === ""
+    ) {
+      continue;
+    }
+    images.push({ data: image.data, mimeType: image.mimeType });
+  }
+  return images;
 }
 
 /** Normalize a tool result's details to a plain record: a tool that
@@ -687,6 +733,60 @@ function toolDetails(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+/** The model-facing form of a tool result for the SDK's own step
+ * continuation: the text alone, or the SDK's `content` output carrying the
+ * images as file parts (the shape every provider's tool-result conversion
+ * reads). The SDK runs this conversion for every tool call (it builds the
+ * step's response messages from it); the next request Lumisca sends is not
+ * that object but the transport's own conversion (see toCoreMessages), so
+ * this only has to reflect the tool's result faithfully. */
+function toolModelOutput(output: ToolOutput) {
+  if (output.images.length === 0) {
+    return { type: "text" as const, value: output.text };
+  }
+  return {
+    type: "content" as const,
+    value: [
+      { type: "text" as const, text: output.text },
+      ...output.images.map(imageFilePart),
+    ],
+  };
+}
+
+/** One image block as the SDK's file part. This is the current image shape
+ * (`{ type: "image" }` is deprecated and logs a warning on every request
+ * that carries an image); the tagged `data` payload keeps the explicit
+ * media type instead of a `data:` URL the provider has to parse. */
+function imageFilePart(image: { data: string; mimeType: string }) {
+  return {
+    type: "file" as const,
+    mediaType: image.mimeType,
+    data: { type: "data" as const, data: image.data },
+  };
+}
+
+/** The tool-result output for one provider: the text alone, or the SDK's
+ * `content` output when that provider's tool message can carry the images
+ * (see {@link toolResultTakesImages}). */
+function toolResultOutput(
+  value: string,
+  images: readonly ToolImage[],
+  isError: boolean,
+  takesImages: boolean,
+) {
+  if (isError) return { type: "error-text" as const, value };
+  if (images.length === 0 || !takesImages) {
+    return { type: "text" as const, value };
+  }
+  return {
+    type: "content" as const,
+    value: [
+      { type: "text" as const, text: value },
+      ...images.map(imageFilePart),
+    ],
+  };
 }
 
 /** Render an SDK tool `output` (whatever the execute function returned)
@@ -717,6 +817,28 @@ function toCoreMessages(
   const out: ModelMessage[] = [];
   const requiresReasoningContent =
     model.compat?.requiresReasoningContentOnAssistantMessages === true;
+  // Tool images the provider's tool message cannot carry (see
+  // toolResultTakesImages): they are handed over in one user message after
+  // the tool results they belong to. Buffered until the run of tool results
+  // ends, so a turn that called several tools in parallel keeps its tool
+  // messages contiguous — providers read them as the direct answer to the
+  // assistant turn, not as a sequence a user message may interrupt.
+  let queuedImages: Array<{ toolName: string; images: ToolImage[] }> = [];
+  const flushImages = () => {
+    if (queuedImages.length === 0) return;
+    out.push({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: queuedImages.map((entry) => `[image from ${entry.toolName}]`)
+            .join("\n"),
+        },
+        ...queuedImages.flatMap((entry) => entry.images.map(imageFilePart)),
+      ],
+    });
+    queuedImages = [];
+  };
   for (const message of messages) {
     if (message.role === "toolResult") {
       // Tool results: Vercel v7 expects role "tool" with ToolResultPart[]
@@ -724,26 +846,46 @@ function toCoreMessages(
       const toolCallId = String(m.toolCallId ?? "");
       const toolName = String(m.toolName ?? "");
       const isError = m.isError === true;
-      const text = typeof m.content === "object" && Array.isArray(m.content)
-        ? (m.content as Array<Record<string, unknown>>)
+      const blocks = typeof m.content === "object" && Array.isArray(m.content)
+        ? m.content as Array<Record<string, unknown>>
+        : [];
+      const text = blocks.length > 0
+        ? blocks
           .filter((b) => b.type === "text")
           .map((b) => String(b.text ?? ""))
           .join("\n")
         : String(m.content ?? "");
+      // The tool's images only travel to a model that can see them. For any
+      // other model the image analysis already replaced them (see
+      // agent/image-analysis.ts); a block that survived a failed analysis
+      // must not be sent — the provider would reject the picture it cannot
+      // accept instead of reading the text around it.
+      const images = (model.input ?? []).includes("image")
+        ? toolImages(blocks.filter((b) => b.type === "image"))
+        : [];
+      const takesImages = !isError && toolResultTakesImages(model);
       out.push({
         role: "tool",
         content: [{
           type: "tool-result",
           toolCallId,
           toolName,
-          output: {
-            type: isError ? "error-text" : "text",
-            value: text || "Tool completed.",
-          },
+          output: toolResultOutput(
+            text || "Tool completed.",
+            images,
+            isError,
+            takesImages,
+          ),
         }],
       });
+      if (images.length > 0 && !takesImages) {
+        queuedImages.push({ toolName, images });
+      }
       continue;
     }
+    // A non-tool message ends the run of tool results: the images that
+    // still have to follow go out now, still right behind them.
+    flushImages();
     if (typeof message.content === "string") {
       out.push({
         role: message.role,
@@ -768,10 +910,7 @@ function toCoreMessages(
         parts.push({ type: "reasoning", text: block.thinking });
         hasReasoningContent ||= block.thinking.length > 0;
       } else if (block.type === "image") {
-        parts.push({
-          type: "image",
-          image: `data:${block.mimeType};base64,${block.data}`,
-        });
+        parts.push(imageFilePart(block));
       }
     }
     for (const block of message.content as unknown[]) {
@@ -801,6 +940,9 @@ function toCoreMessages(
       out.push({ role: message.role, content: parts as VercelUserParts });
     }
   }
+  // A transcript that ends on tool results (the regular shape of a turn
+  // that is about to continue) still owes their images.
+  flushImages();
   return out;
 }
 
@@ -856,16 +998,25 @@ function toExecutableToolSet(
               .map((c) => c.text)
               .join("\n"),
             details: toolDetails(result.details),
+            // Image blocks stay in the envelope (base64) instead of being
+            // flattened away here: the transcript keeps them for the UI and
+            // the image analysis, and the model gets them back as image
+            // parts (see toolModelOutput and toCoreMessages).
+            images: result.content
+              .filter((c): c is {
+                type: "image";
+                data: string;
+                mimeType: string;
+              } => c.type === "image" && c.data !== "" && c.mimeType !== "")
+              .map((c) => ({ data: c.data, mimeType: c.mimeType })),
           };
         },
         // The two audiences of a tool result are separated here: the part
         // above carries the details for the UI, this conversion decides
-        // what the provider sees (the text alone —the details would be
-        // noise in the prompt).
-        toModelOutput: ({ output }: { output?: unknown }) => ({
-          type: "text" as const,
-          value: readToolOutput(output).text,
-        }),
+        // what the model sees (the text, plus the tool's images — the
+        // details would be noise in the prompt).
+        toModelOutput: ({ output }: { output?: unknown }) =>
+          toolModelOutput(readToolOutput(output)),
       } as never);
     } else {
       set[t.name] = tool({ description: t.description, inputSchema } as never);
