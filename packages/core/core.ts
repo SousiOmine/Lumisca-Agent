@@ -247,7 +247,7 @@ export class LumiscaCore {
       visuals: this.visuals,
       // Resolved lazily (open) so the circular wiring stays one-way:
       // the pool references the service, the service references the pool
-      // via the injected applySessionChange / agentMcpStatus below.
+      // via the injected applyMcpConfigChange / agentMcpStatus below.
       loadMergedMcp: (workspace) => this.mcp.loadMergedConfig(workspace),
       requireWorkspace: (id) => this.requireWorkspace(id),
       emit: (event) => this.emit(event),
@@ -262,8 +262,8 @@ export class LumiscaCore {
       agentMcpStatus: (sessionId) =>
         this.pool.get(sessionId)?.getMcpStatus() ?? null,
       requireWorkspace: (id) => this.requireWorkspace(id),
-      applySessionChange: (sessions, mutate) =>
-        this.pool.applyChange(sessions, mutate),
+      applyMcpConfigChange: (sessions, mutate) =>
+        this.pool.applyMcpConfigChange(sessions, mutate),
       refreshSessionMcp: (sessions) => this.pool.refreshMcp(sessions),
     });
     this.workspaces = overrides.workspaces ??

@@ -53,9 +53,12 @@ export interface McpServiceDeps {
   /** Live MCP status of one open session's agent (null when not open). */
   agentMcpStatus(sessionId: string): McpServerStatus[] | null;
   requireWorkspace(id: string): Workspace;
-  /** Guarded session mutation: refuses while any listed session is
-   * streaming, applies the mutation, then rebuilds the agents. */
-  applySessionChange(sessions: SessionInfo[], mutate: () => void): void;
+  /** Apply an MCP config change to the listed sessions: the mutation always
+   * runs (a config must never be lost to a running session), and each open
+   * session is brought onto the new config — an idle one by a rebuild, a
+   * streaming one by reconnecting its MCP servers in place. See
+   * SessionPool.applyMcpConfigChange. */
+  applyMcpConfigChange(sessions: SessionInfo[], mutate: () => void): void;
   /** Rebuild the sessions' MCP attachments from scratch (fresh connections
    * and tool discovery), for a change no config write expresses — a
    * completed OAuth sign-in. Also refuses while streaming. */
@@ -131,13 +134,16 @@ export class McpService {
     return this.toMcpInfo(config, statuses, exists);
   }
 
-  /** Replace the app-level MCP config (validating first), then rebuild
-   * every open session so the new tools take effect. Throws `conflict`
-   * while any session is streaming. */
+  /** Replace the app-level MCP config (validating first), then bring every
+   * open session onto it so the new tools take effect: an idle session is
+   * rebuilt, a streaming one has its servers reconnected in place (its run
+   * keeps the tools it started with — see
+   * SessionPool.applyMcpConfigChange). Never refuses: the config is stored
+   * even while sessions run. */
   setAppMcpConfig(text: string): McpInfo {
     this.validateConfig(text, APP_MCP_SOURCE);
     const sessions = this.deps.listSessions();
-    this.deps.applySessionChange(sessions, () => {
+    this.deps.applyMcpConfigChange(sessions, () => {
       this.deps.settings.set(APP_MCP_SETTINGS_KEY, text);
     });
     return this.getAppMcpInfo();
@@ -173,9 +179,10 @@ export class McpService {
     );
   }
 
-  /** Replace the workspace's `.mcp.json` (validating first), then rebuild
-   * every session in the workspace so the new tools take effect. Throws
-   * `conflict` while any session is streaming. */
+  /** Replace the workspace's `.mcp.json` (validating first), then bring the
+   * workspace's open sessions onto it; see applyMcpConfigChange for how a
+   * running one is handled. Never refuses: the file is written even while
+   * sessions run. */
   setMcpConfig(workspaceId: string, text: string): McpInfo {
     const workspace = this.deps.requireWorkspace(workspaceId);
     const root = workspace.folders[0];
@@ -183,7 +190,7 @@ export class McpService {
     const filePath = join(root, MCP_CONFIG_FILE);
     this.validateConfig(text, filePath);
     const sessions = this.deps.listSessions(workspaceId);
-    this.deps.applySessionChange(sessions, () => {
+    this.deps.applyMcpConfigChange(sessions, () => {
       // Atomic write: a temp file + rename keeps the config valid even if
       // the process dies halfway.
       atomicWriteTextFileSync(filePath, text);

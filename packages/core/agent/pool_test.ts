@@ -17,10 +17,19 @@ interface TeardownLog {
   tasksClosed: number;
   backgroundKilled: number;
   mcpClosed: number;
+  /** In-place MCP reconnects (a config change applied to a running
+   * session, which may not be rebuilt). */
+  mcpRefreshed: number;
 }
 
 function log(): TeardownLog {
-  return { agentClosed: 0, tasksClosed: 0, backgroundKilled: 0, mcpClosed: 0 };
+  return {
+    agentClosed: 0,
+    tasksClosed: 0,
+    backgroundKilled: 0,
+    mcpClosed: 0,
+    mcpRefreshed: 0,
+  };
 }
 
 const WORKSPACE: Workspace = {
@@ -102,6 +111,14 @@ function makePool(options: { streaming?: boolean } = {}): {
         },
       } as unknown as SessionResources["mcp"];
       return resources.agent;
+    },
+    refreshMcp(
+      _session: SessionInfo,
+      _workspace: Workspace,
+      _resources: SessionResources,
+      _isCurrentAttachment: unknown,
+    ): void {
+      teardown.mcpRefreshed++;
     },
   } as unknown as AgentFactory;
   return { pool: new SessionPool(deps, factory), teardown };
@@ -194,6 +211,50 @@ Deno.test("pool.applyChange with no open sessions only runs the mutation", () =>
   });
   assertEquals(mutated, true);
   assertEquals(teardown.agentClosed, 0);
+});
+
+Deno.test("pool.applyMcpConfigChange stores while a session streams", () => {
+  const { pool, teardown } = makePool({ streaming: true });
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  let mutated = false;
+  pool.applyMcpConfigChange([session], () => {
+    mutated = true;
+  });
+  // The config is the user's edit: a running session must not cost them the
+  // save...
+  assertEquals(mutated, true);
+  // ...and its agent is never replaced mid-run (that would duplicate the
+  // rows of the run in flight): its MCP servers are reconnected in place.
+  assertEquals(teardown.agentClosed, 0);
+  assertEquals(teardown.mcpRefreshed, 1);
+});
+
+Deno.test("pool.applyMcpConfigChange rebuilds idle sessions", () => {
+  const { pool, teardown } = makePool();
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  let mutated = false;
+  pool.applyMcpConfigChange([session], () => {
+    mutated = true;
+  });
+  assertEquals(mutated, true);
+  // Nothing to lose here: the agent is rebuilt against the new config.
+  assertEquals(teardown.agentClosed, 1);
+  assertEquals(teardown.mcpRefreshed, 0);
+});
+
+Deno.test("pool.applyMcpConfigChange leaves closed sessions alone", () => {
+  const { pool, teardown } = makePool();
+  let mutated = false;
+  pool.applyMcpConfigChange([sessionInfo("closed")], () => {
+    mutated = true;
+  });
+  assertEquals(mutated, true);
+  assertEquals(teardown.agentClosed, 0);
+  assertEquals(teardown.mcpRefreshed, 0);
 });
 
 Deno.test("pool.setThinkingLevel ignores a closed session", () => {

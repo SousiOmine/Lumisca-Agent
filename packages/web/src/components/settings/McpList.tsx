@@ -111,6 +111,7 @@ export function McpList() {
       <McpDetail
         initial={editing}
         existingNames={config?.servers.map((s) => s.name) ?? []}
+        saveError={error}
         onSave={(server) => {
           const servers = config
             ? [

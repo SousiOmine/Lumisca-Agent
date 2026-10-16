@@ -352,6 +352,44 @@ export class SessionPool {
     }
   }
 
+  /** Apply an MCP config change to the listed sessions. The mutation runs
+   * unconditionally: the config is the user's edit, and refusing to store it
+   * because some session happens to be running would lose that edit — the
+   * sessions follow the config, never the other way round. Every open
+   * session is then brought onto it in the same synchronous turn: an idle
+   * one is rebuilt (a fresh agent built from the new config), while a
+   * streaming one cannot be (replacing its agent would duplicate the rows of
+   * the run in flight, see rebuild) and has its MCP servers reconnected in
+   * place instead — its run keeps the tools it started with, and the tools
+   * it can discover follow the new config. */
+  applyMcpConfigChange(sessions: SessionInfo[], mutate: () => void): void {
+    mutate();
+    for (const session of sessions) {
+      const resources = this.sessions.get(session.id);
+      // A session that is not open picks the config up when it is opened.
+      if (resources?.agent === undefined) continue;
+      if (resources.agent.isStreaming) {
+        this.refreshMcpInPlace(session, resources);
+        continue;
+      }
+      this.rebuild(session);
+    }
+  }
+
+  /** Hand one streaming session its current MCP config without touching its
+   * agent (see AgentFactory.refreshMcp). */
+  private refreshMcpInPlace(
+    session: SessionInfo,
+    resources: SessionResources,
+  ): void {
+    this.factory.refreshMcp(
+      session,
+      this.deps.requireWorkspace(session.workspaceId),
+      resources,
+      (attachment) => this.sessions.get(session.id)?.mcp === attachment,
+    );
+  }
+
   /** Rebuild the listed sessions' MCP attachments from scratch: a fresh
    * manager reconnects every server and re-discovers its tools. Needed when
    * what changed is not the config but the credentials — an interactive

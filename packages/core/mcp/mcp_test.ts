@@ -481,7 +481,7 @@ Deno.test("loadMergedConfig merges app, workspace and plugin MCP servers", async
     listSessions: () => [],
     agentMcpStatus: () => null,
     requireWorkspace: () => workspace,
-    applySessionChange: () => {},
+    applyMcpConfigChange: (_sessions, mutate) => mutate(),
     refreshSessionMcp: () => {},
   });
 
@@ -536,7 +536,7 @@ function makeTestService(): McpService {
     requireWorkspace: () => {
       throw new Error("not used");
     },
-    applySessionChange: () => {},
+    applyMcpConfigChange: (_sessions, mutate) => mutate(),
     refreshSessionMcp: () => {},
   });
 }

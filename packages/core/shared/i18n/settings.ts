@@ -542,6 +542,10 @@ export const settings = {
     en:
       "The MCP config file has been updated externally. Overwrite with the current contents?",
   },
+  "settings.mcp.saveFailed": {
+    ja: "保存できませんでした: {error}",
+    en: "Could not save: {error}",
+  },
   "settings.mcp.deleteConfirm": {
     ja: "MCPサーバー「{name}」を削除しますか？",
     en: 'Delete MCP server "{name}"?',

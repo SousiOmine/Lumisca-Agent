@@ -138,6 +138,10 @@ export class SessionAgent {
    * tools land in the session's tool registry once discovery finished. */
   private mcpAttachment: McpAttachment | null = null;
   private mcpAttached = false;
+  /** Which attachment owns the discovery in flight: a swap
+   * (replaceMcpAttachment) bumps it, so the tools of an attachment the
+   * agent no longer holds can never be merged into the registry. */
+  private mcpGeneration = 0;
   /** The session's tool registry (owned by the session pool): holds every
    * discoverable tool (MCP tools, browser-lab tools, future extensions)
    * whose definitions stay out of the LLM context. Null when the session
@@ -900,7 +904,43 @@ export class SessionAgent {
   attachMcp(attachment: McpAttachment): Promise<void> {
     if (this.mcpAttached) return this.mcpReady;
     this.mcpAttached = true;
+    return this.adoptMcpAttachment(attachment);
+  }
+
+  /** Move this agent to the session's current MCP attachment after a config
+   * change the pool could not express as a rebuild (the session is
+   * streaming, and replacing its agent would corrupt the run). The agent —
+   * and with it the run in flight — stays exactly as it is: only what the
+   * session can discover changes, because the attachment's tools are the
+   * session's shared registry, never the agent's own tool set. The previous
+   * attachment's tools leave the registry with the servers that served
+   * them, and the new ones are merged in once discovery finished, so both
+   * the running run and every later one find them through the tool_search /
+   * tool_call pair (which reads the registry live). The status the settings
+   * UI reads follows the new attachment. */
+  replaceMcpAttachment(attachment: McpAttachment): void {
+    const previous = this.mcpAttachment;
+    if (previous !== null && previous !== attachment) {
+      const registry = this.toolRegistry;
+      if (registry !== null) {
+        // The tools of the servers that just went away must not survive
+        // their processes.
+        registry.removeTools(previous.getTools().map((tool) => tool.name));
+      }
+    }
+    this.mcpAttached = true;
+    this.adoptMcpAttachment(attachment);
+  }
+
+  /** Adopt an MCP attachment: hold it for the status readers, gate prompts
+   * on its discovery, and merge its tools into the session's shared
+   * registry when it finishes. Supersedes any earlier discovery — a
+   * callback whose attachment the agent no longer holds adds nothing, since
+   * that attachment's servers may already be gone (see
+   * replaceMcpAttachment). */
+  private adoptMcpAttachment(attachment: McpAttachment): Promise<void> {
     this.mcpAttachment = attachment;
+    const generation = ++this.mcpGeneration;
     // The pool may already have seeded the registry with browser-lab
     // tools — attach the search/call pair on every path, not just when
     // discovery yields MCP tools, so they are searchable from the first
@@ -908,6 +948,8 @@ export class SessionAgent {
     this.ensureSearchTools();
     if (attachment.done) {
       this.addMcpTools(attachment.getTools());
+      this.mcpReady = Promise.resolve();
+      this.mcpReadyDone = true;
       return Promise.resolve();
     }
     // Nothing to discover (no servers configured): keep the fast path so
@@ -915,14 +957,17 @@ export class SessionAgent {
     // conflict check relies on startPrompt reaching the agent loop
     // synchronously).
     if (attachment.config.servers.length === 0) {
+      this.mcpReady = Promise.resolve();
+      this.mcpReadyDone = true;
       return Promise.resolve();
     }
     this.mcpReadyDone = false;
     this.mcpReady = attachment.ready.then((tools) => {
-      if (this.closed) return;
+      if (this.closed || generation !== this.mcpGeneration) return;
       this.addMcpTools(tools);
     }).finally(() => {
-      this.mcpReadyDone = true;
+      // A newer attachment's discovery owns the flag from here on.
+      if (generation === this.mcpGeneration) this.mcpReadyDone = true;
     });
     return this.mcpReady;
   }

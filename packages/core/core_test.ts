@@ -1797,6 +1797,25 @@ async function waitForSearchTools(
   }
 }
 
+/** What the session's tool_search currently offers — the surface the model
+ * itself uses to find MCP tools (empty when the pair is not attached). */
+async function searchListing(
+  agent: NonNullable<ReturnType<LumiscaCore["getAgent"]>>,
+  query = "",
+): Promise<string> {
+  const search = agent.agent.state.tools.find((t) => t.name === TOOL_SEARCH);
+  if (search === undefined) return "";
+  const result = await search.execute(
+    "search",
+    query === "" ? {} : { query },
+    undefined,
+  );
+  return result.content
+    .filter((part) => part.type === "text")
+    .map((part) => (part as { text: string }).text)
+    .join("\n");
+}
+
 Deno.test("app-level MCP config persists and applies to sessions", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
@@ -1872,6 +1891,111 @@ Deno.test("app-level MCP config persists and applies to sessions", async () => {
     assertEquals(core.listSettings().has("mcp_servers"), false);
   } finally {
     core.close();
+    for (let i = 0; i < 20; i++) {
+      try {
+        await removeDirRetry(root);
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  }
+});
+
+Deno.test("an MCP config saved while a session streams reaches that session", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const root = await makeRealTempDir("lumisca-core-");
+  const fakeServer = join(
+    import.meta.dirname!,
+    "..",
+    "..",
+    "scripts",
+    "fake-mcp-server.ts",
+  );
+  const ws = await core.createWorkspace("ws", [root]);
+  try {
+    // A session with no MCP servers at all: nothing in its registry can
+    // explain the discovery checked below.
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const agent = core.getAgent(session.id)!;
+    await waitForSearchTools(agent);
+    assertEquals(
+      (await searchListing(agent)).includes("mcp__"),
+      false,
+      "the session must start without MCP tools",
+    );
+
+    // A slow answer keeps the session streaming while the config is saved —
+    // the situation in which the save used to answer `conflict` (refused by
+    // the streaming session) and silently dropped the edit.
+    faux.setResponses([
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return fauxAssistantMessage("slow reply");
+      },
+    ]);
+    core.startPrompt(session.id, "go");
+    while (!agent.isStreaming) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const info = await core.setAppMcpConfig(
+      JSON.stringify({
+        mcpServers: {
+          fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+        },
+      }),
+    );
+    assertEquals(info.servers.map((s) => s.name), ["fake"]);
+    assertEquals(core.getAppMcpInfo().exists, true);
+    // Saving did not disturb the run: the same agent, still streaming.
+    assertEquals(core.getAgent(session.id), agent);
+    assertEquals(agent.isStreaming, true);
+    // The new server is this session's (the status is read from its
+    // attachment, which the save swapped in place).
+    assertEquals(agent.getMcpStatus()?.map((s) => s.name), ["fake"]);
+
+    // Its tools are discoverable without a rebuild: the running session's
+    // tool_search reads the session's registry, which the reconnect filled.
+    let listing = "";
+    for (let i = 0; i < 100; i++) {
+      listing = await searchListing(agent);
+      if (listing.includes("mcp__fake__echo")) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert(
+      listing.includes("mcp__fake__echo"),
+      `the new server's tools must be discoverable, got: ${listing}`,
+    );
+    while (agent.isStreaming) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    // A run started afterwards — in the same session, no restart and no
+    // reopen — calls the new tool.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Echoing."),
+        fauxToolCall(TOOL_CALL, {
+          name: "mcp__fake__echo",
+          args: { text: "hi" },
+        }),
+      ]),
+      fauxAssistantMessage("Done."),
+    ]);
+    await promptSession(core, session.id, "Echo hi");
+    const toolResults = agent.messages.filter((m) => m.role === "toolResult");
+    const last = toolResults.at(-1) as {
+      content: Array<{ text: string }>;
+    };
+    assertEquals(last.content[0]!.text, "[mcp__fake__echo]\necho:hi");
+  } finally {
+    core.close();
+    // The MCP server process may hold the directory briefly on Windows.
     for (let i = 0; i < 20; i++) {
       try {
         await removeDirRetry(root);

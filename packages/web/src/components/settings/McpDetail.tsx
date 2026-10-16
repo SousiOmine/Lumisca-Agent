@@ -69,11 +69,17 @@ interface McpTestState {
 export function McpDetail({
   initial,
   existingNames,
+  saveError,
   onSave,
   onCancel,
 }: {
   initial: McpServerInfo | null;
   existingNames: string[];
+  /** The list's last save failure, if any. The form is where save was
+   * pressed, so it is where the reason has to show: the list's own error
+   * line is out of sight while this view is up, and a save that fails
+   * silently looks like a button that does nothing. */
+  saveError: string | null;
   onSave: (server: McpServerInfo) => void;
   onCancel: () => void;
 }) {
@@ -286,6 +292,12 @@ export function McpDetail({
         )}
 
         {error && <p className="error-text">{error}</p>}
+
+        {saveError !== null && (
+          <p className="error-text" style={{ margin: 0 }}>
+            {t("settings.mcp.saveFailed", { error: saveError })}
+          </p>
+        )}
 
         {result?.status === "ok" && (
           <div style={{ fontSize: 12.5 }}>

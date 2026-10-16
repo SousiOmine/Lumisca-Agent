@@ -20,7 +20,7 @@ function makeService(): McpService {
     requireWorkspace: () => {
       throw new Error("not used");
     },
-    applySessionChange: () => {},
+    applyMcpConfigChange: (_sessions, mutate) => mutate(),
     refreshSessionMcp: () => {},
   });
 }

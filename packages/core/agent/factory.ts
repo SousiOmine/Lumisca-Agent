@@ -107,32 +107,13 @@ export class AgentFactory {
       // with an unchanged config reuses both.
       resources.registry = new ToolRegistry();
       if (previous !== undefined) void previous.manager.close();
-      const emitError = (message: string) => {
-        resources.lastError = message;
-        this.deps.emit({
-          type: "session_error",
-          sessionId: session.id,
-          message,
-        });
-      };
-      for (const message of mergedMcp.errors) emitError(message);
-      const attachment = mcp;
-      void attachment.ready.then(() => {
-        // The session may have been closed or rebuilt (with a new
-        // attachment) while discovery ran; only report for the attachment
-        // the session still holds.
-        if (!isCurrentAttachment(attachment)) return;
-        const failed = attachment.manager
-          .getStatus()
-          .filter((s) => s.status === "error");
-        if (failed.length > 0) {
-          emitError(
-            `MCP servers failed: ${
-              failed.map((s) => `${s.name}: ${s.error}`).join("; ")
-            }`,
-          );
-        }
-      });
+      this.reportMcpProblems(
+        session.id,
+        resources,
+        mergedMcp,
+        mcp,
+        isCurrentAttachment,
+      );
     }
     // One tool registry per session, created with the attachment above and
     // reused across agent rebuilds so the session's discoverable tools
@@ -410,5 +391,89 @@ export class AgentFactory {
     agent.attachMcp(mcp);
     resources.agent = agent;
     return agent;
+  }
+
+  /** Move a session to its current MCP config without rebuilding its agent
+   * (the session is streaming, and replacing the agent would corrupt its
+   * run). The attachment is swapped for a fresh one — new child processes,
+   * new discovery — and the agent adopts it, so the servers behind
+   * tool_search / tool_call and the status the settings UI reads follow the
+   * new config while the run keeps the tools it started with. An idle
+   * session is rebuilt instead, which reaches the same wiring through
+   * open. */
+  refreshMcp(
+    session: SessionInfo,
+    workspace: Workspace,
+    resources: SessionResources,
+    isCurrentAttachment: (attachment: McpAttachment) => boolean,
+  ): void {
+    const agent = resources.agent;
+    if (agent === undefined) return;
+    const merged = this.deps.loadMergedMcp(workspace);
+    const previous = resources.mcp;
+    // An unchanged config is no reason to respawn every server process.
+    if (
+      previous !== undefined && sameMcpConfig(previous.config, merged.config)
+    ) {
+      return;
+    }
+    const attachment = new McpAttachment(
+      new McpManager(
+        merged.config,
+        workspace.folders[0] ?? Deno.cwd(),
+        this.deps.mcpOAuth,
+      ),
+      merged.config,
+    );
+    resources.mcp = attachment;
+    if (previous !== undefined) void previous.manager.close();
+    this.reportMcpProblems(
+      session.id,
+      resources,
+      merged,
+      attachment,
+      isCurrentAttachment,
+    );
+    agent.replaceMcpAttachment(attachment);
+    // The sub-agents share the session's attachment and registry, so the
+    // running ones are re-pointed at the new tools too (see TaskHub.setMcp).
+    const registry = resources.registry;
+    if (registry !== undefined) resources.tasks?.setMcp(attachment, registry);
+  }
+
+  /** Report an MCP source's problems on the session: the merged config's
+   * own errors right away, and the servers that failed to start once
+   * discovery finished (a `session_error` event, remembered for clients
+   * that do not read the event stream). The late report is guarded so only
+   * an attachment the session still holds may speak for it. Shared by open
+   * (agent rebuild) and refreshMcp (in-place reconnect). */
+  private reportMcpProblems(
+    sessionId: string,
+    resources: SessionResources,
+    merged: { config: McpConfig; errors: string[] },
+    attachment: McpAttachment,
+    isCurrentAttachment: (attachment: McpAttachment) => boolean,
+  ): void {
+    const emitError = (message: string) => {
+      resources.lastError = message;
+      this.deps.emit({ type: "session_error", sessionId, message });
+    };
+    for (const message of merged.errors) emitError(message);
+    void attachment.ready.then(() => {
+      // The session may have been closed or rebuilt (with a new
+      // attachment) while discovery ran; only report for the attachment
+      // the session still holds.
+      if (!isCurrentAttachment(attachment)) return;
+      const failed = attachment.manager
+        .getStatus()
+        .filter((s) => s.status === "error");
+      if (failed.length > 0) {
+        emitError(
+          `MCP servers failed: ${
+            failed.map((s) => `${s.name}: ${s.error}`).join("; ")
+          }`,
+        );
+      }
+    });
   }
 }
