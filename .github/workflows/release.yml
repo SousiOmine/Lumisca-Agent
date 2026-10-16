@@ -10,6 +10,16 @@ name: Release
 # pipeline. Both distributions carry the same version, so a tag ships them
 # together.
 #
+# The desktop app updates from this release too, and its manifest must not
+# send it through the GitHub *API*: tauri-action points every platform at
+# `api.github.com/repos/.../releases/assets/<id>`, where an unauthenticated
+# request is rejected without a `User-Agent` header and capped at 60 per
+# hour per IP — over either limit GitHub answers 403, which the app reports
+# as a failed download while the update check (a `github.com` CDN URL) still
+# succeeds. The `rewrite-updater-json` job rewrites those URLs to the
+# assets' public download links — the same link shape the server packages
+# use — before the draft may be published.
+#
 # The standalone server updates itself from this release: each server
 # package is signed with the same key as the desktop artifacts and published
 # next to `latest-server-<target>.json`, the manifest a running server
@@ -28,9 +38,14 @@ name: Release
 #
 # Operation notes (learned from v0.6.1):
 # - Do NOT publish the draft release until all matrix jobs (three desktop
-#   bundles + the two server packages) are green. Publishing early freezes
-#   a partial `latest.json` (updater manifest) and offers a release whose
-#   server archives are still missing.
+#   bundles + the two server packages) are green AND the
+#   `rewrite-updater-json` job has rewritten `latest.json`. Publishing early
+#   freezes a partial `latest.json` (updater manifest) and offers a release
+#   whose server archives are still missing.
+# - Rerunning only the desktop matrix jobs (a rerun of failed jobs after a
+#   bundle failed) re-uploads tauri-action's `latest.json`, undoing that
+#   rewrite. Rerun the whole workflow, or dispatch the
+#   `rewrite-updater-json` workflow on the tag.
 # - The draft release is created exactly once by the `create-release` job
 #   and the matrix jobs upload into it via `releaseId`. Letting every
 #   matrix job get-or-create the release by tag races and produces two
@@ -144,6 +159,24 @@ jobs:
           generateReleaseNotes: true
           args: --bundles ${{ matrix.bundles }}
           updaterJsonPreferNsis: true
+
+  rewrite-updater-json:
+    # The manifest tauri-action just uploaded points every platform at the
+    # GitHub API asset endpoint, which an installed app cannot reliably
+    # fetch (see the header). This runs after all three desktop jobs merged
+    # their platform entries into `latest.json` and rewrites those URLs to
+    # the assets' public download links before anyone can publish the
+    # draft — a published manifest with API URLs offers an update that
+    # always fails to download, as v0.9.0 did.
+    #
+    # The workflow is also dispatchable on its own, to rewrite the manifest
+    # of an already published release.
+    needs: build-and-release
+    permissions:
+      contents: write
+    uses: ./.github/workflows/rewrite-updater-json.yml
+    with:
+      tag: ${{ github.ref_name }}
 
   build-server:
     # The server-only distribution: the same compiled server the desktop

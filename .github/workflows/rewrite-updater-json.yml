@@ -1,0 +1,70 @@
+name: Rewrite updater manifest
+
+# Point the desktop updater manifest (`latest.json`) at the public download
+# links of the release's assets instead of the GitHub *API* asset URLs
+# tauri-action writes into it.
+#
+# The API endpoint (`api.github.com/repos/.../releases/assets/<id>`) is not
+# something an installed app can rely on: unauthenticated requests are
+# rejected without a `User-Agent` header and capped at 60 per hour per IP,
+# and over either limit GitHub answers 403. The desktop app shows that as
+# "ダウンロードに失敗しました: Download request failed with status: 403
+# Forbidden" while the update *check* — which reads the manifest through the
+# `github.com` CDN — keeps succeeding. v0.9.0 shipped that way and the
+# update could not be downloaded from a shared egress IP at all.
+#
+# The `releases/download/<tag>/<name>` link carries neither limit, so the
+# manifest is rewritten instead of downloaded through the API. The release
+# workflow calls this workflow right after the desktop matrix uploaded the
+# manifest, and dispatching it by hand repairs an already published release:
+# one that predates the rewrite (v0.9.0), or one whose desktop jobs were
+# rerun after publishing (they upload tauri-action's manifest again and
+# would undo the rewrite). Nothing but the platform URLs changes — the
+# version, notes and signatures are re-uploaded as tauri-action wrote them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag whose latest.json to rewrite (e.g. v0.9.0)
+        required: true
+        type: string
+
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag whose latest.json to rewrite
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # The release's own asset list is the authority for both URLs: a
+      # manifest URL is rewritten only when it is an asset's API URL, and
+      # accepted as-is only when it is that asset's public download URL.
+      # Anything else fails the run instead of shipping a manifest whose
+      # downloads would break.
+      - name: Rewrite the manifest and upload it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          mkdir -p dist/updater
+          gh release view "$TAG" --json assets --jq .assets > dist/updater/assets.json
+          gh release download "$TAG" -p latest.json -D dist/updater --clobber
+          deno run --allow-read --allow-write scripts/rewrite-updater-json.ts \
+            --manifest dist/updater/latest.json \
+            --assets dist/updater/assets.json \
+            --out dist/updater/latest.json
+          gh release upload "$TAG" dist/updater/latest.json --clobber
