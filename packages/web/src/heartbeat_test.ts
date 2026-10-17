@@ -20,20 +20,35 @@ Deno.test("heartbeat: silence past the deadline reports the socket dead once", a
   watchdog.stop();
 });
 
-Deno.test("heartbeat: a beating socket is never reported dead", async () => {
+Deno.test("heartbeat: a beating socket is never reported dead", () => {
+  // The deadline runs on the injected clock, not on real timers: a loaded
+  // runner stalls the event loop for tens of milliseconds, and the
+  // real-timer version of this test reported a live socket as dead on CI
+  // (windows-latest, v0.9.1). Driving the clock also makes the test
+  // stricter: a `beat()` that stopped moving the deadline is caught by the
+  // same run, because the next judgement steps past it.
   let dead = 0;
+  let now = 0;
   const watchdog = createHeartbeatWatchdog({
     onDead: () => dead++,
     timeoutMs: 30,
-    checkMs: 5,
+    // Never fires: the test calls check() itself, so no wall-clock timer
+    // can slip a judgement between two beats.
+    checkMs: 3_600_000,
     isHidden: () => false,
+    now: () => now,
   });
   // Any frame counts, not just heartbeats: a busy stream is alive too.
   for (let i = 0; i < 10; i++) {
-    await sleep(5);
+    now += 20;
+    watchdog.check();
     watchdog.beat();
   }
-  assertEquals(dead, 0);
+  assertEquals(dead, 0, "the beats keep every judgement under the deadline");
+  // The same socket once its frames really stop: still judged.
+  now += 30;
+  watchdog.check();
+  assertEquals(dead, 1);
   watchdog.stop();
 });
 

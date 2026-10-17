@@ -38,11 +38,14 @@ export function createHeartbeatWatchdog(options: {
   checkMs?: number;
   /** Whether the page is hidden right now (defaults to document.hidden). */
   isHidden?: () => boolean;
+  /** Clock override (tests judge the deadline without waiting for it). */
+  now?: () => number;
 }): HeartbeatWatchdog {
   const timeoutMs = options.timeoutMs ?? WS_HEARTBEAT_TIMEOUT_MS;
   const checkMs = options.checkMs ?? WS_HEARTBEAT_CHECK_MS;
   const isHidden = options.isHidden ?? (() => document.hidden);
-  let lastFrameAt = Date.now();
+  const now = options.now ?? Date.now;
+  let lastFrameAt = now();
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -55,7 +58,7 @@ export function createHeartbeatWatchdog(options: {
 
   const check = () => {
     if (stopped || isHidden()) return;
-    if (Date.now() - lastFrameAt < timeoutMs) return;
+    if (now() - lastFrameAt < timeoutMs) return;
     // Fired once: the caller closes the socket, and a second report of the
     // same death would only schedule a redundant reconnect.
     stop();
@@ -66,7 +69,7 @@ export function createHeartbeatWatchdog(options: {
 
   return {
     beat: () => {
-      lastFrameAt = Date.now();
+      lastFrameAt = now();
     },
     check,
     stop,
