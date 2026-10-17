@@ -11,6 +11,7 @@ import {
   COMPACTION_DEFAULT_RESERVE_TOKENS,
   COMPACTION_RESERVE_TOKENS_KEY,
   compactionUsageRatio,
+  inputBudgetTokens,
   parseNonNegativeIntSetting,
   summarizeContextUsage,
 } from "@lumisca/core/shared";
@@ -338,8 +339,15 @@ export function ChatView(
   const currentModel = modelsByProvider.get(view.info.modelProvider)?.find(
     (m) => m.id === view.info.modelId,
   );
-  const contextWindow = currentModel?.contextWindow ??
-    view.info.model?.contextWindow;
+  // The meter measures against the prompt budget, not the raw window: a
+  // model that publishes an input cap (models.dev `limit.input`) rejects a
+  // prompt past the cap, and the window counts the completion too.
+  const contextWindow = inputBudgetTokens({
+    contextWindow: currentModel?.contextWindow ??
+      view.info.model?.contextWindow,
+    maxInputTokens: currentModel?.maxInputTokens ??
+      view.info.model?.maxInputTokens,
+  });
   const contextUsage = summary.currentTokens === undefined
     ? undefined
     : { summary, contextWindow };

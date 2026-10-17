@@ -526,6 +526,7 @@ export class ModelManager {
       id: model.id,
       name: model.name,
       contextWindow: model.contextWindow,
+      maxInputTokens: model.maxInputTokens,
       reasoning: model.reasoning,
       input: model.input,
     };

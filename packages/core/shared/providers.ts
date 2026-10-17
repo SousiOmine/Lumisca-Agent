@@ -110,6 +110,10 @@ export interface ModelInfo {
   id: string;
   name: string;
   contextWindow?: number;
+  /** Largest prompt the provider accepts, when the catalog publishes one
+   * (models.dev `limit.input`). Clients narrow the window by it wherever
+   * they budget a prompt (see shared/context-usage.ts inputBudgetTokens). */
+  maxInputTokens?: number;
   reasoning?: boolean;
   input?: string[];
   enabled?: boolean;

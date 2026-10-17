@@ -170,6 +170,24 @@ Deno.test("resolveCompactionBudgets: the threshold sits one reservation below th
   assertEquals(budgets.summaryMaxTokens, Math.floor(16_384 * 0.8));
 });
 
+Deno.test("resolveCompactionBudgets: the threshold hangs off the documented input cap", () => {
+  // models.dev publishes an input cap below the window for some models (the
+  // window counts the completion); the prompt budget is the smaller number.
+  const budgets = resolveCompactionBudgets({
+    ...wideModel(),
+    contextWindow: 1_050_000,
+    maxInputTokens: 922_000,
+  })!;
+  assertEquals(budgets.contextWindow, 922_000);
+  assertEquals(budgets.thresholdTokens, 922_000 - 16_384);
+  // A cap wider than the window never widens the budget.
+  const narrow = resolveCompactionBudgets({
+    ...modelWith(200_000, 8_000),
+    maxInputTokens: 400_000,
+  })!;
+  assertEquals(narrow.contextWindow, 200_000);
+});
+
 Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables compaction", () => {
   const bare: Model<Api> = {
     id: "x",

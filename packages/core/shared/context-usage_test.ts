@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import {
   compactionUsageRatio,
   contextUsageRatio,
+  inputBudgetTokens,
   summarizeContextUsage,
 } from "./context-usage.ts";
 import type { AgentMessage } from "../ai/types.ts";
@@ -33,6 +34,29 @@ Deno.test("contextUsageRatio: the latest turn against the window", () => {
   // A transcript past the window reports above 1 (the meter clamps it).
   const over = summarizeContextUsage([assistant(300_000)]);
   assertEquals(contextUsageRatio(over, 200_000), 1.5);
+});
+
+Deno.test("inputBudgetTokens narrows the window to the published input cap", () => {
+  // The window counts the completion, the cap is what a request may carry:
+  // the budget is the smaller of the two.
+  assertEquals(
+    inputBudgetTokens({ contextWindow: 1_050_000, maxInputTokens: 922_000 }),
+    922_000,
+  );
+  // A cap wider than the window never widens the budget.
+  assertEquals(
+    inputBudgetTokens({ contextWindow: 200_000, maxInputTokens: 922_000 }),
+    200_000,
+  );
+  // Either number alone is enough.
+  assertEquals(inputBudgetTokens({ contextWindow: 200_000 }), 200_000);
+  assertEquals(inputBudgetTokens({ maxInputTokens: 200_000 }), 200_000);
+  // Unusable values are ignored; with neither number there is no budget
+  // (compaction then stays off).
+  assertEquals(inputBudgetTokens({}), undefined);
+  assertEquals(inputBudgetTokens({ contextWindow: 0 }), undefined);
+  assertEquals(inputBudgetTokens({ maxInputTokens: Number.NaN }), undefined);
+  assertEquals(inputBudgetTokens({ contextWindow: -1 }), undefined);
 });
 
 Deno.test("compactionUsageRatio is the point the next check condenses from", () => {

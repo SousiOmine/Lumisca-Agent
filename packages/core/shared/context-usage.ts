@@ -96,9 +96,27 @@ export function summarizeContextUsage(
   };
 }
 
-/** Ratio of the latest turn's context against the window (undefined when
+/** The prompt budget of one model: its context window, narrowed to the
+ * input cap the catalog publishes (`limit.input`). The window counts the
+ * completion as well, so a provider that documents both numbers rejects a
+ * prompt past the input cap (models.dev publishes 922,000 against a
+ * 1,050,000 window for OpenAI's largest models, for example). Compaction,
+ * the output clamp and the context meter all measure against this budget;
+ * a model that publishes no cap keeps its window. Undefined when neither
+ * number is usable, which leaves compaction off. */
+export function inputBudgetTokens(
+  model: { contextWindow?: number; maxInputTokens?: number },
+): number | undefined {
+  const usable = [model.contextWindow, model.maxInputTokens].filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value) && value > 0,
+  );
+  return usable.length > 0 ? Math.min(...usable) : undefined;
+}
+
+/** Ratio of the latest turn's context against the budget (undefined when
  * either side is missing). Values above 1 mean the transcript already
- * exceeds the window. */
+ * exceeds the budget. */
 export function contextUsageRatio(
   summary: ContextUsageSummary,
   contextWindow?: number,

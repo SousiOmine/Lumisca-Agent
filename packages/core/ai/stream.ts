@@ -30,6 +30,7 @@ import {
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
 import { contentText } from "../shared/mod.ts";
+import { inputBudgetTokens } from "../shared/context-usage.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
@@ -512,15 +513,17 @@ function promptTokensFor(context: StreamRequest): number {
 /**
  * Clamp a request's output cap to the room its prompt leaves (pi's
  * `clampMaxTokensToContext`). Providers validate `prompt + max_output`
- * against the window, so a cap the prompt cannot fit would fail the whole
- * request; the compaction threshold deliberately lets the conversation come
- * close to the window, which is exactly when this matters.
+ * against the prompt budget — the window, narrowed to the input cap the
+ * catalog publishes (see shared/context-usage.ts inputBudgetTokens) — so a
+ * cap the prompt cannot fit would fail the whole request; the compaction
+ * threshold deliberately lets the conversation come close to that budget,
+ * which is exactly when this matters.
  *
  * The clamp only ever shrinks a cap — never invents one for a request that
  * carries none (the provider's own default then applies) — and never goes
  * below {@link MIN_MAX_TOKENS}. A caller's override (the compaction
  * summarizer's smaller cap) is clamped the same way, so the auxiliary
- * request stays inside the window too.
+ * request stays inside the budget too.
  */
 export function clampMaxTokensToContext(
   model: Model<Api>,
@@ -528,8 +531,8 @@ export function clampMaxTokensToContext(
   desired: number | undefined,
 ): number | undefined {
   if (desired === undefined) return undefined;
-  const window = model.contextWindow;
-  if (window === undefined || !Number.isFinite(window) || window <= 0) {
+  const window = inputBudgetTokens(model);
+  if (window === undefined) {
     return Math.max(MIN_MAX_TOKENS, desired);
   }
   const available = window - promptTokens - CONTEXT_SAFETY_TOKENS;

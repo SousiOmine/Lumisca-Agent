@@ -72,6 +72,24 @@ Deno.test("catalog lists only models that support tool calling", () => {
   );
 });
 
+Deno.test("catalog carries the documented input cap onto the model", () => {
+  const built = buildCatalogProviders(catalogWith([
+    {
+      id: "capped",
+      tool_call: true,
+      limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+    },
+    { id: "window-only", tool_call: true },
+  ]));
+  const byId = new Map(built[0]!.getModels().map((m) => [m.id, m]));
+  // The window counts the completion, the cap is what one request may
+  // carry: both travel, so the budgets can hang off the smaller number.
+  assertEquals(byId.get("capped")?.contextWindow, 1_050_000);
+  assertEquals(byId.get("capped")?.maxInputTokens, 922_000);
+  // A model that publishes no cap stays measured by its window.
+  assertEquals(byId.get("window-only")?.maxInputTokens, undefined);
+});
+
 Deno.test("catalog still drops models that cannot answer in text", () => {
   assertEquals(
     listedModels([

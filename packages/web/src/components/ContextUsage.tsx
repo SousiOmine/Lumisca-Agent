@@ -14,6 +14,9 @@ const DEFAULT_WARN_RATIO = 0.8;
 
 export interface ContextUsageData {
   summary: ContextUsageSummary;
+  /** The prompt budget to measure against: the model's window narrowed to
+   * the input cap the catalog publishes (shared/context-usage.ts
+   * inputBudgetTokens). Undefined while no model is known. */
   contextWindow?: number;
   /** The usage ratio the bar turns amber from: the point where the next
    * compaction check condenses the history (see

@@ -879,6 +879,39 @@ Deno.test("the output cap clamp only shrinks, and never invents a cap", () => {
   assertEquals(clampMaxTokensToContext(bare, 5_000, 8_000), 8_000);
 });
 
+Deno.test("the output cap clamp measures the room against the input cap", () => {
+  // A model whose window counts the completion can document a smaller
+  // input cap (models.dev `limit.input`); the room left for the output is
+  // the cap's, because that is what providers validate the request against.
+  const capped = {
+    ...windowedModel(1_050_000, 128_000),
+    maxInputTokens: 922_000,
+  } as Model<Api>;
+  assertEquals(
+    clampMaxTokensToContext(capped, 900_000, 128_000),
+    922_000 - 900_000 - CONTEXT_SAFETY_TOKENS,
+  );
+  // Without the cap the same prompt leaves more room than the cap asks for,
+  // so the requested cap stands unchanged.
+  assertEquals(
+    clampMaxTokensToContext(
+      windowedModel(1_050_000, 128_000),
+      900_000,
+      128_000,
+    ),
+    128_000,
+  );
+  // A cap wider than the window never widens the room.
+  const narrow = {
+    ...windowedModel(10_000, 8_000),
+    maxInputTokens: 40_000,
+  } as Model<Api>;
+  assertEquals(
+    clampMaxTokensToContext(narrow, 5_000, 8_000),
+    10_000 - 5_000 - CONTEXT_SAFETY_TOKENS,
+  );
+});
+
 Deno.test("the transport clamps the output cap to the room the prompt leaves", async () => {
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
   const streamFn = createStreamFn(transportFor(model));

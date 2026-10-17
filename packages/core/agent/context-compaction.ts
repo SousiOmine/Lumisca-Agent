@@ -48,7 +48,7 @@ import {
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
-import { contextTokensOf } from "../shared/context-usage.ts";
+import { contextTokensOf, inputBudgetTokens } from "../shared/context-usage.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import {
@@ -216,7 +216,10 @@ Keep each section concise. Preserve exact file paths, function names, and error 
  * capacity there is nothing to measure pressure against) or when the
  * policy disables it. */
 export interface CompactionBudgets {
-  /** The model's documented window. */
+  /** The model's prompt budget: its documented window, narrowed to the
+   * input cap the catalog publishes (models.dev `limit.input`) — the two
+   * differ for models whose window counts the completion (see
+   * shared/context-usage.ts inputBudgetTokens). */
   contextWindow: number;
   /** Compact when the projected context would exceed this
    * (`contextWindow - reserveTokens`). */
@@ -249,16 +252,22 @@ function nonNegativeInt(value: number | undefined): number | undefined {
 
 /**
  * Resolve the token budgets of a model: the threshold sits `reserveTokens`
- * below the window, and the summarization call may use at most 80% of that
- * reservation for its own output (pi's `maxTokens`).
+ * below the model's prompt budget — its window narrowed to the input cap
+ * the catalog publishes (models.dev `limit.input`) — and the summarization
+ * call may use at most 80% of that reservation for its own output (pi's
+ * `maxTokens`).
  */
 export function resolveCompactionBudgets(
   model: Model<Api>,
   policy: CompactionPolicy = DEFAULT_COMPACTION_POLICY,
 ): CompactionBudgets | undefined {
   if (!policy.enabled) return undefined;
-  const window = model.contextWindow;
-  if (window === undefined || !Number.isFinite(window) || window <= 0) {
+  // The budget is the prompt a request may actually carry: the window
+  // narrowed to the documented input cap. A provider that publishes both
+  // numbers rejects a prompt past the smaller one, so the threshold has to
+  // hang off it rather than off the window.
+  const window = inputBudgetTokens(model);
+  if (window === undefined) {
     return undefined;
   }
   const threshold = window - policy.reserveTokens;

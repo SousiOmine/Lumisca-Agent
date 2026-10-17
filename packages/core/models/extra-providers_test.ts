@@ -8,6 +8,7 @@ import {
   opencodeGoProvider,
 } from "./dev-catalog.ts";
 import { getSupportedThinkingLevels } from "./thinking.ts";
+import { inputBudgetTokens } from "../shared/context-usage.ts";
 
 /** The providers this suite covers: the ids the catalog must register and
  * the endpoint ClinePass must be served from. Written out here instead of
@@ -88,6 +89,29 @@ Deno.test("OpenCode Go routes each model over the transport models.dev declares"
     assertEquals(m.provider, OPENCODE_GO_PROVIDER_ID);
     assertEquals(m.baseUrl, "https://opencode.ai/zen/go/v1");
   }
+});
+
+Deno.test("the catalog's input caps stay inside the prompt budget", () => {
+  let capped = 0;
+  for (const provider of builtinProviders()) {
+    for (const model of provider.getModels()) {
+      if (model.maxInputTokens === undefined) continue;
+      capped++;
+      const budget = inputBudgetTokens(model);
+      // The budget is the smaller of the two numbers. models.dev publishes
+      // one entry that breaks the order (hy3-free: an input cap of 192,000
+      // against a 190,000 window), which is exactly why the rule lives in
+      // one helper instead of at the call sites.
+      assert(
+        budget !== undefined && model.contextWindow !== undefined &&
+          budget <= model.contextWindow,
+        `${provider.id}/${model.id}: budget above the window`,
+      );
+    }
+  }
+  // models.dev publishes an input cap for a subset of its models; a catalog
+  // that stopped carrying them would leave every budget on the window.
+  assert(capped > 0, "no catalog model carries an input cap");
 });
 
 Deno.test("OpenCode Zen routes npm-overridden models over their native transport", () => {

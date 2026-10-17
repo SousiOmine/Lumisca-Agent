@@ -1115,6 +1115,7 @@ export class LumiscaCore {
     id: string;
     name: string;
     contextWindow?: number;
+    maxInputTokens?: number;
     reasoning?: boolean;
     input?: string[];
     enabled: boolean;

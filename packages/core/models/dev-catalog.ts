@@ -218,6 +218,7 @@ function toLumiscaModel(
     input: input.length > 0 ? input : ["text"],
     cost,
     contextWindow: m.limit?.context,
+    maxInputTokens: m.limit?.input,
     maxTokens: m.limit?.output,
     headers: m.provider?.headers,
     thinkingLevelMap: thinkingLevelMapFor(m.reasoning_options),

@@ -372,6 +372,15 @@ export interface Model<TApi extends Api = Api> {
   input?: ("text" | "image")[];
   cost?: ModelCost;
   contextWindow?: number;
+  /** Largest prompt the provider accepts (models.dev `limit.input`), when
+   * the catalog publishes one. The window is the total the model may hold
+   * including the completion, while `input` is what one request may carry:
+   * a provider documenting both (OpenAI's 922,000 against a 1,050,000
+   * window, for example) rejects a prompt past the smaller number, so every
+   * budget in the app hangs off the smaller of the two (see
+   * shared/context-usage.ts inputBudgetTokens). Undefined for the models
+   * that publish no input cap. */
+  maxInputTokens?: number;
   maxTokens?: number;
   thinkingLevelMap?: ThinkingLevelMap;
   headers?: Record<string, string>;
