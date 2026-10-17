@@ -17,13 +17,16 @@
  *   deno run --allow-read --allow-write scripts/rewrite-updater-json.ts \
  *     --manifest dist/updater/latest.json \
  *     --assets dist/updater/assets.json \
+ *     --tag v0.9.0 \
  *     --out dist/updater/latest.json
  *   gh release upload v0.9.0 dist/updater/latest.json --clobber
  *
- * `--assets` is the release's asset list as `gh` reports it: each platform
- * URL that is an asset's API URL is replaced with that asset's public
- * download URL, a URL that already is one is left alone (so re-running this
- * over its own output is a no-op), and anything else fails — a manifest
+ * `--assets` is the release's asset list as `gh` reports it, and `--tag` is
+ * the tag the release is published under — the links must address it and
+ * the asset list alone cannot supply it (see `scripts/updater-json.ts`).
+ * Each platform URL that is an asset's API URL, the asset's reported public
+ * URL, or the tag link itself is replaced with the tag link, so re-running
+ * this over its own output is a no-op; anything else fails — a manifest
  * whose URLs cannot be mapped must not reach users. `--out` may be the
  * input path: the manifest is read before it is written.
  */
@@ -38,7 +41,8 @@ function usage(message?: string): never {
   reportUsage(
     "rewrite-updater-json",
     "deno run --allow-read --allow-write scripts/rewrite-updater-json.ts " +
-      "--manifest <latest.json> --assets <gh asset list> --out <path>",
+      "--manifest <latest.json> --assets <gh asset list> --tag <vX.Y.Z> " +
+      "--out <path>",
     message,
   );
 }
@@ -46,18 +50,20 @@ function usage(message?: string): never {
 interface Options {
   manifest: string;
   assets: string;
+  tag: string;
   out: string;
 }
 
 function parseArgs(args: readonly string[]): Options {
   const values = parseOptions(args, usage);
-  const required = ["manifest", "assets", "out"] as const;
+  const required = ["manifest", "assets", "tag", "out"] as const;
   for (const key of required) {
     if (!values.has(key)) usage(`--${key} is required`);
   }
   return {
     manifest: absolutePath(values.get("manifest")!),
     assets: absolutePath(values.get("assets")!),
+    tag: values.get("tag")!,
     out: absolutePath(values.get("out")!),
   };
 }
@@ -93,7 +99,7 @@ const rewrite = await (async () => {
     await readJson(options.assets, "asset list"),
   );
   try {
-    return rewriteUpdaterJson(manifest, assets);
+    return rewriteUpdaterJson(manifest, assets, options.tag);
   } catch (error) {
     // A manifest this module refuses to map is the expected failure; any
     // other error is a bug and must keep its stack.

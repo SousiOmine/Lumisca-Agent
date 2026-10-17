@@ -21,6 +21,15 @@ name: Rewrite updater manifest
 # rerun after publishing (they upload tauri-action's manifest again and
 # would undo the rewrite). Nothing but the platform URLs changes — the
 # version, notes and signatures are re-uploaded as tauri-action wrote them.
+#
+# The tag is as load-bearing as the asset list: this runs while the release
+# is still a draft, and GitHub reports a draft's asset URLs under a
+# placeholder (`releases/download/untagged-<hash>/<name>`) that stops
+# addressing them once the release is published under its tag. So the tag is
+# passed in and every URL is built from it (`releaseAssetUrl`), instead of
+# copying whatever public URL the asset list happened to report — v0.9.1's
+# first automated run copied the placeholder and shipped a manifest whose
+# desktop downloads would have broken at publish time.
 
 on:
   workflow_dispatch:
@@ -66,5 +75,6 @@ jobs:
           deno run --allow-read --allow-write scripts/rewrite-updater-json.ts \
             --manifest dist/updater/latest.json \
             --assets dist/updater/assets.json \
+            --tag "$TAG" \
             --out dist/updater/latest.json
           gh release upload "$TAG" dist/updater/latest.json --clobber

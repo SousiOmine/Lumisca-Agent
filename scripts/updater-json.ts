@@ -14,14 +14,20 @@
  * and the update could not be downloaded at all from a shared egress IP.
  *
  * So the manifest is rewritten before it is published: every platform URL
- * becomes the asset's public download link
- * (`github.com/<owner>/<repo>/releases/download/<tag>/<name>`), the same
- * link shape the server distribution has always shipped (see
- * `packages/server/update/release.ts`).
+ * becomes the tag-addressed public download link of the asset it already
+ * addresses (`releases/download/<tag>/<name>`), built by the same
+ * `releaseAssetUrl` the server distribution uses
+ * (`packages/server/update/release.ts`).
  *
- * The release's asset list is the authority for both URLs: an entry is
- * rewritten only when its URL is an asset's `apiUrl`, and accepted as-is
- * only when its URL is that asset's public `url`. Anything else — a URL
+ * The tag is an input, not something the asset list can supply: the rewrite
+ * runs while the release is still a draft, and for a draft GitHub reports
+ * each asset's public `url` as a placeholder
+ * (`releases/download/untagged-<hash>/<name>`) that stops addressing the
+ * asset once the release is published under its tag. The asset list stays
+ * the authority for *which* asset a platform entry addresses: an entry is
+ * rewritten when its URL is that asset's `apiUrl` (what tauri-action
+ * writes), the asset's own public `url` (either form), or the tag link
+ * itself (a second run over this module's output). Anything else — a URL
  * from a different release, a missing asset, a platform entry without a
  * signature — fails, because a manifest this module cannot map is one the
  * release must not publish.
@@ -30,6 +36,7 @@
  * runtime side of the desktop update lives in
  * `packages/desktop/src-tauri/src/update.rs`.
  */
+import { releaseAssetUrl } from "../packages/server/update/release.ts";
 
 /** One asset of a release, as `gh release view <tag> --json assets
  * --jq .assets` reports it (the fields this module reads). */
@@ -38,7 +45,9 @@ export interface ReleaseAsset {
   name: string;
   /** API asset URL — what tauri-action writes into the manifest. */
   apiUrl: string;
-  /** Public download URL — what the manifest must carry instead. */
+  /** Public download URL as GitHub reports it: the tag link once the
+   * release is published, a placeholder (`untagged-<hash>`) while it is a
+   * draft. */
   url: string;
 }
 
@@ -48,8 +57,9 @@ export interface LinkedPlatform {
   key: string;
   /** Name of the asset its URL now addresses. */
   asset: string;
-  /** Whether the API URL was replaced (false: it already was the public
-   * download URL, which is what a second run over the same manifest finds). */
+  /** Whether the URL was replaced (false: it already was the tag's public
+   * download link, which is what a second run over the same manifest
+   * finds). */
   rewritten: boolean;
 }
 
@@ -105,15 +115,24 @@ export interface UpdaterJsonRewrite {
 }
 
 /** Replace every platform URL that addresses an asset of this release
- * through the API with that asset's public download URL. */
+ * (through the API, through a public link GitHub reported, or through the
+ * tag link itself) with that asset's tag-addressed public download link. */
 export function rewriteUpdaterJson(
   manifest: unknown,
   assets: readonly ReleaseAsset[],
+  tag: string,
 ): UpdaterJsonRewrite {
   if (!isRecord(manifest)) {
     throw new UpdaterJsonError("the manifest must be a JSON object");
   }
   const version = requireString(manifest.version, "the manifest's version");
+  requireString(tag, "the release tag");
+  if (tag !== `v${version}`) {
+    throw new UpdaterJsonError(
+      `the release tag is ${tag}, but the manifest's version is ${version}: ` +
+        "the links must address the tag the release is published under",
+    );
+  }
   const platforms = manifest.platforms;
   if (!isRecord(platforms) || Object.keys(platforms).length === 0) {
     throw new UpdaterJsonError(
@@ -121,11 +140,11 @@ export function rewriteUpdaterJson(
     );
   }
 
-  const byApiUrl = new Map<string, ReleaseAsset>();
-  const byPublicUrl = new Map<string, ReleaseAsset>();
+  const byUrl = new Map<string, ReleaseAsset>();
   for (const asset of assets) {
-    byApiUrl.set(asset.apiUrl, asset);
-    byPublicUrl.set(asset.url, asset);
+    byUrl.set(asset.apiUrl, asset);
+    byUrl.set(asset.url, asset);
+    byUrl.set(releaseAssetUrl(tag, asset.name), asset);
   }
 
   const rewritten: [string, unknown][] = [];
@@ -141,20 +160,15 @@ export function rewriteUpdaterJson(
     }
     requireString(entry.signature, `platform "${key}"'s signature`);
     const url = requireString(entry.url, `platform "${key}"'s url`);
-    const apiAsset = byApiUrl.get(url);
-    if (apiAsset !== undefined) {
-      rewritten.push([key, { ...entry, url: apiAsset.url }]);
-      linked.push({ key, asset: apiAsset.name, rewritten: true });
-      continue;
-    }
-    const publicAsset = byPublicUrl.get(url);
-    if (publicAsset === undefined) {
+    const asset = byUrl.get(url);
+    if (asset === undefined) {
       throw new UpdaterJsonError(
         `platform "${key}" points at ${url}, which is not an asset of this release`,
       );
     }
-    rewritten.push([key, entry]);
-    linked.push({ key, asset: publicAsset.name, rewritten: false });
+    const link = releaseAssetUrl(tag, asset.name);
+    rewritten.push([key, link === url ? entry : { ...entry, url: link }]);
+    linked.push({ key, asset: asset.name, rewritten: link !== url });
   }
 
   return {
