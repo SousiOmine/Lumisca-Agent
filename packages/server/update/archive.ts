@@ -55,8 +55,11 @@ const MAX_ENTRY_BYTES = 4 * 1024 * 1024 * 1024;
  * The file name a package entry maps to, or undefined when the entry is not
  * a plain top-level file.
  *
- * Packages carry a single top-level directory (`lumisca-server-<v>-<platform>/`)
- * with flat files inside, so both forms are accepted: `dir/file` and `file`.
+ * Packages carry a single top-level directory (`lumisca-server-<platform>/`,
+ * whose name carries no version on purpose: the release workflow explains
+ * why) with flat files inside, so both forms are accepted: `dir/file` and
+ * `file`. The directory itself is never inspected, only its depth, so an
+ * archive from any release unpacks the same way.
  * Everything else — absolute paths, `..`, drive letters, nested directories,
  * names with separators or leading dots — is rejected.
  */

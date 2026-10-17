@@ -102,6 +102,40 @@ Deno.test("sources carry no mojibake from a legacy code page", async () => {
   assertEquals(offenders, [], `mojibake found in: ${offenders.join(", ")}`);
 });
 
+/**
+ * The directory a release archive unpacks to carries no version. The server
+ * replaces its own files in place on update (packages/server/update/
+ * install.ts), so a version baked into that name would keep advertising the
+ * release the directory was *first* unpacked from — and that name is what
+ * `ps`, a generated service unit and a support conversation show. A
+ * version-free name cannot be misread. The version is answered by the
+ * archive's file name (scripts/build-server-manifest.ts refuses a mismatch),
+ * the release manifest and the binary itself (`--version`).
+ */
+Deno.test("a packaged install directory carries no version", async () => {
+  const workflow = await Deno.readTextFile(
+    new URL(".github/workflows/release.yml", ROOT),
+  );
+  // The packaging steps name the directory the archive unpacks to: `DIR=` in
+  // the Linux step, `$dir =` in the Windows one. A rename is a deliberate
+  // decision, so both are expected to be there.
+  const assignments = workflow.split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^(DIR=|\$dir = )/.test(line));
+  assertEquals(
+    assignments.length,
+    2,
+    `the packaging steps name ${assignments.length} director(ies); ` +
+      "update this check if the packaging changed",
+  );
+  for (const line of assignments) {
+    assert(
+      !/version/i.test(line),
+      `the packaged install directory name carries a version: ${line}`,
+    );
+  }
+});
+
 Deno.test("every i18n catalogue key is referenced by some source", async () => {
   // The catalogue test (shared/i18n_test.ts) proves the entries are
   // complete and translated; nothing proves they are still used, so a key

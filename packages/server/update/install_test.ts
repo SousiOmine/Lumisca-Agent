@@ -31,7 +31,9 @@ async function newPackage(
   format: "zip" | "tar.gz",
   files: Array<{ name: string; content: string }>,
 ): Promise<StagedUpdate> {
-  const prefix = "lumisca-server-0.7.8-windows-x64";
+  // One version-free top-level directory, the layout the release workflow
+  // packages (see its packaging step).
+  const prefix = "lumisca-server-windows-x64";
   const entries = files.map((file) => ({
     name: `${prefix}/${file.name}`,
     content: file.content,

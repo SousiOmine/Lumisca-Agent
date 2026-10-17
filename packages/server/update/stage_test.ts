@@ -43,8 +43,8 @@ async function packageFixture(
   publicKey: string;
 }> {
   const archive = await buildTarGz([
-    { name: "lumisca-server-0.7.8-linux-x64/lumisca-server", content: "new" },
-    { name: "lumisca-server-0.7.8-linux-x64/assets.json", content: "{}" },
+    { name: "lumisca-server-linux-x64/lumisca-server", content: "new" },
+    { name: "lumisca-server-linux-x64/assets.json", content: "{}" },
   ]);
   const keys = await createSigningKeys();
   const path = await Deno.makeTempFile({ prefix: "lumisca-stage-" });

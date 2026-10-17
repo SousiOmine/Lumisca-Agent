@@ -25,7 +25,10 @@ async function packageFixture(
   publicKey: string;
   fetch: typeof fetch;
 }> {
-  const prefix = `lumisca-server-${version}-linux-x64`;
+  // The package's top-level directory carries no version (the release
+  // workflow's packaging step); the version lives in the archive's file name
+  // (ARCHIVE_URL) and in the payload itself.
+  const prefix = "lumisca-server-linux-x64";
   const archive = await buildTarGz([
     { name: `${prefix}/${BINARY}`, content: `binary-${version}` },
     { name: `${prefix}/assets.json`, content: `assets-${version}` },

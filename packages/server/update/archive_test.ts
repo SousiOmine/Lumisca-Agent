@@ -3,8 +3,12 @@ import { removeDirRetry } from "@lumisca/core/test-utils";
 import { ArchiveError, extractArchive, packageEntryName } from "./archive.ts";
 import { buildTarGz, buildZip, ustarHeader } from "./test-utils.ts";
 
-const WINDOWS_PREFIX = "lumisca-server-0.7.8-windows-x64";
-const LINUX_PREFIX = "lumisca-server-0.7.8-linux-x64";
+/** Top-level directory of a release package. It carries no version — see
+ * the release workflow's packaging step: the server replaces its own files
+ * in place on update, so a version in this name would keep advertising the
+ * release the directory was first unpacked from. */
+const WINDOWS_PREFIX = "lumisca-server-windows-x64";
+const LINUX_PREFIX = "lumisca-server-linux-x64";
 
 async function tempDir(): Promise<string> {
   return await Deno.makeTempDir({ prefix: "lumisca-archive-" });

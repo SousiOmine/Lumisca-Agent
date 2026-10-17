@@ -28,6 +28,7 @@ git status
 ### 留意事項
 - **署名鍵**: 双方で共通の鍵を使用します。変更時は `packages/server/update/verify.ts` と `tauri.conf.json` の両方を更新してください。
 - **メタデータ管理**: 配布定義やバージョン比較は `packages/server/update/release.ts` に集約しています。
+- **インストール先の名前**: 配布アーカイブの最上位ディレクトリは `lumisca-server-<platform>` で、バージョンを含みません。自己更新はバイナリと同じディレクトリのファイルを差し替えるため、名前に版があると実際の版と食い違います（`packages/core/repo_hygiene_test.ts` がこの規約を固定しています。実効バージョンは `--version`、適用記録、更新マニフェストが答えます）。
 - **デスクトップの更新マニフェスト**: 公開する `latest.json` の URL は直リンク（`releases/download/<tag>/<name>`）へ書き換えます。tauri-action が書く `api.github.com` の URL は未認証リクエストのレート制限（60 回/時/IP）と User-Agent 必須の対象で、403 になるとアプリ内更新がダウンロードに失敗します。書き換えは `scripts/rewrite-updater-json.ts` と `.github/workflows/rewrite-updater-json.yml`（公開済みリリースの修復にも手動実行できます）。
 - **動作条件**: サーバーの自己更新は、パッケージ済みバイナリかつ `LUMISCA_DESKTOP` 環境変数が未設定の場合にのみ動作します。
 - **再起動制御**: 更新後の動作は環境変数 `LUMISCA_UPDATE_RESTART`（`self`, `supervisor`, `none`）で指定します。

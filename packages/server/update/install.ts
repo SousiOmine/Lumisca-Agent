@@ -18,6 +18,14 @@
  * The swap never touches the running process: its code is already loaded and
  * its assets are read once (packages/server/assets.ts memoizes the manifest),
  * so a running agent session keeps working until the restart.
+ *
+ * Because the files are replaced in place, the install directory's *name*
+ * must never carry a version: it would keep advertising the release the
+ * directory was first unpacked from while the files inside move on (the
+ * release workflow's packaging step keeps it version-free, and
+ * packages/core/repo_hygiene_test.ts holds that line). Which version an
+ * installation runs is answered by the binary itself (`--version`), by the
+ * applied-update record next to it (stage.ts) and by the release manifest.
  */
 import { basename, join } from "node:path";
 import { extractArchive } from "./archive.ts";
