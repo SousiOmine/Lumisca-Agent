@@ -203,6 +203,54 @@ Deno.test("toolResultTakesImages follows the transport that carries the result",
     ),
     true,
   );
+  // The OpenCode gateway (Zen and Go) is a compatible endpoint that cannot
+  // carry one: its gRPC upstream accepts text parts only in a tool message
+  // (the 400 "tool message content part 1 is not text"). The images follow
+  // in a user message instead.
+  assertEquals(
+    toolResultTakesImages(
+      gateway(
+        "openai-completions",
+        "opencode-go",
+        "https://opencode.ai/inference/go/openai/v1",
+      ),
+    ),
+    false,
+  );
+  assertEquals(
+    toolResultTakesImages(
+      gateway(
+        "openai-completions",
+        "opencode",
+        "https://opencode.ai/inference/openai/v1",
+      ),
+    ),
+    false,
+  );
+  // Earlier catalogs published the zen paths; the host is what identifies
+  // the gateway.
+  assertEquals(
+    toolResultTakesImages(
+      gateway(
+        "openai-completions",
+        "opencode-go",
+        "https://opencode.ai/zen/go/v1",
+      ),
+    ),
+    false,
+  );
+  // A different host is a different gateway: the compatible factory's
+  // multi-part tool content stays on.
+  assertEquals(
+    toolResultTakesImages(
+      gateway(
+        "openai-completions",
+        "custom",
+        "https://opencode.ai.example.com/v1",
+      ),
+    ),
+    true,
+  );
   // A model without a base URL is served by the official OpenAI chat model
   // (see isFirstPartyOpenAI), which has no multi-part tool content: the
   // images follow in a user message instead.

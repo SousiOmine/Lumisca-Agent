@@ -123,10 +123,10 @@ function compatibleSettings(
     // image degrade to JSON — the model reads a base64 wall of text instead
     // of the picture. Lumisca turns it on for every compatible endpoint on
     // purpose: the images of a tool result only ever travel to a model that
-    // declares image input (see ai/stream.ts toCoreMessages), and a gateway
-    // that rejects image parts in a tool message is the exception this
-    // default accepts (no metadata describes that capability; models.dev
-    // publishes nothing for it).
+    // declares image input (see ai/stream.ts toCoreMessages). A gateway
+    // that cannot carry them is excluded there, not here: the OpenCode
+    // gateway forwards tool messages to its upstream over gRPC, which
+    // carries text parts only (see toolResultTakesImages).
     supportsMultiPartToolContent: true,
   });
 }
@@ -139,14 +139,20 @@ function compatibleSettings(
  * native image form, and the compatible factory above takes image parts
  * too — while the first-party OpenAI chat model (api.openai.com) and
  * @ai-sdk/mistral serialize a content output as JSON. Those two get their
- * images in a user message of their own instead (see toCoreMessages). */
+ * images in a user message of their own instead (see toCoreMessages).
+ *
+ * The OpenCode gateway (Zen and Go) is a third exception even though it is
+ * a compatible endpoint: it forwards tool messages to its upstream over
+ * gRPC, which only carries text parts, and rejects a multi-part tool
+ * content with HTTP 400 ("tool message content part 1 is not text"). Its
+ * models get the images in a user message too. */
 export function toolResultTakesImages(model: Model<Api>): boolean {
   switch (model.api) {
     case "openai-completions":
       // First-party OpenAI uses the official chat model, which has no
       // multi-part tool content option; every other chat-completions model
       // goes through the compatible factory.
-      return !isFirstPartyOpenAI(model);
+      return !isFirstPartyOpenAI(model) && !isOpenCodeGateway(model);
     case "mistral-conversations":
       return false;
     default:
@@ -193,4 +199,12 @@ function isFirstPartyOpenAI(model: Model<Api>): boolean {
   return model.provider === "openai" ||
     model.baseUrl === undefined ||
     /api\.openai\.com/i.test(model.baseUrl ?? "");
+}
+
+/** True for the OpenCode gateway (Zen and Go). The host decides, not the
+ * provider id: the limitation in {@link toolResultTakesImages} belongs to
+ * the endpoint, so a user-provided compatible provider pointed at it hits
+ * the same rejection. */
+function isOpenCodeGateway(model: Model<Api>): boolean {
+  return /^https?:\/\/opencode\.ai(?:[:/]|$)/i.test(model.baseUrl ?? "");
 }

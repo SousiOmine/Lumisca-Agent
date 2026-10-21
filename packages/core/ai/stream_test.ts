@@ -9,6 +9,7 @@ import type {
   Api,
   LlmMessage,
   Model,
+  StreamOptions,
   StreamRequest,
 } from "./types.ts";
 import {
@@ -249,6 +250,7 @@ async function runToChatBody(
   messages: LlmMessage[],
   buildModel: (fetchFn: FetchLike, model: Model<Api>) => unknown =
     compatibleChatModel,
+  options?: StreamOptions,
 ): Promise<Array<Record<string, unknown>>> {
   let sentBody: Record<string, unknown> | undefined;
   const fetchFn: FetchLike = (_input, init) => {
@@ -259,7 +261,7 @@ async function runToChatBody(
     languageModelFor: () =>
       Promise.resolve(buildModel(fetchFn, model) as never),
   });
-  for await (const _ of streamFn(model, { messages }, undefined)) {
+  for await (const _ of streamFn(model, { messages }, options)) {
     // drain
   }
   return sentBody!.messages as Array<Record<string, unknown>>;
@@ -362,6 +364,35 @@ Deno.test("a tool image rides inside the tool message of a compatible model", as
   ]);
   // No extra message: nothing follows the tool result.
   assertEquals(messages.filter((m) => m.role === "user").length, 0);
+});
+
+Deno.test("a tool image on the OpenCode gateway follows in a user message", async () => {
+  // The gateway takes the compatible factory's request but forwards tool
+  // messages to its upstream over gRPC, which carries text parts only: a
+  // multi-part tool content is rejected with a 400 (see
+  // toolResultTakesImages). The image follows in the one role every
+  // provider takes one in instead.
+  const messages = await runToChatBody(
+    imageModel({
+      provider: "opencode-go",
+      baseUrl: "https://opencode.ai/inference/go/openai/v1",
+    }),
+    [toolResultWithImage()],
+    undefined,
+    // OpenCode Go's managed inference requires the conversation id header.
+    { sessionId: "conv-1" },
+  );
+
+  const toolMessage = messages.find((m) => m.role === "tool")!;
+  assertEquals(toolMessage.content, "[image: shot.png (67 bytes)]");
+  const imageMessages = messages.filter((m) =>
+    m.role === "user" && Array.isArray(m.content)
+  );
+  assertEquals(imageMessages.length, 1);
+  assertEquals(imageMessages[0]!.content, [
+    { type: "text", text: "[image from shot]" },
+    IMAGE_URL_PART,
+  ]);
 });
 
 Deno.test("a tool image of the OpenAI chat model follows in a user message", async () => {
