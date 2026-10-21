@@ -19,8 +19,7 @@ import {
   type ThinkingLevel,
 } from "../types.ts";
 import type { ComposerModel } from "../components/Composer.tsx";
-import { DRAFT_TAB } from "./useTabs.ts";
-import { splitTabKey, tabKey } from "../tabs.ts";
+import { DRAFT_TAB, splitTabKey, tabKey } from "../tabs.ts";
 
 export interface UseSessionActionsOptions {
   setTabs: Dispatch<SetStateAction<string[]>>;

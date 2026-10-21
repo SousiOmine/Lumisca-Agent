@@ -15,11 +15,11 @@ export const EMPTY_DRAFT: TabDraft = { input: "", images: [] };
  * remounts on every switch (it is keyed by the active tab), so anything
  * it held locally would be lost — the drafts live here instead, keyed by
  * tab key, and are fed back into the view when the tab is shown again.
- * A tab that is closed discards its draft; a tab that never existed
- * (the draft screen shown while no tab is open keeps its input under the
- * draft-tab key) does not: only keys that dropped OUT of the tab list
- * since the last change are pruned, so drafts survive "open a session,
- * come back" as long as their tab was not closed. */
+ * A tab that is closed discards its draft; a key that was never listed
+ * (the draft screen is visible before the restore has opened its tab) does
+ * not: only keys that dropped OUT of the tab list since the last change
+ * are pruned, so drafts survive "open a session, come back" as long as
+ * their tab was not closed. */
 export function useDrafts(tabs: readonly string[]) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, TabDraft>>(
     () => new Map(),

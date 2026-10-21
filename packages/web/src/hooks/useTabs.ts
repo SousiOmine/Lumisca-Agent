@@ -12,10 +12,8 @@ import {
   type SessionSnapshot,
 } from "../api.ts";
 import { applyRunState } from "../events.ts";
+import { DRAFT_TAB, withDraftTab } from "../tabs.ts";
 import { emptyView, type SessionView, type TodoPhase } from "../types.ts";
-
-/** Tab id for the not-yet-created "new session" draft tab. */
-export const DRAFT_TAB = "__new__";
 
 /** localStorage keys for restoring the open tabs after a restart. */
 const TABS_KEY = "lumisca.tabs";
@@ -43,8 +41,9 @@ function restoreView(
 }
 
 /** Open tabs + active tab: restore after a restart, persist on change,
- * and the close operations (single, to-right, to-left, others). The views
- * map is owned by useSessionEvents; the tab logic only adds/removes
+ * and the close operations (single, to-right, to-left, others). The strip
+ * never goes empty: with no session tab left it holds the draft tab. The
+ * views map is owned by useSessionEvents; the tab logic only adds/removes
  * entries. */
 export function useTabs(
   setViews: Dispatch<SetStateAction<Map<string, SessionView>>>,
@@ -73,7 +72,8 @@ export function useTabs(
         ids = JSON.parse(localStorage.getItem(TABS_KEY) ?? "[]");
         active = localStorage.getItem(ACTIVE_TAB_KEY);
       } catch {
-        return;
+        // Unreadable storage: there is nothing to restore. The strip below
+        // still gets its draft tab.
       }
       const restoredViews = new Map<string, SessionView>();
       // Restored tabs whose run is still going: their panel snapshots are
@@ -104,8 +104,12 @@ export function useTabs(
       if (disposed) return;
       restoredRef.current = true;
       // Keep the saved order: Promise.all resolves out of order, so filter
-      // the original ids instead of collecting in completion order.
-      const restoredTabs = ids.filter((id) => restoredViews.has(id));
+      // the original ids instead of collecting in completion order. With no
+      // tab left to restore, the strip holds the draft tab rather than
+      // nothing.
+      const restoredTabs = withDraftTab(
+        ids.filter((id) => restoredViews.has(id)),
+      );
       setTabs(restoredTabs);
       setViews((prev) => new Map([...prev, ...restoredViews]));
       setActiveTab(
@@ -156,7 +160,8 @@ export function useTabs(
    * open, and reopening it from the session history rejoins the run). The
    * App asks before it takes the `POST /close` route for a running tab (see
    * CloseTabsDialog). When the active tab is among the closed ones, fall
-   * back to the last remaining tab (kept in the existing order). */
+   * back to the last remaining tab (kept in the existing order); closing
+   * the last tab leaves the draft tab, so the strip never empties. */
   const closeTabs = useCallback((
     ids: string[],
     keepRunning?: ReadonlySet<string>,
@@ -167,16 +172,18 @@ export function useTabs(
         sessionApi(id).close().catch(console.error);
       }
     }
-    setTabs((prev) => prev.filter((id) => !toClose.has(id)));
+    const nextTabs = withDraftTab(tabs.filter((id) => !toClose.has(id)));
+    setTabs(nextTabs);
     setViews((prev) => {
       const next = new Map(prev);
       for (const id of ids) next.delete(id);
       return next;
     });
-    setActiveTab((current) => {
-      if (current && !toClose.has(current)) return current;
-      return tabs.filter((id) => !toClose.has(id)).at(-1) ?? null;
-    });
+    setActiveTab((current) =>
+      current && nextTabs.includes(current)
+        ? current
+        : (nextTabs.at(-1) ?? null)
+    );
   }, [tabs, setViews]);
 
   /** Reopen a previously closed session in a tab: load its info, transcript

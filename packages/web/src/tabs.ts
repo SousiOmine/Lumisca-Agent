@@ -12,6 +12,11 @@
  * directions, so every id round-trips and no key can fail to parse. */
 const SEPARATOR = ":";
 
+/** Tab id of the draft tab: the "new session" screen, which has no session
+ * yet. Not a session id — those are server-generated UUIDs — so it cannot
+ * collide with one. */
+export const DRAFT_TAB = "__new__";
+
 export function tabKey(peerId: string, sessionId: string): string {
   return peerId === ""
     ? sessionId
@@ -60,6 +65,13 @@ export function closeTargets(
   const index = tabs.indexOf(anchorId);
   if (index === -1) return [];
   return op === "toRight" ? tabs.slice(index + 1) : tabs.slice(0, index);
+}
+
+/** The tab strip to show for `tabs`: with nothing left to show it holds the
+ * draft tab, so closing the last tab leaves a new-session tab (the same one
+ * the "+" button opens) instead of an empty strip. */
+export function withDraftTab(tabs: readonly string[]): string[] {
+  return tabs.length === 0 ? [DRAFT_TAB] : [...tabs];
 }
 
 /** `%` → `%25` first, then `:` → `%3A`, so an id that already reads as an

@@ -1,10 +1,12 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertNotStrictEquals } from "@std/assert";
 import {
   type CloseOperation,
   closeTargets,
+  DRAFT_TAB,
   keysForPeer,
   splitTabKey,
   tabKey,
+  withDraftTab,
 } from "./tabs.ts";
 
 Deno.test("keysForPeer picks exactly one peer's tabs", () => {
@@ -45,6 +47,18 @@ Deno.test("closeTargets: a stale anchor targets nothing to the sides", () => {
   // it), and "others" is everybody but that anchor — id or not.
   assertEquals(closeTargets("tab", tabs, "gone"), ["gone"]);
   assertEquals(closeTargets("others", tabs, "gone"), ["a", "b"]);
+});
+
+Deno.test("withDraftTab keeps the strip from going empty", () => {
+  // The last tab was closed: no session remains, so the draft tab stands in
+  // (the same tab the "+" button opens).
+  assertEquals(withDraftTab([]), [DRAFT_TAB]);
+  // Open tabs are kept as they are, in order.
+  assertEquals(withDraftTab(["a", "b"]), ["a", "b"]);
+  // The result never aliases the caller's array: the tab state is replaced,
+  // not shared.
+  const tabs = ["a"];
+  assertNotStrictEquals(withDraftTab(tabs), tabs);
 });
 
 Deno.test("tabKey/splitTabKey round-trip every id shape", () => {

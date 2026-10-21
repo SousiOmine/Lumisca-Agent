@@ -6,7 +6,7 @@ import {
 } from "preact/compat";
 import type { InitialData } from "./types.ts";
 import { isViewRunning, type SessionView } from "./types.ts";
-import { closeTargets, splitTabKey } from "./tabs.ts";
+import { closeTargets, DRAFT_TAB, splitTabKey } from "./tabs.ts";
 import { useT } from "./i18n.ts";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useLanguage } from "./hooks/useLanguage.ts";
@@ -20,7 +20,7 @@ import { useAppHeight } from "./hooks/useAppHeight.ts";
 import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
 import { quit } from "./shell.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
-import { DRAFT_TAB, useTabs } from "./hooks/useTabs.ts";
+import { useTabs } from "./hooks/useTabs.ts";
 import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
 import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { CloseTabsDialog } from "./components/CloseTabsDialog.tsx";
