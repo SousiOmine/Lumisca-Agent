@@ -1,5 +1,6 @@
 import type { AssistantMessage } from "../ai/types.ts";
 import type { NotificationMessage } from "../ai/types.ts";
+import { isContextOverflowText } from "../ai/context-overflow.ts";
 import { notificationMessage } from "../tools/subagent-format.ts";
 
 /** Maximum consecutive vacant responses (no text, no tool call) to retry
@@ -35,24 +36,16 @@ export function hasNoVisibleOutput(message: AssistantMessage): boolean {
 const TRANSIENT_STREAM_ERROR_PATTERN =
   /without finish_reason|finish_reason: network_error|failed to process successful response|invalid json response|fetch failed|network|socket hang up|connection|terminated|premature close|timed out|\b(?:500|502|503|504|529)\b|overloaded/i;
 
-/** Error-message signatures of a provider-confirmed context overflow: the
- * request was rejected because prompt + completion exceeded the model's
- * window. The wording differs per provider (and per gateway — OpenCode Go
- * forwards Console Go's "This model's maximum context length is ... Please
- * reduce the length of the messages or completion"), so the pattern covers
- * the families rather than one literal string. This is the trigger the
- * compactor's overflow recovery hangs off: the request cannot succeed
- * unchanged, and the only repair is a smaller history. */
-const CONTEXT_OVERFLOW_PATTERN =
-  /maximum context length|context length is|context_length_exceeded|context window|reduce the length of the messages|prompt is too long|too many tokens|input token count|exceeds the maximum/i;
-
-/** True when the turn failed because the request was too large for the
- * model's window. A permanent failure otherwise (it can never succeed while
- * the history stays as it is), so it is classified apart from the transient
- * transport errors. */
+/** True when the provider rejected the request for exceeding the model's
+ * window: the wording classifier is shared with the transport (see
+ * ai/context-overflow.ts), which may already have repaired the request by
+ * shrinking its completion cap; the policy sees only the failures that
+ * repair could not fix. This is the trigger the compactor's overflow
+ * recovery hangs off: the request cannot succeed unchanged, and the only
+ * remaining repair is a smaller history. */
 export function isContextOverflowError(message: AssistantMessage): boolean {
   if (message.stopReason !== "error") return false;
-  return CONTEXT_OVERFLOW_PATTERN.test(message.errorMessage ?? "");
+  return isContextOverflowText(message.errorMessage ?? "");
 }
 
 /** True when an error-stopped response failed for a transport reason that

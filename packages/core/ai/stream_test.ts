@@ -14,11 +14,14 @@ import type {
 } from "./types.ts";
 import {
   clampMaxTokensToContext,
+  CONTEXT_SAFETY_RATIO,
   CONTEXT_SAFETY_TOKENS,
+  contextSafetyTokens,
   createStreamFn,
   MIN_MAX_TOKENS,
   type StreamTransport,
 } from "./stream.ts";
+import { OVERFLOW_SAFETY_TOKENS } from "./output-cap-recovery.ts";
 import { estimateLlmMessagesTokens } from "../shared/token-estimate.ts";
 
 /** A fake LanguageModel implementing the AI SDK v2 provider surface (the
@@ -918,18 +921,19 @@ Deno.test("the output cap clamp measures the room against the input cap", () => 
     ...windowedModel(1_050_000, 128_000),
     maxInputTokens: 922_000,
   } as Model<Api>;
+  const cappedPrompt = 900_000;
+  const cappedWindow = 922_000;
   assertEquals(
-    clampMaxTokensToContext(capped, 900_000, 128_000),
-    922_000 - 900_000 - CONTEXT_SAFETY_TOKENS,
+    clampMaxTokensToContext(capped, cappedPrompt, 128_000),
+    cappedWindow - cappedPrompt -
+      contextSafetyTokens(cappedPrompt, cappedWindow),
   );
-  // Without the cap the same prompt leaves more room than the cap asks for,
-  // so the requested cap stands unchanged.
+  // Far from the window the margin still leaves more room than the cap asks
+  // for, so the requested cap stands unchanged.
+  const wide = windowedModel(1_050_000, 128_000);
+  const widePrompt = 500_000;
   assertEquals(
-    clampMaxTokensToContext(
-      windowedModel(1_050_000, 128_000),
-      900_000,
-      128_000,
-    ),
+    clampMaxTokensToContext(wide, widePrompt, 128_000),
     128_000,
   );
   // A cap wider than the window never widens the room.
@@ -940,6 +944,42 @@ Deno.test("the output cap clamp measures the room against the input cap", () => 
   assertEquals(
     clampMaxTokensToContext(narrow, 5_000, 8_000),
     10_000 - 5_000 - CONTEXT_SAFETY_TOKENS,
+  );
+});
+
+Deno.test("the clamp charges a share of a large prompt as margin", () => {
+  // The reported failure, priced the way the estimate priced it: a prompt
+  // of roughly 570,000 tokens on a 1,000,000 window left the model's full
+  // 384,000 cap "fitting" under the old fixed 4,096 margin, and the
+  // provider — which counted the real prompt at 666,931 — rejected it. The
+  // proportional margin now narrows the cap by a share of the prompt, which
+  // is the quantity the estimate gets wrong.
+  const prompt = 570_000;
+  const window = 1_000_000;
+  const cap = clampMaxTokensToContext(
+    windowedModel(window, 384_000),
+    prompt,
+    384_000,
+  );
+  assertEquals(
+    cap,
+    window - prompt - Math.ceil(prompt * CONTEXT_SAFETY_RATIO),
+  );
+  // The real prompt (666,931) plus that cap fits the window the provider
+  // enforces (1,048,576) — the rejection does not happen.
+  assertEquals((cap as number) + 666_931 <= 1_048_576, true);
+});
+
+Deno.test("the margin never takes more than half the room the prompt leaves", () => {
+  // A prompt just under the window: the proportional margin would swallow
+  // the remaining room entirely, leaving a cap no answer fits in. The room
+  // is what must be spent, not the margin, so half of it remains.
+  const window = 1_000_000;
+  const prompt = 990_000;
+  assertEquals(contextSafetyTokens(prompt, window), 5_000);
+  assertEquals(
+    clampMaxTokensToContext(windowedModel(window, 384_000), prompt, 384_000),
+    5_000,
   );
 });
 
@@ -991,4 +1031,97 @@ Deno.test("the transport clamps a caller's override the same way", async () => {
     calls[0]!.maxOutputTokens,
     Math.min(4_000, 10_000 - promptTokens - CONTEXT_SAFETY_TOKENS),
   );
+});
+
+Deno.test("a request the provider rejects as too large is re-sent with a smaller cap", async () => {
+  // The reported failure, end to end: the transport asks for the model's
+  // full 384,000 cap, the gateway rejects prompt + completion on its
+  // 1,048,576-token window, and the transport re-sends the identical prompt
+  // with the room the gateway reports. The caller sees a normal turn.
+  const bodies: Array<Record<string, unknown>> = [];
+  let calls = 0;
+  const provider = createOpenAICompatible({
+    name: "overflow-recovery-test",
+    apiKey: "test-key",
+    baseURL: "https://example.invalid/v1",
+    fetch: (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(body);
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: {
+                type: "invalid_request_error",
+                code: "invalid_request_error",
+                message:
+                  "Upstream request failed: [invalid_request_error] This " +
+                  "model's maximum context length is 1048576 tokens. " +
+                  "However, you requested 1050931 tokens (666931 in the " +
+                  "messages, 384000 in the completion). Please reduce the " +
+                  "length of the messages or completion.",
+              },
+            }),
+            { status: 400, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      const chunks = [
+        {
+          id: "chatcmpl-test",
+          object: "chat.completion.chunk",
+          created: 0,
+          model: "m",
+          choices: [{
+            index: 0,
+            delta: { role: "assistant", content: "very well" },
+            finish_reason: null,
+          }],
+        },
+        {
+          id: "chatcmpl-test",
+          object: "chat.completion.chunk",
+          created: 0,
+          model: "m",
+          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+        },
+      ];
+      return Promise.resolve(
+        new Response(
+          `${
+            chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")
+          }data: [DONE]\n\n`,
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+      );
+    },
+  });
+  const streamFn = createStreamFn(
+    transportFor(provider.chatModel("m")),
+  );
+  const model = windowedModel(1_000_000, 384_000);
+  const events: Array<{ type: string } & Record<string, unknown>> = [];
+  for await (
+    const event of streamFn(model, {
+      messages: [{ role: "user", content: "x".repeat(12_000) }],
+    }, undefined)
+  ) {
+    events.push(event as never);
+  }
+
+  assertEquals(bodies.length, 2);
+  assertEquals(bodies[0]!.max_tokens, 384_000);
+  assertEquals(
+    bodies[1]!.max_tokens,
+    1_048_576 - 666_931 - OVERFLOW_SAFETY_TOKENS,
+  );
+  // One turn, no error: the retry stands in for the rejected request.
+  assertEquals(events.filter((event) => event.type === "start").length, 1);
+  assertEquals(events.some((event) => event.type === "error"), false);
+  assertEquals(events.at(-1)!.type, "done");
+  const done = events.at(-1)! as unknown as {
+    message: { content: Array<{ text?: string }> };
+  };
+  assertEquals(done.message.content[0]?.text, "very well");
 });
