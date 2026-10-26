@@ -9,6 +9,6 @@
   },
   "imports": {
     "@preact/preset-vite": "npm:@preact/preset-vite@2.10.6",
-    "vite": "npm:vite@8.3.4"
+    "vite": "npm:vite@8.3.5"
   }
 }
