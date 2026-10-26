@@ -72,7 +72,10 @@ Deno.test("openai-responses resolves to the official Responses model even for th
     `expected a .responses provider, got ${unwrapped.provider}`,
   );
   // It still targets the gateway's base URL and appends /responses.
-  assertEquals(unwrapped.config?.baseURL, "https://opencode.ai/zen/go/v1");
+  assertEquals(
+    unwrapped.config?.baseURL,
+    "https://opencode.ai/inference/go/openai/v1",
+  );
 });
 
 Deno.test("OpenCode Go chat/anthropic models resolve to their declared transports", () => {
@@ -81,14 +84,14 @@ Deno.test("OpenCode Go chat/anthropic models resolve to their declared transport
   const key = { apiKey: "test-key", source: "test" };
 
   // Chat surface: the OpenAI-compatible chat model on the gateway base URL.
-  const flash = byId.get("deepseek-v4-flash")!;
+  const flash = byId.get("deepseek-v4.1-flash")!;
   assertEquals(flash.api, "openai-completions");
   const chatLm = languageModelFor(flash, key) as unknown as {
     provider?: string;
     modelId?: string;
   };
-  assertEquals(chatLm.provider, "opencode-go:deepseek-v4-flash.chat");
-  assertEquals(chatLm.modelId, "deepseek-v4-flash");
+  assertEquals(chatLm.provider, "opencode-go:deepseek-v4.1-flash.chat");
+  assertEquals(chatLm.modelId, "deepseek-v4.1-flash");
 
   // Anthropic surface: model id stays plain while the base URL receives
   // the appended `/messages` path.
@@ -115,7 +118,7 @@ Deno.test("reasoningForceOption forces unknown Responses-API models into reasoni
   assertEquals(reasoningForceOption(muse, undefined), undefined);
   // Chat-surface models send reasoning_effort unconditionally and need
   // no override.
-  const flash = go.getModels().find((m) => m.id === "deepseek-v4-flash")!;
+  const flash = go.getModels().find((m) => m.id === "deepseek-v4.1-flash")!;
   assertEquals(reasoningForceOption(flash, "high"), undefined);
   // Non-reasoning models never get the override, even on Responses.
   const plain: Model<Api> = {

@@ -20,8 +20,8 @@
     "npm:@jellybrick/dbus-next@0.11.4": "0.11.4",
     "npm:@modelcontextprotocol/sdk@1.32.1": "1.32.1_zod@4.4.3",
     "npm:@napi-rs/canvas@1.0.11": "1.0.11",
-    "npm:@opencode-ai/models@*": "0.0.99",
-    "npm:@opencode-ai/models@0.0.81": "0.0.81",
+    "npm:@opencode-ai/models@*": "0.0.112",
+    "npm:@opencode-ai/models@0.0.112": "0.0.112",
     "npm:@opencode-ai/models@0.0.99": "0.0.99",
     "npm:@preact/preset-vite@2.10.6": "2.10.6_vite@8.3.4__@types+node@26.1.2__esbuild@0.28.2_preact-render-to-string@6.8.1__preact@11.0.1",
     "npm:@tabler/icons-preact@3.49.0": "3.49.0_preact@11.0.1__preact-render-to-string@6.8.1_preact-render-to-string@6.8.1__preact@11.0.1",
@@ -629,8 +629,8 @@
     "@nodable/entities@3.1.0": {
       "integrity": "sha512-LsS/DjHr+uDM647Gru/cA8+J3a3HfhttwCKLyuoyN7yXTFCxKBtSgMQBvrW9yNPa2/zDRUNuGPaH5QUFoa4arQ=="
     },
-    "@opencode-ai/models@0.0.81": {
-      "integrity": "sha512-AwfXoXfppU35puOjEI4w4Mq7bYpaEEYc23KIv6XLUJDI3lmDJTth1YKVsTcY+LlwpJ9HBqQhWsI7Ljaou+Egjw=="
+    "@opencode-ai/models@0.0.112": {
+      "integrity": "sha512-qaZviSXU4IbM5nuk41L5QHoDTExbrEyCt1holHu69MjHMWzh3mtASG08/cvYaXGKelqmfRTMmff11WsYtzB/Uw=="
     },
     "@opencode-ai/models@0.0.99": {
       "integrity": "sha512-VNwCnCbipIUdfc1WlyTLwmFem3lsbcCN44EV5piTM1YjnH5LsDrswYzLhQSmeUoqf1WJVejKEY2MBAebA4jLag=="
@@ -2144,7 +2144,7 @@
       "npm:@jellybrick/dbus-next@0.11.4",
       "npm:@modelcontextprotocol/sdk@1.32.1",
       "npm:@napi-rs/canvas@1.0.11",
-      "npm:@opencode-ai/models@0.0.81",
+      "npm:@opencode-ai/models@0.0.112",
       "npm:@tabler/icons-preact@3.49.0",
       "npm:ai@7.0.127",
       "npm:esbuild@0.28.2",

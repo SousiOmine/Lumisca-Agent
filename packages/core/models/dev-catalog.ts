@@ -46,6 +46,7 @@ export const DEV_PROVIDER_IDS: readonly string[] = [
   "opencode",
   "opencode-go",
   "cline-pass",
+  "commandcode",
   "deepseek",
   "groq",
   "xai",
@@ -307,4 +308,12 @@ export function clinepassProvider(): Provider {
 /** OpenCode Go from models.dev. */
 export function opencodeGoProvider(): Provider {
   return builtinProvider("opencode-go")!;
+}
+
+/** CommandCode (Command Code's Provider API: one OpenAI- and
+ * Anthropic-compatible gateway for its coding plans) from models.dev. Every
+ * plan but Go can call it, and the key is the one the CLI uses
+ * (`CMD_API_KEY`). */
+export function commandcodeProvider(): Provider {
+  return builtinProvider("commandcode")!;
 }
