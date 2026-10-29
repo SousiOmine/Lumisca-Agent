@@ -106,6 +106,7 @@ function makeGoalAgent(
       }),
       list: () => [],
       listMessages: () => [],
+      listBetween: () => [],
       deleteFrom: () => {},
       insertAt: (_sessionId, index, message) => {
         void index;

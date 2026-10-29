@@ -59,3 +59,9 @@ export const TOOL_VM_ACT = "vm_act";
 /** Create another stella agent (a separate counterpart with its own name, role
  * and conversation). Terasuma's `tera_create`. */
 export const TOOL_AGENT_CREATE = "agent_create";
+
+/** Search this conversation's saved history, including the turns a
+ * compaction checkpoint replaced (so they are no longer in the model's
+ * context). Preloaded: a session that was condensed needs to know it can
+ * look back, and the tool costs one short definition. */
+export const TOOL_HISTORY_SEARCH = "history_search";

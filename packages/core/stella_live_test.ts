@@ -109,3 +109,50 @@ Deno.test("stella live: a tool call runs inside the machine", {
     await core.close();
   }
 });
+
+Deno.test(
+  "stella live: history_search reads a turn back from the machine's conversation",
+  {
+    ignore: !(await machineReady()),
+  },
+  async () => {
+    const vm = createVmManager({ containerDir });
+    const faux = fauxProvider();
+    const core = LumiscaCore.forTesting([faux.provider]);
+    try {
+      await core.setProviderApiKey(faux.provider.id, "faux-key");
+      core.setStellaVm(vm);
+      await core.getStellaAvailability();
+
+      const session = await core.getOrCreateStellaSession();
+      assert(core.getAgent(session.id) !== undefined, "the agent must be open");
+
+      // The tool is in the agent's preloaded set, without going through
+      // tool_search: a condensed conversation has to know it can look back.
+      faux.setResponses([
+        fauxAssistantMessage("Noted: the code word is pelican."),
+        fauxAssistantMessage([
+          fauxToolCall("history_search", { query: "pelican" }),
+        ], { stopReason: "toolUse" }),
+        fauxAssistantMessage("found it"),
+      ]);
+      await promptSession(core, session.id, "Remember the code word pelican.");
+      await promptSession(core, session.id, "What was the code word?");
+
+      // The result the model received carries the earlier turn, which is the
+      // whole point: it came from the rows, not from the visible context.
+      const result = core.getAgent(session.id)?.messages.find((message) =>
+        message.role === "toolResult" && message.toolName === "history_search"
+      );
+      assert(result !== undefined, "history_search must have run");
+      const text = result.role === "toolResult"
+        ? result.content.map((block) => block.type === "text" ? block.text : "")
+          .join("")
+        : "";
+      assert(text.includes("pelican"), text);
+      assert(text.includes("Remember the code word"), text);
+    } finally {
+      await core.close();
+    }
+  },
+);

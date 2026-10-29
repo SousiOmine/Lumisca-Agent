@@ -30,4 +30,8 @@ export interface StellaRuntime {
   screenTools: Tool[];
   /** `agent_create`, which adds another counterpart to the sidebar. */
   agentTool: Tool;
+  /** `history_search`, which reads this conversation's saved history back
+   * (the turns a compaction checkpoint replaced are no longer in the
+   * model's context, but every message is still a row). */
+  historyTool: Tool;
 }

@@ -202,6 +202,9 @@ export function createCodingTools(
  * - the screen tools (`vm_screenshot` / `vm_act`) are preloaded, because a
  *   GUI is the one thing a shell cannot reach and an agent must know it can
  *   look;
+ * - `history_search` is preloaded: the conversation outlives any one
+ *   context window, and the turns a checkpoint condensed away are still in
+ *   the message store — but the agent has to know it can ask for them.
  * - skills come from the machine and from the user's global set (see
  *   vm/skills.ts), not from a workspace folder chain.
  *
@@ -217,6 +220,10 @@ export function createStellaTools(options: {
   screen: Tool[];
   /** `agent_create`: add another stella agent (the sidebar's counterparts). */
   agents?: Tool;
+  /** `history_search`: the conversation's own saved history. Omitted → the
+   * tool is not built (a caller without a message store has nothing to
+   * search). */
+  history?: Tool;
   background?: BackgroundProcessManager;
   ask?: AskHub;
   todo?: TodoHub;
@@ -241,6 +248,7 @@ export function createStellaTools(options: {
       : []),
     ...options.screen,
     ...(options.agents !== undefined ? [options.agents] : []),
+    ...(options.history !== undefined ? [options.history] : []),
     ...(options.visuals !== undefined
       ? [createVisualTool({ files, ...options.visuals })]
       : []),

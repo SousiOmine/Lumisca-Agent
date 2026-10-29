@@ -86,6 +86,7 @@ function makeAgent(
       }),
       list: () => [],
       listMessages: () => [],
+      listBetween: () => [],
       deleteFrom: () => {},
       insertAt: (_sessionId, index, message) => {
         void index;
@@ -921,6 +922,7 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
     },
     list: () => [],
     listMessages: () => [],
+    listBetween: () => [],
     deleteFrom: (_sessionId: string, index: number) => {
       rows.splice(index);
     },
@@ -1113,6 +1115,7 @@ Deno.test("compactNow condenses on demand and reports the outcome", async () => 
       }),
       list: () => [],
       listMessages: () => [],
+      listBetween: () => [],
       deleteFrom: () => {},
       insertAt: (_sessionId, index, message) => {
         void index;
@@ -1235,6 +1238,7 @@ Deno.test("a compaction republishes the context its checkpoint left behind", asy
       }),
       list: () => [],
       listMessages: () => [],
+      listBetween: () => [],
       deleteFrom: () => {},
       insertAt: (_sessionId, index, message) => {
         void index;

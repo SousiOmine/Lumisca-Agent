@@ -99,6 +99,7 @@ import {
   type StellaAgent,
 } from "./stella/agents.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
+import { createHistorySearchTool } from "./stella/history.ts";
 import {
   VmBackgroundSpawner,
   VmCommandRunner as VmCommandRunnerImpl,
@@ -1015,6 +1016,11 @@ export class LumiscaCore {
       // duplicate-name rule is enforced once.
       agentTool: createAgentCreateTool({
         create: (input) => this.createStellaAgent(input),
+      }),
+      // The history of THIS conversation: each stella agent has its own
+      // transcript, so the tool is built per open around the session's rows.
+      historyTool: createHistorySearchTool({
+        messages: (window) => this.messages.listBetween(session.id, window),
       }),
     };
   }

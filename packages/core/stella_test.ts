@@ -1,13 +1,22 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { fauxProvider } from "./ai/faux.ts";
+import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
 import { LumiscaCore } from "./core.ts";
 import type { VmManager, VmStatus } from "./vm/container.ts";
 import { createStellaTools } from "./tools/toolsets.ts";
 import { hostBackends } from "./tools/toolsets.ts";
 import { createVmTools } from "./vm/tools.ts";
+import { createHistorySearchTool } from "./stella/history.ts";
+import { createAgentCreateTool } from "./stella/tools.ts";
+import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
+import { AskHub } from "./tools/ask.ts";
+import { BackgroundProcessManager } from "./tools/background.ts";
+import { TodoHub } from "./tools/todo.ts";
+import { TaskHub } from "./tools/task-hub.ts";
+import type { StreamFn } from "./ai/types.ts";
 import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
 import { APP_MODE_KEY } from "./shared/settings-keys.ts";
+import { promptSession } from "./test-utils.ts";
 
 /**
  * stella mode at the core level: the mode switch, the single conversation and
@@ -255,6 +264,7 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
     backends: hostBackends(workspace),
     skills: [],
     screen: createVmTools({ screen }),
+    history: createHistorySearchTool({ messages: () => [] }),
   });
   const names = tools.map((tool) => tool.name);
   // The coding tools are there...
@@ -280,7 +290,82 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   // The machine's screen is preloaded, not discoverable.
   assert(names.includes("vm_screenshot"), names.join(", "));
   assert(names.includes("vm_act"), names.join(", "));
+  // So is the conversation's own history: the turns a checkpoint condensed
+  // away are unreachable without it. A caller that passes no history tool
+  // (nothing to search) simply has none.
+  assert(names.includes("history_search"), names.join(", "));
   void faux;
+});
+
+Deno.test("stella tool set: every preloaded tool has a guideline section", () => {
+  // The stella sections are keyed on the preloaded tools, so a tool added
+  // without a section would reach a session whose prompt says nothing about
+  // it. Built the way the factory builds it (tools/toolsets.ts), not copied
+  // by hand — the coding set's equivalent test caught a drifted list once.
+  const screen: VmScreen = {
+    screenshot: () => Promise.resolve(new Uint8Array()),
+    move: () => Promise.resolve(),
+    click: () => Promise.resolve(),
+    drag: () => Promise.resolve(),
+    type: () => Promise.resolve(),
+    key: () => Promise.resolve(),
+    scroll: () => Promise.resolve(),
+  };
+  const stellaTools = createStellaTools({
+    backends: hostBackends({
+      id: "w",
+      name: "stella",
+      folders: [],
+      createdAt: 0,
+      chat: true,
+    }),
+    skills: [],
+    screen: createVmTools({ screen }),
+    agents: createAgentCreateTool({ create: () => ({}) as never }),
+    history: createHistorySearchTool({ messages: () => [] }),
+    background: new BackgroundProcessManager(),
+    ask: new AskHub("s1", () => {}),
+    todo: new TodoHub("s1", () => {}),
+    task: new TaskHub({
+      sessionId: "s1",
+      resolveRuntime: () => {
+        throw new Error("no sub-agent run in this test");
+      },
+      streamFn: (() => {
+        throw new Error("no sub-agent run in this test");
+      }) as unknown as StreamFn,
+      emit: () => {},
+    }),
+  }).map((tool) => tool.name);
+
+  const covered = new Set(
+    STELLA_PROMPT_SECTIONS.flatMap((section) => section.requires ?? []),
+  );
+  // Tools whose whole contract (arguments, result markers) is stated by the
+  // tool's own description, with no cross-call guidance to add. Adding a
+  // name here says the tool needs no bullet — never that one was forgotten.
+  const noSection = [
+    "list_dir",
+    "async_bash_status",
+    "async_bash_kill",
+    "task_output",
+  ];
+  const unguided = stellaTools.filter((name) =>
+    !covered.has(name) && !noSection.includes(name)
+  );
+  assertEquals(
+    unguided,
+    [],
+    "a stella tool needs a guideline section or an entry in noSection",
+  );
+  // The invariant is only meaningful while the set is the full one.
+  for (const expected of ["history_search", "vm_screenshot", "agent_create"]) {
+    assertEquals(
+      stellaTools.includes(expected),
+      true,
+      `${expected} must be built`,
+    );
+  }
 });
 
 Deno.test("stella tool set: the prompt teaches the machine, not a workspace", async () => {
@@ -300,8 +385,103 @@ Deno.test("stella tool set: the prompt teaches the machine, not a workspace", as
   // The screens are described only because the tools are there.
   assert(prompt.includes("vm_screenshot"), prompt);
   assert(prompt.includes("vm_act"), prompt);
+  // The history search is described for the same reason: a session that was
+  // condensed must know the earlier turns are still reachable.
+  const withHistory = buildStellaSystemPrompt({
+    tools: ["read", "history_search"],
+  });
+  assert(withHistory.includes("history_search"), withHistory);
   // A session without them gets no such guidance (the sections are
   // tool-gated, like every other section).
   const without = buildStellaSystemPrompt({ tools: ["read", "bash"] });
   assert(!without.includes("vm_screenshot"), without);
+  assert(!without.includes("history_search"), without);
+});
+
+/** A core with a running machine, one agent and its conversation open.
+ * The faux provider is the core's own: a second one would script a model
+ * nothing is listening to. */
+async function stellaConversation(name: string) {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  core.setStellaVm(fakeVm(RUNNING));
+  const agent = core.createStellaAgent({ name, role: "r" });
+  const session = await core.getOrCreateStellaSession(agent.id);
+  return { faux, core, agent, session };
+}
+
+/** The text of the last history_search tool result of a session. */
+function lastHistoryResult(core: LumiscaCore, sessionId: string): string {
+  const result = core.getAgent(sessionId)!.messages.findLast((message) =>
+    message.role === "toolResult" && message.toolName === "history_search"
+  );
+  if (result === undefined || result.role !== "toolResult") {
+    throw new Error("history_search did not run");
+  }
+  return result.content
+    .map((block) => block.type === "text" ? block.text : "")
+    .join("");
+}
+
+Deno.test("stella conversation: history_search is preloaded and reads its own rows", async () => {
+  const { faux, core, session } = await stellaConversation("Solo");
+  try {
+    // The prompt is snapshotted from the tool set, so this is the proof the
+    // tool is preloaded for a real stella session — not only for a hand-built
+    // tool set.
+    assert(
+      (session.systemPrompt ?? "").includes("history_search"),
+      session.systemPrompt ?? "",
+    );
+
+    faux.setResponses([fauxAssistantMessage("Noted.")]);
+    await promptSession(core, session.id, "The code word is pelican.");
+
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("history_search", { query: "pelican" }),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("found it"),
+    ]);
+    await promptSession(core, session.id, "Which code word did I give you?");
+
+    // The earlier turn came back from the message store: its words and the
+    // count line are both in the result.
+    const text = lastHistoryResult(core, session.id);
+    assert(text.includes("Found 1 message(s)"), text);
+    assert(text.includes("The code word is pelican."), text);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: history_search never reads another agent's rows", async () => {
+  const { faux, core, session: sessionA } = await stellaConversation("First");
+  try {
+    const second = core.createStellaAgent({ name: "Second", role: "r" });
+    const sessionB = await core.getOrCreateStellaSession(second.id);
+
+    // The word is said to the first agent only.
+    faux.setResponses([fauxAssistantMessage("Noted.")]);
+    await promptSession(core, sessionA.id, "The code word is pelican.");
+
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("history_search", { query: "pelican" }),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("nothing found"),
+    ]);
+    await promptSession(core, sessionB.id, "Which code word did I give you?");
+
+    // Each counterpart has their own history: mixing them would answer as
+    // somebody else. The head line echoes the query, so the check is on the
+    // found count and on the body the other conversation never had.
+    const text = lastHistoryResult(core, sessionB.id);
+    assert(text.includes("No message matching"), text);
+    assert(!text.includes("The code word is pelican."), text);
+  } finally {
+    await core.close();
+  }
 });

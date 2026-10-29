@@ -9,10 +9,21 @@ export interface StoredMessage {
   timestamp: number;
 }
 
+/** Time window of a history search: `from` and `to` are epoch ms and both
+ * inclusive; `null` leaves that side unbounded. */
+export interface MessageWindow {
+  from: number | null;
+  to: number | null;
+}
+
 export interface MessageRepo {
   append(sessionId: string, message: AgentMessage): StoredMessage;
   list(sessionId: string): StoredMessage[];
   listMessages(sessionId: string): AgentMessage[];
+  /** The session's messages whose timestamp lies in `window`, in transcript
+   * order. Backed by the `(session_id, timestamp)` index, so a search reads
+   * only the rows of the period it asks about. */
+  listBetween(sessionId: string, window: MessageWindow): StoredMessage[];
   /** Delete every row at or after `index` (a 0-based transcript position;
    * rows are inserted in transcript order, so rowid == position). Used by
    * the rewind feature: positional (not timestamp-based) so messages that
@@ -93,6 +104,24 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
   const listStmt = db.db.prepare(
     "SELECT * FROM messages WHERE session_id = ? ORDER BY rowid",
   );
+  // One statement per bounded/unbounded combination: SQLite cannot compare
+  // against a NULL bound, so an absent side is its own query rather than a
+  // runtime rewrite of the SQL text.
+  const listBetweenStmt = db.db.prepare(`
+    SELECT * FROM messages
+    WHERE session_id = ? AND timestamp >= ? AND timestamp <= ?
+    ORDER BY rowid
+  `);
+  const listSinceStmt = db.db.prepare(`
+    SELECT * FROM messages
+    WHERE session_id = ? AND timestamp >= ?
+    ORDER BY rowid
+  `);
+  const listUntilStmt = db.db.prepare(`
+    SELECT * FROM messages
+    WHERE session_id = ? AND timestamp <= ?
+    ORDER BY rowid
+  `);
   const deleteStmt = db.db.prepare(
     "DELETE FROM messages WHERE session_id = ?",
   );
@@ -160,6 +189,20 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
 
     listMessages(sessionId: string): AgentMessage[] {
       return list(sessionId).map((m) => m.message);
+    },
+
+    listBetween(sessionId: string, window): StoredMessage[] {
+      const rows =
+        (window.from === null
+          ? window.to === null
+            ? listStmt.all(sessionId)
+            : listUntilStmt.all(sessionId, window.to)
+          : window.to === null
+          ? listSinceStmt.all(sessionId, window.from)
+          : listBetweenStmt.all(sessionId, window.from, window.to)) as Array<
+            Parameters<typeof toStored>[0]
+          >;
+      return rows.map(toStored);
     },
 
     deleteFrom(sessionId: string, index: number): void {

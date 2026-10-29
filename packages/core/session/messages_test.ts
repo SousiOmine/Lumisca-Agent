@@ -308,3 +308,49 @@ Deno.test("messages: insertAt leaves other sessions untouched", () => {
     db.close();
   }
 });
+
+Deno.test("messages: listBetween bounds the window and keeps transcript order", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    const at = (timestamp: number) =>
+      repo.append("s1", {
+        role: "user",
+        content: `t${timestamp}`,
+        timestamp,
+      } as AgentMessage);
+
+    // Inserted out of order: the window is by timestamp, the order is the
+    // transcript's (rowid).
+    at(3000);
+    at(1000);
+    at(2000);
+
+    const all = repo.listBetween("s1", { from: null, to: null });
+    assertEquals(all.map((row) => row.timestamp), [3000, 1000, 2000]);
+    // Both bounds are inclusive.
+    assertEquals(
+      repo.listBetween("s1", { from: 2000, to: 3000 }).map((row) =>
+        row.timestamp
+      ),
+      [3000, 2000],
+    );
+    // One open side each way.
+    assertEquals(
+      repo.listBetween("s1", { from: 2000, to: null }).map((row) =>
+        row.timestamp
+      ),
+      [3000, 2000],
+    );
+    assertEquals(
+      repo.listBetween("s1", { from: null, to: 2000 }).map((row) =>
+        row.timestamp
+      ),
+      [1000, 2000],
+    );
+    assertEquals(repo.listBetween("s1", { from: 4000, to: null }), []);
+  } finally {
+    db.close();
+  }
+});

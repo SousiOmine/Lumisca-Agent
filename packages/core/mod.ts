@@ -25,6 +25,8 @@ export {
   MAX_AGENT_ROLE_CHARS,
   type StellaAgent,
 } from "./stella/agents.ts";
+export type { HistorySearchTarget } from "./stella/history.ts";
+export { createHistorySearchTool } from "./stella/history.ts";
 export type { Logger } from "./log.ts";
 export { refreshCatalogInBackground } from "./models/catalog-refresh.ts";
 export type { CatalogRefresher } from "./models/catalog-refresh.ts";

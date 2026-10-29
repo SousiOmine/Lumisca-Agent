@@ -307,6 +307,7 @@ export class AgentFactory {
         skills: stella.skills(),
         screen: stella.screenTools,
         agents: stella.agentTool,
+        history: stella.historyTool,
         background,
         ask: askHub,
         todo,

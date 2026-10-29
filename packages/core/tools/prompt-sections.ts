@@ -1,4 +1,5 @@
 import {
+  TOOL_AGENT_CREATE,
   TOOL_ASK,
   TOOL_ASYNC_BASH,
   TOOL_BASH,
@@ -6,6 +7,7 @@ import {
   TOOL_EVAL,
   TOOL_GLOB,
   TOOL_GREP,
+  TOOL_HISTORY_SEARCH,
   TOOL_LIST_DIR,
   TOOL_READ,
   TOOL_SEND_MESSAGE,
@@ -243,6 +245,36 @@ const VM_ACT_SECTION: PromptSection = {
     "can do — a command is\n  faster and leaves a record, a click does not.",
 };
 
+/** The conversation's own history, in a stella session. Keyed on the tool:
+ * a session whose history was condensed must be told the earlier turns are
+ * still reachable, and one without the tool would be sent looking for it. */
+const HISTORY_SEARCH_SECTION: PromptSection = {
+  name: "tool:history_search",
+  order: ORDER.tool + 135,
+  requires: [TOOL_HISTORY_SEARCH],
+  text:
+    "- This one conversation outlives any single context window: when older " +
+    "turns are\n  condensed into a checkpoint, their exact words leave your " +
+    "context but stay in the\n  history. Use history_search to look them up " +
+    "(by word or by date) before\n  saying that you do not remember, or " +
+    "before asking the user to repeat something.",
+};
+
+/** Adding a counterpart in a stella session (Terasuma's `tera_create`).
+ * The tool cannot ask the questions, so the bullet carries when to reach
+ * for it: the user has already said what the new agent should be. */
+const AGENT_CREATE_SECTION: PromptSection = {
+  name: "tool:agent_create",
+  order: ORDER.tool + 138,
+  requires: [TOOL_AGENT_CREATE],
+  text:
+    "- The sidebar can hold several counterparts, each with its own role and " +
+    "conversation.\n  When the user describes another one they want, call " +
+    "agent_create with a name\n  and the role in their words — do not ask " +
+    "them for those facts again in the tool;\n  it cannot talk back. The new " +
+    "agent appears in the sidebar, and this conversation\n  stays as it is.",
+};
+
 const TASK_SECTION: PromptSection = {
   name: "tool:task",
   order: ORDER.tool + 130,
@@ -406,6 +438,8 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   SKILL_SECTION,
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
+  HISTORY_SEARCH_SECTION,
+  AGENT_CREATE_SECTION,
   VISUAL_IMAGE_SECTION,
   TASK_SECTION,
   NOTIFICATION_SECTION,
