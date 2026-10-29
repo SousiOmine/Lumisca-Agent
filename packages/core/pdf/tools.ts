@@ -22,7 +22,7 @@ import { findCanvasIcuDataFile } from "./icu-data.ts";
 import { getDocumentProxy, renderPageAsImage } from "unpdf";
 import { errorMessage } from "../errors.ts";
 import { bytesToBase64 } from "../base64.ts";
-import type { Sandbox } from "../workspace/sandbox.ts";
+import type { FileBackend } from "../tools/file-backend.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
 import {
   array,
@@ -70,10 +70,14 @@ export interface PdfRenderResult {
 }
 
 /** Renders PDF pages. The default implementation is Deno-native (see
- * `createUnpdfRenderer`); tests inject a fake. */
+ * `createUnpdfRenderer`); tests inject a fake.
+ *
+ * `readBytes` is the caller's file backend, so a PDF that lives in the
+ * stella VM is fetched the same way every other file tool fetches it and
+ * the renderer never assumes a host path. */
 export interface PdfRenderer {
   render(
-    pdfPath: string,
+    source: { path: string; readBytes(): Promise<Uint8Array> },
     pages: number[],
     dpi: number,
     signal?: AbortSignal,
@@ -133,12 +137,12 @@ export function createUnpdfRenderer(options?: {
   const findIcuDataFile = options?.findIcuDataFile ?? findCanvasIcuDataFile;
   return {
     async render(
-      pdfPath: string,
+      source: { path: string; readBytes(): Promise<Uint8Array> },
       pages: number[],
       dpi: number,
       signal?: AbortSignal,
     ): Promise<PdfRenderResult> {
-      const bytes = await Deno.readFile(pdfPath);
+      const bytes = await source.readBytes();
       if (bytes.length > MAX_PDF_BYTES) {
         throw new Error(
           `PDF is too large to render (${bytes.length} bytes; max ${MAX_PDF_BYTES})`,
@@ -218,12 +222,13 @@ const pdfReadPagesSchema = object({
 });
 
 export interface PdfToolOptions {
-  sandbox: Sandbox;
+  files: FileBackend;
   /** Renderer override (tests inject a fake; omitted → unpdf). */
   renderer?: PdfRenderer;
 }
 
-/** Build the PDF page-as-image tool over a workspace sandbox. */
+/** Build the PDF page-as-image tool over a file backend (the host's
+ * workspace, or the stella VM). */
 export function createPdfTools(options: PdfToolOptions): Tool[] {
   return [createPdfReadPagesTool(options)];
 }
@@ -266,10 +271,26 @@ function createPdfReadPagesTool(
             "call again for the remaining pages",
         );
       }
-      const filePath = await requireExistingFile(options.sandbox, params.path);
+      const filePath = await requireExistingFile(options.files, params.path);
 
       const { totalPages, pages: rendered } = await renderer.render(
-        filePath,
+        {
+          path: filePath,
+          readBytes: async () => {
+            // The renderer buffers the whole document, so the size cap is
+            // enforced before the bytes are transferred (a VM read of a
+            // 100MB PDF would be wasted work).
+            const stat = await options.files.stat(filePath);
+            const size = stat?.size ?? 0;
+            if (size > MAX_PDF_BYTES) {
+              throw new Error(
+                `PDF is too large to render (${size} bytes; max ${MAX_PDF_BYTES})`,
+              );
+            }
+            return (await options.files.readHead(filePath, MAX_PDF_BYTES))
+              .bytes;
+          },
+        },
         pages,
         dpi,
         signal,

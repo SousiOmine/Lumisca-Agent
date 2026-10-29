@@ -21,6 +21,7 @@
  * - `./loopback.ts` — loopback host detection and URL host spellings,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
+export * from "./app-mode.ts";
 export * from "./settings-keys.ts";
 export * from "./i18n/mod.ts";
 export * from "./tool-names.ts";

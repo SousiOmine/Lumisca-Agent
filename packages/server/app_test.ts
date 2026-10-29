@@ -2706,3 +2706,112 @@ Deno.test("compact condenses the history via the API", async () => {
     core.close();
   }
 });
+
+// --- stella mode ------------------------------------------------------------
+
+Deno.test("stella API: the status reports the mode and the availability", async () => {
+  const { core, server, base } = await setup();
+  try {
+    // No machine attached (the test core has none): the mode is offered but
+    // stella is not, and the reason is a sentence the screen shows.
+    const status = await json(base, "/api/stella/status");
+    assertEquals(status.status, 200);
+    const body = await status.json() as {
+      mode: string | null;
+      availability: { available: boolean; reason?: string };
+      state: string;
+    };
+    assertEquals(body.mode, null);
+    assertEquals(body.availability.available, false);
+    assertEquals(body.state, "unavailable");
+    assert(
+      body.availability.available === false &&
+        body.availability.reason?.includes("not set up"),
+      JSON.stringify(body),
+    );
+  } finally {
+    server.shutdown();
+    void core.close();
+  }
+});
+
+Deno.test("stella API: choosing code mode is stored and reported", async () => {
+  const { core, server, base } = await setup();
+  try {
+    const put = await json(base, "/api/stella/mode", {
+      method: "PUT",
+      body: JSON.stringify({ mode: "code" }),
+    });
+    assertEquals(put.status, 200);
+    const body = await put.json() as { mode: string | null };
+    assertEquals(body.mode, "code");
+    // And it is the stored value, not a response-only echo.
+    assertEquals(core.getAppMode(), "code");
+  } finally {
+    server.shutdown();
+    void core.close();
+  }
+});
+
+Deno.test("stella API: stella mode is refused without a usable machine", async () => {
+  const { core, server, base } = await setup();
+  try {
+    const put = await json(base, "/api/stella/mode", {
+      method: "PUT",
+      body: JSON.stringify({ mode: "stella" }),
+    });
+    // 503: the server cannot do what was asked, and the reason says why.
+    assertEquals(put.status, 503);
+    const body = await put.json() as { error: string };
+    assert(body.error.includes("not set up"), body.error);
+    // Nothing was stored: the mode is still unchosen.
+    assertEquals(core.getAppMode(), undefined);
+  } finally {
+    server.shutdown();
+    void core.close();
+  }
+});
+
+Deno.test("stella API: an invalid mode is a 400", async () => {
+  const { core, server, base } = await setup();
+  try {
+    const put = await json(base, "/api/stella/mode", {
+      method: "PUT",
+      body: JSON.stringify({ mode: "turbo" }),
+    });
+    assertEquals(put.status, 400);
+  } finally {
+    server.shutdown();
+    void core.close();
+  }
+});
+
+Deno.test("stella API: the conversation is created on demand and stays out of /sessions", async () => {
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    // Attach a machine that reports itself available; the conversation only
+    // needs the manager to exist (its tools are exercised elsewhere).
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "stopped", vncPort: null, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      reset: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      vncPort: () => Promise.resolve(null),
+    });
+    const response = await json(base, "/api/stella/session");
+    assertEquals(response.status, 200);
+    const session = await response.json() as { id: string; stella?: boolean };
+    assertEquals(session.stella, true);
+
+    // The session list must never offer it.
+    const list = await json(base, "/api/sessions");
+    assertEquals(await list.json(), []);
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});

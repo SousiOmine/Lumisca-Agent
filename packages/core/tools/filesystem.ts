@@ -1,4 +1,4 @@
-import { extname, join } from "node:path";
+import { extname } from "node:path";
 import {
   decodeUtf8,
   diffLineCounts,
@@ -14,9 +14,10 @@ import {
   truncate,
   truncatedNote,
 } from "./truncate.ts";
-import { requireExistingFile, requireResolved } from "./resolve.ts";
 import { bytesToBase64 } from "../base64.ts";
 import type { FsToolContext } from "./context.ts";
+import type { BackendDirEntry, LineRange } from "./file-backend.ts";
+import { requireExistingFile, requireResolved } from "./resolve.ts";
 
 /** Raster image extensions read as image content blocks (vision models see
  * the pixels). Vector images (SVG) are XML and stay on the text path. */
@@ -36,19 +37,18 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 /** Line count suggested by the "file continues" note for a next chunk. */
 const SUGGESTED_RANGE_LINES = 2000;
 
-function fileInfoLine(entry: Deno.DirEntry): string {
+function fileInfoLine(entry: BackendDirEntry): string {
   if (entry.isDirectory) return `${entry.name}/`;
   if (entry.isSymlink) return `${entry.name} -> (symlink)`;
   return `${entry.name}`;
 }
 
-// --- line ranges --------------------------------------------------------------
+/** Resolve a path, throwing the rejection reason (the wording every tool
+ * shares). Re-exported from resolve.ts so this module's tools need one
+ * import for both helpers. */
+export { requireExistingFile, requireResolved } from "./resolve.ts";
 
-/** One line range: 1-based, inclusive. */
-interface LineRange {
-  from: number;
-  to: number;
-}
+// --- line ranges --------------------------------------------------------------
 
 /** One comma-separated segment: `50`, `50-100` or `50+20`. */
 const RANGE_SEGMENT = /^(\d+)(?:-(\d+)|\+(\d+))?$/;
@@ -99,105 +99,23 @@ function splitRangeSuffix(
   return { path: requested.slice(0, colon), spec, ranges };
 }
 
-/** Sort ranges by start and merge overlaps/adjacency, so membership checks
- * run against a small sorted list without materializing every line number. */
-function mergeRanges(ranges: LineRange[]): LineRange[] {
-  const sorted = [...ranges].sort((a, b) => a.from - b.from);
-  const merged: LineRange[] = [];
-  for (const range of sorted) {
-    const last = merged[merged.length - 1];
-    if (last !== undefined && range.from <= last.to + 1) {
-      last.to = Math.max(last.to, range.to);
-    } else {
-      merged.push({ ...range });
-    }
-  }
-  return merged;
-}
-
-/** Strip a trailing `\r` so CRLF lines read back as clean LF lines (edits
- * match line endings leniently, so the raw bytes are not needed here). */
-function stripTrailingCR(line: string): string {
-  return line.endsWith("\r") ? line.slice(0, -1) : line;
-}
-
-/** Stream a file's lines as [1-based line number, text]. The trailing `\n`
- * and a trailing `\r` (CRLF files) are stripped, so the model always sees
- * LF-style lines. Stops early when the consumer breaks. */
-async function* readLines(path: string): AsyncGenerator<[number, string]> {
-  const file = await Deno.open(path, { read: true });
-  const decoder = new TextDecoder();
-  const buffer = new Uint8Array(64 * 1024);
-  let lineNo = 1;
-  let carry = "";
-  try {
-    while (true) {
-      const n = await file.read(buffer);
-      if (n === null) break;
-      carry += decoder.decode(buffer.subarray(0, n), { stream: true });
-      // A single line can exceed the output budget by far (minified
-      // files); keep only its tail so a line-ranged read never buffers
-      // the whole file in memory.
-      if (carry.length > MAX_TOOL_OUTPUT) {
-        carry = carry.slice(-MAX_TOOL_OUTPUT);
-      }
-      let start = 0;
-      for (let i = 0; i < carry.length; i++) {
-        if (carry[i] === "\n") {
-          yield [lineNo++, stripTrailingCR(carry.slice(start, i))];
-          start = i + 1;
-        }
-      }
-      carry = carry.slice(start);
-    }
-    const tail = carry + decoder.decode();
-    if (tail.length > 0) yield [lineNo, stripTrailingCR(tail)];
-  } finally {
-    file.close();
-  }
-}
-
-/** Read the requested line ranges, streaming; stops once the last needed
- * line is past. `endOfFile` reports whether the file ended before the
- * requested range was satisfied, `lastLine` the highest line seen. */
-async function readLineRanges(
-  path: string,
-  ranges: LineRange[],
-): Promise<{ lines: string[]; endOfFile: boolean; lastLine: number }> {
-  const merged = mergeRanges(ranges);
-  const maxTo = merged[merged.length - 1]!.to;
-  const lines: string[] = [];
-  let collectedBytes = 0;
-  let startIndex = 0;
-  let lastLine = 0;
-  let index = 0;
-  let pastMax = false;
-  for await (const [no, text] of readLines(path)) {
-    lastLine = no;
-    while (index < merged.length && no > merged[index]!.to) index++;
-    const current = merged[index];
-    if (current === undefined) {
-      pastMax = true;
-      break;
-    }
-    if (no >= current.from) {
-      lines.push(text);
-      collectedBytes += text.length + 1;
-      // Only the last MAX_TOOL_OUTPUT bytes can ever be displayed; drop
-      // the front as the collection exceeds that (keeping at least one
-      // line) so huge ranges stay memory-bounded.
-      while (
-        collectedBytes > MAX_TOOL_OUTPUT && startIndex < lines.length - 1
-      ) {
-        collectedBytes -= lines[startIndex]!.length + 1;
-        startIndex++;
-      }
-    }
+/** Trim a ranged read to what can be displayed: the model sees the tail of
+ * the last MAX_TOOL_OUTPUT bytes, so drop the front of an oversized range
+ * (keeping at least one line) instead of handing over an unbounded string. */
+function capRangeLines(lines: readonly string[]): {
+  lines: string[];
+  truncated: boolean;
+} {
+  let bytes = 0;
+  let start = 0;
+  for (const line of lines) bytes += line.length + 1;
+  while (bytes > MAX_TOOL_OUTPUT && start < lines.length - 1) {
+    bytes -= lines[start]!.length + 1;
+    start++;
   }
   return {
-    lines: lines.slice(startIndex),
-    endOfFile: !pastMax && lastLine < maxTo,
-    lastLine,
+    lines: lines.slice(start),
+    truncated: start > 0,
   };
 }
 
@@ -218,6 +136,7 @@ const readSchema = object({
 export function createReadFileTool(
   ctx: FsToolContext,
 ): Tool<typeof readSchema> {
+  const files = ctx.files;
   return {
     name: TOOL_READ,
     label: "Read File",
@@ -233,88 +152,69 @@ export function createReadFileTool(
       "with <path>:<line>+2000]`. A ranged read ends with `[end of file: N " +
       "lines]` when it reached the last line.",
     parameters: readSchema,
-    execute: async (_id, params, _signal) => {
+    execute: async (_id, params) => {
       const { path, spec, ranges } = splitRangeSuffix(params.path);
       // The range suffix is not part of the file path, so the existence and
       // type check runs on the path alone (its message then names the file).
-      const filePath = await requireExistingFile(ctx.sandbox, path);
-      // Still needed below: the image branch compares the size against
-      // MAX_IMAGE_BYTES, and the "file continues" note against what was read.
-      const stat = await Deno.stat(filePath);
+      const filePath = await requireExistingFile(files, path);
+      const stat = await files.stat(filePath);
+      // requireExistingFile proved it exists; the second stat is the size
+      // the read below decides on.
+      const size = stat?.size ?? 0;
 
       if (ranges !== undefined) {
-        const { lines, endOfFile, lastLine } = await readLineRanges(
+        const { lines, endOfFile, lastLine } = await files.readRanges(
           filePath,
           ranges,
         );
-        const { text, truncated } = truncate(lines.join("\n"));
-        let output = `--- ${path} lines ${spec} ---\n${text}`;
+        const { lines: kept, truncated } = capRangeLines(lines);
+        let output = `--- ${path} lines ${spec} ---\n${kept.join("\n")}`;
         if (truncated) output += truncatedNote("output");
         if (endOfFile) output += `\n[end of file: ${lastLine} lines]`;
         return {
           content: [{ type: "text", text: output }],
-          details: { path: filePath, size: stat.size },
+          details: { path: filePath, size },
         };
       }
-
       // Whole-file read: image blocks for raster images, else text.
       const mimeType = IMAGE_MIME_BY_EXT[extname(filePath).toLowerCase()];
-      if (mimeType !== undefined && stat.size <= MAX_IMAGE_BYTES) {
-        const file = await Deno.open(filePath, { read: true });
-        try {
-          const buffer = new Uint8Array(stat.size);
-          let read = 0;
-          while (read < buffer.length) {
-            const n = await file.read(buffer.subarray(read));
-            if (n === null) break;
-            read += n;
-          }
-          const name = filePath.split(/[\\/]/).pop() ?? filePath;
-          return {
-            content: [
-              { type: "text", text: `[image: ${name} (${read} bytes)]` },
-              {
-                type: "image",
-                data: bytesToBase64(buffer.subarray(0, read)),
-                mimeType,
-              },
-            ],
-            details: { path: filePath, size: stat.size },
-          };
-        } finally {
-          file.close();
-        }
+      if (mimeType !== undefined && size <= MAX_IMAGE_BYTES) {
+        const { bytes } = await files.readHead(filePath, size);
+        const name = filePath.split(/[\\/]/).pop() ?? filePath;
+        return {
+          content: [
+            { type: "text", text: `[image: ${name} (${bytes.length} bytes)]` },
+            {
+              type: "image",
+              data: bytesToBase64(bytes),
+              mimeType,
+            },
+          ],
+          details: { path: filePath, size },
+        };
       }
 
-      const file = await Deno.open(filePath, { read: true });
-      try {
-        const buffer = new Uint8Array(DEFAULT_READ_LIMIT);
-        const read = await file.read(buffer);
-        const bytes = read === null
-          ? new Uint8Array(0)
-          : buffer.subarray(0, read);
-        const text = decodeUtf8(bytes);
-        // Normalize CRLF so the model sees the same LF-style lines as
-        // line-ranged reads (edits match line endings leniently).
-        const { text: trimmed, truncated } = truncate(
-          text.replaceAll("\r\n", "\n"),
-        );
-        let note = "";
-        if (truncated) {
-          note = truncatedNote("output");
-        }
-        if (bytes.length < stat.size) {
-          const nextLine = countNewlines(bytes) + 1;
-          note +=
-            `\n[file continues; read with ${params.path}:${nextLine}+${SUGGESTED_RANGE_LINES}]`;
-        }
-        return {
-          content: [{ type: "text", text: trimmed + note }],
-          details: { path: filePath, size: stat.size },
-        };
-      } finally {
-        file.close();
+      const { bytes, size: actualSize } = await files.readHead(
+        filePath,
+        DEFAULT_READ_LIMIT,
+      );
+      const text = decodeUtf8(bytes);
+      // Normalize CRLF so the model sees the same LF-style lines as
+      // line-ranged reads (edits match line endings leniently).
+      const { text: trimmed, truncated } = truncate(
+        text.replaceAll("\r\n", "\n"),
+      );
+      let note = "";
+      if (truncated) note = truncatedNote("output");
+      if (bytes.length < actualSize) {
+        const nextLine = countNewlines(bytes) + 1;
+        note +=
+          `\n[file continues; read with ${params.path}:${nextLine}+${SUGGESTED_RANGE_LINES}]`;
       }
+      return {
+        content: [{ type: "text", text: trimmed + note }],
+        details: { path: filePath, size: stat?.size ?? size },
+      };
     },
   };
 }
@@ -327,6 +227,7 @@ const writeSchema = object({
 export function createWriteFileTool(
   ctx: FsToolContext,
 ): Tool<typeof writeSchema> {
+  const files = ctx.files;
   return {
     name: TOOL_WRITE,
     label: "Write File",
@@ -336,27 +237,24 @@ export function createWriteFileTool(
       "existing file's line-ending style (CRLF stays CRLF).",
     parameters: writeSchema,
     execute: async (_id, params) => {
-      const filePath = await requireResolved(ctx.sandbox, params.path);
-      const parent = await requireResolved(ctx.sandbox, join(filePath, ".."));
+      const filePath = await requireResolved(files, params.path);
       // Two concurrent writes to the same file would race (last write
       // wins); serialize per path like edits do.
       return withFileLock(filePath, async () => {
-        await Deno.mkdir(parent, { recursive: true });
         // Keep an existing file's CRLF style when overwriting it, so a
         // full rewrite never flips the whole file to LF (new files stay
         // as sent, normally LF).
         let content = params.content;
         let previous = "";
         try {
-          const existing = await Deno.readTextFile(filePath);
-          previous = existing;
-          if (existing.includes("\r\n")) {
+          previous = await files.readText(filePath);
+          if (previous.includes("\r\n")) {
             content = content.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n");
           }
         } catch {
           // File does not exist yet: write the content as-is.
         }
-        await Deno.writeTextFile(filePath, content);
+        await files.writeText(filePath, content);
         const { addedLines, removedLines } = diffLineCounts(previous, content);
         return {
           content: [{ type: "text", text: `Wrote ${filePath}` }],
@@ -405,6 +303,7 @@ function toFileNewlines(newString: string, fileContent: string): string {
 export function createEditFileTool(
   ctx: FsToolContext,
 ): Tool<typeof editSchema> {
+  const files = ctx.files;
   return {
     name: TOOL_EDIT,
     label: "Edit File",
@@ -418,12 +317,12 @@ export function createEditFileTool(
       "line-ending style.",
     parameters: editSchema,
     execute: async (_id, params) => {
-      const filePath = await requireResolved(ctx.sandbox, params.path);
+      const filePath = await requireResolved(files, params.path);
       // read-modify-write must be atomic per file: parallel edits to the
       // same file would otherwise read the same pre-edit content and
       // overwrite each other (see withFileLock).
       return withFileLock(filePath, async () => {
-        const content = await Deno.readTextFile(filePath);
+        const content = await files.readText(filePath);
         // Match leniently: models usually reproduce `old_string` with LF
         // even when the file is CRLF, so compare both sides normalized to
         // LF and map the match position back into the original bytes.
@@ -449,7 +348,7 @@ export function createEditFileTool(
         const updated = content.slice(0, origIndex) +
           toFileNewlines(params.new_string, content) +
           content.slice(origEnd);
-        await Deno.writeTextFile(filePath, updated);
+        await files.writeText(filePath, updated);
         const { addedLines, removedLines } = diffLineCounts(
           params.old_string,
           params.new_string,
@@ -515,6 +414,7 @@ function withFileLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
 export function createListDirTool(
   ctx: FsToolContext,
 ): Tool<typeof listDirSchema> {
+  const files = ctx.files;
   return {
     name: TOOL_LIST_DIR,
     label: "List Directory",
@@ -524,11 +424,8 @@ export function createListDirTool(
       "cap ends with `[listing truncated to the last 65536 bytes]`.",
     parameters: listDirSchema,
     execute: async (_id, params) => {
-      const dirPath = await requireResolved(ctx.sandbox, params.path);
-      const entries: Deno.DirEntry[] = [];
-      for await (const entry of Deno.readDir(dirPath)) {
-        entries.push(entry);
-      }
+      const dirPath = await requireResolved(files, params.path);
+      const entries = await files.listDir(dirPath);
       entries.sort((a, b) => a.name.localeCompare(b.name));
       const lines = entries.map((e) => fileInfoLine(e));
       const { text, truncated } = truncate(lines.join("\n") || "(empty)");

@@ -1,5 +1,22 @@
 export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
+export {
+  createVmManager,
+  type VmManager,
+  type VmProgress,
+  type VmState,
+  type VmStatus,
+} from "./vm/container.ts";
+export {
+  type StellaAvailability,
+  stellaAvailability,
+} from "./vm/availability.ts";
+export {
+  VM_SCREEN_HEIGHT,
+  VM_SCREEN_WIDTH,
+  VM_SKILLS_DIR,
+  VM_WORKDIR,
+} from "./vm/contract.ts";
 export { CoreError, errorMessage } from "./errors.ts";
 export { createLogger } from "./log.ts";
 export type { Logger } from "./log.ts";

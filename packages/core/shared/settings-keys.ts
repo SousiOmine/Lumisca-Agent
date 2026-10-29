@@ -10,6 +10,12 @@ import { safeJsonParse } from "./misc.ts";
 /** Settings-table key for the UI theme. */
 export const THEME_KEY = "theme";
 
+/** Settings-table key for the operating mode ("code" | "stella"; see
+ * shared/app-mode.ts). Unset means "not chosen yet": the app shows its
+ * mode-selection screen and stores the answer, so the value is never
+ * ambiguous afterwards — there is no silent default. */
+export const APP_MODE_KEY = "app_mode";
+
 /** Settings-table key for the app language ("ja" | "en"; see
  * shared/i18n). It is the single source of the language for BOTH the UI and
  * the session's system prompt, so the server must hold it: the prompt is

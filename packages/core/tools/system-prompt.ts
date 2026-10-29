@@ -10,6 +10,7 @@ import {
   CODING_PROMPT_SECTIONS,
   type PromptSection,
   renderPromptSections,
+  STELLA_PROMPT_SECTIONS,
 } from "./prompt-sections.ts";
 
 /** How a session's system prompt is built: the workspace framing for a
@@ -61,6 +62,41 @@ The workspace contains these folders (file access is restricted to them):
 ${folders}${buildEnvironmentSection(options.model)}${
     guidelines(
       CODING_PROMPT_SECTIONS,
+      options.tools ?? [],
+      options.language ?? DEFAULT_LOCALE,
+    )
+  }
+`;
+}
+
+/**
+ * System prompt of a stella session: one conversation with one assistant,
+ * working inside a virtual machine the user can watch.
+ *
+ * The machine is the framing, and it is stated plainly (what it is, where
+ * the working directory is, that nothing outside it is reachable) because
+ * that is the model's whole world: a session whose prompt still talked about
+ * workspaces and folder pickers would have it looking for things that are not
+ * there. Everything else — the tools, the guidelines — is the coding set,
+ * since the work inside the machine is coding work.
+ */
+export function buildStellaSystemPrompt(
+  options: SystemPromptOptions = {},
+): string {
+  return `You are Lumisca, a general-purpose assistant working inside a virtual
+machine that belongs to this conversation.
+
+The machine is a Linux desktop: a shell, a browser and a screen are there for
+whatever the work needs. Your home and working directory is /home/agent; the
+file tools resolve paths inside it, and bash starts there. Nothing outside
+the machine is reachable — that is deliberate: you experiment freely, and a
+mistake costs nothing on the user's own computer.
+
+You talk with the user in a single, ongoing chat. There is no session list
+and no workspace to pick: this one conversation is the whole context, and it
+grows over time.${buildEnvironmentSection(options.model)}${
+    guidelines(
+      STELLA_PROMPT_SECTIONS,
       options.tools ?? [],
       options.language ?? DEFAULT_LOCALE,
     )

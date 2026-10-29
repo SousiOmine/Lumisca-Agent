@@ -20,6 +20,8 @@
     "npm:@jellybrick/dbus-next@0.11.4": "0.11.4",
     "npm:@modelcontextprotocol/sdk@1.32.2": "1.32.2_zod@4.4.3",
     "npm:@napi-rs/canvas@1.0.13": "1.0.13",
+    "npm:@novnc/novnc@*": "1.7.0",
+    "npm:@novnc/novnc@1.7.0": "1.7.0",
     "npm:@opencode-ai/models@*": "0.0.112",
     "npm:@opencode-ai/models@0.0.112": "0.0.112",
     "npm:@opencode-ai/models@0.0.99": "0.0.99",
@@ -611,6 +613,9 @@
     },
     "@nodable/entities@3.1.0": {
       "integrity": "sha512-LsS/DjHr+uDM647Gru/cA8+J3a3HfhttwCKLyuoyN7yXTFCxKBtSgMQBvrW9yNPa2/zDRUNuGPaH5QUFoa4arQ=="
+    },
+    "@novnc/novnc@1.7.0": {
+      "integrity": "sha512-ucEJOx4T2avIRCleodk7YobZj5O2Ga2AeLfQ69A/yjG9HHba2+PDgwSkN3FttrmG+70ZGx21sElNFouK13RzyA=="
     },
     "@opencode-ai/models@0.0.112": {
       "integrity": "sha512-qaZviSXU4IbM5nuk41L5QHoDTExbrEyCt1holHu69MjHMWzh3mtASG08/cvYaXGKelqmfRTMmff11WsYtzB/Uw=="
@@ -1688,10 +1693,7 @@
       ]
     },
     "preact-render-to-string@6.8.1_preact@11.0.1": {
-      "integrity": "sha512-EIaLVlarET55f737gG/g1bK1UfjAgT3Z7Ch1Z7UX4/TwHh1O7EI5sCtwhVP+cs0n37SyV2HjZCSRtrpMm4Bujw==",
-      "dependencies": [
-        "preact@11.0.1_preact-render-to-string@6.8.1"
-      ]
+      "integrity": "sha512-EIaLVlarET55f737gG/g1bK1UfjAgT3Z7Ch1Z7UX4/TwHh1O7EI5sCtwhVP+cs0n37SyV2HjZCSRtrpMm4Bujw=="
     },
     "preact-render-to-string@6.8.1_preact@11.0.2": {
       "integrity": "sha512-EIaLVlarET55f737gG/g1bK1UfjAgT3Z7Ch1Z7UX4/TwHh1O7EI5sCtwhVP+cs0n37SyV2HjZCSRtrpMm4Bujw==",
@@ -2142,6 +2144,7 @@
       "npm:@jellybrick/dbus-next@0.11.4",
       "npm:@modelcontextprotocol/sdk@1.32.2",
       "npm:@napi-rs/canvas@1.0.13",
+      "npm:@novnc/novnc@1.7.0",
       "npm:@opencode-ai/models@0.0.112",
       "npm:@tabler/icons-preact@3.49.0",
       "npm:ai@7.0.153",

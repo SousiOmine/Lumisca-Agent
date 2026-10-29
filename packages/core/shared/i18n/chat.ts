@@ -170,6 +170,108 @@ export const chat = {
   },
   "chat.visual.error.source": { ja: "ソースを表示", en: "Show source" },
 
+  // --- mode selection and stella -------------------------------------------
+  "chat.modeSelect.title": {
+    ja: "使い方を選んでください",
+    en: "Choose how to work",
+  },
+  "chat.modeSelect.description": {
+    ja: "あとからアプリメニューで切り替えられます。",
+    en: "You can switch later from the app menu.",
+  },
+  "chat.modeSelect.code.title": { ja: "code mode", en: "code mode" },
+  "chat.modeSelect.code.description": {
+    ja:
+      "ワークスペースのコードを読んで直すエージェント。セッションをタブで並べて管理し、このマシンのファイルとシェルをそのまま使います。",
+    en:
+      "A coding agent for your workspaces. Sessions live in tabs, and it uses this machine's files and shell directly.",
+  },
+  "chat.modeSelect.stella.title": { ja: "stella mode", en: "stella mode" },
+  "chat.modeSelect.stella.description": {
+    ja:
+      "1 本の会話だけを持つ相手。専用の仮想マシンの中で作業し、その画面も見られます。セッションやワークスペースの選択はありません。",
+    en:
+      "One ongoing conversation with one assistant. It works inside its own virtual machine, whose screen you can watch. No sessions, no workspace picker.",
+  },
+  "chat.modeSelect.stella.unavailable": {
+    ja: "この環境では使えません: {reason}",
+    en: "Not available on this machine: {reason}",
+  },
+  "chat.modeSelect.choose": { ja: "これにする", en: "Use this" },
+  "chat.modeSelect.current": { ja: "使用中", en: "In use" },
+
+  "chat.stella.title": { ja: "stella", en: "stella" },
+  "chat.stella.subtitle": {
+    ja: "仮想マシンの中で作業します",
+    en: "Working inside a virtual machine",
+  },
+  "chat.stella.empty": {
+    ja: "依頼を入力してください。エージェントは仮想マシンの中で作業します。",
+    en: "Enter a request. The agent works inside its virtual machine.",
+  },
+  "chat.stella.conversationError": {
+    ja: "会話を開けませんでした: {error}",
+    en: "Could not open the conversation: {error}",
+  },
+  "chat.stella.placeholder": {
+    ja: "依頼を入力してください…",
+    en: "Enter a request…",
+  },
+  "chat.stella.machine.start": { ja: "起動", en: "Start" },
+  "chat.stella.machine.starting": { ja: "起動中…", en: "Starting…" },
+  "chat.stella.machine.building": {
+    ja: "初回のイメージ作成中です（数分かかります）…",
+    en: "Building the image for the first time (this takes a few minutes)…",
+  },
+  "chat.stella.machine.stop": { ja: "停止", en: "Stop" },
+  "chat.stella.machine.reset": { ja: "作り直す", en: "Reset" },
+  "chat.stella.machine.resetTitle": {
+    ja: "仮想マシンを作り直しますか？",
+    en: "Reset the virtual machine?",
+  },
+  "chat.stella.machine.resetBody": {
+    ja:
+      "マシンの中のファイルはすべて消えます（会話の履歴は残ります）。元に戻せません。",
+    en:
+      "Everything inside the machine is deleted (the conversation is kept). This cannot be undone.",
+  },
+  "chat.stella.machine.state.podman_missing": {
+    ja: "podman が見つかりません",
+    en: "podman not found",
+  },
+  "chat.stella.machine.state.image_missing": {
+    ja: "イメージ未作成",
+    en: "Image not built",
+  },
+  "chat.stella.machine.state.container_missing": {
+    ja: "未作成",
+    en: "Not created",
+  },
+  "chat.stella.machine.state.stopped": { ja: "停止中", en: "Stopped" },
+  "chat.stella.machine.state.running": { ja: "稼働中", en: "Running" },
+  "chat.stella.machine.state.unavailable": {
+    ja: "使えません",
+    en: "Unavailable",
+  },
+  "chat.stella.machine.screen": { ja: "画面", en: "Screen" },
+  "chat.stella.machine.screenEmpty": {
+    ja: "マシンが起動すると、ここに画面が表示されます。",
+    en: "The machine's screen appears here once it runs.",
+  },
+  "chat.stella.machine.screenConnecting": {
+    ja: "画面に接続しています…",
+    en: "Connecting to the screen…",
+  },
+  "chat.stella.machine.screenFailed": {
+    ja: "画面に接続できませんでした: {reason}",
+    en: "Could not connect to the screen: {reason}",
+  },
+  "chat.stella.machine.openScreen": { ja: "画面を開く", en: "Show screen" },
+  "chat.stella.machine.closeScreen": {
+    ja: "画面を閉じる",
+    en: "Hide screen",
+  },
+
   // --- error banner --------------------------------------------------------
   "chat.error.copyTitle": {
     ja: "クリックしてエラー内容をコピー",

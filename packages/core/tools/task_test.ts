@@ -1,3 +1,4 @@
+import { hostBackends } from "./toolsets.ts";
 import { promptSession, removeDirRetry } from "../test-utils.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
@@ -73,6 +74,7 @@ function makeHub(
     sessionId: "session-1",
     resolveRuntime: () => ({
       workspace: makeWorkspace(root),
+      backends: hostBackends(makeWorkspace(root)),
       model,
       thinkingLevel: "off",
     }),
@@ -99,6 +101,7 @@ function makeScriptedHub() {
     sessionId: "session-1",
     resolveRuntime: () => ({
       workspace: makeWorkspace(root),
+      backends: hostBackends(makeWorkspace(root)),
       model,
       thinkingLevel: "off",
     }),
@@ -345,7 +348,12 @@ Deno.test("the sub-agent runtime is resolved at spawn time", () => {
     let level: ThinkingLevel = "off";
     hub.setRuntimeResolver(() => {
       resolutions++;
-      return { workspace: makeWorkspace(root), model, thinkingLevel: level };
+      return {
+        workspace: makeWorkspace(root),
+        backends: hostBackends(makeWorkspace(root)),
+        model,
+        thinkingLevel: level,
+      };
     });
     hub.spawn("session-1", 0, "explore", "調査", "Do research");
     level = "high";

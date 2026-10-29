@@ -8,6 +8,7 @@ import { createChatTools, createCodingTools } from "../tools/mod.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
 import { findCanvasIcuDataFile } from "./icu-data.ts";
+import { HostFileBackend } from "../tools/host-backend.ts";
 import {
   createPdfTools,
   createUnpdfRenderer,
@@ -59,7 +60,7 @@ async function fixture(): Promise<{ root: string; folder: string }> {
 
 function makeTool(root: string, totalPages = 2) {
   const tools = createPdfTools({
-    sandbox: new Sandbox([root]),
+    files: new HostFileBackend(new Sandbox([root])),
     renderer: fakeRenderer(totalPages),
   });
   return tools[0]!;
@@ -67,7 +68,7 @@ function makeTool(root: string, totalPages = 2) {
 
 Deno.test("pdf tool is named pdf_read_pages and listed in PDF_TOOL_NAMES", () => {
   assertEquals(PDF_TOOL_NAMES, [TOOL_PDF_READ_PAGES]);
-  const tools = createPdfTools({ sandbox: new Sandbox([]) });
+  const tools = createPdfTools({ files: new HostFileBackend(new Sandbox([])) });
   assertEquals(tools.length, 1);
   assertEquals(tools[0]!.name, TOOL_PDF_READ_PAGES);
 });
@@ -236,7 +237,7 @@ Deno.test("pdf tool is discoverable via tool_search and callable via tool_call",
     const registry = new ToolRegistry();
     registry.addTools(
       createPdfTools({
-        sandbox: new Sandbox([root]),
+        files: new HostFileBackend(new Sandbox([root])),
         renderer: fakeRenderer(2),
       }),
     );
@@ -269,7 +270,9 @@ Deno.test("pdf tool renders a real PDF with the bundled renderer", async () => {
     );
     // The default renderer is Deno-native (no external process), so this
     // runs on every host.
-    const tools = createPdfTools({ sandbox: new Sandbox([root]) });
+    const tools = createPdfTools({
+      files: new HostFileBackend(new Sandbox([root])),
+    });
     const result = await tools[0]!.execute("id", {
       path: `${folder}/doc.pdf`,
       pages: [2],
@@ -316,7 +319,9 @@ Deno.test("pdf tool renders a real PDF with the bundled renderer", async () => {
 Deno.test("pdf tool fails fast on malformed and encrypted PDFs", async () => {
   const { root, folder } = await fixture();
   try {
-    const tools = createPdfTools({ sandbox: new Sandbox([root]) });
+    const tools = createPdfTools({
+      files: new HostFileBackend(new Sandbox([root])),
+    });
     const tool = tools[0]!;
     await assertRejects(
       () => tool.execute("id", { path: `${folder}/doc.pdf`, pages: [1] }),
@@ -364,7 +369,7 @@ Deno.test("pdf renderer refuses to load Skia without its ICU data file", {
     // process (fatal check → STATUS_ILLEGAL_INSTRUCTION), so the renderer
     // must refuse with a clear tool error before touching Skia.
     const tools = createPdfTools({
-      sandbox: new Sandbox([root]),
+      files: new HostFileBackend(new Sandbox([root])),
       renderer: createUnpdfRenderer({ findIcuDataFile: () => undefined }),
     });
     await assertRejects(
@@ -396,7 +401,7 @@ Deno.test("pdf renderer honors the LUMISCA_ICU_DATA override", {
       real,
     );
     const tools = createPdfTools({
-      sandbox: new Sandbox([root]),
+      files: new HostFileBackend(new Sandbox([root])),
       renderer: createUnpdfRenderer({ findIcuDataFile: () => real }),
     });
     const result = await tools[0]!.execute("id", {

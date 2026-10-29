@@ -86,6 +86,10 @@ export const chrome = {
     en: "Application menu",
   },
   "chrome.appMenu.newTab": { ja: "新しいタブ", en: "New tab" },
+  "chrome.appMenu.switchMode": {
+    ja: "モードを切り替える",
+    en: "Switch mode",
+  },
   "chrome.appMenu.history": {
     ja: "セッション履歴",
     en: "Session history",

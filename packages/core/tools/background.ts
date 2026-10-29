@@ -11,13 +11,17 @@ import {
   TOOL_ASYNC_BASH_KILL,
   TOOL_ASYNC_BASH_STATUS,
 } from "../shared/mod.ts";
-import type { Sandbox } from "../workspace/sandbox.ts";
+
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { formatDuration } from "./duration.ts";
-import { killProcessTree } from "./process-tree.ts";
-import { shellCommand } from "./shell.ts";
+import { HostBackgroundSpawner } from "./background-backend.ts";
+import type {
+  BackgroundProcess,
+  BackgroundSpawner,
+} from "./background-backend.ts";
 import { requireResolved } from "./resolve.ts";
+import type { FileBackend } from "./file-backend.ts";
 import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
 import { CoreError } from "../errors.ts";
@@ -87,7 +91,7 @@ export interface BackgroundCommandDone {
 
 interface RunningRecord {
   info: BackgroundCommandInfo;
-  child: Deno.ChildProcess;
+  process: BackgroundProcess;
   buffer: Uint8Array;
   /** Resolves when the record left the running set: finalize() ran and
    * flipped the state. The process exit alone is NOT enough — finalize
@@ -160,6 +164,10 @@ export function formatBackgroundNotification(
 }
 
 export interface BackgroundProcessManagerOptions {
+  /** Where commands are spawned: this machine, or the stella VM. Defaults
+   * to the host spawner so a manager built without one still works (tests,
+   * standalone use). */
+  spawner?: BackgroundSpawner;
   /** Extra env vars to expose to spawned commands. */
   env?: Record<string, string>;
   /** Session id stamped onto the lifecycle events emitted for the panel. */
@@ -192,7 +200,11 @@ export class BackgroundProcessManager {
   private nextId = 1;
   private oemLabel: Promise<string | null> | null = null;
 
-  constructor(private readonly options: BackgroundProcessManagerOptions = {}) {}
+  private readonly spawner: BackgroundSpawner;
+
+  constructor(private readonly options: BackgroundProcessManagerOptions = {}) {
+    this.spawner = options.spawner ?? new HostBackgroundSpawner();
+  }
 
   /** Subscribe to command completions (fires once per command). Returns an
    * unsubscribe function. */
@@ -203,13 +215,13 @@ export class BackgroundProcessManager {
 
   /** Start a command in the background; resolves as soon as it is spawned
    * (never waits for output). Throws when the per-session limit is hit. */
-  start(input: {
+  async start(input: {
     cwd: string;
     command: string;
     timeoutSec?: number;
     /** Per-command env vars; override the manager-level env. */
     env?: Record<string, string>;
-  }): { commandId: string; pid: number } {
+  }): Promise<{ commandId: string; pid: number }> {
     if (this.records.size >= MAX_BACKGROUND_COMMANDS) {
       throw new CoreError(
         `Too many background commands (max ${MAX_BACKGROUND_COMMANDS}): wait for one to finish or kill it first`,
@@ -217,16 +229,16 @@ export class BackgroundProcessManager {
       );
     }
     const commandId = String(this.nextId++);
-    const child = shellCommand({
+    const process = await this.spawner.spawn({
       command: input.command,
       cwd: input.cwd,
       baseEnv: this.options.env,
-      env: input.env,
-    }).spawn();
+      ...(input.env !== undefined ? { env: input.env } : {}),
+    });
 
     const info: BackgroundCommandInfo = {
       commandId,
-      pid: child.pid,
+      pid: process.pid,
       command: input.command,
       cwd: input.cwd,
       state: "running",
@@ -235,7 +247,7 @@ export class BackgroundProcessManager {
     };
     const record: RunningRecord = {
       info,
-      child,
+      process,
       buffer: new Uint8Array(0),
       ...settleSignal(),
       finalized: false,
@@ -245,7 +257,7 @@ export class BackgroundProcessManager {
     if (input.timeoutSec !== undefined && input.timeoutSec > 0) {
       record.timer = setTimeout(() => {
         record.killedByTimeout = true;
-        void killProcessTree(child);
+        void process.kill();
       }, input.timeoutSec * 1000);
     }
     this.records.set(commandId, record);
@@ -259,26 +271,26 @@ export class BackgroundProcessManager {
       record.buffer = joined.slice(-MAX_OUTPUT_BUFFER);
       this.emitDelta(record, chunk);
     };
-    const read = async (stream: ReadableStream<Uint8Array>) => {
+    const read = async () => {
       try {
-        for await (const chunk of stream) append(chunk);
+        for await (const chunk of process.output) append(chunk);
       } catch {
         // pipe closed by a kill; nothing to do
       }
     };
-    const readers = [read(child.stdout), read(child.stderr)];
+    const reader = read();
 
-    void child.status.then(async (status) => {
-      // Give the pipe readers a brief grace to flush the final output before
-      // the completion notification is built (a descendant holding the pipe
-      // open must not block completion).
+    void process.exited.then(async (code) => {
+      // Give the output reader a brief grace to flush the final output
+      // before the completion notification is built (a descendant holding
+      // the pipe open must not block completion).
       await Promise.race([
-        Promise.all(readers.map((r) => r.catch(() => {}))),
+        reader.catch(() => {}),
         new Promise((resolve) => setTimeout(resolve, FINAL_FLUSH_GRACE_MS)),
       ]);
-      this.finalize(record, status);
+      this.finalize(record, code);
     });
-    return { commandId, pid: child.pid };
+    return { commandId, pid: process.pid };
   }
 
   /** All commands, newest first (completed history first, then running). */
@@ -328,7 +340,7 @@ export class BackgroundProcessManager {
       clearTimeout(record.timer);
       record.timer = undefined;
     }
-    await killProcessTree(record.child);
+    await record.process.kill();
     const timedOut = !(await this.awaitSettled(record, KILL_SETTLE_WAIT_MS));
     return { ok: true, alreadyExited: false, timedOut };
   }
@@ -353,7 +365,7 @@ export class BackgroundProcessManager {
       }
     }
     await Promise.all(
-      targets.map((record) => killProcessTree(record.child).catch(() => {})),
+      targets.map((record) => record.process.kill().catch(() => {})),
     );
     await Promise.all(
       targets.map((record) => this.awaitSettled(record, KILL_SETTLE_WAIT_MS)),
@@ -447,7 +459,10 @@ export class BackgroundProcessManager {
     return (this.oemLabel ??= detectOemLabel());
   }
 
-  private finalize(record: RunningRecord, status: Deno.CommandStatus): void {
+  private finalize(
+    record: RunningRecord,
+    exitCode: number | undefined,
+  ): void {
     if (record.finalized) return;
     record.finalized = true;
     if (record.timer !== undefined) clearTimeout(record.timer);
@@ -458,7 +473,7 @@ export class BackgroundProcessManager {
       : "exited";
     record.info.state = reason === "exited" ? "finished" : "killed";
     record.info.finishedAt = Date.now();
-    record.info.exitCode = status.code ?? undefined;
+    record.info.exitCode = exitCode;
     // The record has left the running set: release the kill()/killAll()
     // waiters (before the tail decode below, which is not part of the
     // state transition).
@@ -501,7 +516,9 @@ export class BackgroundProcessManager {
 
 export interface AsyncBashToolOptions {
   manager: BackgroundProcessManager;
-  sandbox: Sandbox;
+  /** File backend used to resolve the `cwd` argument (this machine's
+   * workspace, or the stella VM). */
+  files: FileBackend;
   /** Command safety check for the start tool (the fast model judges the
    * command before it runs; a blocked command returns the reason as the
    * tool result). Omitted → the command runs unchecked. */
@@ -565,7 +582,7 @@ function formatListLine(info: BackgroundCommandInfo): string {
 export function createAsyncBashTools(
   options: AsyncBashToolOptions,
 ): Tool[] {
-  const { manager, sandbox, safety } = options;
+  const { manager, files, safety } = options;
 
   const startTool: Tool<typeof startSchema> = {
     name: TOOL_ASYNC_BASH,
@@ -577,7 +594,7 @@ export function createAsyncBashTools(
       "pid; the shell is the same as bash.",
     parameters: startSchema,
     execute: async (_id, params) => {
-      const cwd = await requireResolved(sandbox, params.cwd);
+      const cwd = await requireResolved(files, params.cwd);
       const blocked = await safetyBlockResult(
         safety,
         "bash",

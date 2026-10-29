@@ -2,15 +2,21 @@
  *
  * Split for single responsibility without breaking importers:
  * - `./toolsets.ts` — session skill/tool-set assembly
- *   (`sessionSkills`, `sandboxFileTools`, `createCodingTools`, ...),
+ *   (`sessionSkills`, `fileTools`, `createCodingTools`, ...),
  * - `./system-prompt.ts` — `buildSystemPrompt` / `buildChatSystemPrompt`.
  */
 export {
   createChatTools,
   createCodingTools,
+  createStellaTools,
+  fileTools,
+  hostBackends,
   readOnlyInvestigationTools,
-  sandboxFileTools,
   sessionSkills,
 } from "./toolsets.ts";
-export type { ToolFactoryOptions } from "./toolsets.ts";
-export { buildChatSystemPrompt, buildSystemPrompt } from "./system-prompt.ts";
+export type { ToolBackends, ToolFactoryOptions } from "./toolsets.ts";
+export {
+  buildChatSystemPrompt,
+  buildStellaSystemPrompt,
+  buildSystemPrompt,
+} from "./system-prompt.ts";

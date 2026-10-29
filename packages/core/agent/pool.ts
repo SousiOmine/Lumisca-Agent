@@ -24,6 +24,7 @@ import type { MessageRepo } from "../session/messages.ts";
 import type { RequestShapeRepo } from "../session/request-shapes.ts";
 import type { BrowserBackend } from "../browser/types.ts";
 import type { ComputerHost } from "../computer/types.ts";
+import type { StellaRuntime } from "../vm/runtime.ts";
 import { AgentFactory } from "./factory.ts";
 
 /** Model resolution the agent factory needs (catalog + stored levels). */
@@ -77,6 +78,9 @@ export interface SessionPersistence {
     workspace: Workspace,
     model?: { provider: string; modelId: string },
     tools?: readonly string[],
+    /** True for a stella session's conversation (its prompt is the
+     * machine's, not the folder-less chat one). */
+    stella?: boolean,
   ): string;
   /** Persist a rebuilt system prompt (legacy-session migration). */
   updateSystemPrompt(id: string, systemPrompt: string): void;
@@ -136,6 +140,11 @@ export interface AgentRuntime {
    * the pool was built still reaches new agents, and so a session whose
    * tools were seeded stops acting the moment the feature is turned off. */
   computer?: () => ComputerHost | undefined;
+  /** The stella machine's runtime for a session, or undefined when the
+   * session does not run inside it (every session but stella's). Resolved per
+   * open, so a machine attached after the pool was built still reaches new
+   * agents. Omitted → no stella session can be built. */
+  stellaRuntime?: (session: SessionInfo) => StellaRuntime | undefined;
   /** Global skills directory override (default ~/.agents/skills).
    * LumiscaCore.forTesting passes an empty list, so a test's skill catalog
    * is built from its own fixture only. */

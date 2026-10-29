@@ -25,6 +25,8 @@ interface TitleBarProps {
   onOpenRecent: () => void;
   onOpenSettings: () => void;
   onQuit: () => void;
+  /** Open the mode-selection screen (see AppMenu). */
+  onSwitchMode: () => void;
 }
 
 /** Window chrome for the undecorated desktop window (see
@@ -42,6 +44,7 @@ export function TitleBar({
   onOpenRecent,
   onOpenSettings,
   onQuit,
+  onSwitchMode,
 }: TitleBarProps) {
   const t = useT();
   const [available, setAvailable] = useState(false);
@@ -103,6 +106,7 @@ export function TitleBar({
           onOpenRecent={onOpenRecent}
           onOpenSettings={onOpenSettings}
           onQuit={onQuit}
+          onSwitchMode={onSwitchMode}
           isDesktop
           buttonClass="titlebar-btn"
         />

@@ -49,3 +49,9 @@ export const TOOL_PDF_READ_PAGES = "pdf_read_pages";
  * `visual:` image references). Coding sessions only: a chat session has no
  * workspace to publish from. */
 export const TOOL_VISUAL = "visual";
+
+/** The stella machine's screen (a stella session's only display). Preloaded
+ * rather than discoverable: without it an agent would never know it can look
+ * at — or click on — the machine it works in. */
+export const TOOL_VM_SCREENSHOT = "vm_screenshot";
+export const TOOL_VM_ACT = "vm_act";

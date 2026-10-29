@@ -2,23 +2,36 @@ import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { assert, assertEquals } from "@std/assert";
 import { createBashTool } from "./bash.ts";
+import { HostCommandRunner } from "./host-command-runner.ts";
+import { HostFileBackend } from "./host-backend.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { formatDuration } from "./duration.ts";
 import { defaultSpillDir, MAX_TOOL_OUTPUT } from "./truncate.ts";
 import { removeDirRetry, toolText } from "../test-utils.ts";
 
+/** The host tool over a fresh temp workspace. */
+function hostTool(
+  root: string,
+  options: { env?: Record<string, string>; spillDir?: string } = {},
+) {
+  return createBashTool({
+    files: new HostFileBackend(new Sandbox([root])),
+    runner: new HostCommandRunner(),
+    ...(options.env !== undefined ? { env: options.env } : {}),
+    ...(options.spillDir !== undefined ? { spillDir: options.spillDir } : {}),
+  });
+}
+
 function makeTool() {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
-  const sandbox = new Sandbox([root]);
   // Truncated output spills into a per-test directory instead of the shared
   // OS temp dir. It sits inside the workspace here, which is also the case
   // the note's read hint is written for.
   const spillDir = join(root, "spill");
   return {
-    tool: createBashTool({ sandbox, spillDir }),
+    tool: hostTool(root, { spillDir }),
     root,
-    sandbox,
     spillDir,
   };
 }
@@ -245,11 +258,7 @@ Deno.test("bash tool passes env vars to the command", async () => {
 
 Deno.test("bash tool per-call env overrides the tool-level env", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
-  const sandbox = new Sandbox([root]);
-  const tool = createBashTool({
-    sandbox,
-    env: { LUMISCA_TEST_VAR: "tool-level" },
-  });
+  const tool = hostTool(root, { env: { LUMISCA_TEST_VAR: "tool-level" } });
   try {
     const echo = Deno.build.os === "windows"
       ? "echo $env:LUMISCA_TEST_VAR"
@@ -269,11 +278,14 @@ Deno.test("bash tool per-call env overrides the tool-level env", async () => {
 
 Deno.test("bash tool returns the safety reason when the check blocks", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
-  const sandbox = new Sandbox([root]);
   const safety = {
     check: () => ({ ok: false, reason: "rm -rf / destroys the host" }),
   } as unknown as Parameters<typeof createBashTool>[0]["safety"];
-  const tool = createBashTool({ sandbox, safety });
+  const tool = createBashTool({
+    files: new HostFileBackend(new Sandbox([root])),
+    runner: new HostCommandRunner(),
+    safety,
+  });
   try {
     const result = await tool.execute(
       "1",
@@ -292,11 +304,14 @@ Deno.test("bash tool returns the safety reason when the check blocks", async () 
 
 Deno.test("bash tool runs normally when the check approves", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
-  const sandbox = new Sandbox([root]);
   const safety = {
     check: () => ({ ok: true }),
   } as unknown as Parameters<typeof createBashTool>[0]["safety"];
-  const tool = createBashTool({ sandbox, safety });
+  const tool = createBashTool({
+    files: new HostFileBackend(new Sandbox([root])),
+    runner: new HostCommandRunner(),
+    safety,
+  });
   try {
     const result = await tool.execute(
       "1",
@@ -423,10 +438,7 @@ Deno.test("bash tool keeps the result when the spill fails", async () => {
   // the note must lose only the path — never the result itself.
   const blocked = join(root, "blocked.txt");
   await Deno.writeTextFile(blocked, "x");
-  const tool = createBashTool({
-    sandbox: new Sandbox([root]),
-    spillDir: join(blocked, "spill"),
-  });
+  const tool = hostTool(root, { spillDir: join(blocked, "spill") });
   try {
     const text = toolText(await runBigCommand(tool, root));
     assert(
@@ -446,7 +458,7 @@ Deno.test("bash tool points at bash when the spill is outside the workspace", as
   // sandboxed read/grep tools cannot reach — bash is the way in, and the
   // note must say so instead of sending the model to a rejected path.
   const spillDir = Deno.makeTempDirSync({ prefix: "lumisca-bash-spill-" });
-  const tool = createBashTool({ sandbox: new Sandbox([root]), spillDir });
+  const tool = hostTool(root, { spillDir });
   try {
     const text = toolText(await runBigCommand(tool, root));
     const path = spillPathFrom(text);

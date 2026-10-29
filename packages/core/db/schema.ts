@@ -129,6 +129,30 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
       CREATE INDEX IF NOT EXISTS idx_request_shapes_session
         ON request_shapes(session_id, id);
     `),
+  // stella mode: one hidden session row holds its single ongoing
+  // conversation. The flag keeps it out of every session list (it is not a
+  // session the user opened — stella has no session concept) while letting
+  // the ordinary message store, compaction and rewind machinery work
+  // unchanged. A partial index keeps "find the stella row" a single lookup.
+  //
+  // Guarded because ALTER TABLE ADD COLUMN is not idempotent: a process
+  // killed between this statement and the user_version stamp (the two are
+  // separate writes) would leave the column behind, and the retried
+  // migration would then fail on a database that is otherwise fine.
+  (db) => {
+    const columns = db
+      .prepare("PRAGMA table_info(sessions)")
+      .all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "stella")) {
+      db.exec(
+        "ALTER TABLE sessions ADD COLUMN stella INTEGER NOT NULL DEFAULT 0",
+      );
+    }
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_stella
+        ON sessions(stella) WHERE stella = 1;
+    `);
+  },
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

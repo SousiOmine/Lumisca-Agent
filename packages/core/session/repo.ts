@@ -18,10 +18,15 @@ export interface SessionRepo {
       id?: string;
       createdAt?: number;
       updatedAt?: number;
+      /** True for stella mode's single conversation (see SessionInfo). */
+      stella?: boolean;
     },
   ): SessionRecord;
   get(id: string): SessionRecord | undefined;
   list(workspaceId?: string): SessionRecord[];
+  /** stella mode's single conversation row, or undefined before the first
+   * one is created. Never part of `list()`: stella has no session list. */
+  getStella(): SessionRecord | undefined;
   delete(id: string): void;
   touch(id: string, updatedAt?: number): void;
   updateModel(id: string, provider: string, modelId: string): void;
@@ -38,6 +43,7 @@ export interface SessionRepo {
 }
 
 interface SessionRow {
+  stella?: number;
   id: string;
   workspace_id: string;
   name: string;
@@ -69,6 +75,7 @@ function toGoal(row: SessionRow): GoalInfo | undefined {
 
 function toSession(row: SessionRow): SessionRecord {
   return {
+    ...(row.stella === 1 ? { stella: true } : {}),
     id: row.id,
     workspaceId: row.workspace_id,
     name: row.name,
@@ -82,15 +89,20 @@ function toSession(row: SessionRow): SessionRecord {
 
 export function createSessionRepo(db: LumiscaDb): SessionRepo {
   const insertStmt = db.db.prepare(`
-    INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, created_at, updated_at, stella)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const getStellaStmt = db.db.prepare(
+    "SELECT * FROM sessions WHERE stella = 1",
+  );
   const getStmt = db.db.prepare("SELECT * FROM sessions WHERE id = ?");
+  // stella's row is not a session: it is excluded everywhere a session list
+  // is built, so no client ever offers to open, close or delete it.
   const listStmt = db.db.prepare(
-    "SELECT * FROM sessions ORDER BY updated_at DESC",
+    "SELECT * FROM sessions WHERE stella = 0 ORDER BY updated_at DESC",
   );
   const listByWorkspaceStmt = db.db.prepare(
-    "SELECT * FROM sessions WHERE workspace_id = ? ORDER BY updated_at DESC",
+    "SELECT * FROM sessions WHERE workspace_id = ? AND stella = 0 ORDER BY updated_at DESC",
   );
   const deleteStmt = db.db.prepare("DELETE FROM sessions WHERE id = ?");
   const touchStmt = db.db.prepare(
@@ -131,6 +143,7 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
       const id = input.id ?? crypto.randomUUID();
       const createdAt = input.createdAt ?? Date.now();
       const updatedAt = input.updatedAt ?? createdAt;
+      const stella = input.stella === true;
       insertStmt.run(
         id,
         input.workspaceId,
@@ -140,6 +153,7 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         input.systemPrompt ?? null,
         createdAt,
         updatedAt,
+        stella ? 1 : 0,
       );
       return {
         id,
@@ -150,7 +164,13 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         systemPrompt: input.systemPrompt,
         createdAt,
         updatedAt,
+        ...(stella ? { stella: true } : {}),
       };
+    },
+
+    getStella(): SessionRecord | undefined {
+      const row = getStellaStmt.get() as unknown as SessionRow | undefined;
+      return row ? toSession(row) : undefined;
     },
 
     get(id: string): SessionRecord | undefined {

@@ -21,6 +21,7 @@ function render(tabs: TabSummary[]): string {
       onOpenSettings: () => {},
       isDesktop: true,
       onQuit: () => {},
+      onSwitchMode: () => {},
     }),
   );
 }

@@ -1,5 +1,32 @@
 # Lumisca-Agent アーキテクチャ概要
 
+## 0. 動作モード（code mode / stella mode）
+
+アプリケーションは 2 つの動作モードを持ちます。どちらを使うかは初回起動時に選び、設定（`app_mode`）として保存されます。アプリメニューの「モードを切り替える」から選び直せます。
+
+| | code mode | stella mode |
+|---|---|---|
+| 会話の単位 | セッション（タブ・履歴一覧） | 単一の相手との 1 本の会話 |
+| 作業場所 | ワークスペースフォルダ（ホスト） | 仮想マシン（podman コンテナ） |
+| 利用できるもの | ワークスペースのファイル・シェル・画面 | VM 内のファイル・シェル・画面 |
+
+- **stella mode は podman を必要とします。** 使えない環境では選択肢自体を無効にし、理由を表示します。VM なしで動く「簡易版」は用意していません（ツールを失ったエージェントは作業できないため、静かに機能を落とすより選ばせないほうが正直です）。
+- **モードは設定として 1 つだけ存在します。** タブごと・URL ごとには分かれません。
+- **モードを切り替えても VM は停止しません。** 初回のイメージ作成に数分かかるため、code mode に戻しただけで捨てると復帰のコストが大きすぎます。停止はサーバー終了時（`LumiscaCore.close()`）と、画面の「停止」操作です。
+- **stella の会話は通常のセッションとして保存されます。** ただし `sessions.stella = 1` の 1 行だけで、どのセッション一覧にも現れません。これにより、メッセージ保存・履歴圧縮・巻き戻し・イベント配信の既存実装をそのまま使えます。
+
+### バックエンドの抽象化
+
+stella mode は「どこで作業するか」だけが code mode と違います。ツールの定義・検証・出力の整形を 2 実装に分けないため、ファイルとコマンドの操作をポートとして切り出しています。
+
+| ポート | ホスト実装 | VM 実装 |
+|---|---|---|
+| `FileBackend`（tools/file-backend.ts） | `HostFileBackend`（workspace/sandbox.ts + Deno FS） | `VmFileBackend`（podman exec、base64 転送、grep/find を VM 内で実行） |
+| `CommandRunner`（tools/command-backend.ts） | `HostCommandRunner`（`/bin/sh` または PowerShell） | `VmCommandRunner`（`bash -lc`） |
+| `BackgroundSpawner`（tools/background-backend.ts） | `HostBackgroundSpawner`（子プロセス） | `VmBackgroundSpawner`（setsid + ログファイル追跡） |
+
+`read` / `write` / `edit` / `list_dir` / `grep` / `glob` / `bash` / `visual` / `pdf_read_pages` は、この 2 つのポート越しに同じ実装で動きます。`eval` だけは stella に渡しません（サーバープロセス内で JavaScript を実行するため、VM 隔離の前提を破る）。
+
 ## 1. パッケージ構成
 
 | パッケージ | 主な役割 | 依存関係 |
@@ -9,6 +36,7 @@
 | `web/` | フロントエンド SPA（Preact）：UI、状態管理、API クライアント | `core/shared`, `core/modes` のみ |
 | `desktop/` | デスクトップシェル（Tauri v2）：ネイティブ機能連携 | `server` を子プロセスとして起動 |
 | `browser-rpc/` | ブラウザ連携用 RPC（Rust）：プローブ抽出、URL 制御、ローカル HTTP サーバー | なし |
+| `core/vm/` | stella mode の仮想マシン：podman コンテナの管理、ファイル／シェル／画面の VM 実装、スキル読取 | `core` の他モジュール |
 
 ### 依存関係の原則
 - `core` は他の内部パッケージに依存しません。

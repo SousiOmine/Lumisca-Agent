@@ -1,0 +1,62 @@
+# The stella virtual machine.
+#
+# The agent works ONLY inside this container: the file tools, the shell and
+# the screen all go through `podman exec`, so nothing here can reach the
+# host's filesystem. A display (Xvfb) and a browser (Chromium) are included
+# because the agent is expected to drive GUI programs, not just a shell.
+#
+# Kept deliberately small: a Debian base plus what a working desktop needs.
+# Rebuild it from Settings > stella ("Reset the machine") after editing; the
+# server verifies the contract values in vm/contract.ts against the running
+# container at start-up.
+
+FROM docker.io/debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+
+# git and tmux are part of the working environment (the agent commits and
+# runs long jobs); the X stack is what a GUI program needs to exist at all.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      xvfb x11-utils x11vnc openbox xdotool scrot imagemagick \
+      websockify \
+      xterm fonts-noto-cjk dbus-x11 \
+      chromium \
+      curl ca-certificates \
+      git tmux ripgrep less \
+ && rm -rf /var/lib/apt/lists/*
+
+# Node.js, from the official build: the Debian package is older than what
+# most current tooling requires, and adding a third-party apt repository is a
+# maintenance burden this image does not need.
+RUN set -eu; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) node_arch=x64 ;; \
+      arm64) node_arch=arm64 ;; \
+      *) echo "no Node.js build for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/node.tar.gz \
+      "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-${node_arch}.tar.gz"; \
+    tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1; \
+    rm /tmp/node.tar.gz
+
+# The account the agent's processes run as. Not root: Chromium refuses to use
+# its sandbox as root, and files written here must be the agent's own.
+#
+# The uid/gid match vm/contract.ts, which starts the container with
+# --userns keep-id so they map onto the host user. Debian's base image has no
+# group 1000, so one is created with the user (`--user-group`); naming an
+# existing group here fails the build.
+RUN useradd --create-home --uid 1000 --user-group --shell /bin/bash agent
+
+COPY entry.sh /usr/local/bin/entry.sh
+RUN chmod 0755 /usr/local/bin/entry.sh
+
+# xdotool, scrot and Chromium read DISPLAY from the environment; entry.sh's
+# export does not reach `podman exec`.
+ENV DISPLAY=:99
+
+USER agent
+WORKDIR /home/agent
+
+CMD ["/usr/local/bin/entry.sh"]

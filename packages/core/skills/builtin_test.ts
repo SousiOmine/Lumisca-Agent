@@ -84,10 +84,10 @@ Deno.test("both built-in skills are advertised when both capabilities are presen
   );
 });
 
-Deno.test("loadSkillContent reads the embedded computer-use guide", () => {
+Deno.test("loadSkillContent reads the embedded computer-use guide", async () => {
   const [skill] = computerBuiltins();
   assert(skill !== undefined);
-  const content = loadSkillContent(skill);
+  const content = await loadSkillContent(skill);
   // The guide's key teaching must be present.
   assert(content.includes("tool_search"));
   assert(content.includes("computer_screenshot"));
@@ -99,7 +99,7 @@ Deno.test("the computer-use guide has no follow-up files", async () => {
   const [skill] = computerBuiltins();
   assert(skill !== undefined);
   await assertRejects(
-    () => Promise.resolve().then(() => loadSkillContent(skill, "reference.md")),
+    () => loadSkillContent(skill, "reference.md"),
     Error,
     'No such file in skill "computer-use"',
   );
@@ -107,10 +107,10 @@ Deno.test("the computer-use guide has no follow-up files", async () => {
 
 // --- loading ----------------------------------------------------------------
 
-Deno.test("loadSkillContent reads the embedded SKILL.md without a filesystem", () => {
+Deno.test("loadSkillContent reads the embedded SKILL.md without a filesystem", async () => {
   const [skill] = browserBuiltins();
   assert(skill !== undefined);
-  const content = loadSkillContent(skill);
+  const content = await loadSkillContent(skill);
   // The guide's key teaching must be present.
   assert(content.includes("tool_search"));
   assert(content.includes("browser_open"));
@@ -121,7 +121,7 @@ Deno.test("built-in skills have no follow-up files", async () => {
   const [skill] = browserBuiltins();
   assert(skill !== undefined);
   await assertRejects(
-    () => Promise.resolve().then(() => loadSkillContent(skill, "reference.md")),
+    () => loadSkillContent(skill, "reference.md"),
     Error,
     'No such file in skill "web-browser"',
   );

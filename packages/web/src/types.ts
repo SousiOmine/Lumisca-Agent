@@ -43,6 +43,7 @@ export type {
   SavedPrompt,
   SessionInfo,
   SkillInfo,
+  StellaAvailability,
   SubagentStatus,
   SubagentType,
   TaskInfo,
@@ -56,6 +57,18 @@ export type {
   Workspace,
   WorkspaceFileEntry,
 } from "@lumisca/core";
+
+/** The app-mode state the UI reads at startup (`GET /api/stella/status`):
+ * which mode the user picked, and whether stella can run on the server it is
+ * talking to. */
+export interface AppModeStatus {
+  mode: "code" | "stella" | null;
+  availability: core.StellaAvailability;
+  /** The machine's state (`running`, `stopped`, `image_missing`, ...). */
+  state: string;
+  vncPort: number | null;
+  reason: string;
+}
 
 /** A workspace as shown in the federated workspace picker: which peer owns
  * it ("" = this server) and how that peer is named. */

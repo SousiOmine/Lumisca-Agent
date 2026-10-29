@@ -1,5 +1,6 @@
 import type {
   AgentMessage,
+  AppModeStatus,
   AskAnswer,
   BackgroundCommandInfo,
   CatalogStatus,
@@ -251,8 +252,34 @@ export const api = {
       body: JSON.stringify(input),
     }),
   /** All sessions of this server, newest first (the source of the recent
-   * sessions list). */
+   * sessions list). stella's conversation is never in it: it is not a
+   * session the user opened. */
   listSessions: () => request<SessionInfo[]>("/api/sessions"),
+
+  // --- stella mode -------------------------------------------------------
+
+  /** The stored mode and what this server can do, in one call. */
+  getStellaStatus: () => request<AppModeStatus>("/api/stella/status"),
+  /** Choose the mode. Refused (503) when stella cannot run here. */
+  setAppMode: (mode: "code" | "stella") =>
+    request<AppModeStatus>("/api/stella/mode", {
+      method: "PUT",
+      body: JSON.stringify({ mode }),
+    }),
+  /** Bring the machine up (building its image on a first run). Slow: the
+   * answer is the resulting status. */
+  startStella: () =>
+    request<AppModeStatus>("/api/stella/start", { method: "POST" }),
+  stopStella: () =>
+    request<AppModeStatus>("/api/stella/stop", { method: "POST" }),
+  /** Throw the machine away and make a new one (destructive: confirm
+   * first). */
+  resetStella: () =>
+    request<AppModeStatus>("/api/stella/reset", { method: "POST" }),
+  /** The stella conversation, created on first use. */
+  getStellaSession: () => request<SessionInfo>("/api/stella/session"),
+  /** The skills a stella session can load. */
+  getStellaSkills: () => request<{ skills: SkillInfo[] }>("/api/stella/skills"),
   listProviders: () => request<ProviderInfo[]>("/api/providers"),
   listModels: (providerId: string) =>
     request<ModelInfo[]>(`/api/providers/${providerId}/models`),

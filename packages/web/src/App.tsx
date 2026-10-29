@@ -1,6 +1,7 @@
 import {
   type ReactElement,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "preact/compat";
@@ -25,6 +26,8 @@ import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
 import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { CloseTabsDialog } from "./components/CloseTabsDialog.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
+import { AppMenu } from "./components/AppMenu.tsx";
+import { Modal } from "./components/Modal.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
 import { RecentSessionsModal } from "./components/RecentSessionsModal.tsx";
@@ -34,6 +37,10 @@ import {
 } from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
+import { ModeSelectView } from "./components/ModeSelectView.tsx";
+import { StellaView } from "./components/StellaView.tsx";
+import { useAppMode } from "./hooks/useAppMode.ts";
+import { useStellaSession } from "./hooks/useStellaSession.ts";
 
 export interface AppProps {
   /** Preloaded data from the bootstrap script; undefined when not served. */
@@ -70,6 +77,16 @@ export function App({ initialData }: AppProps): ReactElement {
     setLanguage,
     error: languageError,
   } = useLanguage();
+  // Which mode the app is in, and whether stella can run on this server.
+  // The mode gates the whole body below: unknown (no choice stored yet) shows
+  // the selection screen, so neither mode's hooks run before its mode exists.
+  const {
+    status: modeStatus,
+    loading: modeLoading,
+    error: modeError,
+    setMode,
+    setStatus: setModeStatus,
+  } = useAppMode();
   const {
     workspaces,
     peers,
@@ -148,6 +165,9 @@ export function App({ initialData }: AppProps): ReactElement {
   // settings toggle.
   const [notifyEnabled, setNotifyEnabledState] = useState(isNotifyEnabled);
   const [showRecent, setShowRecent] = useState(false);
+  // The mode-selection screen, reopened from the app menu (the first-run
+  // screen is driven by the stored mode instead; this is the "switch" path).
+  const [showModeSelect, setShowModeSelect] = useState(false);
   const handleNotifyEnabledChange = (enabled: boolean) => {
     setNotifyEnabled(enabled);
     setNotifyEnabledState(enabled);
@@ -226,6 +246,60 @@ export function App({ initialData }: AppProps): ReactElement {
   );
   const openRecent = useCallback(() => setShowRecent(true), []);
   const openSettings = useCallback(() => setSettingsCategory("general"), []);
+
+  // --- stella mode --------------------------------------------------------
+  // The hook runs unconditionally (hooks cannot be conditional), but it only
+  // acts when stella is the current mode: `enabled` gates its requests.
+  const stellaActive = modeStatus?.mode === "stella";
+  const stella = useStellaSession(stellaActive, setViews);
+  const stellaView = stella.sessionId !== null
+    ? views.get(stella.sessionId)
+    : undefined;
+  const stellaInfo = stellaView?.info ?? stella.info ?? undefined;
+  // Opening the conversation needs a running machine; the mode switch refuses
+  // without one, but a machine stopped while the page was open must be
+  // started again before the conversation can be reached.
+  const stellaMachineRunning = modeStatus?.state === "running";
+  useEffect(() => {
+    if (!stellaActive) return;
+    if (!stellaMachineRunning) return;
+    if (stella.sessionId !== null) return;
+    stella.open();
+  }, [stellaActive, stellaMachineRunning, stella.sessionId, stella]);
+
+  // The mode-selection screen, and nothing else, until a mode is chosen.
+  if (modeStatus === null || modeStatus.mode === null) {
+    return (
+      <div className="app" ref={appRef}>
+        <AppMenu
+          onNew={() => {}}
+          onOpenRecent={openRecent}
+          onOpenSettings={openSettings}
+          onQuit={quit}
+          onSwitchMode={() => setShowModeSelect(true)}
+          isDesktop={update.source === "shell"}
+          buttonClass="app-menu-standalone"
+        />
+        {modeLoading
+          ? <div className="mode-select-loading">{t("common.loading")}</div>
+          : modeStatus === null
+          ? (
+            <div className="mode-select-loading">
+              {t("common.serverUnreachable", { error: modeError ?? "" })}
+            </div>
+          )
+          : (
+            <ModeSelectView
+              status={modeStatus}
+              error={modeError}
+              busy={false}
+              onChoose={(mode) => void setMode(mode)}
+            />
+          )}
+      </div>
+    );
+  }
+
   return (
     <div className="app" ref={appRef}>
       {
@@ -238,20 +312,30 @@ export function App({ initialData }: AppProps): ReactElement {
         onOpenRecent={openRecent}
         onOpenSettings={openSettings}
         onQuit={quit}
+        onSwitchMode={() => setShowModeSelect(true)}
       >
-        <TabBar
-          tabs={tabSummaries}
-          onSelect={setActiveTab}
-          onClose={closeTab}
-          onCloseToRight={closeTabsToRight}
-          onCloseToLeft={closeTabsToLeft}
-          onCloseOthers={closeOtherTabs}
-          onNew={openDraftTab}
-          onOpenRecent={openRecent}
-          onOpenSettings={openSettings}
-          isDesktop={update.source === "shell"}
-          onQuit={quit}
-        />
+        {stellaActive
+          // stella mode has no tab strip: one conversation is the whole
+          // surface, and an empty strip beside it would suggest otherwise.
+          // The bar chrome is reused so the strip looks the same in a plain
+          // browser (where the title bar renders no wrapper) as on desktop.
+          ? <div className="tabbar stella-titlebar-label">stella</div>
+          : (
+            <TabBar
+              tabs={tabSummaries}
+              onSelect={setActiveTab}
+              onClose={closeTab}
+              onCloseToRight={closeTabsToRight}
+              onCloseToLeft={closeTabsToLeft}
+              onCloseOthers={closeOtherTabs}
+              onNew={openDraftTab}
+              onOpenRecent={openRecent}
+              onOpenSettings={openSettings}
+              isDesktop={update.source === "shell"}
+              onQuit={quit}
+              onSwitchMode={() => setShowModeSelect(true)}
+            />
+          )}
       </TitleBar>
       {/* Everything below the title bar. */}
       <div className="app-body">
@@ -264,7 +348,41 @@ export function App({ initialData }: AppProps): ReactElement {
             </div>
           </div>
         )}
-        {activeView
+        {stellaActive
+          ? (
+            // stella mode: one conversation, one machine. Rendered instead of
+            // the tab branch (not beside it): a tab strip is exactly the
+            // session-list surface this mode exists to remove.
+            //
+            // The view renders even before the conversation exists: the
+            // machine is started from this screen, so hiding it until a
+            // conversation can be opened would hide the only control that
+            // makes one possible.
+            <StellaView
+              view={stellaView ?? null}
+              info={stellaInfo}
+              conversationError={stella.error}
+              status={modeStatus}
+              onStatus={setModeStatus}
+              input={draft.input}
+              onInputChange={(input) => updateDraft(draftKey, { input })}
+              onPrompt={(text) =>
+                stella.sessionId !== null &&
+                prompt(stella.sessionId, text, [])}
+              onAbort={() =>
+                stella.sessionId !== null && abort(stella.sessionId)}
+              onAnswer={(toolCallId, answers) =>
+                stella.sessionId !== null
+                  ? answer(stella.sessionId, toolCallId, answers)
+                  : Promise.reject()}
+              onRewind={(timestamp) =>
+                stella.sessionId !== null
+                  ? rewind(stella.sessionId, timestamp)
+                  : Promise.resolve()}
+              onOpenSettings={() => setSettingsCategory("providers")}
+            />
+          )
+          : activeView
           ? (
             // Key by tab so switching sessions remounts the view without
             // leaking scroll position (or draft text: the draft is owned
@@ -355,6 +473,29 @@ export function App({ initialData }: AppProps): ReactElement {
           onStopAndClose={() => resolveClose(false)}
           onKeepRunning={() => resolveClose(true)}
         />
+      )}
+      {showModeSelect && modeStatus !== null && (
+        <Modal onClose={() => setShowModeSelect(false)}>
+          <ModeSelectView
+            status={modeStatus}
+            error={modeError}
+            busy={false}
+            onChoose={(mode) => {
+              if (mode === modeStatus.mode) {
+                setShowModeSelect(false);
+                return;
+              }
+              void setMode(mode).then(
+                () =>
+                  setShowModeSelect(false),
+                // A refusal (stella on a host without a usable machine) keeps
+                // the dialog open showing its reason: closing it would hide
+                // why nothing happened.
+                () => {},
+              );
+            }}
+          />
+        </Modal>
       )}
     </div>
   );

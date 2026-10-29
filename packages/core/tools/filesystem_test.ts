@@ -1,6 +1,7 @@
 import { basename, join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
+import { HostFileBackend } from "./host-backend.ts";
 import {
   createEditFileTool,
   createReadFileTool,
@@ -13,8 +14,12 @@ import {
   toolText,
 } from "../test-utils.ts";
 
+function hostFiles(root: string) {
+  return new HostFileBackend(new Sandbox([root]));
+}
+
 function makeRead(root: string) {
-  return createReadFileTool({ sandbox: new Sandbox([root]) });
+  return createReadFileTool({ files: hostFiles(root) });
 }
 
 /** Content after the `--- path lines spec ---` header line. */
@@ -238,10 +243,10 @@ async function writeCrlf(path: string, lines: string[]): Promise<void> {
 }
 
 function makeFs(root: string) {
-  const sandbox = new Sandbox([root]);
+  const files = hostFiles(root);
   return {
-    edit: createEditFileTool({ sandbox }),
-    write: createWriteFileTool({ sandbox }),
+    edit: createEditFileTool({ files }),
+    write: createWriteFileTool({ files }),
   };
 }
 

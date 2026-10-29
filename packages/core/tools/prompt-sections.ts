@@ -13,6 +13,8 @@ import {
   TOOL_TASK,
   TOOL_TODO,
   TOOL_VISUAL,
+  TOOL_VM_ACT,
+  TOOL_VM_SCREENSHOT,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
 
@@ -217,6 +219,30 @@ const VISUAL_IMAGE_SECTION: PromptSection = {
     "belongs.",
 };
 
+/** The machine's screen, in a stella session. Both halves are keyed on the
+ * tools: an agent that cannot look must not be told to check what it sees,
+ * and one that cannot act must not be told to click. */
+const VM_SCREENSHOT_SECTION: PromptSection = {
+  name: "vm:screenshot",
+  order: ORDER.tool + 140,
+  requires: [TOOL_VM_SCREENSHOT],
+  text:
+    "- This machine's screen is yours to look at: use vm_screenshot before " +
+    "acting on a GUI\n  and after an action to see what it did. The image is " +
+    "1:1 with the screen, so a\n  position read off it is a coordinate " +
+    "vm_act takes as-is.",
+};
+
+const VM_ACT_SECTION: PromptSection = {
+  name: "vm:act",
+  order: ORDER.tool + 150,
+  requires: [TOOL_VM_ACT],
+  text:
+    "- Use vm_act for the GUI (a browser, a dialog): click, type, scroll, " +
+    "press keys.\n  Prefer the shell and the file tools for everything they " +
+    "can do — a command is\n  faster and leaves a record, a click does not.",
+};
+
 const TASK_SECTION: PromptSection = {
   name: "tool:task",
   order: ORDER.tool + 130,
@@ -357,6 +383,32 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   // another agent talking, not the user (the session's sub-agents message it
   // back). Gated on send_message, so a session without the task tools never
   // renders it.
+  SUBAGENT_MESSAGE_SECTION,
+  QUALITY_SECTION,
+  WORKFLOW_SECTION,
+];
+
+/** Guideline sections of a stella session's system prompt: the coding set
+ * minus the workspace framing (there is no workspace picker in stella) plus
+ * the machine's screen guidance. The machine is the working area, so the
+ * file/shell sections apply exactly as they do in a workspace. */
+export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
+  READ_SECTION,
+  WRITE_SECTION,
+  EDIT_SECTION,
+  GLOB_SECTION,
+  GREP_SECTION,
+  SEARCH_CAPS_SECTION,
+  BASH_SECTION,
+  ASYNC_BASH_SECTION,
+  ASK_SECTION,
+  TODO_SECTION,
+  SKILL_SECTION,
+  VM_SCREENSHOT_SECTION,
+  VM_ACT_SECTION,
+  VISUAL_IMAGE_SECTION,
+  TASK_SECTION,
+  NOTIFICATION_SECTION,
   SUBAGENT_MESSAGE_SECTION,
   QUALITY_SECTION,
   WORKFLOW_SECTION,

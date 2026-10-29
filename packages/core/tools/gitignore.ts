@@ -82,6 +82,14 @@ export class GitignoreMatcher {
     }
     return new GitignoreMatcher(rulesByRoot);
   }
+  /** A matcher built from `.gitignore` text a caller already read (the
+   * stella VM backend, whose files are not on this machine's disk, reads it
+   * through its own exec seam). `root` must be the absolute root the rules
+   * are relative to. */
+  static fromText(root: string, text: string): GitignoreMatcher {
+    return new GitignoreMatcher(new Map([[root, parseGitignore(text)]]));
+  }
+
   /** True when `relPath` (relative to `walkRoot`) is ignored. `walkRoot`
    * may be a workspace root or any directory inside it (the tools pass the
    * resolved `path` argument) — the owning root's rules are found by

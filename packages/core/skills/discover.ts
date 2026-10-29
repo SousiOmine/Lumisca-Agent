@@ -30,11 +30,17 @@ export interface SkillDef {
    * for file-based skills; absent for app-embedded ones. */
   dir?: string;
   source: SkillSource;
-  /** Embedded content reader (built-in skills): returns SKILL.md or a
-   * follow-up file from the app's memory instead of the disk. Absent for
-   * file-based skills, which read via `path` / `dir`. */
-  read?: (relativePath?: string) => string;
+  /** Content reader, when the skill's files are not on this machine's disk:
+   * app-embedded skills read from memory, and a stella session's skills read
+   * through its VM's exec seam. Absent for file-based skills on the host,
+   * which read via `path` / `dir`. */
+  read?: SkillReader;
 }
+
+/** Reads one file of a skill: SKILL.md when `relativePath` is omitted, else
+ * a file inside the skill's directory. Asynchronous because not every skill
+ * lives on this machine's disk (see SkillDef.read). */
+export type SkillReader = (relativePath?: string) => Promise<string>;
 
 /** A skill as listed to a client: the name to load it by and the catalog
  * description. The wire shape of `GET /api/skills` (the composer's `/skill`
@@ -124,12 +130,12 @@ export function formatAvailableSkills(skills: SkillDef[]): string {
  * File-based skills read from disk (paths escaping the skill directory are
  * rejected); app-embedded skills (built-in) delegate to their `read`
  * reader instead. Reads are capped at MAX_SKILL_FILE_BYTES. */
-export function loadSkillContent(
+export async function loadSkillContent(
   skill: SkillDef,
   relativePath?: string,
-): string {
+): Promise<string> {
   const content = skill.read !== undefined
-    ? skill.read(relativePath)
+    ? await skill.read(relativePath)
     : readSkillFile(skill, relativePath);
   const { text, truncated } = truncateHead(content, MAX_SKILL_FILE_BYTES);
   return truncated

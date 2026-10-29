@@ -8,7 +8,7 @@ import { AskHub } from "./ask.ts";
 import { BackgroundProcessManager } from "./background.ts";
 import { TodoHub } from "./todo.ts";
 import { TaskHub } from "./task-hub.ts";
-import { createCodingTools } from "./toolsets.ts";
+import { createCodingTools, hostBackends } from "./toolsets.ts";
 import {
   CHAT_PROMPT_SECTIONS,
   CODING_PROMPT_SECTIONS,
@@ -75,6 +75,7 @@ function codingToolNames(): string[] {
       sessionId: "s1",
       resolveRuntime: () => ({
         workspace,
+        backends: hostBackends(workspace),
         model: { id: "m", name: "m" } as unknown as Model<Api>,
         thinkingLevel: "off",
       }),

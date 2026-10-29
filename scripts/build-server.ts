@@ -27,6 +27,7 @@
  */
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildAssetsManifest } from "../packages/server/assets.ts";
+import { VM_CONTAINER_DIR_NAME } from "../packages/core/vm/contract.ts";
 import { findCanvasIcuDataFile } from "../packages/core/pdf/icu-data.ts";
 import { binaryName, repoRoot, reportUsage } from "./lib.ts";
 
@@ -170,6 +171,34 @@ async function stageCanvasIcuData(outDir: string): Promise<void> {
   console.log(`ICU data: ${target} (${size} bytes, from ${source})`);
 }
 
+/**
+ * Stage the stella machine's container files beside the binary.
+ *
+ * A compiled server cannot read them any other way: `deno compile` produces a
+ * single executable with no file system of its own, and the server runs
+ * `podman build` against a Containerfile on disk. The directory name is the
+ * one packages/server/paths.ts looks for (`VM_CONTAINER_DIR_NAME`), so the
+ * runtime and the packaging cannot disagree.
+ */
+async function stageStellaContainer(outDir: string): Promise<void> {
+  const source = join(repoRoot, "packages", "core", "vm", "container");
+  const target = join(outDir, VM_CONTAINER_DIR_NAME);
+  await Deno.remove(target, { recursive: true }).catch(() => {});
+  await Deno.mkdir(target, { recursive: true });
+  for await (const entry of Deno.readDir(source)) {
+    if (!entry.isFile) continue;
+    const from = join(source, entry.name);
+    const to = join(target, entry.name);
+    await Deno.copyFile(from, to);
+    // entry.sh must stay executable: podman runs it as the container's CMD,
+    // and a copied mode is not guaranteed by every platform's filesystem.
+    if (entry.name.endsWith(".sh")) {
+      await Deno.chmod(to, 0o755).catch(() => {});
+    }
+  }
+  console.log(`stella container files: ${target}`);
+}
+
 const options = parseArgs(Deno.args);
 await Deno.mkdir(options.outDir, { recursive: true });
 
@@ -179,8 +208,10 @@ const assetsFile = join(options.outDir, "assets.json");
 await Deno.writeTextFile(assetsFile, JSON.stringify(manifest));
 console.log(`Assets: ${assetsFile} (${appJsBytes} bytes of JS)`);
 
-// 2. Stage Skia's ICU data file (Windows only; removed elsewhere).
+// 2. Stage Skia's ICU data file (Windows only; removed elsewhere), and the
+//    stella machine's container files (used by `podman build` at runtime).
 await stageCanvasIcuData(options.outDir);
+await stageStellaContainer(options.outDir);
 
 // 3. Produce the runnable server (or the placeholder a development build
 //    needs for `cargo check` / `tauri dev`).

@@ -49,15 +49,15 @@ export function createSkillTool(
       "that exist. The session skill catalog lists every available skill " +
       "with its description.",
     parameters: skillSchema,
-    execute: (_id, params): Promise<ToolResult> => {
+    execute: async (_id, params): Promise<ToolResult> => {
       const skill = byName.get(params.name);
       if (skill === undefined) {
         throw new Error(
           `Unknown skill "${params.name}". Available skills: ${known}`,
         );
       }
-      const text = loadSkillContent(skill, params.read_followup);
-      return Promise.resolve({
+      const text = await loadSkillContent(skill, params.read_followup);
+      return {
         content: [{ type: "text", text }],
         details: {
           name: skill.name,
@@ -66,7 +66,7 @@ export function createSkillTool(
           ...(skill.path !== undefined ? { path: skill.path } : {}),
           ...(skill.dir !== undefined ? { dir: skill.dir } : {}),
         },
-      });
+      };
     },
   };
 }

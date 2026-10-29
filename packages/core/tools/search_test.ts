@@ -1,14 +1,14 @@
 import { basename, join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
+import { HostFileBackend } from "./host-backend.ts";
 import { errorMessage } from "../errors.ts";
 import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
 import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 
 function makeTools(root: string) {
-  const sandbox = new Sandbox([root]);
-  const ctx = { sandbox };
+  const ctx = { files: new HostFileBackend(new Sandbox([root])) };
   return {
     grep: createGrepTool(ctx),
     glob: createGlobTool(ctx),
@@ -482,8 +482,7 @@ Deno.test("grep and glob search every workspace folder when path is omitted", as
   const first = await fixture();
   const second = await fixture();
   try {
-    const sandbox = new Sandbox([first, second]);
-    const ctx = { sandbox };
+    const ctx = { files: new HostFileBackend(new Sandbox([first, second])) };
     const grep = createGrepTool(ctx);
     const glob = createGlobTool(ctx);
 
@@ -510,13 +509,13 @@ Deno.test("grep and glob results are independent of folder registration order", 
   const z = await fixture("lumisca-zzz-");
   try {
     const grep = (sandbox: Sandbox) =>
-      createGrepTool({ sandbox }).execute(
+      createGrepTool({ files: new HostFileBackend(sandbox) }).execute(
         "1",
         { pattern: "const", max_results: 2 },
         undefined,
       );
     const glob = (sandbox: Sandbox) =>
-      createGlobTool({ sandbox }).execute(
+      createGlobTool({ files: new HostFileBackend(sandbox) }).execute(
         "1",
         { pattern: "**/*.ts" },
         undefined,

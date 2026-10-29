@@ -2,7 +2,11 @@ import type { AgentMessage } from "../ai/types.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { SessionInfo } from "../types/session.ts";
 import type { Workspace } from "../types/workspace.ts";
-import { createChatTools, createCodingTools } from "../tools/mod.ts";
+import {
+  createChatTools,
+  createCodingTools,
+  createStellaTools,
+} from "../tools/mod.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
 import { AskHub } from "../tools/ask.ts";
 import { TodoHub } from "../tools/todo.ts";
@@ -23,7 +27,8 @@ import {
 } from "../browser/tools.ts";
 import { COMPUTER_TOOL_NAMES, createComputerTools } from "../computer/tools.ts";
 import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
+import { hostBackends, type ToolBackends } from "../tools/toolsets.ts";
+import { CoreError } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { SessionPoolDeps } from "./pool.ts";
 import type { SessionResources } from "./pool.ts";
@@ -164,21 +169,46 @@ export class AgentFactory {
     // Chat sessions ("simple chat" without a workspace) have no shell or
     // sub-agent surface: the background-command manager, the task hub and
     // the runtime resolver are skipped, and the tool set is the chat one.
+    // stella is the exception below: its row shares that workspace, but its
+    // tools run inside the machine and it keeps the full surface.
     const chat = workspace.chat;
+    // Where this session's tools run. A stella session works inside its
+    // virtual machine (resolved once per open, so every tool of the agent and
+    // every sub-agent it spawns works in the same place); every other session
+    // works in this machine's workspace.
+    const stella = session.stella === true
+      ? this.deps.stellaRuntime?.(session)
+      : undefined;
+    if (session.stella === true && stella === undefined) {
+      // Only reachable if the machine was detached while its session stayed
+      // open. Failing loudly beats building a stella agent with host tools —
+      // it would silently gain access to the user's own filesystem.
+      throw new CoreError(
+        "The stella machine is not available for this session",
+        "unavailable",
+      );
+    }
+    const backends: ToolBackends = stella !== undefined
+      ? { files: stella.files, runner: stella.runner }
+      : hostBackends(workspace);
+    // stella's conversation row lives in the folder-less chat workspace (it
+    // has no folders of its own — its files are in the machine), but it is
+    // NOT a chat session: it has a shell, background commands and
+    // sub-agents. The two flags are therefore read together everywhere the
+    // chat set would otherwise suppress a surface.
+    const chatOnly = chat && stella === undefined;
     // The PDF page-as-image tool lives in the session's tool registry
     // (discoverable via tool_search), never preloaded into the LLM
     // context — the same contract as MCP and browser-lab tools. Unlike
     // the browser-lab tools it needs no host backend beyond the workspace
-    // itself, so every coding session seeds it; chat sessions (no
+    // itself, so every coding session seeds it; chat-only sessions (no
     // workspace folders to resolve against) remove it. Remove-then-add
     // rebuilds the sandbox on every open, so workspace folder changes
     // apply without stale paths (the registry itself is reused across
     // agent rebuilds).
     registry.removeTools(PDF_TOOL_NAMES);
-    if (!chat) {
-      registry.addTools(
-        createPdfTools({ sandbox: new Sandbox(workspace.folders) }),
-      );
+    if (!chatOnly) {
+      registry.addTools(createPdfTools({ files: backends.files }));
     }
     // Reuse the session's manager when one exists (agent rebuild); create
     // it on first open. Shared by the async_bash tools and the session
@@ -191,6 +221,7 @@ export class AgentFactory {
       background = new BackgroundProcessManager({
         sessionId: session.id,
         emit: (event) => this.deps.emit(event),
+        ...(stella !== undefined ? { spawner: stella.backgroundSpawner } : {}),
       });
       resources.background = background;
     }
@@ -211,18 +242,19 @@ export class AgentFactory {
     // survive agent rebuilds). The runtime is resolved at spawn time, so
     // model/workspace/thinking-level changes apply to new sub-agents even
     // without a rebuild; the resolver itself is refreshed on every open
-    // (it must never hold a stale session). Coding sessions only — the
-    // task tools are absent from chat sessions, which run in a workspace
+    // (it must never hold a stale session). Coding and stella sessions only
+    // — the task tools are absent from chat sessions, which run in a workspace
     // without folders (sub-agents would get coding tools that resolve
     // nothing).
     let tasks = resources.tasks;
-    if (!chat) {
+    if (!chatOnly) {
       const runtimeResolver = () => {
         const fast = this.deps.getFastModelInfo();
         const workspace = this.deps.requireWorkspace(session.workspaceId);
         if (fast !== undefined) {
           return {
             workspace,
+            backends,
             model: fast.model,
             thinkingLevel: this.deps.getThinkingLevel(
               fast.provider,
@@ -232,6 +264,7 @@ export class AgentFactory {
         }
         return {
           workspace,
+          backends,
           model,
           thinkingLevel: this.deps.getThinkingLevel(
             session.modelProvider,
@@ -265,7 +298,22 @@ export class AgentFactory {
     } else {
       tasks = undefined;
     }
-    const tools = chat
+    const tools = stella !== undefined
+      // stella's tool set: the coding tools over the machine's backends, the
+      // screen tools, and the machine's own skill catalog. `eval` is
+      // deliberately absent (see createStellaTools).
+      ? createStellaTools({
+        backends,
+        skills: stella.skills(),
+        screen: stella.screenTools,
+        background,
+        ask: askHub,
+        todo,
+        task: tasks,
+        safety: this.deps.commandSafety,
+        visuals: { store: this.deps.visuals, sessionId: session.id },
+      })
+      : chat
       ? createChatTools({
         ask: askHub,
         todo,
@@ -282,6 +330,7 @@ export class AgentFactory {
         browserAvailable,
         computerAvailable,
         visuals: { store: this.deps.visuals, sessionId: session.id },
+        backends,
       });
     // The system prompt is generated once per session, from the tool set
     // the session actually has (its guidelines are keyed on the preloaded
@@ -298,6 +347,7 @@ export class AgentFactory {
           modelId: session.modelId,
         },
         tools.map((tool) => tool.name),
+        session.stella === true,
       );
       this.deps.updateSystemPrompt(session.id, systemPrompt);
     }

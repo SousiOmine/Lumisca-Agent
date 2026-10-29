@@ -1,5 +1,9 @@
 import type { Workspace } from "../types/workspace.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
+import { HostFileBackend } from "./host-backend.ts";
+import { HostCommandRunner } from "./host-command-runner.ts";
+import type { FileBackend } from "./file-backend.ts";
+import type { CommandRunner } from "./command-backend.ts";
 import {
   createEditFileTool,
   createListDirTool,
@@ -60,26 +64,40 @@ export function sessionSkills(
 /** The sandboxed file+search tool set: read, write, edit, list_dir, grep,
  * glob. The core of every coding tool set (main agent and general
  * sub-agents share it, so new tools cannot drift between the two). */
-export function sandboxFileTools(sandbox: Sandbox): Tool[] {
+export function fileTools(files: FileBackend): Tool[] {
   return [
-    createReadFileTool({ sandbox }),
-    createWriteFileTool({ sandbox }),
-    createEditFileTool({ sandbox }),
-    createListDirTool({ sandbox }),
-    createGrepTool({ sandbox }),
-    createGlobTool({ sandbox }),
+    createReadFileTool({ files }),
+    createWriteFileTool({ files }),
+    createEditFileTool({ files }),
+    createListDirTool({ files }),
+    createGrepTool({ files }),
+    createGlobTool({ files }),
   ];
 }
 
 /** The read-only investigation tool set: read, list_dir, grep, glob.
  * Backs the `explore` sub-agent (which must never modify files). */
-export function readOnlyInvestigationTools(sandbox: Sandbox): Tool[] {
+export function readOnlyInvestigationTools(files: FileBackend): Tool[] {
   return [
-    createReadFileTool({ sandbox }),
-    createListDirTool({ sandbox }),
-    createGrepTool({ sandbox }),
-    createGlobTool({ sandbox }),
+    createReadFileTool({ files }),
+    createListDirTool({ files }),
+    createGrepTool({ files }),
+    createGlobTool({ files }),
   ];
+}
+
+/** The tool backend of a workspace on this machine: files under the
+ * workspace folders, commands on this host. The single place the host
+ * implementations are chosen, so a caller that wants the stella VM's
+ * backends has to say so explicitly. */
+export function hostBackends(workspace: Workspace): {
+  files: FileBackend;
+  runner: CommandRunner;
+} {
+  return {
+    files: new HostFileBackend(new Sandbox(workspace.folders)),
+    runner: new HostCommandRunner(),
+  };
 }
 
 export interface ToolFactoryOptions {
@@ -116,6 +134,17 @@ export interface ToolFactoryOptions {
    * Omitted → the tool is not built: a tool set without a store has nowhere
    * to put a published image, and the reply could not link it. */
   visuals?: VisualTarget;
+  /** The file and command backends the tools run against. Omitted → this
+   * machine's workspace (`hostBackends`); stella sessions pass the VM's.
+   * The workspace itself still supplies the skill catalog and the sandbox
+   * for anything that reads project files directly. */
+  backends?: ToolBackends;
+}
+
+/** The two backends a tool set is built on. */
+export interface ToolBackends {
+  files: FileBackend;
+  runner: CommandRunner;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace. */
@@ -123,21 +152,27 @@ export function createCodingTools(
   workspace: Workspace,
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
-  const sandbox = new Sandbox(workspace.folders);
+  const backends = options.backends ?? hostBackends(workspace);
+  const { files, runner } = backends;
 
   return [
-    ...sandboxFileTools(sandbox),
-    createBashTool({ sandbox, env: options.env, safety: options.safety }),
+    ...fileTools(files),
+    createBashTool({
+      files,
+      runner,
+      env: options.env,
+      safety: options.safety,
+    }),
     ...(options.background !== undefined
       ? createAsyncBashTools({
         manager: options.background,
-        sandbox,
+        files,
         safety: options.safety,
       })
       : []),
     createEvalTool({ safety: options.safety }),
     ...(options.visuals !== undefined
-      ? [createVisualTool({ sandbox, ...options.visuals })]
+      ? [createVisualTool({ files, ...options.visuals })]
       : []),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
@@ -145,6 +180,68 @@ export function createCodingTools(
         computerAvailable: options.computerAvailable,
       }),
     }),
+    ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
+    ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
+    ...(options.task !== undefined ? options.task.parentTools() : []),
+  ];
+}
+
+/**
+ * Build the tool set of a stella session: the coding tools, working inside
+ * the session's virtual machine instead of a workspace on this host.
+ *
+ * What differs from {@link createCodingTools} is what "here" means, not which
+ * tools exist:
+ *
+ * - the file and command backends come from the caller (the VM), so every
+ *   path and every command is resolved and run inside the machine;
+ * - `eval` is absent. It runs JavaScript in the SERVER process, so handing it
+ *   to a session whose whole premise is isolation would be a hole in that
+ *   premise. The machine's own `node` (reached through bash) is the way to
+ *   run code there;
+ * - the screen tools (`vm_screenshot` / `vm_act`) are preloaded, because a
+ *   GUI is the one thing a shell cannot reach and an agent must know it can
+ *   look;
+ * - skills come from the machine and from the user's global set (see
+ *   vm/skills.ts), not from a workspace folder chain.
+ *
+ * Everything else — ask, todo, sub-agents, the visual tool, discoverable
+ * tools through the registry — is unchanged: stella is a different place to
+ * work, not a reduced agent.
+ */
+export function createStellaTools(options: {
+  backends: ToolBackends;
+  /** Skills discovered for this session (vm/skills.ts), already merged with
+   * the built-ins the session is entitled to. */
+  skills: SkillDef[];
+  screen: Tool[];
+  background?: BackgroundProcessManager;
+  ask?: AskHub;
+  todo?: TodoHub;
+  task?: TaskHub;
+  safety?: CommandSafety;
+  visuals?: VisualTarget;
+}): Tool[] {
+  const { files, runner } = options.backends;
+  return [
+    ...fileTools(files),
+    createBashTool({
+      files,
+      runner,
+      safety: options.safety,
+    }),
+    ...(options.background !== undefined
+      ? createAsyncBashTools({
+        manager: options.background,
+        files,
+        safety: options.safety,
+      })
+      : []),
+    ...options.screen,
+    ...(options.visuals !== undefined
+      ? [createVisualTool({ files, ...options.visuals })]
+      : []),
+    createSkillTool({ skills: options.skills }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
     ...(options.task !== undefined ? options.task.parentTools() : []),

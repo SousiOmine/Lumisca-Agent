@@ -7,6 +7,7 @@ import {
   fauxToolCall,
 } from "@lumisca/core";
 import { createAsyncBashTools } from "./background.ts";
+import { HostFileBackend } from "./host-backend.ts";
 import {
   BACKGROUND_TAIL_LIMIT,
   type BackgroundCommandDone,
@@ -124,7 +125,7 @@ Deno.test("start returns immediately and notifies on completion", async () => {
   const exitPromise = waitForExit(manager);
   // Do not await: start() has a synchronous contract and must return while a
   // command whose runtime comfortably exceeds Windows process startup is live.
-  const { commandId } = manager.start({
+  const { commandId } = await manager.start({
     cwd: Deno.cwd(),
     command: startContractCommand,
   });
@@ -253,9 +254,9 @@ Deno.test("async_bash start tool forwards env vars", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const root = Deno.makeTempDirSync({ prefix: "lumisca-async-env-" });
-  const sandbox = new Sandbox([root]);
+  const files = new HostFileBackend(new Sandbox([root]));
   try {
-    const [start] = createAsyncBashTools({ manager, sandbox });
+    const [start] = createAsyncBashTools({ manager, files });
     if (start === undefined) throw new Error("start tool missing");
     const echo = Deno.build.os === "windows"
       ? "echo $env:LUMISCA_TEST_ENV"
@@ -453,9 +454,9 @@ Deno.test("output tail is capped and keeps the last bytes", async () => {
 
 function makeTools() {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-async-" });
-  const sandbox = new Sandbox([root]);
+  const files = new HostFileBackend(new Sandbox([root]));
   const manager = new BackgroundProcessManager();
-  const tools = createAsyncBashTools({ manager, sandbox });
+  const tools = createAsyncBashTools({ manager, files });
   return {
     root,
     manager,

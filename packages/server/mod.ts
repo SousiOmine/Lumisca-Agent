@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 import {
   createComputerHost,
+  createVmManager,
   HttpBrowserBackend,
   LumiscaCore,
   refreshCatalogInBackground,
@@ -8,6 +9,7 @@ import {
 } from "@lumisca/core";
 import { COMPUTER_USE_SESSION_TOKEN_KEY } from "@lumisca/core/shared";
 import { disposeServer, startServer, validateHostConfig } from "./app.ts";
+import { stellaContainerDir } from "./paths.ts";
 import {
   consumeServerStartupEnvironment,
   DEFAULT_HOST,
@@ -180,6 +182,31 @@ function attachBrowserBackend(core: LumiscaCore): void {
  * storing machine state, and the token is worthless to anyone who cannot
  * already reach this machine's session bus.
  */
+/**
+ * stella mode: attach the virtual machine.
+ *
+ * The machine is not probed here (that would spawn `podman --version` on
+ * every start, even for users who never touch stella): the availability check
+ * asks on demand, and the mode switch refuses without it. What this decides
+ * is only WHERE the container files are, which differs between a repository
+ * checkout and a packaged install (see paths.ts).
+ */
+function attachStellaVm(core: LumiscaCore): void {
+  const containerDir = stellaContainerDir(
+    repoRoot,
+    Deno.execPath(),
+    (path) => {
+      try {
+        return Deno.statSync(path).isDirectory;
+      } catch {
+        return false;
+      }
+    },
+  );
+  core.setStellaVm(createVmManager({ containerDir }));
+  console.log(`stella mode: コンテナ定義 ${containerDir}`);
+}
+
 async function attachComputerHost(core: LumiscaCore): Promise<void> {
   const result = await createComputerHost({
     store: {
@@ -250,6 +277,7 @@ try {
 }
 attachBrowserBackend(core);
 await attachComputerHost(core);
+attachStellaVm(core);
 // The model catalog starts as the bundled snapshot; refresh it in the
 // background so new models.dev entries appear without blocking startup
 // (or failing it when offline — the snapshot simply stays active).

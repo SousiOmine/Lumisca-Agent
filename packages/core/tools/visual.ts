@@ -7,8 +7,8 @@ import {
   VISUAL_MIME_BY_EXTENSION,
   visualRef,
 } from "../shared/mod.ts";
-import type { Sandbox } from "../workspace/sandbox.ts";
 import type { SessionVisualStore } from "../session/visuals.ts";
+import type { FileBackend } from "./file-backend.ts";
 import { object, optional, string, type Tool } from "./schema.ts";
 import { requireExistingFile } from "./resolve.ts";
 
@@ -25,8 +25,8 @@ const visualSchema = object({
 });
 
 /** What the tool publishes for: the session's asset store and its id. The
- * sandbox comes from the tool set that hosts the tool, because a file path
- * resolves against the workspace, not against the session. */
+ * backend comes from the tool set that hosts the tool, because a file path
+ * resolves against the workspace (or the stella VM), not the session. */
 export interface VisualTarget {
   store: SessionVisualStore;
   sessionId: string;
@@ -38,9 +38,9 @@ export interface VisualTarget {
  * carries the markdown snippet to paste. Coding sessions only: a chat
  * session has no workspace to read an image from. */
 export function createVisualTool(
-  options: VisualTarget & { sandbox: Sandbox },
+  options: VisualTarget & { files: FileBackend },
 ): Tool<typeof visualSchema> {
-  const { store, sessionId, sandbox } = options;
+  const { store, sessionId, files } = options;
   return {
     name: TOOL_VISUAL,
     label: "Visual",
@@ -54,12 +54,12 @@ export function createVisualTool(
       "missing file, a non-image file, and an oversized file fail.",
     parameters: visualSchema,
     execute: async (_id, params) => {
-      // The sandbox resolves a path that does not exist yet (the file tools
+      // The backend resolves a path that does not exist yet (the file tools
       // create files that way); this tool only reads, so a missing file is
       // refused here.
-      const filePath = await requireExistingFile(sandbox, params.path);
+      const filePath = await requireExistingFile(files, params.path);
       // Still needed below: the size limit is checked before the file is read.
-      const stat = await Deno.stat(filePath);
+      const stat = await files.stat(filePath);
       const extension = extname(filePath).toLowerCase();
       if (!isVisualExtension(extension)) {
         throw new Error(
@@ -68,13 +68,14 @@ export function createVisualTool(
         );
       }
       const limit = maxVisualBytes(extension);
-      if (stat.size > limit) {
+      const size = stat?.size ?? 0;
+      if (size > limit) {
         throw new Error(
-          `Too large to publish: ${stat.size} bytes (the limit is ${limit}): ` +
+          `Too large to publish: ${size} bytes (the limit is ${limit}): ` +
             params.path,
         );
       }
-      const bytes = await Deno.readFile(filePath);
+      const { bytes } = await files.readHead(filePath, limit);
       if (extension === ".svg") {
         // The same rule the fence follows: a diagram never carries script.
         // An image context would not run it, and the asset route refuses to

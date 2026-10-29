@@ -15,6 +15,7 @@ import {
   toolText,
 } from "../test-utils.ts";
 import { createVisualTool } from "./visual.ts";
+import { HostFileBackend } from "./host-backend.ts";
 
 interface Fixture {
   /** Workspace root (also the sandbox root). */
@@ -45,7 +46,7 @@ async function withFixture(
       folder: basename(root),
       store,
       tool: createVisualTool({
-        sandbox: new Sandbox([root]),
+        files: new HostFileBackend(new Sandbox([root])),
         store,
         sessionId: "s1",
       }),

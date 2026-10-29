@@ -48,6 +48,11 @@
    * composer stays above it. The default must stay a length: the shell
    * (`.app`, layout.css) reads it unconditionally. */
   --app-height: 100dvh;
+  /* Height of stella's header (the machine's controls). Zero here: the view
+   * publishes the measured value (hooks/useElementHeight.ts) so the floating
+   * panels start below the controls instead of covering them. The default
+   * must stay a length, for the same reason as --app-banner-height. */
+  --stella-header-height: 0px;
   /* Fill factor (0..1) of the thinking-strength slider, written per render
    * by the component (see ThinkingLevelSlider). The zero here keeps the
    * calc() that reads it valid — the same reason as --app-banner-height. */

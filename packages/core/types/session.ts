@@ -26,4 +26,9 @@ export interface SessionInfo {
    * without a workspace). Attached by the core when sessions are returned;
    * absent on raw rows. */
   chat?: boolean;
+  /** True for stella mode's single conversation. It is not a session the
+   * user opened — stella has no session concept — so it never appears in a
+   * session list; it exists so one ongoing conversation can reuse the
+   * message store, compaction and rewind. */
+  stella?: boolean;
 }

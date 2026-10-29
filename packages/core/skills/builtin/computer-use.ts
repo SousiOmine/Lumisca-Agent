@@ -190,11 +190,11 @@ export function computerUseSkill(): SkillDef {
       if (relativePath !== undefined) {
         // One file per built-in skill for now: no follow-up files exist.
         // The message mirrors the file-based skills' read error.
-        throw new Error(
-          `No such file in skill "computer-use": ${relativePath}`,
+        return Promise.reject(
+          new Error(`No such file in skill "computer-use": ${relativePath}`),
         );
       }
-      return SKILL_MD;
+      return Promise.resolve(SKILL_MD);
     },
   };
 }

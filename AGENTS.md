@@ -89,7 +89,18 @@ npm outdated                                                   # packages/deskto
 - **LLM プロンプト**: システムプロンプトやツール定義の英語文面は翻訳対象外です。回答言語はセッションごとの指示で制御します。
 - **検証**: 文言の変更後は `deno test packages/core/shared/i18n_test.ts` を実行して整合性を確認してください。
 
-## 7. 開発用スクリプト
+## 7. stella mode（仮想マシン）
+
+stella mode は、podman コンテナを仮想マシンとして与え、その中だけでエージェントを動かす動作モードです。実装は `packages/core/vm/` にあり、会話は mode ごとに 1 本だけ存在します。
+
+- **必要環境**: Linux と rootless podman。podman が使えない環境では stella mode を選べません（理由を画面に表示します）。Windows / macOS は対象外です。
+- **イメージ**: `packages/core/vm/container/Containerfile` から初回起動時にビルドします（数分）。配布物では `scripts/build-server.ts` が `stella-container/` をバイナリの隣へ同梱し、`packages/server/paths.ts` がその場所を解決します。Containerfile を変えたらイメージを作り直してください（画面の「作り直す」）。
+- **契約値**: 画面サイズ（1280x800）、DISPLAY、uid/gid、作業ディレクトリは `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方に書かれています。起動時に実コンテナと突き合わせ、ずれていれば起動を失敗させます。
+- **隔離の範囲**: ホストのファイルは VM にマウントしません。VM はセキュリティ境界ではなく作業場所の区切りであり、CPU・メモリ・ディスクの上限や外向きネットワークの制限は設けていません。
+- **ライフサイクル**: 起動は自動（会話を開く前）。停止はサーバー終了時と画面の「停止」。モードの切り替えだけでは停止しません。
+- **eval ツールは渡しません。** サーバープロセス内で JavaScript を実行するため、VM の外に出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使ってください。
+
+## 8. 開発用スクリプト
 
 手元での確認に使うスクリプトは `deno task` から実行します。
 
@@ -97,5 +108,6 @@ npm outdated                                                   # packages/deskto
 - `deno task seed:history <sessionId> [nPairs]`: 指定セッションに長い履歴を流し込みます（多数メッセージでのレイアウト確認用）。
 - `deno task probe:token`: 認証トークンのガード（`/api/health` がトークン無しで 401、付与で 200）を確認します。
 - `deno task probe:computer`: このマシンで computer use が使えるかを確認し、スクリーンショットを 1 枚保存します（Linux では初回にデスクトップが許可ダイアログを出します）。`--click x,y` などを付けると 1 回だけ操作も行います。
+- `deno task probe:stella`: stella mode がこのマシンで使えるかを確認します。`--start` を付けるとイメージのビルド・起動・画面撮影・停止まで通します（初回は数分かかります）。
 
 いずれも手動操作用で、CI からは実行しません。引数の詳細は各スクリプトの先頭コメントにあります。

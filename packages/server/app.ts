@@ -30,6 +30,8 @@ import { fsRoutes } from "./routes/fs.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
 import { skillRoutes } from "./routes/skills.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
+import { stellaRoutes } from "./routes/stella.ts";
+import { stellaScreenRoute } from "./stella-screen.ts";
 import { visualRoutes } from "./routes/visuals.ts";
 import { providerRoutes } from "./routes/providers.ts";
 import { settingRoutes } from "./routes/settings.ts";
@@ -442,6 +444,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", skillRoutes(core));
   app.route("/api", mcpRoutes(core, languageFor));
   app.route("/api", sessionRoutes(core));
+  app.route("/api", stellaRoutes(core));
   // The images a session published for its replies. Mounted after the
   // session routes (its path is its own `/sessions/:id/visual/:name`).
   app.route("/api", visualRoutes(core));
@@ -510,6 +513,18 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   });
 
   app.get("/ws", ws);
+  // The stella machine's screen relay. Mounted under /api so the Host guard,
+  // the token and the CORS/Origin middleware above all apply — the container's
+  // VNC port stays unreachable from the page.
+  app.get(
+    "/api/stella/screen",
+    stellaScreenRoute({
+      vncPort: async () => {
+        const vm = core.getStellaVm();
+        return vm === undefined ? null : await vm.vncPort();
+      },
+    }),
+  );
 
   // SPA fallback (registered last): any other page renders the app shell.
   // The /api next() guard is defensive only — API routes above already

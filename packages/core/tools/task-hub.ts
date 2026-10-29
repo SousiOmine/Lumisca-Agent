@@ -30,16 +30,16 @@ import type {
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { Workspace } from "../types/workspace.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { toAgentTool } from "./pi-adapter.ts";
 import type { Tool } from "./schema.ts";
 import {
+  fileTools,
   readOnlyInvestigationTools,
-  sandboxFileTools,
   sessionSkills,
+  type ToolBackends,
 } from "./toolsets.ts";
 import { ContextCompactor } from "../agent/context-compaction.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
@@ -76,12 +76,12 @@ const log = createLogger("task");
 /** Read-only investigation tools of the `explore` sub-agent. */
 function exploreTools(
   workspace: Workspace,
+  backends: ToolBackends,
   browserAvailable: boolean,
   computerAvailable: boolean,
 ): Tool[] {
-  const sandbox = new Sandbox(workspace.folders);
   return [
-    ...readOnlyInvestigationTools(sandbox),
+    ...readOnlyInvestigationTools(backends.files),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
         browserAvailable,
@@ -100,14 +100,18 @@ function exploreTools(
  * the search/call pair, exactly like the main agent. */
 function generalTools(
   workspace: Workspace,
+  backends: ToolBackends,
   safety: CommandSafety | undefined,
   browserAvailable: boolean,
   computerAvailable: boolean,
 ): Tool[] {
-  const sandbox = new Sandbox(workspace.folders);
   return [
-    ...sandboxFileTools(sandbox),
-    createBashTool({ sandbox, safety }),
+    ...fileTools(backends.files),
+    createBashTool({
+      files: backends.files,
+      runner: backends.runner,
+      safety,
+    }),
     createEvalTool({ safety }),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
@@ -118,10 +122,12 @@ function generalTools(
   ];
 }
 
-/** The runtime a new sub-agent spawns into: the workspace (tool sandbox),
- * the model, and its stored thinking level. */
+/** The runtime a new sub-agent spawns into: the workspace (its skill catalog
+ * and project files), the tool backends the session runs on (this machine or
+ * the stella VM), the model, and its stored thinking level. */
 export interface SubagentRuntime {
   workspace: Workspace;
+  backends: ToolBackends;
   model: Model<Api>;
   thinkingLevel: ThinkingLevel;
 }
@@ -385,12 +391,14 @@ export class TaskHub {
       ...(type === "general"
         ? generalTools(
           runtime.workspace,
+          runtime.backends,
           this.safety,
           this.browserAvailable,
           this.computerAvailable,
         )
         : exploreTools(
           runtime.workspace,
+          runtime.backends,
           this.browserAvailable,
           this.computerAvailable,
         )),

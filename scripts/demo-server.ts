@@ -25,6 +25,7 @@ import {
   type StreamRequest,
 } from "../packages/core/mod.ts";
 import { TOOL_BASH, TOOL_READ } from "../packages/core/shared/mod.ts";
+import { createVmManager } from "../packages/core/vm/container.ts";
 import { startServer } from "../packages/server/app.ts";
 import { repoRoot } from "./lib.ts";
 
@@ -86,6 +87,16 @@ function respond(context: StreamRequest): AssistantMessage {
 
 const faux = fauxProvider();
 const core = LumiscaCore.forTesting([faux.provider]);
+// The stella machine is attached so the mode's UI can be exercised too; it
+// is NOT started here (building the image takes minutes). Without a running
+// machine, stella mode reports itself unavailable and the selection screen
+// says so — which is itself worth seeing in the demo.
+core.setStellaVm(
+  createVmManager({
+    containerDir: new URL("../packages/core/vm/container/", import.meta.url)
+      .pathname,
+  }),
+);
 
 // The faux provider serves exactly one queued response per LLM call, while
 // this demo answers prompts indefinitely. Re-arm the responder at the two
@@ -97,6 +108,10 @@ core.subscribe((event) => {
   if (event.type === "agent_start" || event.type === "tool_end") arm();
 });
 arm();
+
+// A key for the faux provider, so a stella conversation can be created too
+// (creating any session resolves a default model, which requires one).
+await core.setProviderApiKey(faux.provider.id, "faux-key");
 
 const ws = await core.createWorkspace("E2E Demo", [repoRoot]);
 core.createSession({

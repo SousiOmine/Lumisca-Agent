@@ -40,6 +40,8 @@ interface TabBarProps {
   onOpenSettings: () => void;
   isDesktop: boolean;
   onQuit: () => void;
+  /** Open the mode-selection screen (stella is the other mode). */
+  onSwitchMode: () => void;
 }
 
 /** State of the open right-click menu: target tab and cursor position. */
@@ -69,6 +71,7 @@ function TabBarView({
   onOpenSettings,
   isDesktop,
   onQuit,
+  onSwitchMode,
 }: TabBarProps) {
   const t = useT();
   const [menu, setMenu] = useState<TabMenu | null>(null);
@@ -190,6 +193,7 @@ function TabBarView({
             onOpenRecent={onOpenRecent}
             onOpenSettings={onOpenSettings}
             onQuit={onQuit}
+            onSwitchMode={onSwitchMode}
             isDesktop={false}
           />
         </div>

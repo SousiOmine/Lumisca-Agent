@@ -217,11 +217,14 @@ Deno.test("loadSkillContent reads SKILL.md and follow-up files", async () => {
   try {
     const [alpha] = discoverSkills([root], { globalDirs: [] });
     assert(alpha !== undefined);
-    const content = loadSkillContent(alpha);
+    const content = await loadSkillContent(alpha);
     assert(content.includes("# Alpha"));
     // Follow-up file inside the skill directory.
     await Deno.writeTextFile(join(alpha.dir!, "reference.md"), "# Reference\n");
-    assertEquals(loadSkillContent(alpha, "reference.md"), "# Reference\n");
+    assertEquals(
+      await loadSkillContent(alpha, "reference.md"),
+      "# Reference\n",
+    );
   } finally {
     await removeDirRetry(root);
   }
@@ -233,21 +236,17 @@ Deno.test("loadSkillContent rejects paths escaping the skill directory", async (
     const [alpha] = discoverSkills([root], { globalDirs: [] });
     assert(alpha !== undefined);
     await assertRejects(
-      () =>
-        Promise.resolve().then(() => loadSkillContent(alpha, "../secret.txt")),
+      () => loadSkillContent(alpha, "../secret.txt"),
       Error,
       "escapes",
     );
     await assertRejects(
-      () =>
-        Promise.resolve().then(() =>
-          loadSkillContent(alpha, join(root, "secret.txt"))
-        ),
+      () => loadSkillContent(alpha, join(root, "secret.txt")),
       Error,
       "not relative",
     );
     await assertRejects(
-      () => Promise.resolve().then(() => loadSkillContent(alpha, "missing.md")),
+      () => loadSkillContent(alpha, "missing.md"),
       Error,
       "No such file",
     );

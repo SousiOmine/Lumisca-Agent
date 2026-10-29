@@ -1,5 +1,6 @@
 import { useRef, useState } from "preact/compat";
 import {
+  IconArrowsLeftRight,
   IconHistory,
   IconMenu2,
   IconPlus,
@@ -16,6 +17,8 @@ interface AppMenuProps {
   onOpenSettings: () => void;
   /** Quit the desktop app (shown only when running in the shell). */
   onQuit: () => void;
+  /** Open the mode-selection screen (code / stella). */
+  onSwitchMode: () => void;
   isDesktop: boolean;
   /** Extra class for the trigger button (it lives in the title bar on
    * desktop, in the tab bar in a plain browser). */
@@ -30,6 +33,7 @@ export function AppMenu({
   onOpenRecent,
   onOpenSettings,
   onQuit,
+  onSwitchMode,
   isDesktop,
   buttonClass = "icon-btn",
 }: AppMenuProps) {
@@ -97,6 +101,18 @@ export function AppMenu({
             <span>{t("chrome.appMenu.history")}</span>
           </button>
           <div className="app-menu-sep" role="separator" />
+          <button
+            type="button"
+            className="app-menu-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onSwitchMode();
+            }}
+          >
+            <IconArrowsLeftRight size={14} />
+            <span>{t("chrome.appMenu.switchMode")}</span>
+          </button>
           <button
             type="button"
             className="app-menu-item"
