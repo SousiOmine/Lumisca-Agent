@@ -55,3 +55,7 @@ export const TOOL_VISUAL = "visual";
  * at — or click on — the machine it works in. */
 export const TOOL_VM_SCREENSHOT = "vm_screenshot";
 export const TOOL_VM_ACT = "vm_act";
+
+/** Create another stella agent (a separate counterpart with its own name, role
+ * and conversation). Terasuma's `tera_create`. */
+export const TOOL_AGENT_CREATE = "agent_create";

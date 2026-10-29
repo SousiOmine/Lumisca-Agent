@@ -382,28 +382,6 @@ Deno.test("stop: a stopped or absent machine is not an error", async () => {
   }
 });
 
-Deno.test("reset: the container is removed so the next start is empty", async () => {
-  const dir = await containerDir();
-  const { run, calls } = makeRunner({
-    answers: [
-      { match: /^podman rm/, result: ok() },
-      ...runningMachine().answers,
-    ],
-  });
-  try {
-    const manager = createVmManager({ containerDir: dir, run });
-    await manager.reset();
-    assert(
-      calls.some((c) => c.join(" ").startsWith("podman rm --force")),
-      `reset must remove the container: ${
-        calls.map((c) => c.join(" ")).join("\n")
-      }`,
-    );
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-});
-
 Deno.test("status: the VNC port is null when the machine is not running", async () => {
   const dir = await containerDir();
   const { run } = makeRunner({

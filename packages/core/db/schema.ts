@@ -129,11 +129,13 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
       CREATE INDEX IF NOT EXISTS idx_request_shapes_session
         ON request_shapes(session_id, id);
     `),
-  // stella mode: one hidden session row holds its single ongoing
-  // conversation. The flag keeps it out of every session list (it is not a
-  // session the user opened — stella has no session concept) while letting
-  // the ordinary message store, compaction and rewind machinery work
-  // unchanged. A partial index keeps "find the stella row" a single lookup.
+  // stella mode's conversations are hidden from every session list (they are
+  // not sessions the user opened — stella has no session concept) while still
+  // using the ordinary message store, compaction and rewind.
+  //
+  // The flag is NOT unique: each stella agent has its own conversation, so
+  // several rows carry it at once. The index exists only to make "the stella
+  // rows" cheap to find.
   //
   // Guarded because ALTER TABLE ADD COLUMN is not idempotent: a process
   // killed between this statement and the user_version stamp (the two are
@@ -148,9 +150,42 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
         "ALTER TABLE sessions ADD COLUMN stella INTEGER NOT NULL DEFAULT 0",
       );
     }
+    // A database stamped by the earlier, one-conversation shape carries a
+    // UNIQUE index here; it would reject the second agent's conversation, so
+    // it is replaced rather than kept.
+    db.exec("DROP INDEX IF EXISTS idx_sessions_stella");
     db.exec(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_stella
-        ON sessions(stella) WHERE stella = 1;
+      CREATE INDEX IF NOT EXISTS idx_sessions_stella
+        ON sessions(stella);
+    `);
+  },
+  // stella's assistants ("agents"): the other half of "one ongoing
+  // conversation with one counterpart". Each row is a persona — a name and the
+  // role it works from — and its conversation is the `sessions` row pointing
+  // at it. Terasuma's Tera is the same idea.
+  //
+  // `sessions.agent_id` is nullable: every pre-existing session (and every
+  // code-mode session) has none. The unique index keeps "one conversation per
+  // agent" a database fact rather than something the code must remember.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS stella_agents (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        role       TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+    const columns = db
+      .prepare("PRAGMA table_info(sessions)")
+      .all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "agent_id")) {
+      db.exec("ALTER TABLE sessions ADD COLUMN agent_id TEXT");
+    }
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_agent
+        ON sessions(agent_id) WHERE agent_id IS NOT NULL;
     `);
   },
 ];

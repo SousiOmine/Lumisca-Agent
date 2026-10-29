@@ -1,10 +1,16 @@
 import { Hono } from "hono";
-import type { SessionInfo, SkillInfo } from "@lumisca/core";
+import type { SessionInfo, SkillInfo, StellaAgent } from "@lumisca/core";
 import type { StellaAvailability } from "@lumisca/core";
+import { CoreError } from "@lumisca/core";
 import { AppError, parseBody } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface StellaApi {
+  listStellaAgents(): StellaAgent[];
+  defaultStellaAgent(): StellaAgent | undefined;
+  createStellaAgent(input: { name: string; role: string }): StellaAgent;
+  renameStellaAgent(id: string, name: string): StellaAgent;
+  deleteStellaAgent(id: string): Promise<void>;
   getAppMode(): "code" | "stella" | undefined;
   setAppMode(mode: "code" | "stella"): void;
   getStellaAvailability(): Promise<StellaAvailability>;
@@ -13,22 +19,26 @@ export interface StellaApi {
     state: string;
     vncPort: number | null;
     reason: string;
+    starting: boolean;
   }>;
-  startStellaVm(): Promise<void>;
-  stopStellaVm(): Promise<void>;
-  resetStellaVm(): Promise<void>;
-  getOrCreateStellaSession(): Promise<SessionInfo>;
+  /** Bring the machine up if it is not (the first conversation starts it). */
+  ensureStellaReady(): Promise<void>;
+  getOrCreateStellaSession(agentId?: string): Promise<SessionInfo>;
   listStellaSkills(): SkillInfo[];
 }
 
 /**
  * The stella machine's API.
  *
- * These routes are mounted unconditionally: a machine that cannot run on
- * this host answers with its reason instead of a 404, so the mode-selection
- * screen can explain itself. Only `POST /stella/start` and the conversation
- * endpoints refuse with an error — those are actions that cannot be
- * simulated.
+ * There is no start / stop / reset route: the machine is started by the code
+ * that needs it (the conversation endpoint) and stopped when the server stops.
+ * A user who picked stella mode asked for a machine, not for a container to
+ * operate, and every control that existed only to move it between states was
+ * something to read, understand and get wrong.
+ *
+ * These routes are mounted unconditionally: a machine that cannot run on this
+ * host answers with its reason instead of a 404, so the mode-selection screen
+ * can explain itself.
  */
 export function stellaRoutes(core: StellaApi): Hono {
   const app = new Hono();
@@ -44,10 +54,6 @@ export function stellaRoutes(core: StellaApi): Hono {
     if (mode !== "code" && mode !== "stella") {
       throw new AppError('mode must be "code" or "stella"', 400);
     }
-    // Check the machine before asking the core to store the choice: the
-    // core refuses a stella mode whose availability was never established,
-    // and this route is what establishes it.
-    if (mode === "stella") await core.getStellaAvailability();
     try {
       core.setAppMode(mode);
     } catch (error) {
@@ -77,46 +83,79 @@ export function stellaRoutes(core: StellaApi): Hono {
       state: status.state,
       vncPort: status.vncPort,
       reason: status.reason,
+      starting: status.starting,
     };
   };
 
-  app.post("/stella/start", async (c) => {
+  // --- agents (the counterpart of each conversation) -----------------------
+
+  /** The sidebar's list, most recently used first, plus which one a fresh
+   * screen opens. */
+  app.get("/stella/agents", (c) => {
+    return c.json({
+      agents: core.listStellaAgents(),
+      defaultAgentId: core.defaultStellaAgent()?.id ?? null,
+    });
+  });
+
+  app.post("/stella/agents", async (c) => {
+    const body = await parseBody<{ name?: unknown; role?: unknown }>(c);
+    if (typeof body?.name !== "string" || typeof body?.role !== "string") {
+      throw new AppError("name and role (strings) are required", 400);
+    }
     try {
-      await core.startStellaVm();
+      return c.json(
+        core.createStellaAgent({ name: body.name, role: body.role }),
+        201,
+      );
+    } catch (error) {
+      // A duplicate name is a conflict (409), not a malformed request: the
+      // client shows it as "that name is taken" rather than as a typo.
+      throw new AppError(
+        error instanceof Error ? error.message : String(error),
+        error instanceof CoreError && error.kind === "conflict" ? 409 : 400,
+      );
+    }
+  });
+
+  app.patch("/stella/agents/:id", async (c) => {
+    const body = await parseBody<{ name?: unknown }>(c);
+    if (typeof body?.name !== "string") {
+      throw new AppError("name (string) is required", 400);
+    }
+    try {
+      return c.json(core.renameStellaAgent(c.req.param("id"), body.name));
     } catch (error) {
       throw new AppError(
         error instanceof Error ? error.message : String(error),
-        503,
+        error instanceof CoreError && error.kind === "not_found" ? 404 : 400,
       );
     }
-    return c.json(await statusBody());
   });
 
-  app.post("/stella/stop", async (c) => {
-    await core.stopStellaVm();
-    return c.json(await statusBody());
-  });
-
-  /** Throw the machine away. Everything inside goes with it, so the client
-   * confirms with the user first; the conversation itself survives (it is
-   * in this application's database, not in the machine). */
-  app.post("/stella/reset", async (c) => {
-    try {
-      await core.resetStellaVm();
-    } catch (error) {
-      throw new AppError(
-        error instanceof Error ? error.message : String(error),
-        503,
-      );
-    }
-    return c.json(await statusBody());
+  /** Delete an agent and its conversation. The client confirms first: the
+   * transcript goes with it. */
+  app.delete("/stella/agents/:id", async (c) => {
+    await core.deleteStellaAgent(c.req.param("id"));
+    return c.json({ ok: true });
   });
 
   /** The stella conversation, created on first use. Its id is what the
-   * client uses for every session-scoped call (prompt, messages, abort). */
+   * client uses for every session-scoped call (prompt, messages, abort).
+   *
+   * This is also where the machine starts: a conversation needs it, and no
+   * other endpoint is guaranteed to run first. A first run builds the image,
+   * so the response can take minutes — the client shows that as its one
+   * piece of machine state. */
   app.get("/stella/session", async (c) => {
     try {
-      return c.json(await core.getOrCreateStellaSession());
+      await core.ensureStellaReady();
+      const agentId = c.req.query("agentId");
+      return c.json(
+        await core.getOrCreateStellaSession(
+          agentId === undefined || agentId === "" ? undefined : agentId,
+        ),
+      );
     } catch (error) {
       throw new AppError(
         error instanceof Error ? error.message : String(error),

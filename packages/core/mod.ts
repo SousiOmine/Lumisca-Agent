@@ -19,6 +19,12 @@ export {
 } from "./vm/contract.ts";
 export { CoreError, errorMessage } from "./errors.ts";
 export { createLogger } from "./log.ts";
+export {
+  createAgentRepo,
+  MAX_AGENT_NAME_CHARS,
+  MAX_AGENT_ROLE_CHARS,
+  type StellaAgent,
+} from "./stella/agents.ts";
 export type { Logger } from "./log.ts";
 export { refreshCatalogInBackground } from "./models/catalog-refresh.ts";
 export type { CatalogRefresher } from "./models/catalog-refresh.ts";

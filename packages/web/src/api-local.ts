@@ -20,6 +20,7 @@ import type {
   ProviderLoginSnapshot,
   SessionInfo,
   SkillInfo,
+  StellaAgent,
   TaskInfo,
   ThinkingLevel,
   TodoPhase,
@@ -266,18 +267,30 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ mode }),
     }),
-  /** Bring the machine up (building its image on a first run). Slow: the
-   * answer is the resulting status. */
-  startStella: () =>
-    request<AppModeStatus>("/api/stella/start", { method: "POST" }),
-  stopStella: () =>
-    request<AppModeStatus>("/api/stella/stop", { method: "POST" }),
-  /** Throw the machine away and make a new one (destructive: confirm
-   * first). */
-  resetStella: () =>
-    request<AppModeStatus>("/api/stella/reset", { method: "POST" }),
-  /** The stella conversation, created on first use. */
-  getStellaSession: () => request<SessionInfo>("/api/stella/session"),
+  /** The counterparts of stella mode, most recently used first, and which
+   * one a fresh screen opens. */
+  getStellaAgents: () =>
+    request<{ agents: StellaAgent[]; defaultAgentId: string | null }>(
+      "/api/stella/agents",
+    ),
+  createStellaAgent: (name: string, role: string) =>
+    request<StellaAgent>("/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name, role }),
+    }),
+  deleteStellaAgent: (id: string) =>
+    request<{ ok: boolean }>(
+      `/api/stella/agents/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+  /** One agent's conversation, created on first use. This is also what starts
+   * the machine (a first run builds its image: the call can take minutes). */
+  getStellaSession: (agentId?: string) =>
+    request<SessionInfo>(
+      agentId === undefined
+        ? "/api/stella/session"
+        : `/api/stella/session?agentId=${encodeURIComponent(agentId)}`,
+    ),
   /** The skills a stella session can load. */
   getStellaSkills: () => request<{ skills: SkillInfo[] }>("/api/stella/skills"),
   listProviders: () => request<ProviderInfo[]>("/api/providers"),

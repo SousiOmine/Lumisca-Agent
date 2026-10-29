@@ -86,6 +86,10 @@ interface ComposerProps {
    * selected workspace is on another server: the session is created with
    * the peer's default model). */
   hideModelSwitch?: boolean;
+  /** Hide the model line entirely (no picker, no placeholder text). stella's
+   * composer uses this: the model is configuration, and a line explaining that
+   * is one more thing to read on every message. */
+  hideModelLine?: boolean;
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
   /** When set, typing `@` offers workspace files/folders to insert as
@@ -142,6 +146,7 @@ export function Composer({
   onSubmit,
   peerId,
   hideModelSwitch,
+  hideModelLine,
   onOpenSettings,
   mentionWorkspaceId,
   mentionPeerId = "",
@@ -539,7 +544,9 @@ export function Composer({
         )}
       </div>
       <div className="input-row">
-        {hideModelSwitch
+        {hideModelLine
+          ? null
+          : hideModelSwitch
           ? (
             <span className="settings-note" style={{ alignSelf: "center" }}>
               {t("chat.composer.remoteDefault")}

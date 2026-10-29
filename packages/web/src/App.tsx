@@ -1,7 +1,6 @@
 import {
   type ReactElement,
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from "preact/compat";
@@ -40,7 +39,8 @@ import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 import { ModeSelectView } from "./components/ModeSelectView.tsx";
 import { StellaView } from "./components/StellaView.tsx";
 import { useAppMode } from "./hooks/useAppMode.ts";
-import { useStellaSession } from "./hooks/useStellaSession.ts";
+import { useStella } from "./hooks/useStella.ts";
+import { StellaSidebar } from "./components/StellaSidebar.tsx";
 
 export interface AppProps {
   /** Preloaded data from the bootstrap script; undefined when not served. */
@@ -85,7 +85,6 @@ export function App({ initialData }: AppProps): ReactElement {
     loading: modeLoading,
     error: modeError,
     setMode,
-    setStatus: setModeStatus,
   } = useAppMode();
   const {
     workspaces,
@@ -251,21 +250,12 @@ export function App({ initialData }: AppProps): ReactElement {
   // The hook runs unconditionally (hooks cannot be conditional), but it only
   // acts when stella is the current mode: `enabled` gates its requests.
   const stellaActive = modeStatus?.mode === "stella";
-  const stella = useStellaSession(stellaActive, setViews);
+  const stella = useStella(stellaActive, setViews);
   const stellaView = stella.sessionId !== null
     ? views.get(stella.sessionId)
     : undefined;
   const stellaInfo = stellaView?.info ?? stella.info ?? undefined;
-  // Opening the conversation needs a running machine; the mode switch refuses
-  // without one, but a machine stopped while the page was open must be
-  // started again before the conversation can be reached.
-  const stellaMachineRunning = modeStatus?.state === "running";
-  useEffect(() => {
-    if (!stellaActive) return;
-    if (!stellaMachineRunning) return;
-    if (stella.sessionId !== null) return;
-    stella.open();
-  }, [stellaActive, stellaMachineRunning, stella.sessionId, stella]);
+  const stellaAgent = stella.agents.find((a) => a.id === stella.activeAgentId);
 
   // The mode-selection screen, and nothing else, until a mode is chosen.
   if (modeStatus === null || modeStatus.mode === null) {
@@ -350,37 +340,43 @@ export function App({ initialData }: AppProps): ReactElement {
         )}
         {stellaActive
           ? (
-            // stella mode: one conversation, one machine. Rendered instead of
+            // stella mode: the counterparts on the left, one conversation in
+            // the middle, the machine's screen beside it. Rendered instead of
             // the tab branch (not beside it): a tab strip is exactly the
             // session-list surface this mode exists to remove.
-            //
-            // The view renders even before the conversation exists: the
-            // machine is started from this screen, so hiding it until a
-            // conversation can be opened would hide the only control that
-            // makes one possible.
-            <StellaView
-              view={stellaView ?? null}
-              info={stellaInfo}
-              conversationError={stella.error}
-              status={modeStatus}
-              onStatus={setModeStatus}
-              input={draft.input}
-              onInputChange={(input) => updateDraft(draftKey, { input })}
-              onPrompt={(text) =>
-                stella.sessionId !== null &&
-                prompt(stella.sessionId, text, [])}
-              onAbort={() =>
-                stella.sessionId !== null && abort(stella.sessionId)}
-              onAnswer={(toolCallId, answers) =>
-                stella.sessionId !== null
-                  ? answer(stella.sessionId, toolCallId, answers)
-                  : Promise.reject()}
-              onRewind={(timestamp) =>
-                stella.sessionId !== null
-                  ? rewind(stella.sessionId, timestamp)
-                  : Promise.resolve()}
-              onOpenSettings={() => setSettingsCategory("providers")}
-            />
+            <div className="stella-shell">
+              <StellaSidebar
+                agents={stella.agents}
+                activeId={stella.activeAgentId}
+                onSelect={stella.select}
+                onChanged={stella.reloadAgents}
+              />
+              <StellaView
+                agent={stellaAgent === undefined
+                  ? null
+                  : { name: stellaAgent.name }}
+                view={stellaView ?? null}
+                info={stellaInfo}
+                conversationError={stella.error}
+                status={modeStatus}
+                input={draft.input}
+                onInputChange={(input) => updateDraft(draftKey, { input })}
+                onPrompt={(text) =>
+                  stella.sessionId !== null &&
+                  prompt(stella.sessionId, text, [])}
+                onAbort={() =>
+                  stella.sessionId !== null && abort(stella.sessionId)}
+                onAnswer={(toolCallId, answers) =>
+                  stella.sessionId !== null
+                    ? answer(stella.sessionId, toolCallId, answers)
+                    : Promise.reject()}
+                onRewind={(timestamp) =>
+                  stella.sessionId !== null
+                    ? rewind(stella.sessionId, timestamp)
+                    : Promise.resolve()}
+                onOpenSettings={() => setSettingsCategory("providers")}
+              />
+            </div>
           )
           : activeView
           ? (

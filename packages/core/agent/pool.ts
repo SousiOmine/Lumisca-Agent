@@ -78,9 +78,9 @@ export interface SessionPersistence {
     workspace: Workspace,
     model?: { provider: string; modelId: string },
     tools?: readonly string[],
-    /** True for a stella session's conversation (its prompt is the
-     * machine's, not the folder-less chat one). */
-    stella?: boolean,
+    /** A stella agent's persona (its prompt is the machine's, plus who it
+     * is), or undefined for every other session. */
+    stella?: { name: string; role: string },
   ): string;
   /** Persist a rebuilt system prompt (legacy-session migration). */
   updateSystemPrompt(id: string, systemPrompt: string): void;
@@ -145,6 +145,11 @@ export interface AgentRuntime {
    * open, so a machine attached after the pool was built still reaches new
    * agents. Omitted → no stella session can be built. */
   stellaRuntime?: (session: SessionInfo) => StellaRuntime | undefined;
+  /** The persona of a stella session: the agent's name and role, which make
+   * one conversation different from another (see stella/agents.ts). */
+  stellaAgentPersona?: (
+    session: SessionInfo,
+  ) => { name: string; role: string } | undefined;
   /** Global skills directory override (default ~/.agents/skills).
    * LumiscaCore.forTesting passes an empty list, so a test's skill catalog
    * is built from its own fixture only. */

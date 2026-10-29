@@ -35,7 +35,6 @@ function fakeVm(status: VmStatus): VmManager {
     status: () => Promise.resolve(status),
     start: () => Promise.resolve({ ...status, state: "running" as const }),
     stop: () => Promise.resolve(),
-    reset: () => Promise.resolve({ ...status, state: "running" as const }),
     vncPort: () => Promise.resolve(status.vncPort),
   };
 }
@@ -71,23 +70,43 @@ Deno.test("app mode: an unknown stored value reads as not chosen", async () => {
   }
 });
 
-Deno.test("app mode: switching to stella is refused without a usable machine", async () => {
-  const core = await stellaCore(NO_PODMAN);
+Deno.test("app mode: stella is refused when the machine cannot exist here", async () => {
+  // No machine attached at all: there is nothing to start, so the mode must
+  // not be storable (a mode whose whole premise is missing).
+  const core = LumiscaCore.forTesting([fauxProvider().provider]);
   try {
     const availability = await core.getStellaAvailability();
     assertEquals(availability.available, false);
-    const error = assertThrows(
-      () => core.setAppMode("stella"),
-      CoreError,
-    );
+    const error = assertThrows(() => core.setAppMode("stella"), CoreError);
     assert(
-      error.message.includes("podman"),
-      `the reason must name podman: ${error.message}`,
+      error.message.includes("not set up"),
+      `the reason must say the machine is missing: ${error.message}`,
     );
-    // The stored mode is unchanged: a refused switch leaves the old one.
     assertEquals(core.getAppMode(), undefined);
   } finally {
     void core.close();
+  }
+});
+
+Deno.test("app mode: a machine that is merely not running still allows stella", async () => {
+  // This is the point of starting on demand: podman missing is fatal, a
+  // stopped container is not (the first message starts it).
+  const core = await stellaCore(NO_PODMAN);
+  try {
+    void core;
+  } finally {
+    void core.close();
+  }
+  const stopped = await stellaCore({
+    state: "stopped",
+    vncPort: null,
+    reason: "",
+  });
+  try {
+    stopped.setAppMode("stella");
+    assertEquals(stopped.getAppMode(), "stella");
+  } finally {
+    void stopped.close();
   }
 });
 
@@ -136,6 +155,7 @@ Deno.test("app mode: switching away never stops the machine", async () => {
 Deno.test("stella conversation: created once and kept out of the session lists", async () => {
   const core = await stellaCore(RUNNING);
   try {
+    core.createStellaAgent({ name: "Aide", role: "Help with the work." });
     const first = await core.getOrCreateStellaSession();
     assertEquals(first.stella, true);
     // A second call returns the same conversation: stella has one.
@@ -150,11 +170,55 @@ Deno.test("stella conversation: created once and kept out of the session lists",
   }
 });
 
+Deno.test("stella conversation: each agent has its own", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const first = core.createStellaAgent({ name: "First", role: "r" });
+    const second = core.createStellaAgent({ name: "Second", role: "r" });
+    const a = await core.getOrCreateStellaSession(first.id);
+    const b = await core.getOrCreateStellaSession(second.id);
+    // Two agents, two conversations. A shared row would make them one person
+    // with a split personality.
+    assert(a.id !== b.id, `${a.id} == ${b.id}`);
+    assertEquals(a.agentId, first.id);
+    assertEquals(b.agentId, second.id);
+    // Re-asking for the same agent returns the same conversation.
+    assertEquals((await core.getOrCreateStellaSession(first.id)).id, a.id);
+    // Neither appears in the session list.
+    assertEquals(core.listSessions(), []);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: deleting an agent takes its conversation", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const agent = core.createStellaAgent({ name: "Gone", role: "r" });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    await core.deleteStellaAgent(agent.id);
+    assertEquals(core.getSession(session.id), undefined);
+    assertEquals(core.listStellaAgents(), []);
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("stella conversation: its system prompt is the machine's", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const session = await core.getOrCreateStellaSession();
+    const agent = core.createStellaAgent({
+      name: "Aide",
+      role: "You keep notes and check facts.",
+    });
+    const session = await core.getOrCreateStellaSession(agent.id);
     const prompt = session.systemPrompt ?? "";
+    // The persona is the agent's: its name and the role it was made for.
+    assert(prompt.includes('"Aide"'), prompt.slice(0, 120));
+    assert(
+      prompt.includes("You keep notes and check facts."),
+      prompt.slice(0, 300),
+    );
     // The machine framing, not the folder-less chat one.
     assert(prompt.includes("virtual"), `prompt: ${prompt.slice(0, 200)}`);
     assert(prompt.includes("/home/agent"), prompt.slice(0, 400));

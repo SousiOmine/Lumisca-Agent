@@ -43,6 +43,7 @@ export type {
   SavedPrompt,
   SessionInfo,
   SkillInfo,
+  StellaAgent,
   StellaAvailability,
   SubagentStatus,
   SubagentType,
@@ -68,6 +69,9 @@ export interface AppModeStatus {
   state: string;
   vncPort: number | null;
   reason: string;
+  /** True while the machine is being prepared (a first run builds the image,
+   * which takes minutes — the one wait the UI shows). */
+  starting: boolean;
 }
 
 /** A workspace as shown in the federated workspace picker: which peer owns

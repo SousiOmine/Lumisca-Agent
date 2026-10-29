@@ -112,6 +112,11 @@ arm();
 // A key for the faux provider, so a stella conversation can be created too
 // (creating any session resolves a default model, which requires one).
 await core.setProviderApiKey(faux.provider.id, "faux-key");
+// A starter agent, so the stella screen has someone to talk to in the demo.
+core.createStellaAgent({
+  name: "Aide",
+  role: "A general helper for this machine.",
+});
 
 const ws = await core.createWorkspace("E2E Demo", [repoRoot]);
 core.createSession({

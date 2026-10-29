@@ -82,6 +82,7 @@ import {
   type VmExec,
   type VmExecBytes,
   type VmManager,
+  type VmProgress,
 } from "./vm/container.ts";
 import {
   type StellaAvailability,
@@ -92,6 +93,12 @@ import { createVmTools } from "./vm/tools.ts";
 import { discoverVmSkills } from "./vm/skills.ts";
 import type { StellaRuntime } from "./vm/runtime.ts";
 import { builtinSkills } from "./skills/builtin/mod.ts";
+import {
+  type AgentRepo,
+  createAgentRepo,
+  type StellaAgent,
+} from "./stella/agents.ts";
+import { createAgentCreateTool } from "./stella/tools.ts";
 import {
   VmBackgroundSpawner,
   VmCommandRunner as VmCommandRunnerImpl,
@@ -139,6 +146,7 @@ export class LumiscaCore {
   private readonly personalization: PersonalizationService;
   private readonly savedPrompts: SavedPromptsService;
   private readonly sessions: SessionRepo;
+  private readonly stellaAgents: AgentRepo;
   private readonly messages: MessageRepo;
   private readonly requestShapes: RequestShapeRepo;
   private readonly pool: SessionPool;
@@ -187,6 +195,9 @@ export class LumiscaCore {
   /** The stella skill catalog, refreshed before each open (see
    * refreshStellaSkills). */
   private stellaSkills: SkillDef[] = [];
+  /** The in-flight machine start, shared by callers that race on a cold
+   * machine (see ensureStellaReady). */
+  private stellaStarting: Promise<void> | undefined;
 
   private constructor(
     db: LumiscaDb,
@@ -196,6 +207,7 @@ export class LumiscaCore {
       personalization?: PersonalizationService;
       savedPrompts?: SavedPromptsService;
       sessions?: SessionRepo;
+      stellaAgents?: AgentRepo;
       messages?: MessageRepo;
       requestShapes?: RequestShapeRepo;
       commandSafety?: CommandSafety;
@@ -221,6 +233,7 @@ export class LumiscaCore {
     this.savedPrompts = overrides.savedPrompts ??
       new SavedPromptsService(this.settings);
     this.sessions = overrides.sessions ?? createSessionRepo(db);
+    this.stellaAgents = overrides.stellaAgents ?? createAgentRepo(db);
     this.messages = overrides.messages ?? createMessageRepo(db);
     this.requestShapes = overrides.requestShapes ??
       createRequestShapeRepo(db);
@@ -299,6 +312,14 @@ export class LumiscaCore {
       browser: () => this.browserBackend,
       computer: () => this.computerHostForSession(),
       stellaRuntime: (session) => this.stellaRuntimeFor(session),
+      stellaAgentPersona: (session) => {
+        const agentId = session.agentId;
+        if (agentId === undefined) return undefined;
+        const agent = this.stellaAgents.get(agentId);
+        return agent === undefined
+          ? undefined
+          : { name: agent.name, role: agent.role };
+      },
       globalSkillDirs: this.globalSkillDirs,
     });
     this.mcp = overrides.mcp ?? new McpService({
@@ -675,20 +696,14 @@ export class LumiscaCore {
    */
   setAppMode(mode: AppMode): void {
     if (mode === "stella") {
-      // The verdict must exist before a mode that depends on it is stored:
-      // the client reads the status at startup, so a missing verdict means
-      // this call came from somewhere that never checked, and accepting it
-      // would leave stella switched on with no machine behind it.
-      const availability = this.stellaVerdict;
-      if (availability === undefined) {
+      // The machine must be able to run here at all; whether it is up right
+      // now is not this call's business (the first conversation starts it).
+      if (this.stellaVm === undefined) {
         throw new CoreError(
-          "stella mode cannot be selected before the machine's availability " +
-            "is checked (GET /api/stella/status)",
+          "stella mode is not available: the virtual machine is not set up " +
+            "for this installation",
           "unavailable",
         );
-      }
-      if (!availability.available) {
-        throw new CoreError(availability.reason, "unavailable");
       }
     }
     this.settings.set(APP_MODE_KEY, mode);
@@ -728,24 +743,92 @@ export class LumiscaCore {
     return availability;
   }
 
+  // --- stella agents (the counterpart of each conversation) ----------------
+
+  /** The agents in the sidebar, most recently used first. */
+  listStellaAgents(): StellaAgent[] {
+    return this.stellaAgents.list();
+  }
+
+  /** The agent a fresh stella screen opens by default: the last one used, or
+   * undefined on a first run (the client then offers to make one). */
+  defaultStellaAgent(): StellaAgent | undefined {
+    return this.stellaAgents.latest();
+  }
+
+  /** Create an agent from a name and the role it works from. A name that is
+   * already taken is refused (compared case-insensitively: "Researcher" and
+   * "researcher" would be two indistinguishable rows in the sidebar). */
+  createStellaAgent(input: { name: string; role: string }): StellaAgent {
+    const name = input.name.trim();
+    if (
+      this.stellaAgents.list().some(
+        (agent) => agent.name.toLowerCase() === name.toLowerCase(),
+      )
+    ) {
+      throw new CoreError(
+        `An agent named "${name}" already exists. Choose another name.`,
+        "conflict",
+      );
+    }
+    return this.stellaAgents.create(input);
+  }
+
+  renameStellaAgent(id: string, name: string): StellaAgent {
+    this.stellaAgents.rename(id, name);
+    const agent = this.stellaAgents.get(id);
+    if (agent === undefined) {
+      throw new CoreError(`Agent not found: ${id}`, "not_found");
+    }
+    return agent;
+  }
+
   /**
-   * The stella conversation, created on first use.
+   * Delete an agent and its conversation.
    *
-   * stella has no session concept in the UI: one conversation exists for as
-   * long as the machine does, and the agent picks up where it left off. Under
-   * the hood it is an ordinary session row (flagged `stella`), so the
+   * The transcript goes with it: `sessions.agent_id` has no cascade (the row
+   * is deleted explicitly below), so deleting an agent means stopping its
+   * session first and then dropping both rows — an orphaned session would be
+   * invisible in every list while still holding its messages.
+   */
+  async deleteStellaAgent(id: string): Promise<void> {
+    const session = this.sessions.getByAgent(id);
+    if (session !== undefined) await this.deleteSession(session.id);
+    this.stellaAgents.delete(id);
+  }
+
+  /**
+   * The conversation with one agent, created on first use.
+   *
+   * stella has no session concept in the UI: an agent has ONE conversation,
+   * which grows for as long as the agent exists. Under the hood it is an
+   * ordinary session row (flagged `stella`, carrying `agentId`), so the
    * transcript store, context compaction, rewind and the event stream work
    * unchanged — the alternative would be a second, parallel implementation of
    * all four.
    */
-  async getOrCreateStellaSession(): Promise<SessionInfo> {
-    // The machine must exist before an agent is built on it: without one the
-    // factory refuses (never a stella agent with host tools).
-    this.requireStellaVm();
+  async getOrCreateStellaSession(agentId?: string): Promise<SessionInfo> {
+    const agent = agentId !== undefined
+      ? this.stellaAgents.get(agentId)
+      : this.stellaAgents.latest();
+    if (agent === undefined) {
+      throw new CoreError(
+        agentId !== undefined
+          ? `Agent not found: ${agentId}`
+          : "No agent yet: create one before talking to stella",
+        "not_found",
+      );
+    }
+    // The machine must be running before an agent is built on it: without one
+    // the factory refuses (never a stella agent with host tools). Every
+    // caller that wants a conversation wants the machine, so this starts it
+    // rather than making the client ask.
+    await this.ensureStellaReady();
     // The skill catalog is read from the machine, which the factory cannot
     // await (it builds synchronously): prime it here, before any open.
     await this.refreshStellaSkills();
-    const existing = this.sessions.getStella();
+    this.stellaAgents.touch(agent.id);
+    const existing = this.sessions.getByAgent(agent.id);
     if (existing !== undefined) {
       if (this.pool.get(existing.id) === undefined) {
         this.pool.open(
@@ -754,18 +837,17 @@ export class LumiscaCore {
           this.messages.listMessages(existing.id),
         );
       }
-      return this.decorateSession(
-        this.sessions.get(existing.id) ?? existing,
-      );
+      return this.decorateSession(this.sessions.get(existing.id) ?? existing);
     }
     const model = await this.resolveDefaultModel(undefined, undefined);
     const workspace = this.getOrCreateChatWorkspace();
     const session = this.sessions.create({
       workspaceId: workspace.id,
-      name: "stella",
+      name: agent.name,
       modelProvider: model.provider,
       modelId: model.modelId,
       stella: true,
+      agentId: agent.id,
     });
     this.pool.open(session, workspace, []);
     const decorated = this.decorateSession(
@@ -775,12 +857,74 @@ export class LumiscaCore {
     return decorated;
   }
 
-  /** The machine's state, as the stella screen's status line shows it. */
+  /**
+   * Make sure the machine is up, starting it (and building its image on a
+   * first run) when it is not.
+   *
+   * There is no "start the machine" step in the product any more: a user who
+   * chose stella mode asked for a machine, not for a container to babysit, so
+   * every path that needs one calls this and the machine appears. The one
+   * thing that cannot be automated is the wait: a first run builds a Debian
+   * image with Chromium in it, which takes minutes, and the caller reports
+   * that through the progress callback rather than freezing.
+   *
+   * Idempotent and safe to call concurrently: two prompts racing on a cold
+   * machine share one start (the promise is memoized until it settles).
+   */
+  async ensureStellaReady(
+    onProgress?: (progress: VmProgress) => void,
+  ): Promise<void> {
+    const vm = this.requireStellaVm();
+    const availability = stellaAvailability(await vm.status());
+    if (!availability.available) {
+      throw new CoreError(availability.reason, "unavailable");
+    }
+    if (this.stellaStarting !== undefined) {
+      await this.stellaStarting;
+      return;
+    }
+    const status = await vm.status({ fresh: true });
+    if (status.state === "running") {
+      this.stellaVerdict = { available: true };
+      return;
+    }
+    const starting = (async () => {
+      this.stellaVerdict = undefined;
+      try {
+        // The manager reports its steps through the sink it was built
+        // with; a caller that wants progress passes one at construction
+        // (the server does, forwarding it to the client).
+        await vm.start();
+        void onProgress;
+      } finally {
+        this.stellaStarting = undefined;
+        this.stellaVerdict = undefined;
+      }
+    })();
+    this.stellaStarting = starting;
+    await starting;
+  }
+
+  /** Whether a machine start is in flight (the status endpoint reports it so
+   * a waiting client can say "starting" instead of showing a stale state). */
+  isStellaStarting(): boolean {
+    return this.stellaStarting !== undefined;
+  }
+
+  /**
+   * The machine's state.
+   *
+   * stella's UI shows no machine controls, so this is not a dashboard: it
+   * exists for the client to know (a) whether the mode is offerable at all
+   * and (b) whether the screen pane can connect. `starting` carries the
+   * first-run build, which is the one wait the user does see.
+   */
   async getStellaStatus(): Promise<{
     availability: StellaAvailability;
     state: string;
     vncPort: number | null;
     reason: string;
+    starting: boolean;
   }> {
     const vm = this.stellaVm;
     if (vm === undefined) {
@@ -790,6 +934,7 @@ export class LumiscaCore {
         state: "unavailable",
         vncPort: null,
         reason: availability.available ? "" : availability.reason,
+        starting: false,
       };
     }
     const status = await vm.status({ fresh: true });
@@ -800,32 +945,15 @@ export class LumiscaCore {
       state: status.state,
       vncPort: status.vncPort,
       reason: status.reason,
+      starting: this.isStellaStarting(),
     };
   }
 
-  /** Bring the machine up (building the image on a first run). */
-  async startStellaVm(): Promise<void> {
-    const vm = this.requireStellaVm();
-    this.stellaVerdict = undefined;
-    await vm.start();
-    this.stellaVerdict = undefined;
-  }
-
-  /** Stop the machine (`podman stop`). Called on shutdown; the UI's explicit
-   * stop is the same operation. */
+  /** Stop the machine (`podman stop`). Called on shutdown only: the UI has no
+   * stop button, because a machine that disappears when the user is not
+   * looking costs minutes to bring back. */
   async stopStellaVm(): Promise<void> {
     await this.stellaVm?.stop();
-    this.stellaVerdict = undefined;
-  }
-
-  /** Throw the machine away and make a new one. Everything inside goes with
-   * it (that is what the isolation means), so the client confirms first. */
-  async resetStellaVm(): Promise<void> {
-    const vm = this.requireStellaVm();
-    // The conversation survives a reset: it is the user's history, and it
-    // lives in this application's database, not in the machine.
-    this.stellaVerdict = undefined;
-    await vm.reset();
     this.stellaVerdict = undefined;
   }
 
@@ -882,6 +1010,11 @@ export class LumiscaCore {
       },
       screenTools: createVmTools({
         screen: createVmScreen({ exec, execBytes }),
+      }),
+      // The tool goes through the same entry point as the API, so the
+      // duplicate-name rule is enforced once.
+      agentTool: createAgentCreateTool({
+        create: (input) => this.createStellaAgent(input),
       }),
     };
   }
@@ -1544,7 +1677,7 @@ export class LumiscaCore {
     workspace: Workspace,
     model?: { provider: string; modelId: string },
     tools: readonly string[] = [],
-    stella = false,
+    stella: boolean | { name: string; role: string } = false,
   ): string {
     const resolved = model
       ? {
@@ -1559,8 +1692,13 @@ export class LumiscaCore {
     // stella's conversation row shares the folder-less chat workspace, but
     // its prompt is the machine's: a chat prompt would tell it it cannot
     // run anything, which is the opposite of what it can do.
-    if (stella) {
-      return buildStellaSystemPrompt({ tools, model: resolved, language });
+    if (stella !== false) {
+      return buildStellaSystemPrompt({
+        tools,
+        model: resolved,
+        language,
+        ...(stella === true ? {} : { agent: stella }),
+      });
     }
     return workspace.chat
       ? buildChatSystemPrompt({ tools, model: resolved, language })

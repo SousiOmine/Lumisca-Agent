@@ -89,11 +89,7 @@ export interface VmManager {
   /** Stop the container (`podman stop`). A machine that is already gone is
    * not an error. */
   stop(): Promise<void>;
-  /** Throw the machine away and create a fresh one. Everything inside it
-   * goes with it — the files the agent was working on live in the container,
-   * which is the point of the isolation — so callers confirm with the user
-   * first. */
-  reset(): Promise<VmStatus>;
+
   /** The host port noVNC is published on; null when the machine is not
    * running. Read fresh (the port is assigned at creation). */
   vncPort(): Promise<number | null>;
@@ -421,17 +417,6 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         maxOutput: VM_TEXT_OUTPUT_LIMIT,
       });
       cached = null;
-    },
-
-    async reset() {
-      // Nothing of the machine lives on the host (the isolation is the
-      // point), so removing the container IS the reset: the next start
-      // creates an empty one.
-      await run(podman(["rm", "--force", VM_CONTAINER_NAME]), {
-        timeoutMs: VM_REMOVE_TIMEOUT_MS,
-      });
-      cached = null;
-      return await manager.start();
     },
 
     vncPort: async () => {

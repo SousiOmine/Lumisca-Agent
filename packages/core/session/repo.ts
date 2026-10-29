@@ -18,15 +18,18 @@ export interface SessionRepo {
       id?: string;
       createdAt?: number;
       updatedAt?: number;
-      /** True for stella mode's single conversation (see SessionInfo). */
+      /** True for a stella agent's conversation (see SessionInfo). */
       stella?: boolean;
+      /** The stella agent this conversation belongs to. */
+      agentId?: string;
     },
   ): SessionRecord;
   get(id: string): SessionRecord | undefined;
   list(workspaceId?: string): SessionRecord[];
   /** stella mode's single conversation row, or undefined before the first
    * one is created. Never part of `list()`: stella has no session list. */
-  getStella(): SessionRecord | undefined;
+  /** The conversation belonging to one stella agent, if it has been started. */
+  getByAgent(agentId: string): SessionRecord | undefined;
   delete(id: string): void;
   touch(id: string, updatedAt?: number): void;
   updateModel(id: string, provider: string, modelId: string): void;
@@ -44,6 +47,7 @@ export interface SessionRepo {
 
 interface SessionRow {
   stella?: number;
+  agent_id?: string | null;
   id: string;
   workspace_id: string;
   name: string;
@@ -76,6 +80,9 @@ function toGoal(row: SessionRow): GoalInfo | undefined {
 function toSession(row: SessionRow): SessionRecord {
   return {
     ...(row.stella === 1 ? { stella: true } : {}),
+    ...(row.agent_id !== undefined && row.agent_id !== null
+      ? { agentId: row.agent_id }
+      : {}),
     id: row.id,
     workspaceId: row.workspace_id,
     name: row.name,
@@ -89,11 +96,11 @@ function toSession(row: SessionRow): SessionRecord {
 
 export function createSessionRepo(db: LumiscaDb): SessionRepo {
   const insertStmt = db.db.prepare(`
-    INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, created_at, updated_at, stella)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, created_at, updated_at, stella, agent_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  const getStellaStmt = db.db.prepare(
-    "SELECT * FROM sessions WHERE stella = 1",
+  const getByAgentStmt = db.db.prepare(
+    "SELECT * FROM sessions WHERE agent_id = ?",
   );
   const getStmt = db.db.prepare("SELECT * FROM sessions WHERE id = ?");
   // stella's row is not a session: it is excluded everywhere a session list
@@ -154,6 +161,7 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         createdAt,
         updatedAt,
         stella ? 1 : 0,
+        input.agentId ?? null,
       );
       return {
         id,
@@ -165,11 +173,14 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         createdAt,
         updatedAt,
         ...(stella ? { stella: true } : {}),
+        ...(input.agentId !== undefined ? { agentId: input.agentId } : {}),
       };
     },
 
-    getStella(): SessionRecord | undefined {
-      const row = getStellaStmt.get() as unknown as SessionRow | undefined;
+    getByAgent(agentId: string): SessionRecord | undefined {
+      const row = getByAgentStmt.get(agentId) as unknown as
+        | SessionRow
+        | undefined;
       return row ? toSession(row) : undefined;
     },
 

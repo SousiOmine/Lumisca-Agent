@@ -9,7 +9,6 @@ import {
   type SessionInfo,
   type SessionView,
 } from "../types.ts";
-import { useElementHeight } from "../hooks/useElementHeight.ts";
 import { Composer } from "./Composer.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
@@ -19,7 +18,6 @@ import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { BackgroundPanel } from "./BackgroundPanel.tsx";
-import { StellaMachinePanel } from "./StellaMachinePanel.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 
 /** Shared empties: a fresh array or map on every render would defeat the
@@ -32,20 +30,22 @@ const EMPTY_QUESTIONS: SessionView["pendingQuestions"] = [];
 const EMPTY_TOOLS: SessionView["runningTools"] = new Map();
 
 interface StellaViewProps {
-  /** stella's single conversation view, or null while the conversation does
-   * not exist yet — the machine is started from this screen, so the screen
-   * must render before there is anything to talk to. */
+  /** The agent whose conversation this is (the sidebar picks it). Its name is
+   * the conversation's title; its absence (first run, before an agent exists)
+   * is why the composer is disabled. */
+  agent: { name: string } | null;
+  /** The conversation, or null while there is nothing to show yet. */
   view: SessionView | null;
-  /** The conversation's session info, when it exists (the composer's model
-   * display); absent together with `view`. */
+  /** The conversation's session info, when it exists. */
   info?: SessionInfo;
-  /** Why the conversation could not be opened (a provider not configured,
-   * the machine failing to start), or null. Shown in place of the empty
-   * transcript: a disabled composer with no explanation reads as a bug. */
+  /** Why the conversation could not be opened (no provider configured, the
+   * machine failing to start), or null. Shown in place of the transcript: a
+   * disabled composer with no explanation reads as a bug. */
   conversationError: string | null;
-  /** The machine's current state, for the header and the screen pane. */
+  /** The machine's state: `starting` covers the first-run image build (the
+   * one wait the user sees); `state` decides whether the screen pane can
+   * connect. */
   status: AppModeStatus;
-  onStatus: (status: AppModeStatus) => void;
   /** Unsent composer text, owned by the App so it survives a remount. */
   input: string;
   onInputChange: (value: string) => void;
@@ -61,27 +61,26 @@ interface StellaViewProps {
 }
 
 /**
- * stella mode: one conversation with one assistant, working inside a virtual
- * machine.
+ * stella mode's conversation: one agent, one running conversation, one
+ * machine behind it.
  *
- * Deliberately not a session view with the tabs removed. What a session view
- * offers — a workspace picker, a session history, a tab strip, a model
- * switcher per tab — is the cognitive load this mode exists to remove. What
- * it keeps is the transcript, the composer, the question card and the three
- * panels that reflect work in progress (todo, tasks, background commands),
- * since those are what the user watches while the agent works.
+ * What is NOT here is the point. There is no workspace picker, no tab strip,
+ * no session history, no model switcher and — since the machine starts itself
+ * when a message needs it — no start / stop / reset controls. The machine's
+ * state appears only as the one wait that cannot be hidden (a first-run image
+ * build) and as errors.
  *
- * The machine's screen is a pane beside the chat rather than a hidden tab:
- * stella's promise is that the agent works somewhere the user can see, and a
- * screen nobody looks at keeps none of it.
+ * The progress panels (todo / tasks / background commands) render only while
+ * something is actually in them: an always-present frame of three empty
+ * panels is furniture, and furniture the user has to read every time.
  */
 export function StellaView(
   {
+    agent,
     view,
     info,
     conversationError,
     status,
-    onStatus,
     input,
     onInputChange,
     onPrompt,
@@ -93,15 +92,10 @@ export function StellaView(
 ) {
   const t = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
-  // The floating panels are positioned from the viewport; this header is
-  // between that edge and the transcript, so its height is published for the
-  // stylesheet to offset them (see stella.css).
-  const headerRef = useRef<HTMLElement>(null);
-  useElementHeight(headerRef, "--stella-header-height");
   const userScrolledUp = useRef(false);
   const pendingSubmitScroll = useRef(false);
-  // The conversation does not exist until the machine runs: an empty view
-  // stands in so the screen (and its Start button) renders regardless.
+  // The conversation may not exist yet (first run, or the machine still
+  // starting): an empty view stands in so the screen renders regardless.
   const sessionInfo = view?.info ?? info;
   const open = view ??
     (sessionInfo !== undefined ? emptyView(sessionInfo) : undefined);
@@ -114,7 +108,16 @@ export function StellaView(
   const pendingQuestions = open?.pendingQuestions ?? EMPTY_QUESTIONS;
   const isRunning = open !== undefined && isViewRunning(open);
   const visualBase = sessionVisualBase("", sessionInfo?.id ?? "");
-  const [showScreen, setShowScreen] = useState(status.state === "running");
+  // The screen is not a tab and not a button: while the machine runs it is
+  // simply there, beside the conversation, because "the agent works somewhere
+  // you can see" is the promise of this mode. Closing it is allowed (a narrow
+  // window needs the room) and it comes back with the next message.
+  const [screenClosed, setScreenClosed] = useState(false);
+  useEffect(() => {
+    if (isRunning) setScreenClosed(false);
+  }, [isRunning]);
+  const machineRunning = status.state === "running";
+  const showScreen = machineRunning && !screenClosed;
 
   // Keep the transcript pinned to the newest content while the user is at the
   // bottom (the same contract as the code view: reading earlier messages must
@@ -179,32 +182,37 @@ export function StellaView(
     onInputChange(text);
   };
 
-  const machineRunning = status.state === "running";
+  const hasTodos = todos.length > 0;
+  const hasTasks = tasks.length > 0;
+  const hasBackgrounds = backgrounds.length > 0;
+  const hasPanels = hasTodos || hasTasks || hasBackgrounds;
 
   return (
     <div className="stella">
       <div className="stella-main">
-        <header className="stella-header" ref={headerRef}>
-          <div className="stella-title">
-            <h1>{t("chat.stella.title")}</h1>
-            <p>{t("chat.stella.subtitle")}</p>
+        {agent !== null && (
+          <header className="stella-header">
+            <h1>{agent.name}</h1>
+            {status.starting && (
+              <span className="stella-note" role="status">
+                {t("chat.stella.machine.starting")}
+              </span>
+            )}
+            {status.state !== "running" && !status.starting &&
+              status.reason !== "" && (
+              <span className="stella-note error-text" role="alert">
+                {status.reason}
+              </span>
+            )}
+          </header>
+        )}
+        {hasPanels && (
+          <div className="stella-panels">
+            {hasTodos && <TodoPanel todos={todos} />}
+            {hasTasks && <TaskPanel tasks={tasks} />}
+            {hasBackgrounds && <BackgroundPanel commands={backgrounds} />}
           </div>
-          <StellaMachinePanel status={status} onStatus={onStatus} />
-          <button
-            type="button"
-            className="btn small"
-            onClick={() => setShowScreen((value) => !value)}
-          >
-            {showScreen
-              ? t("chat.stella.machine.closeScreen")
-              : t("chat.stella.machine.openScreen")}
-          </button>
-        </header>
-        <div className="chat-panels">
-          <TodoPanel todos={todos} />
-          <TaskPanel tasks={tasks} />
-          <BackgroundPanel commands={backgrounds} />
-        </div>
+        )}
         <div className="chat-scroll" ref={scrollRef}>
           <div className="chat-column">
             {messages.length === 0 && streamingText.length === 0 && (
@@ -258,7 +266,9 @@ export function StellaView(
           <Composer
             value={input}
             onChange={onInputChange}
-            placeholder={t("chat.stella.placeholder")}
+            placeholder={agent === null
+              ? t("chat.stella.noAgent")
+              : t("chat.stella.placeholder")}
             model={{
               provider: sessionInfo?.modelProvider ?? "",
               modelId: sessionInfo?.modelId ?? "",
@@ -266,16 +276,18 @@ export function StellaView(
             onModelSelect={() => {}}
             thinkingLevel={sessionInfo?.thinkingLevel}
             thinkingLevels={sessionInfo?.thinkingLevels}
-            // No model picker: switching models is a decision that belongs to
-            // configuration, not to a conversation whose point is to stay
-            // simple. The model follows the app's default (set in settings).
+            // No model line at all: switching models is a decision that
+            // belongs to configuration, not to a conversation whose point is
+            // to stay simple, and a line explaining that is one more thing to
+            // read. The model follows the app's default (set in settings).
             hideModelSwitch
+            hideModelLine
             submitLabel={t("chat.composer.submit")}
             submitIcon={IconSend}
             submitIconOnly
             // Nothing can be sent before the conversation exists (it is
-            // created once the machine runs), so the button says so instead of
-            // accepting a prompt that would go nowhere.
+            // created once an agent is picked and the machine runs), so the
+            // button says so instead of accepting a prompt that goes nowhere.
             submitDisabled={!input.trim() || sessionInfo === undefined}
             onAbort={isRunning ? onAbort : undefined}
             onSubmit={submit}
@@ -289,7 +301,7 @@ export function StellaView(
         <StellaPane
           running={machineRunning}
           vncPort={status.vncPort}
-          onClose={() => setShowScreen(false)}
+          onClose={() => setScreenClosed(true)}
         />
       )}
     </div>

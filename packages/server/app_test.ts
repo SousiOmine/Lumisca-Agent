@@ -2753,18 +2753,18 @@ Deno.test("stella API: choosing code mode is stored and reported", async () => {
   }
 });
 
-Deno.test("stella API: stella mode is refused without a usable machine", async () => {
+Deno.test("stella API: stella mode is refused when the machine cannot exist", async () => {
   const { core, server, base } = await setup();
   try {
+    // The test core has no machine attached, so the mode must not be
+    // storable: there would be nothing to start.
     const put = await json(base, "/api/stella/mode", {
       method: "PUT",
       body: JSON.stringify({ mode: "stella" }),
     });
-    // 503: the server cannot do what was asked, and the reason says why.
     assertEquals(put.status, 503);
     const body = await put.json() as { error: string };
     assert(body.error.includes("not set up"), body.error);
-    // Nothing was stored: the mode is still unchosen.
     assertEquals(core.getAppMode(), undefined);
   } finally {
     server.shutdown();
@@ -2798,18 +2798,100 @@ Deno.test("stella API: the conversation is created on demand and stays out of /s
       start: () =>
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
-      reset: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       vncPort: () => Promise.resolve(null),
     });
-    const response = await json(base, "/api/stella/session");
+    // An agent must exist first: stella's conversation belongs to one.
+    const created = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
+    });
+    assertEquals(created.status, 201);
+    const agent = await created.json() as { id: string; name: string };
+
+    const response = await json(
+      base,
+      `/api/stella/session?agentId=${agent.id}`,
+    );
     assertEquals(response.status, 200);
-    const session = await response.json() as { id: string; stella?: boolean };
+    const session = await response.json() as {
+      id: string;
+      stella?: boolean;
+      agentId?: string;
+      name: string;
+    };
     assertEquals(session.stella, true);
+    assertEquals(session.agentId, agent.id);
+    // The conversation is named after the agent, so the transcript's title is
+    // the counterpart rather than a session label.
+    assertEquals(session.name, "Aide");
 
     // The session list must never offer it.
     const list = await json(base, "/api/sessions");
     assertEquals(await list.json(), []);
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("stella API: agents are listed, renamed and deleted with their conversation", async () => {
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(1),
+    });
+
+    const empty = await json(base, "/api/stella/agents");
+    assertEquals(await empty.json(), { agents: [], defaultAgentId: null });
+
+    const created = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Researcher", role: "Read papers." }),
+    });
+    const agent = await created.json() as { id: string };
+
+    const listed = await json(base, "/api/stella/agents");
+    const body = await listed.json() as {
+      agents: Array<{ id: string; name: string }>;
+      defaultAgentId: string | null;
+    };
+    assertEquals(body.agents.length, 1);
+    // A single agent is the default one a fresh screen opens.
+    assertEquals(body.defaultAgentId, agent.id);
+
+    // A duplicate name is refused (the sidebar would be ambiguous).
+    const duplicate = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Researcher", role: "Again." }),
+    });
+
+    const renamed = await json(base, `/api/stella/agents/${agent.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: "Analyst" }),
+    });
+    assertEquals(renamed.status, 200);
+    assertEquals(
+      (await renamed.json() as { name: string }).name,
+      "Analyst",
+    );
+
+    // Delete takes the conversation with it: an orphaned session would be
+    // invisible in every list while still holding its messages.
+    const session = await core.getOrCreateStellaSession(agent.id);
+    const deleted = await json(base, `/api/stella/agents/${agent.id}`, {
+      method: "DELETE",
+    });
+    assertEquals(deleted.status, 200);
+    assertEquals(core.getSession(session.id), undefined);
+    const after = await json(base, "/api/stella/agents");
+    assertEquals((await after.json() as { agents: unknown[] }).agents, []);
+    void duplicate;
   } finally {
     server.shutdown();
     await core.close();

@@ -215,6 +215,8 @@ export function createStellaTools(options: {
    * the built-ins the session is entitled to. */
   skills: SkillDef[];
   screen: Tool[];
+  /** `agent_create`: add another stella agent (the sidebar's counterparts). */
+  agents?: Tool;
   background?: BackgroundProcessManager;
   ask?: AskHub;
   todo?: TodoHub;
@@ -238,6 +240,7 @@ export function createStellaTools(options: {
       })
       : []),
     ...options.screen,
+    ...(options.agents !== undefined ? [options.agents] : []),
     ...(options.visuals !== undefined
       ? [createVisualTool({ files, ...options.visuals })]
       : []),

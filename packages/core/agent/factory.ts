@@ -306,6 +306,7 @@ export class AgentFactory {
         backends,
         skills: stella.skills(),
         screen: stella.screenTools,
+        agents: stella.agentTool,
         background,
         ask: askHub,
         todo,
@@ -347,7 +348,12 @@ export class AgentFactory {
           modelId: session.modelId,
         },
         tools.map((tool) => tool.name),
-        session.stella === true,
+        // A stella session's prompt is the machine's plus WHO this agent is;
+        // the persona comes from the agent registry, through the pool.
+        session.stella === true
+          ? (this.deps.stellaAgentPersona?.(session) ??
+            { name: "Lumisca", role: "" })
+          : undefined,
       );
       this.deps.updateSystemPrompt(session.id, systemPrompt);
     }

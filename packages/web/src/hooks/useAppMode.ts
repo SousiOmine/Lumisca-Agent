@@ -10,6 +10,11 @@ import type { AppModeStatus } from "../types.ts";
  * server has — never a client-side guess that a `podman` call later
  * contradicts.
  *
+ * Re-read on a slow interval while stella is the mode: the machine starts
+ * itself when a conversation needs it, so the client has to learn when it is
+ * up (to connect the screen) and when a first-run build is still going — the
+ * only machine state the UI shows. Nothing polls in code mode.
+ *
  * Changing the mode is optimistic for `code` (nothing can fail) and
  * server-confirmed for `stella` (switching there refuses on a host without a
  * usable machine, and the refusal is the whole point: the mode must never be
@@ -49,6 +54,17 @@ export function useAppMode(): {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // The machine can change state without the user doing anything (a
+  // conversation starts it, a first run finishes building it), so stella's
+  // status is followed on a slow interval. 3s is fast enough that the screen
+  // pane appears as soon as the machine is up, and slow enough that a
+  // `podman` call per tick is not a load.
+  useEffect(() => {
+    if (status?.mode !== "stella") return;
+    const timer = setInterval(() => void reload(), 3_000);
+    return () => clearInterval(timer);
+  }, [status?.mode, reload]);
 
   const setMode = useCallback(async (mode: "code" | "stella") => {
     setError(null);

@@ -81,9 +81,24 @@ ${folders}${buildEnvironmentSection(options.model)}${
  * since the work inside the machine is coding work.
  */
 export function buildStellaSystemPrompt(
-  options: SystemPromptOptions = {},
+  options: SystemPromptOptions & {
+    /** Who this session is talking as: the agent's name and the role it was
+     * created with. This is what makes one stella conversation different from
+     * another, so it belongs in the prompt rather than in a first message. */
+    agent?: { name: string; role: string };
+  } = {},
 ): string {
-  return `You are Lumisca, a general-purpose assistant working inside a virtual
+  // The persona, when the session has one. Written first because it is the
+  // most specific fact about this session: a reader (and the model) should
+  // know who this is before being told what the machine is.
+  const persona = options.agent === undefined
+    ? ""
+    : `You are "${options.agent.name}".${
+      options.agent.role === "" ? "" : ` ${options.agent.role}`
+    }
+
+`;
+  return `${persona}You are Lumisca, a general-purpose assistant working inside a virtual
 machine that belongs to this conversation.
 
 The machine is a Linux desktop: a shell, a browser and a screen are there for

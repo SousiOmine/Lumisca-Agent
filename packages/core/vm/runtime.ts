@@ -28,4 +28,6 @@ export interface StellaRuntime {
   refreshSkills(): Promise<void>;
   /** The screen tools (`vm_screenshot` / `vm_act`), preloaded. */
   screenTools: Tool[];
+  /** `agent_create`, which adds another counterpart to the sidebar. */
+  agentTool: Tool;
 }
