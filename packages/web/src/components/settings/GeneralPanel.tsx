@@ -2,6 +2,7 @@ import type { UpdateStatus } from "../../shell.ts";
 import type { UpdateSource } from "../../hooks/useUpdateStatus.ts";
 import { LOCALES, type MessageKey } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
+import { SettingRow, Toggle } from "../SettingRow.tsx";
 import type { Locale } from "../../types.ts";
 
 interface GeneralPanelProps {
@@ -181,49 +182,31 @@ export function GeneralPanel(
 
       {supported && (
         <>
-          <div className="update-item">
-            <div className="update-info">
-              <span className="update-label">
-                {t("settings.general.autoUpdate")}
-              </span>
-              <span className="update-desc">
-                {server
-                  ? t("settings.general.autoUpdateDescServer")
-                  : t("settings.general.autoUpdateDesc")}
-              </span>
-            </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={status.autoUpdate}
-                onChange={(e) => onSetAuto(e.currentTarget.checked)}
-                aria-label={t("settings.general.autoUpdate")}
-              />
-              <span className="toggle-slider" />
-            </label>
-          </div>
+          <SettingRow
+            label={t("settings.general.autoUpdate")}
+            description={server
+              ? t("settings.general.autoUpdateDescServer")
+              : t("settings.general.autoUpdateDesc")}
+          >
+            <Toggle
+              checked={status.autoUpdate}
+              onChange={onSetAuto}
+              label={t("settings.general.autoUpdate")}
+            />
+          </SettingRow>
 
           {server && (
-            <div className="update-item">
-              <div className="update-info">
-                <span className="update-label">
-                  {t("settings.general.autoRestart")}
-                </span>
-                <span className="update-desc">
-                  {t("settings.general.autoRestartDesc")}
-                </span>
-              </div>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={status.autoRestart === true}
-                  disabled={status.restartMode === "none"}
-                  onChange={(e) => onSetAutoRestart(e.currentTarget.checked)}
-                  aria-label={t("settings.general.autoRestart")}
-                />
-                <span className="toggle-slider" />
-              </label>
-            </div>
+            <SettingRow
+              label={t("settings.general.autoRestart")}
+              description={t("settings.general.autoRestartDesc")}
+            >
+              <Toggle
+                checked={status.autoRestart === true}
+                disabled={status.restartMode === "none"}
+                onChange={onSetAutoRestart}
+                label={t("settings.general.autoRestart")}
+              />
+            </SettingRow>
           )}
 
           <div className="update-status-row">
@@ -339,22 +322,13 @@ export function GeneralPanel(
       )}
 
       {source === "shell" && (
-        <div className="update-item">
-          <div className="update-info">
-            <span className="update-label">
-              {t("settings.general.bgNotification")}
-            </span>
-          </div>
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={notifyEnabled}
-              onChange={(e) => onNotifyEnabledChange(e.currentTarget.checked)}
-              aria-label={t("settings.general.bgNotification")}
-            />
-            <span className="toggle-slider" />
-          </label>
-        </div>
+        <SettingRow label={t("settings.general.bgNotification")}>
+          <Toggle
+            checked={notifyEnabled}
+            onChange={onNotifyEnabledChange}
+            label={t("settings.general.bgNotification")}
+          />
+        </SettingRow>
       )}
     </div>
   );

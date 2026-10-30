@@ -10,6 +10,7 @@ import {
 import { errorText } from "../../providers.ts";
 import { useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
+import { SettingRow, Toggle } from "../SettingRow.tsx";
 
 /** Quiet period before a typed token count is persisted (the same
  * debounce the personalization editor uses). */
@@ -153,11 +154,7 @@ export function CompactionSettings() {
     label: string,
     description: string,
   ) => (
-    <div className="update-item">
-      <div className="update-info">
-        <span className="update-label">{label}</span>
-        <span className="update-desc">{description}</span>
-      </div>
+    <SettingRow label={label} description={description}>
       <input
         type="text"
         inputMode="numeric"
@@ -175,32 +172,23 @@ export function CompactionSettings() {
           if (e.key === "Enter") e.currentTarget.blur();
         }}
       />
-    </div>
+    </SettingRow>
   );
 
   return (
     <div className="settings-pane compaction-settings">
       <span className="update-label">{t("settings.compaction.title")}</span>
-      <div className="update-item">
-        <div className="update-info">
-          <span className="update-label">
-            {t("settings.compaction.enabled")}
-          </span>
-          <span className="update-desc">
-            {t("settings.compaction.enabledDesc")}
-          </span>
-        </div>
-        <label className="toggle-switch">
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={saving || !loaded}
-            onChange={(e) => toggleEnabled(e.currentTarget.checked)}
-            aria-label={t("settings.compaction.enabled")}
-          />
-          <span className="toggle-slider" />
-        </label>
-      </div>
+      <SettingRow
+        label={t("settings.compaction.enabled")}
+        description={t("settings.compaction.enabledDesc")}
+      >
+        <Toggle
+          checked={enabled}
+          disabled={saving || !loaded}
+          onChange={toggleEnabled}
+          label={t("settings.compaction.enabled")}
+        />
+      </SettingRow>
 
       {tokenRow(
         COMPACTION_RESERVE_TOKENS_KEY,

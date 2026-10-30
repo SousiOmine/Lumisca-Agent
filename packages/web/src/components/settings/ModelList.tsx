@@ -8,6 +8,7 @@ import {
 } from "../../providers.ts";
 import type { ModelInfo } from "../../types.ts";
 import { useT } from "../../i18n.ts";
+import { Toggle } from "../SettingRow.tsx";
 
 interface ProviderModels {
   providerId: string;
@@ -129,19 +130,12 @@ export function ModelList() {
                       <span className="model-toggle-name">
                         {m.name ?? m.id}
                       </span>
-                      <label className="toggle-switch">
-                        <input
-                          type="checkbox"
-                          checked={m.enabled !== false}
-                          onChange={(e) =>
-                            toggleModel(
-                              pm.providerId,
-                              m.id,
-                              e.currentTarget.checked,
-                            )}
-                        />
-                        <span className="toggle-slider" />
-                      </label>
+                      <Toggle
+                        checked={m.enabled !== false}
+                        onChange={(next) =>
+                          toggleModel(pm.providerId, m.id, next)}
+                        label={m.name ?? m.id}
+                      />
                     </div>
                   ))}
                 </div>

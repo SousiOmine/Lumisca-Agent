@@ -10,6 +10,7 @@ import { errorText } from "../../providers.ts";
 import { useEffect } from "preact/compat";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSaveAction } from "../../hooks/useSave.ts";
+import { SettingRow, Toggle } from "../SettingRow.tsx";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
 
@@ -71,27 +72,18 @@ export function CommandSafetyPanel() {
 
   return (
     <div className="settings-pane">
-      <div
-        className="update-item"
+      <SettingRow
+        label={t("settings.security.title")}
+        description={t("settings.security.description")}
         title={t("settings.security.tooltip")}
       >
-        <div className="update-info">
-          <span className="update-label">{t("settings.security.title")}</span>
-          <span className="update-desc">
-            {t("settings.security.description")}
-          </span>
-        </div>
-        <label className="toggle-switch">
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={saving}
-            onChange={(e) => setEnabledValue(e.currentTarget.checked)}
-            aria-label={t("settings.security.title")}
-          />
-          <span className="toggle-slider" />
-        </label>
-      </div>
+        <Toggle
+          checked={enabled}
+          disabled={saving}
+          onChange={setEnabledValue}
+          label={t("settings.security.title")}
+        />
+      </SettingRow>
 
       {!fastModelSet && (
         <p className="settings-warning">

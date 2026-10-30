@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/compat";
 import { COMPUTER_USE_ENABLED_KEY } from "@lumisca/core/shared";
 import { errorText } from "../../providers.ts";
 import { useSaveAction } from "../../hooks/useSave.ts";
+import { SettingRow, Toggle } from "../SettingRow.tsx";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
 
@@ -38,31 +39,20 @@ export function ComputerUsePanel() {
 
   return (
     <div className="settings-pane">
-      <div
-        className="update-item"
+      <SettingRow
+        label={t("settings.computerUse.title")}
+        description={loaded
+          ? t("settings.computerUse.description")
+          : t("common.loading")}
         title={t("settings.computerUse.tooltip")}
       >
-        <div className="update-info">
-          <span className="update-label">
-            {t("settings.computerUse.title")}
-          </span>
-          <span className="update-desc">
-            {loaded
-              ? t("settings.computerUse.description")
-              : t("common.loading")}
-          </span>
-        </div>
-        <label className="toggle-switch">
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={saving || !loaded}
-            onChange={(e) => setEnabledValue(e.currentTarget.checked)}
-            aria-label={t("settings.computerUse.title")}
-          />
-          <span className="toggle-slider" />
-        </label>
-      </div>
+        <Toggle
+          checked={enabled}
+          disabled={saving || !loaded}
+          onChange={setEnabledValue}
+          label={t("settings.computerUse.title")}
+        />
+      </SettingRow>
 
       {error && (
         <div className="error-text">
