@@ -23,7 +23,6 @@ import {
   UserProviderStore,
 } from "./user-providers.ts";
 import {
-  buildProvider,
   type EnvReader,
   loadCustomProviders,
   processEnv,
