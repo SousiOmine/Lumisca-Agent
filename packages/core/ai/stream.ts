@@ -22,16 +22,36 @@ import type {
 } from "ai";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
+import {
+  clampMaxTokensToContext,
+  outputCapFor,
+  promptTokensFor,
+} from "./budget.ts";
+export {
+  CONTEXT_SAFETY_RATIO,
+  CONTEXT_SAFETY_TOKENS,
+  contextSafetyTokens,
+  MIN_MAX_TOKENS,
+} from "./budget.ts";
 import { withOutputCapRecovery } from "./output-cap-recovery.ts";
+import {
+  imageFilePart,
+  readToolOutput,
+  toolDetails,
+  type ToolImage,
+  toolImages,
+  toolModelOutput,
+  type ToolOutput,
+  toolResultOutput,
+} from "./tool-envelope.ts";
+export {
+  readToolOutput,
+  type ToolImage,
+  type ToolOutput,
+} from "./tool-envelope.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor, toolResultTakesImages } from "./lang-model.ts";
-import {
-  estimateLlmMessagesTokens,
-  estimateTextTokens,
-  estimateToolTokens,
-} from "../shared/token-estimate.ts";
 import { contentText } from "../shared/mod.ts";
-import { inputBudgetTokens } from "../shared/context-usage.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
@@ -499,110 +519,6 @@ function uncachedInputTokens(
     : 0;
 }
 
-/** The completion cap to send for one request: the caller's override when it
- * set one, else the model's documented `maxTokens`, else none (the
- * provider's own default). */
-function outputCapFor(
-  model: Model<Api>,
-  options: StreamOptions | undefined,
-): number | undefined {
-  const override = options?.maxOutputTokens;
-  if (override !== undefined && override > 0) return override;
-  return model.maxTokens !== undefined && model.maxTokens > 0
-    ? model.maxTokens
-    : undefined;
-}
-
-/** Room kept between the prompt and the window when clamping an output cap:
- * the token estimate is a heuristic, and a request the provider rejects
- * costs a whole turn. Mirrors pi's CONTEXT_SAFETY_TOKENS — the floor of the
- * margin; large prompts charge more (see {@link contextSafetyTokens}). */
-export const CONTEXT_SAFETY_TOKENS = 4_096;
-
-/** Share of the estimated prompt charged as margin on top of the floor.
- *
- * The estimate prices ASCII at four characters per token, while source code
- * and JSON (tool schemas included) tokenize closer to three: a long prompt
- * is therefore under-counted by more than a fixed 4,096 can absorb, and the
- * cap the clamp believes fits is rejected by the provider (observed: a
- * conversation the provider counted at 666,931 tokens on a 1,000,000 window
- * had been estimated low enough to send the model's full 384,000 cap, which
- * overshot by 2,355). Charging a share of the prompt makes the margin grow
- * with exactly the quantity the estimate gets wrong. */
-export const CONTEXT_SAFETY_RATIO = 0.1;
-
-/** Cap on the proportional margin as a share of the room the prompt leaves:
- * the margin must never eat more than half of it, or a prompt just below the
- * window would collapse the cap to nothing (a request that cannot answer is
- * worse than one the provider rejects — the latter has a repair). */
-const CONTEXT_SAFETY_MAX_SHARE = 0.5;
-
-/**
- * The margin kept between the estimated prompt and the window: the larger of
- * {@link CONTEXT_SAFETY_TOKENS} and {@link CONTEXT_SAFETY_RATIO} of the
- * prompt, bounded to half the room the prompt leaves.
- */
-export function contextSafetyTokens(
-  promptTokens: number,
-  window: number,
-): number {
-  const room = Math.max(0, window - promptTokens);
-  const proportional = Math.ceil(promptTokens * CONTEXT_SAFETY_RATIO);
-  return Math.max(
-    CONTEXT_SAFETY_TOKENS,
-    Math.min(proportional, Math.floor(room * CONTEXT_SAFETY_MAX_SHARE)),
-  );
-}
-
-/** The smallest cap a clamped request may carry (pi's MIN_MAX_TOKENS): a
- * cap of zero would ask for no output at all. */
-export const MIN_MAX_TOKENS = 1;
-
-/** Estimated prompt size of one request: the converted messages, the system
- * prompt, and the tool schemas — the three parts a provider counts. */
-function promptTokensFor(context: StreamRequest): number {
-  let tokens = estimateLlmMessagesTokens(context.messages);
-  if (context.systemPrompt !== undefined) {
-    tokens += estimateTextTokens(context.systemPrompt);
-  }
-  for (const tool of context.tools ?? []) {
-    tokens += estimateToolTokens(tool);
-  }
-  return tokens;
-}
-
-/**
- * Clamp a request's output cap to the room its prompt leaves (pi's
- * `clampMaxTokensToContext`). Providers validate `prompt + max_output`
- * against the prompt budget — the window, narrowed to the input cap the
- * catalog publishes (see shared/context-usage.ts inputBudgetTokens) — so a
- * cap the prompt cannot fit would fail the whole request; the compaction
- * threshold deliberately lets the conversation come close to that budget,
- * which is exactly when this matters.
- *
- * The clamp only ever shrinks a cap — never invents one for a request that
- * carries none (the provider's own default then applies) — and never goes
- * below {@link MIN_MAX_TOKENS}. A caller's override (the compaction
- * summarizer's smaller cap) is clamped the same way, so the auxiliary
- * request stays inside the budget too. The margin itself is proportional to
- * the prompt (see {@link contextSafetyTokens}): a fixed reserve is too small
- * to cover the estimate's error on a large window.
- */
-export function clampMaxTokensToContext(
-  model: Model<Api>,
-  promptTokens: number,
-  desired: number | undefined,
-): number | undefined {
-  if (desired === undefined) return undefined;
-  const window = inputBudgetTokens(model);
-  if (window === undefined) {
-    return Math.max(MIN_MAX_TOKENS, desired);
-  }
-  const available = window - promptTokens -
-    contextSafetyTokens(promptTokens, window);
-  return Math.min(desired, Math.max(MIN_MAX_TOKENS, available));
-}
-
 /** Map a Lumisca thinking level to a Vercel reasoning hint (best effort).
  * Returns a plain string (`"high"`, etc.) or `undefined` — not an object
  * with `{ enabled, effort }` — because the `@ai-sdk/openai-compatible`
@@ -731,151 +647,6 @@ function toArgsRecord(input: unknown): Record<string, unknown> {
 
 /** One image a tool returned, in the app's own block shape (`data` is
  * base64, `mimeType` a full media type such as `image/png`). */
-export interface ToolImage {
-  data: string;
-  mimeType: string;
-}
-
-/** What a Lumisca tool's `execute` hands to the AI SDK's tool loop: the
- * transcript text, the structured details the UI reads (the `+3 -2` diff
- * badge), and the images the tool returned. The SDK carries the whole
- * object on its `tool-result` part; the transport then splits it for its
- * two audiences — details for the UI, text and images for the model (see
- * toModelOutput and toCoreMessages). */
-export interface ToolOutput {
-  text: string;
-  details: Record<string, unknown>;
-  images: readonly ToolImage[];
-}
-
-/** Read a `tool-result` part's output as {@link ToolOutput}: our own
- * envelope, or the text of any other result (a provider-executed or
- * test-double result carries neither details nor images). */
-export function readToolOutput(output: unknown): ToolOutput {
-  if (typeof output === "object" && output !== null) {
-    const candidate = output as {
-      text?: unknown;
-      details?: unknown;
-      images?: unknown;
-    };
-    if (
-      typeof candidate.text === "string" &&
-      typeof candidate.details === "object" &&
-      candidate.details !== null
-    ) {
-      return {
-        text: candidate.text,
-        details: candidate.details as Record<string, unknown>,
-        images: toolImages(candidate.images),
-      };
-    }
-  }
-  return { text: outputText(output), details: {}, images: [] };
-}
-
-/** The images of a tool result envelope, filtered to the well-formed ones:
- * a block without base64 data or without a media type would only fail
- * deeper in the provider (or render as a broken `<img>`). */
-function toolImages(value: unknown): ToolImage[] {
-  if (!Array.isArray(value)) return [];
-  const images: ToolImage[] = [];
-  for (const entry of value) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const image = entry as { data?: unknown; mimeType?: unknown };
-    if (
-      typeof image.data !== "string" || image.data === "" ||
-      typeof image.mimeType !== "string" || image.mimeType === ""
-    ) {
-      continue;
-    }
-    images.push({ data: image.data, mimeType: image.mimeType });
-  }
-  return images;
-}
-
-/** Normalize a tool result's details to a plain record: a tool that
- * reported none (or something other than an object) gets `{}` instead, so
- * the transcript never carries a non-record. */
-function toolDetails(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-/** The model-facing form of a tool result for the SDK's own step
- * continuation: the text alone, or the SDK's `content` output carrying the
- * images as file parts (the shape every provider's tool-result conversion
- * reads). The SDK runs this conversion for every tool call (it builds the
- * step's response messages from it); the next request Lumisca sends is not
- * that object but the transport's own conversion (see toCoreMessages), so
- * this only has to reflect the tool's result faithfully. */
-function toolModelOutput(output: ToolOutput) {
-  if (output.images.length === 0) {
-    return { type: "text" as const, value: output.text };
-  }
-  return {
-    type: "content" as const,
-    value: [
-      { type: "text" as const, text: output.text },
-      ...output.images.map(imageFilePart),
-    ],
-  };
-}
-
-/** One image block as the SDK's file part. This is the current image shape
- * (`{ type: "image" }` is deprecated and logs a warning on every request
- * that carries an image); the tagged `data` payload keeps the explicit
- * media type instead of a `data:` URL the provider has to parse. */
-function imageFilePart(image: { data: string; mimeType: string }) {
-  return {
-    type: "file" as const,
-    mediaType: image.mimeType,
-    data: { type: "data" as const, data: image.data },
-  };
-}
-
-/** The tool-result output for one provider: the text alone, or the SDK's
- * `content` output when that provider's tool message can carry the images
- * (see {@link toolResultTakesImages}). */
-function toolResultOutput(
-  value: string,
-  images: readonly ToolImage[],
-  isError: boolean,
-  takesImages: boolean,
-) {
-  if (isError) return { type: "error-text" as const, value };
-  if (images.length === 0 || !takesImages) {
-    return { type: "text" as const, value };
-  }
-  return {
-    type: "content" as const,
-    value: [
-      { type: "text" as const, text: value },
-      ...images.map(imageFilePart),
-    ],
-  };
-}
-
-/** Render an SDK tool `output` (whatever the execute function returned)
- * as the transcript/display text. */
-function outputText(output: unknown): string {
-  if (typeof output === "string") return output;
-  if (typeof output === "object" && output !== null) {
-    const o = output as { type?: unknown; value?: unknown; text?: unknown };
-    if (typeof o.value === "string") return o.value;
-    if (typeof o.text === "string" && typeof o.type === "string") {
-      return o.text;
-    }
-    try {
-      return JSON.stringify(output);
-    } catch {
-      return String(output);
-    }
-  }
-  if (output === undefined || output === null) return "Tool completed.";
-  return String(output);
-}
-
 /** Convert Lumisca LLM messages to Vercel CoreMessage[] (v7 format). */
 function toCoreMessages(
   model: Model<Api>,

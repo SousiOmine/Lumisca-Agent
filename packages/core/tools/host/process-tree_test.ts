@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { killProcessTree } from "./process-tree.ts";
 import { shellCommand } from "./shell.ts";
-import { removeDirRetry, waitUntil } from "../test-utils.ts";
+import { removeDirRetry, waitUntil } from "../../test-utils.ts";
 
 /**
  * `killProcessTree` stops the tree a command grew, not only the shell the

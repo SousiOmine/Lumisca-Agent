@@ -11,7 +11,7 @@ import type {
 } from "../ai/types.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import type { ModelInfo, ThinkingLevel } from "../shared/mod.ts";
-import { CoreError } from "../errors.ts";
+import { CoreError, errorMessage } from "../errors.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
@@ -262,7 +262,7 @@ export class ModelManager {
     try {
       this.applyCustomProviders();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       log.debug(`custom providers unreadable, keeping previous: ${message}`);
       return {
         ...status,

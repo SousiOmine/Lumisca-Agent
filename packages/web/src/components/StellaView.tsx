@@ -1,5 +1,5 @@
 import { IconSend } from "@tabler/icons-preact";
-import { useEffect, useMemo, useRef, useState } from "preact/compat";
+import { useEffect, useState } from "preact/compat";
 import { sessionVisualBase } from "../api-client.ts";
 import { useT } from "../i18n.ts";
 import {
@@ -10,9 +10,8 @@ import {
   type SessionView,
 } from "../types.ts";
 import { Composer } from "./Composer.tsx";
-import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
-import { ErrorBanner } from "./chat/ErrorBanner.tsx";
-import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
+import { Transcript } from "./Transcript.tsx";
+import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
 import type { UserMessageImage } from "./chat/types.ts";
 import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
@@ -94,9 +93,7 @@ export function StellaView(
   }: StellaViewProps,
 ) {
   const t = useT();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const userScrolledUp = useRef(false);
-  const pendingSubmitScroll = useRef(false);
+  const { pinOnNextContent } = useTranscriptScroll();
   // The conversation may not exist yet (first run, or the machine still
   // starting): an empty view stands in so the screen renders regardless.
   const sessionInfo = view?.info ?? info;
@@ -125,56 +122,12 @@ export function StellaView(
   const machineRunning = status.state === "running";
   const showScreen = machineRunning && !screenClosed;
 
-  // Keep the transcript pinned to the newest content while the user is at the
-  // bottom (the same contract as the code view: reading earlier messages must
-  // never be yanked away).
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const pin = () => {
-      if (pendingSubmitScroll.current) {
-        pendingSubmitScroll.current = false;
-        el.scrollTop = el.scrollHeight;
-        return;
-      }
-      if (!userScrolledUp.current) el.scrollTop = el.scrollHeight;
-    };
-    const onScroll = () => {
-      userScrolledUp.current =
-        el.scrollHeight - el.scrollTop - el.clientHeight >= 80;
-    };
-    pin();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    const observer = new ResizeObserver(pin);
-    observer.observe(el);
-    const content = el.firstElementChild;
-    if (content) observer.observe(content);
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      observer.disconnect();
-    };
-  }, []);
-
-  const turns = useMemo(() => buildTurns(messages), [messages]);
-  const toolResults = useMemo(() => {
-    const map = new Map<
-      string,
-      Extract<SessionView["messages"][number], { role: "toolResult" }>
-    >();
-    for (const message of messages) {
-      if (message.role === "toolResult") map.set(message.toolCallId, message);
-    }
-    return map;
-  }, [messages]);
-
   const submit = () => {
     const text = input.trim();
     if (text.length === 0 || sessionInfo === undefined) return;
     onPrompt(text);
     onInputChange("");
-    pendingSubmitScroll.current = true;
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    pinOnNextContent();
   };
 
   /** A rewind refills the composer with the message's text, so a corrected
@@ -219,55 +172,28 @@ export function StellaView(
             {hasBackgrounds && <BackgroundPanel commands={backgrounds} />}
           </div>
         )}
-        <div className="chat-scroll" ref={scrollRef}>
-          <div className="chat-column">
-            {messages.length === 0 && streamingText.length === 0 && (
-              <div className="chat-empty">
-                <div className="chat-empty-inner">
-                  {conversationError !== null
-                    ? (
-                      <p className="error-text" role="alert">
-                        {t("chat.stella.conversationError", {
-                          error: conversationError,
-                        })}
-                      </p>
-                    )
-                    : <p>{t("chat.stella.empty")}</p>}
-                </div>
-              </div>
-            )}
-            {turns.map((turn, index) => (
-              <ConversationTurn
-                key={`${turn.user.timestamp}-${index}`}
-                turn={turn}
-                toolResults={toolResults}
-                runningTools={runningTools}
-                visualBase={visualBase}
-                running={isRunning && index === turns.length - 1}
-                endedAt={index === turns.length - 1
-                  ? open?.agentEndedAt
-                  : undefined}
-                onRewind={handleRewind}
-                onSend={(text) => {
-                  if (sessionInfo === undefined) return;
-                  onPrompt(text);
-                }}
-              />
-            ))}
-            {streamingText.length > 0 && (
-              <div className="msg">
-                <div className="msg-body markdown">
-                  <MarkdownBlock
-                    text={streamingText}
-                    visualBase={visualBase}
-                  />
-                  <span className="cursor" />
-                </div>
-              </div>
-            )}
-            {open?.error && <ErrorBanner text={open.error} />}
-          </div>
-        </div>
+        <Transcript
+          messages={messages}
+          streamingText={streamingText}
+          runningTools={runningTools}
+          running={isRunning}
+          agentEndedAt={open?.agentEndedAt}
+          error={open?.error}
+          visualBase={visualBase}
+          onRewind={handleRewind}
+          onSend={(text) => {
+            if (sessionInfo !== undefined) onPrompt(text);
+          }}
+          empty={conversationError !== null
+            ? (
+              <p className="error-text" role="alert">
+                {t("chat.stella.conversationError", {
+                  error: conversationError,
+                })}
+              </p>
+            )
+            : <p>{t("chat.stella.empty")}</p>}
+        />
         <div className="input-area">
           <QuestionPanel
             pending={pendingQuestions}
@@ -290,8 +216,7 @@ export function StellaView(
             // belongs to configuration, not to a conversation whose point is
             // to stay simple, and a line explaining that is one more thing to
             // read. The model follows the app's default (set in settings).
-            hideModelSwitch
-            hideModelLine
+            modelBar="none"
             submitLabel={t("chat.composer.submit")}
             submitIcon={IconSend}
             submitIconOnly

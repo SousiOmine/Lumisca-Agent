@@ -14,6 +14,7 @@
  * and exit callbacks), so the whole state machine is testable without a
  * running server, a network, or a self-replacing binary.
  */
+import { errorMessage } from "@lumisca/core";
 import { UPDATE_AUTO_KEY, UPDATE_AUTO_RESTART_KEY } from "@lumisca/core/shared";
 import type { UpdateRestartMode } from "../startup.ts";
 import { SERVER_VERSION } from "../version.ts";
@@ -562,8 +563,4 @@ export class UpdateService {
       error: message,
     });
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -24,7 +24,6 @@ import type {
   ModePrompt,
   PendingImage,
   ThinkingLevel,
-  ToolResultMessage,
 } from "../types.ts";
 import {
   Composer,
@@ -43,14 +42,13 @@ import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { BackgroundPanel } from "./BackgroundPanel.tsx";
 import { GoalPanel } from "./GoalPanel.tsx";
-import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
-import { ErrorBanner } from "./chat/ErrorBanner.tsx";
-import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
 import { useProviderModels } from "../providers.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { useSkills } from "../hooks/useSkills.ts";
 import { useT } from "../i18n.ts";
+import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
+import { Transcript } from "./Transcript.tsx";
 
 export { buildTurns } from "./chat/ConversationTurn.tsx";
 
@@ -113,18 +111,8 @@ export function ChatView(
     onOpenSettings,
   }: ChatViewProps,
 ) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  /** Message lookup of the app language (the slash menu's labels are
-   * catalogue entries). */
+  const { pinOnNextContent } = useTranscriptScroll();
   const t = useT();
-  // Set on submit: the sent message must become visible even if the user was
-  // scrolled up reading earlier messages. The user message arrives
-  // asynchronously via the event stream, so the intent is remembered until
-  // the next content change forces the scroll.
-  const pendingSubmitScroll = useRef(false);
-  // Whether the user has scrolled up from the bottom to read earlier
-  // messages. While false the view stays pinned to the newest content.
-  const userScrolledUp = useRef(false);
   const isRunning = isViewRunning(view);
 
   // Where this session's `visual:` image references resolve. The assets live
@@ -161,42 +149,6 @@ export function ChatView(
     () => buildSlashCommands(savedPrompts, view.info.chat ?? false, skills, t),
     [view.info.chat, savedPrompts, skills, t],
   );
-
-  // Pin the scroll to the newest content while the user is at the bottom.
-  // A ResizeObserver fires on every content layout change (streaming
-  // deltas, tool state changes, images, error rows), so the follow does not
-  // depend on listing each source of growth. User intent comes from the
-  // scroll events instead of a proximity check at update time: a single
-  // large delta (a whole code block in one chunk) must not leave the view
-  // stuck above the fold with the scrollbar reading "bottom". Never yank
-  // the position out from under someone reading earlier messages; a
-  // submitted message is the exception.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const pin = () => {
-      if (pendingSubmitScroll.current) {
-        pendingSubmitScroll.current = false;
-        el.scrollTop = el.scrollHeight;
-        return;
-      }
-      if (!userScrolledUp.current) el.scrollTop = el.scrollHeight;
-    };
-    const onScroll = () => {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-      userScrolledUp.current = !nearBottom;
-    };
-    pin();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    const observer = new ResizeObserver(pin);
-    observer.observe(el);
-    const content = el.firstElementChild;
-    if (content) observer.observe(content);
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      observer.disconnect();
-    };
-  }, []);
 
   /** Send the composer text, or an explicit message (slash commands build
    * their own prompt; the input is cleared either way). `mode` is passed
@@ -246,12 +198,7 @@ export function ChatView(
     onPrompt(text, images, mode);
     onInputChange("");
     onImagesChange([]);
-    // Bring the scroll to the bottom right away and force it again when the
-    // sent message arrives (see the effect above) so it is never left hidden
-    // below the fold.
-    pendingSubmitScroll.current = true;
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    pinOnNextContent();
   };
 
   /** A `run` or `action` command was picked at the start of the input (the
@@ -318,21 +265,6 @@ export function ChatView(
     [],
   );
 
-  // Turns and the tool-result index only change when the message list
-  // changes; keeping their identities stable lets the memoized
-  // ConversationTurn skip re-rendering while only the streaming text (or
-  // the composer's own state) changed.
-  const turns = useMemo(() => buildTurns(view.messages), [view.messages]);
-  const toolResults = useMemo(() => {
-    const map = new Map<string, ToolResultMessage>();
-    for (const message of view.messages) {
-      if (message.role === "toolResult") {
-        map.set(message.toolCallId, message);
-      }
-    }
-    return map;
-  }, [view.messages]);
-
   // Context meter for the composer footer: the latest turn's input usage
   // against the current model's window, plus the session-average cache
   // hit rate. The window comes from the owning peer's model list ("" =
@@ -387,54 +319,20 @@ export function ChatView(
         <TaskPanel tasks={view.tasks} />
         <BackgroundPanel commands={view.backgrounds} />
       </div>
-      <div className="chat-scroll" ref={scrollRef}>
-        <div className="chat-column">
-          {view.messages.length === 0 && view.streamingText.length === 0 && (
-            <div className="chat-empty">
-              <div className="chat-empty-inner">
-                {view.info.chat
-                  ? (
-                    <p>
-                      {t("chat.empty.chat")}
-                    </p>
-                  )
-                  : (
-                    <p>
-                      {t("chat.empty.workspace")}
-                    </p>
-                  )}
-              </div>
-            </div>
-          )}
-          {turns.map((turn, index) => (
-            <ConversationTurn
-              key={`${turn.user.timestamp}-${index}`}
-              turn={turn}
-              toolResults={toolResults}
-              runningTools={view.runningTools}
-              visualBase={visualBase}
-              running={isRunning && index === turns.length - 1}
-              endedAt={index === turns.length - 1
-                ? view.agentEndedAt
-                : undefined}
-              onRewind={handleRewind}
-              onSend={onCardAnswer}
-            />
-          ))}
-          {view.streamingText.length > 0 && (
-            <div className="msg">
-              <div className="msg-body markdown">
-                <MarkdownBlock
-                  text={view.streamingText}
-                  visualBase={visualBase}
-                />
-                <span className="cursor" />
-              </div>
-            </div>
-          )}
-          {view.error && <ErrorBanner text={view.error} />}
-        </div>
-      </div>
+      <Transcript
+        messages={view.messages}
+        streamingText={view.streamingText}
+        runningTools={view.runningTools}
+        running={isRunning}
+        agentEndedAt={view.agentEndedAt}
+        error={view.error}
+        visualBase={visualBase}
+        onRewind={handleRewind}
+        onSend={onCardAnswer}
+        empty={view.info.chat
+          ? <p>{t("chat.empty.chat")}</p>
+          : <p>{t("chat.empty.workspace")}</p>}
+      />
       <div className="input-area">
         <QuestionPanel pending={view.pendingQuestions} onAnswer={onAnswer} />
         {providerUnconfigured && (

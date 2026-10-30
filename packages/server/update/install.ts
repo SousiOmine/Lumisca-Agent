@@ -37,6 +37,7 @@ import {
   writeAppliedUpdate,
 } from "./stage.ts";
 import { PORT_WAIT_ENV_KEY } from "../startup.ts";
+import { errorMessage } from "@lumisca/core";
 
 /** Where the running server lives. */
 export interface InstallEnvironment {
@@ -176,7 +177,7 @@ export async function applyStagedUpdate(
     await Deno.remove(extractDir, { recursive: true }).catch(() => {});
     throw new InstallError(
       `更新ファイルを配置できませんでした (${installDir}): ` +
-        `${error instanceof Error ? error.message : String(error)}`,
+        `${errorMessage(error)}`,
     );
   }
 
@@ -212,7 +213,7 @@ export async function applyStagedUpdate(
       if (!existing) added.push(target);
     } catch (error) {
       failures.push(
-        `${name}: ${error instanceof Error ? error.message : String(error)}`,
+        `${name}: ${errorMessage(error)}`,
       );
       break;
     }

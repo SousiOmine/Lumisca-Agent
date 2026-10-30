@@ -1,6 +1,6 @@
 /**
- * Public surface of the Lumisca AI layer (the replacement for pi-ai and
- * pi-agent-core). The rest of the app imports types and helpers from here.
+ * Public surface of the AI layer. The rest of the app imports types and
+ * helpers from here.
  */
 export {
   createAssistantMessageEventStream,

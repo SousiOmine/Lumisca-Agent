@@ -136,7 +136,7 @@ pub(crate) fn handle_shell_request(
                     .local
                     .lock_recover()
                     .as_ref()
-                    .map(|l| page_url(&format!("http://127.0.0.1:{}", l.port), &l.token))
+                    .map(|l| crate::server::Endpoint::loopback(l.port, &l.token).page_url())
             };
             let maximized = app
                 .get_webview_window("main")

@@ -330,7 +330,7 @@ export class SessionPool {
 
   /** Update the thinking level of an open session in place, without
    * rebuilding the agent. The in-flight run (if any) keeps the level it
-   * started with — pi-agent-core snapshots it at run start — so this never
+   * started with — the level is snapshotted at run start — so this never
    * throws while streaming and never interrupts the running loop. Closed
    * sessions are ignored: their next `open()` reads the stored level. */
   setThinkingLevel(id: string, level: ThinkingLevel): void {

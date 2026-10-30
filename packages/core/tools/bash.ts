@@ -52,16 +52,15 @@ export interface BashToolOptions {
    * runs; a blocked command returns the reason as the tool result).
    * Omitted → the command runs unchecked. */
   safety?: CommandSafety;
-  /** Where a truncated stream spills its complete output. Defaults to the
-   * OS temp dir (`defaultSpillDir()`); tests point it at a per-test
-   * directory so a run never shares (or cleans up) the real one. */
+  /** Where a truncated stream spills its complete output. Defaults to a
+   * directory under the file backend's first root, so the spill is readable
+   * where the command ran; tests point it at a per-test directory. */
   spillDir?: string;
 }
 
 /** How to read a spilled file back. The `read`/`grep` tools resolve paths
  * through the file backend, so only a spill inside its roots is reachable
- * that way — the default spill directory lives in the OS temp dir, where
- * bash is the way in. */
+ * that way; anything else is only reachable through the shell that ran. */
 async function spillRecovery(
   files: FileBackend,
   path: string,
@@ -77,13 +76,12 @@ async function spillRecovery(
  * machine (HostCommandRunner: PowerShell on Windows, /bin/sh elsewhere) or
  * the stella VM (VmCommandRunner: `bash -lc` inside the container). The
  * working directory is a required argument, resolved against the file
- * backend; the command itself is not sandboxed beyond that (same policy as
- * pi).
+ * backend; the command itself is not sandboxed beyond that.
  *
  * A stream longer than MAX_TOOL_OUTPUT keeps its last 64KiB inline and
- * spills the complete text to a file (see {@link OutputSpiller}), which the
- * truncation note points at — so the model can read the part that was cut
- * instead of re-running the command.
+ * spills the complete text through the same file backend (see
+ * {@link OutputSpiller}), which the truncation note points at — so the model
+ * can read the part that was cut instead of re-running the command.
  *
  * The wait policy (exit, never pipe EOF) lives in the runner; this tool
  * only decides what the model reads.
@@ -92,8 +90,8 @@ export function createBashTool(
   options: BashToolOptions,
 ): Tool<typeof bashSchema> {
   const defaultTimeoutSec = options.defaultTimeoutSec ?? 120;
-  const spiller = new OutputSpiller(options.spillDir);
   const { files, runner } = options;
+  const spiller = new OutputSpiller(files, options.spillDir);
 
   /** Note for a cut stream: spill the full text and point at it, or fall
    * back to the plain note when the spill could not be written (the result

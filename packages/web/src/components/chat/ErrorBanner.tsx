@@ -1,23 +1,13 @@
-import { useState } from "preact/compat";
 import { IconCheck, IconClipboard } from "@tabler/icons-preact";
 import { useT } from "../../i18n.ts";
+import { useCopy } from "../../hooks/useSave.ts";
 
 /** The session error banner. Clicking it copies the error text to the
  * clipboard — provider error messages are long and hard to select by
  * hand, and the banner sits at the bottom of the chat. */
 export function ErrorBanner({ text }: { text: string }) {
   const t = useT();
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard unavailable: the text stays selectable.
-    }
-  };
+  const { copied, copy } = useCopy(text);
 
   return (
     <div
@@ -26,11 +16,11 @@ export function ErrorBanner({ text }: { text: string }) {
       tabIndex={0}
       title={t("chat.error.copyTitle")}
       aria-label={t("chat.error.copyAriaLabel")}
-      onClick={() => void handleCopy()}
+      onClick={() => void copy()}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          void handleCopy();
+          void copy();
         }
       }}
     >

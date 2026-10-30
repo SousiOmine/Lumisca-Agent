@@ -1,8 +1,8 @@
 /**
  * The Lumisca model/provider registry: owns the {@link Provider} entries and
- * resolves credentials for requests. This replaces pi-ai's `Models`/MutableModels
- * collection. Providers are Lumisca-typed; the actual LLM calls go through the
- * Vercel-backed StreamFn built by {@link buildStreamFn}.
+ * resolves credentials for requests. Providers are Lumisca-typed; the actual
+ * LLM calls go through the Vercel-backed StreamFn built by
+ * {@link buildStreamFn}.
  */
 import { createStreamFn, type StreamTransport } from "./stream.ts";
 import { languageModelFor, type ResolvedApiKey } from "./lang-model.ts";

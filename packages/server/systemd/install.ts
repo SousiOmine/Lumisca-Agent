@@ -35,6 +35,7 @@ import {
   requirePackaged,
 } from "./shared.ts";
 import { SERVICE_UNIT_TEMPLATE } from "./template.ts";
+import { errorMessage } from "@lumisca/core";
 
 /** File the write-access check creates inside the updater's staging
  * directory. */
@@ -80,7 +81,7 @@ async function requireWritableInstallDir(paths: ServicePaths): Promise<void> {
   } catch (error) {
     throw new ServiceDefinitionError(
       `インストール先に書き込めません (${paths.installDir}): ` +
-        `${error instanceof Error ? error.message : String(error)}\n` +
+        `${errorMessage(error)}\n` +
         "自動更新のステージングとデータベースの作成に書き込み権限が必要です。" +
         "書き込み可能なディレクトリに展開し直してください。",
     );

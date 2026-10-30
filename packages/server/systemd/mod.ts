@@ -42,6 +42,7 @@ import {
 } from "./plan.ts";
 import { runStatus } from "./status.ts";
 import { runUninstall } from "./uninstall.ts";
+import { errorMessage } from "@lumisca/core";
 
 /**
  * Run one `service` invocation and return the process exit code:
@@ -88,9 +89,7 @@ export async function runServiceCommand(
     // writes to the console directly (the same stream the real one uses).
     const report = service?.err ?? ((line: string) => console.error(line));
     report(
-      `lumisca-server service: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `lumisca-server service: ${errorMessage(error)}`,
     );
     if (
       error instanceof ServiceUsageError ||

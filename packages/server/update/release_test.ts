@@ -1,5 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
+  FIRST_UPDATE_CHECK_DELAY_MS,
+  UPDATE_CHECK_INTERVAL_MS,
+} from "./service.ts";
+import {
   archiveAssetName,
   compareVersions,
   defaultManifestUrl,
@@ -119,4 +123,37 @@ Deno.test("isNewerVersion only accepts a strictly newer release", () => {
   // A build whose own version is broken accepts any well-formed candidate,
   // instead of silently never updating.
   assertEquals(isNewerVersion("0.7.8", "unknown"), true);
+});
+
+Deno.test("the check cadence matches the desktop updater", async () => {
+  // Two updaters, one schedule: the desktop shell updates the app bundle and
+  // the standalone server updates its own binary, but a user running both
+  // should not see them poll on different clocks. The Rust constant cannot be
+  // imported, so its source is read.
+  const rust = await Deno.readTextFile(
+    new URL(
+      "../../desktop/src-tauri/src/update.rs",
+      import.meta.url,
+    ),
+  );
+  const seconds = (name: string): number | undefined => {
+    const raw = rust.match(
+      new RegExp(
+        `pub\\(crate\\) const ${name}: Duration = Duration::from_secs\\(([^)]+)\\);`,
+      ),
+    )?.[1];
+    if (raw === undefined) return undefined;
+    return raw.split("*").reduce(
+      (product, part) => product * Number(part.trim()),
+      1,
+    );
+  };
+  assertEquals(
+    seconds("UPDATE_CHECK_INTERVAL")! * 1000,
+    UPDATE_CHECK_INTERVAL_MS,
+  );
+  assertEquals(
+    seconds("FIRST_UPDATE_CHECK_DELAY")! * 1000,
+    FIRST_UPDATE_CHECK_DELAY_MS,
+  );
 });

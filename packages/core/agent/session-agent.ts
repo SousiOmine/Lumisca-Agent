@@ -20,7 +20,8 @@ import type { MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
+import { McpAttachmentHost } from "./mcp-host.ts";
+import { Rewinder } from "./rewinder.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
@@ -132,7 +133,7 @@ export interface SessionAgentOptions {
 }
 
 /**
- * One live agent session: wraps pi's Agent, forwards UI events,
+ * One live agent session: wraps the Agent, forwards UI events,
  * and persists new messages to the database as they complete.
  */
 export class SessionAgent {
@@ -142,29 +143,15 @@ export class SessionAgent {
    * transcript messages they cover (see transcript.ts). */
   private readonly transcript: TranscriptStore;
   private readonly onEvent: (event: ClientEvent) => void;
-  /** The session's shared MCP attachment (owned by the session pool); its
-   * tools land in the session's tool registry once discovery finished. */
-  private mcpAttachment: McpAttachment | null = null;
-  private mcpAttached = false;
-  /** Which attachment owns the discovery in flight: a swap
-   * (replaceMcpAttachment) bumps it, so the tools of an attachment the
-   * agent no longer holds can never be merged into the registry. */
-  private mcpGeneration = 0;
+  /** The session's MCP attachment: its servers gate the first prompt, and
+   * its tools land in the session's shared registry once discovery finished. */
+  private mcp: McpAttachmentHost;
   /** The session's tool registry (owned by the session pool): holds every
    * discoverable tool (MCP tools, browser-lab tools, future extensions)
    * whose definitions stay out of the LLM context. Null when the session
    * has none. The pool seeds it with the browser-lab tools before building
    * the agent; MCP discovery merges its tools in afterwards. */
   private readonly toolRegistry: ToolRegistry | null;
-  /** Resolves once MCP tools are attached (or skipped/failed). Prompts
-   * await it so the first turn always sees the MCP tools — without the
-   * gate, a prompt sent right after session creation would start before
-   * the MCP servers have finished spawning. Never rejects. */
-  private mcpReady: Promise<void> = Promise.resolve();
-  /** True when there is nothing to wait for; prompts then skip the await
-   * entirely (an await on a resolved promise would still defer the run by
-   * a microtask and break "already running" conflict checks). */
-  private mcpReadyDone = true;
   /** Interprets images for a text-only main model (null when the main
    * model sees images or no analysis model is configured). */
   private readonly imageAnalyzer: ImageAnalyzer | null;
@@ -180,7 +167,7 @@ export class SessionAgent {
    * from the rewound message onward, so a run started in between would have
    * its messages deleted again (and a steer into the dying run would be
    * dropped with the queues). */
-  private rewindInFlight: Promise<void> | null = null;
+  private readonly rewinder: Rewinder;
   /** Owns the vacant-response / rate-limit retry state (budgets, parked
    * restarts, abort epochs). */
   private readonly retry: RetryManager;
@@ -289,6 +276,26 @@ export class SessionAgent {
         ? { onRequest: options.onRequestShape }
         : {}),
     });
+    this.rewinder = new Rewinder({
+      agent: this.agent,
+      transcript: this.transcript,
+      retry: this.retry,
+      goals: this.goals,
+      isStreaming: () => this.isStreaming,
+      abort: () => this.abort(),
+      rebaseContexts: (messages) => this.rebaseContexts(messages),
+      emit: (event) =>
+        this.emit({
+          type: event.type,
+          sessionId: this.sessionId,
+          removed: event.removed,
+        }),
+    });
+    this.mcp = new McpAttachmentHost(
+      this.agent,
+      this.toolRegistry,
+      () => this.closed,
+    );
     // Condense the history before a request would exceed the model's window
     // (see context-compaction.ts). The compactor reads the live prompt and
     // tools, so a mid-session model or tool change is reflected without
@@ -369,7 +376,7 @@ export class SessionAgent {
   }
 
   /** Update the reasoning level used from the next run onward. The
-   * in-flight run (if any) keeps the level it started with: pi-agent-core
+   * in-flight run (if any) keeps the level it started with: the agent
    * snapshots `thinkingLevel` into the loop config at run start, so
    * mutating the state mid-run never affects the current turn — only
    * subsequent prompts. Rebuilding the agent is therefore unnecessary,
@@ -394,8 +401,8 @@ export class SessionAgent {
   }
 
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
-    if (!this.mcpReadyDone) await this.mcpReady;
-    await this.awaitRewind();
+    if (!this.mcp.done) await this.mcp.waitReady();
+    await this.rewinder.settle();
     // The same delivery fact promptWhileRunning stamps: a prompt delivered
     // while a run is active is queued into that run by the agent loop
     // instead of starting one of its own (see Agent.prompt).
@@ -450,8 +457,8 @@ export class SessionAgent {
     text: string,
     routine: { id: string; name: string },
   ): Promise<{ failure: string | null }> {
-    if (!this.mcpReadyDone) await this.mcpReady;
-    await this.awaitRewind();
+    if (!this.mcp.done) await this.mcp.waitReady();
+    await this.rewinder.settle();
     const message = this.buildUserMessage(
       text,
       undefined,
@@ -555,7 +562,7 @@ export class SessionAgent {
    * abort drops its queues, and a rewind is about to abort the run, so
    * neither takes a steer (see deliverPrompt). */
   private joinsActiveRun(): boolean {
-    return this.rewindInFlight === null && this.isStreaming &&
+    return !this.rewinder.busy && this.isStreaming &&
       !this.agent.isAborting;
   }
 
@@ -572,7 +579,7 @@ export class SessionAgent {
       // Skipped entirely when no rewind runs: the steer decision below then
       // stays in the caller's task (no microtask window for an abort to slip
       // between the check and the delivery).
-      if (this.rewindInFlight !== null) await this.awaitRewind();
+      if (this.rewinder.busy) await this.rewinder.settle();
       if (this.closed) return;
       if (this.joinsActiveRun()) {
         this.agent.steer(message);
@@ -634,7 +641,7 @@ export class SessionAgent {
    * session_error: re-delivering the message would duplicate it in the
    * transcript, and a message that was aborted must stay aborted. */
   private async startRun(message: AgentMessage): Promise<void> {
-    if (!this.mcpReadyDone) await this.mcpReady;
+    if (!this.mcp.done) await this.mcp.waitReady();
     try {
       await this.agent.prompt(message);
     } catch (error) {
@@ -871,119 +878,7 @@ export class SessionAgent {
    * aborted run's artifacts follow it); any other unknown timestamp
    * throws not_found. */
   async rewind(timestamp: number): Promise<void> {
-    // Registered before the first await: a prompt delivered from here on
-    // waits for the truncation (deliverPrompt → awaitRewind).
-    const work = this.runRewind(timestamp);
-    this.rewindInFlight = work;
-    try {
-      await work;
-    } finally {
-      if (this.rewindInFlight === work) this.rewindInFlight = null;
-    }
-  }
-
-  /** Wait for an in-flight rewind, if any. Resolves immediately otherwise;
-   * a rewind that failed (not_found) is already settled, so its own caller
-   * saw the error and the wait just continues. */
-  private async awaitRewind(): Promise<void> {
-    // The loop covers a rewind started while this awaited the previous one.
-    while (this.rewindInFlight !== null) {
-      await this.rewindInFlight.catch(() => {});
-    }
-  }
-
-  private async runRewind(timestamp: number): Promise<void> {
-    if (this.isStreaming) {
-      // Rejects pending asks first (via abort), so a run waiting on the
-      // user's answer unwinds immediately — waitForIdle below would hang
-      // until the ask tool's promise settles otherwise.
-      this.abort();
-      // An aborted run normally ends as a turn (stopReason "aborted"); a run
-      // that died with an exception instead must not block the truncation —
-      // its failure belongs to whoever started it, and the rewind owns the
-      // transcript from here on.
-      await this.agent.waitForIdle().catch(() => {});
-    }
-    const messages = this.agent.state.messages;
-    const index = messages.findIndex(
-      (m) =>
-        (m.role === "user" || m.role === "mode") &&
-        m.timestamp === timestamp,
-    );
-    // Goal declarations (modeId "goal") that would disappear with the
-    // truncation: rewinding them away cancels the goal. Captured before
-    // the splice mutates the array.
-    const goalTimestamps = new Set(
-      messages
-        .filter(
-          (m) =>
-            m.role === "mode" &&
-            (m as { modeId?: unknown }).modeId === "goal",
-        )
-        .map((m) => m.timestamp),
-    );
-    let removed: Array<{
-      role: string;
-      timestamp: number;
-      toolCallId?: string;
-    }> = [];
-    /** Drop everything at `cut` onward from memory and the database,
-     * recording what was removed for the clients. Each entry carries the
-     * fields of the app's message identity key (see the web's messageKey):
-     * role + timestamp, and the tool call id for tool results — parallel
-     * results can share a millisecond, and the key must stay unambiguous. */
-    const truncateFrom = (cut: number) => {
-      removed = messages.splice(cut).map((message) => ({
-        role: message.role,
-        timestamp: message.timestamp,
-        ...(message.role === "toolResult"
-          ? { toolCallId: message.toolCallId }
-          : {}),
-      }));
-      this.transcript.forgetFrom(messages, cut);
-    };
-    if (index !== -1) {
-      truncateFrom(index);
-    } else if (
-      messages.every(
-        (m) =>
-          (m.role !== "user" && m.role !== "mode") ||
-          m.timestamp < timestamp,
-      )
-    ) {
-      // A queued steer: announced to clients but not in the transcript
-      // yet. It is the newest message, so only messages newer than it
-      // (the aborted run's artifacts) follow it in the transcript.
-      const cut = messages.findIndex((m) => m.timestamp > timestamp);
-      if (cut !== -1) truncateFrom(cut);
-      // The steer itself has no transcript row, but clients were already
-      // told about it (synthetic message events) — include it in the
-      // deletion notice so they drop it from the view too.
-      removed.push({ role: "user", timestamp });
-    } else {
-      throw new CoreError(
-        `User message not found: ${timestamp}`,
-        "not_found",
-      );
-    }
-    this.agent.clearAllQueues();
-    // A parked silent-error restart was never announced (no message
-    // events, no transcript row) — dropping it here leaves no trace,
-    // exactly like clearing the queues.
-    this.retry.reset();
-    // Rewinding away the goal's own mode message cancels the goal: the
-    // declaration itself is gone, so the loop must not continue. Any other
-    // rewind leaves the goal intact (the user only corrected a later turn).
-    this.goals?.cancelWhenRewound(goalTimestamps, removed);
-    // The truncation may have removed the context publications that went
-    // with the rewound messages: re-anchor, so a provider whose snapshot is
-    // no longer in history publishes it again before the next run.
-    this.rebaseContexts(this.agent.state.messages);
-    this.emit({
-      type: "messages_truncated",
-      sessionId: this.sessionId,
-      removed,
-    });
+    await this.rewinder.rewind(timestamp);
   }
 
   /** Abort the run and unsubscribe from background-command completions.
@@ -1007,110 +902,21 @@ export class SessionAgent {
   /** Live MCP server status of this session (null when no MCP config or
    * the manager has not started yet). */
   getMcpStatus(): McpServerStatus[] | null {
-    return this.mcpAttachment?.manager.getStatus() ?? null;
+    return this.mcp.status();
   }
 
   /** Attach the session's shared MCP attachment (owned by the session
-   * pool; its server processes also serve the sub-agents). The tools are
-   * added to the agent once discovery finished; the returned promise (also
-   * stored as `mcpReady`) resolves when attachment finished, so the first
-   * prompt can wait for it. Config errors are reported by the pool, never
-   * here. */
+   * pool; its server processes also serve the sub-agents). The returned
+   * promise resolves when discovery finished, so the first prompt can wait
+   * for it. Config errors are reported by the pool, never here. */
   attachMcp(attachment: McpAttachment): Promise<void> {
-    if (this.mcpAttached) return this.mcpReady;
-    this.mcpAttached = true;
-    return this.adoptMcpAttachment(attachment);
+    return this.mcp.attach(attachment);
   }
 
   /** Move this agent to the session's current MCP attachment after a config
-   * change the pool could not express as a rebuild (the session is
-   * streaming, and replacing its agent would corrupt the run). The agent —
-   * and with it the run in flight — stays exactly as it is: only what the
-   * session can discover changes, because the attachment's tools are the
-   * session's shared registry, never the agent's own tool set. The previous
-   * attachment's tools leave the registry with the servers that served
-   * them, and the new ones are merged in once discovery finished, so both
-   * the running run and every later one find them through the tool_search /
-   * tool_call pair (which reads the registry live). The status the settings
-   * UI reads follows the new attachment. */
+   * change the pool could not express as a rebuild (see McpAttachmentHost). */
   replaceMcpAttachment(attachment: McpAttachment): void {
-    const previous = this.mcpAttachment;
-    if (previous !== null && previous !== attachment) {
-      const registry = this.toolRegistry;
-      if (registry !== null) {
-        // The tools of the servers that just went away must not survive
-        // their processes.
-        registry.removeTools(previous.getTools().map((tool) => tool.name));
-      }
-    }
-    this.mcpAttached = true;
-    this.adoptMcpAttachment(attachment);
-  }
-
-  /** Adopt an MCP attachment: hold it for the status readers, gate prompts
-   * on its discovery, and merge its tools into the session's shared
-   * registry when it finishes. Supersedes any earlier discovery — a
-   * callback whose attachment the agent no longer holds adds nothing, since
-   * that attachment's servers may already be gone (see
-   * replaceMcpAttachment). */
-  private adoptMcpAttachment(attachment: McpAttachment): Promise<void> {
-    this.mcpAttachment = attachment;
-    const generation = ++this.mcpGeneration;
-    // The pool may already have seeded the registry with browser-lab
-    // tools — attach the search/call pair on every path, not just when
-    // discovery yields MCP tools, so they are searchable from the first
-    // prompt even in a session without any MCP servers.
-    this.ensureSearchTools();
-    if (attachment.done) {
-      this.addMcpTools(attachment.getTools());
-      this.mcpReady = Promise.resolve();
-      this.mcpReadyDone = true;
-      return Promise.resolve();
-    }
-    // Nothing to discover (no servers configured): keep the fast path so
-    // prompts start without even a microtask delay (the "already running"
-    // conflict check relies on startPrompt reaching the agent loop
-    // synchronously).
-    if (attachment.config.servers.length === 0) {
-      this.mcpReady = Promise.resolve();
-      this.mcpReadyDone = true;
-      return Promise.resolve();
-    }
-    this.mcpReadyDone = false;
-    this.mcpReady = attachment.ready.then((tools) => {
-      if (this.closed || generation !== this.mcpGeneration) return;
-      this.addMcpTools(tools);
-    }).finally(() => {
-      // A newer attachment's discovery owns the flag from here on.
-      if (generation === this.mcpGeneration) this.mcpReadyDone = true;
-    });
-    return this.mcpReady;
-  }
-
-  /** MCP discovery finished: merge its tools into the session's tool
-   * registry (the pool's browser-lab seed must survive) and make sure the
-   * tool_search / tool_call pair is attached. The pair is added once and
-   * never changes afterwards, so the request's tool definitions (and
-   * their prefix-cache block) stay stable for the whole session;
-   * individual tool definitions are only ever loaded into the transcript
-   * through a search result. */
-  private addMcpTools(tools: Tool[]): void {
-    if (this.toolRegistry === null) return;
-    this.toolRegistry.addTools(tools);
-    this.ensureSearchTools();
-  }
-
-  /** When the session's registry holds tools, attach the tool_search /
-   * tool_call pair — the only discoverable-tool surface the LLM ever sees.
-   * Idempotent: called at attach time (the registry may already hold
-   * browser-lab tools seeded by the pool) and from addMcpTools when
-   * discovery fills the registry later. The prompt is NOT touched: the
-   * contract for the pair is published as a context message when the pair
-   * appears (see mcp/context.ts), so the request's first tokens — the
-   * provider's cached prefix — never change under a running session. */
-  private ensureSearchTools(): void {
-    if (this.toolRegistry === null || this.toolRegistry.isEmpty) return;
-    addToolsToAgent(this.agent, registryToolPair(() => this.toolRegistry!));
+    this.mcp.replace(attachment);
   }
 
   async waitForIdle(): Promise<void> {

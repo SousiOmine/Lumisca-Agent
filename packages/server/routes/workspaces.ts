@@ -6,8 +6,8 @@ import {
   parseBody,
   requireNonEmptyString,
   requireStringArray,
-  ttlCache,
 } from "./util.ts";
+import { ttlCache } from "../cache.ts";
 
 interface WorkspaceBody {
   name?: unknown;

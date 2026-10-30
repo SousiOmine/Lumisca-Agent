@@ -26,7 +26,7 @@
 import type { Routine } from "../shared/routine.ts";
 import { nextRunAt } from "../shared/routine.ts";
 import type { RoutineRepo } from "./repo.ts";
-import { CoreError } from "../errors.ts";
+import { CoreError, errorMessage } from "../errors.ts";
 
 /** How often the scheduler looks for due routines. A minute's granularity
  * would be enough for the schedules it supports, but the tick also drives
@@ -177,7 +177,7 @@ export function createRoutineScheduler(
       });
     } catch (error) {
       const wasStopped = stopped.delete(id);
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       record(id, {
         status: wasStopped ? "stopped" : "error",
         detail: wasStopped ? "Stopped by the user" : message,
@@ -207,9 +207,7 @@ export function createRoutineScheduler(
       });
     } catch (error) {
       log(
-        `routine ${id}: could not record the result (${
-          error instanceof Error ? error.message : String(error)
-        })`,
+        `routine ${id}: could not record the result (${errorMessage(error)})`,
       );
     }
   }

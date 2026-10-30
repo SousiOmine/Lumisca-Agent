@@ -1,16 +1,13 @@
 import { useEffect, useState } from "preact/compat";
-import {
-  IconArrowLeft,
-  IconCheck,
-  IconPlus,
-  IconTrash,
-} from "@tabler/icons-preact";
+import { IconCheck, IconPlus, IconTrash } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";
 import type { UserProviderSummary } from "../../types.ts";
 // The picker and the core's validation read one list (shared/providers.ts).
 import { ALLOWED_OPENAI_APIS } from "@lumisca/core/shared";
+import { Field } from "../Field.tsx";
+import { BackHeader } from "../BackHeader.tsx";
 
 /** One model row in the form. Mirrors UserProviderModel; empty-string
  * numeric fields mean "use provider default". */
@@ -314,29 +311,23 @@ export function AddUserProviderForm({
 
   return (
     <>
-      <div className="modal-header">
-        <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> {t("common.back")}
-        </button>
-        <h2>
-          {mode === "create"
-            ? t("settings.userProvider.createTitle")
-            : t("settings.userProvider.editTitle")}
-        </h2>
-      </div>
+      <BackHeader
+        onBack={onBack}
+        title={mode === "create"
+          ? t("settings.userProvider.createTitle")
+          : t("settings.userProvider.editTitle")}
+      />
 
       <div className="settings-pane" style={{ gap: 10 }}>
-        <label className="field">
-          <span>{t("settings.userProvider.displayNameLabel")}</span>
+        <Field label={t("settings.userProvider.displayNameLabel")}>
           <input
             placeholder={t("settings.userProvider.displayNamePlaceholder")}
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
           />
-        </label>
+        </Field>
 
-        <label className="field">
-          <span>{t("settings.userProvider.idLabel")}</span>
+        <Field label={t("settings.userProvider.idLabel")}>
           <input
             placeholder={t("settings.userProvider.idPlaceholder")}
             value={id}
@@ -351,10 +342,9 @@ export function AddUserProviderForm({
               ? t("settings.userProvider.idHint")
               : t("settings.userProvider.idHintEdit")}
           </p>
-        </label>
+        </Field>
 
-        <label className="field">
-          <span>{t("settings.userProvider.baseUrlLabel")}</span>
+        <Field label={t("settings.userProvider.baseUrlLabel")}>
           <input
             placeholder="https://api.example.com/v1"
             value={baseUrl}
@@ -363,10 +353,9 @@ export function AddUserProviderForm({
           <p className="settings-note">
             {t("settings.userProvider.baseUrlHint")}
           </p>
-        </label>
+        </Field>
 
-        <label className="field">
-          <span>{t("settings.userProvider.apiLabel")}</span>
+        <Field label={t("settings.userProvider.apiLabel")}>
           <select
             value={providerApi}
             onChange={(e) => setProviderApi(e.currentTarget.value)}
@@ -378,13 +367,13 @@ export function AddUserProviderForm({
           <p className="settings-note">
             {t("settings.userProvider.apiDefaultHint")}
           </p>
-        </label>
+        </Field>
 
-        <label className="field">
-          <span>
-            {t("settings.userProvider.apiKeyLabel")}{" "}
-            {mode === "edit" && t("settings.userProvider.apiKeyKeepBlank")}
-          </span>
+        <Field
+          label={`${t("settings.userProvider.apiKeyLabel")} ${
+            mode === "edit" ? t("settings.userProvider.apiKeyKeepBlank") : ""
+          }`.trim()}
+        >
           <input
             type="password"
             placeholder={initial?.hasApiKey
@@ -393,7 +382,7 @@ export function AddUserProviderForm({
             value={apiKey}
             onChange={(e) => setApiKey(e.currentTarget.value)}
           />
-        </label>
+        </Field>
 
         <div>
           <p className="settings-note">

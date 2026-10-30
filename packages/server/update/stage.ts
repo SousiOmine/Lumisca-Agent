@@ -12,6 +12,7 @@ import { join } from "node:path";
 import type { ArchiveFormat, ReleaseManifest } from "./release.ts";
 import { releaseTargetFor } from "./release.ts";
 import { verifyFileSignature } from "./verify.ts";
+import { errorMessage } from "@lumisca/core";
 
 /** Sub-directory of the install directory that holds staged packages. */
 export const STAGING_DIR_NAME = ".lumisca-update";
@@ -276,9 +277,7 @@ export async function stageUpdate(
     await Deno.remove(partPath).catch(() => {});
     if (error instanceof UpdateDownloadError) throw error;
     throw new UpdateDownloadError(
-      `更新パッケージを取得できませんでした: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `更新パッケージを取得できませんでした: ${errorMessage(error)}`,
     );
   }
 

@@ -1,12 +1,12 @@
 /**
- * Test doubles for the Lumisca AI layer, replacing pi-ai's faux helpers.
+ * Test doubles for the Lumisca AI layer.
  *
  * The faux {@link FauxProvider} serves a scripted queue of responses — one
  * per LLM call — so the agent loop can be driven deterministically. Each
  * queued entry is either an {@link AssistantMessage} or a response function
- * `(context, options, state, model) => AssistantMessage | Promise<AssistantMessage>`
- * (the same shape pi-ai's faux accepted), so tests can inspect the request
- * and model the provider's behavior (e.g. capture the reasoning option).
+ * `(context, options, state, model) => AssistantMessage | Promise<AssistantMessage>`,
+ * so tests can inspect the request and model the provider's behavior (e.g.
+ * capture the reasoning option).
  */
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import type {
@@ -26,6 +26,7 @@ import type {
   ToolCall,
   Usage,
 } from "./types.ts";
+import { errorMessage } from "../errors.ts";
 
 export function fauxText(text: string): TextContent {
   return { type: "text", text };
@@ -98,7 +99,7 @@ export interface FauxModelConfig {
 
 export interface FauxOptions {
   models?: FauxModelConfig[];
-  /** Simulated tokens-per-second (kept for pi-ai test-source compatibility). */
+  /** Simulated tokens-per-second of the generated text. */
   tokensPerSecond?: number;
 }
 
@@ -187,7 +188,7 @@ export function fauxProvider(options: FauxOptions = {}): FauxProvider {
       }
       stream.end(message);
     }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       stream.push({ type: "error", errorMessage: message });
     });
     return stream;

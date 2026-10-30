@@ -12,15 +12,14 @@ import type {
   StreamOptions,
   StreamRequest,
 } from "./types.ts";
+import { createStreamFn, type StreamTransport } from "./stream.ts";
 import {
   clampMaxTokensToContext,
   CONTEXT_SAFETY_RATIO,
   CONTEXT_SAFETY_TOKENS,
   contextSafetyTokens,
-  createStreamFn,
   MIN_MAX_TOKENS,
-  type StreamTransport,
-} from "./stream.ts";
+} from "./budget.ts";
 import { OVERFLOW_SAFETY_TOKENS } from "./output-cap-recovery.ts";
 import { estimateLlmMessagesTokens } from "../shared/token-estimate.ts";
 

@@ -145,6 +145,20 @@ Deno.test("vm fs: writeText sends the payload over stdin, never inline", async (
   assert(argv.join(" ").includes('base64 --decode > "$1"'), argv.join(" "));
 });
 
+Deno.test("vm fs: a private write is owner-only inside the machine", async () => {
+  const { run, calls } = script([
+    { match: /^sh -c umask 077/, stdout: "" },
+  ]);
+  await backend(run).writeText("/home/agent/spill.txt", "secret", {
+    private: true,
+  });
+  const [argv] = calls;
+  assert(argv !== undefined);
+  const command = argv.join(" ");
+  assert(command.includes("umask 077"), command);
+  assert(command.includes('base64 --decode > "$1"'), command);
+});
+
 Deno.test("vm fs: readRanges returns the lines and the file length", async () => {
   const { run } = script([
     {

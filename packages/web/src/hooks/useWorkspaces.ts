@@ -4,6 +4,7 @@ import { errorText } from "../providers.ts";
 import { useT } from "../i18n.ts";
 import { useAsyncEffect } from "./useAsync.ts";
 import type { FederatedWorkspace, InitialData, PeerStatus } from "../types.ts";
+import { confirmAction } from "../confirm.ts";
 
 /** Custom event dispatched after the connection registry (settings →
  * 接続先サーバー) is mutated, so the federated list is re-read without a
@@ -96,7 +97,7 @@ export function useWorkspaces(initialData?: InitialData) {
    * peer that owns them. */
   const deleteWorkspace = useCallback(async (fws: FederatedWorkspace) => {
     if (
-      !globalThis.confirm(
+      !confirmAction(
         t("common.workspaceDeleteConfirm", { name: fws.workspace.name }),
       )
     ) {

@@ -5,9 +5,8 @@
  * session agent and the sub-agent hub use (prompt / steer / followUp /
  * continue / abort / waitForIdle / subscribe).
  *
- * This replaces pi-agent-core's Agent. The transport is whatever StreamFn is
- * injected — the real one is Vercel-backed (ai/stream.ts), tests inject a
- * faux (ai/faux.ts).
+ * The transport is whatever StreamFn is injected — the real one is
+ * Vercel-backed (ai/stream.ts), tests inject a faux (ai/faux.ts).
  */
 import type { StreamFn } from "./types.ts";
 import type {

@@ -4,6 +4,7 @@ import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import { GoalJudge, lastAssistantOutput } from "./judge.ts";
+import { errorMessage } from "../errors.ts";
 
 /** Session-bound goal persistence (the sessions table, via the pool).
  * The session agent owns the loop; the pool binds these to one session. */
@@ -122,7 +123,7 @@ export async function runGoalLoop(
         maxIterations: goal.maxIterations,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       const text = finishGoal(
         deps,
         (event) => deps.emit(event),

@@ -15,7 +15,7 @@ import {
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { formatDuration } from "./duration.ts";
-import { HostBackgroundSpawner } from "./background-backend.ts";
+import { HostBackgroundSpawner } from "./host/background.ts";
 import type {
   BackgroundProcess,
   BackgroundSpawner,

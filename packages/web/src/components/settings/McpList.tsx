@@ -20,6 +20,7 @@ import { useT } from "../../i18n.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { McpDetail } from "./McpDetail.tsx";
 import { mcpConfigFields } from "./mcpDraft.ts";
+import { confirmAction } from "../../confirm.ts";
 
 /** Config-relevant key of a whole server list; the live status fields are
  * ignored so the stale-edit comparison stays stable (see mcpConfigFields). */
@@ -73,7 +74,7 @@ export function McpList() {
         const current = await api.getMcpConfig();
         if (configKey(current.servers) !== configKey(baseline.servers)) {
           if (
-            !globalThis.confirm(
+            !confirmAction(
               t("settings.mcp.configConflict"),
             )
           ) {
@@ -102,7 +103,7 @@ export function McpList() {
 
   const remove = (name: string) => {
     if (!config) return;
-    if (!globalThis.confirm(t("settings.mcp.deleteConfirm", { name }))) return;
+    if (!confirmAction(t("settings.mcp.deleteConfirm", { name }))) return;
     void save(config.servers.filter((s) => s.name !== name));
   };
 

@@ -1,20 +1,15 @@
 /**
- * Lumisca's own AI vocabulary. This module replaces the pi-ai surface the
- * application used: the model/provider catalog, message/content shapes, the
- * credential store, and the stream contract. The shapes are deliberately
- * kept structurally compatible with what the rest of the app already reads
- * (content block discriminators like "text"/"thinking"/"toolCall", the
- * AssistantMessage stopReason/usage fields, ...) so the agent loop, the
- * retry policy, the UI event bridge and the database keep working — only the
- * import sites and the transport change (Vercel AI SDK now backs the calls).
- *
- * No pi-ai dependency lives here.
+ * Lumisca's AI vocabulary: the model/provider catalog, message/content
+ * shapes, the credential store, and the stream contract. The agent loop, the
+ * retry policy, the UI event bridge and the database all read these shapes,
+ * so they change in one place; the transport is the only part that knows a
+ * provider SDK (see stream.ts).
  */
 
 // ---- transport / api -------------------------------------------------------
 
-/** The request APIs the app can drive. A subset of pi-ai's KnownApi; each
- * maps to a Vercel AI SDK provider factory (see lang-model.ts). */
+/** The request APIs the app can drive; each maps to a Vercel AI SDK
+ * provider factory (see lang-model.ts). */
 export type Api =
   | "openai-completions"
   | "openai-responses"
@@ -163,7 +158,7 @@ export interface ToolResultMessage<TDetails = unknown> {
   timestamp: number;
 }
 
-/** The pi-ai message union the app converts to LLM messages. */
+/** The message union the app converts to LLM messages. */
 export type Message = UserMessage | AssistantMessage | ToolResultMessage;
 
 export type LlmContentBlock = TextContent | ImageContent | ThinkingContent;
@@ -180,7 +175,7 @@ export interface LlmMessage {
 
 // ---- agent message (the transcript, incl. Lumisca extras) --------------------
 
-/** The Lumisca transcript message: the pi-ai union plus the mode,
+/** The transcript message: the three conversational roles plus the mode,
  * notification, context and checkpoint roles the agent loop injects. */
 export type AgentMessage =
   | UserMessage

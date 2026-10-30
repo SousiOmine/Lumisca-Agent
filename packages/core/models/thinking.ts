@@ -1,6 +1,6 @@
 import { THINKING_LEVEL_ORDER, type ThinkingLevel } from "../shared/mod.ts";
 
-/** Structural subset of pi-ai's Model: everything the level helpers need. */
+/** Structural subset of a model: everything the level helpers need. */
 export interface ThinkingModel {
   reasoning?: boolean;
   thinkingLevelMap?: Partial<Record<string, string | null>>;
@@ -12,12 +12,10 @@ export function isThinkingLevel(value: unknown): value is ThinkingLevel {
 }
 
 /**
- * The thinking levels a model actually supports. Mirrors pi-ai's
- * getSupportedThinkingLevels (dist/models.js): non-reasoning models only
+ * The thinking levels a model actually supports: non-reasoning models only
  * support "off"; thinkingLevelMap entries mapped to null are unsupported;
  * "xhigh"/"max" require an explicit map entry (provider defaults never
- * extend that far). pi-ai does not export the function, so the logic is
- * re-implemented here and kept in sync by tests.
+ * extend that far). Tests pin the table.
  */
 export function getSupportedThinkingLevels(
   model: ThinkingModel | undefined,
@@ -32,11 +30,10 @@ export function getSupportedThinkingLevels(
 }
 
 /**
- * The nearest level to `level` that `model` supports (mirrors pi-ai's
- * clampThinkingLevel): the closest supported level at or above the request,
- * else the closest one below. Unknown levels fall back to the model's
- * strongest supported level; every model supports at least "off", so the
- * result is always a valid level.
+ * The nearest level to `level` that `model` supports: the closest supported
+ * level at or above the request, else the closest one below. Unknown levels
+ * fall back to the model's strongest supported level; every model supports at
+ * least "off", so the result is always a valid level.
  */
 export function clampThinkingLevel(
   model: ThinkingModel | undefined,

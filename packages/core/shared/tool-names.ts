@@ -1,4 +1,4 @@
-/** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db / pi imports), bundled into the browser client. */
+/** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db, no Node APIs), bundled into the browser client. */
 
 /** Tool names of the built-in coding tools. Single source of truth shared
  * with the UI, so the tool registry can never drift from the

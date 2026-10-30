@@ -14,10 +14,6 @@ export const APP_MODES = ["code", "stella"] as const;
 
 export type AppMode = (typeof APP_MODES)[number];
 
-/** The mode before the user picked one. The selection screen is shown
- * exactly while this is the stored value. */
-export const DEFAULT_APP_MODE: AppMode = "code";
-
 export function isAppMode(value: unknown): value is AppMode {
   return typeof value === "string" &&
     (APP_MODES as readonly string[]).includes(value);

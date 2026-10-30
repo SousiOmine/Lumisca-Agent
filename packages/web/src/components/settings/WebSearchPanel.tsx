@@ -5,6 +5,7 @@ import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import { useT } from "../../i18n.ts";
 import { WebSearchProviderDialog } from "./WebSearchProviderDialog.tsx";
+import { confirmAction } from "../../confirm.ts";
 
 /** Which provider the dialog is editing: adding one, or changing a stored
  * key. */
@@ -66,7 +67,7 @@ export function WebSearchPanel() {
   };
 
   const remove = async (id: string, name: string) => {
-    if (!globalThis.confirm(t("settings.webSearch.removeConfirm", { name }))) {
+    if (!confirmAction(t("settings.webSearch.removeConfirm", { name }))) {
       return;
     }
     await mutate(id, () => api.deleteWebSearchProvider(id));

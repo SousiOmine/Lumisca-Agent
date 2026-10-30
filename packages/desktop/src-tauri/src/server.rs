@@ -5,14 +5,15 @@
 //! through the `AppHandle`.
 
 use std::ffi::OsStr;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::io::{BufRead, BufReader, Read};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
+pub(crate) use crate::health::{health_check, host_label, HealthFailure, Scheme};
 use crate::server_log;
 use crate::window::navigate_main;
 use crate::{AppState, LockRecover, StartupStatus, StartupTask};
@@ -26,10 +27,6 @@ const SERVER_PORT_ENV: &str = "LUMISCA_PORT";
 /// bundle, which this app's own updater replaces, so the server must not try
 /// to update itself (see packages/server/mod.ts).
 const SERVER_DESKTOP_ENV: &str = "LUMISCA_DESKTOP";
-/// Poll interval while waiting for the local server to come up (the
-/// compiled server answers in ~0.3s; a fast poll keeps the switch to the
-/// app page snappy).
-const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// How long one local startup attempt may wait before the port is
 /// abandoned and a fresh one is tried. 3s covers a cold deno run; a
 /// healthy server answers in well under a second.
@@ -39,6 +36,31 @@ const LOCAL_START_TIMEOUT: Duration = Duration::from_secs(3);
 /// server busy inside a long synchronous step, short enough to keep the
 /// settings UI responsive.
 const HEALTH_RECHECK_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// A server this shell can open: where it listens and the token the page
+/// carries. The pair always travels together (a URL without its token opens
+/// a 401 page), so it is one value rather than two strings at each call site.
+#[derive(Clone)]
+pub(crate) struct Endpoint {
+    pub(crate) base: String,
+    pub(crate) token: String,
+}
+
+impl Endpoint {
+    /// A loopback endpoint on `port` with `token`.
+    pub(crate) fn loopback(port: u16, token: impl Into<String>) -> Self {
+        Self {
+            base: format!("http://127.0.0.1:{port}"),
+            token: token.into(),
+        }
+    }
+
+    /// The page URL for this endpoint: the base plus `/?token=` (the page is
+    /// token-guarded in production mode).
+    pub(crate) fn page_url(&self) -> String {
+        format!("{}/?token={}", self.base.trim_end_matches('/'), self.token)
+    }
+}
 
 /// A locally spawned server process.
 pub(crate) struct LocalServer {
@@ -269,180 +291,13 @@ pub(crate) fn generate_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Transport of a remote server URL. Lumisca itself always listens on
-/// plain HTTP — TLS for a remote server is terminated in FRONT of it
-/// (`tailscale serve`, a reverse proxy, …), so `https` only describes the
-/// hop from this shell to that front end.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Scheme {
-    Http,
-    Https,
-}
-
-/// Per-attempt ceiling of one HTTPS probe. `timeout` is the caller's total
-/// budget across retries (the startup path polls a server that is still
-/// booting); a single TLS handshake must not be allowed to consume all of
-/// it.
-const HTTPS_HEALTH_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// Install the process-wide rustls crypto provider (ring), once. reqwest is
-/// built with `rustls-no-provider` (the feature tauri-plugin-updater
-/// enables), which deliberately ships no provider: building a client
-/// without one panics. The updater installs ring on its own first use, but
-/// not necessarily before this shell's first health check, so the provider
-/// is installed here — idempotent, and a no-op when someone got there
-/// first.
-pub(crate) fn install_crypto_provider() {
-    static INSTALL: std::sync::Once = std::sync::Once::new();
-    INSTALL.call_once(|| {
-        if rustls::crypto::CryptoProvider::get_default().is_none() {
-            let _ = rustls::crypto::ring::default_provider().install_default();
-        }
-    });
-}
-
-/// Bracketed IPv6 literals for Host headers, URLs and connect addresses.
-pub(crate) fn host_label(host: &str) -> String {
-    if host.contains(':') && !host.starts_with('[') {
-        format!("[{host}]")
-    } else {
-        host.to_string()
-    }
-}
-
-/// Why a health probe failed. The boolean callers (the local startup loops)
-/// only need to know *that* it failed, but a server the user just typed in
-/// deserves the difference: "nothing answered" (wrong address, front end
-/// down) and "the server refused us" (403 from the Host guard, 401 from a
-/// mistyped token) are fixed in completely different places.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum HealthFailure {
-    /// No usable answer within the budget: connection refused, DNS failure,
-    /// TLS handshake failure, timeout.
-    Unreachable,
-    /// The server answered with a status other than 200.
-    Status(u16),
-}
-
-/// Check a server's GET /api/health. `host` may be a hostname or an IP
-/// literal; `token` is optional (servers without token auth answer without
-/// it). The Host header names the target host so the server's Host guard
-/// accepts the probe. Replaces a bare TCP connect, which would accept ANY
-/// process on the port — e.g. a stale server with a different database.
-pub(crate) fn health_check(
-    scheme: Scheme,
-    host: &str,
-    port: u16,
-    token: Option<&str>,
-    timeout: Duration,
-) -> Result<(), HealthFailure> {
-    match scheme {
-        Scheme::Http => health_check_http(host, port, token, timeout),
-        Scheme::Https => health_check_https(host, port, token, timeout),
-    }
-}
-
-/// Status code of an HTTP/1.x response head, or None when the bytes are not
-/// one (a truncated read, a non-HTTP answer on the port).
-fn status_of(head: &str) -> Option<u16> {
-    let mut parts = head.split_whitespace();
-    if !parts.next()?.starts_with("HTTP/") {
-        return None;
-    }
-    parts.next()?.parse().ok()
-}
-
-/// Plain HTTP probe, spoken over raw TCP: the local server path, kept free
-/// of dependencies and of the TLS client's per-call worker thread.
-fn health_check_http(
-    host: &str,
-    port: u16,
-    token: Option<&str>,
-    timeout: Duration,
-) -> Result<(), HealthFailure> {
-    let deadline = Instant::now() + timeout;
-    let host_label = host_label(host);
-    let mut request = format!("GET /api/health HTTP/1.1\r\nHost: {host_label}:{port}\r\n");
-    if let Some(t) = token {
-        request.push_str(&format!("X-Lumisca-Token: {t}\r\n"));
-    }
-    request.push_str("Connection: close\r\n\r\n");
-    let addr = format!("{host_label}:{port}");
-    // An answer that is not a 200 is remembered: a server that refuses us
-    // (403 Host guard, 401 token) is up, and reporting it as unreachable
-    // would send the user looking for a network problem.
-    let mut failure = HealthFailure::Unreachable;
-    while Instant::now() < deadline {
-        if let Ok(mut stream) = TcpStream::connect(addr.as_str()) {
-            let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
-            let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
-            if stream.write_all(request.as_bytes()).is_ok() {
-                let mut buf = [0u8; 256];
-                if let Ok(n) = stream.read(&mut buf) {
-                    match status_of(&String::from_utf8_lossy(&buf[..n])) {
-                        Some(200) => return Ok(()),
-                        Some(status) => failure = HealthFailure::Status(status),
-                        None => {}
-                    }
-                }
-            }
-        }
-        std::thread::sleep(HEALTH_POLL_INTERVAL);
-    }
-    Err(failure)
-}
-
-/// HTTPS probe: the same GET /api/health over TLS. The certificate is
-/// verified against the OS trust store (Tailscale's `serve` hands out a
-/// publicly trusted certificate), and the Host header comes from the URL,
-/// so the server's Host guard accepts a MagicDNS name. Retried until
-/// `timeout` because the front end may be mid-restart; only a 200 counts
-/// (redirects are not followed — the probe must answer for the URL the user
-/// registered, not for whatever it points at).
-fn health_check_https(
-    host: &str,
-    port: u16,
-    token: Option<&str>,
-    timeout: Duration,
-) -> Result<(), HealthFailure> {
-    install_crypto_provider();
-    let deadline = Instant::now() + timeout;
-    let url = format!("https://{}:{port}/api/health", host_label(host));
-    let client = match reqwest::blocking::Client::builder()
-        .connect_timeout(HTTPS_HEALTH_ATTEMPT_TIMEOUT)
-        .timeout(HTTPS_HEALTH_ATTEMPT_TIMEOUT)
-        .redirect(reqwest::redirect::Policy::none())
-        // The probe targets a tailnet/LAN address directly; a proxy from the
-        // environment would only get in the way.
-        .no_proxy()
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return Err(HealthFailure::Unreachable),
-    };
-    let mut failure = HealthFailure::Unreachable;
-    while Instant::now() < deadline {
-        let mut request = client.get(&url);
-        if let Some(t) = token {
-            request = request.header("X-Lumisca-Token", t);
-        }
-        match request.send() {
-            Ok(response) if response.status() == reqwest::StatusCode::OK => return Ok(()),
-            Ok(response) => failure = HealthFailure::Status(response.status().as_u16()),
-            // A TLS failure (untrusted certificate here, since that is the
-            // one class of error the OS store rejects for a live server)
-            // and a connection refusal are both "nothing usable answered".
-            Err(_) => {}
-        }
-        std::thread::sleep(HEALTH_POLL_INTERVAL);
-    }
-    Err(failure)
-}
-
-/// The page URL to open for a connection: the base URL plus `/?token=`
-/// (the page is token-guarded in production mode).
+/// The page URL to open for a connection (see [`Endpoint::page_url`]).
 pub(crate) fn page_url(base: &str, token: &str) -> String {
-    format!("{}/?token={}", base.trim_end_matches('/'), token)
+    Endpoint {
+        base: base.to_string(),
+        token: token.to_string(),
+    }
+    .page_url()
 }
 
 fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String> {
@@ -671,7 +526,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         )
         .is_ok()
         {
-            return Ok(page_url(&format!("http://127.0.0.1:{port}"), &token));
+            return Ok(Endpoint::loopback(port, &token).page_url());
         }
         // A missed health check does NOT mean a dead process: a server that
         // is busy inside a long synchronous step (a large database write, a
@@ -698,7 +553,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
             )
             .is_ok()
             {
-                return Ok(page_url(&format!("http://127.0.0.1:{port}"), &token));
+                return Ok(Endpoint::loopback(port, &token).page_url());
             }
             server_log::note(
                 app,
@@ -774,7 +629,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         port,
         token: token.clone(),
     });
-    Ok(page_url(&format!("http://127.0.0.1:{port}"), &token))
+    Ok(Endpoint::loopback(port, &token).page_url())
 }
 
 /// Startup failure message: the generic "did not become ready" plus the
@@ -858,20 +713,4 @@ pub(crate) fn start_local_server_async(app: &AppHandle) {
             });
         }
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn status_of_reads_the_status_line_and_ignores_anything_else() {
-        assert_eq!(status_of("HTTP/1.1 200 OK\r\n"), Some(200));
-        assert_eq!(status_of("HTTP/1.0 403 Forbidden\r\n"), Some(403));
-        // A truncated read (no status line) or a non-HTTP answer must not
-        // masquerade as a healthy server.
-        assert_eq!(status_of(""), None);
-        assert_eq!(status_of("SSH-2.0-OpenSSH_9.0\r\n"), None);
-        assert_eq!(status_of("HTTP/1.1\r\n"), None);
-    }
 }

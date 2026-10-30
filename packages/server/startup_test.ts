@@ -13,6 +13,8 @@ import {
   parseServerPort,
   parseUpdateRestartMode,
   PORT_WAIT_ENV_KEY,
+  resolveAllowedHosts,
+  resolveDbPath,
   SERVER_STARTUP_ENV_KEYS,
   updateSupport,
 } from "./startup.ts";
@@ -312,4 +314,30 @@ Deno.test("spawned commands inherit the cleaned process environment", async () =
       else Deno.env.set(key, value);
     }
   }
+});
+
+Deno.test("resolveDbPath prefers the explicit file, then the home, then cwd", () => {
+  // The launcher's three documented shapes.
+  assertEquals(
+    resolveDbPath({ LUMISCA_DB: "/tmp/x.db" } as never, "/work"),
+    "/tmp/x.db",
+  );
+  assertEquals(
+    resolveDbPath({ LUMISCA_HOME: "/home/me" } as never, "/work"),
+    "/home/me/lumisca.db",
+  );
+  assertEquals(
+    resolveDbPath({} as never, "/work"),
+    "/work/lumisca.db",
+  );
+});
+
+Deno.test("resolveAllowedHosts lowercases and drops blank entries", () => {
+  assertEquals(
+    resolveAllowedHosts(
+      { LUMISCA_ALLOWED_HOSTS: " A.example ,, B.example " } as never,
+    ),
+    ["a.example", "b.example"],
+  );
+  assertEquals(resolveAllowedHosts({} as never), []);
 });

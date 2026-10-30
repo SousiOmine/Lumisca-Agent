@@ -1,7 +1,7 @@
 /**
  * Minimal structured logger shared by the core and the server.
  *
- * Deliberately dependency-free (no db / pi imports) so any module can use
+ * Deliberately dependency-free (no db, no Node APIs) so any module can use
  * it without creating import cycles. Output goes to `console.debug/info/
  * warn/error` with a timestamp and a scope label, e.g.:
  *

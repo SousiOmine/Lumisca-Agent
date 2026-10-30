@@ -1,7 +1,7 @@
 import { basename, join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
-import { HostFileBackend } from "./host-backend.ts";
+import { HostFileBackend } from "./host/files.ts";
 import {
   createEditFileTool,
   createReadFileTool,

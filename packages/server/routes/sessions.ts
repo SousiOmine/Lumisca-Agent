@@ -16,8 +16,10 @@ import type {
 import {
   AppError,
   parseBody,
+  requireBody,
   requireNonEmptyString,
   requireNumber,
+  requireString,
 } from "./util.ts";
 
 interface SessionBody {
@@ -470,10 +472,9 @@ export function sessionRoutes(core: SessionApi): Hono {
    * that is no longer the user's. */
   app.post("/sessions/:id/handover", async (c) => {
     const body = await parseBody<{ note?: unknown; toolCallId?: unknown }>(c);
-    const note = body?.note ?? "";
-    if (typeof note !== "string") {
-      throw new AppError("note must be a string", 400);
-    }
+    const note = body?.note === undefined
+      ? ""
+      : requireString(body.note, "note");
     const toolCallId = body?.toolCallId;
     if (toolCallId !== undefined && typeof toolCallId !== "string") {
       throw new AppError("toolCallId must be a string", 400);
@@ -521,17 +522,12 @@ export function sessionRoutes(core: SessionApi): Hono {
   });
 
   app.post("/sessions/:id/model", async (c) => {
-    const body = await parseBody<{ provider?: unknown; modelId?: unknown }>(c);
-    if (
-      !body || typeof body.provider !== "string" ||
-      typeof body.modelId !== "string"
-    ) {
-      throw new AppError(
-        "provider and modelId (strings) are required",
-        400,
-      );
-    }
-    core.setSessionModel(c.req.param("id"), body.provider, body.modelId);
+    const body = requireBody(
+      await parseBody<{ provider?: unknown; modelId?: unknown }>(c),
+    );
+    const provider = requireNonEmptyString(body.provider, "provider");
+    const modelId = requireNonEmptyString(body.modelId, "modelId");
+    core.setSessionModel(c.req.param("id"), provider, modelId);
     return c.json(core.getSession(c.req.param("id")));
   });
 

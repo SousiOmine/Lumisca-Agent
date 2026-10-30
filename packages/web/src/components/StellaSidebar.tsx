@@ -5,6 +5,7 @@ import { errorText } from "../providers.ts";
 import { useT } from "../i18n.ts";
 import type { StellaAgent } from "../types.ts";
 import { Modal } from "./Modal.tsx";
+import { Field } from "./Field.tsx";
 
 interface StellaSidebarProps {
   agents: StellaAgent[];
@@ -122,24 +123,22 @@ export function StellaSidebar(
       {creating && (
         <Modal onClose={resetForm}>
           <h2>{t("chat.stella.agents.new")}</h2>
-          <label className="field">
-            <span>{t("chat.stella.agents.name")}</span>
+          <Field label={t("chat.stella.agents.name")}>
             <input
               type="text"
               value={name}
               onInput={(event) => setName(event.currentTarget.value)}
               autoFocus
             />
-          </label>
-          <label className="field">
-            <span>{t("chat.stella.agents.role")}</span>
+          </Field>
+          <Field label={t("chat.stella.agents.role")}>
             <textarea
               value={role}
               rows={4}
               placeholder={t("chat.stella.agents.roleHint")}
               onInput={(event) => setRole(event.currentTarget.value)}
             />
-          </label>
+          </Field>
           {error !== null && <p className="error-text" role="alert">{error}</p>}
           <div className="modal-actions">
             <button type="button" className="btn" onClick={resetForm}>

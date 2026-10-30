@@ -19,7 +19,7 @@ import type {
 } from "../ai/types.ts";
 import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
 import { createReadFileTool } from "../tools/filesystem.ts";
-import { HostFileBackend } from "../tools/host-backend.ts";
+import { HostFileBackend } from "../tools/host/files.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import { object, string, type Tool } from "../tools/schema.ts";
 import { Sandbox } from "../workspace/sandbox.ts";

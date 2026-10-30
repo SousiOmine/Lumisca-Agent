@@ -29,15 +29,6 @@ import type { MessageKey, MessageParams } from "@lumisca/core/shared";
  * fact that changes without a request from this screen.
  */
 
-/** The routines of one agent, as the server reports them. */
-export interface RoutineState {
-  routines: RoutineView[];
-  loading: boolean;
-  error: string | null;
-  /** The agent whose conversation these belong to (its name is shown). */
-  agentName: string | null;
-}
-
 export type { RoutineView } from "../../types.ts";
 
 /** How often the list re-reads itself while a run is going. */

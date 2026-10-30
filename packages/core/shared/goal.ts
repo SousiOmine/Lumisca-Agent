@@ -1,5 +1,5 @@
 /** Frontend-safe shared helpers (see shared/mod.ts): goal state shapes.
- * No runtime dependencies (no db / pi imports) — bundled into the browser
+ * No runtime dependencies (no db, no Node APIs) — bundled into the browser
  * client like the todo/task snapshots. */
 
 /** Lifecycle of the currently running goal, as shown in the right-side

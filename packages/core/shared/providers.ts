@@ -1,8 +1,8 @@
-/** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db / pi imports), bundled into the browser client. */
+/** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db, no Node APIs), bundled into the browser client. */
 
 /**
  * Reasoning-effort levels for a model. "off" disables thinking; the rest
- * match pi-ai's ThinkingLevel so values pass straight into the agent.
+ * scale the provider's reasoning effort (see ai/stream.ts).
  */
 export type ThinkingLevel =
   | "off"
@@ -60,8 +60,8 @@ export const ALLOWED_OPENAI_APIS = [
 
 /** One event a login flow notifies the UI about (device code, auth URL,
  * info, progress). Mirrors the minimal shape the web client needs to drive
- * the user through the OAuth flow; independent of the pi-ai's own event
- * type so the frontend stays pi-free. */
+ * the user through the OAuth flow; defined here rather than by a provider
+ * SDK so the frontend bundle stays free of them. */
 export type ProviderLoginEvent =
   | {
     type: "info";

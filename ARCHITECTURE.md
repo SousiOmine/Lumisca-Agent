@@ -21,9 +21,9 @@ stella mode は「どこで作業するか」だけが code mode と違います
 
 | ポート | ホスト実装 | VM 実装 |
 |---|---|---|
-| `FileBackend`（tools/file-backend.ts） | `HostFileBackend`（workspace/sandbox.ts + Deno FS） | `VmFileBackend`（podman exec、base64 転送、grep/find を VM 内で実行） |
-| `CommandRunner`（tools/command-backend.ts） | `HostCommandRunner`（`/bin/sh` または PowerShell） | `VmCommandRunner`（`bash -lc`） |
-| `BackgroundSpawner`（tools/background-backend.ts） | `HostBackgroundSpawner`（子プロセス） | `VmBackgroundSpawner`（setsid + ログファイル追跡） |
+| `FileBackend`（tools/file-backend.ts） | `HostFileBackend`（tools/host/files.ts） | `VmFileBackend`（vm/fs.ts: podman exec、base64 転送、grep/find を VM 内で実行） |
+| `CommandRunner`（tools/command-backend.ts） | `HostCommandRunner`（tools/host/command-runner.ts: `/bin/sh` または PowerShell） | `VmCommandRunner`（vm/shell.ts: `bash -lc`） |
+| `BackgroundSpawner`（tools/background-backend.ts） | `HostBackgroundSpawner`（tools/host/background.ts: 子プロセス） | `VmBackgroundSpawner`（vm/shell.ts: setsid + ログファイル追跡） |
 
 `read` / `write` / `edit` / `list_dir` / `grep` / `glob` / `bash` / `visual` / `pdf_read_pages` は、この 2 つのポート越しに同じ実装で動きます。`eval` だけは stella に渡しません（サーバープロセス内で JavaScript を実行するため、VM 隔離の前提を破る）。
 
@@ -85,7 +85,13 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
 | `web/` | フロントエンド SPA（Preact）：UI、状態管理、API クライアント | `core/shared`, `core/modes` のみ |
 | `desktop/` | デスクトップシェル（Tauri v2）：ネイティブ機能連携 | `server` を子プロセスとして起動 |
 | `browser-rpc/` | ブラウザ連携用 RPC（Rust）：プローブ抽出、URL 制御、ローカル HTTP サーバー | なし |
-| `core/vm/` | stella mode の仮想マシン：podman コンテナの管理、ファイル／シェル／画面の VM 実装、スキル読取 | `core` の他モジュール |
+| `core/vm/` | stella mode の仮想マシン：podman コンテナの管理（`machine.ts` が状態と exec の縫い目を保持）、ファイル／シェル／画面の VM 実装、スキル読取 | `core` の他モジュール |
+
+### ホストと VM の対称な配置
+
+ファイル・コマンド・バックグラウンド実行は、ポート（`tools/*-backend.ts`）と 2 つの実装に分かれます。ホスト側の実装は `tools/host/`（`files.ts` / `command-runner.ts` / `background.ts` / `shell.ts` / `process-tree.ts`）、VM 側は `vm/`（`fs.ts` / `shell.ts`）にあり、どちらが本物のマシンでどちらがコンテナかは名前で分かります。
+
+`tools/truncate.ts` の切り詰め出力（spill）も同じ規則に従います。`OutputSpiller` は `FileBackend` を通して書くので、stella ではマシンの中、code mode ではワークスペースの根の下に置かれ、どちらも `read` / `grep` で読めます。
 
 ### 依存関係の原則
 - `core` は他の内部パッケージに依存しません。
@@ -104,6 +110,15 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
 ---
 
 ## 2. web パッケージの設計方針
+
+- **状態をどこに置くか**  
+  判断は 3 つだけです。
+  1. **画面をまたいで同じ値を読む**ものは、モジュールスコープのストアに置きます（`i18n.ts` の言語、`modelCatalog.ts` のモデルカタログ、`useSavedPrompts.ts` の保存プロンプト）。再マウントで消えては困る変更は必ずストアへ書きます。
+  2. **1 つの画面の中だけ**で完結する状態は、その画面の `useState` に置きます。
+  3. **そのどちらでもない**（親が 1 つ、子が複数）場合は props で渡します。深さは 2 階層までを目安にし、3 階層を超えるなら 1 か 2 のどちらかに寄せてください。
+
+- **共有の振る舞いはフックに集約する**  
+  保存・コピー・非同期 effect の後始末は、画面ごとに書かずフックを共有します（`hooks/useSave.ts` の `useCopy` / `useSavedNotice` / `useSaveAction`、`hooks/useAsync.ts` の `useAsyncEffect`）。表示部品も同様で、ラベル付き入力は `Field`、戻るヘッダは `BackHeader`、折りたたみパネルは `CollapsiblePanel`、破壊的操作の確認は `confirmAction` を使います。
 
 - **モデルカタログの共有ストア（`modelCatalog.ts`）**  
   接続先（ピア）ごとのプロバイダーおよびモデル情報を一元管理するストアです。設定画面やチャットビューなどの全コンポーネントがこのストアを参照します。画面遷移やタブ切り替えで再フェッチを行わないため、モデルの変更操作は必ず本ストアへ反映してください（`applyModelEnabled` や `setModelEnabled` を使用）。コンポーネントのローカルステートに保持すると画面遷移時に変更が失われます。
@@ -255,11 +270,11 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
 1. `packages/core/deno.json`
 2. `packages/server/deno.json`
 3. `packages/web/deno.json`
-4. `desktop/deno.json`
-5. `desktop/package.json`
-6. `desktop/package-lock.json`
-7. `tauri.conf.json`
-8. `Cargo.toml`
+4. `packages/desktop/deno.json`
+5. `packages/desktop/package.json`
+6. `packages/desktop/package-lock.json`
+7. `packages/desktop/src-tauri/tauri.conf.json`
+8. `packages/desktop/src-tauri/Cargo.toml`
 9. `packages/server/version.ts`
 
 `packages/server/version.ts` の定義値は、コンパイル後の単体サーバーが自身のバージョンを把握し、自動更新時のバージョン比較に使用します。

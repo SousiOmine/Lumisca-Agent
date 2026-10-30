@@ -14,7 +14,7 @@ const DONE_RETENTION_MS = 60_000;
 const IDLE_TIMEOUT_MS = 15 * 60_000;
 
 /**
- * One in-flight provider login, bridging the pi-ai `AuthInteraction` and
+ * One in-flight provider login, bridging the core's `AuthInteraction` and
  * the settings UI.
  *
  * The flow runs server-side (started from the POST /login handler, not
@@ -163,7 +163,7 @@ export class LoginSession {
 
   private notify(event: AuthNotice): void {
     if (this.settled) return;
-    // The pi-ai AuthEvent and our frontend-safe ProviderLoginEvent have
+    // The core's AuthEvent and the frontend-safe ProviderLoginEvent have
     // identical shapes (minus nothing), so a pass-through cast suffices.
     this.events.push(event as ProviderLoginEvent);
   }

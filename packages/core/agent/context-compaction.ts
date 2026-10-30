@@ -42,7 +42,8 @@ import type {
 } from "../ai/types.ts";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
-import { CONTEXT_SAFETY_TOKENS, streamText } from "../ai/stream.ts";
+import { CONTEXT_SAFETY_TOKENS } from "../ai/budget.ts";
+import { streamText } from "../ai/stream.ts";
 import {
   estimateMessageTokens,
   estimateTextTokens,

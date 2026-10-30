@@ -8,6 +8,7 @@ import type { CommandApproval } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
+import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 
 /** Settings → セキュリティ: the command safety check. When enabled, the
@@ -20,8 +21,7 @@ export function CommandSafetyPanel() {
   const [enabled, setEnabled] = useState(false);
   const [fastModelSet, setFastModelSet] = useState(true);
   const [approvals, setApprovals] = useState<CommandApproval[]>([]);
-  const [error, setError] = useState<string | undefined>();
-  const [saving, setSaving] = useState(false);
+  const { saving, error, save, fail } = useSaveAction(errorText);
 
   // The two loads are independent: fire both at once like before, with the
   // shared stale guard instead of a local flag.
@@ -36,57 +36,37 @@ export function CommandSafetyPanel() {
         setLoaded(true);
       })
       .catch((e) => {
-        if (!isStale()) setError(errorText(e));
+        if (!isStale()) fail(e);
       });
     void api.getCommandSafety()
       .then((state) => {
         if (!isStale()) setApprovals(state.approvals);
       })
       .catch((e) => {
-        if (!isStale()) setError(errorText(e));
+        if (!isStale()) fail(e);
       });
   }, []);
 
-  const setEnabledValue = async (next: boolean) => {
-    setSaving(true);
-    setError(undefined);
+  const setEnabledValue = (next: boolean) => {
     const previous = enabled;
     setEnabled(next); // optimistic
-    try {
-      await api.setSetting(COMMAND_SAFETY_ENABLED_KEY, next ? "1" : "");
-    } catch (e) {
-      setEnabled(previous);
-      setError(errorText(e));
-    } finally {
-      setSaving(false);
-    }
+    void save(
+      () => api.setSetting(COMMAND_SAFETY_ENABLED_KEY, next ? "1" : ""),
+      () => setEnabled(previous),
+    );
   };
 
-  const removeApproval = async (hash: string) => {
-    setSaving(true);
-    setError(undefined);
-    try {
+  const removeApproval = (hash: string) =>
+    save(async () => {
       await api.deleteCommandApproval(hash);
       setApprovals((prev) => prev.filter((a) => a.hash !== hash));
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setSaving(false);
-    }
-  };
+    });
 
-  const clearApprovals = async () => {
-    setSaving(true);
-    setError(undefined);
-    try {
+  const clearApprovals = () =>
+    save(async () => {
       await api.clearCommandApprovals();
       setApprovals([]);
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setSaving(false);
-    }
-  };
+    });
 
   return (
     <div className="settings-pane">

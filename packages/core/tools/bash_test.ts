@@ -2,8 +2,8 @@ import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { assert, assertEquals } from "@std/assert";
 import { createBashTool } from "./bash.ts";
-import { HostCommandRunner } from "./host-command-runner.ts";
-import { HostFileBackend } from "./host-backend.ts";
+import { HostCommandRunner } from "./host/command-runner.ts";
+import { HostFileBackend } from "./host/files.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { formatDuration } from "./duration.ts";
@@ -25,14 +25,12 @@ function hostTool(
 
 function makeTool() {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
-  // Truncated output spills into a per-test directory instead of the shared
-  // OS temp dir. It sits inside the workspace here, which is also the case
-  // the note's read hint is written for.
-  const spillDir = join(root, "spill");
+  // The spill follows the file backend (a per-test workspace), so a run
+  // never shares the real directory with another one.
   return {
-    tool: hostTool(root, { spillDir }),
+    tool: hostTool(root),
     root,
-    spillDir,
+    spillDir: join(root, ".lumisca-tool-output"),
   };
 }
 
@@ -452,29 +450,46 @@ Deno.test("bash tool keeps the result when the spill fails", async () => {
   }
 });
 
-Deno.test("bash tool points at bash when the spill is outside the workspace", async () => {
+Deno.test("bash tool keeps the plain note when the spill cannot be written", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
-  // The production shape: the spill dir is the OS temp dir, which the
-  // sandboxed read/grep tools cannot reach — bash is the way in, and the
-  // note must say so instead of sending the model to a rejected path.
-  const spillDir = Deno.makeTempDirSync({ prefix: "lumisca-bash-spill-" });
-  const tool = hostTool(root, { spillDir });
+  // A spill path under a regular file cannot be created at all; the result
+  // must still arrive, with the plain note instead of a dead path.
+  const blocked = Deno.makeTempDirSync({ prefix: "lumisca-bash-blocked-" });
+  const file = join(blocked, "not-a-directory");
+  await Deno.writeTextFile(file, "x");
+  const tool = hostTool(root, { spillDir: join(file, "spill") });
   try {
     const text = toolText(await runBigCommand(tool, root));
-    const path = spillPathFrom(text);
-    assertEquals(path.startsWith(spillDir), true, `path: ${path}`);
     assert(
-      text.includes("outside the workspace: read it with bash"),
-      `bash hint missing: ${text.slice(-200)}`,
+      text.includes("[stdout truncated to the last 65536 bytes]"),
+      `plain note missing: ${text.slice(-200)}`,
     );
-    assert((await Deno.readTextFile(path)).includes(BIG_HEAD));
+    assertEquals(text.includes("full output:"), false);
+    assert(text.includes("[exit code: 0]"), `result lost: ${text.slice(-200)}`);
   } finally {
     await removeDirRetry(root);
-    await removeDirRetry(spillDir);
+    await removeDirRetry(blocked);
   }
 });
 
-Deno.test("spill files default to the OS temp dir", () => {
+Deno.test("the spill is readable through the same file backend", async () => {
+  const { tool, root } = makeTool();
+  const files = new HostFileBackend(new Sandbox([root]));
+  try {
+    const text = toolText(await runBigCommand(tool, root));
+    const path = spillPathFrom(text);
+    // The point of the default location: the tool that ran the command and
+    // the tools that read files agree on where the output went. A stella
+    // session spills inside its machine for the same reason.
+    const resolved = await files.resolve(path);
+    assertEquals(resolved.ok, true, `unresolvable spill: ${path}`);
+    assert((await files.readText(path)).includes(BIG_HEAD), `spill: ${path}`);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("spill files default to the machine's temp dir", () => {
   assertEquals(defaultSpillDir(), join(tmpdir(), "lumisca-tool-output"));
 });
 

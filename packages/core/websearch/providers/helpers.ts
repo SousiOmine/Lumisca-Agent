@@ -57,14 +57,3 @@ export function snippetOf(value: string, maxChars = MAX_SNIPPET_CHARS): string {
   const text = oneLine(htmlToText(value));
   return clip(text, maxChars);
 }
-
-/** Several highlight strings joined into one excerpt. */
-export function joinedSnippet(
-  values: readonly unknown[],
-  maxChars = MAX_SNIPPET_CHARS,
-): string {
-  const parts = values
-    .map((value) => stringOrNull(value))
-    .filter((value): value is string => value !== null);
-  return snippetOf(parts.join(" … "), maxChars);
-}

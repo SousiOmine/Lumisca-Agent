@@ -1,4 +1,4 @@
-/** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db / pi imports), bundled into the browser client. */
+/** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db, no Node APIs), bundled into the browser client. */
 
 /** One option of an ask question, shown as a selectable chip in the UI. */
 export interface AskOption {

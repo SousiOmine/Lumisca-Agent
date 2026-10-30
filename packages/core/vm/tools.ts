@@ -275,10 +275,3 @@ function waitAbortable(ms: number, signal?: AbortSignal): Promise<void> {
 function abortError(): Error {
   return new DOMException("Aborted", "AbortError");
 }
-
-/** Size of the screen the tools report; exported so the prompt section and
- * the tools cannot disagree. */
-export const VM_SCREEN = {
-  width: VM_SCREEN_WIDTH,
-  height: VM_SCREEN_HEIGHT,
-} as const;

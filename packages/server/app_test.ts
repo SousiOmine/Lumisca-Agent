@@ -17,8 +17,8 @@ import {
   createApp,
   disposeServer,
   startServer,
-  validateHostConfig,
 } from "./app.ts";
+import { validateHostConfig } from "./security.ts";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 function setup(
   env?: () => Record<string, string>,
@@ -2892,6 +2892,170 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
     const after = await json(base, "/api/stella/agents");
     assertEquals((await after.json() as { agents: unknown[] }).agents, []);
     void duplicate;
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("panel snapshots answer for a session with nothing running", async () => {
+  const { core, server, base, faux } = await setup();
+  try {
+    const created = await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    });
+    assertEquals(created.status, 201);
+    const session = await created.json() as { id: string };
+
+    // The four resync endpoints the web re-reads after a socket drop. Each
+    // one opens the session first, so an empty answer still proves the route
+    // (and its ordering against static paths) is wired.
+    const todo = await json(base, `/api/sessions/${session.id}/todo`);
+    assertEquals(todo.status, 200);
+    assertEquals(await todo.json(), { todos: [] });
+
+    const tasks = await json(base, `/api/sessions/${session.id}/tasks`);
+    assertEquals(tasks.status, 200);
+    assertEquals(await tasks.json(), { tasks: [] });
+
+    const background = await json(
+      base,
+      `/api/sessions/${session.id}/background`,
+    );
+    assertEquals(background.status, 200);
+    assertEquals(await background.json(), { backgrounds: [] });
+
+    const goal = await json(base, `/api/sessions/${session.id}/goal`);
+    assertEquals(goal.status, 200);
+    assertEquals(await goal.json(), { goal: null });
+
+    // Cancelling a goal nobody started is a no-op, not an error: the panel's
+    // button stays clickable until its own `goal_done` arrives.
+    const cancelled = await json(base, `/api/sessions/${session.id}/goal`, {
+      method: "DELETE",
+    });
+    assertEquals(cancelled.status, 200);
+    assertEquals(await cancelled.json(), { ok: true });
+
+    // A session that does not exist is a 404 on every one of them.
+    const missing = await json(base, "/api/sessions/nope/todo");
+    assertEquals(missing.status, 404);
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("saved prompts and user providers: the routes exist and validate", async () => {
+  const { core, server, base } = await setup();
+  try {
+    // Saved prompts: list, create, update, delete.
+    const empty = await json(base, "/api/settings/saved-prompts");
+    assertEquals(empty.status, 200);
+    assertEquals(await empty.json(), { prompts: [] });
+
+    const created = await json(base, "/api/settings/saved-prompts", {
+      method: "POST",
+      body: JSON.stringify({ id: "p1", label: "L", prompt: "do it" }),
+    });
+    assertEquals(created.status, 201);
+    const updated = await json(base, "/api/settings/saved-prompts/p1", {
+      method: "PUT",
+      body: JSON.stringify({ label: "L2" }),
+    });
+    assertEquals(updated.status, 200);
+    assertEquals((await updated.json() as { label: string }).label, "L2");
+    const removed = await json(base, "/api/settings/saved-prompts/p1", {
+      method: "DELETE",
+    });
+    assertEquals(removed.status, 200);
+
+    // A malformed body is a 400, and the message names the missing field.
+    const bad = await json(base, "/api/settings/saved-prompts", {
+      method: "POST",
+      body: JSON.stringify({ id: "p2" }),
+    });
+    assertEquals(bad.status, 400);
+
+    // User-defined providers: the list is empty on a fresh core, and a
+    // provider without a base URL is refused by the core (400, not 500).
+    const providers = await json(base, "/api/providers/user");
+    assertEquals(providers.status, 200);
+    assertEquals(await providers.json(), []);
+    const noBaseUrl = await json(base, "/api/providers/user", {
+      method: "POST",
+      body: JSON.stringify({ id: "u1", name: "U", baseUrl: "", apiKey: "k" }),
+    });
+    assertEquals(noBaseUrl.status, 400);
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("routine routes: list, enable, run and remove", async () => {
+  const { core, server, base } = await setup();
+  try {
+    // Routines belong to a stella agent, so one has to exist first.
+    const agent = core.createStellaAgent({ name: "Runner", role: "test" });
+    const list = await json(base, `/api/stella/agents/${agent.id}/routines`);
+    assertEquals(list.status, 200);
+    assertEquals((await list.json() as { routines: unknown[] }).routines, []);
+
+    // A routine created through the repo (the tool path) shows up in the
+    // list, and the PATCH that toggles it answers the whole list.
+    const repo = core.getRoutineRepo();
+    const routine = repo.create({
+      agentId: agent.id,
+      name: "daily",
+      prompt: "report",
+      schedule: { kind: "daily", time: "09:00" },
+    });
+    const afterCreate = await json(
+      base,
+      `/api/stella/agents/${agent.id}/routines`,
+    );
+    assertEquals(
+      (await afterCreate.json() as { routines: unknown[] }).routines.length,
+      1,
+    );
+
+    const disabled = await json(base, `/api/routines/${routine.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled: false }),
+    });
+    assertEquals(disabled.status, 200);
+    assertEquals(
+      (await disabled.json() as { routines: { enabled: boolean }[] })
+        .routines[0]!.enabled,
+      false,
+    );
+
+    // A bad `enabled` is a 400 (the helper, not a hand-rolled check).
+    const badBody = await json(base, `/api/routines/${routine.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled: "yes" }),
+    });
+    assertEquals(badBody.status, 400);
+
+    const removed = await json(base, `/api/routines/${routine.id}`, {
+      method: "DELETE",
+    });
+    assertEquals(removed.status, 200);
+    assertEquals(
+      (await removed.json() as { routines: unknown[] }).routines,
+      [],
+    );
+
+    // An unknown id is a 404 on the stop/run actions too.
+    const missing = await json(base, "/api/routines/nope/run", {
+      method: "POST",
+    });
+    assertEquals(missing.status, 404);
   } finally {
     server.shutdown();
     await core.close();

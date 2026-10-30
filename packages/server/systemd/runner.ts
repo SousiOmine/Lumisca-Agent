@@ -9,6 +9,7 @@
  * exit code *is* the answer (`is-active`, `is-enabled`); a failure to start
  * the tool at all is thrown, since nothing can be inferred from it.
  */
+import { errorMessage } from "@lumisca/core";
 
 /** Result of one external command, decoded and trimmed. */
 export interface CommandResult {
@@ -45,9 +46,7 @@ export function createSystemdRunner(): ServiceRunner {
       stderr: "piped",
     }).output().catch((error) => {
       throw new ServiceCommandError(
-        `${program} を実行できません: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `${program} を実行できません: ${errorMessage(error)}`,
       );
     });
     const decode = (bytes: Uint8Array) =>

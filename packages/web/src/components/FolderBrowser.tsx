@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "preact/compat";
 import {
   type Icon,
-  IconArrowLeft,
   IconArrowUp,
   IconChevronRight,
   IconDeviceDesktop,
@@ -20,6 +19,7 @@ import { errorText } from "../providers.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { useT } from "../i18n.ts";
 import { useTouchInput } from "../hooks/useMediaQuery.ts";
+import { BackHeader } from "./BackHeader.tsx";
 
 /** Sidebar icon of each place: a root is a drive/volume, so it reads as a
  * folder. */
@@ -249,12 +249,10 @@ export function FolderBrowser(
 
   return (
     <>
-      <div className="modal-header">
-        <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> {t("common.back")}
-        </button>
-        <h2>{t("chrome.folderBrowser.title")}</h2>
-      </div>
+      <BackHeader
+        onBack={onBack}
+        title={t("chrome.folderBrowser.title")}
+      />
       <p className="settings-note">
         {peerId === ""
           ? t("chrome.folderBrowser.selectPrompt")

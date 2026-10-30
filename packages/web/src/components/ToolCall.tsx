@@ -1,39 +1,79 @@
+import type { ComponentType } from "preact/compat";
 import {
   IconBrain,
+  IconCamera,
   IconCheck,
   IconChevronRight,
   IconCode,
+  IconDeviceDesktop,
   IconEdit,
   IconFile,
+  IconFileText,
   IconFolder,
+  IconHistory,
+  IconListCheck,
   IconLoader,
   IconLoader2,
+  IconMessageCircle,
   IconMessageQuestion,
+  IconMouse,
+  IconPhoto,
+  IconPlug,
+  IconRepeat,
   IconSearch,
   IconSend,
+  IconSparkles,
   IconTerminal2,
   IconUser,
   IconUsers,
+  IconWindowMaximize,
+  IconWorld,
   IconWorldSearch,
 } from "@tabler/icons-preact";
 import {
   contentImages,
   contentText,
+  TOOL_AGENT_CREATE,
   TOOL_ASK,
   TOOL_ASYNC_BASH,
   TOOL_ASYNC_BASH_KILL,
   TOOL_ASYNC_BASH_STATUS,
   TOOL_BASH,
+  TOOL_BROWSER_ACT,
+  TOOL_BROWSER_CLOSE,
+  TOOL_BROWSER_OBSERVE,
+  TOOL_BROWSER_OPEN,
+  TOOL_BROWSER_SCREENSHOT,
+  TOOL_BROWSER_WAIT,
+  TOOL_CALL,
+  TOOL_CHAT_UI,
+  TOOL_COMPUTER_ACT,
+  TOOL_COMPUTER_LIST_WINDOWS,
+  TOOL_COMPUTER_SCREENSHOT,
   TOOL_EDIT,
   TOOL_EVAL,
   TOOL_GLOB,
   TOOL_GREP,
+  TOOL_HISTORY_SEARCH,
   TOOL_IDENTITY,
   TOOL_LIST_DIR,
+  TOOL_PDF_READ_PAGES,
   TOOL_READ,
+  TOOL_ROUTINE_CREATE,
+  TOOL_ROUTINE_DELETE,
+  TOOL_ROUTINE_LIST,
+  TOOL_ROUTINE_RUN,
+  TOOL_ROUTINE_UPDATE,
+  TOOL_SEARCH,
   TOOL_SEND_MESSAGE,
+  TOOL_SKILL,
   TOOL_TASK,
   TOOL_TASK_OUTPUT,
+  TOOL_TODO,
+  TOOL_VISUAL,
+  TOOL_VM_ACT,
+  TOOL_VM_ASK_USER,
+  TOOL_VM_SCREENSHOT,
   TOOL_WEB_FETCH,
   TOOL_WEB_SEARCH,
   TOOL_WRITE,
@@ -45,186 +85,19 @@ import { ContentImages } from "./ContentImages.tsx";
 import { useExpandableRow } from "../hooks/useExpandableRow.ts";
 import { useT } from "../i18n.ts";
 
-/** Map tool names to compact icons. */
-function toolIcon(name: string) {
-  switch (name) {
-    // file reading
-    case TOOL_READ:
-    case "Read":
-      return <IconFile size={13} />;
-    // file writing / editing
-    case TOOL_WRITE:
-    case TOOL_EDIT:
-    case "Edit":
-    case "Write":
-      return <IconEdit size={13} />;
-    // directory listing
-    case TOOL_LIST_DIR:
-      return <IconFolder size={13} />;
-    // shell commands
-    case TOOL_BASH:
-    case "Bash":
-    // background shell commands
-    case TOOL_ASYNC_BASH:
-    case TOOL_ASYNC_BASH_STATUS:
-    case TOOL_ASYNC_BASH_KILL:
-      return <IconTerminal2 size={13} />;
-    // search / grep
-    case TOOL_GREP:
-    case "Grep":
-    case TOOL_GLOB:
-    case "Search":
-      return <IconSearch size={13} />;
-    // web
-    case TOOL_WEB_SEARCH:
-    case TOOL_WEB_FETCH:
-    case "WebFetch":
-      return <IconWorldSearch size={13} />;
-    // sub-agent
-    case "Agent":
-    case TOOL_TASK:
-      return <IconBrain size={13} />;
-    // sub-agent output
-    case TOOL_TASK_OUTPUT:
-      return <IconUsers size={13} />;
-    // agent-to-agent message
-    case TOOL_SEND_MESSAGE:
-      return <IconSend size={13} />;
-    // code evaluation
-    case TOOL_EVAL:
-      return <IconCode size={13} />;
-    // asking the user a question
-    case TOOL_ASK:
-      return <IconMessageQuestion size={13} />;
-    // the agent's own text about itself
-    case TOOL_IDENTITY:
-      return <IconUser size={13} />;
-    // task list
-    case "TodoWrite":
-    case "TodoRead":
-      return <IconCode size={13} />;
-    default:
-      return <IconLoader size={13} />;
-  }
+type Args = Readonly<Record<string, unknown>>;
+type IconComponent = ComponentType<{ size?: number }>;
+
+interface ToolPresentation {
+  icon: IconComponent;
+  summary?: (args: Args) => string;
 }
 
-/** Extract a short summary from tool arguments. */
-function toolSummary(name: string, args: Record<string, unknown>): string {
-  switch (name) {
-    // file reading — argument may be `path`, `file_path`, or `file`
-    case TOOL_READ:
-    case "Read":
-      return shortPath(
-        typeof args.path === "string"
-          ? args.path
-          : typeof args.file_path === "string"
-          ? args.file_path
-          : typeof args.file === "string"
-          ? args.file
-          : "",
-      );
-    // file writing / editing
-    case TOOL_WRITE:
-    case TOOL_EDIT:
-    case "Edit":
-    case "Write":
-      return shortPath(
-        typeof args.path === "string"
-          ? args.path
-          : typeof args.file_path === "string"
-          ? args.file_path
-          : "",
-      );
-    // directory listing — argument may be `path` or `dir`
-    case TOOL_LIST_DIR:
-      return typeof args.path === "string"
-        ? args.path
-        : typeof args.dir === "string"
-        ? args.dir
-        : ".";
-    // shell commands
-    case TOOL_BASH:
-    case "Bash":
-      return typeof args.command === "string" ? truncate(args.command, 60) : "";
-    // background shell commands
-    case TOOL_ASYNC_BASH:
-      return typeof args.command === "string" ? truncate(args.command, 60) : "";
-    case TOOL_ASYNC_BASH_STATUS:
-      return typeof args.id === "string" ? `#${args.id}` : "list";
-    case TOOL_ASYNC_BASH_KILL:
-      return typeof args.id === "string" ? `#${args.id}` : "";
-    // code evaluation — show the snippet
-    case TOOL_EVAL:
-      return typeof args.code === "string" ? truncate(args.code, 60) : "";
-    // asking the user — show the number of questions / first question
-    case TOOL_ASK: {
-      const questions = Array.isArray(args.questions)
-        ? args.questions as Array<{ question?: unknown }>
-        : [];
-      if (questions.length === 0) return "";
-      if (questions.length === 1) {
-        return typeof questions[0]!.question === "string"
-          ? truncate(questions[0]!.question as string, 50)
-          : "1 question";
-      }
-      return `${questions.length} questions`;
-    }
-    // search / grep — argument may be `pattern`, `query`, or `command`
-    case TOOL_GREP:
-    case "Grep":
-      return typeof args.pattern === "string"
-        ? args.pattern
-        : typeof args.query === "string"
-        ? args.query
-        : typeof args.command === "string"
-        ? truncate(args.command, 50)
-        : "";
-    case TOOL_GLOB:
-      return typeof args.pattern === "string" ? args.pattern : "";
-    case "Search":
-      return typeof args.query === "string" ? truncate(args.query, 50) : "";
-    // web
-    case TOOL_WEB_SEARCH:
-      return typeof args.query === "string" ? truncate(args.query, 50) : "";
-    case TOOL_WEB_FETCH:
-    case "WebFetch":
-      return typeof args.url === "string" ? truncate(args.url, 50) : "";
-    // sub-agent
-    case "Agent":
-    case TOOL_TASK:
-      return typeof args.description === "string"
-        ? truncate(args.description, 50)
-        : typeof args.prompt === "string"
-        ? truncate(args.prompt, 50)
-        : "";
-    case TOOL_TASK_OUTPUT:
-      return typeof args.agent_id === "string"
-        ? `${args.agent_id}${args.wait === true ? " (wait)" : ""}`
-        : "";
-    case TOOL_SEND_MESSAGE:
-      return typeof args.to === "string"
-        ? `to ${args.to}: ${
-          typeof args.summary === "string" ? truncate(args.summary, 40) : ""
-        }`
-        : "";
-    // task list
-    case "TodoWrite":
-      return "update task list";
-    case "TodoRead":
-      return "read task list";
-    // the agent's own text about itself: the action is what the row is about
-    case TOOL_IDENTITY:
-      return typeof args.action === "string" ? args.action : "";
-    default:
-      // Generic: show first string arg value.
-      for (const v of Object.values(args)) {
-        if (typeof v === "string" && v.length > 0) return truncate(v, 50);
-      }
-      return "";
-  }
+function arg(args: Args, key: string): string {
+  const value = args[key];
+  return typeof value === "string" ? value : "";
 }
 
-/** Show only the tail of a file path (e.g. "src/components/Chat.tsx"). */
 function shortPath(p: string): string {
   const parts = p.replace(/\\/g, "/").split("/");
   return parts.length > 3 ? `…/${parts.slice(-3).join("/")}` : p;
@@ -234,19 +107,129 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
-/** Added/removed line counts of an edit/write result, for the `+10 -5`
- * badge. Reads the structured details the tools report; results written
- * before the counts existed simply show no badge. */
+const pathTail = (args: Args) => shortPath(arg(args, "path"));
+const command = (args: Args) => truncate(arg(args, "command"), 60);
+const query = (args: Args) => truncate(arg(args, "query"), 50);
+const pattern = (args: Args) => arg(args, "pattern");
+const url = (args: Args) => truncate(arg(args, "url"), 50);
+const id = (args: Args) => arg(args, "id");
+const act = (args: Args) =>
+  [arg(args, "action"), arg(args, "ref")].filter(Boolean).join(" ");
+
+function todoProgress(args: Args): string {
+  const phases = Array.isArray(args.phases)
+    ? args.phases as Array<{ tasks?: unknown }>
+    : [];
+  const tasks = phases.flatMap((phase) =>
+    Array.isArray(phase.tasks) ? phase.tasks as Array<{ status?: unknown }> : []
+  );
+  if (tasks.length === 0) return "";
+  const done = tasks.filter((task) => task.status === "completed").length;
+  return `${done}/${tasks.length}`;
+}
+
+function askSummary(args: Args): string {
+  const questions = Array.isArray(args.questions) ? args.questions : [];
+  if (questions.length === 0) return "";
+  if (questions.length > 1) return `${questions.length} questions`;
+  const first = questions[0] as { question?: unknown } | undefined;
+  return typeof first?.question === "string"
+    ? truncate(first.question, 50)
+    : "1 question";
+}
+
+function pdfSummary(args: Args): string {
+  const pages = Array.isArray(args.pages) ? args.pages : [];
+  const path = pathTail(args);
+  return pages.length === 0 ? path : `${path} p.${pages.join(",")}`;
+}
+
+const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
+  [TOOL_READ]: { icon: IconFile, summary: pathTail },
+  [TOOL_WRITE]: { icon: IconEdit, summary: pathTail },
+  [TOOL_EDIT]: { icon: IconEdit, summary: pathTail },
+  [TOOL_LIST_DIR]: { icon: IconFolder, summary: pathTail },
+  [TOOL_GREP]: { icon: IconSearch, summary: pattern },
+  [TOOL_GLOB]: { icon: IconSearch, summary: pattern },
+  [TOOL_VISUAL]: { icon: IconPhoto, summary: pathTail },
+  [TOOL_PDF_READ_PAGES]: { icon: IconFileText, summary: pdfSummary },
+  [TOOL_BASH]: { icon: IconTerminal2, summary: command },
+  [TOOL_ASYNC_BASH]: { icon: IconTerminal2, summary: command },
+  [TOOL_ASYNC_BASH_STATUS]: {
+    icon: IconTerminal2,
+    summary: (args) => id(args) === "" ? "list" : `#${id(args)}`,
+  },
+  [TOOL_ASYNC_BASH_KILL]: { icon: IconTerminal2, summary: (a) => `#${id(a)}` },
+  [TOOL_EVAL]: { icon: IconCode, summary: (a) => truncate(arg(a, "code"), 60) },
+  [TOOL_WEB_SEARCH]: { icon: IconWorldSearch, summary: query },
+  [TOOL_WEB_FETCH]: { icon: IconWorldSearch, summary: url },
+  [TOOL_BROWSER_OPEN]: { icon: IconWorld, summary: url },
+  [TOOL_BROWSER_OBSERVE]: { icon: IconWorld },
+  [TOOL_BROWSER_ACT]: { icon: IconMouse, summary: act },
+  [TOOL_BROWSER_WAIT]: { icon: IconWorld, summary: (a) => arg(a, "until") },
+  [TOOL_BROWSER_SCREENSHOT]: {
+    icon: IconCamera,
+    summary: (a) => arg(a, "format"),
+  },
+  [TOOL_BROWSER_CLOSE]: { icon: IconWorld },
+  [TOOL_COMPUTER_SCREENSHOT]: { icon: IconDeviceDesktop },
+  [TOOL_COMPUTER_ACT]: { icon: IconMouse, summary: act },
+  [TOOL_COMPUTER_LIST_WINDOWS]: {
+    icon: IconWindowMaximize,
+    summary: (a) => arg(a, "title_contains"),
+  },
+  [TOOL_VM_SCREENSHOT]: { icon: IconDeviceDesktop },
+  [TOOL_VM_ACT]: { icon: IconMouse, summary: act },
+  [TOOL_VM_ASK_USER]: {
+    icon: IconMessageQuestion,
+    summary: (a) => truncate(arg(a, "reason"), 50),
+  },
+  [TOOL_ASK]: { icon: IconMessageQuestion, summary: askSummary },
+  [TOOL_TODO]: { icon: IconListCheck, summary: todoProgress },
+  [TOOL_CHAT_UI]: { icon: IconMessageCircle },
+  [TOOL_SKILL]: { icon: IconSparkles, summary: (a) => arg(a, "name") },
+  [TOOL_HISTORY_SEARCH]: { icon: IconHistory, summary: query },
+  [TOOL_IDENTITY]: { icon: IconUser, summary: (a) => arg(a, "action") },
+  [TOOL_TASK]: {
+    icon: IconBrain,
+    summary: (a) => truncate(arg(a, "description") || arg(a, "prompt"), 50),
+  },
+  [TOOL_TASK_OUTPUT]: {
+    icon: IconUsers,
+    summary: (a) => `${arg(a, "agent_id")}${a.wait === true ? " (wait)" : ""}`,
+  },
+  [TOOL_SEND_MESSAGE]: {
+    icon: IconSend,
+    summary: (a) => `to ${arg(a, "to")}: ${truncate(arg(a, "summary"), 40)}`,
+  },
+  [TOOL_AGENT_CREATE]: { icon: IconUser, summary: (a) => arg(a, "name") },
+  [TOOL_ROUTINE_CREATE]: { icon: IconRepeat, summary: (a) => arg(a, "name") },
+  [TOOL_ROUTINE_LIST]: { icon: IconRepeat },
+  [TOOL_ROUTINE_UPDATE]: { icon: IconRepeat, summary: id },
+  [TOOL_ROUTINE_DELETE]: { icon: IconRepeat, summary: id },
+  [TOOL_ROUTINE_RUN]: { icon: IconRepeat, summary: id },
+  [TOOL_SEARCH]: { icon: IconSearch, summary: query },
+  [TOOL_CALL]: { icon: IconPlug, summary: (a) => arg(a, "name") },
+};
+
+function toolSummary(name: string, args: Args): string {
+  const presentation = PRESENTATION[name];
+  if (presentation !== undefined) {
+    return presentation.summary ? presentation.summary(args) : "";
+  }
+  for (const value of Object.values(args)) {
+    if (typeof value === "string" && value.length > 0) {
+      return truncate(value, 50);
+    }
+  }
+  return "";
+}
+
 function toolDiffStat(
   name: string,
   result?: ToolResultMessage,
 ): { added: number; removed: number } | null {
-  if (
-    name !== TOOL_EDIT && name !== "Edit" &&
-    name !== TOOL_WRITE && name !== "Write"
-  ) {
-    return null;
-  }
+  if (name !== TOOL_EDIT && name !== TOOL_WRITE) return null;
   if (!result || result.isError) return null;
   const details = result.details as
     | { addedLines?: unknown; removedLines?: unknown }
@@ -265,19 +248,13 @@ interface ToolCallProps {
   toolCall: ToolCallBlock;
   result?: ToolResultMessage;
   running: boolean;
-  /** Send a `chat_ui` card's answer as the user's next message. Omitted →
-   * the card renders without working buttons (a read-only transcript). */
   onSend?: (text: string) => void;
 }
 
-export function ToolCall({
-  toolCall,
-  result,
-  running,
-  onSend,
-}: ToolCallProps) {
-  // A chat_ui call IS the card: drawing the tool line too would show the
-  // markup twice (once as a JSON blob, once as the card).
+export function ToolCall(
+  { toolCall, result, running, onSend }: ToolCallProps,
+) {
+  // The card is the whole rendering of a chat_ui call.
   const card = chatUiView(toolCall);
   if (card !== undefined) {
     return <UiCard view={card} onSend={onSend ?? (() => {})} />;
@@ -291,12 +268,10 @@ export function ToolCall({
     ? "running"
     : "pending";
 
-  const summary = toolSummary(
-    toolCall.name,
-    toolCall.arguments as Record<string, unknown>,
-  );
-
+  const args = toolCall.arguments as Args;
+  const summary = toolSummary(toolCall.name, args);
   const diffStat = toolDiffStat(toolCall.name, result);
+  const Icon = PRESENTATION[toolCall.name]?.icon ?? IconLoader;
 
   return (
     <div className="tool-timeline">
@@ -310,7 +285,7 @@ export function ToolCall({
         <span className="tool-line-icon">
           {state === "running"
             ? <IconLoader2 size={13} className="spin" />
-            : toolIcon(toolCall.name)}
+            : <Icon size={13} />}
         </span>
         <span className="tool-line-name">{toolCall.name}</span>
         {summary && (

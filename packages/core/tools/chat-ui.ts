@@ -26,11 +26,6 @@ const chatUiSchema = object({
   ),
 });
 
-/** What the tool's arguments look like once validated. */
-export interface ChatUiParams {
-  markup: string;
-}
-
 /**
  * The description is one fixed string: it is sent with every request, so it
  * must stay cache-friendly (no counts, no examples that change) and small.

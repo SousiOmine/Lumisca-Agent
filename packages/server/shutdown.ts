@@ -19,6 +19,7 @@
  * The decision is a pure function of the signal, and the drain is injected, so
  * the contract is testable without a real process to kill.
  */
+import { errorMessage } from "@lumisca/core";
 
 /** How long the graceful drain may take before the process forces its exit.
  * The unit's `TimeoutStopSec=10` is the outer bound (deploy/systemd). */
@@ -86,9 +87,7 @@ export function createShutdown(
         // the log, not turned into an exit code the supervisor would read as
         // a crash.
         options.onError?.(
-          `終了処理に失敗しました: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `終了処理に失敗しました: ${errorMessage(error)}`,
         );
         finish(code);
       },

@@ -5,7 +5,7 @@ import type { VmManager, VmStatus } from "./vm/container.ts";
 import { createStellaTools } from "./tools/toolsets.ts";
 import { hostBackends } from "./tools/toolsets.ts";
 import { createVmTools } from "./vm/tools.ts";
-import { createHistorySearchTool } from "./stella/history.ts";
+import { createHistorySearchTool } from "./session/history.ts";
 import { createIdentityTool } from "./stella/identity.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
 import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";

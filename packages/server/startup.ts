@@ -1,4 +1,5 @@
 import { dirname, join } from "node:path";
+import { errorMessage } from "@lumisca/core";
 
 /**
  * Environment key the updater uses to tell its successor how long it may
@@ -111,6 +112,45 @@ export function parseServerPort(
 ): number {
   if (raw === undefined || raw.trim() === "") return fallback;
   return parsePortValue(raw);
+}
+
+/** The database file: LUMISCA_DB, else LUMISCA_HOME/lumisca.db, else the
+ * working directory. */
+export function resolveDbPath(
+  env: ServerStartupEnvironment,
+  cwd: string = Deno.cwd(),
+): string {
+  const db = env.LUMISCA_DB;
+  if (db) return db;
+  const home = env.LUMISCA_HOME;
+  if (home) return `${home}/lumisca.db`;
+  return `${cwd}/lumisca.db`;
+}
+
+/** Repository root for the frontend sources (LUMISCA_REPO_ROOT, else the
+ * working directory), normalized: esbuild rejects relative working
+ * directories when bundling the client. */
+export function resolveRepoRoot(
+  env: ServerStartupEnvironment,
+  cwd: string = Deno.cwd(),
+): string {
+  const root = env.LUMISCA_REPO_ROOT ?? cwd;
+  try {
+    return Deno.realPathSync(root);
+  } catch {
+    return root;
+  }
+}
+
+/** Extra hostnames the Host guard accepts (LUMISCA_ALLOWED_HOSTS,
+ * comma-separated, no port). Loopback hostnames are always accepted. */
+export function resolveAllowedHosts(
+  env: ServerStartupEnvironment,
+): string[] {
+  return (env.LUMISCA_ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter((h) => h.length > 0);
 }
 
 /** True when a listen failure means "someone else holds this port". */
@@ -237,6 +277,6 @@ export function describeListenError(
       "  - 別ポートで起動 (PowerShell): $env:LUMISCA_PORT=8100; deno task dev:server",
     ].join("\n");
   }
-  const detail = error instanceof Error ? error.message : String(error);
+  const detail = errorMessage(error);
   return `Lumisca: http://${host}:${port} で listen できません: ${detail}`;
 }

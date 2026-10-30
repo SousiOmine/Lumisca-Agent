@@ -15,7 +15,7 @@ import {
   toolText,
 } from "../test-utils.ts";
 import { createVisualTool } from "./visual.ts";
-import { HostFileBackend } from "./host-backend.ts";
+import { HostFileBackend } from "./host/files.ts";
 
 interface Fixture {
   /** Workspace root (also the sandbox root). */

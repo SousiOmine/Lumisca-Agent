@@ -7,6 +7,7 @@
  * the argument building, the output caps and the abort handling have exactly
  * one definition instead of drifting apart per caller.
  */
+import { errorMessage } from "../errors.ts";
 
 /** The result of one command, already decoded and capped. */
 export interface VmCommandResult {
@@ -86,7 +87,7 @@ export async function runVmCommand(
     return {
       exitCode: -1,
       stdout: "",
-      stderr: error instanceof Error ? error.message : String(error),
+      stderr: errorMessage(error),
       truncated: false,
       timedOut: false,
     };
@@ -132,7 +133,7 @@ export async function runVmCommandBytes(
     return {
       exitCode: -1,
       stdout: new Uint8Array(0),
-      stderr: error instanceof Error ? error.message : String(error),
+      stderr: errorMessage(error),
       truncated: false,
       timedOut: false,
     };

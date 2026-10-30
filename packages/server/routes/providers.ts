@@ -17,8 +17,8 @@ import {
   requireBoolean,
   requireNonEmptyString,
   requireString,
-  ttlCache,
 } from "./util.ts";
+import { ttlCache } from "../cache.ts";
 import { LoginSessions } from "../login.ts";
 
 /** Auth checks are cached briefly; invalidated when a key or credential

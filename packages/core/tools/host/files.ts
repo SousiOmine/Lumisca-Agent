@@ -1,11 +1,11 @@
 import { relative } from "node:path";
-import { BUILD_ARTIFACT_DIRS, walkEntries } from "../workspace/walk.ts";
-import type { ResolvedPath, Sandbox } from "../workspace/sandbox.ts";
+import { BUILD_ARTIFACT_DIRS, walkEntries } from "../../workspace/walk.ts";
+import type { ResolvedPath, Sandbox } from "../../workspace/sandbox.ts";
 import {
   type GitignoreMatcher,
   globToRegExp,
   loadCachedGitignore,
-} from "./gitignore.ts";
+} from "../gitignore.ts";
 import {
   type BackendDirEntry,
   type BackendGrepResult,
@@ -16,8 +16,9 @@ import {
   type LineRange,
   previewLine,
   type RangeReadResult,
-} from "./file-backend.ts";
-import { MAX_TOOL_OUTPUT } from "./truncate.ts";
+} from "../file-backend.ts";
+import { MAX_TOOL_OUTPUT } from "../truncate.ts";
+import { mergeRanges, stripTrailingCR } from "../../lines.ts";
 
 /** Files larger than this are skipped by grep on every backend (a model
  * grepping a huge file costs more than the search is worth). */
@@ -154,9 +155,17 @@ export class HostFileBackend implements FileBackend {
     }
   }
 
-  async writeText(path: string, text: string): Promise<void> {
+  async writeText(
+    path: string,
+    text: string,
+    options: { private?: boolean } = {},
+  ): Promise<void> {
     await Deno.mkdir(parentOf(path), { recursive: true });
-    await Deno.writeTextFile(path, text);
+    await Deno.writeTextFile(
+      path,
+      text,
+      options.private === true ? { mode: 0o600 } : {},
+    );
   }
 
   async readRanges(
@@ -293,28 +302,6 @@ export class HostFileBackend implements FileBackend {
 interface SearchRoot {
   path: string;
   isFile: boolean;
-}
-
-/** Sort ranges by start and merge overlaps/adjacency, so membership checks
- * run against a small sorted list without materializing every line number. */
-function mergeRanges(ranges: readonly LineRange[]): LineRange[] {
-  const sorted = [...ranges].sort((a, b) => a.from - b.from);
-  const merged: LineRange[] = [];
-  for (const range of sorted) {
-    const last = merged[merged.length - 1];
-    if (last !== undefined && range.from <= last.to + 1) {
-      last.to = Math.max(last.to, range.to);
-    } else {
-      merged.push({ from: range.from, to: range.to });
-    }
-  }
-  return merged;
-}
-
-/** Strip a trailing `\r` so CRLF lines read back as clean LF lines (edits
- * match line endings leniently, so the raw bytes are not needed here). */
-function stripTrailingCR(line: string): string {
-  return line.endsWith("\r") ? line.slice(0, -1) : line;
 }
 
 /** Stream a file's lines as [1-based line number, text]. The trailing `\n`

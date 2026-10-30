@@ -82,14 +82,12 @@ interface ComposerProps {
    * lists the PEER's models, so switching a remote session's model works
    * against the machine that runs the agent. */
   peerId?: string;
-  /** Hide the model switch bar entirely (used by the draft tab when the
-   * selected workspace is on another server: the session is created with
-   * the peer's default model). */
-  hideModelSwitch?: boolean;
-  /** Hide the model line entirely (no picker, no placeholder text). stella's
-   * composer uses this: the model is configuration, and a line explaining that
-   * is one more thing to read on every message. */
-  hideModelLine?: boolean;
+  /** What the footer says about the model. `picker` (the default) opens the
+   * model list; `remote-default` names that the model comes from the peer
+   * the session will be created on; `none` says nothing at all — stella's
+   * model is configuration, and a line explaining that is one more thing to
+   * read on every message. */
+  modelBar?: "picker" | "remote-default" | "none";
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
   /** When set, typing `@` offers workspace files/folders to insert as
@@ -145,8 +143,7 @@ export function Composer({
   onAbort,
   onSubmit,
   peerId,
-  hideModelSwitch,
-  hideModelLine,
+  modelBar = "picker",
   onOpenSettings,
   mentionWorkspaceId,
   mentionPeerId = "",
@@ -544,9 +541,9 @@ export function Composer({
         )}
       </div>
       <div className="input-row">
-        {hideModelLine
+        {modelBar === "none"
           ? null
-          : hideModelSwitch
+          : modelBar === "remote-default"
           ? (
             <span className="settings-note" style={{ alignSelf: "center" }}>
               {t("chat.composer.remoteDefault")}

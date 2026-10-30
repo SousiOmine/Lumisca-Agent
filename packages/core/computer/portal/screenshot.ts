@@ -26,7 +26,6 @@ import type { ScreenImage } from "./types.ts";
 export const PORTAL_DESTINATION = "org.freedesktop.portal.Desktop";
 export const PORTAL_PATH = "/org/freedesktop/portal/desktop";
 export const SCREENSHOT_INTERFACE = "org.freedesktop.portal.Screenshot";
-export const REQUEST_INTERFACE = "org.freedesktop.portal.Request";
 
 /** Capture the whole desktop (every monitor, in one image). */
 export async function captureScreen(

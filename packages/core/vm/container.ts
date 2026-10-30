@@ -10,6 +10,7 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { firstLine } from "../lines.ts";
 import {
   VM_BUILD_TIMEOUT_MS,
   VM_CONTAINER_NAME,
@@ -456,12 +457,6 @@ export interface VmExecOptions {
 export type VmExecResult = VmCommandResult;
 
 export type { VmCommandBytesResult };
-
-/** First line of a command's error output, for a one-sentence reason. */
-function firstLine(text: string): string {
-  const line = text.trim().split("\n")[0] ?? "";
-  return line === "" ? "(no output)" : line.trim();
-}
 
 /** The sentence a failed command contributes: its stderr, else its stdout,
  * else the exit code. */

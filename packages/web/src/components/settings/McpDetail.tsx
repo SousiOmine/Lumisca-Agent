@@ -1,7 +1,6 @@
 import { useState } from "preact/compat";
 import type { CSSProperties } from "preact/compat";
 import {
-  IconArrowLeft,
   IconCheck,
   IconCopy,
   IconExternalLink,
@@ -15,6 +14,7 @@ import { useT } from "../../i18n.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { Field } from "../Field.tsx";
 import { mcpDraftKey } from "./mcpDraft.ts";
+import { BackHeader } from "../BackHeader.tsx";
 
 /** Parse textarea lines into a string list (blanks removed). */
 function parseLines(text: string): string[] {
@@ -186,19 +186,16 @@ export function McpDetail({
 
   return (
     <>
-      <div className="modal-header">
-        <button type="button" className="btn" onClick={onCancel}>
-          <IconArrowLeft size={14} /> {t("common.back")}
-        </button>
-        <h2>
-          {initial
-            ? t("settings.mcp.editTitle", { name: initial.name })
-            : t("settings.mcp.addTitle")}
-        </h2>
+      <BackHeader
+        onBack={onCancel}
+        title={initial
+          ? t("settings.mcp.editTitle", { name: initial.name })
+          : t("settings.mcp.addTitle")}
+      >
         <button type="button" className="btn push" onClick={onCancel}>
           {t("common.close")}
         </button>
-      </div>
+      </BackHeader>
 
       <div
         style={{

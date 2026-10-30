@@ -1,6 +1,6 @@
 /**
  * Frontend-safe shared helpers (see shared/mod.ts): pure functions and
- * constants with no runtime dependencies (no db / pi imports), bundled into
+ * constants with no runtime dependencies (no db, no Node APIs), bundled into
  * the browser client.
  *
  * Visuals: the images an agent may put inside its reply. An agent publishes

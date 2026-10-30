@@ -1,5 +1,4 @@
 import { useState } from "preact/compat";
-import { IconArrowLeft } from "@tabler/icons-preact";
 import type {
   WebSearchProviderId,
   WebSearchSettingsView,
@@ -9,6 +8,7 @@ import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import { Field } from "../Field.tsx";
 import { errorText } from "../../providers.ts";
+import { BackHeader } from "../BackHeader.tsx";
 
 /**
  * Add a search provider, or replace one's key.
@@ -87,18 +87,14 @@ export function WebSearchProviderDialog({
 
   return (
     <>
-      <div className="modal-header">
-        <button type="button" className="btn" onClick={onCancel}>
-          <IconArrowLeft size={14} /> {t("common.back")}
-        </button>
-        <h2>
-          {t(
-            adding
-              ? "settings.webSearch.form.addTitle"
-              : "settings.webSearch.form.editTitle",
-          )}
-        </h2>
-      </div>
+      <BackHeader
+        onBack={onCancel}
+        title={t(
+          adding
+            ? "settings.webSearch.form.addTitle"
+            : "settings.webSearch.form.editTitle",
+        )}
+      />
 
       <div className="stack-8">
         {adding && (

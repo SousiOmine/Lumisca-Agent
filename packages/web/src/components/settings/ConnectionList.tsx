@@ -8,6 +8,7 @@ import { errorText } from "../../providers.ts";
 import { notifyConnectionsUpdated } from "../../hooks/useWorkspaces.ts";
 import { Field } from "../Field.tsx";
 import { useT } from "../../i18n.ts";
+import { confirmAction } from "../../confirm.ts";
 
 const ACTIVE_TAG: CSSProperties = {
   fontSize: 11,
@@ -117,7 +118,7 @@ export function ConnectionList() {
 
   const remove = (id: string) =>
     run(async () => {
-      if (!globalThis.confirm(t("settings.connection.deleteConfirm"))) return;
+      if (!confirmAction(t("settings.connection.deleteConfirm"))) return;
       const next = servers.filter((s) => s.id !== id);
       await api.putConnections(next);
       setServers(next);

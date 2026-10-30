@@ -21,6 +21,8 @@
  * the boundary.
  */
 import { posix, relative } from "node:path";
+import { base64ToBytes, textToBase64 } from "../base64.ts";
+import { firstLine, mergeRanges, stripTrailingCR } from "../lines.ts";
 import type { ResolvedPath } from "../workspace/sandbox.ts";
 import {
   type BackendDirEntry,
@@ -238,20 +240,26 @@ export class VmFileBackend implements FileBackend {
     };
   }
 
-  async writeText(path: string, text: string): Promise<void> {
+  async writeText(
+    path: string,
+    text: string,
+    options: { private?: boolean } = {},
+  ): Promise<void> {
     // The payload travels over stdin (base64), never as part of a shell
     // string: quoting a whole source file correctly is not worth attempting.
     const result = await this.#exec(
       [
         "sh",
         "-c",
-        'mkdir -p -- "$(dirname -- "$1")" && base64 --decode > "$1"',
+        `mkdir -p -- "$(dirname -- "$1")" && ${
+          options.private === true ? "umask 077 && " : ""
+        }base64 --decode > "$1"`,
         "sh",
         path,
       ],
       {
         timeoutMs: FILE_TIMEOUT_MS,
-        stdin: new TextEncoder().encode(bytesToBase64(text)),
+        stdin: new TextEncoder().encode(textToBase64(text)),
       },
     );
     if (result.exitCode !== 0) {
@@ -471,48 +479,6 @@ function isInside(root: string, path: string): boolean {
   if (path === root) return true;
   const prefix = root.endsWith("/") ? root : `${root}/`;
   return path.startsWith(prefix);
-}
-
-/** Sort ranges by start and merge overlaps/adjacency. */
-function mergeRanges(ranges: readonly LineRange[]): LineRange[] {
-  const sorted = [...ranges].sort((a, b) => a.from - b.from);
-  const merged: LineRange[] = [];
-  for (const range of sorted) {
-    const last = merged[merged.length - 1];
-    if (last !== undefined && range.from <= last.to + 1) {
-      last.to = Math.max(last.to, range.to);
-    } else {
-      merged.push({ from: range.from, to: range.to });
-    }
-  }
-  return merged;
-}
-
-function stripTrailingCR(line: string): string {
-  return line.endsWith("\r") ? line.slice(0, -1) : line;
-}
-
-function bytesToBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  // Chunked so a large file stays inside the call-stack limit of spread.
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
-function base64ToBytes(text: string): Uint8Array {
-  const binary = atob(text);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function firstLine(text: string): string {
-  const line = text.trim().split("\n")[0] ?? "";
-  return line === "" ? "(no output)" : line.trim();
 }
 
 export { GREP_BATCH, GREP_MAX_FILE_SIZE };

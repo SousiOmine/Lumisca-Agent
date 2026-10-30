@@ -32,9 +32,13 @@
   align-items: stretch;
 }
 
-/* The session's todo plan. A rounded card that follows the theme tokens;
- * hidden by the component while the plan is empty. */
-.todo-panel {
+/* Every card of the stack shares one shape: a header that toggles the body,
+ * a dim uppercase title, a right-aligned summary. The four panels differ only
+ * in what their body lists. */
+.todo-panel,
+.task-panel,
+.background-panel,
+.goal-panel {
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -45,7 +49,10 @@
   animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
 }
 
-.todo-panel-header {
+.todo-panel-header,
+.task-panel-header,
+.background-panel-header,
+.goal-panel-header {
   width: 100%;
   display: flex;
   align-items: center;
@@ -58,24 +65,36 @@
   font: inherit;
 }
 
-.todo-panel-header:hover {
+.todo-panel-header:hover,
+.task-panel-header:hover,
+.background-panel-header:hover,
+.goal-panel-header:hover {
   background: var(--accent-soft);
 }
 
-.todo-panel-title {
+.todo-panel-title,
+.task-panel-title,
+.background-panel-title,
+.goal-panel-title {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
-.todo-panel-summary {
+.todo-panel-summary,
+.task-panel-summary,
+.background-panel-summary,
+.goal-panel-summary {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
 
-.todo-panel-body {
+.todo-panel-body,
+.task-panel-body,
+.background-panel-body,
+.goal-panel-body {
   border-top: 1px solid var(--border);
   max-height: min(50dvh, 360px);
   overflow-y: auto;
@@ -117,57 +136,6 @@
 /* The session's sub-agent tasks (the task tool), stacked under the todo
  * panel. A rounded card that follows the theme tokens; hidden by the
  * component while no task is running. */
-.task-panel {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
-  overflow: hidden;
-  font-size: 12px;
-  animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
-}
-
-.task-panel-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  background: none;
-  border: none;
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-}
-
-.task-panel-header:hover {
-  background: var(--accent-soft);
-}
-
-.task-panel-title {
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.task-panel-summary {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-faint);
-}
-
-.task-panel-body {
-  border-top: 1px solid var(--border);
-  max-height: min(50dvh, 360px);
-  overflow-y: auto;
-  padding: 6px 10px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .task-item {
   display: flex;
   flex-direction: column;
@@ -219,57 +187,6 @@
 /* The session's background commands (the async_bash tool), stacked under
  * the task panel. A rounded card that follows the theme tokens; hidden by
  * the component while no command is running. */
-.background-panel {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
-  overflow: hidden;
-  font-size: 12px;
-  animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
-}
-
-.background-panel-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  background: none;
-  border: none;
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-}
-
-.background-panel-header:hover {
-  background: var(--accent-soft);
-}
-
-.background-panel-title {
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.background-panel-summary {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-faint);
-}
-
-.background-panel-body {
-  border-top: 1px solid var(--border);
-  max-height: min(50dvh, 360px);
-  overflow-y: auto;
-  padding: 6px 10px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .background-item {
   display: flex;
   flex-direction: column;
@@ -321,60 +238,6 @@
   word-break: break-word;
   max-height: 96px;
   overflow: hidden;
-}
-
-/* The session's active goal (/goal mode), stacked at the top of the
- * fixed right-side panels. A rounded card that follows the theme tokens;
- * hidden by the component while no goal runs. */
-.goal-panel {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
-  overflow: hidden;
-  font-size: 12px;
-  animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
-}
-
-.goal-panel-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  background: none;
-  border: none;
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-}
-
-.goal-panel-header:hover {
-  background: var(--accent-soft);
-}
-
-.goal-panel-title {
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.goal-panel-summary {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-faint);
-}
-
-.goal-panel-body {
-  border-top: 1px solid var(--border);
-  max-height: min(50dvh, 360px);
-  overflow-y: auto;
-  padding: 6px 10px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
 .goal-text {

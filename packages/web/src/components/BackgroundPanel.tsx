@@ -1,68 +1,38 @@
-import { useState } from "preact/compat";
-import {
-  IconChevronDown,
-  IconChevronUp,
-  IconTerminal,
-} from "@tabler/icons-preact";
+import { IconTerminal } from "@tabler/icons-preact";
 import type { BackgroundView } from "../types.ts";
 import { useT } from "../i18n.ts";
-import { useNarrowViewport } from "../hooks/useMediaQuery.ts";
+import { CollapsiblePanel } from "./Panel.tsx";
 
-/** The session's background commands (the async_bash tool), stacked under
- * the task panel in the same fixed top-right corner. Shows only the
- * commands that are still running — a finished or killed command disappears
- * from the panel the moment it settles (its completion lands in the chat
- * as a notification instead). Renders nothing while nothing runs; the
- * header collapses the body to a compact card. */
+/** The session's running background commands (the async_bash tool). A
+ * settled command disappears from the panel: its completion lands in the
+ * chat as a notification. */
 export function BackgroundPanel({ commands }: { commands: BackgroundView[] }) {
   const t = useT();
-  // Collapsed on a phone: see TodoPanel (the stack sits above the
-  // transcript there).
-  const narrow = useNarrowViewport();
-  const [collapsed, setCollapsed] = useState(narrow);
   const running = commands.filter((c) => c.state === "running");
   if (running.length === 0) return null;
   return (
-    <div className={`background-panel${collapsed ? " collapsed" : ""}`}>
-      <button
-        type="button"
-        className="background-panel-header"
-        title={collapsed
-          ? t("common.expandPanel")
-          : t("panels.common.collapse")}
-        onClick={() => setCollapsed((c) => !c)}
-      >
-        <IconTerminal size={14} />
-        <span className="background-panel-title">
-          {t("panels.background.title")}
-        </span>
-        <span className="background-panel-summary">
-          {running.length} running
-        </span>
-        {collapsed
-          ? <IconChevronDown size={14} />
-          : <IconChevronUp size={14} />}
-      </button>
-      {!collapsed && (
-        <div className="background-panel-body">
-          {running.map((command) => (
-            <div key={command.commandId} className="background-item">
-              <div className="background-head">
-                <span className="background-mark">▶</span>
-                <span className="background-name" title={command.command}>
-                  {command.command}
-                </span>
-                <span className="background-meta">pid {command.pid}</span>
-              </div>
-              {command.liveText.length > 0 && (
-                <pre className="background-live">
-                  {command.liveText.slice(-400)}
-                </pre>
-              )}
-            </div>
-          ))}
+    <CollapsiblePanel
+      kind="background-panel"
+      icon={<IconTerminal size={14} />}
+      title={t("panels.background.title")}
+      summary={`${running.length} running`}
+    >
+      {running.map((command) => (
+        <div key={command.commandId} className="background-item">
+          <div className="background-head">
+            <span className="background-mark">▶</span>
+            <span className="background-name" title={command.command}>
+              {command.command}
+            </span>
+            <span className="background-meta">pid {command.pid}</span>
+          </div>
+          {command.liveText.length > 0 && (
+            <pre className="background-live">
+              {command.liveText.slice(-400)}
+            </pre>
+          )}
         </div>
-      )}
-    </div>
+      ))}
+    </CollapsiblePanel>
   );
 }

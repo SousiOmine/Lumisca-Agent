@@ -1,4 +1,4 @@
-import { decodeUtf8 } from "../shared/mod.ts";
+import { decodeUtf8 } from "../../shared/mod.ts";
 
 /** How many sweeps a POSIX tree gets before its root is killed, and how
  * long each waits: the sweep exists to catch a child spawned while the

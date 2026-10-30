@@ -24,6 +24,7 @@ import type {
   RunOptions,
   ShellRunResult,
 } from "../tools/command-backend.ts";
+import { firstLine } from "../lines.ts";
 import { VM_BG_DIR } from "./contract.ts";
 import type { VmExec } from "./container.ts";
 
@@ -246,9 +247,4 @@ function envPrefix(env: Record<string, string> | undefined): string {
 /** Quote a value for a POSIX shell. */
 export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
-function firstLine(text: string): string {
-  const line = text.trim().split("\n")[0] ?? "";
-  return line === "" ? "(no output)" : line.trim();
 }

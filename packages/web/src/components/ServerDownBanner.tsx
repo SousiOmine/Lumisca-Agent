@@ -7,6 +7,7 @@ import {
 import type { ServerHealth } from "../hooks/useServerHealth.ts";
 import type { BannerMount } from "../hooks/usePanelInset.ts";
 import { useT } from "../i18n.ts";
+import { useSavedNotice } from "../hooks/useSave.ts";
 
 /** Banner shown when the desktop local server looks unreachable: recent
  * fetch/WS failures plus the shell confirming the child is gone — or
@@ -25,7 +26,7 @@ export function ServerDownBanner(
 ) {
   const t = useT();
   const [showLog, setShowLog] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { saved: copied, flash: flashCopied } = useSavedNotice(1500);
   const { server } = health;
 
   if (!health.disconnected) return null;
@@ -51,8 +52,7 @@ export function ServerDownBanner(
     ].filter((line, i) => i < 3 || line !== "").join("\n");
     try {
       await navigator.clipboard.writeText(body);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      flashCopied();
     } catch {
       // Clipboard unavailable: the <pre> below stays selectable.
     }

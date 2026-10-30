@@ -1,4 +1,4 @@
-import { decodeUtf8 } from "../shared/mod.ts";
+import { decodeUtf8 } from "../../shared/mod.ts";
 
 /** How a shell is invoked: the program plus fixed leading args (the command
  * string is appended as one final argv element). */

@@ -13,6 +13,7 @@ use tauri::{Manager, WindowEvent};
 pub mod bridge;
 pub mod browser_lab;
 pub mod connection;
+pub mod health;
 pub mod notify;
 pub mod server;
 pub mod server_log;

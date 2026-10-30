@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import type { SessionInfo, SkillInfo, StellaAgent } from "@lumisca/core";
 import type { StellaAvailability } from "@lumisca/core";
 import { CoreError } from "@lumisca/core";
-import { AppError, parseBody } from "./util.ts";
+import { errorMessage } from "@lumisca/core";
+import { AppError, parseBody, requireNonEmptyString } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface StellaApi {
@@ -58,7 +59,7 @@ export function stellaRoutes(core: StellaApi): Hono {
       core.setAppMode(mode);
     } catch (error) {
       throw new AppError(
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
         503,
       );
     }
@@ -100,19 +101,15 @@ export function stellaRoutes(core: StellaApi): Hono {
 
   app.post("/stella/agents", async (c) => {
     const body = await parseBody<{ name?: unknown; role?: unknown }>(c);
-    if (typeof body?.name !== "string" || typeof body?.role !== "string") {
-      throw new AppError("name and role (strings) are required", 400);
-    }
+    const name = requireNonEmptyString(body?.name, "name");
+    const role = requireNonEmptyString(body?.role, "role");
     try {
-      return c.json(
-        core.createStellaAgent({ name: body.name, role: body.role }),
-        201,
-      );
+      return c.json(core.createStellaAgent({ name, role }), 201);
     } catch (error) {
       // A duplicate name is a conflict (409), not a malformed request: the
       // client shows it as "that name is taken" rather than as a typo.
       throw new AppError(
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
         error instanceof CoreError && error.kind === "conflict" ? 409 : 400,
       );
     }
@@ -120,14 +117,12 @@ export function stellaRoutes(core: StellaApi): Hono {
 
   app.patch("/stella/agents/:id", async (c) => {
     const body = await parseBody<{ name?: unknown }>(c);
-    if (typeof body?.name !== "string") {
-      throw new AppError("name (string) is required", 400);
-    }
+    const name = requireNonEmptyString(body?.name, "name");
     try {
-      return c.json(core.renameStellaAgent(c.req.param("id"), body.name));
+      return c.json(core.renameStellaAgent(c.req.param("id"), name));
     } catch (error) {
       throw new AppError(
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
         error instanceof CoreError && error.kind === "not_found" ? 404 : 400,
       );
     }
@@ -158,7 +153,7 @@ export function stellaRoutes(core: StellaApi): Hono {
       );
     } catch (error) {
       throw new AppError(
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
         503,
       );
     }

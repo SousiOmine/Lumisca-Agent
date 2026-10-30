@@ -1,4 +1,4 @@
-/** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db / pi imports), bundled into the browser client. */
+/** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db, no Node APIs), bundled into the browser client. */
 
 /** Minimal server-config shape accepted by serializeMcpServers (config
  * fields only; the live status fields of McpServerInfo are ignored). */

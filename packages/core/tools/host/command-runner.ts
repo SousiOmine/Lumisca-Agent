@@ -1,10 +1,10 @@
-import { errorMessage } from "../errors.ts";
+import { errorMessage } from "../../errors.ts";
 import {
   type CommandRunner,
   MAX_RAW_COMMAND_OUTPUT,
   type RunOptions,
   type ShellRunResult,
-} from "./command-backend.ts";
+} from "../command-backend.ts";
 import { shellCommand } from "./shell.ts";
 import { killProcessTree } from "./process-tree.ts";
 

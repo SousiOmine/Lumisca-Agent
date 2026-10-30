@@ -8,7 +8,7 @@
  * The screen is therefore a fixed 1280x800 (vm/contract.ts) and a capture is
  * never resized: what the agent sees is 1:1 with what it clicks.
  */
-import { VM_DISPLAY, VM_SCREEN_HEIGHT, VM_SCREEN_WIDTH } from "./contract.ts";
+import { VM_SCREEN_HEIGHT, VM_SCREEN_WIDTH } from "./contract.ts";
 import type { VmExec, VmExecBytes } from "./container.ts";
 
 /** Screenshot bounds: enough for a 1280x800 PNG and nothing more. */
@@ -244,14 +244,4 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
       }
     },
   };
-}
-
-/** The screen description shown to the agent alongside a capture. */
-export function screenSize(): { width: number; height: number } {
-  return { width: VM_SCREEN_WIDTH, height: VM_SCREEN_HEIGHT };
-}
-
-/** The DISPLAY the machine runs on (for error messages). */
-export function screenDisplay(): string {
-  return VM_DISPLAY;
 }

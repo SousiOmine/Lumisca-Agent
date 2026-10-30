@@ -14,6 +14,7 @@ import { SETTINGS_DIR_NAME } from "@lumisca/core";
 import { parsePortValue } from "../startup.ts";
 import type { LaunchFlags, ServicePaths } from "./compose.ts";
 import { hasControlCharacter, splitHosts } from "./document.ts";
+import { errorMessage } from "@lumisca/core";
 
 /** Unit name of the installation (`lumisca.service`, a user unit). */
 export const UNIT_NAME = "lumisca.service";
@@ -137,7 +138,7 @@ function requirePort(value: string): number {
     return parsePortValue(value);
   } catch (error) {
     throw new ServiceUsageError(
-      error instanceof Error ? error.message : String(error),
+      errorMessage(error),
     );
   }
 }

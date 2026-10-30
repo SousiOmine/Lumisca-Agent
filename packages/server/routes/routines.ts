@@ -12,7 +12,7 @@
  */
 import { Hono } from "hono";
 import type { Routine, StellaAgent } from "@lumisca/core";
-import { AppError, parseBody } from "./util.ts";
+import { AppError, parseBody, requireBoolean } from "./util.ts";
 
 /** One routine as the settings list shows it: the stored row plus whether it
  * is running right now (which lives in the scheduler, not the database). */
@@ -89,10 +89,7 @@ export function routineRoutes(core: RoutineApi): Hono {
    * stale next-run value). */
   app.patch("/routines/:id", async (c) => {
     const body = await parseBody<{ enabled?: unknown }>(c);
-    const enabled = body?.enabled;
-    if (typeof enabled !== "boolean") {
-      throw new AppError("enabled (boolean) is required", 400);
-    }
+    const enabled = requireBoolean(body?.enabled, "enabled");
     const id = c.req.param("id");
     const repo = core.getRoutineRepo();
     const routine = repo.get(id);

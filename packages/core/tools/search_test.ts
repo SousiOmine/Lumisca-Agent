@@ -1,7 +1,7 @@
 import { basename, join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { Sandbox } from "../workspace/sandbox.ts";
-import { HostFileBackend } from "./host-backend.ts";
+import { HostFileBackend } from "./host/files.ts";
 import { errorMessage } from "../errors.ts";
 import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
 import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";

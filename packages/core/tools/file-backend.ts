@@ -53,8 +53,14 @@ export interface FileBackend {
     maxBytes: number,
   ): Promise<{ bytes: Uint8Array; size: number }>;
 
-  /** Create or overwrite a file, creating missing parent directories. */
-  writeText(path: string, text: string): Promise<void>;
+  /** Create or overwrite a file, creating missing parent directories.
+   * `private` asks for owner-only permissions where the platform has them
+   * (spilled tool output can hold secrets). */
+  writeText(
+    path: string,
+    text: string,
+    options?: { private?: boolean },
+  ): Promise<void>;
 
   /** Read selected 1-based, inclusive line ranges of a file. Implementations
    * must not load the whole file for a narrow range (the host streams, the

@@ -1,9 +1,9 @@
-import { useState } from "preact/compat";
 import {
   IconArrowBackUp,
   IconCheck,
   IconClipboard,
 } from "@tabler/icons-preact";
+import { useCopy } from "../../hooks/useSave.ts";
 import { ContentImages } from "../ContentImages.tsx";
 import type { UserMessageImage } from "./types.ts";
 
@@ -34,17 +34,11 @@ export function CopyableUserMessage({
     images: UserMessageImage[],
   ) => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopy(text);
 
   const handleCopy = async () => {
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // fallback: select text
-    }
+    await copy();
   };
 
   return (

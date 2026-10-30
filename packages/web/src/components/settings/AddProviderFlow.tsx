@@ -1,7 +1,8 @@
 import { useMemo, useState } from "preact/compat";
-import { IconArrowLeft, IconPlugConnected } from "@tabler/icons-preact";
+import { IconPlugConnected } from "@tabler/icons-preact";
 import { filterByQuery, useProviderModels } from "../../providers.ts";
 import { useT } from "../../i18n.ts";
+import { BackHeader } from "../BackHeader.tsx";
 
 /** Settings → add provider: searchable list of every known provider, plus
  * an entry to add an arbitrary OpenAI-compatible provider by hand. */
@@ -25,12 +26,10 @@ export function AddProviderFlow({
 
   return (
     <>
-      <div className="modal-header">
-        <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> {t("common.back")}
-        </button>
-        <h2>{t("settings.provider.addProvider")}</h2>
-      </div>
+      <BackHeader
+        onBack={onBack}
+        title={t("settings.provider.addProvider")}
+      />
       <p className="settings-note">
         {t("settings.provider.selectToAdd")}
       </p>

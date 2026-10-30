@@ -492,7 +492,7 @@ export function NewSessionView(
               autoFocus
               large
               model={model}
-              hideModelSwitch={remoteWorkspace}
+              modelBar={remoteWorkspace ? "remote-default" : "picker"}
               onModelSelect={(provider, modelId, info?: ModelInfo) => {
                 modelTouched.current = true;
                 setModel({

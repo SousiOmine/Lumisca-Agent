@@ -1,32 +1,15 @@
 import { join } from "node:path";
-import { type Context, Hono } from "hono";
-import { getCookie, setCookie } from "hono/cookie";
-import { cors } from "hono/cors";
+import { Hono } from "hono";
 import { upgradeWebSocket } from "hono/deno";
-import {
-  errorMessage,
-  LANGUAGE_KEY,
-  type Locale,
-  type LumiscaCore,
-  MCP_OAUTH_CALLBACK_PATH,
-  nextRunAt,
-  parseAcceptLanguage,
-  parseLocale,
-  resolveLocale,
-  systemLanguageTags,
-  THEME_KEY,
-  type ThemeSetting,
-} from "@lumisca/core";
-import type { InitialData } from "@lumisca/core/shared";
+import { type LumiscaCore, nextRunAt } from "@lumisca/core";
 import {
   hostForUrl,
-  isLoopbackHost,
   WS_HEARTBEAT_INTERVAL_MS,
   WS_HEARTBEAT_TYPE,
 } from "@lumisca/core/shared";
 import { Assets } from "./assets.ts";
-import { TOKEN_COOKIE_OPTIONS, tokenCookieName } from "./auth-cookie.ts";
-import { renderHtmlDocument, renderTokenRequiredPage } from "./render.ts";
+import { languageForRequest, registerPages } from "./pages.ts";
+import { installSecurityMiddleware } from "./security.ts";
 import { fsRoutes } from "./routes/fs.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
 import { skillRoutes } from "./routes/skills.ts";
@@ -88,66 +71,6 @@ export interface AppOptions {
   heartbeatMs?: number;
 }
 
-/** Startup validation: a non-loopback bind without a token would expose
- * the agent (bash tool included) to anyone who can reach the address.
- * Returns an error message, or null when the configuration is safe. */
-export function validateHostConfig(
-  host: string,
-  token: string | undefined,
-): string | null {
-  if (isLoopbackHost(host) || token) return null;
-  return `binding to "${host}" without LUMISCA_TOKEN would expose the agent ` +
-    "to the network; set LUMISCA_TOKEN or bind a loopback address";
-}
-
-/** Validate the Host header for embedding into the page (the CSP names
- * the WebSocket endpoint). The host guard already rejected non-loopback /
- * disallowed hostnames; this re-parses so only a clean hostname:port is
- * ever embedded — a raw header containing userinfo or quotes could
- * otherwise inject into the CSP meta tag. Returns "" when unparseable. */
-function safePageHost(hostHeader: string | undefined): string {
-  if (!hostHeader) return "";
-  try {
-    return new URL(`http://${hostHeader}`).host;
-  } catch {
-    return "";
-  }
-}
-
-function hostnameOf(host: string | undefined): string {
-  if (!host) return "";
-  try {
-    return new URL(`http://${host}`).hostname.replace(/^\[|\]$/g, "");
-  } catch {
-    return "";
-  }
-}
-
-/** Origins allowed to read cross-origin responses (the Tauri WebView). */
-const ALLOWED_ORIGINS = new Set([
-  "tauri://localhost",
-  "http://tauri.localhost",
-]);
-
-function isAllowedOrigin(origin: string, host: string | undefined): boolean {
-  if (ALLOWED_ORIGINS.has(origin)) return true;
-  try {
-    const expected = new URL(`http://${host}`);
-    const actual = new URL(origin);
-    if (actual.origin === expected.origin) return true;
-    // `localhost` / `127.0.0.1` / `::1` are the same server but different
-    // origins; allow those loopback spellings only when the port matches,
-    // so a different local port can never pass the check (otherwise any
-    // other local dev server could read the API cross-origin).
-    return actual.protocol === expected.protocol &&
-      actual.port === expected.port &&
-      isLoopbackHost(actual.hostname) &&
-      isLoopbackHost(hostnameOf(host));
-  } catch {
-    return false;
-  }
-}
-
 /** Cleanup hooks per app instance, reached via disposeServer. */
 const appDisposers = new WeakMap<Hono, () => void>();
 const serverDisposers = new WeakMap<
@@ -157,108 +80,6 @@ const serverDisposers = new WeakMap<
 
 function disposeApp(app: Hono): void {
   appDisposers.get(app)?.();
-}
-
-/** The security middleware chain: Host guard (DNS-rebinding protection),
- * optional bearer token, CORS (same-origin + Tauri WebView), and the
- * WebSocket Origin check (CORS does not apply to WS handshakes). Extracted
- * so createApp stays a composition root over routes. `language` resolves
- * the app language of one request: the token-required page is the one
- * response rendered before the client bundle loads, so its text comes from
- * the catalogue (see createApp's languageFor). */
-function installSecurityMiddleware(
-  app: Hono,
-  options: AppOptions,
-  language: (c: Context) => Locale,
-): void {
-  // The server is local-only by default: refuse requests that do not target
-  // a loopback host (blocks DNS rebinding and cross-origin browser access).
-  // Remote hosting opens additional hostnames via allowedHosts; the Host
-  // check still applies to them, so DNS rebinding stays blocked.
-  const allowedHosts = new Set(
-    (options.allowedHosts ?? []).map((h) => h.toLowerCase()),
-  );
-  app.use("*", async (c, next) => {
-    const host = hostnameOf(c.req.header("host"));
-    if (!isLoopbackHost(host) && !allowedHosts.has(host)) {
-      return c.text(
-        "Forbidden: host is not allowed (loopback or LUMISCA_ALLOWED_HOSTS)",
-        403,
-      );
-    }
-    await next();
-  });
-
-  // Optional bearer token: blocks arbitrary local processes (curl, other
-  // apps) from driving the agent, and — for remote hosting — anyone without
-  // the token from reaching the page itself. The token is accepted as the
-  // X-Lumisca-Token header, the `token` query parameter (WebSocket
-  // handshakes; also `?token=` on the page URL, which is how the desktop
-  // shell and a first-time browser open the UI), or the cookie the browser
-  // keeps after such a visit (auth-cookie.ts) — that last form is what
-  // saves a remote user from pasting the token into the address bar every
-  // time. Static assets stay public (they contain no secrets) so the page
-  // can load them without a token query, and so does the MCP OAuth callback
-  // — the browser that comes back from the authorization server may be a
-  // different one than the app is open in, and it carries only the `state`
-  // of a sign-in this server started (see routes/mcp.ts).
-  if (options.token) {
-    const token = options.token;
-    const publicPath = (path: string) =>
-      path === "/assets/app.js" || path === "/styles.css" ||
-      path === "/favicon.png" || path === MCP_OAUTH_CALLBACK_PATH;
-    app.use("*", async (c, next) => {
-      if (!publicPath(c.req.path)) {
-        const cookieName = tokenCookieName(c.req.header("host"));
-        const remembered = getCookie(c, cookieName);
-        const presented = c.req.header("x-lumisca-token") ??
-          c.req.query("token");
-        if (presented !== token && remembered !== token) {
-          // A browser (Accept: text/html) is told what to do; every other
-          // client keeps the JSON error it can parse. The page renders in
-          // the language of this request (it is served before the app
-          // loads, so the catalogue is the only source of its text).
-          return c.req.header("accept")?.includes("text/html")
-            ? c.html(renderTokenRequiredPage(language(c)), 401)
-            : c.json(
-              { error: "Unauthorized: missing or invalid token" },
-              401,
-            );
-        }
-        // The client presented the token itself, so let the browser
-        // remember it: the next visit — an address without any credential —
-        // then passes this guard.
-        if (remembered !== token) {
-          setCookie(c, cookieName, token, TOKEN_COOKIE_OPTIONS);
-        }
-      }
-      await next();
-    });
-  }
-
-  // The desktop shell (Tauri WebView) calls the API from another origin.
-  // Only same-origin and the Tauri WebView origins may read responses.
-  const corsHandler = cors({
-    origin: (origin, c) =>
-      isAllowedOrigin(origin, c.req.header("host")) ? origin : undefined,
-    allowHeaders: ["content-type", "x-lumisca-token"],
-  });
-  app.use("/api/*", corsHandler);
-  app.use("/ws", corsHandler);
-
-  // Browsers send an Origin on WebSocket handshakes; CORS does not apply to
-  // WS, so without this check any website could open ws://127.0.0.1:<port>/ws
-  // and read every agent event. Non-browser clients (no Origin) are allowed —
-  // they are already gated by the loopback-only Host check above.
-  app.use("/ws", async (c, next) => {
-    const origin = c.req.header("origin");
-    if (
-      origin !== undefined && !isAllowedOrigin(origin, c.req.header("host"))
-    ) {
-      return c.text("Forbidden: cross-origin WebSocket", 403);
-    }
-    await next();
-  });
 }
 
 /** Create the HTTP + WebSocket application. */
@@ -283,9 +104,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     );
   if (!options.fed) fed.start();
 
-  // Host guard, token, CORS, and the WS Origin check (see
-  // installSecurityMiddleware).
-  installSecurityMiddleware(app, options, (c) => languageFor(c));
+  // Host guard, token, CORS, and the WS Origin check.
+  installSecurityMiddleware(app, options, (c) => languageForRequest(core, c));
 
   // Route handlers throw instead of catching: unify error responses here.
   app.onError((error, c) => {
@@ -309,134 +129,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // apart from a healthy one.
   app.get("/api/health", (c) => c.json({ ok: true, now: Date.now() }));
 
-  // --- HTML page ------------------------------------------------------------
+  // --- page and static assets ----------------------------------------------
 
-  /** Theme preference from the core settings ("system" when unset/unknown).
-   * The client resolves "system" via prefers-color-scheme; the server only
-   * knows it, so the shell falls back to dark for the first paint. */
-  const theme = (): ThemeSetting => {
-    const stored = core.getSetting(THEME_KEY);
-    return stored === "light"
-      ? "light"
-      : stored === "system"
-      ? "system"
-      : "dark";
-  };
-
-  /** Resolved theme for the shell's first paint (no client-side flash). */
-  const resolvedTheme = (): "light" | "dark" =>
-    theme() === "light" ? "light" : "dark";
-
-  /**
-   * The app language of one request: the stored setting when the user has
-   * chosen one, else the browser's own preference (Accept-Language), else
-   * the machine's locale (see shared/i18n resolveLocale).
-   *
-   * The setting is what makes the language stable: it is read when a
-   * session is created (the prompt is generated with it — see core.ts) and
-   * when the UI is rendered, so every part of the app agrees. A first-time
-   * page load stores the resolved value, once (see renderPage): without
-   * that, the language of a session would depend on whichever client
-   * happened to create it.
-   */
-  const languageFor = (c: Context): Locale => {
-    return resolveLocale(core.getSetting(LANGUAGE_KEY), [
-      ...parseAcceptLanguage(c.req.header("accept-language")),
-      ...systemLanguageTags(),
-    ]);
-  };
-
-  /** Initial data for the app bootstrap, served as the externalized
-   * /assets/initial-data.js script (inline scripts are banned by the page
-   * CSP). Fresh per request — the client re-reads the data on every load,
-   * so it can never go stale relative to the server's state. */
-  const initialData = (language: Locale): InitialData => ({
-    workspaces: core.listWorkspaces(),
-    theme: theme(),
-    language,
-  });
-
-  const renderPage = async (c: Context) => {
-    const css = await assets.getCss();
-    const language = languageFor(c);
-    // First run (no language chosen yet): remember what this request asked
-    // for — the browser's preference, else the machine's locale. Idempotent
-    // (only an unset setting is written) and deliberate about happening on
-    // a GET: the value has to exist before the first session is created,
-    // and session creation is not tied to any one client. From here on the
-    // settings dialog is the only writer.
-    if (parseLocale(core.getSetting(LANGUAGE_KEY)) === undefined) {
-      core.setSetting(LANGUAGE_KEY, language);
-    }
-    // Built through the context (`c.newResponse`) rather than as a raw
-    // Response: only then do headers a middleware set — the token cookie
-    // included — reach the final response.
-    return c.newResponse(
-      renderHtmlDocument(css, resolvedTheme(), {
-        // The page's own host, so the CSP can name the WebSocket endpoint
-        // (the UI's event stream) even when the page is served remotely.
-        // Re-parsed (not the raw header) so userinfo/quotes can never
-        // reach the CSP attribute.
-        pageHost: safePageHost(c.req.header("host")),
-        token: options.token,
-        language,
-      }),
-      200,
-      { "content-type": "text/html; charset=utf-8" },
-    );
-  };
-
-  app.get("/", (c) => renderPage(c));
-
-  app.get("/assets/initial-data.js", (c) => {
-    // `<` is escaped so the JSON can never close the script tag.
-    const safeData = JSON.stringify(initialData(languageFor(c)))
-      .replace(/</g, "\\u003c");
-    const tokenLine = options.token
-      ? `\nwindow.__LUMISCA_TOKEN__ = ${JSON.stringify(options.token)};`
-      : "";
-    return c.body(`window.__INITIAL_DATA__ = ${safeData};${tokenLine}`, 200, {
-      "content-type": "application/javascript; charset=utf-8",
-    });
-  });
-
-  // --- static assets ------------------------------------------------------
-  // Error policy: API routes answer JSON ({ error }); static assets answer
-  // plain text (browsers show the message directly — a JSON body would be
-  // displayed as a blob).
-
-  app.get("/assets/app.js", async (c) => {
-    try {
-      const js = await assets.getAppJs();
-      return c.body(js, 200, {
-        "content-type": "application/javascript; charset=utf-8",
-      });
-    } catch (error) {
-      return c.text(
-        `Client bundle build failed: ${errorMessage(error)}`,
-        500,
-      );
-    }
-  });
-
-  app.get("/styles.css", async (c) => {
-    try {
-      const css = await assets.getCss();
-      return c.body(css, 200, { "content-type": "text/css; charset=utf-8" });
-    } catch (error) {
-      return c.text(String(error), 500);
-    }
-  });
-
-  app.get("/favicon.png", async (c) => {
-    try {
-      const png = await assets.getFavicon();
-      return c.newResponse(png.buffer as ArrayBuffer, 200, {
-        "content-type": "image/png",
-      });
-    } catch {
-      return c.text("not found", 404);
-    }
+  const pages = registerPages(app, core, assets, {
+    token: options.token,
   });
 
   // --- API routes (before the SPA fallback; unmatched /api paths fall
@@ -445,7 +141,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", fsRoutes());
   app.route("/api", workspaceRoutes(core));
   app.route("/api", skillRoutes(core));
-  app.route("/api", mcpRoutes(core, languageFor));
+  app.route("/api", mcpRoutes(core, (c) => languageForRequest(core, c)));
   // Web search: its own surface because the setting holds API keys (the
   // generic /settings surface filters it out).
   app.route("/api", webSearchRoutes(core));
@@ -558,7 +254,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     if (/\.\w+$/.test(c.req.path)) {
       return c.text("Not found", 404);
     }
-    return renderPage(c);
+    return pages.renderPage(c);
   });
 
   return app;

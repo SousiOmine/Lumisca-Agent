@@ -1,10 +1,10 @@
 /**
  * Login-flow helpers for the server bridge.
  *
- * Lumisca runs on Deno, where only the device-code OAuth flows of the
- * pi-ai SDK work (browser-callback flows depend on Node's http/crypto).
- * When a login flow offers a device-code method through a `select` prompt,
- * we answer it automatically so the Node-only option is never shown.
+ * Lumisca runs on Deno, where only device-code OAuth flows work (a
+ * browser-callback flow needs Node's http/crypto). When a login flow offers a
+ * device-code method through a `select` prompt, we answer it automatically so
+ * the Node-only option is never shown.
  */
 
 /** Matches option ids/labels for the portable device-code method (e.g. the

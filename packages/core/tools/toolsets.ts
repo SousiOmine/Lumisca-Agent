@@ -1,7 +1,7 @@
 import type { Workspace } from "../types/workspace.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
-import { HostFileBackend } from "./host-backend.ts";
-import { HostCommandRunner } from "./host-command-runner.ts";
+import { HostFileBackend } from "./host/files.ts";
+import { HostCommandRunner } from "./host/command-runner.ts";
 import type { FileBackend } from "./file-backend.ts";
 import type { CommandRunner } from "./command-backend.ts";
 import {

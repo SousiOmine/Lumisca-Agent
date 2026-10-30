@@ -61,7 +61,7 @@ import {
   type SavedPrompt,
 } from "./shared/mod.ts";
 import { systemLanguageTags } from "./locale.ts";
-import { CoreError } from "./errors.ts";
+import { CoreError, errorMessage } from "./errors.ts";
 import { createWorkspaceRepo } from "./workspace/repo.ts";
 import { WorkspaceService } from "./workspaces.ts";
 import { PersonalizationService } from "./personalization.ts";
@@ -81,32 +81,20 @@ import {
   buildStellaSystemPrompt,
   buildSystemPrompt,
 } from "./tools/mod.ts";
-import { runVmCommand, runVmCommandBytes } from "./vm/command.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
-import {
-  createVmExec,
-  createVmExecBytes,
-  type VmExec,
-  type VmExecBytes,
-  type VmManager,
-  type VmProgress,
-} from "./vm/container.ts";
-import {
-  type StellaAvailability,
-  stellaAvailability,
-} from "./vm/availability.ts";
+import type { VmManager, VmProgress } from "./vm/container.ts";
+import type { StellaAvailability } from "./vm/availability.ts";
+import { StellaMachine } from "./vm/machine.ts";
 import { createVmScreen } from "./vm/screen.ts";
 import { createVmTools } from "./vm/tools.ts";
-import { discoverVmSkills } from "./vm/skills.ts";
 import type { StellaRuntime } from "./vm/runtime.ts";
-import { builtinSkills } from "./skills/builtin/mod.ts";
 import {
   type AgentRepo,
   createAgentRepo,
   type StellaAgent,
 } from "./stella/agents.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
-import { createHistorySearchTool } from "./stella/history.ts";
+import { createHistorySearchTool } from "./session/history.ts";
 import {
   createIdentityProvider,
   createIdentityTool,
@@ -211,30 +199,10 @@ export class LumiscaCore {
   /** Per-session count of the events this core has emitted; see
    * getSessionRevision. Entries are dropped with their session. */
   private readonly sessionRevisions = new Map<string, number>();
-  /** The stella machine, attached by the server once it knows where the
-   * container files live (see setStellaVm). Undefined until then, and in
-   * tests — stella mode is unavailable without one, never degraded. */
-  private stellaVm: VmManager | undefined;
-  /** The availability verdict of the machine, cached until the next status
-   * read (see getStellaAvailability). */
-  private stellaVerdict: StellaAvailability | undefined;
-  /** The exec seams of the attached machine, rebuilt whenever the machine is
-   * replaced (never carried across a detach, so a removed machine cannot be
-   * reached through a stale reference). */
-  private stellaExecCache:
-    | { vm: VmManager; exec: VmExec; execBytes: VmExecBytes }
-    | undefined;
-  /** The stella skill catalog, refreshed before each open (see
-   * refreshStellaSkills). */
-  private stellaSkills: SkillDef[] = [];
-  /** How the machine's commands are run (see StellaRuntime): `podman` in
-   * production, an injected stub in tests. */
-  private readonly stellaRun:
-    | { run: VmCommandRunner; runBytes: VmCommandBytesRunner }
-    | undefined;
-  /** The in-flight machine start, shared by callers that race on a cold
-   * machine (see ensureStellaReady). */
-  private stellaStarting: Promise<void> | undefined;
+  /** The virtual machine of stella mode: the manager, its exec seams, the
+   * availability verdict and the skill catalog. Attached by the server once
+   * it knows where the container files live. */
+  private readonly stella: StellaMachine;
   /** Hand-over hubs per session (see handoverFor). Dropped with the
    * session. */
   private readonly handoverHubs = new Map<string, HandoverHub>();
@@ -279,7 +247,10 @@ export class LumiscaCore {
     } = {},
   ) {
     this.globalSkillDirs = overrides.globalSkillDirs;
-    this.stellaRun = overrides.stellaRun;
+    this.stella = new StellaMachine(
+      overrides.globalSkillDirs,
+      overrides.stellaRun,
+    );
     this.db = db;
     this.settings = settings;
     this.credentials = createDbCredentialStore(this.settings);
@@ -516,7 +487,7 @@ export class LumiscaCore {
     // container (and a memory-hungry desktop inside it) alive after the app
     // that owns it is gone. A stop that fails is logged by the server's
     // shutdown path, not swallowed here.
-    if (this.stellaVm !== undefined) await this.stellaVm.stop();
+    await this.stella.stop();
     this.db.close();
   }
 
@@ -883,7 +854,7 @@ export class LumiscaCore {
     if (mode === "stella") {
       // The machine must be able to run here at all; whether it is up right
       // now is not this call's business (the first conversation starts it).
-      if (this.stellaVm === undefined) {
+      if (this.stella.get() === undefined) {
         throw new CoreError(
           "stella mode is not available: the virtual machine is not set up " +
             "for this installation",
@@ -897,35 +868,19 @@ export class LumiscaCore {
   /** Attach the stella machine (the server does this at start-up, once it
    * has resolved where the container files live). Detach with undefined. */
   setStellaVm(vm: VmManager | undefined): void {
-    this.stellaVm = vm;
-    // A new machine invalidates both the cached verdict (an image may have
-    // been built since, or podman removed) and the exec seams.
-    this.stellaVerdict = undefined;
-    this.stellaExecCache = undefined;
-    this.stellaSkills = [];
+    this.stella.set(vm);
   }
 
   /** The machine, when one is attached. */
   getStellaVm(): VmManager | undefined {
-    return this.stellaVm;
+    return this.stella.get();
   }
 
   /** Whether stella mode can run here, with the reason when it cannot. Read
    * from the machine's actual state, so installing podman or building the
    * image takes effect without a restart. */
   async getStellaAvailability(): Promise<StellaAvailability> {
-    const availability = this.stellaVm === undefined
-      ? {
-        available: false as const,
-        reason:
-          "stella mode is not available: the virtual machine is not set up " +
-          "for this installation",
-      }
-      : stellaAvailability(await this.stellaVm.status());
-    // Every read records the verdict: the mode switch depends on one having
-    // been made, and this is the call that makes it.
-    this.stellaVerdict = availability;
-    return availability;
+    return await this.stella.availability();
   }
 
   // --- stella agents (the counterpart of each conversation) ----------------
@@ -1015,7 +970,7 @@ export class LumiscaCore {
     // The agent's working folder: bash cannot start in a folder that does
     // not exist (`podman exec --workdir` fails), and a fresh agent has no
     // files yet.
-    await this.ensureStellaWorkdir(agent.id);
+    await this.stella.ensureAgentDir(agent.id);
     this.stellaAgents.touch(agent.id);
     const existing = this.sessions.getByAgent(agent.id);
     if (existing !== undefined) {
@@ -1063,41 +1018,19 @@ export class LumiscaCore {
   async ensureStellaReady(
     onProgress?: (progress: VmProgress) => void,
   ): Promise<void> {
-    const vm = this.requireStellaVm();
-    const availability = stellaAvailability(await vm.status());
-    if (!availability.available) {
-      throw new CoreError(availability.reason, "unavailable");
+    try {
+      await this.stella.ensureReady(onProgress);
+    } catch (error) {
+      // The machine's reasons are user-facing (an image to build, podman
+      // missing); classify them as unavailable, not as a server fault.
+      throw new CoreError(errorMessage(error), "unavailable");
     }
-    if (this.stellaStarting !== undefined) {
-      await this.stellaStarting;
-      return;
-    }
-    const status = await vm.status({ fresh: true });
-    if (status.state === "running") {
-      this.stellaVerdict = { available: true };
-      return;
-    }
-    const starting = (async () => {
-      this.stellaVerdict = undefined;
-      try {
-        // The manager reports its steps through the sink it was built
-        // with; a caller that wants progress passes one at construction
-        // (the server does, forwarding it to the client).
-        await vm.start();
-        void onProgress;
-      } finally {
-        this.stellaStarting = undefined;
-        this.stellaVerdict = undefined;
-      }
-    })();
-    this.stellaStarting = starting;
-    await starting;
   }
 
   /** Whether a machine start is in flight (the status endpoint reports it so
    * a waiting client can say "starting" instead of showing a stale state). */
   isStellaStarting(): boolean {
-    return this.stellaStarting !== undefined;
+    return this.stella.starting;
   }
 
   /**
@@ -1115,35 +1048,14 @@ export class LumiscaCore {
     reason: string;
     starting: boolean;
   }> {
-    const vm = this.stellaVm;
-    if (vm === undefined) {
-      const availability = await this.getStellaAvailability();
-      return {
-        availability,
-        state: "unavailable",
-        vncPort: null,
-        reason: availability.available ? "" : availability.reason,
-        starting: false,
-      };
-    }
-    const status = await vm.status({ fresh: true });
-    const availability = stellaAvailability(status);
-    this.stellaVerdict = availability;
-    return {
-      availability,
-      state: status.state,
-      vncPort: status.vncPort,
-      reason: status.reason,
-      starting: this.isStellaStarting(),
-    };
+    return await this.stella.status();
   }
 
   /** Stop the machine (`podman stop`). Called on shutdown only: the UI has no
    * stop button, because a machine that disappears when the user is not
    * looking costs minutes to bring back. */
   async stopStellaVm(): Promise<void> {
-    await this.stellaVm?.stop();
-    this.stellaVerdict = undefined;
+    await this.stella.stop();
   }
 
   /** The hand-over hub of one session (see vm/handover.ts): created on
@@ -1169,36 +1081,6 @@ export class LumiscaCore {
     agent.finishHandover(note, toolCallId);
   }
 
-  /** The exec seam of the attached machine: how the file, shell and screen
-   * backends reach inside it. Undefined without a machine. */
-  private stellaExec(): VmExec | undefined {
-    return this.stellaSeams()?.exec;
-  }
-
-  private stellaExecBytes(): VmExecBytes | undefined {
-    return this.stellaSeams()?.execBytes;
-  }
-
-  /** The exec seams of the attached machine, created on first use. */
-  private stellaSeams():
-    | { exec: VmExec; execBytes: VmExecBytes }
-    | undefined {
-    const vm = this.stellaVm;
-    if (vm === undefined) return undefined;
-    if (this.stellaExecCache?.vm !== vm) {
-      this.stellaExecCache = {
-        vm,
-        exec: createVmExec({
-          run: this.stellaRun?.run ?? runVmCommand,
-        }),
-        execBytes: createVmExecBytes({
-          runBytes: this.stellaRun?.runBytes ?? runVmCommandBytes,
-        }),
-      };
-    }
-    return this.stellaExecCache;
-  }
-
   /**
    * The runtime a stella session's tools run on, or undefined for every
    * other session.
@@ -1212,10 +1094,10 @@ export class LumiscaCore {
    */
   private stellaRuntimeFor(session: SessionInfo): StellaRuntime | undefined {
     if (session.stella !== true) return undefined;
-    const exec = this.stellaExec();
-    const execBytes = this.stellaExecBytes();
+    const exec = this.stella.exec();
+    const execBytes = this.stella.execBytes();
     if (exec === undefined || execBytes === undefined) return undefined;
-    const skills = (): SkillDef[] => this.stellaSkills;
+    const skills = (): SkillDef[] => this.stella.skills();
     // The agent's working folder: relative paths and bash start here, the
     // way a workspace folder does in code mode. It is a default place, not a
     // boundary — the file backend's root is the machine's home, so one agent
@@ -1244,9 +1126,7 @@ export class LumiscaCore {
       runner: new VmCommandRunnerImpl(exec),
       backgroundSpawner: new VmBackgroundSpawner(exec),
       skills,
-      refreshSkills: async () => {
-        this.stellaSkills = await this.readStellaSkills();
-      },
+      refreshSkills: () => this.stella.refreshSkills(),
       screenTools: [
         ...createVmTools({ screen: createVmScreen({ exec, execBytes }) }),
         createVmAskUserTool({
@@ -1278,53 +1158,10 @@ export class LumiscaCore {
     };
   }
 
-  /** Create the agent's working folder inside the machine (idempotent).
-   * Called when its conversation opens, so the first bash call has a place
-   * to start. A machine that is not running is not an error here: the open
-   * path already required it, and a failure would only hide the real one. */
-  private async ensureStellaWorkdir(agentId: string): Promise<void> {
-    const exec = this.stellaExec();
-    if (exec === undefined) return;
-    await exec(["mkdir", "-p", "--", vmAgentDir(agentId)], {
-      timeoutMs: 30_000,
-    });
-  }
-
-  /** Re-read the stella skill catalog (the machine's own skills plus the
-   * user's global and built-in set). Awaited before a stella session opens,
-   * so the agent's skill tool starts with a current list. */
+  /** Re-read the stella skill catalog. Awaited before a stella session
+   * opens, so the agent's skill tool starts with a current list. */
   async refreshStellaSkills(): Promise<void> {
-    this.stellaSkills = await this.readStellaSkills();
-  }
-
-  private async readStellaSkills(): Promise<SkillDef[]> {
-    const exec = this.stellaExec();
-    if (exec === undefined) return [];
-    return await discoverVmSkills({
-      exec,
-      builtinSkills: builtinSkills({
-        // The machine has its own browser and no host computer surface: the
-        // built-in guides are chosen accordingly.
-        browser: false,
-        computer: false,
-      }),
-      ...(this.globalSkillDirs !== undefined
-        ? { globalDirs: this.globalSkillDirs }
-        : {}),
-    });
-  }
-
-  /** The machine, or the reason there is none (a caller that must not
-   * silently continue). */
-  private requireStellaVm(): VmManager {
-    if (this.stellaVm === undefined) {
-      throw new CoreError(
-        "stella mode is not available: the virtual machine is not set up for " +
-          "this installation",
-        "unavailable",
-      );
-    }
-    return this.stellaVm;
+    await this.stella.refreshSkills();
   }
 
   // --- workspaces (delegated to WorkspaceService) -------------------------
@@ -1674,7 +1511,7 @@ export class LumiscaCore {
    * this machine's disk — a workspace lookup would answer a different
    * question. */
   listStellaSkills(): SkillInfo[] {
-    return this.stellaSkills.map(skillInfo);
+    return this.stella.skills().map(skillInfo);
   }
 
   /** The session's active goal (`/goal` mode), if any. Persisted in the

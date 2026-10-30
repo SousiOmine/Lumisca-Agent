@@ -7,7 +7,7 @@ import {
   fauxToolCall,
 } from "@lumisca/core";
 import { createAsyncBashTools } from "./background.ts";
-import { HostFileBackend } from "./host-backend.ts";
+import { HostFileBackend } from "./host/files.ts";
 import {
   BACKGROUND_TAIL_LIMIT,
   type BackgroundCommandDone,

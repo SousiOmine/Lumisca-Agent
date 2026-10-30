@@ -1,5 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { FileBackend } from "./file-backend.ts";
 
 export const MAX_TOOL_OUTPUT = 64 * 1024;
 /** How much of a file one whole-file `read` transfers (its head; the cut
@@ -8,8 +9,7 @@ export const MAX_TOOL_OUTPUT = 64 * 1024;
 export const DEFAULT_READ_LIMIT = 50 * 1024;
 
 /** Directory holding the complete output of truncated streams (see
- * {@link OutputSpiller}): by default under the OS temp dir, so nothing is
- * written into the user's workspace. Only a run that actually truncates
+ * {@link OutputSpiller}) on this machine. Only a run that actually truncates
  * creates it. */
 export function defaultSpillDir(): string {
   return join(tmpdir(), "lumisca-tool-output");
@@ -24,8 +24,8 @@ export function truncatedNote(kind: string, max = MAX_TOOL_OUTPUT): string {
 /** Note for a cut stream whose complete text was saved to `path`: the
  * standard wording above, plus where the full output is and how to read it
  * back. `recovery` is the how-to clause — only the caller knows what can
- * reach the file (the `read`/`grep` tools resolve paths through the
- * workspace sandbox, bash does not). */
+ * reach the file (the `read`/`grep` tools resolve paths through the file
+ * backend, bash does not). */
 export function spilledNote(
   kind: string,
   path: string,
@@ -35,16 +35,14 @@ export function spilledNote(
   return `\n[${kind} truncated to the last ${max} bytes; full output: ${path} — ${recovery}]`;
 }
 
-/**
- * Writes the complete output of a truncated stream to a file the model can
- * read back (DSH's spill): a cut result keeps its tail inline and points at
- * this file instead of forcing the model to re-run the command to see the
- * part that was dropped.
+/** Writes the complete output of a truncated stream where the session's own
+ * tools can read it: through `files`, so a stella session spills inside its
+ * machine rather than onto the host's disk (which nothing in the machine can
+ * open).
  *
- * Best effort by design: every failure (unwritable directory, full disk,
+ * Best effort by design: every failure (unwritable directory, full disk, a
  * name collision) is reported as `undefined`, never as an exception, so a
- * failed spill cannot break the tool result that carries it.
- */
+ * failed spill cannot break the tool result that carries it. */
 export class OutputSpiller {
   /** Sequence of this spiller, paired with a process-wide random tag so two
    * spillers (a second session, a sub-agent, another Lumisca process) that
@@ -52,24 +50,34 @@ export class OutputSpiller {
   private seq = 0;
   private readonly tag = crypto.randomUUID().slice(0, 8);
 
-  constructor(private readonly dir: string = defaultSpillDir()) {}
+  constructor(
+    private readonly files: FileBackend,
+    private readonly dir: string = defaultSpillPath(files),
+  ) {}
 
   /** Save `text` as `<dir>/<tag>-<n>-<kind>.txt` and return its path, or
    * `undefined` when nothing could be written. */
   async save(kind: string, text: string): Promise<string | undefined> {
     const path = join(this.dir, `${this.tag}-${++this.seq}-${kind}.txt`);
     try {
-      // Lazy: a run that never truncates never creates the directory.
-      await Deno.mkdir(this.dir, { recursive: true });
-      // Owner-only (the output can hold secrets such as tokens), and never
-      // overwrite: an existing file means a name collision, which falls back
-      // to the note without a path rather than clobbering another spill.
-      await Deno.writeTextFile(path, text, { mode: 0o600, createNew: true });
+      // Never overwrite: an existing file means a name collision, which falls
+      // back to the note without a path rather than clobbering another spill.
+      const existing = await this.files.stat(path);
+      if (existing !== undefined) return undefined;
+      await this.files.writeText(path, text, { private: true });
       return path;
     } catch {
       return undefined;
     }
   }
+}
+
+/** Where this backend's spills go: its first root, so the path is always one
+ * the backend can resolve and the model can read back. The name starts with
+ * a dot because it sits at the top of that root. */
+function defaultSpillPath(files: FileBackend): string {
+  const root = (files.roots[0] ?? ".").replace(/[\\/]+$/, "");
+  return `${root}/.lumisca-tool-output`;
 }
 
 export function truncate(text: string, max = MAX_TOOL_OUTPUT): {

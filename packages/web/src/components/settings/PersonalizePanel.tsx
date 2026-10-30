@@ -14,6 +14,7 @@ import {
   useSavedPrompts,
 } from "../../hooks/useSavedPrompts.ts";
 import { useT } from "../../i18n.ts";
+import { Field } from "../Field.tsx";
 
 /** Settings → パーソナライズ. Edits the machine-level AGENTS.md that lives
  * next to the settings file, and manages saved prompts (user-defined prompt
@@ -334,26 +335,26 @@ function PromptEditForm({
   return (
     <div className="saved-prompt-form">
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <label className="field" style={{ flex: 1 }}>
-          <span>{t("settings.personalize.idLabel")}</span>
+        <Field label={t("settings.personalize.idLabel")} style={{ flex: 1 }}>
           <input
             placeholder={t("settings.personalize.idPlaceholder")}
             value={id}
             onChange={(e) => setId(e.currentTarget.value)}
             disabled={isEdit}
           />
-        </label>
-        <label className="field" style={{ flex: 1 }}>
-          <span>{t("settings.personalize.displayLabel")}</span>
+        </Field>
+        <Field
+          label={t("settings.personalize.displayLabel")}
+          style={{ flex: 1 }}
+        >
           <input
             placeholder={t("settings.personalize.displayPlaceholder")}
             value={label}
             onChange={(e) => setLabel(e.currentTarget.value)}
           />
-        </label>
+        </Field>
       </div>
-      <label className="field">
-        <span>{t("settings.personalize.promptLabel")}</span>
+      <Field label={t("settings.personalize.promptLabel")}>
         <textarea
           className="mono"
           placeholder={t("settings.personalize.promptPlaceholder")}
@@ -362,7 +363,7 @@ function PromptEditForm({
           rows={4}
           spellcheck={false}
         />
-      </label>
+      </Field>
       {error && <p className="error-text">{error}</p>}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button type="button" className="btn" onClick={onCancel}>
