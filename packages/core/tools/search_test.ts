@@ -6,6 +6,7 @@ import { errorMessage } from "../errors.ts";
 import { GitignoreMatcher, globToRegExp } from "./gitignore.ts";
 import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
+import { toAgentTool } from "./pi-adapter.ts";
 
 function makeTools(root: string) {
   const ctx = { files: new HostFileBackend(new Sandbox([root])) };
@@ -537,5 +538,49 @@ Deno.test("grep and glob results are independent of folder registration order", 
   } finally {
     await Deno.remove(a, { recursive: true });
     await Deno.remove(z, { recursive: true });
+  }
+});
+
+Deno.test("grep/glob refuse an out-of-range max_results", async () => {
+  const root = await fixture();
+  const { grep, glob } = makeTools(root);
+  try {
+    const grepTool = toAgentTool(grep);
+    const globTool = toAgentTool(glob);
+    for (
+      const call of [
+        () =>
+          grepTool.execute("1", { pattern: "foo", max_results: -5 }, undefined),
+        () =>
+          grepTool.execute(
+            "1",
+            { pattern: "foo", max_results: 5000 },
+            undefined,
+          ),
+        () =>
+          globTool.execute(
+            "1",
+            { pattern: "**/*.ts", max_results: 0 },
+            undefined,
+          ),
+      ]
+    ) {
+      let error: unknown;
+      try {
+        await call();
+      } catch (cause) {
+        error = cause;
+      }
+      assert(
+        error !== undefined,
+        "an out-of-range max_results must be refused, not silently clamped",
+      );
+      assert(
+        errorMessage(error).includes("max_results"),
+        `the message must name the argument: ${errorMessage(error)}`,
+      );
+    }
+  } finally {
+    await removeDirRetry(root);
   }
 });

@@ -34,12 +34,14 @@ export class HostCommandRunner implements CommandRunner {
 
   async run(command: string, options: RunOptions): Promise<ShellRunResult> {
     const startedAt = performance.now();
-    // Per-call env vars override the runner-level env and the shell's own.
+    // Per-call env vars override the tool's own values (`baseEnv`), and both
+    // override the shell's own (NO_COLOR and friends): a tool set the
+    // environment deliberately, so it must win over a cosmetic default.
     const process = shellCommand({
       command,
       cwd: options.cwd,
       baseEnv: this.baseEnv,
-      env: options.env,
+      env: { ...options.baseEnv, ...options.env },
     }).spawn();
 
     // The pipes are read here rather than through child.output(): that call

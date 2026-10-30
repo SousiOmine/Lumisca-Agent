@@ -1,5 +1,6 @@
 import type { Tool, ToolResult } from "./schema.ts";
 import { truncatedHeadNote, truncateHead } from "./truncate.ts";
+import { assertSchemaBounds } from "./validate.ts";
 
 /**
  * Tools that are not preloaded into the LLM context, discoverable through
@@ -178,12 +179,13 @@ export class ToolRegistry {
     };
   }
 
-  /** Execute a registered tool by name, applying its prepareArguments shim.
-   * Argument validation is deliberately not performed here — tool_call's
-   * schema is permissive, and validating is the tool's own contract (MCP
-   * tools delegate it to their server; extension tools validate inside
-   * their execute). Throws for unknown names — the caller turns that into
-   * an error tool result. */
+  /** Execute a registered tool by name, applying its prepareArguments shim
+   * and the bounds its schema declares (see assertSchemaBounds; a discoverable
+   * tool is called through tool_call, which never passed through the agent
+   * adapter). Field-level types stay the tool's own contract: tool_call's
+   * schema is permissive, and MCP tools delegate validation to their server.
+   * Throws for unknown names — the caller turns that into an error tool
+   * result. */
   async call(
     toolCallId: string,
     name: string,
@@ -199,6 +201,7 @@ export class ToolRegistry {
     const prepared = tool.prepareArguments !== undefined
       ? tool.prepareArguments(args)
       : args;
+    assertSchemaBounds(tool.parameters, prepared);
     return await tool.execute(
       toolCallId,
       prepared as never,

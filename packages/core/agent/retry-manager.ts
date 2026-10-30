@@ -76,8 +76,12 @@ export class RetryManager {
   private pendingRateLimitRetry: NotificationMessage | null = null;
   /** Interrupts the backoff sleep of a rate-limit restart when the run is
    * aborted or the session closes. Independent of the agent's own abort
-   * signal (which is cleared between runs). */
-  private readonly retryAbort = new AbortController();
+   * signal (which is cleared between runs), and REPLACED by every abort():
+   * an AbortSignal is one-way, so reusing the aborted controller would make
+   * every later backoff sleep fail immediately and silently drop the
+   * retry for the rest of the session. Standing down the restarts that
+   * were parked at the moment of the abort is `abortEpoch`'s job. */
+  private retryAbort = new AbortController();
   /** Backoff sleep before a rate-limit restart (injectable for tests). */
   private readonly rateLimitRetrySleep: (
     ms: number,
@@ -114,6 +118,8 @@ export class RetryManager {
   /** Abort in-flight backoff and invalidate parked restarts. */
   abort(): void {
     this.retryAbort.abort();
+    // The signal is spent: a later backoff must be interruptible again.
+    this.retryAbort = new AbortController();
     this.abortEpoch++;
     this.pendingOverflow = false;
   }

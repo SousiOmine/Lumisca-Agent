@@ -307,3 +307,41 @@ Deno.test("eval runs normally when the check approves", async () => {
   const result = await tool.execute("1", { code: "1 + 2" }, undefined);
   assertEquals(toolText(result), "[result]\n3");
 });
+
+Deno.test("eval: reset stops the timers its snippets scheduled", async () => {
+  const tool = makeEval();
+  const dir = Deno.makeTempDirSync({ prefix: "lumisca-eval-" });
+  const marker = join(dir, "ticks.txt");
+  try {
+    await tool.execute(
+      "1",
+      {
+        code: `let n = 0;
+          setInterval(() => {
+            n++;
+            Deno.writeTextFileSync(${JSON.stringify(marker)}, String(n));
+          }, 10);
+          "armed"`,
+      },
+      undefined,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const before = Number(Deno.readTextFileSync(marker));
+    assert(before > 0, "the interval must have run before the reset");
+
+    // reset throws the sandbox (and the closure the interval captured)
+    // away; the timer itself must go with it, or it keeps running in the
+    // server process for the rest of the session.
+    await tool.execute("2", { code: "'reset'", reset: true }, undefined);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const after = Number(Deno.readTextFileSync(marker));
+    assertEquals(
+      after,
+      before,
+      "the interval kept running after reset",
+    );
+  } finally {
+    tool.dispose?.();
+    await removeDirRetry(dir);
+  }
+});

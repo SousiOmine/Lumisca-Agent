@@ -16,6 +16,9 @@ import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 import { safetyBlockResult } from "./safety.ts";
 
 const DEFAULT_TIMEOUT_MS = 5000;
+/** Longest a snippet may run. The sandbox shares the server process, so a
+ * snippet cannot be allowed to hold it for minutes. */
+const MAX_TIMEOUT_MS = 120_000;
 /** inspect depth for the completion value (arrays of objects stay readable). */
 const RESULT_DEPTH = 4;
 /** inspect bounds: huge arrays/strings would otherwise materialize a giant
@@ -98,6 +101,11 @@ class EvalSession {
    * loop can never accumulate unbounded output in memory. */
   private outputBytes = 0;
   private outputTruncated = false;
+  /** Timers the snippets scheduled (see newSandbox): reset() and close()
+   * stop them, so a forgotten interval cannot outlive its sandbox. Typed
+   * `unknown` because the host's timer handle is a number at runtime but
+   * the Node typings in scope declare an object. */
+  private readonly timers = new Set<unknown>();
 
   constructor() {
     this.sandbox = this.newSandbox();
@@ -114,6 +122,35 @@ class EvalSession {
         return;
       }
       this.output.push(line);
+    };
+    // Timers are tracked so reset() can stop them. A snippet that leaves a
+    // `setInterval` behind keeps running in THIS process — the sandbox is a
+    // vm context, not a separate runtime — so an unattended interval would
+    // outlive the call, the reset, and the session (replacing the sandbox
+    // does not stop a timer the host already scheduled).
+    const schedule =
+      (repeat: boolean) =>
+      (handler: unknown, ms?: number, ...rest: unknown[]): number => {
+        const run = (): void => {
+          if (typeof handler !== "function") return;
+          try {
+            (handler as (...args: unknown[]) => void)(...rest);
+          } catch (error) {
+            // A throwing callback must not take the server process down.
+            console.error(`[eval timer] ${errorMessage(error)}`);
+          }
+        };
+        const id: unknown = repeat ? setInterval(run, ms) : setTimeout(() => {
+          this.timers.delete(id);
+          run();
+        }, ms);
+        this.timers.add(id);
+        return id as number;
+      };
+    const cancel = (id: number): void => {
+      this.timers.delete(id);
+      clearTimeout(id);
+      clearInterval(id);
     };
     return {
       // Same permission level as bash: full host access. The snippet runs in
@@ -145,18 +182,34 @@ class EvalSession {
       structuredClone,
       performance,
       queueMicrotask,
-      setTimeout,
-      clearTimeout,
-      setInterval,
-      clearInterval,
+      setTimeout: schedule(false),
+      clearTimeout: cancel,
+      setInterval: schedule(true),
+      clearInterval: cancel,
       console: { log: emit, info: emit, warn: emit, error: emit },
     };
   }
 
-  /** Discard all state (the `reset` argument). */
+  /** Discard all state (the `reset` argument), stopping every timer the
+   * snippets scheduled: the sandbox they closed over is gone, so a surviving
+   * interval could only write into a dead context. */
   reset(): void {
+    this.clearTimers();
     this.sandbox = this.newSandbox();
     this.context = createContext(this.sandbox);
+  }
+
+  /** Stop every timer this session's snippets scheduled. */
+  close(): void {
+    this.clearTimers();
+  }
+
+  private clearTimers(): void {
+    for (const id of this.timers) {
+      clearTimeout(id as number);
+      clearInterval(id as number);
+    }
+    this.timers.clear();
   }
 
   /** Run one snippet and return its completion value and console output.
@@ -221,7 +274,10 @@ function composeResult(output: string, value: unknown): string {
 
 const evalSchema = object({
   code: string("JavaScript/TypeScript code to evaluate"),
-  timeout: optional(integer("Timeout in milliseconds (default 5000)")),
+  timeout: optional(integer(
+    "Timeout in milliseconds (default 5000)",
+    { min: 1, max: MAX_TIMEOUT_MS },
+  )),
   reset: optional(boolean(
     "Clear the REPL state before evaluating (default: false — variables persist between calls)",
   )),
@@ -306,5 +362,6 @@ export function createEvalTool(
       };
       return await (queue = queue.then(run, run));
     },
+    dispose: () => session.close(),
   };
 }

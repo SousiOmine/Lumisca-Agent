@@ -68,6 +68,43 @@ export function parseJsonOrThrow<T>(
 export function decodeUtf8(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }
+
+/** `YYYY-MM-DD HH:MM` on the MACHINE's clock (local time, not UTC). Shared
+ * by the history search's head lines and the routine list's times so both
+ * read the same clock the user does. Mixing UTC dates with local weekday
+ * names is the mistake this exists to prevent. */
+export function formatLocalDateTime(at: number | Date): string {
+  const date = typeof at === "number" ? new Date(at) : at;
+  return `${formatLocalDate(date)} ${pad2(date.getHours())}:${
+    pad2(date.getMinutes())
+  }`;
+}
+
+/** `YYYY-MM-DD` on the machine's clock (local time, not UTC). */
+export function formatLocalDate(at: number | Date): string {
+  const date = typeof at === "number" ? new Date(at) : at;
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${
+    pad2(date.getDate())
+  }`;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/** The day the machine's clock reads, with its weekday name in the given
+ * language: e.g. `2026-08-11 (Tuesday)` / `2026-08-11 (火曜日)`. Both parts
+ * come from the same `Date`, so the date and the weekday can never
+ * describe different days (a UTC date next to a local weekday name would
+ * be off by one for the first hours of a JST day). */
+export function formatLocalDay(
+  at: Date,
+  localeTag: string,
+): string {
+  return `${formatLocalDate(at)} (${
+    at.toLocaleDateString(localeTag, { weekday: "long" })
+  })`;
+}
 /** Display name for a newly created session ("Session <date>" /
  * "セッション <date>"), shown until the title generator replaces it. The
  * language is the session's own (the setting at creation). */

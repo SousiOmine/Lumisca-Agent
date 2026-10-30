@@ -1,4 +1,3 @@
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FileBackend } from "./file-backend.ts";
 
@@ -7,13 +6,6 @@ export const MAX_TOOL_OUTPUT = 64 * 1024;
  * points at a line range for the rest). 50KB is what the model can take in
  * one look without spending the turn on a single file. */
 export const DEFAULT_READ_LIMIT = 50 * 1024;
-
-/** Directory holding the complete output of truncated streams (see
- * {@link OutputSpiller}) on this machine. Only a run that actually truncates
- * creates it. */
-export function defaultSpillDir(): string {
-  return join(tmpdir(), "lumisca-tool-output");
-}
 
 /** Standard note appended when tool output was cut, e.g. `output` →
  * "[output truncated to the last 65536 bytes]". Shared by every tool. */
@@ -42,13 +34,22 @@ export function spilledNote(
  *
  * Best effort by design: every failure (unwritable directory, full disk, a
  * name collision) is reported as `undefined`, never as an exception, so a
- * failed spill cannot break the tool result that carries it. */
+ * failed spill cannot break the tool result that carries it.
+ *
+ * The directory is scratch space, so it is bounded: at most
+ * {@link MAX_SPILL_FILES} spills are kept (the oldest are removed), and a
+ * session that closes its tools deletes its own spills (see `clear()`).
+ * Without this, every truncated build log of a long session stayed on disk
+ * forever — and, since the directory sits at the workspace root, showed up in
+ * later `glob` results. */
 export class OutputSpiller {
   /** Sequence of this spiller, paired with a process-wide random tag so two
    * spillers (a second session, a sub-agent, another Lumisca process) that
    * share the directory never pick the same name. */
   private seq = 0;
   private readonly tag = crypto.randomUUID().slice(0, 8);
+  /** The spills this instance wrote, oldest first, with their sizes. */
+  private readonly written: string[] = [];
 
   constructor(
     private readonly files: FileBackend,
@@ -65,12 +66,36 @@ export class OutputSpiller {
       const existing = await this.files.stat(path);
       if (existing !== undefined) return undefined;
       await this.files.writeText(path, text, { private: true });
+      this.written.push(path);
+      await this.pruneOwn();
       return path;
     } catch {
       return undefined;
     }
   }
+
+  /** Delete every spill this instance wrote (the session's tools are being
+   * closed, and nothing can reference them any more). */
+  async clear(): Promise<void> {
+    const paths = this.written.splice(0);
+    await Promise.all(paths.map((path) => this.files.removeFile(path)));
+  }
+
+  /** Keep only the newest MAX_SPILL_FILES of this instance's own files. A
+   * spill is only useful while it is the most recent output; older ones have
+   * been superseded by whatever the model read next. */
+  private async pruneOwn(): Promise<void> {
+    while (this.written.length > MAX_SPILL_FILES) {
+      const oldest = this.written.shift();
+      if (oldest !== undefined) await this.files.removeFile(oldest);
+    }
+  }
 }
+
+/** How many spilled outputs one tool instance keeps. Each is at most
+ * MAX_TOOL_OUTPUT (64 KiB) plus the raw command output that produced it, so
+ * this bounds the scratch directory to a few megabytes. */
+export const MAX_SPILL_FILES = 16;
 
 /** Where this backend's spills go: its first root, so the path is always one
  * the backend can resolve and the model can read back. The name starts with

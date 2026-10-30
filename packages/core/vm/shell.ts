@@ -54,7 +54,7 @@ export class VmCommandRunner implements CommandRunner {
 
   async run(command: string, options: RunOptions): Promise<ShellRunResult> {
     const startedAt = performance.now();
-    const env = envPrefix(options.env);
+    const env = envPrefix({ ...options.baseEnv, ...options.env });
     const result = await this.#exec(
       ["bash", "-lc", `${env}${command}`],
       {

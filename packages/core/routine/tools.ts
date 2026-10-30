@@ -31,6 +31,7 @@ import {
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
 } from "../shared/mod.ts";
+import { formatLocalDateTime } from "../shared/misc.ts";
 import {
   integer,
   object,
@@ -103,11 +104,7 @@ export function scheduleText(schedule: RoutineSchedule): string {
 /** `YYYY-MM-DD HH:MM` in the server's local time: what the user's clock
  * says, without the ambiguity of a bare epoch value. */
 function formatLocal(at: number): string {
-  const date = new Date(at);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${
-    pad(date.getDate())
-  } ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return formatLocalDateTime(at);
 }
 
 /** A schedule the caller supplied, normalized; throws with the accepted

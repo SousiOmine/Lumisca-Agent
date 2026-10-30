@@ -17,6 +17,12 @@ export interface SchemaString {
 export interface SchemaInteger {
   type: "integer";
   description?: string;
+  /** Inclusive lower bound (JSON Schema `minimum`). Declared so the provider
+   * sees the bound AND so the tool's validation can be generated from the
+   * same declaration (see validate.ts). */
+  minimum?: number;
+  /** Inclusive upper bound (JSON Schema `maximum`). */
+  maximum?: number;
 }
 
 export interface SchemaBoolean {
@@ -104,10 +110,16 @@ export function string(description?: string): SchemaString {
     : { type: "string", description };
 }
 
-export function integer(description?: string): SchemaInteger {
-  return description === undefined
-    ? { type: "integer" }
-    : { type: "integer", description };
+export function integer(
+  description?: string,
+  bounds?: { min?: number; max?: number },
+): SchemaInteger {
+  return {
+    type: "integer",
+    ...(description === undefined ? {} : { description }),
+    ...(bounds?.min === undefined ? {} : { minimum: bounds.min }),
+    ...(bounds?.max === undefined ? {} : { maximum: bounds.max }),
+  };
 }
 
 export function boolean(description?: string): SchemaBoolean {
@@ -196,4 +208,8 @@ export interface Tool<P extends ToolSchema = ToolSchema> {
     params: Infer<P>,
     signal?: AbortSignal,
   ) => Promise<ToolResult>;
+  /** Release anything the tool allocated for its own use (timers, child
+   * processes, watchers). Called when the agent holding the tool is closed,
+   * so a long-lived session cannot leak it. Omitted → nothing to release. */
+  dispose?: () => void;
 }

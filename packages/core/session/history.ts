@@ -3,6 +3,7 @@ import { CoreError } from "../errors.ts";
 import type { MessageWindow, StoredMessage } from "../session/messages.ts";
 import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import { contentText } from "../shared/content.ts";
+import { formatLocalDateTime } from "../shared/misc.ts";
 import {
   integer,
   object,
@@ -294,11 +295,7 @@ function formatMessage(row: StoredMessage): string {
 /** Local time of a timestamp: `2026-10-29 14:03`. The window is expressed in
  * local dates as well, so a head line can be read against the bounds. */
 function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${
-    pad(date.getDate())
-  } ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return formatLocalDateTime(timestamp);
 }
 
 /** Search terms: whitespace-separated and lower-cased. Japanese has no word

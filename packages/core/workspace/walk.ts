@@ -8,6 +8,9 @@ import type { GitignoreMatcher } from "../tools/gitignore.ts";
 export const BUILD_ARTIFACT_DIRS: ReadonlySet<string> = new Set([
   ".git",
   ".lumisca-cache",
+  // Tool output this application itself spills (tools/truncate.ts): it is
+  // scratch space for one truncated result, never part of the user's tree.
+  ".lumisca-tool-output",
   ".next",
   ".nuxt",
   "dist",

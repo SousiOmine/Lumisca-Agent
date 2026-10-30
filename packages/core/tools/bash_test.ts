@@ -1,13 +1,12 @@
 import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { assert, assertEquals } from "@std/assert";
 import { createBashTool } from "./bash.ts";
 import { HostCommandRunner } from "./host/command-runner.ts";
 import { HostFileBackend } from "./host/files.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { formatDuration } from "./duration.ts";
-import { defaultSpillDir, MAX_TOOL_OUTPUT } from "./truncate.ts";
+import { MAX_SPILL_FILES, MAX_TOOL_OUTPUT } from "./truncate.ts";
 import { removeDirRetry, toolText } from "../test-utils.ts";
 
 /** The host tool over a fresh temp workspace. */
@@ -250,6 +249,20 @@ Deno.test("bash tool passes env vars to the command", async () => {
   }
 });
 
+Deno.test("bash tool passes the tool-level env to the command", async () => {
+  const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
+  const tool = hostTool(root, { env: { LUMISCA_TEST_VAR: "tool-level" } });
+  try {
+    const echo = Deno.build.os === "windows"
+      ? "echo $env:LUMISCA_TEST_VAR"
+      : "echo $LUMISCA_TEST_VAR";
+    const result = await tool.execute("1", { cwd: root, command: echo });
+    assertEquals(toolText(result).includes("tool-level"), true);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
 Deno.test("bash tool per-call env overrides the tool-level env", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const tool = hostTool(root, { env: { LUMISCA_TEST_VAR: "tool-level" } });
@@ -485,10 +498,6 @@ Deno.test("the spill is readable through the same file backend", async () => {
   }
 });
 
-Deno.test("spill files default to the machine's temp dir", () => {
-  assertEquals(defaultSpillDir(), join(tmpdir(), "lumisca-tool-output"));
-});
-
 Deno.test("bash tool description documents the spilled full output", async () => {
   const { tool, root } = makeTool();
   try {
@@ -584,6 +593,29 @@ Deno.test("bash tool returns when the run is aborted", async () => {
     if (Deno.build.os !== "windows") {
       assertEquals(result.details?.exitCode, 137);
     }
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("bash tool keeps only the newest spills and drops them on close", async () => {
+  const { tool, root, spillDir } = makeTool();
+  try {
+    // Each run writes far more than the tool's cap, so every one spills.
+    for (let i = 0; i < MAX_SPILL_FILES + 4; i++) {
+      await runBigCommand(tool, root);
+    }
+    const kept = [...Deno.readDirSync(spillDir)];
+    assertEquals(
+      kept.length <= MAX_SPILL_FILES,
+      true,
+      `spills not pruned: ${kept.length}`,
+    );
+    // The tools are closed with the agent: nothing can reference the spills
+    // any more, so they go.
+    tool.dispose?.();
+    const after = [...Deno.readDirSync(spillDir)];
+    assertEquals(after, [], "dispose must delete the session's spills");
   } finally {
     await removeDirRetry(root);
   }

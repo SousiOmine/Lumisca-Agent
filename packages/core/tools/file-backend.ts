@@ -62,6 +62,11 @@ export interface FileBackend {
     options?: { private?: boolean },
   ): Promise<void>;
 
+  /** Delete one file. A missing file is not an error (the caller is pruning
+   * its own scratch space, and a concurrent prune may have won the race).
+   * Used by {@link OutputSpiller} to bound what it keeps. */
+  removeFile(path: string): Promise<void>;
+
   /** Read selected 1-based, inclusive line ranges of a file. Implementations
    * must not load the whole file for a narrow range (the host streams, the
    * VM asks the container's `sed`), so a ranged read of a huge log stays
@@ -103,6 +108,16 @@ export interface RangeReadResult {
   /** The highest line number that exists in the file (0 for an empty one).
    * Reported so the caller's "end of file" note names the real length. */
   lastLine: number;
+  /** Number of leading requested lines the backend had to drop to keep the
+   * result inside its output bound. The backend is the only party that
+   * knows this (it bounds what it transfers), so the tool reports the cut
+   * from here instead of recomputing it — a silently shortened read would
+   * look like a complete one to the model. */
+  droppedLines: number;
+  /** True when the backend cut the END of the result instead (the stella VM
+   * keeps the head of what crosses the container boundary). Either flag
+   * means the model did not receive every requested line. */
+  truncatedTail: boolean;
 }
 
 export interface BackendDirEntry {

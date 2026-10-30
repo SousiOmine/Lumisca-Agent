@@ -29,6 +29,13 @@ import type { FsToolContext } from "./context.ts";
  * cap notes.
  */
 
+/** Result caps. The defaults are what a model usually wants in one look;
+ * the maxima bound how much one call can push into the transcript. */
+const DEFAULT_GREP_RESULTS = 200;
+const MAX_GREP_RESULTS = 1000;
+const DEFAULT_GLOB_PATHS = 500;
+const MAX_GLOB_PATHS = 2000;
+
 const grepSchema = object({
   pattern: string("Regular expression to search for"),
   path: optional(string(
@@ -42,6 +49,7 @@ const grepSchema = object({
   )),
   max_results: optional(integer(
     "Maximum matches to return (default 200, cap 1000)",
+    { min: 1, max: MAX_GREP_RESULTS },
   )),
 });
 /** Model-supplied patterns are applied per line without a timeout; a
@@ -95,7 +103,10 @@ export function createGrepTool(
       } catch (error) {
         throw new Error(`Invalid pattern: ${errorMessage(error)}`);
       }
-      const maxResults = Math.min(params.max_results ?? 200, 1000);
+      const maxResults = Math.min(
+        params.max_results ?? DEFAULT_GREP_RESULTS,
+        MAX_GREP_RESULTS,
+      );
       const result = await files.grep({
         ...(params.path !== undefined ? { path: params.path } : {}),
         pattern: params.pattern,
@@ -131,6 +142,7 @@ const globSchema = object({
   )),
   max_results: optional(integer(
     "Maximum paths to return (default 500, cap 2000)",
+    { min: 1, max: MAX_GLOB_PATHS },
   )),
 });
 
@@ -154,7 +166,10 @@ export function createGlobTool(
           `pattern is too long (max ${MAX_GLOB_PATTERN_CHARS} chars)`,
         );
       }
-      const maxResults = Math.min(params.max_results ?? 500, 2000);
+      const maxResults = Math.min(
+        params.max_results ?? DEFAULT_GLOB_PATHS,
+        MAX_GLOB_PATHS,
+      );
       const found = await files.glob({
         ...(params.path !== undefined ? { path: params.path } : {}),
         pattern: params.pattern,

@@ -172,6 +172,26 @@ Deno.test("resumeOnce stands down when the backoff is aborted", async () => {
   assertEquals(agent.prompts.length, 0);
 });
 
+Deno.test("abort: a later rate-limit backoff is still interruptible", async () => {
+  // AbortSignal is one-way, so reusing the controller abort() fired would
+  // leave every later backoff pre-aborted: the sleep would reject at once
+  // and the retry would be dropped silently for the rest of the session.
+  // The stub mirrors sleepAbortable's contract (reject when the signal is
+  // already aborted) without waiting out the real backoff.
+  const retries = new RetryManager((_ms, signal) =>
+    signal?.aborted === true
+      ? Promise.reject(new Error("aborted"))
+      : Promise.resolve()
+  );
+  retries.abort();
+  retries.reset();
+  retries.classify(errored("429 rate_limit_exceeded"), false);
+
+  const agent = recordingAgent();
+  assertEquals(await retries.resumeOnce(agent, false), true);
+  assertEquals(agent.prompts.length, 1);
+});
+
 Deno.test("resumeOnce stands down when an abort lands between restarts", async () => {
   const retries = new RetryManager(() => {
     // The stop arrives while the backoff is running: the current restart

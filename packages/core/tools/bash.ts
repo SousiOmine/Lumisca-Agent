@@ -24,12 +24,22 @@ import {
 } from "./truncate.ts";
 import type { FileBackend } from "./file-backend.ts";
 
+/** Default and maximum wall-clock time one command may take. A model that
+ * asks for a longer one is refused rather than silently clamped, and a
+ * negative or zero value cannot slip through to the runner (a negative
+ * timeout used to fire the kill immediately). */
+export const DEFAULT_BASH_TIMEOUT_SEC = 120;
+export const MAX_BASH_TIMEOUT_SEC = 3600;
+
 const bashSchema = object({
   cwd: string(
     "Working directory: a workspace folder name (e.g. `Aaa`) or an absolute path",
   ),
   command: string("The shell command to execute"),
-  timeout: optional(integer("Timeout in seconds (default 120)")),
+  timeout: optional(integer(
+    "Timeout in seconds (default 120)",
+    { min: 1, max: MAX_BASH_TIMEOUT_SEC },
+  )),
   env: optional(stringMap("Environment variables to pass to the command")),
 });
 
@@ -44,7 +54,9 @@ export interface BashToolOptions {
    * this; a coding workspace has no such default, so its `cwd` argument
    * stays required. */
   defaultCwd?: string;
-  /** Extra env vars to expose. */
+  /** Extra env vars to expose to every command this tool runs. A value the
+   * model passes per call (`env`) wins over it; both win over the shell's
+   * own environment (see tools/host/shell.ts). */
   env?: Record<string, string>;
   /** Default timeout in seconds. */
   defaultTimeoutSec?: number;
@@ -89,7 +101,8 @@ async function spillRecovery(
 export function createBashTool(
   options: BashToolOptions,
 ): Tool<typeof bashSchema> {
-  const defaultTimeoutSec = options.defaultTimeoutSec ?? 120;
+  const defaultTimeoutSec = options.defaultTimeoutSec ??
+    DEFAULT_BASH_TIMEOUT_SEC;
   const { files, runner } = options;
   const spiller = new OutputSpiller(files, options.spillDir);
 
@@ -155,6 +168,7 @@ export function createBashTool(
         cwd,
         timeoutSec,
         ...(signal !== undefined ? { signal } : {}),
+        ...(options.env !== undefined ? { baseEnv: options.env } : {}),
         ...(params.env !== undefined ? { env: params.env } : {}),
         // The runner retains well past the tool's own cap: the tool keeps
         // the tail inline AND spills the complete text, so a stream cut only
@@ -203,6 +217,9 @@ export function createBashTool(
           durationMs: result.durationMs,
         },
       };
+    },
+    dispose: () => {
+      void spiller.clear();
     },
   };
 }

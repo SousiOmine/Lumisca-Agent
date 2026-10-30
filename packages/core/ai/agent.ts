@@ -240,6 +240,16 @@ export class Agent {
   close(): void {
     this.closed = true;
     this.abort();
+    // Tools that hold process-level resources (the eval sandbox's timers)
+    // release them here: the agent is the owner, and a closed agent is
+    // never resumed.
+    for (const tool of this.state.tools) {
+      try {
+        tool.dispose?.();
+      } catch {
+        // A failing dispose must not stop the rest of the teardown.
+      }
+    }
   }
 
   /** Start (or continue) an exchange, empty the steer queue as it goes. */

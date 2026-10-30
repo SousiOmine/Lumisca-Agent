@@ -31,6 +31,10 @@ export interface RunOptions {
   timeoutSec: number;
   /** Aborting settles the call promptly; the command is killed. */
   signal?: AbortSignal;
+  /** The owning tool's own environment (the tool's `env` option). Merged
+   * under `env` and over the shell's own values, so one call can override
+   * what the tool set for every call. */
+  baseEnv?: Record<string, string>;
   /** Extra environment variables for this call only. */
   env?: Record<string, string>;
   /**

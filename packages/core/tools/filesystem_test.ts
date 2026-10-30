@@ -232,6 +232,38 @@ Deno.test("read line ranges stay memory-bounded on huge single-line files", asyn
   }
 });
 
+Deno.test("read reports the lines a huge ranged read had to drop", async () => {
+  const root = await makeRealTempDir("lumisca-read-");
+  const folder = basename(root);
+  try {
+    // Far more than one output budget: the backend keeps the tail and says
+    // how much it dropped, so the model never mistakes the short window for
+    // the whole range.
+    const rows = Array.from(
+      { length: 3000 },
+      (_, i) => `${i + 1}:${"x".repeat(99)}`,
+    );
+    await Deno.writeTextFile(join(root, "big.txt"), rows.join("\n") + "\n");
+    const result = await makeRead(root).execute("id", {
+      path: `${folder}/big.txt:1-3000`,
+    });
+    const text = toolText(result);
+    assert(
+      text.includes("truncated"),
+      `the cut must be announced: ${text.slice(0, 200)}`,
+    );
+    // The first row ("1:xxx...") is the one that was dropped; the header
+    // line comes first, so check the body's first line.
+    const firstBodyLine = text.split("\n")[1] ?? "";
+    assert(
+      !firstBodyLine.startsWith("1:"),
+      `the dropped first line must not appear: ${firstBodyLine.slice(0, 20)}`,
+    );
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
 // --- edit / write / line endings -------------------------------------------
 
 /** Write a file with CRLF line endings. */

@@ -8,12 +8,7 @@ import {
   TOOL_WRITE,
 } from "../shared/mod.ts";
 import { object, string, type Tool } from "./schema.ts";
-import {
-  DEFAULT_READ_LIMIT,
-  MAX_TOOL_OUTPUT,
-  truncate,
-  truncatedNote,
-} from "./truncate.ts";
+import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 import { bytesToBase64 } from "../base64.ts";
 import type { FsToolContext } from "./context.ts";
 import type { BackendDirEntry, LineRange } from "./file-backend.ts";
@@ -99,23 +94,21 @@ function splitRangeSuffix(
   return { path: requested.slice(0, colon), spec, ranges };
 }
 
-/** Trim a ranged read to what can be displayed: the model sees the tail of
- * the last MAX_TOOL_OUTPUT bytes, so drop the front of an oversized range
- * (keeping at least one line) instead of handing over an unbounded string. */
-function capRangeLines(lines: readonly string[]): {
+/** Trim a ranged read to what can be displayed. The backends already bound
+ * what they transfer (see RangeReadResult), so this only reports what they
+ * dropped: recomputing the cut here made a shortened read look complete,
+ * because the lines had already been trimmed before this ran. */
+function capRangeLines(result: {
+  lines: readonly string[];
+  droppedLines: number;
+  truncatedTail: boolean;
+}): {
   lines: string[];
   truncated: boolean;
 } {
-  let bytes = 0;
-  let start = 0;
-  for (const line of lines) bytes += line.length + 1;
-  while (bytes > MAX_TOOL_OUTPUT && start < lines.length - 1) {
-    bytes -= lines[start]!.length + 1;
-    start++;
-  }
   return {
-    lines: lines.slice(start),
-    truncated: start > 0,
+    lines: [...result.lines],
+    truncated: result.droppedLines > 0 || result.truncatedTail,
   };
 }
 
@@ -163,14 +156,18 @@ export function createReadFileTool(
       const size = stat?.size ?? 0;
 
       if (ranges !== undefined) {
-        const { lines, endOfFile, lastLine } = await files.readRanges(
-          filePath,
-          ranges,
-        );
-        const { lines: kept, truncated } = capRangeLines(lines);
+        const read = await files.readRanges(filePath, ranges);
+        const { lines: kept, truncated } = capRangeLines(read);
         let output = `--- ${path} lines ${spec} ---\n${kept.join("\n")}`;
-        if (truncated) output += truncatedNote("output");
-        if (endOfFile) output += `\n[end of file: ${lastLine} lines]`;
+        if (truncated) {
+          output += read.droppedLines > 0
+            ? `\n[output truncated: the first ${read.droppedLines} line(s) ` +
+              `are not shown]`
+            : truncatedNote("output");
+        }
+        if (read.endOfFile) {
+          output += `\n[end of file: ${read.lastLine} lines]`;
+        }
         return {
           content: [{ type: "text", text: output }],
           details: { path: filePath, size },

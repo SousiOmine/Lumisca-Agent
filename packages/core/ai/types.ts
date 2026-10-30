@@ -344,6 +344,8 @@ export interface AgentTool<P = unknown> {
     params: P,
     signal: AbortSignal | undefined,
   ) => Promise<{ content: (TextContent | ImageContent)[]; details: unknown }>;
+  /** Release what the tool allocated for itself (see Tool.dispose). */
+  dispose?: () => void;
 }
 
 // ---- model / provider ----------------------------------------------------------

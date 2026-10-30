@@ -46,6 +46,7 @@ import {
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
 } from "../shared/mod.ts";
+import { canonicalJson } from "../shared/digest.ts";
 
 /** Names of the routine tools (discoverable through tool_search): removed
  * from every session that is not stella's, added back when it is. */
@@ -70,28 +71,7 @@ const log = createLogger("pool");
  * canonical (key-sorted) JSON so a settings round-trip that reorders fields
  * does not spuriously tear down and respawn MCP server processes. */
 function sameMcpConfig(a: McpConfig, b: McpConfig): boolean {
-  return stableJson(a.servers) === stableJson(b.servers);
-}
-
-/** Key-sorted JSON (recursively), so equality is independent of object key
- * order. Used by sameMcpConfig for small configs only. */
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJson).join(",")}]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map((key) =>
-        `${JSON.stringify(key)}:${
-          stableJson(
-            (value as Record<string, unknown>)[key],
-          )
-        }`
-      );
-    return `{${entries.join(",")}}`;
-  }
-  return JSON.stringify(value);
+  return canonicalJson(a.servers) === canonicalJson(b.servers);
 }
 
 /** Builds the live agent of a session with every runtime it needs

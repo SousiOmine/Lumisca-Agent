@@ -237,6 +237,12 @@ export class VmFileBackend implements FileBackend {
       lines,
       endOfFile: Number.isFinite(reported) && reported < maxTo,
       lastLine: Number.isFinite(reported) ? reported : 0,
+      // The container runner bounds what crosses the boundary with
+      // `keep: "head"`, so a cut here loses the END of the ranges (the host
+      // backend, which can hold everything, drops the front instead). Saying
+      // which side was lost keeps the note honest.
+      droppedLines: 0,
+      truncatedTail: result.truncated,
     };
   }
 
@@ -265,6 +271,15 @@ export class VmFileBackend implements FileBackend {
     if (result.exitCode !== 0) {
       throw new Error(`Could not write ${path}: ${firstLine(result.stderr)}`);
     }
+  }
+
+  async removeFile(path: string): Promise<void> {
+    // Pruning is best effort, as on the host backend: `rm -f` is silent when
+    // the file is already gone.
+    await this.#exec(["rm", "-f", "--", path], {
+      timeoutMs: FILE_TIMEOUT_MS,
+      maxOutput: 4096,
+    });
   }
 
   async listDir(path: string): Promise<BackendDirEntry[]> {

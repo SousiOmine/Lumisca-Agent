@@ -1,5 +1,5 @@
 import { cpus, release } from "node:os";
-import { decodeUtf8 } from "./shared/mod.ts";
+import { decodeUtf8, formatLocalDay } from "./shared/mod.ts";
 
 /** Model facts for the system prompt's environment section. */
 export interface EnvironmentModel {
@@ -126,11 +126,15 @@ function detectTerminal(): string | undefined {
   return undefined;
 }
 
-/** e.g. "2026-08-11 (Tuesday)". `now` is injectable so a caller (or a test)
- * can ask for another day's reading. */
+/** e.g. "2026-08-11 (Tuesday)". Both the date and the weekday name come
+ * from the same instant on the MACHINE's clock: reading the date from
+ * `toISOString()` (UTC) next to a local weekday name produced pairs that
+ * name no real day for the first hours of a JST day. The reading is
+ * model-facing text, so the weekday stays English like the rest of the
+ * prompt. `now` is injectable so a caller (or a test) can ask for another
+ * day's reading. */
 export function today(now: Date = new Date()): string {
-  const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
-  return `${now.toISOString().slice(0, 10)} (${weekday})`;
+  return formatLocalDay(now, "en-US");
 }
 
 function modelLabel(model: EnvironmentModel | undefined): string | undefined {

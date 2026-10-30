@@ -1,16 +1,20 @@
 import { CoreError } from "../errors.ts";
+import type { SchemaObject, ToolSchema } from "./schema.ts";
 
 /**
- * Runtime argument checks that JSON Schema cannot express: ranges and enum
- * membership. The schema layer declares the *type* (the provider still sees
- * `"type": "integer"`), but a value outside the documented range has to be
- * rejected here — and every tool that checks its own arguments goes through
- * this module, so the wording and the error kind (`invalid`, which the
- * server maps to its 400-class status) cannot drift apart.
+ * Runtime argument checks that a provider may ignore: bounds and enum
+ * membership. A JSON Schema `minimum` is advisory — a model can (and does)
+ * send `max_results: -5` — so the tool must reject it, and the wording and
+ * the error kind (`invalid`, which the server maps to its 400-class status)
+ * stay in this module so they cannot drift between tools.
  *
- * Checks are only added when a tool adopts them; a schema-level `minimum`
- * would be the declarative alternative, and is deliberately not used
- * because a rejected argument must produce the tool's own message.
+ * Two layers:
+ * - {@link assertSchemaBounds} enforces what the schema already declares
+ *   (`integer(desc, { min, max })`), called once for every tool call at the
+ *   adapter boundary (tools/pi-adapter.ts, tools/registry.ts). A tool that
+ *   only needs ranges therefore writes no validation code at all.
+ * - The `require*` helpers remain for checks with no schema form (an enum
+ *   of strings, a cross-field rule); a tool calls them in its `execute`.
  */
 
 /** Require an integer; returns it so the check can wrap the value inline. */
@@ -50,4 +54,44 @@ export function requireOneOf<T extends string>(
     );
   }
   return value as T;
+}
+
+/**
+ * Enforce the numeric bounds a tool's schema declares. Called at the adapter
+ * boundary, so every call — preloaded tools, discoverable tools, the
+ * sub-agent's tools — is checked the same way, and a tool's `execute` never
+ * sees an out-of-range value.
+ *
+ * Only top-level integers are examined, which is where every bound in this
+ * codebase lives (a nested range would need the same declaration walk, so
+ * extend this when one appears). Values of another type are left to the
+ * tool: the schema's type is what the provider was told, and a mismatch is
+ * the tool's own contract to report.
+ */
+export function assertSchemaBounds(
+  parameters: ToolSchema,
+  params: unknown,
+): void {
+  if (parameters.type !== "object" || params === null) return;
+  if (typeof params !== "object" || Array.isArray(params)) return;
+  const properties = (parameters as SchemaObject).properties;
+  for (const [name, schema] of Object.entries(properties)) {
+    if (schema.type !== "integer") continue;
+    const value = (params as Record<string, unknown>)[name];
+    if (value === undefined) continue;
+    if (typeof value !== "number" || !Number.isInteger(value)) continue;
+    const { minimum, maximum } = schema;
+    if (minimum === undefined && maximum === undefined) continue;
+    if (
+      (minimum !== undefined && value < minimum) ||
+      (maximum !== undefined && value > maximum)
+    ) {
+      throw new CoreError(
+        `${name} must be an integer between ${minimum ?? "…"} and ${
+          maximum ?? "…"
+        } (got ${value})`,
+        "invalid",
+      );
+    }
+  }
 }

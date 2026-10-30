@@ -168,6 +168,12 @@ export class HostFileBackend implements FileBackend {
     );
   }
 
+  async removeFile(path: string): Promise<void> {
+    // Pruning is best effort: a missing file means another prune (or the
+    // model) got there first, which is the outcome the caller wanted.
+    await Deno.remove(path).catch(() => {});
+  }
+
   async readRanges(
     path: string,
     ranges: readonly LineRange[],
@@ -206,6 +212,8 @@ export class HostFileBackend implements FileBackend {
       lines: lines.slice(startIndex),
       endOfFile: !pastMax && lastLine < maxTo,
       lastLine,
+      droppedLines: startIndex,
+      truncatedTail: false,
     };
   }
 
