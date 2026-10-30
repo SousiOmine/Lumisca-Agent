@@ -21,7 +21,6 @@ import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { AddUserProviderForm } from "./settings/AddUserProviderForm.tsx";
 import { reloadCatalog, useUserProviders } from "../providers.ts";
-import type { UserProviderSummary } from "../types.ts";
 import { ModelList } from "./settings/ModelList.tsx";
 import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
 import { CompactionSettings } from "./settings/CompactionSettings.tsx";
@@ -62,6 +61,29 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
+/** What each panel needs. One object instead of a prop per panel: the
+ * table below renders them, so the wiring lives next to the entry that uses
+ * it. */
+interface PanelContext {
+  props: SettingsModalProps;
+  /** Switch to another category (a panel's "open the provider settings"
+   * link reaches across). */
+  openCategory: (id: SettingsCategory) => void;
+  /** The panel's own navigation state (providers has sub-screens). */
+  providersView: ProvidersView;
+  setProvidersView: (view: ProvidersView) => void;
+  userProviders: ReturnType<typeof useUserProviders>;
+  reloadCatalog: () => void;
+}
+
+interface SettingsCategoryEntry {
+  id: SettingsCategory;
+  labelKey: MessageKey;
+  icon: ReactNode;
+  /** The screen this category shows. */
+  render: (panels: PanelContext) => ReactNode;
+}
+
 export type SettingsCategory =
   | "general"
   | "appearance"
@@ -84,57 +106,203 @@ type ProvidersView =
   | { kind: "editUser"; providerId: string };
 
 /** Navigation entries. The labels are catalogue keys: they follow the app
- * language like every other string. */
-const CATEGORIES: {
-  id: SettingsCategory;
-  labelKey: MessageKey;
-  icon: ReactNode;
-}[] = [
+ * language like every other string.
+ *
+ * Each entry also carries its panel: navigation and body used to be two
+ * separate lists (a `SettingsCategory` union, this array, and an eleven-branch
+ * `category === "…" && <Panel/>` ladder), so adding a category meant editing
+ * three places and a forgotten one was not a type error. One table cannot
+ * drift from itself. */
+const CATEGORIES: readonly SettingsCategoryEntry[] = [
   {
     id: "general",
     labelKey: "settings.nav.general",
     icon: <IconSettings size={18} />,
+    render: ({ props }) => (
+      <GeneralPanel
+        status={props.update.status}
+        source={props.update.source}
+        bridgeError={props.update.error}
+        language={props.language}
+        languageError={props.languageError}
+        onLanguageChange={props.onLanguageChange}
+        onSetAuto={props.update.setAuto}
+        onSetAutoRestart={props.update.setAutoRestart}
+        onCheck={props.update.check}
+        onDownload={props.update.download}
+        onInstall={props.update.install}
+        onRestart={props.update.restart}
+        notifyEnabled={props.notifyEnabled}
+        onNotifyEnabledChange={props.onNotifyEnabledChange}
+      />
+    ),
   },
   {
     id: "appearance",
     labelKey: "settings.nav.appearance",
     icon: <IconPalette size={18} />,
+    render: ({ props }) => (
+      <AppearancePanel
+        theme={props.theme}
+        error={props.themeError}
+        onThemeChange={props.onThemeChange}
+      />
+    ),
   },
   {
     id: "personalize",
     labelKey: "settings.nav.personalize",
     icon: <IconUser size={18} />,
+    render: () => <PersonalizePanel />,
   },
   {
     id: "servers",
     labelKey: "settings.nav.servers",
     icon: <IconWorld size={18} />,
+    render: () => <ConnectionList />,
   },
   {
     id: "providers",
     labelKey: "settings.nav.providers",
     icon: <IconPlugConnected size={18} />,
+    render: ({ providersView, setProvidersView, userProviders }) => {
+      switch (providersView.kind) {
+        case "list":
+          return (
+            <ProviderList
+              onAdd={() => setProvidersView({ kind: "add" })}
+              onOpen={(id) => {
+                if (userProviders.ids.has(id)) {
+                  setProvidersView({ kind: "editUser", providerId: id });
+                } else {
+                  setProvidersView({
+                    kind: "detail",
+                    providerId: id,
+                    from: "list",
+                  });
+                }
+              }}
+            />
+          );
+        case "add":
+          return (
+            <AddProviderFlow
+              onSelect={(id) =>
+                setProvidersView({
+                  kind: "detail",
+                  providerId: id,
+                  from: "add",
+                })}
+              onAddUser={() => setProvidersView({ kind: "addUser" })}
+              onBack={() => setProvidersView({ kind: "list" })}
+            />
+          );
+        case "detail":
+          return (
+            <ProviderDetail
+              providerId={providersView.providerId}
+              onBack={() => setProvidersView({ kind: providersView.from })}
+              onDone={() => setProvidersView({ kind: "list" })}
+              onEditUser={(providerId) =>
+                setProvidersView({ kind: "editUser", providerId })}
+            />
+          );
+        case "addUser":
+          return (
+            <AddUserProviderForm
+              mode="create"
+              onBack={() => setProvidersView({ kind: "list" })}
+              onDone={() => {
+                userProviders.reload();
+                // The new provider must become pickable (and its sessions
+                // sendable) without a page reload: the catalog store is what
+                // every picker and the composer's send gate read.
+                reloadCatalog();
+                setProvidersView({ kind: "list" });
+              }}
+            />
+          );
+        case "editUser": {
+          const initial = userProviders.providers.find(
+            (p) => p.id === providersView.providerId,
+          );
+          return (
+            <AddUserProviderForm
+              mode="edit"
+              key={providersView.providerId}
+              initial={initial}
+              onBack={() => setProvidersView({ kind: "list" })}
+              onDone={() => {
+                userProviders.reload();
+                // An edited provider (a cleared key, a changed base URL)
+                // changes whether its models can run: refresh the store.
+                reloadCatalog();
+                setProvidersView({ kind: "list" });
+              }}
+              onDeleted={() => {
+                userProviders.reload();
+                reloadCatalog();
+              }}
+            />
+          );
+        }
+      }
+    },
   },
   {
     id: "models",
     labelKey: "settings.nav.models",
     icon: <IconBrain size={18} />,
+    render: ({ openCategory }) => (
+      <>
+        <ModelPreferencePanel
+          onOpenProviders={() => openCategory("providers")}
+        />
+        <CompactionSettings />
+        <ModelList />
+      </>
+    ),
   },
-  { id: "mcp", labelKey: "settings.nav.mcp", icon: <IconServer size={18} /> },
+  {
+    id: "mcp",
+    labelKey: "settings.nav.mcp",
+    icon: <IconServer size={18} />,
+    render: () => <McpList />,
+  },
   {
     id: "webSearch",
     labelKey: "settings.nav.webSearch",
     icon: <IconWorldSearch size={18} />,
+    render: () => <WebSearchPanel />,
   },
   {
     id: "routines",
     labelKey: "settings.nav.routines",
     icon: <IconRepeat size={18} />,
+    render: ({ props }) => (
+      <RoutinePanel
+        routines={props.routines.routines}
+        loading={props.routines.loading}
+        error={props.routines.error}
+        agentName={props.routineAgent}
+        onRefresh={props.routines.refresh}
+        onSetEnabled={props.routines.setEnabled}
+        onRun={props.routines.run}
+        onStop={props.routines.stop}
+        onDelete={props.routines.remove}
+      />
+    ),
   },
   {
     id: "security",
     labelKey: "settings.nav.security",
     icon: <IconShield size={18} />,
+    render: () => (
+      <>
+        <CommandSafetyPanel />
+        <ComputerUsePanel />
+      </>
+    ),
   },
 ];
 
@@ -160,12 +328,34 @@ export function SettingsModal({
   });
   const userProviders = useUserProviders();
 
-  const userProviderForEdit = (id: string): UserProviderSummary | undefined =>
-    userProviders.providers.find((p) => p.id === id);
-
   const openCategory = (id: SettingsCategory) => {
     setCategory(id);
     setProvidersView({ kind: "list" });
+  };
+
+  const panels: PanelContext = {
+    openCategory,
+    // The remaining props are the same object the modal received; the
+    // panels read what they need from it.
+    props: {
+      theme,
+      themeError,
+      onThemeChange,
+      language,
+      languageError,
+      onLanguageChange,
+      update,
+      notifyEnabled,
+      onNotifyEnabledChange,
+      initialCategory,
+      routines,
+      routineAgent,
+      onClose,
+    },
+    providersView,
+    setProvidersView,
+    userProviders,
+    reloadCatalog,
   };
 
   return (
@@ -205,133 +395,7 @@ export function SettingsModal({
         </nav>
 
         <div className="settings-content">
-          {category === "general" && (
-            <GeneralPanel
-              status={update.status}
-              source={update.source}
-              bridgeError={update.error}
-              language={language}
-              languageError={languageError}
-              onLanguageChange={onLanguageChange}
-              onSetAuto={update.setAuto}
-              onSetAutoRestart={update.setAutoRestart}
-              onCheck={update.check}
-              onDownload={update.download}
-              onInstall={update.install}
-              onRestart={update.restart}
-              notifyEnabled={notifyEnabled}
-              onNotifyEnabledChange={onNotifyEnabledChange}
-            />
-          )}
-          {category === "providers" && providersView.kind === "list" && (
-            <ProviderList
-              onAdd={() => setProvidersView({ kind: "add" })}
-              onOpen={(id) => {
-                if (userProviders.ids.has(id)) {
-                  setProvidersView({ kind: "editUser", providerId: id });
-                } else {
-                  setProvidersView({
-                    kind: "detail",
-                    providerId: id,
-                    from: "list",
-                  });
-                }
-              }}
-            />
-          )}
-          {category === "providers" && providersView.kind === "add" && (
-            <AddProviderFlow
-              onSelect={(id) =>
-                setProvidersView({
-                  kind: "detail",
-                  providerId: id,
-                  from: "add",
-                })}
-              onAddUser={() => setProvidersView({ kind: "addUser" })}
-              onBack={() => setProvidersView({ kind: "list" })}
-            />
-          )}
-          {category === "providers" && providersView.kind === "detail" && (
-            <ProviderDetail
-              providerId={providersView.providerId}
-              onBack={() => setProvidersView({ kind: providersView.from })}
-              onDone={() => setProvidersView({ kind: "list" })}
-              onEditUser={(providerId) =>
-                setProvidersView({ kind: "editUser", providerId })}
-            />
-          )}
-          {category === "providers" && providersView.kind === "addUser" && (
-            <AddUserProviderForm
-              mode="create"
-              onBack={() => setProvidersView({ kind: "list" })}
-              onDone={() => {
-                userProviders.reload();
-                // The new provider must become pickable (and its sessions
-                // sendable) without a page reload: the catalog store is
-                // what every picker and the composer's send gate read.
-                reloadCatalog();
-                setProvidersView({ kind: "list" });
-              }}
-            />
-          )}
-          {category === "providers" && providersView.kind === "editUser" && (
-            <AddUserProviderForm
-              mode="edit"
-              key={providersView.providerId}
-              initial={userProviderForEdit(providersView.providerId)}
-              onBack={() => setProvidersView({ kind: "list" })}
-              onDone={() => {
-                userProviders.reload();
-                // An edited provider (a cleared key, a changed base URL)
-                // changes whether its models can run: refresh the store.
-                reloadCatalog();
-                setProvidersView({ kind: "list" });
-              }}
-              onDeleted={() => {
-                userProviders.reload();
-                reloadCatalog();
-              }}
-            />
-          )}
-          {category === "models" && (
-            <>
-              <ModelPreferencePanel
-                onOpenProviders={() => openCategory("providers")}
-              />
-              <CompactionSettings />
-              <ModelList />
-            </>
-          )}
-          {category === "mcp" && <McpList />}
-          {category === "webSearch" && <WebSearchPanel />}
-          {category === "routines" && (
-            <RoutinePanel
-              routines={routines.routines}
-              loading={routines.loading}
-              error={routines.error}
-              agentName={routineAgent}
-              onRefresh={routines.refresh}
-              onSetEnabled={routines.setEnabled}
-              onRun={routines.run}
-              onStop={routines.stop}
-              onDelete={routines.remove}
-            />
-          )}
-          {category === "security" && (
-            <>
-              <CommandSafetyPanel />
-              <ComputerUsePanel />
-            </>
-          )}
-          {category === "servers" && <ConnectionList />}
-          {category === "personalize" && <PersonalizePanel />}
-          {category === "appearance" && (
-            <AppearancePanel
-              theme={theme}
-              error={themeError}
-              onThemeChange={onThemeChange}
-            />
-          )}
+          {CATEGORIES.find((c) => c.id === category)?.render(panels)}
         </div>
       </div>
     </Modal>
