@@ -1,9 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import {
-  intercept,
-  jsonError,
-  record,
-} from "./api-test-utils.ts";
+import { intercept, jsonError, record } from "./api-test-utils.ts";
 
 import type { UserProviderInput } from "./types.ts";
 

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { SessionInfo } from "@lumisca/core";
 import { AppError } from "./util.ts";
+import { assetHeaders } from "./asset-headers.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface AttachmentApi {
@@ -15,16 +16,6 @@ export interface AttachmentApi {
     { path: string; mimeType: string; downloadName: string } | undefined
   >;
 }
-
-/** Caching of one attachment: the name is fresh per attachment and never
- * reused, so the bytes behind it never change. */
-const IMMUTABLE_CACHE = "private, max-age=31536000, immutable";
-
-/** Extensions a browser may render in place. Everything else is served as a
- * download — the same split the card draws (see shared/attachments.ts), and
- * enforced here as well: what a client decides to show is its own business,
- * but what this route lets a browser RENDER is not. */
-const INLINE_MIME_PREFIX = "image/";
 
 /**
  * Serves the files an agent attached to its reply (the `chat_attach` tool,
@@ -50,22 +41,12 @@ export function attachmentRoutes(core: AttachmentApi): Hono {
     if (attachment === undefined) {
       throw new AppError(`Attachment not found: ${name}`, 404);
     }
-    const headers: Record<string, string> = {
-      "content-type": attachment.mimeType,
-      "cache-control": IMMUTABLE_CACHE,
-      "x-content-type-options": "nosniff",
-    };
-    // An image is shown in place; anything else is a file to keep. The
-    // download carries the name the user knows, not the store's random one.
-    headers["content-disposition"] = attachment.mimeType.startsWith(
-        INLINE_MIME_PREFIX,
-      )
-      ? `inline; filename*=UTF-8''${
-        encodeURIComponent(attachment.downloadName)
-      }`
-      : `attachment; filename*=UTF-8''${
-        encodeURIComponent(attachment.downloadName)
-      }`;
+    // The download carries the name the user knows, not the store's random
+    // one (see asset-headers.ts for the rest of the rules).
+    const headers = assetHeaders({
+      mimeType: attachment.mimeType,
+      downloadName: attachment.downloadName,
+    });
     const bytes = await Deno.readFile(attachment.path);
     return new Response(bytes, { headers });
   });

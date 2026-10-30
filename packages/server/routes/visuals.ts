@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { SessionInfo } from "@lumisca/core";
 import { AppError } from "./util.ts";
+import { assetHeaders } from "./asset-headers.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface VisualApi {
@@ -13,10 +14,6 @@ export interface VisualApi {
     name: string,
   ): Promise<{ path: string; mimeType: string } | undefined>;
 }
-
-/** Caching of one asset: the name is fresh per publish and never reused, so
- * the bytes behind it never change. */
-const IMMUTABLE_CACHE = "private, max-age=31536000, immutable";
 
 /**
  * Serves the images a session published for its replies (the `visual:`
@@ -43,18 +40,7 @@ export function visualRoutes(core: VisualApi): Hono {
     if (visual === undefined) {
       throw new AppError(`Visual not found: ${name}`, 404);
     }
-    const headers: Record<string, string> = {
-      "content-type": visual.mimeType,
-      "cache-control": IMMUTABLE_CACHE,
-      "x-content-type-options": "nosniff",
-    };
-    if (visual.mimeType === "image/svg+xml") {
-      // An asset URL can be opened as a document of its own (a new tab, a
-      // drag-and-drop target), where the page's CSP does not apply: without
-      // this, a script an SVG carries would run with the app's origin. The
-      // response therefore brings its own policy, which allows nothing.
-      headers["content-security-policy"] = "default-src 'none'; sandbox";
-    }
+    const headers = assetHeaders({ mimeType: visual.mimeType });
     const bytes = await Deno.readFile(visual.path);
     // The asset is bounded by the store's limit (4 MiB), so buffering it
     // needs no stream handling; the buffer is an ArrayBuffer of its own.

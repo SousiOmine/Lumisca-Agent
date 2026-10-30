@@ -1,11 +1,11 @@
 import { assertEquals } from "@std/assert";
 import {
   assertRequest,
-  type SentRequest,
   intercept,
   jsonError,
   ok,
   record,
+  type SentRequest,
 } from "./api-test-utils.ts";
 import { splitTabKey, tabKey } from "./tabs.ts";
 
