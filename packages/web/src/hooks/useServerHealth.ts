@@ -26,10 +26,12 @@ export interface ServerHealth {
   /** The shell's classification of the local server child (null = no
    * shell, i.e. plain browser — the banner never shows there). */
   server: LocalServerStatus | null;
-  /** True when the server looks unreachable: recent fetch/WS failures plus
-   * the shell confirming the child is gone (`exited`/`none`), or failures
+  /** True when the server the page is served by looks unreachable: this
+   * shell displays the local server, recent fetch/WS failures, plus the
+   * shell confirming the child is gone (`exited`/`none`) — or failures
    * persisting while the child is `running` (a hang). The banner then
-   * offers restart + log copy-paste. */
+   * offers restart + log copy-paste. A remote display never arms it: the
+   * local child is not behind the page there. */
   disconnected: boolean;
   /** Record one API/WS failure (call from fetch catch sites / WS onclose). */
   noteFailure: () => void;
@@ -172,11 +174,17 @@ export function useServerHealth(active: boolean): ServerHealth {
 
   const failureFresh = Date.now() - lastFailureAt < FAILURE_FRESHNESS_MS;
   const hung = Date.now() - incidentSince >= HUNG_AFTER_MS;
+  // This shell's local child only explains the page's failures while the
+  // page IS the local server: with a remote server displayed, that child is
+  // not behind this page (it may not even be running), and neither
+  // "restart the local server" nor its log would fix anything.
+  const localDisplay = server?.mode === "local";
   // Gone (`exited`/`none`) + fresh failure is "down" right away. A `running`
   // child with failures persisting past HUNG_AFTER_MS is a hang — show the
   // same banner (its log tail is then the only clue). Transient blips
   // (fresh but brief, or already recovering) stay quiet.
   const disconnected = server !== null &&
+    localDisplay &&
     failureFresh &&
     healthyRounds < RECOVER_ROUNDS &&
     !dismissed &&

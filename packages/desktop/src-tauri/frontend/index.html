@@ -115,6 +115,31 @@
         max-width: 420px;
         line-height: 1.5;
       }
+      /* Startup failure with a way out: retry the remembered remote server
+         or fall back to the local one. */
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 18px;
+      }
+      .btn {
+        padding: 7px 14px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--text);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        border-color: var(--text-dim);
+      }
+      .btn.primary {
+        color: #1b1b1b;
+        background: var(--accent);
+        border-color: var(--accent);
+      }
     </style>
   </head>
   <body>
@@ -197,6 +222,7 @@
       <div class="wordmark">Lumisca</div>
       <div class="spinner" id="spinner"></div>
       <p class="status" id="status">起動中…</p>
+      <div class="actions hidden" id="actions"></div>
     </div>
     <script src="splash.js"></script>
   </body>

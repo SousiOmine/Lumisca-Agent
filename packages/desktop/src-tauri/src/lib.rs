@@ -12,9 +12,11 @@ use tauri::{Manager, WindowEvent};
 
 pub mod bridge;
 pub mod browser_lab;
+pub mod connection;
 pub mod notify;
 pub mod server;
 pub mod server_log;
+pub mod settings;
 pub mod update;
 pub mod window;
 
@@ -43,9 +45,15 @@ type StartupTask = Arc<Mutex<Option<Result<String, String>>>>;
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct StartupStatus {
-    /// "starting" | "ready" | "error"
+    /// What the shell is doing with the window's connection:
+    /// - "starting": the local server is booting.
+    /// - "connecting": the remembered remote server is being probed.
+    /// - "ready": the server answered and the window is navigating to it.
+    /// - "error": the local server failed to start.
+    /// - "remote-unreachable": the remembered remote server did not answer;
+    ///   the splash offers a retry and the local server instead.
     status: String,
-    /// Error message when status is "error".
+    /// Error message when status is "error" / "remote-unreachable".
     error: Option<String>,
 }
 
@@ -68,6 +76,15 @@ pub(crate) struct AppState {
     /// The last remote server the user switched to (url, token) — the
     /// "current display" reported by the bridge state.
     last_remote: Mutex<Option<(String, String)>>,
+    /// The connection `settings.json` holds for the next launch. Kept here
+    /// so the splash's 150 ms poll of `state` never reads the file, and so
+    /// the display and the persisted choice are written together.
+    remembered: Mutex<Option<settings::SavedConnection>>,
+    /// Bumped whenever the display is switched by hand (connect-local /
+    /// connect-remote). A startup restore that finishes after a manual
+    /// switch must not pull the window back to the remembered server, so it
+    /// compares this counter with the value it started under.
+    connect_epoch: Mutex<u64>,
     /// Auto-update state, surfaced to the settings UI through the bridge.
     update: Mutex<update::UpdateState>,
     /// Downloaded update awaiting installation.
@@ -96,7 +113,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let handle = app.handle().clone();
-            let settings = update::load_desktop_settings(&handle);
+            let prefs = settings::load(&handle);
             // The browser lab starts before the local server: the server
             // child receives the lab endpoint through its environment.
             let lab = match browser_lab::BrowserLab::start(&handle) {
@@ -110,7 +127,9 @@ pub fn run() {
                 local: Mutex::new(None),
                 server_log: Mutex::new(server_log::ServerLog::new(&handle)),
                 last_remote: Mutex::new(None),
-                update: Mutex::new(update::UpdateState::new(settings.auto_update)),
+                remembered: Mutex::new(prefs.last_remote),
+                connect_epoch: Mutex::new(0),
+                update: Mutex::new(update::UpdateState::new(prefs.auto_update)),
                 pending: Mutex::new(None),
                 startup: Mutex::new(StartupStatus::new("starting", None)),
                 startup_task: Mutex::new(None),
@@ -137,12 +156,12 @@ pub fn run() {
                 eprintln!("[lumisca] updater init failed: {e}");
             }
 
-            // Start the local server in the background: the initial splash
-            // page paints right away and the window navigates to the
-            // server as soon as it answers /api/health. Blocking setup
-            // here would keep the placeholder visible for the whole
-            // server startup.
-            server::start_local_server_async(&handle);
+            // Display the server this shell showed last time: the local one
+            // (started here in the background, so the splash paints right
+            // away) or the remote server the user was connected to.
+            // Blocking setup on either would keep the placeholder visible
+            // for the whole probe.
+            connection::start(&handle);
 
             // Periodic auto-update loop: the first check shortly after
             // startup so the UI is up, then every 6 hours. Each cycle is

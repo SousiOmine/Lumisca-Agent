@@ -250,6 +250,11 @@ function serverUpdate<T>(
 export type ServerLiveness = "running" | "exited" | "none";
 
 export interface LocalServerStatus {
+  /** Which server the page is talking to (`local` | `remote`). While a
+   * remote server is displayed, the desktop shell's local child process is
+   * not behind this page at all — even if it is still running — so the
+   * connection-lost banner must not blame it. */
+  mode: "local" | "remote";
   liveness: ServerLiveness;
   port: number | null;
   /** Process exit code when the child already exited (null = signaled). */

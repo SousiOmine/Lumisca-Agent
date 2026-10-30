@@ -3,7 +3,6 @@
 //! `on_before_exit` hook that stops the local server when the installer
 //! is launched on Windows.
 
-use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -55,36 +54,6 @@ impl UpdateState {
 pub(crate) struct PendingUpdate {
     update: Update,
     bytes: Vec<u8>,
-}
-
-/// Desktop-level settings (auto-update etc.). Kept next to the server
-/// database: the settings UI may be served by a remote server, so these
-/// flags cannot live in that server's settings.
-#[derive(serde::Serialize, serde::Deserialize)]
-pub(crate) struct DesktopSettings {
-    pub(crate) auto_update: bool,
-}
-
-impl Default for DesktopSettings {
-    fn default() -> Self {
-        Self { auto_update: true }
-    }
-}
-
-fn desktop_settings_path(app: &AppHandle) -> PathBuf {
-    crate::server::app_data_dir(app).join("settings.json")
-}
-
-pub(crate) fn load_desktop_settings(app: &AppHandle) -> DesktopSettings {
-    std::fs::read_to_string(desktop_settings_path(app))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
-}
-
-fn save_desktop_settings(app: &AppHandle, settings: &DesktopSettings) -> Result<(), String> {
-    let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(desktop_settings_path(app), json).map_err(|e| e.to_string())
 }
 
 /// The single updater instance used by every check. It is built once (in
@@ -157,9 +126,7 @@ pub(crate) fn auto_update_enabled(app: &AppHandle) -> bool {
 /// Persist and apply the auto-update toggle. Turning it on kicks off the
 /// first check immediately.
 pub(crate) fn set_auto_update(app: &AppHandle, enabled: bool) -> Result<(), String> {
-    let mut settings = load_desktop_settings(app);
-    settings.auto_update = enabled;
-    save_desktop_settings(app, &settings)?;
+    crate::settings::update(app, |settings| settings.auto_update = enabled)?;
     app.state::<AppState>().update.lock_recover().auto_update = enabled;
     if enabled {
         tauri::async_runtime::spawn(check_for_updates(app.clone(), true));

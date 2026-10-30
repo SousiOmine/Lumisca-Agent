@@ -752,6 +752,14 @@ export const settings = {
       "URLs may be http:// or https://. For https, terminate TLS in front of the server (e.g. tailscale serve) and start the server with --allowed-hosts <MagicDNS name>.",
   },
   "settings.connection.unnamed": { ja: "（無名）", en: "(unnamed)" },
+  /** Desktop only: the choice here is written to the shell's settings and
+   * restored on the next launch. */
+  "settings.connection.persistedNote": {
+    ja:
+      "選んだ接続先は保存され、次回の起動時もそのサーバーを表示します。表示できない場合は起動画面で再試行とローカルサーバーへの切り替えを選べます。",
+    en:
+      "The chosen server is saved and reopened on the next launch. If it cannot be reached, the startup screen offers a retry and the local server.",
+  },
 
   // --- command safety panel --------------------------------------------------
   "settings.security.title": {

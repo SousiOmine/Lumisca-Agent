@@ -242,6 +242,12 @@ export function ConnectionList() {
             />
           ))}
 
+          {desktop && (
+            <p className="settings-note">
+              {t("settings.connection.persistedNote")}
+            </p>
+          )}
+
           <p className="settings-note">{t("settings.connection.urlHint")}</p>
 
           <div>

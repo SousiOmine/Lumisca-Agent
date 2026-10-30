@@ -67,6 +67,11 @@ pub(crate) enum ServerLiveness {
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LocalServerStatus {
+    /// Which server the page is talking to: "local" or "remote". While a
+    /// remote server is displayed, this shell's local child is irrelevant
+    /// to the page's own failures (it may not even be running), so the
+    /// connection-lost banner only concerns itself with "local".
+    pub(crate) mode: String,
     pub(crate) liveness: ServerLiveness,
     pub(crate) port: Option<u16>,
     /// Process exit code when the child already exited (None = signaled).
@@ -79,10 +84,16 @@ pub(crate) struct LocalServerStatus {
 /// across polls.
 pub(crate) fn local_server_status(app: &AppHandle) -> LocalServerStatus {
     let state = app.state::<AppState>();
+    let mode = if state.last_remote.lock_recover().is_some() {
+        "remote"
+    } else {
+        "local"
+    };
     let tail = state.server_log.lock_recover().tail_text();
     let mut guard = state.local.lock_recover();
     let Some(local) = guard.as_mut() else {
         return LocalServerStatus {
+            mode: mode.to_string(),
             liveness: ServerLiveness::None,
             port: None,
             exit_code: None,
@@ -91,12 +102,14 @@ pub(crate) fn local_server_status(app: &AppHandle) -> LocalServerStatus {
     };
     match local.child.try_wait() {
         Ok(Some(status)) => LocalServerStatus {
+            mode: mode.to_string(),
             liveness: ServerLiveness::Exited,
             port: Some(local.port),
             exit_code: status.code(),
             log_tail: tail,
         },
         Ok(None) => LocalServerStatus {
+            mode: mode.to_string(),
             liveness: ServerLiveness::Running,
             port: Some(local.port),
             exit_code: None,
@@ -106,6 +119,7 @@ pub(crate) fn local_server_status(app: &AppHandle) -> LocalServerStatus {
             log_tail: tail.clone(),
         },
         Err(_) => LocalServerStatus {
+            mode: mode.to_string(),
             liveness: ServerLiveness::Running,
             port: Some(local.port),
             exit_code: None,
@@ -799,11 +813,11 @@ pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
         );
         kill_process_tree(&mut stale.child);
     }
-    // Forget a remote display: the restart is explicitly about the local
-    // server, so the window must come back to it.
-    *app.state::<AppState>().last_remote.lock_recover() = None;
+    // The restart is explicitly about the local server, so the window
+    // comes back to it — and the next launch starts locally instead of
+    // restoring the remote server.
     let url = ensure_local_server(app)?;
-    navigate_main(app, &url)?;
+    crate::connection::display_local(app, &url)?;
     Ok(url)
 }
 

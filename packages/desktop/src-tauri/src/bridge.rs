@@ -20,31 +20,19 @@
 //! arbitrary pages in the webview cannot drive the bridge.
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, StatusCode};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::server::{
-    ensure_local_server, health_check, host_label, local_server_status, page_url,
-    restart_local_server, HealthFailure, Scheme,
-};
+use crate::server::{local_server_status, page_url, restart_local_server};
+use crate::settings::SavedConnection;
 use crate::update::{
     check_for_updates, download_update, install_update, set_auto_update, update_status_json,
 };
-use crate::window::navigate_main;
-use crate::{notify, AppState, LockRecover};
+use crate::{connection, notify, AppState, LockRecover};
 
 /// JSON body of a lumisca://shell/* bridge response.
 type BridgeResponse = HttpResponse<Vec<u8>>;
-
-/// How long `connect-local` waits for the in-flight background startup
-/// before giving up. The busy-wait loop below has no other termination
-/// condition: if the startup thread died (panic, kill) without filling its
-/// result slot, the bridge would otherwise spin forever. 30s covers the
-/// startup's own worst case (10 attempts × the 3s health-check timeout,
-/// plus the retry sleeps), so a healthy startup always beats the deadline.
-const CONNECT_LOCAL_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Current display, shown by the settings UI. Also carries the local
 /// server startup progress for the splash page.
@@ -54,10 +42,16 @@ struct ConnectionState {
     mode: String,
     /// Page URL of the current display, if known.
     url: Option<String>,
-    /// "starting" | "ready" | "error" — local server startup progress.
+    /// What the shell is doing with the connection: "starting" (local
+    /// server booting), "connecting" (probing the remembered remote
+    /// server), "ready", "error" (local start failed),
+    /// "remote-unreachable" (the remembered server did not answer).
     status: String,
-    /// Error message when status is "error".
+    /// Error message when status is "error" / "remote-unreachable".
     error: Option<String>,
+    /// Whether a remote server is remembered, i.e. whether the splash can
+    /// offer "reconnect" beside "use the local server".
+    saved: bool,
     /// Whether the main window is maximized (custom title bar icon).
     maximized: bool,
 }
@@ -91,135 +85,6 @@ fn bridge_json(status: StatusCode, value: serde_json::Value) -> BridgeResponse {
 
 fn bridge_error(status: StatusCode, message: &str) -> BridgeResponse {
     bridge_json(status, serde_json::json!({ "error": message }))
-}
-
-/// A validated remote server URL: the transport to speak, the target host
-/// and port, and the canonical base URL used for navigation, the health
-/// probe and the "currently showing" state.
-#[derive(Debug)]
-struct RemoteTarget {
-    scheme: Scheme,
-    host: String,
-    port: u16,
-    /// `scheme://host[:port]` — the input normalized to its origin. A
-    /// trailing slash, or the path/query of a URL pasted straight out of
-    /// the server's output, is dropped: the UI is always served at the
-    /// root, and only the fields of this connection carry the token.
-    base: String,
-}
-
-/// Parse a server URL. Both `http://` (a LAN or Tailscale address served
-/// directly) and `https://` (a TLS-terminating front end such as
-/// `tailscale serve` in front of a MagicDNS name) are supported; every
-/// other scheme is rejected instead of being handed to the window. A URL
-/// carrying userinfo is refused rather than silently stripped — those
-/// credentials would end up in the bridge state and never reach the
-/// server.
-fn parse_remote_url(url: &str) -> Result<RemoteTarget, String> {
-    let parsed = url::Url::parse(url).map_err(|e| format!("URL が不正です: {e}"))?;
-    let scheme = match parsed.scheme() {
-        "http" => Scheme::Http,
-        "https" => Scheme::Https,
-        _ => return Err("http:// または https:// の URL のみサポートされています".into()),
-    };
-    if !parsed.username().is_empty() || parsed.password().is_some() {
-        return Err("URL にユーザー情報（user:pass@）は指定できません".into());
-    }
-    // `url::Host` rather than `host_str`: the latter serializes an IPv6
-    // literal with its brackets, and brackets belong to the authority
-    // spelling — `host_label` re-adds them for the Host header and the base
-    // URL where they are required.
-    let host = match parsed.host() {
-        Some(url::Host::Domain(domain)) => domain.to_string(),
-        Some(url::Host::Ipv4(address)) => address.to_string(),
-        Some(url::Host::Ipv6(address)) => address.to_string(),
-        None => return Err("URL にホストがありません".to_string()),
-    };
-    // The port actually used, and the port as spelled in the base URL: an
-    // omitted one is filled in from the scheme's default and dropped from
-    // the base (http://host:443 would be as wrong as https://host:80).
-    let port = parsed.port().unwrap_or(match scheme {
-        Scheme::Http => 80,
-        Scheme::Https => 443,
-    });
-    let label = host_label(&host);
-    let base = match parsed.port() {
-        Some(port) => format!("{}://{label}:{port}", parsed.scheme()),
-        None => format!("{}://{label}", parsed.scheme()),
-    };
-    Ok(RemoteTarget {
-        scheme,
-        host,
-        port,
-        base,
-    })
-}
-
-/// Connect-time failure message for the settings UI. The probe says why it
-/// failed instead of a bare "cannot connect": for a remote server the
-/// likeliest causes are a Host guard 403 (the name is missing from the
-/// server's `--allowed-hosts`) and a token mismatch, and neither is
-/// something the user can see from the URL alone.
-fn connect_failure(url: &str, failure: HealthFailure) -> String {
-    match failure {
-        HealthFailure::Unreachable => format!("サーバーに接続できません: {url}"),
-        HealthFailure::Status(403) => format!(
-            "サーバーに接続できません: {url}（HTTP 403: ホスト名が拒否されました。サーバーの --allowed-hosts にこのホスト名を追加してください）"
-        ),
-        HealthFailure::Status(401) => {
-            format!("サーバーに接続できません: {url}（HTTP 401: トークンが一致しません）")
-        }
-        HealthFailure::Status(status) => {
-            format!("サーバーに接続できません: {url}（HTTP {status}）")
-        }
-    }
-}
-
-fn connect_remote_impl(app: &AppHandle, url: &str, token: &str) -> Result<String, String> {
-    let target = parse_remote_url(url)?;
-    if let Err(failure) = health_check(
-        target.scheme,
-        &target.host,
-        target.port,
-        Some(token),
-        Duration::from_secs(5),
-    ) {
-        return Err(connect_failure(url, failure));
-    }
-    let page = page_url(&target.base, token);
-    *app.state::<AppState>().last_remote.lock_recover() = Some((target.base, token.to_string()));
-    navigate_main(app, &page)?;
-    Ok(page)
-}
-
-fn connect_local_impl(app: &AppHandle) -> Result<String, String> {
-    // If the background startup is still running, wait for its result
-    // instead of spawning a second server instance.
-    let pending = app.state::<AppState>().startup_task.lock_recover().clone();
-    if let Some(shared) = pending {
-        let deadline = Instant::now() + CONNECT_LOCAL_WAIT_TIMEOUT;
-        loop {
-            if let Some(result) = shared.lock_recover().clone() {
-                return result;
-            }
-            if Instant::now() >= deadline {
-                // The background startup never completed (e.g. its thread
-                // panicked and never filled the slot). Forget it so the
-                // next attempt starts a server directly instead of waiting
-                // again.
-                *app.state::<AppState>().startup_task.lock_recover() = None;
-                return Err(
-                    "サーバーの起動待機時間が超過しました。しばらく時間をおいてから再度お試しください。"
-                        .into(),
-                );
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-    }
-    let url = ensure_local_server(app)?;
-    *app.state::<AppState>().last_remote.lock_recover() = None;
-    navigate_main(app, &url)?;
-    Ok(url)
 }
 
 pub(crate) fn handle_shell_request(
@@ -277,21 +142,29 @@ pub(crate) fn handle_shell_request(
                 .get_webview_window("main")
                 .map(|window| window.is_maximized().unwrap_or(false))
                 .unwrap_or(false);
+            // The splash polls this every 150 ms, so the remembered choice
+            // is read from memory rather than from the settings file on
+            // every poll.
+            let saved = state.remembered.lock_recover().is_some();
             let state = ConnectionState {
                 mode: mode.to_string(),
                 url,
                 status: startup.status.clone(),
                 error: startup.error.clone(),
+                saved,
                 maximized,
             };
             bridge_json(StatusCode::OK, serde_json::to_value(state).unwrap())
         }
+        // Both switches remember the choice in `settings.json`, so the next
+        // launch returns to the server the window was showing.
         "connect-remote" => {
             let (url, token) = match (get("url"), get("token")) {
                 (Some(url), token) => (url, token.unwrap_or_default()),
                 _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
             };
-            match connect_remote_impl(app, &url, &token) {
+            let conn = SavedConnection { url, token };
+            match connection::connect_remote(app, &conn) {
                 Ok(page) => bridge_json(
                     StatusCode::OK,
                     serde_json::json!({ "ok": true, "url": page }),
@@ -299,12 +172,21 @@ pub(crate) fn handle_shell_request(
                 Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
             }
         }
-        "connect-local" => match connect_local_impl(app) {
+        "connect-local" => match connection::connect_local(app) {
             Ok(url) => bridge_json(
                 StatusCode::OK,
                 serde_json::json!({ "ok": true, "url": url }),
             ),
             Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
+        },
+        // Retry the remembered remote server from the splash, without a
+        // navigation away from it (it failed to answer at startup).
+        "connect-saved" => match connection::connect_saved(app) {
+            Ok(url) => bridge_json(
+                StatusCode::OK,
+                serde_json::json!({ "ok": true, "url": url }),
+            ),
+            Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
         },
         // --- local server diagnostics ------------------------------------
         //
@@ -324,21 +206,13 @@ pub(crate) fn handle_shell_request(
             ),
             Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
         },
+        // Reachability check for the settings UI, without switching.
         "test" => {
             let (url, token) = match (get("url"), get("token")) {
                 (Some(url), token) => (url, token.unwrap_or_default()),
                 _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
             };
-            match parse_remote_url(&url).and_then(|target| {
-                health_check(
-                    target.scheme,
-                    &target.host,
-                    target.port,
-                    Some(&token),
-                    Duration::from_secs(5),
-                )
-                .map_err(|failure| connect_failure(&url, failure))
-            }) {
+            match connection::test_remote(&url, &token) {
                 Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
                 Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
             }
@@ -477,93 +351,5 @@ pub(crate) fn handle_shell_request(
             bridge_json(StatusCode::OK, serde_json::json!({ "path": path }))
         }
         _ => bridge_error(StatusCode::NOT_FOUND, "unknown action"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The base URL is the input normalized to its origin: what the window
-    /// is navigated to, what the health probe targets, and what the settings
-    /// UI reports as the current display.
-    #[test]
-    fn parse_remote_url_normalizes_the_base_url() {
-        let https = parse_remote_url("https://host.tailnet.ts.net/").unwrap();
-        assert_eq!(https.scheme, Scheme::Https);
-        assert_eq!(https.host, "host.tailnet.ts.net");
-        assert_eq!(https.port, 443);
-        assert_eq!(https.base, "https://host.tailnet.ts.net");
-
-        let http = parse_remote_url("http://100.64.0.5:8000").unwrap();
-        assert_eq!(http.scheme, Scheme::Http);
-        assert_eq!(http.host, "100.64.0.5");
-        assert_eq!(http.port, 8000);
-        assert_eq!(http.base, "http://100.64.0.5:8000");
-
-        // A URL pasted straight out of the server's output carries a path,
-        // query and fragment the page does not live at (and a token that
-        // belongs in its own field): only the origin is kept.
-        let pasted = parse_remote_url("https://host.tailnet.ts.net/?token=abc#top").unwrap();
-        assert_eq!(pasted.base, "https://host.tailnet.ts.net");
-    }
-
-    #[test]
-    fn parse_remote_url_accepts_and_fills_the_default_ports() {
-        assert_eq!(parse_remote_url("http://host").unwrap().port, 80);
-        assert_eq!(parse_remote_url("https://host").unwrap().port, 443);
-        // An explicit default port is normalized away by the URL parser, so
-        // the base never spells out http://host:80 or https://host:443.
-        let explicit = parse_remote_url("https://host:443").unwrap();
-        assert_eq!(explicit.port, 443);
-        assert_eq!(explicit.base, "https://host");
-    }
-
-    #[test]
-    fn parse_remote_url_brackets_ipv6_literals() {
-        let target = parse_remote_url("https://[::1]:8443").unwrap();
-        assert_eq!(target.host, "::1");
-        assert_eq!(target.port, 8443);
-        assert_eq!(target.base, "https://[::1]:8443");
-    }
-
-    #[test]
-    fn parse_remote_url_rejects_other_schemes() {
-        assert_eq!(
-            parse_remote_url("ftp://host").unwrap_err(),
-            "http:// または https:// の URL のみサポートされています"
-        );
-        // A bare "host:port" parses as the scheme "host" — rejected here
-        // rather than navigated to.
-        assert!(parse_remote_url("homeserver:8000").is_err());
-        assert!(parse_remote_url("file:///tmp").is_err());
-        assert!(parse_remote_url("ws://host:8000").is_err());
-    }
-
-    #[test]
-    fn parse_remote_url_rejects_malformed_urls() {
-        assert!(parse_remote_url("").is_err());
-        assert!(parse_remote_url("https://").is_err());
-        assert_eq!(
-            parse_remote_url("https://user:pass@host").unwrap_err(),
-            "URL にユーザー情報（user:pass@）は指定できません"
-        );
-    }
-
-    /// The failure message names the operationally distinct causes: a 403
-    /// comes from the server's Host guard and is fixed in ITS
-    /// `--allowed-hosts`, not on this side.
-    #[test]
-    fn connect_failure_explains_the_http_status() {
-        let url = "https://host.tailnet.ts.net";
-        assert_eq!(
-            connect_failure(url, HealthFailure::Unreachable),
-            "サーバーに接続できません: https://host.tailnet.ts.net"
-        );
-        let forbidden = connect_failure(url, HealthFailure::Status(403));
-        assert!(forbidden.contains("HTTP 403"));
-        assert!(forbidden.contains("--allowed-hosts"));
-        assert!(connect_failure(url, HealthFailure::Status(401)).contains("HTTP 401"));
-        assert!(connect_failure(url, HealthFailure::Status(502)).contains("HTTP 502"));
     }
 }
