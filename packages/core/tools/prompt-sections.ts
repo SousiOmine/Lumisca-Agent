@@ -1,15 +1,14 @@
 import {
-  TOOL_AGENT_CREATE,
   TOOL_ASK,
   TOOL_ASYNC_BASH,
   TOOL_BASH,
+  TOOL_CHAT_ATTACH,
   TOOL_CHAT_UI,
   TOOL_EDIT,
   TOOL_EVAL,
   TOOL_GLOB,
   TOOL_GREP,
   TOOL_HISTORY_SEARCH,
-  TOOL_IDENTITY,
   TOOL_LIST_DIR,
   TOOL_READ,
   TOOL_SEND_MESSAGE,
@@ -230,13 +229,32 @@ const VISUAL_DIAGRAM_SECTION: PromptSection = {
     "text.",
 };
 
+/** Code mode's way of putting an image INSIDE the reply: the visual tool
+ * publishes the file and returns the markdown to paste. A conversation
+ * (stella) does not use it — there the file is sent with chat_attach and
+ * appears as a card (see CHAT_ATTACH_SECTION). */
 const VISUAL_IMAGE_SECTION: PromptSection = {
   name: "visual:image",
-  order: ORDER.tool + 125,
+  order: ORDER.tool + 128,
   requires: [TOOL_VISUAL],
-  text: "- To show an image file in your reply, publish it with the visual " +
-    "tool and\n  paste the markdown snippet it returns where the image " +
-    "belongs.",
+  text: "- To show an image file inside your reply, publish it with the " +
+    "visual tool and\n  paste the markdown snippet it returns where the " +
+    "image belongs.",
+};
+
+/** Showing a file the agent produced: the chat_attach tool hands it to the
+ * user, as a card under the reply (an image inline, anything else as a
+ * download). Keyed on the tool: a session without one must not be told to
+ * send files, and an agent that does not know it can will paste the path
+ * instead and leave the user to go find it. */
+const CHAT_ATTACH_SECTION: PromptSection = {
+  name: "tool:chat_attach",
+  order: ORDER.tool + 125,
+  requires: [TOOL_CHAT_ATTACH],
+  text: "- To give the user a file (an image, a report, a log), send it with " +
+    "chat_attach:\n  it appears as a card under the reply. Do not write its " +
+    "path and expect the user to\n  open it, and do not paste its content " +
+    "into the reply as well.",
 };
 
 /** The machine's screen, in a stella session. Both halves are keyed on the
@@ -276,37 +294,6 @@ const HISTORY_SEARCH_SECTION: PromptSection = {
     "context but stay in the\n  history. Use history_search to look them up " +
     "(by word or by date) before\n  saying that you do not remember, or " +
     "before asking the user to repeat something.",
-};
-
-/** The agent's own identity, in a stella session. Keyed on the tool: a
- * session without it has no way to write about itself, and must not be
- * pointed at one. The bullet carries what the tool description cannot: when
- * reaching for it (once it has learned something about the job), and that a
- * write is not a system-prompt edit. */
-const IDENTITY_SECTION: PromptSection = {
-  name: "tool:identity",
-  order: ORDER.tool + 136,
-  requires: [TOOL_IDENTITY],
-  text:
-    "- Your identity is what you write about yourself (your role, what you " +
-    "are responsible\n  for, the knowledge the work needs); it is not the role " +
-    "the user gave you. Write it\n  once you have learned something worth " +
-    "keeping across sessions, and update it when\n  that changes — a write " +
-    "reaches your next turn, not the current one.",
-};
-
-/** Adding an agent in a stella session (Terasuma's `tera_create`).
- * The tool cannot ask the questions, so the bullet carries when to reach
- * for it: the user has already said what the new agent should be. */
-const AGENT_CREATE_SECTION: PromptSection = {
-  name: "tool:agent_create",
-  order: ORDER.tool + 138,
-  requires: [TOOL_AGENT_CREATE],
-  text: "- The sidebar can hold several agents, each with its own role and " +
-    "conversation.\n  When the user describes another one they want, call " +
-    "agent_create with a name\n  and the role in their words — do not ask " +
-    "them for those facts again in the tool;\n  it cannot talk back. The new " +
-    "agent appears in the sidebar, and this conversation\n  stays as it is.",
 };
 
 /** Handing the screen to the user. Keyed on the tool: an agent that cannot
@@ -471,6 +458,7 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   WEB_SEARCH_SECTION,
   VISUAL_DIAGRAM_SECTION,
   VISUAL_IMAGE_SECTION,
+  CHAT_ATTACH_SECTION,
   TASK_SECTION,
   NOTIFICATION_SECTION,
   // The same rule a sub-agent gets: a "[Message from ...]" notification is
@@ -485,7 +473,13 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
 /** Guideline sections of a stella session's system prompt: the coding set
  * minus the workspace framing (there is no workspace picker in stella) plus
  * the machine's screen guidance. The machine is the working area, so the
- * file/shell sections apply exactly as they do in a workspace. */
+ * file/shell sections apply exactly as they do in a workspace.
+ *
+ * What is absent says as much as what is here: no `ask` (the person answers
+ * in words or with a card; there is no panel to block on), no `todo` (no
+ * progress panel), no identity or agent_create bullets (those tools are
+ * discoverable through tool_search — their built-in skills teach them), and
+ * no visual bullet (chat_attach replaced it). */
 export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   READ_SECTION,
   WRITE_SECTION,
@@ -495,18 +489,14 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   SEARCH_CAPS_SECTION,
   BASH_SECTION,
   ASYNC_BASH_SECTION,
-  ASK_SECTION,
-  TODO_SECTION,
   SKILL_SECTION,
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
   VM_ASK_USER_SECTION,
   CHAT_UI_SECTION,
+  CHAT_ATTACH_SECTION,
   HISTORY_SEARCH_SECTION,
-  IDENTITY_SECTION,
-  AGENT_CREATE_SECTION,
   WEB_SEARCH_SECTION,
-  VISUAL_IMAGE_SECTION,
   TASK_SECTION,
   NOTIFICATION_SECTION,
   SUBAGENT_MESSAGE_SECTION,

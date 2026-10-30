@@ -99,10 +99,17 @@ function exploreTools(
  * outlive them (async_bash). `safety` (when present) gates their bash/eval
  * tools like the main agent's; browser-lab tools are not preloaded either
  * — general sub-agents reach them through the session's tool registry via
- * the search/call pair, exactly like the main agent. */
+ * the search/call pair, exactly like the main agent.
+ *
+ * `eval` is the session's call, not this function's: it runs JavaScript in
+ * the SERVER process, so a session that works inside the stella machine
+ * (whose whole premise is that nothing outside it is reachable) must not
+ * hand it out — not even to a sub-agent. The runtime says which it is (see
+ * SubagentRuntime.eval); there is no default, so a caller has to decide. */
 function generalTools(
   workspace: Workspace,
   backends: ToolBackends,
+  evalTool: boolean,
   safety: CommandSafety | undefined,
   browserAvailable: boolean,
   computerAvailable: boolean,
@@ -115,7 +122,7 @@ function generalTools(
       runner: backends.runner,
       safety,
     }),
-    createEvalTool({ safety }),
+    ...(evalTool ? [createEvalTool({ safety })] : []),
     ...(webSearch === undefined ? [] : createWebSearchTools(webSearch)),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
@@ -134,6 +141,10 @@ export interface SubagentRuntime {
   backends: ToolBackends;
   model: Model<Api>;
   thinkingLevel: ThinkingLevel;
+  /** Whether the sub-agent gets `eval`. False for a session that works
+   * inside the stella machine: the tool runs in the server process, which
+   * is exactly the boundary that mode exists to hold. */
+  eval: boolean;
 }
 
 /** Where the parent (main) agent receives injected notifications. Set by
@@ -407,6 +418,7 @@ export class TaskHub {
         ? generalTools(
           runtime.workspace,
           runtime.backends,
+          runtime.eval,
           this.safety,
           this.browserAvailable,
           this.computerAvailable,

@@ -1,9 +1,9 @@
-import { join } from "node:path";
 import {
   isVisualExtension,
   maxVisualBytes,
   visualMimeType,
 } from "../shared/mod.ts";
+import { AssetDir } from "./asset-dir.ts";
 
 /**
  * The published visuals of a session: the image files a reply may embed with
@@ -15,12 +15,22 @@ import {
  * resolved here. Assets sit beside the database rather than inside a
  * workspace: they belong to the conversation, not to the project, and
  * publishing must not touch the files the user version-controls.
+ *
+ * What this class adds to {@link AssetDir} is the policy of one kind of
+ * asset: which extensions are images, what each may weigh, and the content
+ * type of a name. The naming, the directory and the cache-forever property
+ * are shared with the attachments store (session/attachments.ts), because
+ * getting them wrong once is enough.
  */
 export class SessionVisualStore {
+  readonly #dir: AssetDir;
+
   /** `root` is the directory the per-session directories are created under
    * (created on the first publish, so a session that never shows an image
    * leaves nothing behind). */
-  constructor(private readonly root: string) {}
+  constructor(root: string) {
+    this.#dir = new AssetDir(root);
+  }
 
   /** Store `bytes` as a new asset of `sessionId` and return its name (what
    * `visualRef` links). Throws — never truncates or renames — when the
@@ -41,33 +51,27 @@ export class SessionVisualStore {
         `Visual is too large: ${bytes.byteLength} bytes (limit ${limit})`,
       );
     }
-    const dir = this.sessionDir(sessionId);
-    await Deno.mkdir(dir, { recursive: true });
-    let held = 0;
-    for await (const entry of Deno.readDir(dir)) {
-      if (entry.isFile) held++;
-    }
-    if (held >= MAX_ASSETS_PER_SESSION) {
-      throw new Error(
-        `This session already holds ${MAX_ASSETS_PER_SESSION} visuals; reuse one of them instead of publishing another`,
+    try {
+      return await this.#dir.write(
+        sessionId,
+        bytes,
+        suffix,
+        MAX_ASSETS_PER_SESSION,
       );
-    }
-    // A fresh name per publish: an asset is never overwritten, so a message
-    // that references one keeps showing what it showed (and the asset route
-    // can cache it forever). The retry only guards the impossible case of
-    // two publishes drawing the same 48-bit name; it never falls back to a
-    // shared name.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const name = `${randomNameBase()}${suffix}`;
-      const path = join(dir, name);
-      try {
-        await Deno.writeFile(path, bytes, { createNew: true });
-        return name;
-      } catch (error) {
-        if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+    } catch (error) {
+      // The cap's wording is this store's (a visual, not an attachment):
+      // translate it rather than leak the shared one, which names no kind.
+      if (
+        error instanceof Error &&
+        error.message.includes(`holds ${MAX_ASSETS_PER_SESSION} assets`)
+      ) {
+        throw new Error(
+          `This session already holds ${MAX_ASSETS_PER_SESSION} visuals; ` +
+            "reuse one of them instead of publishing another",
+        );
       }
+      throw error;
     }
-    throw new Error("Could not allocate a visual asset name");
   }
 
   /** The file an asset name names, or undefined when this session has no
@@ -80,28 +84,14 @@ export class SessionVisualStore {
   ): Promise<{ path: string; mimeType: string } | undefined> {
     const mimeType = visualMimeType(name);
     if (mimeType === undefined) return undefined;
-    const path = join(this.sessionDir(sessionId), name);
-    try {
-      const stat = await Deno.stat(path);
-      if (!stat.isFile) return undefined;
-    } catch {
-      return undefined;
-    }
-    return { path, mimeType };
+    const path = await this.#dir.resolve(sessionId, name);
+    return path === undefined ? undefined : { path, mimeType };
   }
 
   /** Drop every asset of a session (the session itself is gone). No-op when
    * the session never published one. */
-  async deleteSession(sessionId: string): Promise<void> {
-    try {
-      await Deno.remove(this.sessionDir(sessionId), { recursive: true });
-    } catch (error) {
-      if (!(error instanceof Deno.errors.NotFound)) throw error;
-    }
-  }
-
-  private sessionDir(sessionId: string): string {
-    return join(this.root, sessionId);
+  deleteSession(sessionId: string): Promise<void> {
+    return this.#dir.deleteSession(sessionId);
   }
 }
 
@@ -112,13 +102,3 @@ export const VISUALS_DIR_NAME = ".lumisca-visuals";
 /** Most assets one session may hold. A session publishes a handful in
  * normal use; the cap only stops a loop from filling the disk. */
 const MAX_ASSETS_PER_SESSION = 200;
-
-/** 12 hex characters of randomness per asset name. The name is visible in a
- * message, so it stays short; 48 bits is far beyond what a collision needs,
- * and `createNew` turns the theoretical one into a retry rather than an
- * overwrite. */
-function randomNameBase(): string {
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}

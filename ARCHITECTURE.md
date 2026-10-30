@@ -26,7 +26,21 @@ stella mode は「どこで作業するか」だけが code mode と違います
 | `CommandRunner`（tools/command-backend.ts） | `HostCommandRunner`（tools/host/command-runner.ts: `/bin/sh` または PowerShell） | `VmCommandRunner`（vm/shell.ts: `bash -lc`） |
 | `BackgroundSpawner`（tools/background-backend.ts） | `HostBackgroundSpawner`（tools/host/background.ts: 子プロセス） | `VmBackgroundSpawner`（vm/shell.ts: setsid + ログファイル追跡） |
 
-`read` / `write` / `edit` / `list_dir` / `grep` / `glob` / `bash` / `visual` / `pdf_read_pages` は、この 2 つのポート越しに同じ実装で動きます。`eval` だけは stella に渡しません（サーバープロセス内で JavaScript を実行するため、VM 隔離の前提を破る）。
+`read` / `write` / `edit` / `list_dir` / `grep` / `glob` / `bash` / `pdf_read_pages` は、この 2 つのポート越しに同じ実装で動きます。`eval` だけは stella に渡しません（サーバープロセス内で JavaScript を実行するため、VM 隔離の前提を破る）。同じ理由で、stella のサブエージェントにも渡しません（`SubagentRuntime.eval` が `false`。`tools/task-hub.ts` の `generalTools`）。
+
+### ツールレジストリの分離（main / subagent）
+
+セッションは `ToolRegistry` を 2 つ持ちます（`tools/registries.ts` の `SessionToolRegistries`）。
+
+| レジストリ | 中身 | 使う相手 |
+|---|---|---|
+| `main` | 共有ツール＋その会話の相手だけのツール | メインエージェントの `tool_search` / `tool_call` |
+| `subagent` | 共有ツールのみ | サブエージェントの `tool_search` / `tool_call` |
+
+- **共有ツール**（`addShared` / `removeShared`）: MCP、browser-lab、computer use、`pdf_read_pages`。どこで作業するかを表すものなので、どのエージェントからも見えます。
+- **main だけのツール**（`addMainOnly`）: `identity`、`agent_create`、`routine_*`。会話の相手自身に属するもの（自分の自己記述、サイドバーの相手の追加、その会話に予約されたスケジュール）で、サブエージェントが触れると、親の identity を書き換えたり、ユーザーが頼んでいない相手を作ったり、自分の実行より長生きする仕事を予約できてしまいます。
+- **フィルタではなく 2 実体**である理由: MCP のディスカバリは 2 つの独立した受け手（メインの `McpAttachmentHost` と `TaskHub`）に届き、それぞれが自分のツールを合流させてから search/call ペアを付けます。片方を他方のフィルタにすると、先に走った側がまだ空のレジストリを見てペアを組まない、という競合が生まれます。
+- stella のサブエージェントは VM のバックエンドで動きます（`SubagentRuntime.backends` が VM のもの）。つまり code mode のサブエージェントと同じツール集合で、**(a) `eval` を除き、(b) stella 専用ツールを見ない**、という 2 点だけが違います。
 
 ### 作業フォルダとパスの境界
 
@@ -148,9 +162,10 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
   3. **ピアの状態監視**: ピアとの接続切断および復帰イベントを UI に通知し、復帰時に自動で再同期します。
 
 - **応答内の図と画像**  
-  エージェントの応答内で視覚要素を表示する経路は 2 つあります。
+  エージェントの応答内で視覚要素を表示する経路は 3 つあります。
   1. **SVG コードブロック**: ```svg で囲まれた SVG を、`<img src="data:image/svg+xml,...">` として安全に描画します。スクリプトを含むものや不正なデータはエラーカードとして表示します。
-  2. **画像参照（`visual:<name>`）**: `visual` ツールで保存された画像を参照します。レンダラーがセッションのアセット配信ルート（`/api/sessions/<id>/visual/<name>`）に変換して表示します。
+  2. **ファイル送信（`chat_attach`）**: 画像もファイルも会話にカードで出ます（画像はインライン、それ以外はダウンロード）。code mode と stella の両方で使えます。
+  3. **画像参照（`visual:<name>`）**: code mode の `visual` ツールが保存した画像を参照します。レンダラーがセッションのアセット配信ルート（`/api/sessions/<id>/visual/<name>`）に変換し、本文の好きな位置に置けます。stella ではこのツールを外しており（2 が代わり）、保存済みの応答を表示し続けるためにルートとストアだけ残しています。
 
 - **スキルパレット（`/skill`）**  
   入力欄のスラッシュメニューから、ワークスペースで利用可能なスキルを検索して選択できます。選択したスキルは通常のユーザープロンプトとして送信されます。
@@ -213,8 +228,11 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
   - **失敗の翻訳**: HTTP 401/429/402/5xx などを `WebSearchErrorCode`（auth・rate_limit・quota・invalid・unsupported・unavailable）に畳み、モデルへは英語の次の一手を、設定画面へはアプリ言語の理由を返します。
   - **APIキーの扱い**: 設定は 1 つの設定エントリ（`web_search`）に JSON で保存します。キーを含むため汎用の設定 API からは保護し（`settings/guard.ts`）、専用の `/api/web-search` 群で読み書きします。読み出しは「キーが登録されているか」だけを返し、キー自体は返しません。
 
-- **画像アセット管理（`tools/visual.ts`, `session/visuals.ts`）**  
-  応答内で画像を表示する際、ファイルをセッション専用のアセット領域へ複製します。元ファイルが後から変更された場合でも、チャットログの表示内容を保持するためです。保存先はデータベースと同じディレクトリ内の独立したフォルダーです。
+- **アセット管理（`session/asset-dir.ts`, `session/visuals.ts`, `session/attachments.ts`）**  
+  2 つのストアが同じ土台を使います（`AssetDir`）。どちらもセッション専用の領域へファイルを複製し、元ファイルが変わっても表示内容を保ちます。保存先はデータベースと同じディレクトリ内の独立したフォルダーです（`.lumisca-visuals` / `.lumisca-attachments`）。
+  - **名前はストアだけが作る**: 12 桁の hex＋拡張子。モデルが渡したパスから名前を作らないので、応答がマシン上のパスを指すことはありません。配信ルートは名前に一致するファイルしか返しません。
+  - **`visual`（code mode）**: 画像のみ。`visual:<name>` 参照で本文に埋め込みます。
+  - **`chat_attach`（両モード）**: 任意のファイル。表示名と Content-Type を `<name>.json` のサイドカーに残し、ダウンロードが元の名前で届くようにします。インライン表示はラスタ画像だけで、SVG はダウンロード扱いです（インライン SVG はスクリプトを運べるため、配信時にスクリプト方針を決めずに済ませています）。上限は 1 件 4 MiB・1 回 10 件・合計 16 MiB（`shared/attachments.ts`）。
 
 - **Computer Use（`computer/`）**  
   画面キャプチャと操作（クリック・キー入力・ウィンドウ一覧）を提供する機能です。Windows と Linux（Wayland セッション）に対応し、設定で明示的に有効化されている場合のみ利用できます。座標はキャプチャ画像のピクセルを基点とし、画面のスケールや解像度に合わせて正しく変換されます。
@@ -234,8 +252,8 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
 - **認証 Cookie（`auth-cookie.ts`）**  
   ブラウザからのアクセス時に認証トークンを Cookie に保持します。ポート番号ごとに Cookie 名を分離し（`lumisca_token_<ポート>`）、同一ホスト上で複数インスタンスが稼働する場合の競合を防ぎます。
 
-- **アセット配信（`routes/visuals.ts`）**  
-  セッションで共有された画像ファイルを配信します。SVG 画像の配信時には `Content-Security-Policy: default-src 'none'; sandbox` を付与し、意図しないスクリプトの実行を防止します。
+- **アセット配信（`routes/visuals.ts`, `routes/attachments.ts`）**  
+  セッションで共有された画像ファイル（`visual:` 参照）と、エージェントが送ったファイル（`chat_attach`）を配信します。後者は表示名を `Content-Disposition` に載せ、画像は `inline`、それ以外は `attachment` として返します。対象のセッションが存在することを先に確かめるので、名前だけでセッションの有無を探ることはできません。`visuals` の SVG 配信時には `Content-Security-Policy: default-src 'none'; sandbox` を付与し、意図しないスクリプトの実行を防止します。
 
 - **Web 検索の設定 API（`routes/web-search.ts`）**  
   `GET /web-search`（全体）、`POST /web-search/providers`（追加）、`PUT/DELETE /web-search/providers/:id`（キー変更・削除）、`PUT /web-search/default`（既定の切り替え、`null` で解除）、`POST /web-search/test`（保存前の接続確認）。変更系はすべて変更後の全体を返します。接続確認の失敗は HTTP 200 のまま `ok: false` と理由を返します（誤ったキーは利用者が直す結果であって、壊れたリクエストではないため）。

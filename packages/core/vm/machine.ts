@@ -219,6 +219,9 @@ export class StellaMachine {
         // The machine has its own browser and no host computer surface.
         browser: false,
         computer: false,
+        // This is a stella session's catalog: its agent owns an identity and
+        // may create more agents, and both tools are discoverable.
+        stella: true,
       }),
       ...(this.globalSkillDirs !== undefined
         ? { globalDirs: this.globalSkillDirs }

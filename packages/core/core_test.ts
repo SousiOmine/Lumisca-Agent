@@ -3423,18 +3423,19 @@ Deno.test("deleting a workspace drops its sessions' visuals", async () => {
   }
 });
 
-Deno.test("a coding session gets the visual tool; a chat session does not", async () => {
+Deno.test("a coding session gets chat_attach and visual; a chat session neither", async () => {
   const dir = await makeRealTempDir("lumisca-visuals-core-");
   const { core, sessionId } = await openFileBackedCore(dir);
   try {
-    // The visual tool is preloaded (the prompt's image bullet requires it),
-    // so the session was told it may publish an image.
+    // Both tools are preloaded in code mode: `chat_attach` hands a file
+    // over as a card, `visual` puts an image inside the reply's markdown.
     const coding = core.getSession(sessionId)!.systemPrompt ?? "";
-    assert(coding.includes("publish it with the visual tool"));
+    assert(coding.includes("chat_attach"));
+    assert(coding.includes("publish it with the visual"));
     assert(coding.includes("```svg"));
 
-    // A chat session has no workspace to publish from, so it must not be
-    // pointed at the tool — but the fence works everywhere.
+    // A chat session has no workspace to read a file from, so it must not be
+    // pointed at either tool — but the fence works everywhere.
     const faux = fauxProvider();
     core.models.models.setProvider(faux.provider);
     const chat = await core.createSession({
@@ -3442,7 +3443,8 @@ Deno.test("a coding session gets the visual tool; a chat session does not", asyn
       modelId: faux.getModel().id,
     });
     const chatPrompt = core.getSession(chat.id)!.systemPrompt ?? "";
-    assertEquals(chatPrompt.includes("publish it with the visual tool"), false);
+    assertEquals(chatPrompt.includes("chat_attach"), false);
+    assertEquals(chatPrompt.includes("publish it with the visual"), false);
     assert(chatPrompt.includes("```svg"));
   } finally {
     await core.close();

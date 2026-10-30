@@ -71,7 +71,7 @@ export class ToolRegistry {
   }
 
   /** Add tools that are not already registered (idempotent). */
-  addTools(tools: Tool[]): void {
+  addTools(tools: readonly Tool[]): void {
     for (const tool of tools) {
       if (!this.tools.has(tool.name)) this.tools.set(tool.name, tool);
     }

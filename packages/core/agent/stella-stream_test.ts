@@ -16,6 +16,7 @@ Deno.test("stellaEntryOf: the user's words are the user's entry", () => {
     role: "user",
     text: "README を直して",
     cards: [],
+    attachments: [],
     timestamp: 5,
   });
   // An empty prompt is nothing to show (it cannot be sent, but the
@@ -31,6 +32,7 @@ Deno.test("stellaEntryOf: the agent's text is an assistant entry", () => {
     role: "assistant",
     text: "直しました。",
     cards: [],
+    attachments: [],
     timestamp: 7,
   });
 });
@@ -54,6 +56,7 @@ Deno.test("stellaEntryOf: a chat_ui card travels with the words", () => {
     role: "assistant",
     text: "確認します。",
     cards: [markup],
+    attachments: [],
     timestamp: 9,
   });
 
@@ -65,8 +68,77 @@ Deno.test("stellaEntryOf: a chat_ui card travels with the words", () => {
     role: "assistant",
     text: "",
     cards: [markup],
+    attachments: [],
     timestamp: 10,
   });
+});
+
+Deno.test("stellaEntryOf: the files an agent sent are an entry of their own", () => {
+  const result = {
+    role: "toolResult",
+    toolCallId: "t2",
+    toolName: "chat_attach",
+    content: [{ type: "text", text: "Sent 2 files to the user." }],
+    details: {
+      attachments: [
+        {
+          name: "9f3c2a1b4d5e.png",
+          displayName: "chart.png",
+          size: 4096,
+          inline: true,
+        },
+        {
+          name: "0f1e2d3c4b5a.txt",
+          displayName: "run.log",
+          size: 12,
+          inline: false,
+        },
+      ],
+    },
+    isError: false,
+    timestamp: 15,
+  } as AgentMessage;
+
+  // A file the agent hands over is part of the reply, so it becomes an
+  // entry — but it stays its own entry, because that is what it is in the
+  // transcript (see the projection's comment on ordering).
+  assertEquals(stellaEntryOf(result), {
+    role: "assistant",
+    text: "",
+    cards: [],
+    attachments: [
+      {
+        name: "9f3c2a1b4d5e.png",
+        displayName: "chart.png",
+        size: 4096,
+        inline: true,
+      },
+      {
+        name: "0f1e2d3c4b5a.txt",
+        displayName: "run.log",
+        size: 12,
+        inline: false,
+      },
+    ],
+    timestamp: 15,
+  });
+
+  // A failed attach sent nothing: it is the model's record of a failure, not
+  // a file the user received.
+  assertEquals(
+    stellaEntryOf({ ...result, isError: true } as AgentMessage),
+    null,
+  );
+
+  // Details an older build wrote (or a hand-edited row) show nothing rather
+  // than a broken card.
+  assertEquals(
+    stellaEntryOf({
+      ...result,
+      details: { attachments: [{ name: "x.png" }] },
+    } as AgentMessage),
+    null,
+  );
 });
 
 Deno.test("stellaEntryOf: the model's own rows are never conversation entries", () => {
@@ -145,6 +217,7 @@ Deno.test("stellaEventsOf: messages arrive as entries, without the session id", 
       role: "assistant",
       text: "はい。",
       cards: [],
+      attachments: [],
       timestamp: 20,
     },
   }]);

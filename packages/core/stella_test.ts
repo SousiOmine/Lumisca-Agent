@@ -8,8 +8,8 @@ import { createVmTools } from "./vm/tools.ts";
 import { createHistorySearchTool } from "./session/history.ts";
 import { createIdentityTool } from "./stella/identity.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
+import { createChatUiTool } from "./tools/chat-ui.ts";
 import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
-import { AskHub } from "./tools/ask.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
 import { TaskHub } from "./tools/task-hub.ts";
 import type { StreamFn } from "./ai/types.ts";
@@ -17,6 +17,7 @@ import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
 import { APP_MODE_KEY } from "./shared/settings-keys.ts";
 import { promptSession } from "./test-utils.ts";
+import { SessionAttachmentStore } from "./session/attachments.ts";
 
 /**
  * stella mode at the core level: the mode switch, the single conversation and
@@ -266,6 +267,13 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ messages: () => [] }),
     identity: createIdentityTool({ read: () => "", write: () => {} }),
+    agents: createAgentCreateTool({ create: () => ({}) as never }),
+    attach: {
+      store: new SessionAttachmentStore(
+        Deno.makeTempDirSync({ prefix: "lumisca-stella-attach-" }),
+      ),
+      sessionId: "s1",
+    },
   });
   const names = tools.map((tool) => tool.name);
   // The coding tools are there...
@@ -295,9 +303,21 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   // away are unreachable without it. A caller that passes no history tool
   // (nothing to search) simply has none.
   assert(names.includes("history_search"), names.join(", "));
-  // And so is the identity: an agent that cannot write about itself never
-  // does. A caller with nowhere to store it passes no tool.
-  assert(names.includes("identity"), names.join(", "));
+  // The identity and agent_create are NOT here: they belong to the
+  // conversation's own agent, so they are discoverable (tool_search) and
+  // live in the session's main registry only — a sub-agent must not rewrite
+  // its parent's identity or create siblings. The caller below passes both,
+  // so their absence is this tool set's decision, not a missing argument.
+  assertEquals(names.includes("identity"), false);
+  assertEquals(names.includes("agent_create"), false);
+  // ask is absent for the same reason todo is: stella's conversation has no
+  // panel that could show the question, and a blocked run has no way back.
+  assertEquals(names.includes("ask"), false);
+  assertEquals(names.includes("todo"), false);
+  // The visual tool is gone; a file the agent hands over goes through
+  // chat_attach instead (an image inline, anything else as a download).
+  assertEquals(names.includes("visual"), false);
+  assert(names.includes("chat_attach"), names.join(", "));
   void faux;
 });
 
@@ -328,8 +348,14 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     agents: createAgentCreateTool({ create: () => ({}) as never }),
     history: createHistorySearchTool({ messages: () => [] }),
     identity: createIdentityTool({ read: () => "", write: () => {} }),
+    chatUi: createChatUiTool(),
+    attach: {
+      store: new SessionAttachmentStore(
+        Deno.makeTempDirSync({ prefix: "lumisca-stella-sections-" }),
+      ),
+      sessionId: "s1",
+    },
     background: new BackgroundProcessManager(),
-    ask: new AskHub("s1", () => {}),
     task: new TaskHub({
       sessionId: "s1",
       resolveRuntime: () => {
@@ -366,15 +392,24 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
   for (
     const expected of [
       "history_search",
-      "identity",
       "vm_screenshot",
-      "agent_create",
+      "chat_attach",
+      "chat_ui",
     ]
   ) {
     assertEquals(
       stellaTools.includes(expected),
       true,
       `${expected} must be built`,
+    );
+  }
+  // The tools that belong to the conversation's own agent are discoverable
+  // instead (main registry), so they are absent here by design.
+  for (const discoverable of ["identity", "agent_create"]) {
+    assertEquals(
+      stellaTools.includes(discoverable),
+      false,
+      `${discoverable} must be discoverable, not preloaded`,
     );
   }
   // `todo` is the one coding tool a stella session does not get: its plan is
@@ -384,6 +419,9 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     false,
     "stella must not build todo",
   );
+  // `ask` goes with it: the same conversation has no panel to answer it in,
+  // and a blocking question would leave the run waiting for nothing.
+  assertEquals(stellaTools.includes("ask"), false, "stella must not ask");
 });
 
 Deno.test("stella tool set: the prompt teaches the machine, not a workspace", async () => {
@@ -519,12 +557,20 @@ Deno.test("stella conversation: the identity a write produces reaches the next r
     // not open with an empty identity block.
     assertEquals(identityMessages(core, session.id), []);
 
-    // The agent writes about itself in one turn...
+    // The agent writes about itself in one turn. The tool is discoverable
+    // (main registry), so the turn finds it first and then calls it —
+    // exactly the path a real agent takes.
     faux.setResponses([
       fauxAssistantMessage([
-        fauxToolCall("identity", {
-          action: "write",
-          content: "I keep the project's notes and know where things are.",
+        fauxToolCall("tool_search", { query: "identity" }),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage([
+        fauxToolCall("tool_call", {
+          name: "identity",
+          args: {
+            action: "write",
+            content: "I keep the project's notes and know where things are.",
+          },
         }),
       ], { stopReason: "toolUse" }),
       fauxAssistantMessage("Wrote it."),
@@ -573,9 +619,12 @@ Deno.test("stella conversation: each agent's identity is its own", async () => {
 
     faux.setResponses([
       fauxAssistantMessage([
-        fauxToolCall("identity", {
-          action: "write",
-          content: "I am the first.",
+        fauxToolCall("tool_search", { query: "identity" }),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage([
+        fauxToolCall("tool_call", {
+          name: "identity",
+          args: { action: "write", content: "I am the first." },
         }),
       ], { stopReason: "toolUse" }),
       fauxAssistantMessage("done"),

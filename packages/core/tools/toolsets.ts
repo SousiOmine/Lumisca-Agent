@@ -15,6 +15,7 @@ import { createAsyncBashTools } from "./background.ts";
 import type { BackgroundProcessManager } from "./background.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import { createEvalTool } from "./eval.ts";
+import { type ChatAttachTarget, createChatAttachTool } from "./attach.ts";
 import { createVisualTool, type VisualTarget } from "./visual.ts";
 import { createWebSearchTools } from "./web.ts";
 import type { SearchProvider } from "../websearch/types.ts";
@@ -132,9 +133,14 @@ export interface ToolFactoryOptions {
    * feature). Gates the built-in computer-use skill the same way.
    * Omitted/undefined → the skill is not advertised. */
   computerAvailable?: boolean;
-  /** Where the visual tool publishes (the session's asset store and id).
-   * Omitted → the tool is not built: a tool set without a store has nowhere
-   * to put a published image, and the reply could not link it. */
+  /** Where `chat_attach` keeps the bytes it sends (the session's store and
+   * id). Omitted → the tool is not built: without a store there is nowhere
+   * for a file to go, and the card would link nothing. */
+  attach?: ChatAttachTarget;
+  /** Where the `visual` tool publishes (the session's asset store and id).
+   * Code mode has it in addition to `chat_attach`: the `visual:` reference
+   * puts an image INSIDE the reply's markdown, which is what a coding
+   * answer with a chart wants. Omitted → the tool is not built. */
   visuals?: VisualTarget;
   /** The file and command backends the tools run against. Omitted → this
    * machine's workspace (`hostBackends`); stella sessions pass the VM's.
@@ -177,6 +183,9 @@ export function createCodingTools(
       })
       : []),
     createEvalTool({ safety: options.safety }),
+    ...(options.attach !== undefined
+      ? [createChatAttachTool({ files, ...options.attach })]
+      : []),
     ...(options.visuals !== undefined
       ? [createVisualTool({ files, ...options.visuals })]
       : []),
@@ -218,12 +227,23 @@ export function createCodingTools(
  *   conversation has no panels (the agent says what it is doing in its own
  *   words), so the tool would collect a plan nobody reads — one more schema
  *   on every request and one more round trip per plan change.
+ * - `ask` is absent too. A conversation whose person is watching the machine
+ *   answers in words or with a card; a blocking question the server shows in
+ *   a panel would be a surface this mode does not have, and it would leave
+ *   the run waiting for an answer nothing draws.
+ * - `visual` is replaced by `chat_attach`: the visual tool publishes an image
+ *   the reply has to link with markdown, while a conversation wants the file
+ *   itself — an image inline, anything else as a download.
+ * - `identity` and `agent_create` are NOT here: they belong to the
+ *   conversation's own agent, so they live in the session's main registry
+ *   and are reached through tool_search (TC-7). A sub-agent must not rewrite
+ *   the identity of the agent that started it, nor create siblings the user
+ *   never asked for.
  * - skills come from the machine and from the user's global set (see
  *   vm/skills.ts), not from a workspace folder chain.
  *
- * Everything else — ask, sub-agents, the visual tool, discoverable tools
- * through the registry — is unchanged: stella is a different place to work,
- * not a reduced agent.
+ * Everything else — sub-agents, discoverable tools through the registry — is
+ * unchanged: stella is a different place to work, not a reduced agent.
  */
 export function createStellaTools(options: {
   backends: ToolBackends;
@@ -234,7 +254,10 @@ export function createStellaTools(options: {
    * the built-ins the session is entitled to. */
   skills: SkillDef[];
   screen: Tool[];
-  /** `agent_create`: add another stella agent (one of the sidebar's agents). */
+  /** `agent_create`: add another stella agent (one of the sidebar's agents).
+   * Superseded by the main registry (TC-7): a tool that belongs to this
+   * conversation's own agent is reached through tool_search, so it never
+   * reaches a sub-agent. Kept out of this option bag on purpose. */
   agents?: Tool;
   /** `chat_ui`: show a card in the chat. */
   chatUi?: Tool;
@@ -242,16 +265,19 @@ export function createStellaTools(options: {
    * tool is not built (a caller without a message store has nothing to
    * search). */
   history?: Tool;
-  /** `identity`: the agent's own text about itself. Omitted → the tool is
-   * not built (a caller with nowhere to store it has nothing to write). */
+  /** `identity`: the agent's own text about itself. Like `agents`, it is
+   * reached through the session's main registry (see agent/factory.ts), so
+   * it is deliberately not part of this set: a tool a sub-agent could find
+   * would let it rewrite the identity of the agent that started it. */
   identity?: Tool;
+  /** `chat_attach`: hand files to the user. Omitted → the tool is not built
+   * (a caller with no attachment store has nowhere to keep the bytes). */
+  attach?: ChatAttachTarget;
   /** The user's web-search provider (see ToolFactoryOptions.webSearch). */
   webSearch?: SearchProvider;
   background?: BackgroundProcessManager;
-  ask?: AskHub;
   task?: TaskHub;
   safety?: CommandSafety;
-  visuals?: VisualTarget;
 }): Tool[] {
   const { files, runner } = options.backends;
   return [
@@ -272,17 +298,14 @@ export function createStellaTools(options: {
       : []),
     ...options.screen,
     ...(options.chatUi !== undefined ? [options.chatUi] : []),
-    ...(options.agents !== undefined ? [options.agents] : []),
-    ...(options.history !== undefined ? [options.history] : []),
-    ...(options.identity !== undefined ? [options.identity] : []),
-    ...(options.visuals !== undefined
-      ? [createVisualTool({ files, ...options.visuals })]
+    ...(options.attach !== undefined
+      ? [createChatAttachTool({ files, ...options.attach })]
       : []),
+    ...(options.history !== undefined ? [options.history] : []),
     ...(options.webSearch !== undefined
       ? createWebSearchTools(options.webSearch)
       : []),
     createSkillTool({ skills: options.skills }),
-    ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.task !== undefined ? options.task.parentTools() : []),
   ];
 }

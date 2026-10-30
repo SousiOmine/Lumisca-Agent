@@ -348,6 +348,7 @@ Deno.test("ConversationTurn: a steered notification renders in the work log", ()
   const html = renderToString(createElement(ConversationTurn, {
     turn: { user: user(1), responses },
     visualBase: "/api/sessions/s/visual/",
+    attachBase: "/api/sessions/s/attachment/",
     toolResults: new Map(),
     runningTools: new Map(),
     running: true,
@@ -387,6 +388,7 @@ Deno.test("ConversationTurn: a context snapshot renders in the work log", () => 
   const html = renderToString(createElement(ConversationTurn, {
     turn: { user: user(1), responses },
     visualBase: "/api/sessions/s/visual/",
+    attachBase: "/api/sessions/s/attachment/",
     toolResults: new Map(),
     runningTools: new Map(),
     running: true,
@@ -527,6 +529,7 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
     return renderToString(createElement(ConversationTurn, {
       turn: turns[turns.length - 1]!,
       visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
       toolResults: new Map(),
       runningTools: new Map(),
       running: isViewRunning(view),
@@ -561,6 +564,7 @@ Deno.test("ConversationTurn: a mode prompt renders the images attached to it", (
   const html = renderToString(createElement(ConversationTurn, {
     turn: turns[0]!,
     visualBase: "/api/sessions/s/visual/",
+    attachBase: "/api/sessions/s/attachment/",
     toolResults: new Map(),
     runningTools: new Map(),
     running: false,

@@ -52,9 +52,13 @@ export function stellaStateOf(
 /** Identity of an entry for dedup: an entry arrives twice (the synthetic
  * start/end pair of an injected message, and the streaming placeholder
  * followed by the final copy), and a re-read snapshot can overlap the live
- * events. Role + timestamp is the same pair the server persists. */
+ * events. Role + timestamp is the same pair the server persists — plus the
+ * first attachment's name, because an agent that sends a file and then says
+ * something in the same millisecond would otherwise have the two entries
+ * collapse into one. */
 export function entryKey(entry: StellaEntry): string {
-  return `${entry.role}:${entry.timestamp}`;
+  const first = entry.attachments[0]?.name ?? "";
+  return `${entry.role}:${entry.timestamp}:${first}`;
 }
 
 /** Insert or replace an entry at its existing position (dedup by key), or

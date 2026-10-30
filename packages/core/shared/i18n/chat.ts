@@ -170,6 +170,9 @@ export const chat = {
   },
   "chat.visual.error.source": { ja: "ソースを表示", en: "Show source" },
 
+  // --- attachments (files the agent sends to the user) --------------------
+  "chat.attach.download": { ja: "ダウンロード", en: "Download" },
+
   // --- mode selection and stella -------------------------------------------
   "chat.modeSelect.title": {
     ja: "モードを選択",

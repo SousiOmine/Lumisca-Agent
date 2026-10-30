@@ -1,6 +1,8 @@
 import type { SkillDef } from "../discover.ts";
 import { webBrowserSkill } from "./web-browser.ts";
 import { computerUseSkill } from "./computer-use.ts";
+import { agentCreateSkill } from "./agent-create.ts";
+import { identitySkill } from "./identity.ts";
 
 /**
  * App-embedded skills: shipped with the application itself, always
@@ -29,6 +31,12 @@ export interface BuiltinContext {
    * attached AND the user enabled the feature in settings). The
    * computer-use skill is included only when true. */
   computer: boolean;
+  /** Whether the session is a stella conversation. Its agent owns a
+   * sidebar identity and may create more agents, and both tools are
+   * discoverable rather than preloaded; the agent-create and identity
+   * skills teach them. Absent → neither skill is advertised (a code-mode
+   * session has no agents to manage). */
+  stella?: boolean;
 }
 
 /** The app-embedded skill set for a session context. */
@@ -36,5 +44,6 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
   return [
     ...(context.browser ? [webBrowserSkill()] : []),
     ...(context.computer ? [computerUseSkill()] : []),
+    ...(context.stella === true ? [agentCreateSkill(), identitySkill()] : []),
   ];
 }

@@ -17,6 +17,7 @@ import {
   IconMessageCircle,
   IconMessageQuestion,
   IconMouse,
+  IconPaperclip,
   IconPhoto,
   IconPlug,
   IconRepeat,
@@ -46,6 +47,7 @@ import {
   TOOL_BROWSER_SCREENSHOT,
   TOOL_BROWSER_WAIT,
   TOOL_CALL,
+  TOOL_CHAT_ATTACH,
   TOOL_CHAT_UI,
   TOOL_COMPUTER_ACT,
   TOOL_COMPUTER_LIST_WINDOWS,
@@ -151,6 +153,16 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   [TOOL_LIST_DIR]: { icon: IconFolder, summary: pathTail },
   [TOOL_GREP]: { icon: IconSearch, summary: pattern },
   [TOOL_GLOB]: { icon: IconSearch, summary: pattern },
+  [TOOL_CHAT_ATTACH]: {
+    icon: IconPaperclip,
+    summary: (args) => {
+      const paths = Array.isArray(args.paths) ? args.paths : [];
+      if (paths.length === 0) return "";
+      const first = paths[0];
+      const name = typeof first === "string" ? shortPath(first) : "";
+      return paths.length === 1 ? name : `${name} +${paths.length - 1}`;
+    },
+  },
   [TOOL_VISUAL]: { icon: IconPhoto, summary: pathTail },
   [TOOL_PDF_READ_PAGES]: { icon: IconFileText, summary: pdfSummary },
   [TOOL_BASH]: { icon: IconTerminal2, summary: command },

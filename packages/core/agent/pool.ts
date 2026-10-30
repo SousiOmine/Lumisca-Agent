@@ -16,10 +16,11 @@ import type { TaskInfo } from "../shared/mod.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import type { McpOAuthStore } from "../mcp/oauth.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import type { ToolRegistry } from "../tools/registry.ts";
+import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import type { SessionVisualStore } from "../session/visuals.ts";
+import type { SessionAttachmentStore } from "../session/attachments.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { RequestShapeRepo } from "../session/request-shapes.ts";
 import type { BrowserBackend } from "../browser/types.ts";
@@ -129,6 +130,10 @@ export interface AgentRuntime {
    * in a core (the store is a directory beside the database); a hand-built
    * pool without one simply gets no visual tool. */
   visuals: SessionVisualStore;
+  /** Where the files an agent attaches to the chat are kept (see
+   * tools/attach.ts). Always present in a core; a hand-built pool without
+   * one simply gets no `chat_attach` tool. */
+  attachments: SessionAttachmentStore;
   /** Forward an agent event to every frontend listener. */
   emit(event: ClientEvent): void;
   /** The session's browser-lab backend (Desktop WebView host), or
@@ -190,10 +195,10 @@ export interface SessionResources {
    * session — the main agent and the sub-agents — and survive agent
    * rebuilds while the merged config is unchanged. Closed on close. */
   mcp?: McpAttachment;
-  /** Tool registry (MCP + browser-lab tools discoverable via
-   * tool_search/call), rebuilt together with the attachment when the
-   * config changes. */
-  registry?: ToolRegistry;
+  /** The two tool registries of the session (the main agent's and its
+   * sub-agents'), rebuilt together with the attachment when the config
+   * changes. See tools/registries.ts for why they are separate. */
+  registries?: SessionToolRegistries;
   /** The last failure of the session, if any (cleared when a new run
    * starts). Lets non-WebSocket clients learn about failures of
    * fire-and-forget prompts. */
@@ -426,10 +431,10 @@ export class SessionPool {
       if (resources?.agent === undefined) continue;
       const previous = resources.mcp;
       // Dropping the attachment makes the factory build a new one (with a
-      // fresh manager); the registry follows it, since a rebuild builds
+      // fresh manager); the registries follow it, since a rebuild builds
       // fresh tools.
       resources.mcp = undefined;
-      resources.registry = undefined;
+      resources.registries = undefined;
       if (previous !== undefined) void previous.manager.close();
       this.rebuild(session);
     }

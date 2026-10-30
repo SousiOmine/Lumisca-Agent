@@ -16,7 +16,7 @@ import {
   summarizeContextUsage,
 } from "@lumisca/core/shared";
 import { api } from "../api.ts";
-import { sessionVisualBase } from "../api-client.ts";
+import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
@@ -119,6 +119,7 @@ export function ChatView(
   // where the agent runs, so a peer's session is read through the hub's
   // federation proxy (the same base the per-session API calls use).
   const visualBase = sessionVisualBase(peerId ?? "", view.info.id);
+  const attachBase = sessionAttachmentBase(peerId ?? "", view.info.id);
 
   // --- saved prompts (shared hook so the menu refreshes after the settings
   // panel mutates the list) ----------------------------------------------
@@ -327,6 +328,7 @@ export function ChatView(
         agentEndedAt={view.agentEndedAt}
         error={view.error}
         visualBase={visualBase}
+        attachBase={attachBase}
         onRewind={handleRewind}
         onSend={onCardAnswer}
         empty={view.info.chat

@@ -28,6 +28,8 @@ import type { ClientEvent } from "../types/event.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import type { Workspace } from "../types/workspace.ts";
 import { ToolRegistry } from "./registry.ts";
+import { SessionToolRegistries } from "./registries.ts";
+import { object, type Tool } from "./schema.ts";
 import {
   createSendMessageTool,
   createTaskOutputTool,
@@ -77,6 +79,7 @@ function makeHub(
       backends: hostBackends(makeWorkspace(root)),
       model,
       thinkingLevel: "off",
+      eval: true,
     }),
     streamFn,
     backoffSleep,
@@ -89,8 +92,10 @@ function makeHub(
  * retry happened, not how long it slept. */
 const instantSleep = () => Promise.resolve();
 
-/** A hub whose sub-agents stream from the scripted faux responses. */
-function makeScriptedHub() {
+/** A hub whose sub-agents stream from the scripted faux responses. `eval`
+ * says whether they get the eval tool — false is the stella case (the tool
+ * runs in the server process, outside the machine). */
+function makeScriptedHub(options: { eval?: boolean } = {}) {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
@@ -104,6 +109,7 @@ function makeScriptedHub() {
       backends: hostBackends(makeWorkspace(root)),
       model,
       thinkingLevel: "off",
+      eval: options.eval ?? true,
     }),
     streamFn,
     emit: (event) => events.push(event),
@@ -353,6 +359,7 @@ Deno.test("the sub-agent runtime is resolved at spawn time", () => {
         backends: hostBackends(makeWorkspace(root)),
         model,
         thinkingLevel: level,
+        eval: true,
       };
     });
     hub.spawn("session-1", 0, "explore", "調査", "Do research");
@@ -1144,6 +1151,121 @@ Deno.test("explore sub-agents have no MCP tools", async () => {
     shutdown();
   }
 });
+
+Deno.test("a stella sub-agent has no eval: it runs in the server process", async () => {
+  const { faux, hub } = makeScriptedHub({ eval: false });
+  try {
+    // The session's premise is that its tools run inside the machine; eval
+    // runs JavaScript in the SERVER process, so a sub-agent of such a
+    // session must not have it. Calling it fails as an unknown tool, which
+    // is what the model sees.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Trying eval."),
+        fauxToolCall("eval", { code: "1 + 1" }),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("Tool eval not found"),
+          `the eval call should have failed: ${text}`,
+        );
+        return fauxAssistantMessage("No eval here.");
+      },
+    ]);
+    hub.spawn("session-1", 0, "general", "eval 確認", "Evaluate 1 + 1");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "No eval here.");
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("a code-mode sub-agent keeps eval", async () => {
+  const { faux, hub } = makeScriptedHub({ eval: true });
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Evaluating."),
+        fauxToolCall("eval", { code: "1 + 1" }),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        // The tool ran: its result carries the completion value.
+        assert(
+          text.includes("[result]"),
+          `eval should have run: ${text}`,
+        );
+        return fauxAssistantMessage("Evaluated.");
+      },
+    ]);
+    hub.spawn("session-1", 0, "general", "eval 実行", "Evaluate 1 + 1");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "Evaluated.");
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("a sub-agent's tool_search never finds a stella agent's own tools", async () => {
+  const { faux, hub } = makeScriptedHub();
+  // The session's main registry holds the tools that belong to its own
+  // agent; the sub-agents' does not (see tools/registries.ts). This is the
+  // split the pool performs, reproduced here: what the hub is given is
+  // exactly what a sub-agent can reach.
+  const registries = new SessionToolRegistries();
+  registries.addShared([fakeMcpTool("mcp__remote__ping")]);
+  registries.addMainOnly([
+    fakeMcpTool("identity"),
+    fakeMcpTool("agent_create"),
+  ]);
+  hub.setMcp(null, registries.subagent);
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Searching."),
+        fauxToolCall(TOOL_SEARCH, { query: "", limit: 10 }),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        // The shared tool is found; the main agent's own tools are not.
+        assert(text.includes("mcp__remote__ping"), text);
+        assert(
+          !text.includes("identity"),
+          `identity must not be found: ${text}`,
+        );
+        assert(
+          !text.includes("agent_create"),
+          `agent_create must not be found: ${text}`,
+        );
+        return fauxAssistantMessage("Only shared tools.");
+      },
+    ]);
+    hub.spawn(
+      "session-1",
+      0,
+      "general",
+      "列挙",
+      "List every tool you can find",
+    );
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "Only shared tools.");
+  } finally {
+    hub.close();
+  }
+});
+
+/** A tool that only exists to be found by tool_search. */
+function fakeMcpTool(name: string): Tool {
+  return {
+    name,
+    label: `server: ${name}`,
+    description: `Does ${name}`,
+    parameters: object({}, {}),
+    execute: () =>
+      Promise.resolve({ content: [{ type: "text", text: name }], details: {} }),
+  };
+}
 
 Deno.test("a config change redirects a running general sub-agent to the new registry", async () => {
   const { faux, hub, root } = makeScriptedHub();

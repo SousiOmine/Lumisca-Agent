@@ -1,7 +1,7 @@
 import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
-import type { ToolRegistry } from "../tools/registry.ts";
+import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { Tool } from "../tools/schema.ts";
 import type { Agent } from "../ai/agent.ts";
 
@@ -29,7 +29,7 @@ export class McpAttachmentHost {
 
   constructor(
     private readonly agent: Agent,
-    private readonly registry: ToolRegistry | null,
+    private readonly registries: SessionToolRegistries | null,
     private readonly isClosed: () => boolean,
   ) {}
 
@@ -66,10 +66,12 @@ export class McpAttachmentHost {
   replace(attachment: McpAttachment): void {
     const previous = this.#attachment;
     if (
-      previous !== null && previous !== attachment && this.registry !== null
+      previous !== null && previous !== attachment && this.registries !== null
     ) {
       // The tools of the servers that just went away must not survive them.
-      this.registry.removeTools(previous.getTools().map((tool) => tool.name));
+      this.registries.removeShared(
+        previous.getTools().map((tool) => tool.name),
+      );
     }
     this.#attached = true;
     this.#adopt(attachment);
@@ -111,19 +113,25 @@ export class McpAttachmentHost {
     this.#readyDone = true;
   }
 
-  /** Merge discovered tools into the registry (the pool's seed must stay). */
+  /** Merge discovered tools into both registries (the pool's seed must
+   * stay). The sub-agents share what describes where they work — MCP
+   * servers above all — so discovery goes to both, not just to the agent
+   * that owns the attachment. */
   #addTools(tools: Tool[]): void {
-    if (this.registry === null) return;
-    this.registry.addTools(tools);
+    if (this.registries === null) return;
+    this.registries.addShared(tools);
     this.#ensureSearchTools();
   }
 
-  /** Attach the tool_search / tool_call pair when the registry holds tools.
-   * Idempotent, and the prompt is not touched: the pair's contract reaches
-   * the model as a context message, so the provider's cached prefix never
-   * changes under a running session. */
+  /** Attach the tool_search / tool_call pair when the main registry holds
+   * tools. Idempotent, and the prompt is not touched: the pair's contract
+   * reaches the model as a context message, so the provider's cached prefix
+   * never changes under a running session. */
   #ensureSearchTools(): void {
-    if (this.registry === null || this.registry.isEmpty) return;
-    addToolsToAgent(this.agent, registryToolPair(() => this.registry!));
+    if (this.registries === null || this.registries.main.isEmpty) return;
+    addToolsToAgent(
+      this.agent,
+      registryToolPair(() => this.registries!.main),
+    );
   }
 }

@@ -13,6 +13,7 @@
  * - `./providers.ts` — thinking levels, provider/login/model summaries,
  * - `./content.ts` — message content helpers,
  * - `./visual.ts` — published visuals (the `visual:` image references),
+ * - `./attachments.ts` — files an agent sends to the user, and their limits,
  * - `./mcp-config.ts` — MCP server config serialization,
  * - `./context-usage.ts` — context accounting and formatting,
  * - `./token-estimate.ts` — fixed-heuristic token estimates for history,
@@ -33,6 +34,7 @@ export * from "./goal.ts";
 export * from "./providers.ts";
 export * from "./content.ts";
 export * from "./visual.ts";
+export * from "./attachments.ts";
 export * from "./diff-stat.ts";
 export * from "./mcp-config.ts";
 export * from "./context-usage.ts";

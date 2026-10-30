@@ -1,6 +1,7 @@
 import { useMemo } from "preact/compat";
 import { parseUiMarkup, type UiView } from "@lumisca/core/shared";
 import { useTranscriptScroll } from "../../hooks/useTranscriptScroll.ts";
+import { AttachmentCard } from "../chat/AttachmentCard.tsx";
 import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { UiCard } from "../chat/UiCard.tsx";
 import { CopyableUserMessage } from "../chat/CopyableUserMessage.tsx";
@@ -16,16 +17,24 @@ import type { StellaConversationState } from "../../stella-state.ts";
  * cannot accidentally draw what the agent did to arrive at its answer. What
  * it draws is one entry after another, each with its own time, plus the reply
  * that is still streaming.
+ *
+ * A `chat_attach` result is the exception on the server side, and only
+ * because it IS part of the reply: the files an agent sends are something to
+ * look at or keep, so they arrive as an entry of their own and are drawn as
+ * the same card code mode uses.
  */
 export function StellaTranscript({
   conversation,
   visualBase,
+  attachBase,
   onRewind,
   onSend,
 }: {
   conversation: StellaConversationState;
   /** Asset base of the conversation (see MarkdownBlock). */
   visualBase: string;
+  /** Attachment base of the conversation (the files chat_attach sent). */
+  attachBase: string;
   /** Rewind from an entry onward (the entry's timestamp names it). */
   onRewind: (timestamp: number, text: string) => void;
   /** Send a card's answer as the user's next message. */
@@ -41,6 +50,7 @@ export function StellaTranscript({
             key={`${entry.role}-${entry.timestamp}-${index}`}
             entry={entry}
             visualBase={visualBase}
+            attachBase={attachBase}
             onRewind={onRewind}
             onSend={onSend}
           />
@@ -68,15 +78,17 @@ export function StellaTranscript({
 }
 
 /** One entry: the user's message (with rewind and a copy button) or the
- * agent's text and cards. */
+ * agent's text, cards and files. */
 function EntryRow({
   entry,
   visualBase,
+  attachBase,
   onRewind,
   onSend,
 }: {
   entry: StellaEntry;
   visualBase: string;
+  attachBase: string;
   onRewind: (timestamp: number, text: string) => void;
   onSend: (text: string) => void;
 }) {
@@ -101,6 +113,7 @@ function EntryRow({
         {entry.cards.map((markup, index) => (
           <CardView key={index} markup={markup} onSend={onSend} />
         ))}
+        <AttachmentCard attachments={entry.attachments} base={attachBase} />
       </div>
     </div>
   );

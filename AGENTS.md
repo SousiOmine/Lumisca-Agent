@@ -98,12 +98,15 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
 - **契約値**: 画面サイズ（1280x800）、DISPLAY、uid/gid、作業ディレクトリは `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方に書かれています。起動時に実コンテナと突き合わせ、ずれていれば起動を失敗させます。
 - **隔離の範囲**: ホストのファイルは VM にマウントしません。VM はセキュリティ境界ではなく作業場所の区切りであり、CPU・メモリ・ディスクの上限や外向きネットワークの制限は設けていません。
 - **ライフサイクル**: 起動は自動（会話を開く前）。停止はサーバー終了時と画面の「停止」。モードの切り替えだけでは停止しません。
-- **eval ツールは渡しません。** サーバープロセス内で JavaScript を実行するため、VM の外に出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使ってください。
+- **eval ツールは渡しません。** サーバープロセス内で JavaScript を実行するため、VM の外に出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使ってください。同じ理由で、このモードのサブエージェントにも `eval` は渡しません（`SubagentRuntime.eval` が `false`）。
+- **ツールの集合**: ファイル・シェル・画面・`chat_ui`・`chat_attach`・`history_search`・`skill`・サブエージェントがプリロードされます。`ask` と `todo` はありません（質問に答えるパネルも進捗パネルも、この会話には無いため）。`identity` と `agent_create` は**プリロードせず**、セッションの main レジストリに置いて `tool_search` で見つけさせます（使い方は組み込みスキル `identity` / `agent-create` が教えます）。
+- **ツールレジストリの分離**: セッションは `main` と `subagent` の 2 つのレジストリを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけに入ります。stella のサブエージェントは VM の中で code mode と同じツール集合で動きますが、この 3 種は `tool_search` でも見つかりません。
 - **作業フォルダとパスの境界**: 相対パスと `bash` は `/home/agent/agents/<agent id>` を基点にしますが、境界はマシンのホーム `/home/agent` です。ほかの相手のフォルダにも絶対パスで触れます（`packages/core/vm/fs.ts` の `resolveVmPath`）。境界を変えるときはシステムプロンプト（`packages/core/tools/system-prompt.ts`）の記述も合わせてください。
 - **画面の受け渡し**: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。待機中は画面ペインが操作可能になり、エージェントは止まっています。待ちを解く経路（完了・停止・セッション終了）を増やすときは `cancelAll` とイベントの後始末も合わせて確認してください。
 - **ルーチン**: スケジュールは `daily` / `weekly` / `every` の 3 種類だけで、cron は扱いません。次回時刻は「保存済みの値」ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます（後回しにすると、長い実行が重複して走ります）。
-- **identity（相手の自己記述）**: 相手は `role`（ユーザーが作成時に書く）とは別に、`identity` ツールで自分の役割と知識を書けます。保存先は `stella_agents.identity`、モデルへは context メッセージとして届きます（`packages/core/stella/identity.ts`）。**システムプロンプトには書きません** — 書き換えのたびに先頭が変わるとキャッシュ済みプレフィックスを捨てるためです。反映は次のターンからで、圧縮は待ちません。
-- **スキル一覧の出どころ**: `<available_skills>` を公開する provider（`packages/core/skills/catalog.ts`）は、セッションごとの解決関数を受け取ります。stella ではマシン内の `.agents/skills` とホストのグローバル／組み込みを返すので、一覧と `skill` ツールが読める集合が一致します。
+- **identity（相手の自己記述）**: 相手は `role`（ユーザーが作成時に書く）とは別に、`identity` ツールで自分の役割と知識を書けます。保存先は `stella_agents.identity`、モデルへは context メッセージとして届きます（`packages/core/stella/identity.ts`）。**システムプロンプトには書きません** — 書き換えのたびに先頭が変わるとキャッシュ済みプレフィックスを捨てるためです。反映は次のターンからで、圧縮は待ちません。ツールはプリロードせず main レジストリ経由です。
+- **ユーザーへのファイル送信**: 画像やファイルは `chat_attach` で送ります（`packages/core/tools/attach.ts`）。画像はインライン、それ以外はダウンロードとして会話にカードで出ます。code mode と stella の両方で使えます。保存先はデータベース隣の `.lumisca-attachments`（`packages/core/session/attachments.ts`）、配信は `/api/sessions/:id/attachment/:name` です。1 件 4 MiB・1 回 10 件・合計 16 MiB まで。`visual` ツール（`visual:` 参照で本文中に画像を置く）は **code mode のみ**に残しています（stella では外し、保存済みの応答を表示し続けるためにストアとルートだけ残しています）。
+- **スキル一覧の出どころ**: `<available_skills>` を公開する provider（`packages/core/skills/catalog.ts`）は、セッションごとの解決関数を受け取ります。stella ではマシン内の `.agents/skills` とホストのグローバル／組み込みを返すので、一覧と `skill` ツールが読める集合が一致します。組み込みスキルは `BuiltinContext.stella` で `identity` / `agent-create` を加えます（`packages/core/skills/builtin/mod.ts`）。
 
 ## 8. 開発用スクリプト
 

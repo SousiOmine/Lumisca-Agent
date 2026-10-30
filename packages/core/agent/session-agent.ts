@@ -25,7 +25,7 @@ import { Rewinder } from "./rewinder.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
-import type { ToolRegistry } from "../tools/registry.ts";
+import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
 import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
 import type { AskAnswer } from "../shared/mod.ts";
@@ -102,13 +102,13 @@ export interface SessionAgentOptions {
   /** Backoff sleep used before a rate-limit (429) restart, injectable for
    * tests; defaults to sleepAbortable (real exponential backoff). */
   rateLimitRetrySleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-  /** The session's tool registry (owned by the session pool). When set,
-   * its tools are never preloaded into the LLM context — the pool seeds it
-   * with browser-lab tools, MCP discovery fills it, and the agent only
-   * gets the tool_search / tool_call pair over it, so the request's tool
-   * definitions stay small and stable. Omitted → no discoverable tools
-   * (the pair is not built). */
-  toolRegistry?: ToolRegistry;
+  /** The session's tool registries (owned by the session pool). When set,
+   * their tools are never preloaded into the LLM context — the pool seeds
+   * them with browser-lab tools, MCP discovery fills them, and the agent
+   * only gets the tool_search / tool_call pair over `main`, so the
+   * request's tool definitions stay small and stable. Omitted → no
+   * discoverable tools (the pair is not built). */
+  toolRegistry?: SessionToolRegistries;
   /** The app language of this agent: the language of the text the core
    * writes into the transcript (goal notices, compaction checkpoints) and
    * of the session's title. The pool passes the setting read when the
@@ -146,12 +146,13 @@ export class SessionAgent {
   /** The session's MCP attachment: its servers gate the first prompt, and
    * its tools land in the session's shared registry once discovery finished. */
   private mcp: McpAttachmentHost;
-  /** The session's tool registry (owned by the session pool): holds every
-   * discoverable tool (MCP tools, browser-lab tools, future extensions)
-   * whose definitions stay out of the LLM context. Null when the session
-   * has none. The pool seeds it with the browser-lab tools before building
-   * the agent; MCP discovery merges its tools in afterwards. */
-  private readonly toolRegistry: ToolRegistry | null;
+  /** The session's tool registries (owned by the session pool): the main
+   * agent's and its sub-agents', holding every discoverable tool (MCP
+   * tools, browser-lab tools, future extensions) whose definitions stay out
+   * of the LLM context. Null when the session has none. The pool seeds them
+   * before building the agent; MCP discovery merges its tools in
+   * afterwards. This agent searches `main` only. */
+  private readonly toolRegistry: SessionToolRegistries | null;
   /** Interprets images for a text-only main model (null when the main
    * model sees images or no analysis model is configured). */
   private readonly imageAnalyzer: ImageAnalyzer | null;

@@ -73,6 +73,13 @@ export const TOOL_VM_ASK_USER = "vm_ask_user";
  * ask with a card instead of a wall of prose. */
 export const TOOL_CHAT_UI = "chat_ui";
 
+/** Send files to the user (images inline, everything else as a download).
+ * The agent's text is already the answer; this tool attaches what the user
+ * should look at or keep. Preloaded wherever the session has a file backend
+ * to read from, because an agent that cannot see the tool rats out paths in
+ * prose instead of handing the file over. */
+export const TOOL_CHAT_ATTACH = "chat_attach";
+
 /** Create another stella agent (a separate agent with its own name, role and
  * conversation). Terasuma's `tera_create`. */
 export const TOOL_AGENT_CREATE = "agent_create";

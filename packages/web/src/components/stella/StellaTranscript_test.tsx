@@ -16,6 +16,7 @@ function render(state: Partial<StellaConversationState>): string {
   return renderToString(createElement(StellaTranscript, {
     conversation: { ...emptyStellaState("Aide"), ...state },
     visualBase: "/api/sessions/s/visual/",
+    attachBase: "/api/sessions/s/attachment/",
     onRewind: () => {},
     onSend: () => {},
   }));
@@ -24,9 +25,27 @@ function render(state: Partial<StellaConversationState>): string {
 Deno.test("StellaTranscript: the words come out in order", () => {
   const html = render({
     entries: [
-      { role: "user", text: "README を直して", cards: [], timestamp: 1 },
-      { role: "assistant", text: "直しました。", cards: [], timestamp: 2 },
-      { role: "user", text: "ありがとう", cards: [], timestamp: 3 },
+      {
+        role: "user",
+        text: "README を直して",
+        cards: [],
+        attachments: [],
+        timestamp: 1,
+      },
+      {
+        role: "assistant",
+        text: "直しました。",
+        cards: [],
+        attachments: [],
+        timestamp: 2,
+      },
+      {
+        role: "user",
+        text: "ありがとう",
+        cards: [],
+        attachments: [],
+        timestamp: 3,
+      },
     ],
   });
 
@@ -45,6 +64,7 @@ Deno.test("StellaTranscript: a card renders with its markup", () => {
         role: "assistant",
         text: "確認します。",
         cards: [markup],
+        attachments: [],
         timestamp: 1,
       },
     ],
@@ -85,6 +105,7 @@ Deno.test("StellaTranscript: nothing of the model's machinery can appear", () =>
       role: "assistant",
       text: "答えです。",
       cards: [],
+      attachments: [],
       timestamp: 1,
     }],
   });

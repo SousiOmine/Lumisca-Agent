@@ -94,6 +94,19 @@ export function sessionVisualBase(peerId: string, sessionId: string): string {
     : `/api/fed/${encodeURIComponent(peerId)}${path}`;
 }
 
+/** URL base of a session's attachments (the files `chat_attach` sent, always
+ * ending with "/"). Same rule as sessionVisualBase: the machine running the
+ * agent owns the files, so a peer's are read through the federation proxy. */
+export function sessionAttachmentBase(
+  peerId: string,
+  sessionId: string,
+): string {
+  const path = `${sessionPath(sessionId, "/attachment/")}`;
+  return peerId === ""
+    ? `/api${path}`
+    : `/api/fed/${encodeURIComponent(peerId)}${path}`;
+}
+
 /** Bind one API call to a peer or this server: `local` runs against this
  * server (peerId === ""), `remote` against the peer. Used by the per-session
  * / workspace / model dispatchers so each method is a one-liner instead of

@@ -180,6 +180,65 @@
   margin: 10px 0;
 }
 
+/* ---- files an agent sent (chat_attach) ----------------------------------- */
+
+/* The files under a reply: images side by side, other files as rows. They
+ * sit where the reply ends, because handing a file over IS part of the
+ * answer, not a detail of how it was produced. */
+.attach-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.attach-image {
+  display: block;
+  max-width: min(100%, 320px);
+  border-radius: var(--radius);
+  overflow: hidden;
+  line-height: 0;
+}
+
+.attach-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.attach-file {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+.attach-file:hover {
+  border-color: var(--border-strong);
+}
+
+.attach-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attach-file-size,
+.attach-file-action {
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* The card a diagram that cannot be shown renders: the reason, and the
  * source it came from (collapsed, so nothing the agent wrote is lost). */
 .visual-error {

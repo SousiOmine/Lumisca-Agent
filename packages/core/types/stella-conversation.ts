@@ -14,6 +14,7 @@
  * never receives a `Date: …` publication cannot show it.
  */
 import type { AskQuestion } from "../shared/interaction.ts";
+import type { AttachmentRef } from "../shared/attachments.ts";
 
 /** One thing the user or the agent said, as the conversation shows it.
  * `text` and `cards` are one entry rather than two because they are one
@@ -24,13 +25,18 @@ export interface StellaEntry {
    * other role in a conversation (stella has no modes, no notifications). */
   role: "user" | "assistant";
   /** The message's text ("" for an assistant message that only shows a
-   * card). */
+   * card or a set of files). */
   text: string;
   /** `chat_ui` markup the message showed, in order. A card is the reply's
    * presentation — a table, a flow chart, a question — so it travels with
    * the words rather than being dropped with the tool call that carried
    * it. */
   cards: string[];
+  /** Files the agent sent with `chat_attach`, in the order it sent them.
+   * Like a card, the files ARE part of the reply (something to look at or
+   * keep), so they travel with it while the tool call itself stays in the
+   * model's history. Empty for a message that sent none. */
+  attachments: AttachmentRef[];
   /** Epoch ms, from the message itself: rewind names a message by it. */
   timestamp: number;
 }

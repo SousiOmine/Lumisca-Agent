@@ -72,6 +72,10 @@ import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
 import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
 import { SessionVisualStore, VISUALS_DIR_NAME } from "./session/visuals.ts";
 import {
+  ATTACHMENTS_DIR_NAME,
+  SessionAttachmentStore,
+} from "./session/attachments.ts";
+import {
   createRequestShapeRepo,
   type RequestShapeRepo,
 } from "./session/request-shapes.ts";
@@ -175,6 +179,11 @@ export class LumiscaCore {
    * inside its reply — see session/visuals.ts). Shared with the session pool
    * (the visual tool publishes here) and read by the server's asset route. */
   private readonly visuals: SessionVisualStore;
+  /** Where the files an agent attaches to the chat live (see
+   * session/attachments.ts). Beside the database like the visuals, shared
+   * with the session pool (the `chat_attach` tool writes here) and read by
+   * the server's attachment route. */
+  private readonly attachments: SessionAttachmentStore;
   /** MCP OAuth grants (see mcp/oauth.ts), shared with the session pool. */
   private readonly mcpOAuth: McpOAuthStore;
   private readonly commandSafety: CommandSafety;
@@ -231,6 +240,7 @@ export class LumiscaCore {
       mcp?: McpService;
       workspaces?: WorkspaceService;
       visuals?: SessionVisualStore;
+      attachments?: SessionAttachmentStore;
       globalSkillDirs?: string[];
       /** Environment the model layer reads (custom providers, ambient API
        * keys). Defaults to the real process environment; tests pass their
@@ -315,6 +325,13 @@ export class LumiscaCore {
       new SessionVisualStore(
         join(tmpdir(), `lumisca-visuals-${crypto.randomUUID()}`),
       );
+    // Attachments follow the same rule: beside the database when there is
+    // one, a temp directory for an in-memory core, and nothing on disk until
+    // a session actually sends a file.
+    this.attachments = overrides.attachments ??
+      new SessionAttachmentStore(
+        join(tmpdir(), `lumisca-attachments-${crypto.randomUUID()}`),
+      );
     this.pool = overrides.pool ?? new SessionPool({
       mcpOAuth: this.mcpOAuth,
       requireModel: (provider, modelId) => this.requireModel(provider, modelId),
@@ -364,6 +381,7 @@ export class LumiscaCore {
       },
       commandSafety: this.commandSafety,
       visuals: this.visuals,
+      attachments: this.attachments,
       // Resolved lazily (open) so the circular wiring stays one-way:
       // the pool references the service, the service references the pool
       // via the injected applyMcpConfigChange / agentMcpStatus below.
@@ -426,6 +444,9 @@ export class LumiscaCore {
         // --db.
         visuals: new SessionVisualStore(
           join(dirname(dbPath), VISUALS_DIR_NAME),
+        ),
+        attachments: new SessionAttachmentStore(
+          join(dirname(dbPath), ATTACHMENTS_DIR_NAME),
         ),
       },
     );
@@ -1426,6 +1447,20 @@ export class LumiscaCore {
     return this.visuals.resolve(sessionId, name);
   }
 
+  /** The file one of a session's attachments names, with the content type
+   * and download name to serve it as
+   * (`GET /api/sessions/:id/attachment/:name`). Undefined when the session
+   * has no such file. The store validates the name, so a caller cannot ask
+   * for anything outside the session's own directory. */
+  resolveSessionAttachment(
+    sessionId: string,
+    name: string,
+  ): Promise<
+    { path: string; mimeType: string; downloadName: string } | undefined
+  > {
+    return this.attachments.resolve(sessionId, name);
+  }
+
   /** Load a persisted session into memory (restores message history). */
   openSession(id: string): SessionInfo {
     const session = this.sessions.get(id);
@@ -1457,9 +1492,11 @@ export class LumiscaCore {
     this.sessions.delete(id);
     this.sessionRevisions.delete(id);
     await closing;
-    // The published visuals belong to the session: once it is gone nothing
-    // can reference them (a message that did is gone too).
+    // The published visuals and the files the agent sent belong to the
+    // session: once it is gone nothing can reference them (a message that
+    // did is gone too).
     await this.visuals.deleteSession(id);
+    await this.attachments.deleteSession(id);
   }
 
   getAgent(id: string): SessionAgent | undefined {

@@ -14,7 +14,7 @@ function entry(
   timestamp: number,
   cards: string[] = [],
 ) {
-  return { role, text, cards, timestamp };
+  return { role, text, cards, attachments: [], timestamp };
 }
 
 function state(
@@ -74,7 +74,7 @@ Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
     entry: entry("user", "A", 1),
   })!;
   assertEquals(current.entries.map((e) => e.text), ["A", "B"]);
-  assertEquals(entryKey(current.entries[0]!), "user:1");
+  assertEquals(entryKey(current.entries[0]!), "user:1:");
 });
 
 Deno.test("applyStellaEvent: deltas accumulate and are dropped at the end", () => {

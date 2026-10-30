@@ -1,11 +1,10 @@
 import { IconSend } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/compat";
-import { sessionVisualBase } from "../api-client.ts";
+import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useT } from "../i18n.ts";
 import type { AppModeStatus } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
-import { QuestionPanel } from "./QuestionPanel.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
 import type { StellaConversationState } from "../stella-state.ts";
@@ -34,10 +33,6 @@ interface StellaViewProps {
   onInputChange: (value: string) => void;
   onPrompt: (text: string) => void;
   onAbort: () => void;
-  onAnswer: (
-    toolCallId: string,
-    answers: { id: string; values: string[] }[],
-  ) => Promise<void>;
   /** Rewind from a message onward (the transcript's undo). */
   onRewind: (timestamp: number) => Promise<void>;
   /** The user finished at the screen (the `vm_ask_user` hand-over). */
@@ -73,7 +68,6 @@ export function StellaView(
     onInputChange,
     onPrompt,
     onAbort,
-    onAnswer,
     onRewind,
     onFinishHandover,
     onOpenSettings,
@@ -82,6 +76,7 @@ export function StellaView(
   const t = useT();
   const { pinOnNextContent } = useTranscriptScroll();
   const visualBase = sessionVisualBase("", sessionId ?? "");
+  const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const isRunning = conversation?.running === true;
   // The screen is the user's while the agent waits for them: the pane turns
   // interactive and a bar above it says what to do and offers "done".
@@ -155,15 +150,12 @@ export function StellaView(
             <StellaTranscript
               conversation={conversation}
               visualBase={visualBase}
+              attachBase={attachBase}
               onRewind={handleRewind}
               onSend={(text) => onPrompt(text)}
             />
           )}
         <div className="input-area">
-          <QuestionPanel
-            pending={conversation?.questions ?? []}
-            onAnswer={onAnswer}
-          />
           <Composer
             value={input}
             onChange={onInputChange}

@@ -14,7 +14,7 @@ import { TaskHub } from "../tools/task-hub.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
-import { ToolRegistry } from "../tools/registry.ts";
+import { SessionToolRegistries } from "../tools/registries.ts";
 import { createSkillCatalogProvider } from "../skills/catalog.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
 import { createDateProvider } from "./date-context.ts";
@@ -38,6 +38,8 @@ import type { SearchProvider } from "../websearch/types.ts";
 import type { SessionPoolDeps } from "./pool.ts";
 import type { SessionResources } from "./pool.ts";
 import {
+  TOOL_AGENT_CREATE,
+  TOOL_IDENTITY,
   TOOL_ROUTINE_CREATE,
   TOOL_ROUTINE_DELETE,
   TOOL_ROUTINE_LIST,
@@ -54,6 +56,11 @@ const ROUTINE_TOOL_NAMES = [
   TOOL_ROUTINE_DELETE,
   TOOL_ROUTINE_RUN,
 ];
+
+/** Names of the tools that belong to a stella conversation's own agent
+ * (discoverable, main-only): removed from every session that is not
+ * stella's, added to that session's main registry when it is. */
+const STELLA_AGENT_TOOL_NAMES = [TOOL_IDENTITY, TOOL_AGENT_CREATE];
 
 /** Module logger (debug-gated): attachment rebuilds are the first thing
  * to check when MCP tools misbehave. */
@@ -129,10 +136,10 @@ export class AgentFactory {
         mergedMcp.config,
       );
       resources.mcp = mcp;
-      // A config change builds fresh tools, so the registry is rebuilt
+      // A config change builds fresh tools, so the registries are rebuilt
       // with the attachment — stale tools must not survive it. A rebuild
       // with an unchanged config reuses both.
-      resources.registry = new ToolRegistry();
+      resources.registries = new SessionToolRegistries();
       if (previous !== undefined) void previous.manager.close();
       this.reportMcpProblems(
         session.id,
@@ -142,11 +149,13 @@ export class AgentFactory {
         isCurrentAttachment,
       );
     }
-    // One tool registry per session, created with the attachment above and
-    // reused across agent rebuilds so the session's discoverable tools
-    // survive them. The main agent's attachMcp fills it once discovery
-    // finishes; every agent of the session searches it.
-    const registry = resources.registry!;
+    // The two tool registries of the session, created with the attachment
+    // above and reused across agent rebuilds so the session's discoverable
+    // tools survive them. The main agent's attachMcp fills both: what
+    // describes where the session works (MCP, the browser lab, computer
+    // use, the PDF reader) is shared, while tools that belong to this
+    // conversation's own agent stay in `main` only (see tools/registries.ts).
+    const registries = resources.registries!;
     // The browser-lab tools live in the session's tool registry
     // (discoverable via tool_search), never preloaded into the LLM context
     // — the same contract as MCP tools. Seeded at open so every agent of
@@ -164,11 +173,11 @@ export class AgentFactory {
     // sub-agents, prompt listing) is gated on the same value.
     const browserAvailable = browser !== undefined;
     if (browser !== undefined) {
-      registry.addTools(
+      registries.addShared(
         createBrowserToolsFrom(() => this.deps.browser?.()),
       );
     } else {
-      registry.removeTools(BROWSER_TOOL_NAMES);
+      registries.removeShared(BROWSER_TOOL_NAMES);
     }
     // The computer-use tools follow the same contract as the browser-lab
     // ones: seeded into the session's registry (never preloaded), removed
@@ -186,11 +195,11 @@ export class AgentFactory {
     // user has not configured one; the tools are then simply absent.
     const webSearch: SearchProvider | undefined = this.deps.webSearch?.();
     if (computer !== undefined) {
-      registry.addTools(
+      registries.addShared(
         createComputerTools({ resolveHost: () => this.deps.computer?.() }),
       );
     } else {
-      registry.removeTools(COMPUTER_TOOL_NAMES);
+      registries.removeShared(COMPUTER_TOOL_NAMES);
     }
     // Chat sessions ("simple chat" without a workspace) have no shell or
     // sub-agent surface: the background-command manager, the task hub and
@@ -232,17 +241,28 @@ export class AgentFactory {
     // rebuilds the sandbox on every open, so workspace folder changes
     // apply without stale paths (the registry itself is reused across
     // agent rebuilds).
-    registry.removeTools(PDF_TOOL_NAMES);
+    registries.removeShared(PDF_TOOL_NAMES);
     if (!chatOnly) {
-      registry.addTools(createPdfTools({ files: backends.files }));
+      registries.addShared(createPdfTools({ files: backends.files }));
     }
     // The routine tools are discoverable rather than preloaded: a routine is
     // created once and fires on its own, so five definitions would cost every
     // turn of every conversation for nothing. Only a stella session has them:
     // a routine belongs to an agent's one ongoing conversation, and code mode
-    // sessions are tabs the user opens and closes.
-    registry.removeTools(ROUTINE_TOOL_NAMES);
-    if (stella !== undefined) registry.addTools(stella.routineTools);
+    // sessions are tabs the user opens and closes. They are the main agent's
+    // alone: a sub-agent must not schedule work that outlives its own run.
+    registries.main.removeTools(ROUTINE_TOOL_NAMES);
+    if (stella !== undefined) registries.addMainOnly(stella.routineTools);
+    // The two tools that belong to THIS conversation's agent: its identity
+    // and creating another agent. They are discoverable (tool_search) rather
+    // than preloaded — an agent that knows it may write about itself does,
+    // and the definition costs a line on every turn otherwise — and they are
+    // main-only, so a sub-agent cannot rewrite its parent's identity or
+    // create siblings the user never asked for.
+    registries.main.removeTools(STELLA_AGENT_TOOL_NAMES);
+    if (stella !== undefined) {
+      registries.addMainOnly([stella.identityTool, stella.agentTool]);
+    }
     // Reuse the session's manager when one exists (agent rebuild); create
     // it on first open. Shared by the async_bash tools and the session
     // agent: the tools start/check/kill commands, the agent turns
@@ -286,6 +306,10 @@ export class AgentFactory {
       const runtimeResolver = () => {
         const fast = this.deps.getFastModelInfo();
         const workspace = this.deps.requireWorkspace(session.workspaceId);
+        // `eval` runs in the server process, so a stella session's
+        // sub-agents must not have it (its tools all run inside the
+        // machine; see generalTools).
+        const evalTool = stella === undefined;
         if (fast !== undefined) {
           return {
             workspace,
@@ -295,6 +319,7 @@ export class AgentFactory {
               fast.provider,
               fast.modelId,
             ),
+            eval: evalTool,
           };
         }
         return {
@@ -305,6 +330,7 @@ export class AgentFactory {
             session.modelProvider,
             session.modelId,
           ),
+          eval: evalTool,
         };
       };
       if (tasks === undefined) {
@@ -321,12 +347,12 @@ export class AgentFactory {
       } else {
         tasks.setRuntimeResolver(runtimeResolver);
       }
-      // The sub-agents share the session's MCP attachment and tool
-      // registry (general sub-agents get the search/call pair over it),
-      // the browser availability gate (the web-browser built-in skill
+      // The sub-agents share the session's MCP attachment (their own
+      // registry holds the shared tools the discovery merges in), the
+      // browser availability gate (the web-browser built-in skill
       // in their skill tool), and the language their reports come back
       // in — re-read on every open, like the rest.
-      tasks.setMcp(mcp, registry);
+      tasks.setMcp(mcp, registries.subagent);
       tasks.setBrowserAvailable(browserAvailable);
       tasks.setComputerAvailable(computerAvailable);
       tasks.setWebSearch(webSearch);
@@ -337,21 +363,21 @@ export class AgentFactory {
     const tools = stella !== undefined
       // stella's tool set: the coding tools over the machine's backends, the
       // screen tools, and the machine's own skill catalog. `eval` is
-      // deliberately absent (see createStellaTools).
+      // deliberately absent (see createStellaTools), and so are `ask`
+      // (no panel to answer it) and `visual` (replaced by chat_attach).
       ? createStellaTools({
         backends,
         cwd: stella.cwd,
         skills: stella.skills(),
         screen: stella.screenTools,
         chatUi: stella.chatUiTool,
-        agents: stella.agentTool,
+        attach: {
+          store: this.deps.attachments,
+          sessionId: session.id,
+        },
         history: stella.historyTool,
-        identity: stella.identityTool,
-        background,
-        ask: askHub,
         task: tasks,
         safety: this.deps.commandSafety,
-        visuals: { store: this.deps.visuals, sessionId: session.id },
         webSearch,
       })
       : chat
@@ -371,6 +397,7 @@ export class AgentFactory {
         safety: this.deps.commandSafety,
         browserAvailable,
         computerAvailable,
+        attach: { store: this.deps.attachments, sessionId: session.id },
         visuals: { store: this.deps.visuals, sessionId: session.id },
         backends,
         webSearch,
@@ -433,7 +460,7 @@ export class AgentFactory {
       // the same condition, so a late MCP discovery publishes it instead
       // of rewriting the prompt.
       createMcpToolsProvider({
-        searchable: () => !registry.isEmpty,
+        searchable: () => !registries.main.isEmpty,
       }),
     ];
     const agent = new SessionAgentImpl({
@@ -474,7 +501,7 @@ export class AgentFactory {
       askHub,
       ...(stella !== undefined ? { handoverHub: stella.handoverHub } : {}),
       taskHub: tasks,
-      toolRegistry: registry,
+      toolRegistry: registries,
       contextProviders,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
@@ -546,10 +573,12 @@ export class AgentFactory {
       isCurrentAttachment,
     );
     agent.replaceMcpAttachment(attachment);
-    // The sub-agents share the session's attachment and registry, so the
-    // running ones are re-pointed at the new tools too (see TaskHub.setMcp).
-    const registry = resources.registry;
-    if (registry !== undefined) resources.tasks?.setMcp(attachment, registry);
+    // The sub-agents share the session's attachment, so the running ones are
+    // re-pointed at the new tools too (see TaskHub.setMcp).
+    const registries = resources.registries;
+    if (registries !== undefined) {
+      resources.tasks?.setMcp(attachment, registries.subagent);
+    }
   }
 
   /** Report an MCP source's problems on the session: the merged config's

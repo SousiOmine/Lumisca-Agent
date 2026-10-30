@@ -18,6 +18,7 @@ import { stellaRoutes } from "./routes/stella.ts";
 import { routineRoutes } from "./routes/routines.ts";
 import { stellaScreenRoute } from "./stella-screen.ts";
 import { visualRoutes } from "./routes/visuals.ts";
+import { attachmentRoutes } from "./routes/attachments.ts";
 import { providerRoutes } from "./routes/providers.ts";
 import { settingRoutes } from "./routes/settings.ts";
 import { mcpRoutes } from "./routes/mcp.ts";
@@ -164,6 +165,9 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // The images a session published for its replies. Mounted after the
   // session routes (its path is its own `/sessions/:id/visual/:name`).
   app.route("/api", visualRoutes(core));
+  // The files an agent attached to its reply (`chat_attach`). Their own
+  // path shape, like the visuals above.
+  app.route("/api", attachmentRoutes(core));
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
   app.route("/api", connectionRoutes(core, () => fed.restart()));

@@ -1,5 +1,10 @@
 import { memo, useState } from "preact/compat";
-import { contentText } from "@lumisca/core/shared";
+import {
+  type AttachmentRef,
+  attachmentsOfDetails,
+  contentText,
+  TOOL_CHAT_ATTACH,
+} from "@lumisca/core/shared";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -7,6 +12,7 @@ import type {
   ToolResultMessage,
 } from "../../types.ts";
 import { AgentActivity } from "../AgentActivity.tsx";
+import { AttachmentCard } from "./AttachmentCard.tsx";
 import { MessageRow } from "./MessageRow.tsx";
 import { AssistantText } from "./AssistantText.tsx";
 import { AssistantTools } from "./AssistantTools.tsx";
@@ -105,6 +111,7 @@ export const ConversationTurn = memo(function ConversationTurn({
   toolResults,
   runningTools,
   visualBase,
+  attachBase,
   running,
   endedAt,
   onRewind,
@@ -115,6 +122,8 @@ export const ConversationTurn = memo(function ConversationTurn({
   runningTools: Map<string, string>;
   /** Asset base of the session this turn belongs to (see MarkdownBlock). */
   visualBase: string;
+  /** Attachment base of the session (the files chat_attach sent). */
+  attachBase: string;
   running: boolean;
   endedAt?: number;
   onRewind: (
@@ -144,6 +153,12 @@ export const ConversationTurn = memo(function ConversationTurn({
     (message): message is AssistantMessage => message.role === "assistant",
   );
   const finalAssistant = assistants.at(-1);
+  // The files the agent sent while working on this turn (`chat_attach`
+  // results). They render under the reply, always visible: a file the user
+  // was handed is part of the answer, not a detail of how it was reached, so
+  // it must not hide inside the collapsible work log. The results are read
+  // from the turn's own list, so a rewind that drops them drops the card too.
+  const attachments = attachmentsOfTurn(turn.responses);
   // Everything the turn produced except the final assistant, whose text
   // renders below the log: intermediate assistant messages (their text and
   // tool calls) plus the turn's compact rows — a notification or a prompt
@@ -212,6 +227,20 @@ export const ConversationTurn = memo(function ConversationTurn({
       {finalAssistant && contentText(finalAssistant.content) && (
         <AssistantText message={finalAssistant} visualBase={visualBase} />
       )}
+      <AttachmentCard attachments={attachments} base={attachBase} />
     </section>
   );
 });
+
+/** Every file the turn's `chat_attach` calls sent, in call order. */
+function attachmentsOfTurn(
+  responses: readonly AgentMessage[],
+): AttachmentRef[] {
+  const attachments: AttachmentRef[] = [];
+  for (const message of responses) {
+    if (message.role !== "toolResult") continue;
+    if (message.toolName !== TOOL_CHAT_ATTACH || message.isError) continue;
+    attachments.push(...attachmentsOfDetails(message.details));
+  }
+  return attachments;
+}

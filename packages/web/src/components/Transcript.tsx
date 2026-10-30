@@ -17,6 +17,8 @@ interface TranscriptProps {
   error?: string;
   /** Resolves a `visual:` image reference (see api-client). */
   visualBase: string;
+  /** Resolves a file `chat_attach` sent (see api-client). */
+  attachBase: string;
   onRewind: (
     timestamp: number,
     text: string,
@@ -40,6 +42,7 @@ export function Transcript(
     agentEndedAt,
     error,
     visualBase,
+    attachBase,
     onRewind,
     onSend,
     empty,
@@ -70,6 +73,7 @@ export function Transcript(
             toolResults={toolResults}
             runningTools={runningTools}
             visualBase={visualBase}
+            attachBase={attachBase}
             running={running && index === turns.length - 1}
             endedAt={index === turns.length - 1 ? agentEndedAt : undefined}
             onRewind={onRewind}

@@ -18,7 +18,8 @@
  * also a reply, so it travels with the text that carried it.
  */
 import type { AgentMessage } from "../ai/types.ts";
-import { TOOL_CHAT_UI } from "../shared/tool-names.ts";
+import { TOOL_CHAT_ATTACH, TOOL_CHAT_UI } from "../shared/tool-names.ts";
+import { attachmentsOfDetails } from "../shared/attachments.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type {
   StellaEntry,
@@ -67,8 +68,17 @@ function cardsOf(message: ContentMessage): string[] {
  * `user` and `mode` are the person talking (stella has no slash commands, so
  * `mode` never occurs; it is accepted because the projection is written
  * against the transcript's actual type). An assistant message appears when it
- * says something: text, or a card. A message that exists only to carry a
- * tool call would be an empty row, so it is left out.
+ * says something: text, a card, or the files it sent. A message that exists
+ * only to carry a tool call would be an empty row, so it is left out.
+ *
+ * A `chat_attach` result is the one tool result that becomes an entry of its
+ * own: the files an agent hands over are part of the reply (something to
+ * look at or keep), not a record of how it worked. It is kept as a separate
+ * entry rather than merged into the preceding message because the two are
+ * separate messages in the transcript — merging would make the projection
+ * depend on what came before it, and an event replayed out of order (or a
+ * reload that starts mid-conversation) would put the files in the wrong
+ * place.
  */
 export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
   switch (message.role) {
@@ -77,23 +87,48 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       const text = message.role === "mode"
         ? message.shortText
         : textOf(message);
-      return text.length === 0
-        ? null
-        : { role: "user", text, cards: [], timestamp: message.timestamp };
+      return text.length === 0 ? null : {
+        role: "user",
+        text,
+        cards: [],
+        attachments: [],
+        timestamp: message.timestamp,
+      };
     }
     case "assistant": {
       const text = textOf(message);
       const cards = cardsOf(message);
       if (text.length === 0 && cards.length === 0) return null;
-      return { role: "assistant", text, cards, timestamp: message.timestamp };
+      return {
+        role: "assistant",
+        text,
+        cards,
+        attachments: [],
+        timestamp: message.timestamp,
+      };
     }
-    // Tool results, notifications, context publications and compaction
-    // checkpoints are the model's, not the conversation's.
+    case "toolResult": {
+      // Only the files an agent sent are the conversation's; every other
+      // tool result is the model's record of its work.
+      if (message.toolName !== TOOL_CHAT_ATTACH || message.isError) return null;
+      const attachments = attachmentsOfDetails(message.details);
+      return attachments.length === 0 ? null : {
+        role: "assistant",
+        text: "",
+        cards: [],
+        attachments,
+        timestamp: message.timestamp,
+      };
+    }
+    // Notifications, context publications and compaction checkpoints are
+    // the model's, not the conversation's.
     default:
       return null;
   }
 }
 
+/** The attachment list a `chat_attach` result carries, or none when the
+ * details are not the shape this build wrote (see shared/attachments.ts). */
 /** The conversation's view of a pending-question list. The shapes are the
  * same today; the named type keeps the conversation's contract from drifting
  * with the ask hub's. */

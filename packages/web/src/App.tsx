@@ -366,8 +366,6 @@ export function App({ initialData }: AppProps): ReactElement {
                 onInputChange={(input) => updateDraft(draftKey, { input })}
                 onPrompt={(text) => stella.prompt(text)}
                 onAbort={() => stella.abort()}
-                onAnswer={(toolCallId, answers) =>
-                  stella.answer(toolCallId, answers)}
                 onRewind={(timestamp) => stella.rewind(timestamp)}
                 onFinishHandover={(note, toolCallId) =>
                   stella.finishHandover(note, toolCallId)}

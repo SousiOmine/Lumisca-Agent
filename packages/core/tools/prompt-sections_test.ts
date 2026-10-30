@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Api, Model, StreamFn } from "../ai/types.ts";
 import type { Workspace } from "../types/workspace.ts";
+import { SessionAttachmentStore } from "../session/attachments.ts";
 import { SessionVisualStore } from "../session/visuals.ts";
 import { AskHub } from "./ask.ts";
 import { BackgroundProcessManager } from "./background.ts";
@@ -22,6 +23,7 @@ import {
   TOOL_ASYNC_BASH_KILL,
   TOOL_ASYNC_BASH_STATUS,
   TOOL_BASH,
+  TOOL_CHAT_ATTACH,
   TOOL_EDIT,
   TOOL_EVAL,
   TOOL_GLOB,
@@ -80,12 +82,19 @@ function codingToolNames(): string[] {
         backends: hostBackends(workspace),
         model: { id: "m", name: "m" } as unknown as Model<Api>,
         thinkingLevel: "off",
+        eval: true,
       }),
       streamFn: (() => {
         throw new Error("no sub-agent run in this test");
       }) as unknown as StreamFn,
       emit: () => {},
     }),
+    attach: {
+      store: new SessionAttachmentStore(
+        join(tmpdir(), "lumisca-sections-test"),
+      ),
+      sessionId: "s1",
+    },
     visuals: {
       store: new SessionVisualStore(join(tmpdir(), "lumisca-sections-test")),
       sessionId: "s1",
@@ -108,7 +117,7 @@ Deno.test("every tool a coding session preloads has a guideline section", () => 
   );
   // The invariant is only meaningful while the built set is the full one
   // (an option-gated tool silently missing would make this test vacuous).
-  for (const gated of [TOOL_ASK, TOOL_TODO, TOOL_TASK, TOOL_VISUAL]) {
+  for (const gated of [TOOL_ASK, TOOL_TODO, TOOL_TASK, TOOL_CHAT_ATTACH]) {
     assertEquals(CODING_TOOLS.includes(gated), true, `${gated} must be built`);
   }
 });
@@ -183,16 +192,28 @@ Deno.test("renderPromptSections renders only the sections the tools satisfy", ()
   );
 });
 
-Deno.test("the visual sections follow the tools they need", () => {
+Deno.test("the file bullet follows the tool it needs", () => {
   // The diagram needs no tool (the client renders the fence), so its bullet
-  // reaches every session; the image bullet needs the visual tool that
-  // publishes the file, and must not point a session at a tool it lacks.
+  // reaches every session; the file bullet needs chat_attach, and must not
+  // point a session at a tool it lacks.
   const chat = renderPromptSections(CHAT_PROMPT_SECTIONS, [TOOL_ASK]);
   assert(chat.includes("```svg"), "the diagram bullet is unconditional");
-  assertEquals(chat.includes("publish it with the visual"), false);
+  assertEquals(chat.includes("chat_attach"), false);
 
   const coding = renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS);
-  assert(coding.includes("publish it with the visual"));
+  assert(coding.includes("chat_attach"));
+  assertEquals(
+    renderPromptSections(
+      CODING_PROMPT_SECTIONS,
+      CODING_TOOLS.filter((name) => name !== TOOL_CHAT_ATTACH),
+    ).includes("chat_attach"),
+    false,
+    "the file bullet requires chat_attach",
+  );
+  // Code mode keeps the visual tool as well: it is the way to put an image
+  // INSIDE the reply, while chat_attach hands a file over as a card.
+  assertEquals(CODING_TOOLS.includes(TOOL_VISUAL), true);
+  assert(coding.includes("publish it with the visual"), coding);
   assertEquals(
     renderPromptSections(
       CODING_PROMPT_SECTIONS,

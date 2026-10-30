@@ -46,6 +46,45 @@ function computerBuiltins() {
 
 // --- the built-in registry ---------------------------------------------------
 
+Deno.test("builtinSkills advertises the stella-only skills for a stella session", async () => {
+  const skills = builtinSkills({
+    browser: false,
+    computer: false,
+    stella: true,
+  });
+  assertEquals(skills.map((s) => s.name), ["agent-create", "identity"]);
+
+  // Each guide teaches the tool_search → tool_call path, because neither
+  // tool is preloaded (they live in the session's main registry).
+  const agentCreate = skills[0]!;
+  assert(agentCreate.description.includes("tool_search"));
+  const identity = skills[1]!;
+  assert(identity.description.includes("tool_search"));
+
+  const agentGuide = await loadSkillContent(agentCreate);
+  assert(agentGuide.includes("agent_create"));
+  assert(agentGuide.includes("tool_search"));
+  assert(agentGuide.includes("chat_ui"));
+
+  const identityGuide = await loadSkillContent(identity);
+  assert(identityGuide.includes("identity"));
+  assert(identityGuide.includes("tool_search"));
+  // The one thing the tool's own description cannot carry: what to keep out
+  // of the text.
+  assert(identityGuide.includes("Secrets"));
+  // And when a write lands (the next run), so the model does not assume it
+  // failed.
+  assert(identityGuide.includes("next run"));
+
+  // A code-mode session has no agents to manage: neither skill is offered.
+  assertEquals(
+    builtinSkills({ browser: false, computer: false }).some((s) =>
+      s.name === "agent-create" || s.name === "identity"
+    ),
+    false,
+  );
+});
+
 Deno.test("builtinSkills advertises web-browser when the browser is available", () => {
   const skills = browserBuiltins();
   assertEquals(skills.map((s) => s.name), ["web-browser"]);
