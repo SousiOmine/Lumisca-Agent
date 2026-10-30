@@ -200,3 +200,33 @@ Deno.test("resolveSettingsPath defaults to ~/.config", () => {
     "Cannot resolve the home directory",
   );
 });
+
+Deno.test("file settings repo: an external edit survives the next write", async () => {
+  const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
+  const path = join(dir, "settings.jsonc");
+  try {
+    const repo = createFileSettingsRepo(path);
+    repo.set("theme", "dark");
+
+    // The user edits the running app's settings file by hand (the module
+    // documents it as hand-editable). The next UI-driven write must not
+    // erase that edit.
+    Deno.writeTextFileSync(
+      path,
+      `${JSON.stringify({ theme: "dark", language: "ja" }, null, 2)}\n`,
+    );
+    repo.set("model_fast", "openai/gpt-x");
+
+    const stored = JSON.parse(Deno.readTextFileSync(path)) as Record<
+      string,
+      unknown
+    >;
+    assertEquals(stored.language, "ja", "the hand edit must survive");
+    assertEquals(stored.model_fast, "openai/gpt-x");
+    assertEquals(stored.theme, "dark");
+    // The in-memory view is in step with the file, not stale.
+    assertEquals(repo.get("language"), "ja");
+  } finally {
+    await removeDirRetry(dir);
+  }
+});

@@ -1,8 +1,22 @@
 import { CoreError } from "../errors.ts";
 import {
   APP_MCP_SETTINGS_KEY,
+  APP_MODE_KEY,
   COMMAND_SAFETY_APPROVALS_KEY,
+  COMMAND_SAFETY_ENABLED_KEY,
+  COMPACTION_ENABLED_KEY,
+  COMPACTION_KEEP_RECENT_TOKENS_KEY,
+  COMPACTION_RESERVE_TOKENS_KEY,
+  COMPUTER_USE_ENABLED_KEY,
   CONNECTIONS_KEY,
+  FAST_MODEL_KEY,
+  IMAGE_MODEL_KEY,
+  LANGUAGE_KEY,
+  SAVED_PROMPTS_KEY,
+  THEME_KEY,
+  UPDATE_AUTO_KEY,
+  UPDATE_AUTO_RESTART_KEY,
+  USER_PROVIDERS_KEY,
   WEB_SEARCH_KEY,
 } from "../shared/mod.ts";
 import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
@@ -60,4 +74,48 @@ export function filterExposedSettings(
     safe.set(key, value);
   }
   return safe;
+}
+
+/** Settings keys the generic settings surface may write.
+ *
+ * The settings file is shared by many owners (the UI's preferences, the
+ * model layer's per-model records, the credential store, the MCP config), so
+ * an open write endpoint could create or overwrite any of them — a typo in a
+ * key, or a client that sends a key it invented, would silently persist a
+ * dead entry. The list is therefore an allow-list: a new preference has to
+ * be declared here (one line, next to its constant) and cannot be reached by
+ * accident.
+ *
+ * Entries with their own dedicated surface are absent on purpose: credentials
+ * (`api_key:*`), the MCP OAuth grants, the web-search configuration, the MCP
+ * config, the connection registry and the command-safety approvals are
+ * written through their own routes/services, which validate their payloads.
+ * Per-model enablement and thinking level are absent too: they are written by
+ * the model layer through /providers/:id/models/:modelId, which knows the
+ * provider/model pair. */
+const MUTABLE_KEYS: ReadonlySet<string> = new Set([
+  THEME_KEY,
+  APP_MODE_KEY,
+  LANGUAGE_KEY,
+  FAST_MODEL_KEY,
+  IMAGE_MODEL_KEY,
+  COMPUTER_USE_ENABLED_KEY,
+  UPDATE_AUTO_KEY,
+  UPDATE_AUTO_RESTART_KEY,
+  COMMAND_SAFETY_ENABLED_KEY,
+  COMPACTION_ENABLED_KEY,
+  COMPACTION_RESERVE_TOKENS_KEY,
+  COMPACTION_KEEP_RECENT_TOKENS_KEY,
+  SAVED_PROMPTS_KEY,
+  USER_PROVIDERS_KEY,
+]);
+
+/** Throw unless `key` may be written through the generic settings surface. */
+export function assertMutableKey(key: string): void {
+  if (MUTABLE_KEYS.has(key)) return;
+  throw new CoreError(
+    `Unknown setting: ${key} (a preference must be declared in ` +
+      "settings/guard.ts before it can be written)",
+    "invalid",
+  );
 }

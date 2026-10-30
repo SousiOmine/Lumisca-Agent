@@ -149,6 +149,32 @@ Deno.test("refreshCatalog keeps an existing session usable after upstream remova
   }
 });
 
+Deno.test("a retired provider still resolves the credential it served with", async () => {
+  const core = LumiscaCore.forTesting();
+  try {
+    // A stored key is what a session created before the removal used.
+    await core.setProviderApiKey("mistral", "sk-mistral-test");
+    const pruned = structuredClone(snapshotCatalog().providers);
+    delete pruned["mistral"];
+    await core.refreshModelCatalog({ fetch: stubFetch(pruned) });
+    assertEquals(core.getModel("mistral", "any"), undefined);
+
+    // The retired entry IS the provider that served those sessions, so its
+    // auth definition survives: without it every retired session would fail
+    // with "Provider is not configured", which is the opposite of the point
+    // of keeping the provider alive.
+    const retired = core.models.getProviderWithRetired("mistral");
+    assert(retired !== undefined, "the retired provider must stay resolvable");
+    const resolved = await retired.resolveCredential({
+      credential: { type: "api_key", key: "sk-mistral-test" },
+      env: {},
+    });
+    assertEquals(resolved?.auth.apiKey, "sk-mistral-test");
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("refreshCatalog reports custom-provider failure on the status", async () => {
   // The models file appears *after* the core is built: only the refresh
   // re-reads the custom sources, so the failure lands on the status rather

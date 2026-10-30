@@ -1281,6 +1281,25 @@ Deno.test("settings API refuses to write credentials", async () => {
   }
 });
 
+Deno.test("settings API refuses a preference it does not declare", async () => {
+  const { core, server, base } = await setup();
+  try {
+    // A typo, or a client that invents a key: the settings file is shared by
+    // many owners (preferences, model records, credentials), so an unknown
+    // key must not become a permanent dead entry.
+    const res = await json(base, "/api/settings/some_invented_key", {
+      method: "PUT",
+      body: JSON.stringify({ value: "x" }),
+    });
+    assertEquals(res.status, 400);
+    const stored = core.getSetting("some_invented_key");
+    assertEquals(stored, undefined);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("computer use toggle goes through the capability path", async () => {
   const { core, server, base } = await setup();
   try {

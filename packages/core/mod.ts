@@ -320,6 +320,7 @@ export {
 export type { PluginMcpResult } from "./plugins/mcp.ts";
 export { CREDENTIAL_KEY_PREFIX } from "./settings/credentials.ts";
 export {
+  assertMutableKey,
   assertNotProtected,
   filterExposedSettings,
   protectedKeyReason,

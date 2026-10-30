@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseJsonc, SettingsFileError } from "./jsonc.ts";
-import { atomicWriteTextFileSync } from "../fs.ts";
+import { atomicWriteTextFileSync, readIfExists } from "../fs.ts";
 export { THEME_KEY } from "../shared/mod.ts";
 
 export interface SettingsRepo {
@@ -31,18 +31,38 @@ function toStoredString(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-/** Settings persisted as a single user-editable JSONC file. The file is
- * loaded once at creation (a missing file means empty settings); every
- * mutation rewrites the whole file atomically (tmp + rename). */
+/** Settings persisted as a single user-editable JSONC file.
+ *
+ * The file is read once at creation (a missing file means empty settings).
+ * Every mutation re-reads it first when the bytes on disk are not the ones
+ * this repo last wrote: the file is documented as hand-editable, so an edit
+ * made while the app runs (or by another process) must not be overwritten by
+ * the next theme change. The re-read keeps the values in memory in step with
+ * what the user just wrote.
+ *
+ * Comments and formatting are NOT preserved when the app writes (the JSON is
+ * re-serialized); the file stays valid JSON, which is also valid JSONC, so a
+ * hand edit before the app starts keeps working. */
 export function createFileSettingsRepo(path: string): SettingsRepo {
-  const data = loadFile(path);
+  let data = loadFile(path);
+  /** The exact bytes last written (or read at creation). A change on disk
+   * means somebody else edited the file. */
+  let written = readIfExists(path);
+
+  /** Re-read the file when it changed underneath this repo. Returns whether
+   * it did. */
+  const refreshIfChanged = (): boolean => {
+    const current = readIfExists(path);
+    if (current === written) return false;
+    data = loadFile(path);
+    written = current;
+    return true;
+  };
 
   const save = () => {
-    atomicWriteTextFileSync(
-      path,
-      `${JSON.stringify(Object.fromEntries(data), null, 2)}\n`,
-      { mode: 0o600 },
-    );
+    const text = `${JSON.stringify(Object.fromEntries(data), null, 2)}\n`;
+    atomicWriteTextFileSync(path, text, { mode: 0o600 });
+    written = text;
   };
 
   return {
@@ -51,11 +71,15 @@ export function createFileSettingsRepo(path: string): SettingsRepo {
       return value === undefined ? undefined : toStoredString(value);
     },
     set(key: string, value: string): void {
+      refreshIfChanged();
       data.set(key, toNativeValue(value));
       save();
     },
     delete(key: string): void {
-      if (data.delete(key)) save();
+      const changed = refreshIfChanged();
+      // `data` may have been replaced by the re-read, so the delete has to
+      // act on the fresh map (and save only when something actually went).
+      if (data.delete(key) || changed) save();
     },
     list(): Map<string, string> {
       const out = new Map<string, string>();

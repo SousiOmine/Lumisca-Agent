@@ -52,6 +52,22 @@ import { createLogger } from "../log.ts";
 const log = createLogger("catalog");
 
 /** Owns the Lumisca model registry and resolves providers/models. */
+/** A provider removed from the catalog, kept for the sessions that already
+ * reference it: the provider itself (with its auth definition and headers)
+ * and the models that disappeared with it.
+ *
+ * The whole provider is kept, not just its models: credential resolution runs
+ * through `provider.resolveCredential`, so a stand-in without auth could
+ * never resolve a stored key or an env var, and every retired session would
+ * fail with "Provider is not configured" — the opposite of what keeping the
+ * provider alive is for. */
+interface RetiredProvider {
+  /** The provider as it was: id, name, baseUrl, headers and auth. */
+  provider: Provider;
+  /** The models that went away with it (or with an update), by id. */
+  models: Map<string, Model<Api>>;
+}
+
 export class ModelManager {
   readonly models: LumiscaModels;
   private readonly settings: SettingsRepo;
@@ -72,6 +88,10 @@ export class ModelManager {
    * or the bundled snapshot). Starts as the snapshot the constructor
    * registered; every `refreshCatalog` replaces it. */
   private catalogStatus: CatalogStatus;
+  /** Providers removed from the catalog, kept for the sessions that already
+   * reference them (see {@link RetiredProvider}). Filled by
+   * `refreshCatalog`, never by construction. */
+  private readonly retired = new Map<string, RetiredProvider>();
 
   constructor(
     credentials: CredentialStore,
@@ -135,14 +155,6 @@ export class ModelManager {
     return { ...this.catalogStatus };
   }
 
-  /** Retired models kept alive for existing sessions: provider id → models
-   * by id. A model removed upstream stays resolvable (open/reopen/stream
-   * keep working) but is hidden from every listing surface — pickers,
-   * `getModels()`, and the default-model fallback never see it. New
-   * sessions cannot select it; only sessions created before its removal
-   * reference it. Filled by `refreshCatalog`, never by construction. */
-  private readonly retiredModels = new Map<string, Map<string, Model<Api>>>();
-
   /** Resolve a model including retired ones (existing sessions only).
    * Listings and new-session resolution must use `getModel`, never this. */
   getModelWithRetired(
@@ -150,7 +162,7 @@ export class ModelManager {
     modelId: string,
   ): Model<Api> | undefined {
     return this.models.getModel(providerId, modelId) ??
-      this.retiredModels.get(providerId)?.get(modelId);
+      this.retired.get(providerId)?.models.get(modelId);
   }
 
   /** The configured image-analysis model (the `model_image` setting), or
@@ -185,32 +197,22 @@ export class ModelManager {
   }
 
   /** Resolve a provider for existing sessions, including retired ones.
-   * Listings must use `getProvider`, never this. The retired stand-in
-   * carries no auth of its own: credential resolution still runs against
-   * the provider id (stored keys/env vars keep working), and when nothing
-   * resolves the stream fails with the usual not-configured error. */
+   * Listings must use `getProvider`, never this: a retired provider is only
+   * reachable for the sessions that already name it.
+   *
+   * The retired entry IS the provider that served those sessions, so its
+   * credential resolution keeps working: a stored key or an env var resolved
+   * before the removal resolves after it too. */
   getProviderWithRetired(providerId: string): Provider | undefined {
-    const live = this.models.getProvider(providerId);
-    if (live !== undefined) return live;
-    const retired = this.retiredModels.get(providerId);
-    if (retired === undefined || retired.size === 0) return undefined;
-    const models = [...retired.values()];
-    return buildProvider({
-      id: providerId,
-      name: models[0]!.provider,
-      auth: {
-        name: `${providerId} API key`,
-        resolve: () => Promise.resolve(undefined),
-      },
-      models,
-    });
+    return this.models.getProvider(providerId) ??
+      this.retired.get(providerId)?.provider;
   }
 
   /** Whether a retired model is still referenced (kept alive for existing
    * sessions rather than listed). */
   isRetiredModel(providerId: string, modelId: string): boolean {
     return this.models.getModel(providerId, modelId) === undefined &&
-      this.retiredModels.get(providerId)?.has(modelId) === true;
+      this.retired.get(providerId)?.models.has(modelId) === true;
   }
 
   /** Refresh the built-in catalog from models.dev (`live → cache →
@@ -291,16 +293,12 @@ export class ModelManager {
     return this.getCatalogStatus();
   }
 
-  /** Remember every model of a removed provider before it leaves the
-   * registry (see `retiredModels`). */
+  /** Remember a removed provider (with its auth and headers) and its models
+   * before it leaves the registry (see {@link RetiredProvider}). */
   private retireProvider(provider: Provider): void {
     if (provider.getModels().length === 0) return;
-    let kept = this.retiredModels.get(provider.id);
-    if (kept === undefined) {
-      kept = new Map();
-      this.retiredModels.set(provider.id, kept);
-    }
-    for (const model of provider.getModels()) kept.set(model.id, model);
+    const kept = this.retiredEntry(provider.id, provider);
+    for (const model of provider.getModels()) kept.models.set(model.id, model);
   }
 
   /** Remember the models a provider update dropped (same provider id, model
@@ -308,21 +306,36 @@ export class ModelManager {
    * set so a re-added model resolves to its live form, not the tombstone. */
   private retireRemovedModels(previous: Provider, next: Provider): void {
     const liveIds = new Set(next.getModels().map((m) => m.id));
-    let kept = this.retiredModels.get(previous.id);
+    let kept = this.retired.get(previous.id);
     for (const model of previous.getModels()) {
       if (liveIds.has(model.id)) {
-        kept?.delete(model.id);
+        kept?.models.delete(model.id);
         continue;
       }
-      if (kept === undefined) {
-        kept = new Map();
-        this.retiredModels.set(previous.id, kept);
-      }
-      kept.set(model.id, model);
+      kept = this.retiredEntry(previous.id, previous);
+      kept.models.set(model.id, model);
     }
-    if (kept !== undefined && kept.size === 0) {
-      this.retiredModels.delete(previous.id);
+    if (kept !== undefined && kept.models.size === 0) {
+      this.retired.delete(previous.id);
     }
+  }
+
+  /** The retired entry of a provider, created on first use. The FIRST
+   * provider seen for an id wins: it is the one a live session was built
+   * against, so its baseUrl, headers and auth are the ones that keep working
+   * (a later refresh cannot rewrite the connection a session relies on). */
+  private retiredEntry(
+    providerId: string,
+    provider: Provider,
+  ): RetiredProvider {
+    const existing = this.retired.get(providerId);
+    if (existing !== undefined) return existing;
+    const created: RetiredProvider = {
+      provider,
+      models: new Map(),
+    };
+    this.retired.set(providerId, created);
+    return created;
   }
 
   /** Whether the provider id comes from Lumisca's own custom-provider

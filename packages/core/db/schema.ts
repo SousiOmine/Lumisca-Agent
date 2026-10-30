@@ -1,5 +1,27 @@
 import type { DatabaseSync } from "node:sqlite";
 
+/**
+ * `ALTER TABLE … ADD COLUMN`, skipped when the column already exists.
+ *
+ * Two shapes of database reach this: the ordinary one (the column is
+ * missing) and one written by an older build that added the column without
+ * stamping the version — those exist in the wild, and a retried migration
+ * must not fail on them. With migrations now transactional (see
+ * {@link applyMigrations}) this guards history, not the current path.
+ */
+function addColumnIfMissing(
+  db: DatabaseSync,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const columns = db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all() as Array<{ name: string }>;
+  if (columns.some((entry) => entry.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
 const BASE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
@@ -136,20 +158,13 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   // The flag is NOT unique: each stella agent has its own conversation, so
   // several rows carry it at once. The index exists only to make "the stella
   // rows" cheap to find.
-  //
-  // Guarded because ALTER TABLE ADD COLUMN is not idempotent: a process
-  // killed between this statement and the user_version stamp (the two are
-  // separate writes) would leave the column behind, and the retried
-  // migration would then fail on a database that is otherwise fine.
   (db) => {
-    const columns = db
-      .prepare("PRAGMA table_info(sessions)")
-      .all() as Array<{ name: string }>;
-    if (!columns.some((column) => column.name === "stella")) {
-      db.exec(
-        "ALTER TABLE sessions ADD COLUMN stella INTEGER NOT NULL DEFAULT 0",
-      );
-    }
+    addColumnIfMissing(
+      db,
+      "sessions",
+      "stella",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
     // A database stamped by the earlier, one-conversation shape carries a
     // UNIQUE index here; it would reject the second agent's conversation, so
     // it is replaced rather than kept.
@@ -177,12 +192,7 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
         updated_at INTEGER NOT NULL
       );
     `);
-    const columns = db
-      .prepare("PRAGMA table_info(sessions)")
-      .all() as Array<{ name: string }>;
-    if (!columns.some((column) => column.name === "agent_id")) {
-      db.exec("ALTER TABLE sessions ADD COLUMN agent_id TEXT");
-    }
+    addColumnIfMissing(db, "sessions", "agent_id", "TEXT");
     db.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_agent
         ON sessions(agent_id) WHERE agent_id IS NOT NULL;
@@ -227,14 +237,12 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   // has no file to live in: the machine's home is reachable from every agent,
   // and a persona is a property of the agent, not of a folder.
   (db) => {
-    const columns = db
-      .prepare("PRAGMA table_info(stella_agents)")
-      .all() as Array<{ name: string }>;
-    if (!columns.some((column) => column.name === "identity")) {
-      db.exec(
-        "ALTER TABLE stella_agents ADD COLUMN identity TEXT NOT NULL DEFAULT ''",
-      );
-    }
+    addColumnIfMissing(
+      db,
+      "stella_agents",
+      "identity",
+      "TEXT NOT NULL DEFAULT ''",
+    );
   },
 ];
 
@@ -243,13 +251,38 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
  * migration list") instead of a literal that every new migration breaks. */
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
-/** Apply pending migrations, tracked via PRAGMA user_version. */
+/** Apply pending migrations, tracked via PRAGMA user_version.
+ *
+ * Each migration runs in its own transaction WITH its stamp, so a process
+ * killed mid-migration leaves the database at the previous version instead
+ * of half-migrated. That matters because the ALTERs are not idempotent: a
+ * column added without its stamp would make the retried migration fail with
+ * `duplicate column name`, and the database could never be opened again. */
 export function migrate(db: DatabaseSync): void {
+  applyMigrations(db, MIGRATIONS);
+}
+
+/** Apply a migration list. Split from {@link migrate} so a test can drive a
+ * deliberately failing migration and observe the rollback, which is the
+ * property that keeps a half-done database openable. */
+export function applyMigrations(
+  db: DatabaseSync,
+  migrations: ReadonlyArray<(db: DatabaseSync) => void>,
+): void {
   const { user_version: current } = db
     .prepare("PRAGMA user_version")
     .get() as { user_version: number };
-  for (let v = current; v < MIGRATIONS.length; v++) {
-    MIGRATIONS[v]!(db);
-    db.exec(`PRAGMA user_version = ${v + 1}`);
+  for (let v = current; v < migrations.length; v++) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      migrations[v]!(db);
+      // PRAGMA user_version cannot take a bound parameter, and the value is
+      // this module's own integer (never user input).
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
   }
 }

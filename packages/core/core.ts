@@ -17,7 +17,11 @@ import {
   type ConnectionEntry,
   parseConnections,
 } from "./settings/connections.ts";
-import { assertNotProtected, filterExposedSettings } from "./settings/guard.ts";
+import {
+  assertMutableKey,
+  assertNotProtected,
+  filterExposedSettings,
+} from "./settings/guard.ts";
 import {
   createWebSearchSettingsStore,
   type FetchLike,
@@ -729,8 +733,26 @@ export class LumiscaCore {
     return this.settings.get(key);
   }
 
+  /** Write a setting. Protected keys are refused (they have dedicated
+   * APIs). This is the surface the server and the core's own services use,
+   * so it accepts every unprotected key — a service writing its own record
+   * (the approvals table, the resolved language) must not have to be on a
+   * preference allow-list. Client-supplied writes go through
+   * {@link setUserSetting} instead. */
   setSetting(key: string, value: string): void {
     assertNotProtected(key);
+    this.settings.set(key, value);
+  }
+
+  /** Write a preference on behalf of a client (the generic settings route).
+   * In addition to the protection check, only the keys declared in
+   * settings/guard.ts are accepted: the settings file is shared by many
+   * owners, so a key a client invented must not become a permanent dead
+   * entry. The protection check runs FIRST, so a credential key is refused
+   * as forbidden (403) rather than as an unknown preference (400). */
+  setUserSetting(key: string, value: string): void {
+    assertNotProtected(key);
+    assertMutableKey(key);
     this.settings.set(key, value);
   }
 

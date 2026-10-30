@@ -612,10 +612,16 @@ Deno.test("bash tool keeps only the newest spills and drops them on close", asyn
       `spills not pruned: ${kept.length}`,
     );
     // The tools are closed with the agent: nothing can reference the spills
-    // any more, so they go.
+    // any more, so they go. Removal is asynchronous (it goes through the
+    // file backend, which may be a container), so poll rather than assume.
     tool.dispose?.();
-    const after = [...Deno.readDirSync(spillDir)];
-    assertEquals(after, [], "dispose must delete the session's spills");
+    let remaining: unknown[] = [];
+    for (let i = 0; i < 50; i++) {
+      remaining = [...Deno.readDirSync(spillDir)];
+      if (remaining.length === 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assertEquals(remaining, [], "dispose must delete the session's spills");
   } finally {
     await removeDirRetry(root);
   }

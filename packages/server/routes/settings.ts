@@ -15,7 +15,9 @@ import {
  * Credential filtering/guarding lives in the core, not here. */
 export interface SettingsApi {
   listSettings(): Map<string, string>;
-  setSetting(key: string, value: string): void;
+  /** Write a preference on behalf of a client; refuses protected keys and
+   * any key that is not a declared preference. */
+  setUserSetting(key: string, value: string): void;
   /** Enable or disable computer use. Not a plain setting write: the flag
    * decides which tools every session gets, so the core validates that this
    * machine has a host and rebuilds the open sessions (refused while one is
@@ -60,7 +62,7 @@ export function settingRoutes(core: SettingsApi): Hono {
       core.setComputerUseEnabled(value === "1");
       return c.json({ ok: true });
     }
-    core.setSetting(key, value);
+    core.setUserSetting(key, value);
     return c.json({ ok: true });
   });
 

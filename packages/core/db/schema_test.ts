@@ -1,5 +1,6 @@
-import { assertEquals } from "@std/assert";
-import { migrate, SCHEMA_VERSION } from "./schema.ts";
+import { assert, assertEquals } from "@std/assert";
+import { DatabaseSync } from "node:sqlite";
+import { applyMigrations, migrate, SCHEMA_VERSION } from "./schema.ts";
 import { LumiscaDb } from "./mod.ts";
 
 Deno.test("migrate brings an empty database to the newest user_version", () => {
@@ -164,6 +165,57 @@ Deno.test("migrate leaves rows that already report an uncached prompt alone", ()
     migrate(db.db);
 
     assertEquals(storedUsages(db), before);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("a failing migration rolls back together with its stamp", () => {
+  // A killed process between an ALTER and its stamp used to leave a column
+  // without the version, and the retried migration then failed with
+  // `duplicate column name` — the database could never be opened again.
+  // Each step now runs in one transaction with its stamp.
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("CREATE TABLE workspaces (id TEXT PRIMARY KEY)");
+    const version = () =>
+      (db.prepare("PRAGMA user_version").get() as { user_version: number })
+        .user_version;
+    const columns = () =>
+      (db.prepare("SELECT name FROM pragma_table_info('workspaces')")
+        .all() as unknown as Array<{ name: string }>).map((column) =>
+          column.name
+        );
+
+    let ran = 0;
+    const migrations: Array<(db: DatabaseSync) => void> = [
+      (target) => {
+        ran++;
+        target.exec(
+          "ALTER TABLE workspaces ADD COLUMN chat INTEGER NOT NULL DEFAULT 0",
+        );
+      },
+      (target) => {
+        ran++;
+        // Fails: the column exists. The step must not leave a partial
+        // schema behind with a stale version.
+        target.exec(
+          "ALTER TABLE workspaces ADD COLUMN chat INTEGER NOT NULL DEFAULT 0",
+        );
+      },
+    ];
+    let failure: unknown;
+    try {
+      applyMigrations(db, migrations);
+    } catch (error) {
+      failure = error;
+    }
+    assert(failure !== undefined, "the second migration must fail");
+    assertEquals(ran, 2, "both migrations ran");
+    // The first one committed (its column and stamp stand); the second
+    // rolled back completely, so a retry can run it again.
+    assertEquals(version(), 1);
+    assertEquals(columns().filter((name) => name === "chat").length, 1);
   } finally {
     db.close();
   }
