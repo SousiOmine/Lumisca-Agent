@@ -2,7 +2,7 @@ import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import type { AgentMessage } from "../ai/types.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
-import { RetryManager } from "./retry-manager.ts";
+import { MAX_OUTPUT_CAP_RETRIES, RetryManager } from "./retry-manager.ts";
 import {
   isContextOverflowError,
   MAX_EMPTY_RESPONSE_RETRIES,
@@ -423,4 +423,23 @@ Deno.test("abort and reset clear a parked overflow", () => {
     ).action,
     "park",
   );
+});
+
+Deno.test("classify: an answer cut at the output cap parks a continuation", () => {
+  const retries = new RetryManager(instantSleep);
+  const cut = fauxAssistantMessage("the beginning of a long answer", {
+    stopReason: "length",
+  });
+  // The visible text must not reset the budget: the model was still talking.
+  assertEquals(retries.classify(cut, false).action, "park");
+  assertEquals(retries.hasPendingRestart, true);
+
+  // Consume the parked restart, then keep hitting the cap: the budget runs
+  // out and the turn is accepted as it is (the model cannot be asked
+  // forever).
+  for (let i = 1; i <= MAX_OUTPUT_CAP_RETRIES; i++) {
+    retries.clearPendingRestart();
+    const action = retries.classify(cut, false).action;
+    assertEquals(action, i < MAX_OUTPUT_CAP_RETRIES ? "park" : "none");
+  }
 });

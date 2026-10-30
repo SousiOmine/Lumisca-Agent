@@ -1124,3 +1124,39 @@ Deno.test("a request the provider rejects as too large is re-sent with a smaller
   };
   assertEquals(done.message.content[0]?.text, "very well");
 });
+
+Deno.test("a response the provider cut at the output cap is stopReason length", async () => {
+  // The finish reason is the only signal that the model never finished: a
+  // truncated answer used to be stored, shown and retried as a complete one.
+  const events = await runStream([
+    { type: "text-start", id: "t" },
+    { type: "text-delta", id: "t", delta: "the answer so far" },
+    { type: "text-end", id: "t" },
+    {
+      type: "finish",
+      finishReason: "length",
+      usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 0 },
+    },
+  ]);
+  const done = events.find((event) => event.type === "done") as
+    | { message: { stopReason: string } }
+    | undefined;
+  assertEquals(done?.message.stopReason, "length");
+});
+
+Deno.test("an ordinary stop stays stopReason stop", async () => {
+  const events = await runStream([
+    { type: "text-start", id: "t" },
+    { type: "text-delta", id: "t", delta: "done" },
+    { type: "text-end", id: "t" },
+    {
+      type: "finish",
+      finishReason: "stop",
+      usage: { inputTokens: 10, outputTokens: 2, cachedInputTokens: 0 },
+    },
+  ]);
+  const done = events.find((event) => event.type === "done") as
+    | { message: { stopReason: string } }
+    | undefined;
+  assertEquals(done?.message.stopReason, "stop");
+});

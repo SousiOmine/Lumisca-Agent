@@ -3,10 +3,12 @@ import type { AgentMessage, AssistantMessage } from "../ai/types.ts";
 import {
   buildContextOverflowRetryNotification,
   buildInterruptedRetryNotification,
+  buildOutputCapRetryNotification,
   buildRateLimitRetryNotification,
   buildRetryNotification,
   hasNoVisibleOutput,
   isContextOverflowError,
+  isOutputCapStop,
   isSilentErrorResponse,
   isTransientStreamError,
   MAX_EMPTY_RESPONSE_RETRIES,
@@ -39,6 +41,11 @@ export type RetryDecision =
  * looping. Mirrors DSH's `maxOverflowRetries` default. */
 export const MAX_OVERFLOW_RETRIES = 1;
 
+/** How many times one exchange may continue an answer the output cap cut
+ * short. One is nearly always enough (the model finishes in the next turn);
+ * the bound exists so a model stuck at the cap cannot loop. */
+export const MAX_OUTPUT_CAP_RETRIES = 2;
+
 /** Owns the vacant-response / rate-limit retry state of one session agent.
  * Extracted from SessionAgent so the retry budgets, the parked restart
  * notifications, and the abort epochs live in one testable unit; the agent
@@ -61,6 +68,12 @@ export class RetryManager {
    * dropping long streams cannot loop forever (each restart re-sends the
    * whole conversation, so an unbounded chain would burn quota). */
   private interruptedRetries = 0;
+  /** Consecutive responses the provider cut at the output cap (finish
+   * reason "length"). A separate budget from the transport interruption:
+   * a model whose answer does not fit in the cap will keep hitting it, and
+   * the point of retrying is to let it finish in a second turn, not to
+   * treat the cut as a broken connection. */
+  private outputCapRetries = 0;
   /** Consecutive context-overflow recoveries in the current exchange.
    * Bounded: the first one condenses the history and restarts, a second
    * rejection surfaces (compaction could not free enough). */
@@ -109,6 +122,7 @@ export class RetryManager {
     this.emptyResponseRetries = 0;
     this.rateLimitRetries = 0;
     this.interruptedRetries = 0;
+    this.outputCapRetries = 0;
     this.overflowRetries = 0;
     this.pendingOverflow = false;
     this.pendingErrorRetry = null;
@@ -157,6 +171,21 @@ export class RetryManager {
   ): RetryDecision {
     if (message.role !== "assistant") return { action: "none" };
     const assistant = message as AssistantMessage;
+    // An answer the provider cut at the output cap is incomplete even though
+    // it has visible text: continue it instead of treating it as finished.
+    // Checked first because the visible text would otherwise reset the
+    // budgets below and the model would never be asked to go on.
+    if (
+      !closed && isOutputCapStop(assistant) &&
+      this.outputCapRetries < MAX_OUTPUT_CAP_RETRIES
+    ) {
+      this.outputCapRetries++;
+      const notification = buildOutputCapRetryNotification(
+        this.outputCapRetries,
+      );
+      this.pendingErrorRetry = notification;
+      return { action: "park", notification, rateLimit: false };
+    }
     if (!hasNoVisibleOutput(assistant)) {
       // The response produced output. A transport cut after partial text is
       // still worth continuing from where it stopped — the partial answer
@@ -176,6 +205,7 @@ export class RetryManager {
       this.emptyResponseRetries = 0;
       this.rateLimitRetries = 0;
       this.interruptedRetries = 0;
+      this.outputCapRetries = 0;
       return { action: "none" };
     }
     if (assistant.stopReason === "aborted") return { action: "none" };

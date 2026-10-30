@@ -22,11 +22,7 @@ import {
   parseUserProviderInput,
   UserProviderStore,
 } from "./user-providers.ts";
-import {
-  type EnvReader,
-  loadCustomProviders,
-  processEnv,
-} from "./custom.ts";
+import { type EnvReader, loadCustomProviders, processEnv } from "./custom.ts";
 import {
   buildCatalogProviders,
   builtinProviders,

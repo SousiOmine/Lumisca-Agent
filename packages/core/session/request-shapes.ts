@@ -1,6 +1,12 @@
 import type { RequestShape } from "../ai/types.ts";
 import type { LumiscaDb } from "../db/mod.ts";
 
+/** How many shapes one session keeps. A session's rows are proportional to
+ * its cache breaks, and the newest ones are the ones a post-mortem reads;
+ * without a bound a long-lived session (or a routine that fires daily for
+ * years) would accumulate them forever. */
+export const MAX_REQUEST_SHAPES_PER_SESSION = 200;
+
 /** One recorded request shape (see RequestShape). */
 export interface RequestShapeRecord extends RequestShape {
   id: number;
@@ -42,6 +48,18 @@ export function createRequestShapeRepo(db: LumiscaDb): RequestShapeRepo {
   const listStmt = db.db.prepare(
     "SELECT * FROM request_shapes WHERE session_id = ? ORDER BY id",
   );
+  // Keep the newest rows of one session (see MAX_REQUEST_SHAPES_PER_SESSION):
+  // deleting the ones before the last N is cheaper than counting them.
+  const pruneStmt = db.db.prepare(`
+    DELETE FROM request_shapes
+    WHERE session_id = ?
+      AND id <= (
+        SELECT id FROM request_shapes
+        WHERE session_id = ?
+        ORDER BY id DESC
+        LIMIT 1 OFFSET ?
+      )
+  `);
 
   interface ShapeRow {
     id: number;
@@ -75,6 +93,7 @@ export function createRequestShapeRepo(db: LumiscaDb): RequestShapeRepo {
         shape.messagesHash,
         shape.messageCount,
       );
+      pruneStmt.run(sessionId, sessionId, MAX_REQUEST_SHAPES_PER_SESSION);
     },
 
     list(sessionId: string, limit?: number): RequestShapeRecord[] {

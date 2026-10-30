@@ -84,6 +84,29 @@ export function buildInterruptedRetryNotification(
   });
 }
 
+/** True when the provider cut the response at the output cap: the model was
+ * still talking, so the answer is incomplete even though it looks fine.
+ * Treated like an interrupted stream (continue from where it stopped), with
+ * its own budget: cutting an answer short is not a transport failure. */
+export function isOutputCapStop(message: AssistantMessage): boolean {
+  return message.stopReason === "length";
+}
+
+/** The notification queued to continue a response the provider cut at the
+ * output cap. The partial text is already in the transcript. */
+export function buildOutputCapRetryNotification(
+  attempt: number,
+): NotificationMessage {
+  return notificationMessage({
+    kind: "retry",
+    title: `Output limit reached (retry ${attempt})`,
+    body: "Your previous response hit the model's output limit and was cut " +
+      "off. Continue from where it stopped — do not repeat what you already " +
+      "wrote.",
+    status: "neutral",
+  });
+}
+
 /** The notification queued to retry a vacant response. The text is
  * self-contained (no system-prompt prefix contract): the model reads it as
  * a user message telling it its previous response was empty. */

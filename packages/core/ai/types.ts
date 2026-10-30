@@ -40,14 +40,11 @@ export type ThinkingLevelMap = Partial<
 export interface TextContent {
   type: "text";
   text: string;
-  textSignature?: string;
 }
 
 export interface ThinkingContent {
   type: "thinking";
   thinking: string;
-  thinkingSignature?: string;
-  redacted?: boolean;
 }
 
 export interface ImageContent {
@@ -61,8 +58,6 @@ export interface ToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
-  thoughtSignature?: string;
-  namespace?: string;
 }
 
 export type AssistantMessageContent =
@@ -80,7 +75,6 @@ export interface Usage {
   cacheRead: number;
   /** Prompt tokens the provider wrote into its prompt cache. */
   cacheWrite: number;
-  cacheWrite1h?: number;
   reasoningTokens?: number;
   /** Financial cost of the usage, when the provider reports/derives it. */
   cost?: number;
@@ -101,11 +95,12 @@ export interface ModelCost {
 export type StopReason =
   | "pending"
   | "stop"
+  /** The provider cut the answer at the output cap; the turn is incomplete
+   * (see ai/stream.ts, which maps the SDK's finish reason onto this). */
   | "length"
   | "toolUse"
   | "error"
-  | "aborted"
-  | "deferred";
+  | "aborted";
 
 export interface UserMessage {
   role: "user";
@@ -132,9 +127,6 @@ export interface AssistantMessage {
   api: Api;
   provider: string;
   model: string;
-  responseModel?: string;
-  responseId?: string;
-  providerThinkingLevel?: string;
   usage: Usage;
   stopReason: StopReason;
   errorMessage?: string;
@@ -142,7 +134,6 @@ export interface AssistantMessage {
    * `APICallError.isRetryable`). Persisted with the message so a post-mortem
    * can tell a transient cut from a permanent rejection. */
   errorRetryable?: boolean;
-  rawStopReason?: string;
   timestamp: number;
 }
 
@@ -152,8 +143,6 @@ export interface ToolResultMessage<TDetails = unknown> {
   toolName: string;
   content: (TextContent | ImageContent)[];
   details?: TDetails;
-  usage?: Usage;
-  addedToolNames?: string[];
   isError: boolean;
   timestamp: number;
 }
@@ -350,17 +339,15 @@ export interface AgentTool<P = unknown> {
 
 // ---- model / provider ----------------------------------------------------------
 
+/** Per-model quirks the transport has to honour. A field lives here only
+ * once something reads it: an unread flag is a promise the code does not
+ * keep, and every provider-specific knob added "for later" becomes a lie the
+ * next reader has to verify (see the one entry below and ai/stream.ts). */
 export interface ModelCompat {
-  maxTokensField?: string;
-  supportsDeveloperRole?: boolean;
-  supportsStore?: boolean;
-  supportsReasoningEffort?: boolean;
-  supportsLongCacheRetention?: boolean;
+  /** The provider rejects an assistant turn that carries tool calls without
+   * a `reasoning_content` field; the transport sends an empty one (see
+   * ai/stream.ts emptyReasoningContentOption). */
   requiresReasoningContentOnAssistantMessages?: boolean;
-  thinkingFormat?: string;
-  sessionAffinityFormat?: string;
-  forceAdaptiveThinking?: boolean;
-  supportsTemperature?: boolean;
 }
 
 export interface Model<TApi extends Api = Api> {
@@ -551,7 +538,6 @@ export type StreamEvent =
   | { type: "start"; partial?: AssistantMessage; [k: string]: unknown }
   | { type: "text_delta"; delta: string; [k: string]: unknown }
   | { type: "thinking_delta"; delta: string; [k: string]: unknown }
-  | { type: "toolcall_delta"; delta: string; [k: string]: unknown }
   | {
     type: "error";
     errorMessage?: string;
@@ -649,8 +635,7 @@ export type AgentEvent =
     type: "message_update";
     assistantMessageEvent:
       | { type: "text_delta"; delta: string }
-      | { type: "thinking_delta"; delta: string }
-      | { type: "toolcall_delta"; delta: string };
+      | { type: "thinking_delta"; delta: string };
   }
   | { type: "message_end"; message: AgentMessage }
   | {

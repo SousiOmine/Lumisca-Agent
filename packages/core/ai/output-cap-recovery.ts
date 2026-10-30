@@ -83,7 +83,6 @@ export function recoveredOutputCap(
 const CONTENT_EVENTS: ReadonlySet<string> = new Set([
   "text_delta",
   "thinking_delta",
-  "toolcall_delta",
   "toolcall_start",
   "toolcall_result",
 ]);

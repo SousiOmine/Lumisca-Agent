@@ -1,6 +1,9 @@
 import { assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
-import { createRequestShapeRepo } from "./request-shapes.ts";
+import {
+  createRequestShapeRepo,
+  MAX_REQUEST_SHAPES_PER_SESSION,
+} from "./request-shapes.ts";
 import type { RequestShape } from "../ai/types.ts";
 
 /** Create workspace + session rows so the FK constraint is satisfied. */
@@ -97,6 +100,27 @@ Deno.test("request shapes: deleting a session cascades to its rows", () => {
     repo.record("s1", shape());
     db.db.prepare("DELETE FROM sessions WHERE id = 's1'").run();
     assertEquals(repo.list("s1"), []);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("record keeps only the newest shapes of a session", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createRequestShapeRepo(db);
+    for (let i = 0; i < MAX_REQUEST_SHAPES_PER_SESSION + 25; i++) {
+      repo.record(
+        "s1",
+        shape({ change: i === 0 ? "initial" : "head-changed" }),
+      );
+    }
+    const kept = repo.list("s1");
+    assertEquals(kept.length, MAX_REQUEST_SHAPES_PER_SESSION);
+    // The newest rows survive; the oldest (including the initial one) go.
+    assertEquals(kept.at(-1)?.id! > kept[0]!.id, true);
+    assertEquals(kept.some((entry) => entry.change === "initial"), false);
   } finally {
     db.close();
   }

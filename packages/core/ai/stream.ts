@@ -63,6 +63,7 @@ import type {
   AssistantMessage,
   LlmMessage,
   Model,
+  StopReason,
   StreamEvent,
   StreamFn,
   StreamOptions,
@@ -226,6 +227,10 @@ async function* runStream(
   let text = "";
   let thinking = "";
   let streamedUsage: LanguageModelUsage | undefined;
+  /** The provider's finish reason of this step ("stop", "length", …). The
+   * turn's stopReason follows it, so a response the provider cut at the
+   * output cap is reported as "length" instead of looking complete. */
+  let finishReason: string | undefined;
   /** True while this call is being cancelled by OUR signal (the session
    * agent's abort / rewind). The turn must then still end as an ordinary
    * assistant message with stopReason "aborted": an exception escaping this
@@ -261,12 +266,6 @@ async function* runStream(
           if (delta.length === 0) break;
           thinking += delta;
           yield { type: "thinking_delta", delta };
-          break;
-        }
-        case "tool-input-delta": {
-          const delta = typeof p.delta === "string" ? p.delta : "";
-          if (delta.length === 0) break;
-          yield { type: "toolcall_delta", delta };
           break;
         }
         case "tool-call": {
@@ -322,9 +321,13 @@ async function* runStream(
         case "finish-step": {
           // The step's usage arrives before the final `finish` part:
           // capture it so the done message carries the real token counts
-          // (input/cacheRead/cacheWrite) instead of zeros.
+          // (input/cacheRead/cacheWrite) instead of zeros. The finish reason
+          // rides along: it is what tells a truncated answer from a complete
+          // one.
           const usage = (p as { usage?: unknown }).usage;
           if (isLanguageModelUsage(usage)) streamedUsage = usage;
+          const reason = (p as { finishReason?: unknown }).finishReason;
+          if (typeof reason === "string") finishReason = reason;
           break;
         }
         case "finish": {
@@ -421,6 +424,7 @@ async function* runStream(
     finalText,
     finalThinking,
     finalUsage,
+    finishReason,
   );
   // An aborted turn is a real turn: the retry policy skips it (stopReason
   // "aborted"), the UI renders whatever arrived before the stop, and the
@@ -599,6 +603,7 @@ function buildAssistantMessage(
   text: string,
   thinking: string,
   usage: Usage,
+  finishReason: string | undefined,
 ): AssistantMessage {
   const content: AssistantMessage["content"] = [];
   if (thinking.length > 0) {
@@ -630,9 +635,27 @@ function buildAssistantMessage(
     provider: model.provider,
     model: model.id,
     usage,
-    stopReason: step && (step.toolCalls?.length ?? 0) > 0 ? "toolUse" : "stop",
+    stopReason: stopReasonOf(step, finishReason),
     timestamp: Date.now(),
   };
+}
+
+/** The turn's stop reason: tool calls mean the loop continues, a provider
+ * finish reason of "length" means the answer was cut at the output cap (the
+ * model never finished saying what it was saying), and anything else is a
+ * completed turn.
+ *
+ * The "length" case used to be indistinguishable from a complete answer, so
+ * a truncated reply was stored, shown and retried as if the model had
+ * finished — the retry policy's "nothing visible happened" check never saw
+ * it either, because the partial text WAS visible. */
+function stopReasonOf(
+  step: { toolCalls?: unknown[] } | undefined,
+  finishReason: string | undefined,
+): StopReason {
+  if (step !== undefined && (step.toolCalls?.length ?? 0) > 0) return "toolUse";
+  if (finishReason === "length") return "length";
+  return "stop";
 }
 
 /** Normalize model-generated tool arguments to a plain record. Anything
