@@ -141,12 +141,19 @@ Deno.test("vm shell: a start without a pid is refused", async () => {
   );
 });
 
-Deno.test("vm shell: shellQuote round-trips through a real shell", async () => {
-  // The quoting is the one piece that must be exactly right: a value with a
-  // quote in it must reach the command unchanged.
-  const value = 'it\'s a "test"';
-  const result = await new Deno.Command("/bin/sh", {
-    args: ["-c", `printf '%s' ${shellQuote(value)}`],
-  }).output();
-  assertEquals(new TextDecoder().decode(result.stdout), value);
+Deno.test({
+  name: "vm shell: shellQuote round-trips through a real shell",
+  ignore: Deno.build.os === "windows",
+  fn: async () => {
+    // The quoting is the one piece that must be exactly right: a value with
+    // a quote in it must reach the command unchanged. Only a POSIX shell can
+    // answer this: the VM image has no `sh` at C:\bin, and the quoting the
+    // host uses on Windows is PowerShell's, not this one (fs_test covers the
+    // strings shellQuote itself produces on every platform).
+    const value = 'it\'s a "test"';
+    const result = await new Deno.Command("/bin/sh", {
+      args: ["-c", `printf '%s' ${shellQuote(value)}`],
+    }).output();
+    assertEquals(new TextDecoder().decode(result.stdout), value);
+  },
 });

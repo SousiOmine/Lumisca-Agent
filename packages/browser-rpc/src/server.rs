@@ -77,6 +77,13 @@ impl RpcServer {
                     }
                     match listener.accept() {
                         Ok((stream, _)) => {
+                            // BSD/macOS inherits O_NONBLOCK from the listener
+                            // on accept (Linux does not), which would make the
+                            // first read return WouldBlock before the client's
+                            // bytes arrive: the handler would drop the stream
+                            // with the request unread and the client would see
+                            // ECONNRESET. Accepted connections must block.
+                            let _ = stream.set_nonblocking(false);
                             let token = token.clone();
                             let handler = handler.clone();
                             let clock = clock.clone();
@@ -318,6 +325,12 @@ mod tests {
 
     fn post(url: &str, token: &str, body: &str) -> (u16, String) {
         let mut stream = TcpStream::connect(url).expect("connect");
+        send_over(&mut stream, url, token, body)
+    }
+
+    /// The request/reply half of [`post`], over a connection the caller
+    /// already holds (so a test can let the server accept it first).
+    fn send_over(stream: &mut TcpStream, url: &str, token: &str, body: &str) -> (u16, String) {
         let request = format!(
             concat!(
                 "POST /rpc HTTP/1.1\r\nHost: {url}\r\nContent-Type: application/json\r\n",
@@ -368,6 +381,28 @@ mod tests {
         assert_eq!(parsed["id"], 1);
         assert_eq!(parsed["result"]["a"], 1);
         assert!(server.last_request_at.load(Ordering::Relaxed) > 0);
+    }
+
+    // Regression test for a macOS-only failure: `accept` inherits
+    // O_NONBLOCK from the non-blocking listener there (Linux clears it), so
+    // a request whose bytes had not arrived yet hit WouldBlock, the handler
+    // closed the socket, and the client got ECONNRESET instead of a reply.
+    // Waiting before the first write makes that window wide enough to hit on
+    // every platform.
+    #[test]
+    fn a_request_that_arrives_late_is_still_answered() {
+        let server = start_server();
+        let url = format!("127.0.0.1:{}", server.port);
+        let mut stream = TcpStream::connect(&url).expect("connect");
+        std::thread::sleep(Duration::from_millis(200));
+        let (status, json) = send_over(
+            &mut stream,
+            &url,
+            "sekrit",
+            r#"{"id":1,"method":"observe","params":{}}"#,
+        );
+        assert_eq!(status, 200, "reply: {json}");
+        assert!(json.contains(r#""ok":true"#), "reply: {json}");
     }
 
     #[test]

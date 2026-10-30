@@ -1,4 +1,5 @@
 import { basename, join } from "node:path";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { assert, assertEquals } from "@std/assert";
 import { createBashTool } from "./bash.ts";
@@ -23,7 +24,11 @@ function hostTool(
 }
 
 function makeTool() {
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
+  // The sandbox resolves its roots through symlinks, so on macOS a temp dir
+  // under /var comes back as /private/var. Comparing the spill path (which
+  // goes through the backend) against the unresolved name would fail for
+  // that reason alone, not because the spill went somewhere else.
+  const root = realpathSync(Deno.makeTempDirSync({ prefix: "lumisca-bash-" }));
   // The spill follows the file backend (a per-test workspace), so a run
   // never shares the real directory with another one.
   return {

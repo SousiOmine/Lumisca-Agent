@@ -41,6 +41,29 @@ Deno.test("agents: create, list and read back", () => {
   }
 });
 
+Deno.test("agents: a touch inside the creation millisecond still wins", () => {
+  const { db, repo } = setup();
+  try {
+    // The clock is what makes this flaky in practice: two inserts and the
+    // touch all land on the same `Date.now()` often enough that a plain
+    // `updated_at = now` left the order to SQLite's row order. Freezing the
+    // clock here forces that case every run.
+    const realNow = Date.now;
+    Date.now = () => 1_700_000_000_000;
+    try {
+      const first = repo.create({ name: "First", role: "r" });
+      repo.create({ name: "Second", role: "r" });
+      repo.touch(first.id);
+    } finally {
+      Date.now = realNow;
+    }
+    assertEquals(repo.latest()?.name, "First");
+    assertEquals(repo.list().map((a) => a.name), ["First", "Second"]);
+  } finally {
+    db.close();
+  }
+});
+
 Deno.test("agents: the most recently used one is the default", () => {
   const { db, repo } = setup();
   try {

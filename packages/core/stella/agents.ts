@@ -114,7 +114,11 @@ export function normalizeAgentInput(input: {
 
 export function createAgentRepo(db: LumiscaDb): AgentRepo {
   const listStmt = db.db.prepare(
-    "SELECT * FROM stella_agents ORDER BY updated_at DESC, created_at DESC",
+    // `created_at` then `rowid` make the order total: two agents created in
+    // the same millisecond would otherwise come back in whatever order
+    // SQLite felt like (and the sidebar would reshuffle between reads).
+    "SELECT * FROM stella_agents " +
+      "ORDER BY updated_at DESC, created_at DESC, rowid DESC",
   );
   const getStmt = db.db.prepare("SELECT * FROM stella_agents WHERE id = ?");
   const insertStmt = db.db.prepare(
@@ -128,11 +132,19 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
     "UPDATE stella_agents SET identity = ?, updated_at = ? WHERE id = ?",
   );
   const deleteStmt = db.db.prepare("DELETE FROM stella_agents WHERE id = ?");
+  // "Most recently used" has to be a strict order, and a millisecond clock is
+  // too coarse for it: creating two agents and touching one inside the same
+  // millisecond would leave the tie for SQLite to break (it picks the last
+  // row, i.e. the wrong agent). Adding 1 over the current maximum keeps the
+  // touched row on top whatever the clock resolution is.
   const touchStmt = db.db.prepare(
-    "UPDATE stella_agents SET updated_at = ? WHERE id = ?",
+    "UPDATE stella_agents SET updated_at = " +
+      "MAX(?, (SELECT COALESCE(MAX(updated_at), 0) + 1 FROM stella_agents)) " +
+      "WHERE id = ?",
   );
   const latestStmt = db.db.prepare(
-    "SELECT * FROM stella_agents ORDER BY updated_at DESC, created_at DESC LIMIT 1",
+    "SELECT * FROM stella_agents " +
+      "ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1",
   );
 
   return {
