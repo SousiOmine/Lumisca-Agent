@@ -10,6 +10,7 @@ import type {
   StellaEntry,
   StellaHandover,
   StellaQuestion,
+  WindowQuery,
 } from "@lumisca/core";
 import type { StellaAvailability } from "@lumisca/core";
 import { CoreError, errorMessage, stellaEventsOf } from "@lumisca/core";
@@ -20,6 +21,7 @@ import {
 import {
   AppError,
   parseBody,
+  parseWindowQuery,
   requireNonEmptyString,
   requireNumber,
 } from "./util.ts";
@@ -49,9 +51,13 @@ export interface StellaApi {
    * addresses the conversation by agent, never by session id. */
   findStellaSession(agentId: string): SessionInfo | undefined;
   listStellaSkills(): SkillInfo[];
-  /** The conversation's messages as the client draws them (the model's own
-   * rows are projected away — see agent/stella-stream.ts). */
-  getStellaEntries(sessionId: string): StellaEntry[];
+  /** One window of the conversation as the client draws it (the model's own
+   * rows are projected away — see agent/stella-stream.ts). Undefined when the
+   * conversation is not open. */
+  readStellaConversation(
+    sessionId: string,
+    query: WindowQuery,
+  ): { items: StellaEntry[]; older: string | null } | undefined;
   /** The questions the run is waiting on (the ask tool). */
   getPendingQuestions(sessionId: string): StellaQuestion[];
   /** The screen hand-over the run is blocked on, or null. */
@@ -201,7 +207,9 @@ export function stellaRoutes(core: StellaApi): Hono {
     try {
       await core.ensureStellaReady();
       const session = await core.getOrCreateStellaSession(agentId);
-      return c.json(await snapshotOf(session, agentId));
+      return c.json(
+        snapshotOf(session, agentId, parseWindowQuery(c.req.url)),
+      );
     } catch (error) {
       throw new AppError(
         errorMessage(error),
@@ -210,13 +218,14 @@ export function stellaRoutes(core: StellaApi): Hono {
     }
   });
 
-  /** The conversation re-read after a WS drop or a page reload: the
-   * messages, the run state and what the run is waiting on, read in one
-   * handler so they describe the same instant. */
-  app.get("/stella/conversations/:agentId/messages", async (c) => {
+  /** The conversation re-read after a WS drop or a page reload: a window of
+   * the entries, the run state and what the run is waiting on, read in one
+   * handler so they describe the same instant. `older` reads further back
+   * (see snapshotOf). */
+  app.get("/stella/conversations/:agentId/messages", (c) => {
     const agentId = c.req.param("agentId");
     const session = requireConversation(agentId);
-    return c.json(await snapshotOf(session, agentId));
+    return c.json(snapshotOf(session, agentId, parseWindowQuery(c.req.url)));
   });
 
   /** The conversation's revision: how many events the server has emitted
@@ -374,14 +383,24 @@ export function stellaRoutes(core: StellaApi): Hono {
     return session;
   }
 
-  /** One conversation snapshot: the messages as the client draws them plus
-   * the live state the event stream cannot restore on its own. */
+  /** One conversation snapshot: a window of the entries as the client draws
+   * them plus the live state the event stream cannot restore on its own. */
   function snapshotOf(
     session: SessionInfo,
     agentId: string,
+    query: WindowQuery,
   ): StellaConversationSnapshot {
+    const page = core.readStellaConversation(session.id, query);
+    if (page === undefined) {
+      // Unreachable: every caller opened the conversation (open, or a route
+      // that requires an existing one), and a conversation is only ever
+      // read while it is open. Do not invent an empty transcript for it.
+      throw new AppError(`Conversation is not open: ${agentId}`, 409);
+    }
     return {
-      entries: core.getStellaEntries(session.id),
+      entries: page.items,
+      // The way back through the conversation; null at its beginning.
+      older: page.older,
       running: core.getAgent(session.id)?.isStreaming === true,
       questions: core.getPendingQuestions(session.id),
       handover: core.getPendingHandover(session.id),

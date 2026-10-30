@@ -100,10 +100,17 @@ export function App({ initialData }: AppProps): ReactElement {
   // restart + log copy-paste. Declared before useSessionEvents so its
   // noteFailure can be wired as the connection-lost callback.
   const serverHealth = useServerHealth(true);
-  const { views, setViews, setViewError, seedRevision, resyncPanels } =
-    useSessionEvents({
-      onConnectionLost: () => serverHealth.noteFailure(),
-    });
+  const {
+    views,
+    setViews,
+    setViewError,
+    seedRevision,
+    resyncPanels,
+    loadOlder,
+    olderLoading,
+  } = useSessionEvents({
+    onConnectionLost: () => serverHealth.noteFailure(),
+  });
   const {
     tabs,
     setTabs,
@@ -367,6 +374,8 @@ export function App({ initialData }: AppProps): ReactElement {
                 onPrompt={(text) => stella.prompt(text)}
                 onAbort={() => stella.abort()}
                 onRewind={(timestamp) => stella.rewind(timestamp)}
+                onLoadOlder={stella.loadOlder}
+                loadingOlder={stella.loadingOlder}
                 onFinishHandover={(note, toolCallId) =>
                   stella.finishHandover(note, toolCallId)}
                 onOpenSettings={() => setSettingsCategory("providers")}
@@ -409,6 +418,8 @@ export function App({ initialData }: AppProps): ReactElement {
                 if (!activeTab) return;
                 if (commandId === "compact") compact(activeTab, instructions);
               }}
+              onLoadOlder={() => activeTab !== null && loadOlder(activeTab)}
+              loadingOlder={activeTab !== null && olderLoading.has(activeTab)}
               onOpenSettings={() => setSettingsCategory("providers")}
             />
           )

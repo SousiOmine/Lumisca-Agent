@@ -18,6 +18,7 @@ import { GoalRunner } from "./goal-runner.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
+import { messageIdentityOf } from "../session/transcript-window.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { McpAttachmentHost } from "./mcp-host.ts";
@@ -314,10 +315,22 @@ export class SessionAgent {
         : {}),
       insert: (index, message) => this.insertHistory(index, message),
       onCompacted: (result, message) => {
+        // The position travels as an identity: clients hold a window of the
+        // transcript and cannot resolve an index into it (see ClientEvent).
+        const before = this.agent.state.messages[result.index + 1];
+        if (before === undefined) {
+          // The checkpoint closed the transcript: there is no message after
+          // it, and no client can place it without one. Compaction only
+          // ever cuts before a retained unit, so this is a bug rather than a
+          // case to paper over.
+          throw new Error(
+            "Compaction inserted a checkpoint after the transcript's end",
+          );
+        }
         this.emit({
           type: "messages_checkpoint",
           sessionId: this.sessionId,
-          index: result.index,
+          before: messageIdentityOf(before),
           message,
         });
       },

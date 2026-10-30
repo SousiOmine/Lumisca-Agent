@@ -272,7 +272,7 @@ Deno.test("stellaEventsOf: the model's own events produce nothing", () => {
     {
       type: "messages_checkpoint",
       sessionId: "s",
-      index: 1,
+      before: { role: "assistant", timestamp: 4 },
       message: {
         role: "checkpoint",
         title: "Summary",

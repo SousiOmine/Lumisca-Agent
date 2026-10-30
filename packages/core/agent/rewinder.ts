@@ -4,6 +4,7 @@ import type { AgentMessage } from "../ai/types.ts";
 import type { GoalRunner } from "./goal-runner.ts";
 import type { RetryManager } from "./retry-manager.ts";
 import type { TranscriptStore } from "./transcript.ts";
+import type { MessageIdentity } from "../types/event.ts";
 
 /** What a rewind needs from its session: the live transcript and the pieces
  * that hold state derived from it. Everything else (the event stream, the
@@ -24,14 +25,10 @@ export interface RewindDeps {
   ) => void;
 }
 
-/** One message the truncation dropped, as the clients know it: the app's
- * message identity key is role + timestamp, plus the tool call id for tool
- * results (parallel results can share a millisecond). */
-export interface RemovedMessage {
-  role: string;
-  timestamp: number;
-  toolCallId?: string;
-}
+/** One message the truncation dropped, as clients know it (see
+ * MessageIdentity): role + timestamp, plus the tool call id for tool
+ * results, so a client drops exactly these and nothing else. */
+export type RemovedMessage = MessageIdentity;
 
 /**
  * Truncating a transcript from a user message onward (the undo button).

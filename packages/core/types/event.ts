@@ -1,4 +1,4 @@
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage, CheckpointMessage } from "../ai/types.ts";
 import type {
   AskQuestion,
   GoalInfo,
@@ -7,6 +7,19 @@ import type {
   TodoPhase,
 } from "../shared/mod.ts";
 import type { SessionInfo } from "./session.ts";
+
+/**
+ * How a client tells two messages of one transcript apart: the role and the
+ * timestamp the message was stamped with, plus the tool call id for a tool
+ * result (parallel results can share a millisecond, and the identity must stay
+ * unambiguous). The web calls this a message key; the transcript windows name
+ * their cursor with it, and a rewind reports what it removed by it.
+ */
+export interface MessageIdentity {
+  role: string;
+  timestamp: number;
+  toolCallId?: string;
+}
 
 /** Events emitted by the core and forwarded to any client (WebSocket, HTTP). */
 export type ClientEvent =
@@ -35,32 +48,29 @@ export type ClientEvent =
   | { type: "session_error"; sessionId: string; message: string }
   /** The transcript was rewound from a user message onward. `removed` is
    * the exact list of messages deleted (memory + database); clients drop
-   * those keys from the view and remember them so a later resync cannot
-   * resurrect them. Each entry carries the fields of the app's message
-   * identity key (see the web's `messageKey`): role + timestamp, plus the
-   * tool call id for tool results — parallel results can share a
-   * millisecond, and the key must stay unambiguous. */
+   * those identities from the view and remember them so a later resync
+   * cannot resurrect them. */
   | {
     type: "messages_truncated";
     sessionId: string;
-    removed: Array<{
-      role: string;
-      timestamp: number;
-      toolCallId?: string;
-    }>;
+    removed: MessageIdentity[];
   }
   /** Older history was condensed into a checkpoint message because the
    * conversation reached the model's request limit (see
-   * agent/context-compaction.ts). The checkpoint was INSERTED at `index`:
-   * every message stays in the transcript (and in the database), and the
-   * model's view now starts at the checkpoint — clients show the row where
-   * it sits without dropping anything. Unlike `messages_truncated` this
+   * agent/context-compaction.ts). The checkpoint was INSERTED immediately
+   * before `before`: every message stays in the transcript (and in the
+   * database), and the model's view now starts after the checkpoint —
+   * clients show the row where it sits without dropping anything.
+   *
+   * The position is an identity, not an index: clients hold a WINDOW of the
+   * transcript (see session/transcript-window.ts), so an index would not say
+   * where the row belongs in what they have. Unlike `messages_truncated` this
    * arrives while a run keeps streaming: it never clears the run state. */
   | {
     type: "messages_checkpoint";
     sessionId: string;
-    index: number;
-    message: AgentMessage;
+    before: MessageIdentity;
+    message: CheckpointMessage;
   }
   /** The session title changed (e.g. auto-generated from the first
    * message by the fast model). Clients update the displayed name. */

@@ -1,3 +1,8 @@
+import {
+  addContextUsage,
+  subtractContextUsage,
+  withLatestContextUsage,
+} from "@lumisca/core/shared";
 import { isViewRunning } from "./types.ts";
 import type {
   AgentMessage,
@@ -31,8 +36,8 @@ export function messageKey(
 }
 
 /** Drop messages whose key is in the `removed` set (rewind tombstones).
- * mergeMessages is append-only, so without this a resync would resurrect
- * messages a rewind deleted while the socket was down. */
+ * Merging never deletes, so without this a resync would resurrect messages a
+ * rewind deleted while the socket was down. */
 export function filterRemoved(
   messages: AgentMessage[],
   removed: Set<string>,
@@ -41,24 +46,134 @@ export function filterRemoved(
   return messages.filter((m) => !removed.has(messageKey(m)));
 }
 
-/** Merge fetched (persisted) messages into the current list without
- * duplicating anything already present. Used by resync: events emitted
- * while the socket was down arrive here after the fetch, so the merged
- * result must be idempotent. */
-export function mergeMessages(
-  existing: AgentMessage[],
-  fetched: AgentMessage[],
-): AgentMessage[] {
-  const merged = [...existing];
-  const seen = new Set(existing.map(messageKey));
-  for (const m of fetched) {
-    const key = messageKey(m);
-    if (!seen.has(key)) {
-      seen.add(key);
-      merged.push(m);
-    }
+/** A view's loaded history plus the cursor for the window before it. */
+export interface LoadedHistory {
+  messages: AgentMessage[];
+  /** The cursor for the window before `messages[0]`, or null at the
+   * transcript's beginning (see SessionSnapshot). */
+  older: string | null;
+}
+
+/** Fold the NEWEST window the server returned into the history a view
+ * holds.
+ *
+ * A resync (a reconnect, a revision probe that saw a gap, a tab returning to
+ * the foreground) re-reads the newest window. It overlaps what the view has,
+ * and it may carry messages the view lacks: the ones appended since (a run
+ * kept writing while the socket was down), and — when compaction spliced a
+ * checkpoint into the history — a row in the middle.
+ *
+ * The merge anchors each incoming message on the one with the same identity
+ * and inserts what it lacks in front of the anchor it precedes; messages that
+ * follow the last anchor are the transcript's newest and extend the end.
+ *
+ * The cursor (the identity of the oldest loaded message) is recomputed here
+ * rather than taken from either side: it stays the view's while the view's
+ * front is unchanged, becomes the window's when the window reached back
+ * before it, and is dropped when the front is a message neither side named —
+ * the reader paged further than one window, and the next read of the newest
+ * window restores a cursor that exists.
+ *
+ * A window that shares nothing with the view means the view fell more than a
+ * page behind, or was never in step: it is replaced wholesale, cursor
+ * included. Keeping the old messages would leave an invisible gap in the
+ * middle of the transcript, which is worse than losing a scroll position. */
+export function mergeNewestWindow(
+  history: LoadedHistory,
+  window: LoadedHistory,
+  removed: Set<string>,
+): LoadedHistory {
+  const existing = history.messages;
+  const fetched = window.messages;
+  if (fetched.length === 0) return history;
+  // Nothing loaded yet: the window IS the history, cursor included.
+  if (existing.length === 0) {
+    return { messages: filterRemoved(fetched, removed), older: window.older };
   }
-  return merged;
+
+  const indexByKey = new Map(
+    existing.map((message, index) => [messageKey(message), index] as const),
+  );
+  if (!fetched.some((message) => indexByKey.has(messageKey(message)))) {
+    // No overlap: the view is behind by a whole page or more.
+    return { messages: filterRemoved(fetched, removed), older: window.older };
+  }
+
+  const merged: AgentMessage[] = [];
+  // Messages the window carries that the view lacks: they go in front of the
+  // next message the view already has.
+  let pending: AgentMessage[] = [];
+  let cursor = 0;
+  for (const message of fetched) {
+    const anchor = indexByKey.get(messageKey(message));
+    if (anchor === undefined) {
+      pending.push(message);
+      continue;
+    }
+    while (cursor < anchor) {
+      merged.push(existing[cursor]!);
+      cursor++;
+    }
+    // The same identity is the same message: the persisted copy wins (a
+    // stream can leave a placeholder behind).
+    merged.push(...pending, message);
+    pending = [];
+    cursor = anchor + 1;
+  }
+  while (cursor < existing.length) {
+    merged.push(existing[cursor]!);
+    cursor++;
+  }
+  merged.push(...pending);
+
+  const messages = filterRemoved(merged, removed);
+  return { messages, older: cursorAfterMerge(history, window, messages) };
+}
+
+/** The cursor for the merged history (see mergeNewestWindow): the view's own
+ * while its front survived, the window's when the window reached back before
+ * it, and none when neither side names the new front. */
+function cursorAfterMerge(
+  history: LoadedHistory,
+  window: LoadedHistory,
+  merged: readonly AgentMessage[],
+): string | null {
+  const front = merged[0];
+  if (front === undefined) return null;
+  const frontKey = messageKey(front);
+  // The merge may keep either copy of a shared message (the window's copy
+  // wins), so the front is compared by identity, not by object.
+  if (
+    history.messages[0] !== undefined &&
+    messageKey(history.messages[0]) === frontKey
+  ) {
+    return history.older;
+  }
+  const inWindow = window.messages.some((message) =>
+    messageKey(message) === frontKey
+  );
+  return inWindow ? window.older : null;
+}
+
+/** Put a page the reader asked for (the window before `older`) in front of
+ * the history, and keep the cursor for the one before it.
+ *
+ * Paging is positional in effect but identity-based in fact: the server
+ * answers with the window that ends just before the item the cursor names, so
+ * a page never repeats itself and never skips. Messages already loaded are
+ * dropped (compaction can shift a page's boundary), and a page that adds
+ * nothing ends the walk for good — the reader must not be sent round the same
+ * window twice. */
+export function prependOlderWindow(
+  history: LoadedHistory,
+  fetched: AgentMessage[],
+  nextOlder: string | null,
+): LoadedHistory {
+  if (fetched.length === 0) return { messages: history.messages, older: null };
+  const known = new Set(history.messages.map(messageKey));
+  const added = fetched.filter((message) => !known.has(messageKey(message)));
+  if (added.length === 0) return { messages: history.messages, older: null };
+  return { messages: [...added, ...history.messages], older: nextOlder };
 }
 
 /** Reconcile a view's run state with the transcript snapshot's `running`
@@ -100,6 +215,18 @@ export function applyRunState(
   };
 }
 
+/** Whether a filter kept the message the history started at (the cursor names
+ * that message, so it stays true exactly as long as it survives). */
+function keepsFront(
+  before: readonly AgentMessage[],
+  after: readonly AgentMessage[],
+): boolean {
+  const front = before[0];
+  const next = after[0];
+  return front !== undefined && next !== undefined &&
+    messageKey(front) === messageKey(next);
+}
+
 /** Insert or replace a message at its existing position (dedup by key);
  * appends when absent. A resync can fetch a message whose message_end
  * event still arrives afterwards — the second copy must not duplicate. */
@@ -114,6 +241,53 @@ function upsertMessage(
   const next = [...messages];
   next[index] = message;
   return next;
+}
+
+/**
+ * Apply one live message to a view: the stream's copy, in its transcript
+ * place.
+ *
+ * A message the view already holds is replaced by this copy. A message it does
+ * not hold is appended — the view always ends at the transcript's end, so a
+ * live message arrives after what it has — *unless* it is older than the
+ * view's newest message. That case is one the view cannot draw: the message
+ * belongs to a window the reader has not loaded (a steered prompt, a tool
+ * result of an older turn, the checkpoint a compaction spliced into the
+ * history). Dropping it keeps the loaded window contiguous, and the reader
+ * reaches it by paging back or by a snapshot that carries it.
+ *
+ * The context meter follows the message: the summary the server sent
+ * describes the whole transcript, and a turn that was just priced must move
+ * the meter now, not at the next resync.
+ */
+function applyMessage(
+  view: SessionView,
+  message: AgentMessage,
+): SessionView | null {
+  const previous = view.messages.find((m) =>
+    messageKey(m) === messageKey(message)
+  );
+  if (previous === undefined && isOlderThanLoaded(view.messages, message)) {
+    return null;
+  }
+  const usage = addContextUsage(
+    previous === undefined
+      ? view.usage
+      : subtractContextUsage(view.usage, previous),
+    message,
+  );
+  return { ...view, messages: upsertMessage(view.messages, message), usage };
+}
+
+/** Whether `message` belongs before the newest message the view holds. A
+ * timestamp comparison is what the transcript's order is: messages are
+ * stamped when they are created, and the view always holds the last one. */
+function isOlderThanLoaded(
+  messages: readonly AgentMessage[],
+  message: AgentMessage,
+): boolean {
+  const newest = messages.at(-1);
+  return newest !== undefined && message.timestamp < newest.timestamp;
 }
 
 /** True when two todo plan snapshots are identical (ids, names, and
@@ -229,10 +403,24 @@ export function applySnapshot(
     error !== view.error;
   const nameChanged = snapshot !== undefined && !movedByEvent.name &&
     name !== view.info.name;
-  const messages = snapshot === undefined ? view.messages : filterRemoved(
-    mergeMessages(view.messages, snapshot.messages),
-    view.removed,
-  );
+  // The snapshot is a WINDOW of the transcript (see mergeNewestWindow): it
+  // extends the view forwards, and the view's cursor stays true because
+  // paging back is the reader's action, not a resync's.
+  const history = snapshot === undefined
+    ? { messages: view.messages, older: view.older }
+    : mergeNewestWindow(
+      view,
+      { messages: snapshot.messages, older: snapshot.older },
+      view.removed,
+    );
+  const messages = history.messages;
+  const older = history.older;
+  const usage = snapshot === undefined
+    ? view.usage
+    : withLatestContextUsage(snapshot.usage, messages);
+  // A snapshot counts whole history: the meter must not blink when the
+  // summary moved (a run priced another turn) while the messages did not.
+  const usageChanged = usage !== view.usage;
   const todo = parts.todos;
   const todoChanged = todo !== undefined && !sameTodoPlan(todo, view.todos);
   const fetchedTasks = parts.tasks;
@@ -251,8 +439,8 @@ export function applySnapshot(
   const goalChanged = fetchedGoal !== undefined &&
     !sameGoal(fetchedGoal ?? undefined, view.goal);
   if (
-    messages.length === view.messages.length && !todoChanged &&
-    !tasksChanged && !backgroundsChanged && !goalChanged &&
+    messages === view.messages && older === view.older && !usageChanged &&
+    !todoChanged && !tasksChanged && !backgroundsChanged && !goalChanged &&
     withRun === view && !questionsChanged &&
     !errorChanged && !nameChanged
   ) {
@@ -261,6 +449,8 @@ export function applySnapshot(
   return {
     ...withRun,
     messages,
+    older,
+    usage,
     ...(questionsChanged ? { pendingQuestions: questions } : {}),
     ...(errorChanged ? { error } : {}),
     ...(nameChanged ? { info: { ...withRun.info, name } } : {}),
@@ -423,7 +613,7 @@ export function applyEvent(
       // running is announced immediately by the server and re-emitted when
       // the run drains it — same role + timestamp — so it must never show
       // twice.
-      return { ...view, messages: upsertMessage(view.messages, event.message) };
+      return applyMessage(view, event.message);
     }
     case "message_delta":
       // Bound the streaming buffer like task_delta: the server keeps only
@@ -440,9 +630,10 @@ export function applyEvent(
       // Assistant messages get the same treatment so a resync race cannot
       // append a duplicate.
       // Clear thinking indicator once the message is complete.
+      const applied = applyMessage(view, event.message);
+      if (applied === null) return null;
       return {
-        ...view,
-        messages: upsertMessage(view.messages, event.message),
+        ...applied,
         streamingText: "",
         thinkingStartAt: undefined,
       };
@@ -587,15 +778,31 @@ export function applyEvent(
     }
     case "messages_truncated": {
       // The transcript was rewound from a user message onward: drop the
-      // exact messages the server removed, and tombstone their keys so an
-      // append-only resync cannot resurrect them. Run state is cleared
-      // too (a running run was aborted by the rewind), questions included.
+      // exact messages the server removed, and tombstone their identities so
+      // a resync window cannot resurrect them. Run state is cleared too (a
+      // running run was aborted by the rewind), questions included. The
+      // context meter drops what the removed turns priced: the snapshot the
+      // next resync reads recounts the transcript anyway.
       const removedKeys = new Set(event.removed.map((m) => messageKey(m)));
       const removed = new Set(view.removed);
       for (const key of removedKeys) removed.add(key);
+      const messages: AgentMessage[] = [];
+      let usage = view.usage;
+      for (const message of view.messages) {
+        if (removedKeys.has(messageKey(message))) {
+          usage = subtractContextUsage(usage, message);
+          continue;
+        }
+        messages.push(message);
+      }
       return {
         ...view,
-        messages: view.messages.filter((m) => !removedKeys.has(messageKey(m))),
+        messages,
+        // The cursor names the oldest loaded message: it stays true while
+        // that message survived, and there is nothing to name when the
+        // rewind removed it (the next snapshot restores one).
+        older: keepsFront(view.messages, messages) ? view.older : null,
+        usage: withLatestContextUsage(usage, messages),
         removed,
         streamingText: "",
         runningTools: new Map(),
@@ -609,22 +816,30 @@ export function applyEvent(
     case "messages_checkpoint": {
       // Older history was condensed into a checkpoint (the run keeps
       // streaming, so no run state is touched). Nothing was deleted: the
-      // checkpoint is inserted at `event.index`, which is the position of
-      // the first message the model still sees verbatim. A view that is
-      // missing part of the preceding history (a resync in flight) appends
-      // instead — the checkpoint row must never be dropped, it is what
-      // marks where the model's view starts.
+      // checkpoint is inserted at `event.index`, the position of the first
+      // message the model still sees verbatim.
+      //
+      // The view holds a WINDOW, so the row goes in front of the message the
+      // server named (`before`). When that message is not in the window, the
+      // checkpoint belongs to history the reader has not loaded: drawing it
+      // would put a "summarized" row above messages it does not summarize, so
+      // it is dropped here. Paging back reaches it in place, and so does the
+      // next snapshot.
       const existing = view.messages.findIndex((m) =>
         messageKey(m) === messageKey(event.message)
       );
       if (existing !== -1) return null;
-      const anchor = view.messages[event.index];
-      const at = anchor === undefined
-        ? -1
-        : view.messages.findIndex((m) => messageKey(m) === messageKey(anchor));
+      const anchor = view.messages.findIndex((m) =>
+        messageKey(m) === messageKey(event.before)
+      );
+      if (anchor === -1) return null;
       const messages = [...view.messages];
-      messages.splice(at === -1 ? messages.length : at, 0, event.message);
-      return { ...view, messages };
+      messages.splice(anchor, 0, event.message);
+      return {
+        ...view,
+        messages,
+        usage: addContextUsage(view.usage, event.message),
+      };
     }
     case "agent_end":
       return view.agentStartedAt === undefined ? null : {

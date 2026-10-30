@@ -19,6 +19,8 @@ function render(state: Partial<StellaConversationState>): string {
     attachBase: "/api/sessions/s/attachment/",
     onRewind: () => {},
     onSend: () => {},
+    onLoadOlder: () => false,
+    loadingOlder: false,
   }));
 }
 

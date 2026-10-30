@@ -268,6 +268,12 @@ export const chat = {
     en: "Could not connect to the screen: {reason}",
   },
 
+  // --- history window ------------------------------------------------------
+  "chat.history.loadingOlder": {
+    ja: "以前の履歴を読み込んでいます…",
+    en: "Loading earlier history…",
+  },
+
   // --- error banner --------------------------------------------------------
   "chat.error.copyTitle": {
     ja: "クリックしてエラー内容をコピー",

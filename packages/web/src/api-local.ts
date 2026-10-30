@@ -35,6 +35,7 @@ import type {
   WorkspaceFileEntry,
 } from "./types.ts";
 import type { CommandApproval, SavedPrompt } from "@lumisca/core/shared";
+import type { ContextUsageSummary } from "@lumisca/core/shared";
 import {
   promptBody,
   request,
@@ -55,7 +56,13 @@ export type SessionInfoDto = SessionInfo & { lastError?: string };
  * disagree with the transcript they travel with (see events.applyRunState
  * for `running`). */
 export interface SessionSnapshot {
+  /** A WINDOW of the transcript, oldest first: the newest messages on open,
+   * or the ones before the `older` cursor a client asked for. A long
+   * session's transcript is not sent whole (see `older`). */
   messages: AgentMessage[];
+  /** The cursor for the window before `messages[0]`, or null at the
+   * transcript's beginning. Opaque; echo it back to read further. */
+  older: string | null;
   /** A run is active right now (its `agent_start` was never replayed). */
   running: boolean;
   /** Questions the agent is waiting on (the ask tool); empty when none is
@@ -67,6 +74,10 @@ export interface SessionSnapshot {
   /** The session's current title (it may have been generated after the
    * client last read the session info). */
   name: string;
+  /** Context usage over the WHOLE transcript. A window cannot answer this
+   * (its older turns are not loaded), and the meter would silently report
+   * the window's average as the session's. */
+  usage: ContextUsageSummary;
   /** The session's revision at the moment of this snapshot (see
    * `api.getRevision`): the client seeds its "everything seen up to here"
    * marker from it, so a later probe can tell whether anything was missed. */
@@ -83,15 +94,25 @@ export interface SessionSnapshot {
 export const sessionRoutes = {
   getSession: (peerId: string, sessionId: string) =>
     sessionRequest<SessionInfoDto>(peerId, sessionPath(sessionId)),
-  /** The session's live-state snapshot (the transcript plus the run state,
-   * pending questions, last error, title and revision that event replay
-   * cannot restore); re-fetched after a WS drop or page reload to restore a
-   * tab. */
-  getMessages: (peerId: string, sessionId: string) =>
-    sessionRequest<SessionSnapshot>(
+  /** One window of the session's live-state snapshot (the transcript window
+   * plus the run state, pending questions, last error, title and revision
+   * that event replay cannot restore); re-fetched after a WS drop or page
+   * reload to restore a tab. `window.older` asks for the history before a
+   * cursor the previous response returned (see SessionSnapshot). */
+  getMessages: (
+    peerId: string,
+    sessionId: string,
+    window: { older?: string; limit?: number } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (window.older !== undefined) query.set("older", window.older);
+    if (window.limit !== undefined) query.set("limit", String(window.limit));
+    const suffix = query.size === 0 ? "/messages" : `/messages?${query}`;
+    return sessionRequest<SessionSnapshot>(
       peerId,
-      sessionPath(sessionId, "/messages"),
-    ),
+      sessionPath(sessionId, suffix),
+    );
+  },
   /** The session's revision: how many events the owning server has emitted
    * for it. Cheap (a counter read, no session open), so the client polls it
    * on a low interval and re-reads the snapshot only when it moved — a

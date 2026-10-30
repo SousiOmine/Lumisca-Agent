@@ -217,7 +217,19 @@ export interface BackgroundView extends core.BackgroundCommandInfo {
 /** Live state of one open session tab. */
 export interface SessionView {
   info: core.SessionInfo;
+  /** The loaded window of the transcript, oldest first (see
+   * events.mergeWindow): the newest window on open, plus whatever older
+   * windows the reader scrolled back to. */
   messages: core.AgentMessage[];
+  /** The cursor for the window before `messages[0]`, or null at the
+   * transcript's beginning. Echoed back to read further (opaque: see the
+   * core's session/transcript-window.ts). */
+  older: string | null;
+  /** Context usage over the WHOLE transcript, as the server summarized it
+   * with the snapshot (see addContextUsage in the core's shared helpers):
+   * the loaded window cannot answer this, and a meter computed from it would
+   * report the window's average as the session's. */
+  usage: core.ContextUsageSummary;
   streamingText: string;
   runningTools: Map<string, string>; // toolCallId -> toolName
   /** Questions the agent asked (ask tool) that are still waiting for the
@@ -256,14 +268,25 @@ export interface SessionView {
   thinkingStartAt?: number;
 }
 
+/** The window of a transcript a view is built from, with the summary the
+ * server took over the whole of it (see SessionSnapshot, which carries more:
+ * a view takes exactly these three). */
+export interface TranscriptWindow {
+  messages: core.AgentMessage[];
+  older: string | null;
+  usage: core.ContextUsageSummary;
+}
+
 /** Fresh view state for a newly opened session tab. */
 export function emptyView(
   info: core.SessionInfo,
-  messages: core.AgentMessage[] = [],
+  window: TranscriptWindow,
 ): SessionView {
   return {
     info,
-    messages,
+    messages: window.messages,
+    older: window.older,
+    usage: window.usage,
     streamingText: "",
     runningTools: new Map(),
     pendingQuestions: [],

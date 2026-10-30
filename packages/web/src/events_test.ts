@@ -5,15 +5,18 @@ import {
   applySnapshot,
   filterRemoved,
   mergeBackgrounds,
-  mergeMessages,
+  mergeNewestWindow,
   mergeTasks,
   messageKey,
+  prependOlderWindow,
   revisionGap,
   sameBackgrounds,
   sameGoal,
   sameQuestions,
   sameTodoPlan,
 } from "./events.ts";
+import { summarizeContextUsage } from "@lumisca/core/shared";
+import type { SessionSnapshot } from "./api-local.ts";
 import {
   type AgentMessage,
   type BackgroundCommandInfo,
@@ -47,6 +50,8 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
       updatedAt: 1,
     },
     messages: [],
+    older: null,
+    usage: summarizeContextUsage([]),
     streamingText: "",
     runningTools: new Map(),
     pendingQuestions: [],
@@ -55,6 +60,21 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
     backgrounds: [],
     removed: new Set(),
     ...overrides,
+  };
+}
+
+/** A snapshot with the fields every caller in these tests does not set. */
+function snapshot(
+  parts: Partial<SessionSnapshot> & Pick<SessionSnapshot, "messages">,
+): SessionSnapshot {
+  return {
+    older: null,
+    running: false,
+    questions: [],
+    name: "s",
+    usage: summarizeContextUsage([]),
+    rev: 1,
+    ...parts,
   };
 }
 
@@ -242,7 +262,14 @@ Deno.test("events: tool results are keyed by tool call id, not by timestamp", ()
 
   // A resync that fetches the same two messages neither duplicates nor
   // drops one.
-  assertEquals(mergeMessages(v.messages, [first, second]).length, 2);
+  assertEquals(
+    mergeNewestWindow(
+      v,
+      { messages: [first, second], older: null },
+      new Set(),
+    ).messages.length,
+    2,
+  );
 
   // A rewind that removed one of them tombstones exactly that one; the
   // other survives the resync that follows.
@@ -256,8 +283,8 @@ Deno.test("events: tool results are keyed by tool call id, not by timestamp", ()
   )!;
   assertEquals(v.messages.length, 1);
   assertEquals(
-    filterRemoved(mergeMessages(v.messages, [first, second]), v.removed)
-      .map((m) => (m as { toolCallId?: string }).toolCallId),
+    mergeNewestWindow(v, { messages: [first, second], older: null }, v.removed)
+      .messages.map((m) => (m as { toolCallId?: string }).toolCallId),
     ["t2"],
   );
 });
@@ -331,18 +358,32 @@ Deno.test("events: applyRunState drops a run that ended unwatched", () => {
   assertEquals(applyRunState(finished, false), finished);
 });
 
-Deno.test("events: mergeMessages is idempotent and order-preserving", () => {
+Deno.test("events: mergeNewestWindow is idempotent and order-preserving", () => {
   const existing = [message("user", 100), message("assistant", 200)];
   const fetched = [
     message("user", 100),
     message("assistant", 200),
     message("assistant", 300),
   ];
-  const merged = mergeMessages(existing, fetched);
-  assertEquals(merged.length, 3);
-  assertEquals(merged[2]!.timestamp, 300);
+  const merged = mergeNewestWindow(
+    { messages: existing, older: "cursor" },
+    { messages: fetched, older: "window-cursor" },
+    new Set(),
+  );
+  assertEquals(merged.messages.length, 3);
+  assertEquals(merged.messages[2]!.timestamp, 300);
+  // The view's cursor (the way back through history) survives a resync: the
+  // newest window says nothing about what the reader paged to.
+  assertEquals(merged.older, "cursor");
   // Running the merge again with the same inputs must not grow the list.
-  assertEquals(mergeMessages(merged, fetched).length, 3);
+  assertEquals(
+    mergeNewestWindow(
+      merged,
+      { messages: fetched, older: "window-cursor" },
+      new Set(),
+    ).messages.length,
+    3,
+  );
 });
 
 Deno.test("events: messages_truncated drops the exact removed messages", () => {
@@ -565,7 +606,7 @@ Deno.test("events: revisionGap detects a lost frame", () => {
 });
 
 Deno.test("events: applySnapshot applies the live state, or keeps identity", () => {
-  const snapshot = {
+  const window = {
     messages: [message("user", 1), message("assistant", 2, "hi")],
     running: true,
     questions: [{
@@ -581,12 +622,12 @@ Deno.test("events: applySnapshot applies the live state, or keeps identity", () 
     rev: 4,
   };
   const v = view();
-  const applied = applySnapshot(v, { snapshot }, undefined);
+  const applied = applySnapshot(v, { snapshot: snapshot(window) }, undefined);
 
   // A view that (re)connected mid-run renders the run as running, shows the
   // questions the run is blocked on, the last failure and the fresh title.
   assertEquals(isViewRunning(applied), true);
-  assertEquals(applied.pendingQuestions, snapshot.questions);
+  assertEquals(applied.pendingQuestions, window.questions);
   assertEquals(applied.error, "boom");
   assertEquals(applied.info.name, "renamed");
   assertEquals(applied.messages.length, 2);
@@ -594,7 +635,10 @@ Deno.test("events: applySnapshot applies the live state, or keeps identity", () 
 
   // Re-applying the same snapshot changes nothing: the resync must not
   // re-render a tab that is already in sync.
-  assertEquals(applySnapshot(applied, { snapshot }, undefined), applied);
+  assertEquals(
+    applySnapshot(applied, { snapshot: snapshot(window) }, undefined),
+    applied,
+  );
 });
 
 Deno.test("events: applySnapshot lets an event win over the snapshot it raced", () => {
@@ -611,13 +655,12 @@ Deno.test("events: applySnapshot lets an event win over the snapshot it raced", 
   const running = applyEvent({ type: "agent_start", sessionId: "s1" }, v)!;
   const ended = applyEvent({ type: "agent_end", sessionId: "s1" }, running)!;
   const applied = applySnapshot(ended, {
-    snapshot: {
+    snapshot: snapshot({
       messages: [],
       running: true,
-      questions: [],
       name: "old-name",
       rev: 3,
-    },
+    }),
   }, prior);
 
   assertEquals(isViewRunning(applied), false, "the ended run stays ended");
@@ -635,13 +678,10 @@ Deno.test("events: applySnapshot merges panels and respects tombstones", () => {
     removed: new Set([messageKey(rewound)]),
   };
   const applied = applySnapshot(v, {
-    snapshot: {
+    snapshot: snapshot({
       messages: [rewound, kept, message("assistant", 3, "hi")],
-      running: false,
-      questions: [],
-      name: "s",
       rev: 2,
-    },
+    }),
     todos: TODOS,
     goal: null,
   }, undefined);
@@ -1072,7 +1112,9 @@ Deno.test("events: messages_checkpoint inserts the row and keeps run state", () 
     {
       type: "messages_checkpoint",
       sessionId: "s1",
-      index: 2,
+      // The row goes in front of the message the server named, which is the
+      // first one the model still sees verbatim.
+      before: { role: "user", timestamp: 300 },
       message: checkpoint,
     },
     v,
@@ -1104,7 +1146,7 @@ Deno.test("events: messages_checkpoint inserts the row and keeps run state", () 
       {
         type: "messages_checkpoint",
         sessionId: "s1",
-        index: 2,
+        before: { role: "user", timestamp: 300 },
         message: checkpoint,
       },
       v,
@@ -1122,7 +1164,7 @@ Deno.test("events: messages_checkpoint inserts the row and keeps run state", () 
       {
         type: "messages_checkpoint",
         sessionId: "s2",
-        index: 0,
+        before: { role: "user", timestamp: 100 },
         message: checkpoint,
       },
       view(),
@@ -1131,10 +1173,12 @@ Deno.test("events: messages_checkpoint inserts the row and keeps run state", () 
   );
 });
 
-Deno.test("events: a checkpoint whose anchor is missing still appears", () => {
-  // A view that is behind (a resync in flight) cannot locate the insertion
-  // point; the checkpoint must still appear — it is what marks where the
-  // model's view starts.
+Deno.test("events: a checkpoint outside the loaded window is not drawn", () => {
+  // The view holds a window of the transcript: a checkpoint whose anchor
+  // (`before`) is not in it belongs to history the reader has not loaded.
+  // Drawing it would put a "summarized" row above messages it does not
+  // summarize, so it stays out — the reader reaches it by paging back, and a
+  // snapshot that carries it places it then.
   const checkpoint: AgentMessage = {
     role: "checkpoint",
     title: "履歴 4 件を要約しました（約 40K トークン）",
@@ -1145,10 +1189,126 @@ Deno.test("events: a checkpoint whose anchor is missing still appears", () => {
     {
       type: "messages_checkpoint",
       sessionId: "s1",
-      index: 3,
+      before: { role: "user", timestamp: 50 },
       message: checkpoint,
     },
     view({ messages: [message("user", 100)] }),
+  );
+  assertEquals(v, null);
+});
+
+Deno.test("events: mergeNewestWindow inserts a missed message in place", () => {
+  // The view's window and the newest one overlap but the view lacks one
+  // message in the middle (it arrived while the socket was down).
+  const existing = [message("user", 100), message("assistant", 200)];
+  const fetched = [
+    message("user", 100),
+    message("assistant", 200),
+    message("user", 300),
+    message("assistant", 400),
+  ];
+  const merged = mergeNewestWindow(
+    { messages: existing, older: "older-cursor" },
+    { messages: fetched, older: "window-cursor" },
+    new Set(),
+  );
+  assertEquals(
+    merged.messages.map((m) => m.timestamp),
+    [100, 200, 300, 400],
+  );
+  // The way back through history is the view's: a resync re-reads the newest
+  // window, and that says nothing about what the reader paged to.
+  assertEquals(merged.older, "older-cursor");
+});
+
+Deno.test("events: mergeNewestWindow replaces a view that shares nothing", () => {
+  // The view fell more than a page behind: keeping its messages would leave
+  // an invisible gap, so the fetched window is taken as the history.
+  const merged = mergeNewestWindow(
+    { messages: [message("user", 100)], older: "stale" },
+    {
+      messages: [message("user", 300), message("assistant", 400)],
+      older: "window-cursor",
+    },
+    new Set(),
+  );
+  assertEquals(merged.messages.map((m) => m.timestamp), [300, 400]);
+  // The window took the view's place, so its cursor is the way back now.
+  assertEquals(merged.older, "window-cursor");
+});
+
+Deno.test("events: prependOlderWindow puts a page in front and dedups", () => {
+  const current = {
+    messages: [message("user", 300), message("assistant", 400)],
+    older: "cursor-b",
+  };
+  const page = [message("user", 100), message("assistant", 200)];
+  const next = prependOlderWindow(current, page, "cursor-a");
+  assertEquals(
+    next.messages.map((m) => m.timestamp),
+    [100, 200, 300, 400],
+  );
+  assertEquals(next.older, "cursor-a");
+
+  // A page that adds nothing ends the walk: the reader must not be sent round
+  // the same window twice.
+  const repeated = prependOlderWindow(current, current.messages, "cursor-b");
+  assertEquals(repeated.messages, current.messages);
+  assertEquals(repeated.older, null);
+});
+
+Deno.test("events: a live message moves the context meter", () => {
+  // A turn that streams in moves the context meter now, not at the next
+  // resync: the summary the server sent describes the whole transcript.
+  const reply: AgentMessage = {
+    role: "assistant",
+    content: [{ type: "text", text: "hi" }],
+    usage: { input: 100, output: 10, cacheRead: 900, cacheWrite: 0 },
+    timestamp: 200,
+  } as AgentMessage;
+  let v = view({ messages: [message("user", 100)] });
+  v = applyEvent({ type: "message_end", sessionId: "s1", message: reply }, v)!;
+  assertEquals(v.usage.turns, 1);
+  assertEquals(v.usage.currentTokens, 1000);
+  assertEquals(v.usage.totalTokens, 1000);
+});
+
+Deno.test("events: a rewound turn is dropped from the meter", () => {
+  const reply: AgentMessage = {
+    role: "assistant",
+    content: [{ type: "text", text: "hi" }],
+    usage: { input: 100, output: 10, cacheRead: 900, cacheWrite: 0 },
+    timestamp: 200,
+  } as AgentMessage;
+  let v = view({ messages: [message("user", 100), reply] });
+  v = applyEvent({ type: "message_end", sessionId: "s1", message: reply }, v)!;
+  assertEquals(v.usage.totalTokens, 1000);
+
+  v = applyEvent(
+    {
+      type: "messages_truncated",
+      sessionId: "s1",
+      removed: [{ role: "user", timestamp: 100 }, {
+        role: "assistant",
+        timestamp: 200,
+      }],
+    },
+    v,
   )!;
-  assertEquals(v.messages.map((m) => m.role), ["user", "checkpoint"]);
+  assertEquals(v.messages, []);
+  assertEquals(v.usage.totalTokens, 0);
+  // A rewind rewrites the history from a point: the window has no way back
+  // until the next snapshot recounts it.
+  assertEquals(v.older, null);
+});
+
+Deno.test("events: a steered message older than the window is not drawn", () => {
+  // The view holds a window; a live message older than its newest belongs to
+  // history the reader has not loaded. Appending it would put it at the wrong
+  // end of the transcript, so it stays out until a window carries it.
+  const v = applyEvent(
+    { type: "message_end", sessionId: "s1", message: message("user", 50) },
+    view({ messages: [message("user", 100), message("assistant", 200)] }),
+  );
+  assertEquals(v, null);
 });

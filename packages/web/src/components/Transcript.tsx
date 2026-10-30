@@ -1,4 +1,6 @@
 import { useMemo } from "preact/compat";
+import { messageKey } from "../events.ts";
+import { useT } from "../i18n.ts";
 import type { ComponentChildren } from "preact";
 import type { AgentMessage, SessionView, ToolResultMessage } from "../types.ts";
 import type { UserMessageImage } from "./chat/types.ts";
@@ -9,6 +11,14 @@ import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
 
 interface TranscriptProps {
   messages: AgentMessage[];
+  /** Read the history before the loaded window (the reader reached the
+   * top). Returns whether a read started. */
+  onLoadOlder: () => boolean;
+  /** Whether the server said history exists before this window (a null
+   * cursor means the transcript's beginning). */
+  hasOlder: boolean;
+  /** Whether a read started by onLoadOlder is still in flight. */
+  loadingOlder: boolean;
   streamingText: string;
   runningTools: SessionView["runningTools"];
   /** True while a run is active (the last turn then renders as running). */
@@ -36,6 +46,9 @@ interface TranscriptProps {
 export function Transcript(
   {
     messages,
+    onLoadOlder,
+    loadingOlder,
+    hasOlder,
     streamingText,
     runningTools,
     running,
@@ -48,7 +61,17 @@ export function Transcript(
     empty,
   }: TranscriptProps,
 ) {
-  const { scrollRef } = useTranscriptScroll();
+  // The transcript holds a WINDOW of the session's history (see the core's
+  // session/transcript-window.ts): reaching the top reads the page before it
+  // and keeps the line the reader was on.
+  const t = useT();
+  const { scrollRef } = useTranscriptScroll({
+    onReachTop: () => hasOlder && onLoadOlder(),
+    loadingOlder,
+    firstMessageKey: messages[0] === undefined
+      ? undefined
+      : messageKey(messages[0]),
+  });
   const turns = useMemo(() => buildTurns(messages), [messages]);
   const toolResults = useMemo(() => {
     const map = new Map<string, ToolResultMessage>();
@@ -61,6 +84,11 @@ export function Transcript(
   return (
     <div className="chat-scroll" ref={scrollRef}>
       <div className="chat-column">
+        {loadingOlder && (
+          <p className="chat-history-note" role="status">
+            {t("chat.history.loadingOlder")}
+          </p>
+        )}
         {messages.length === 0 && streamingText.length === 0 && (
           <div className="chat-empty">
             <div className="chat-empty-inner">{empty}</div>

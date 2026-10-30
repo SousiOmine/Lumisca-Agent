@@ -21,8 +21,13 @@ import type {
  */
 
 export interface StellaConversationState {
-  /** The messages, in transcript order. */
+  /** The loaded window of the conversation, oldest first (a long
+   * conversation is read one window at a time; see the core's
+   * session/transcript-window.ts). */
   entries: StellaEntry[];
+  /** The cursor for the entries before `entries[0]`, or null at the
+   * conversation's beginning. */
+  older: string | null;
   /** The reply that is still arriving. Appended to the last entry when the
    * run ends (see the `entry` case), never kept alongside a finished one. */
   streamingText: string;
@@ -34,12 +39,31 @@ export interface StellaConversationState {
   agentName: string;
 }
 
-/** The state of a conversation just read from the server. */
+/**
+ * The state of a conversation just read from the server, merged into what the
+ * client already holds.
+ *
+ * The snapshot is a WINDOW of the conversation (see the core's
+ * session/transcript-window.ts), and it is read again after every WS drop and
+ * revision gap. The entries are merged by identity rather than replaced: a
+ * reader who paged back through older windows keeps them, and the window that
+ * just arrived adds what the socket never delivered. A window that shares
+ * nothing with the state means the client is not at the conversation's end any
+ * more; it is taken as the state, cursor included.
+ */
 export function stellaStateOf(
   snapshot: StellaConversationSnapshot,
+  current?: StellaConversationState,
 ): StellaConversationState {
+  const merged = current === undefined
+    ? { entries: snapshot.entries, replaced: true }
+    : mergeEntries(current.entries, snapshot.entries);
   return {
-    entries: snapshot.entries,
+    entries: merged.entries,
+    // The client keeps the cursor of the oldest entry it loaded unless the
+    // whole window replaced it: a window that starts inside what it holds
+    // must not lose the reader's way back.
+    older: merged.replaced ? snapshot.older : current!.older,
     streamingText: "",
     running: snapshot.running,
     questions: snapshot.questions,
@@ -47,6 +71,72 @@ export function stellaStateOf(
     ...(snapshot.error !== undefined ? { error: snapshot.error } : {}),
     agentName: snapshot.agentName,
   };
+}
+
+/**
+ * Merge the newest window of a conversation into the entries a client holds.
+ *
+ * Entries are ordered by the transcript, so the window's entries anchor on the
+ * ones with the same identity and anything the client lacks goes in front of
+ * the anchor it precedes; anything after the last anchor is the conversation's
+ * newest and extends the end. A window that shares nothing replaces the
+ * entries (the client fell behind by more than a page), and a window that
+ * changes nothing returns what was passed in (`replaced: false`).
+ */
+function mergeEntries(
+  existing: StellaEntry[],
+  fetched: StellaEntry[],
+): { entries: StellaEntry[]; replaced: boolean } {
+  if (fetched.length === 0) return { entries: existing, replaced: false };
+  if (existing.length === 0) return { entries: fetched, replaced: false };
+  const indexByKey = new Map(
+    existing.map((entry, index) => [entryKey(entry), index] as const),
+  );
+  if (!fetched.some((entry) => indexByKey.has(entryKey(entry)))) {
+    return { entries: fetched, replaced: true };
+  }
+
+  const merged: StellaEntry[] = [];
+  let pending: StellaEntry[] = [];
+  let cursor = 0;
+  for (const entry of fetched) {
+    const anchor = indexByKey.get(entryKey(entry));
+    if (anchor === undefined) {
+      pending.push(entry);
+      continue;
+    }
+    while (cursor < anchor) {
+      merged.push(existing[cursor]!);
+      cursor++;
+    }
+    // The same identity is the same entry: the persisted copy wins.
+    merged.push(...pending, entry);
+    pending = [];
+    cursor = anchor + 1;
+  }
+  while (cursor < existing.length) {
+    merged.push(existing[cursor]!);
+    cursor++;
+  }
+  merged.push(...pending);
+  return { entries: merged, replaced: false };
+}
+
+/**
+ * Put a page the reader asked for (the entries before `older`) in front of
+ * what the client holds. A page that adds nothing ends the walk: the client
+ * must not be sent round the same window twice.
+ */
+export function prependOlderEntries(
+  state: StellaConversationState,
+  fetched: StellaEntry[],
+  nextOlder: string | null,
+): StellaConversationState {
+  if (fetched.length === 0) return { ...state, older: null };
+  const known = new Set(state.entries.map(entryKey));
+  const added = fetched.filter((entry) => !known.has(entryKey(entry)));
+  if (added.length === 0) return { ...state, older: null };
+  return { ...state, entries: [...added, ...state.entries], older: nextOlder };
 }
 
 /** Identity of an entry for dedup: an entry arrives twice (the synthetic
@@ -154,6 +244,7 @@ function sameHandover(
 export function emptyStellaState(agentName: string): StellaConversationState {
   return {
     entries: [],
+    older: null,
     streamingText: "",
     running: false,
     questions: [],

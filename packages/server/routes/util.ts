@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/http-status";
-import { CoreError, errorMessage } from "@lumisca/core";
+import { CoreError, errorMessage, type WindowQuery } from "@lumisca/core";
 
 /** Error with an explicit HTTP status. Thrown by route handlers when the
  * status matters (e.g. 404); everything else is classified by errorStatus. */
@@ -121,4 +121,26 @@ export function requireStringArray(value: unknown, what: string): string[] {
     throw new AppError(`${what} is required`, 400);
   }
   return value as string[];
+}
+
+/**
+ * The transcript window one snapshot request asks for, from its query string.
+ *
+ * `older` is the cursor the previous window returned (an opaque identity — see
+ * core's session/transcript-window.ts), absent for the newest window. `limit`
+ * is the page size; a value core cannot honour (zero, negative, or not a
+ * number) is the core's own invalid error, so the bound lives in one place.
+ */
+export function parseWindowQuery(url: string): WindowQuery {
+  const params = new URL(url).searchParams;
+  const older = params.get("older");
+  const rawLimit = params.get("limit");
+  const limit = rawLimit === null ? undefined : Number(rawLimit);
+  if (limit !== undefined && !Number.isFinite(limit)) {
+    throw new AppError(`limit must be a number: ${rawLimit}`, 400);
+  }
+  return {
+    ...(older === null || older.length === 0 ? {} : { older }),
+    ...(limit === undefined ? {} : { limit }),
+  };
 }

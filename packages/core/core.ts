@@ -2,9 +2,10 @@ import { LumiscaDb } from "./db/mod.ts";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ClientEvent } from "./types/event.ts";
+import type { AgentMessage } from "./ai/types.ts";
 import type { SessionInfo } from "./types/session.ts";
 import type { StellaEntry } from "./types/stella-conversation.ts";
-import { stellaEntryOf } from "./agent/stella-stream.ts";
+import { stellaEntryCursorOf, stellaEntryOf } from "./agent/stella-stream.ts";
 import type { Workspace } from "./types/workspace.ts";
 import {
   createFileSettingsRepo,
@@ -101,6 +102,13 @@ import {
 } from "./stella/agents.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
 import { createHistorySearchTool } from "./session/history.ts";
+import {
+  messageCursorOf,
+  readWindow,
+  startsTranscriptTurn,
+  type WindowPage,
+  type WindowQuery,
+} from "./session/transcript-window.ts";
 import {
   createIdentityProvider,
   createIdentityTool,
@@ -1580,6 +1588,32 @@ export class LumiscaCore {
     return this.pool.lastError(id);
   }
 
+  /**
+   * One window of a session's transcript, for the clients that draw it.
+   *
+   * The transcript is the model's whole history; a client needs the recent
+   * part, and asks for older windows only when the reader scrolls up (see
+   * session/transcript-window.ts for why a window begins at a turn and why
+   * the cursor is an identity). Returns undefined when the session is not
+   * open: the caller opens it first (the snapshot endpoint does), so a client
+   * is never served a page of a transcript nobody is running.
+   */
+  readTranscript(
+    id: string,
+    query: WindowQuery,
+  ): WindowPage<AgentMessage> | undefined {
+    const agent = this.pool.get(id);
+    if (agent === undefined) return undefined;
+    const messages = agent.messages;
+    return readWindow(messages, query, {
+      cursor: messageCursorOf,
+      startsWindow: (index) => {
+        const message = messages[index];
+        return message !== undefined && startsTranscriptTurn(message.role);
+      },
+    });
+  }
+
   /** The conversation a stella agent already has, or undefined before its
    * first open. The client addresses a conversation by agent (stella has no
    * session concept), so this is the lookup that needs no session id. */
@@ -1588,21 +1622,31 @@ export class LumiscaCore {
     return session === undefined ? undefined : this.decorateSession(session);
   }
 
-  /** The conversation's messages as its client draws them: the user's words,
-   * the agent's words and the cards. Everything else in the transcript (context
-   * publications, tool calls and results, notifications, compaction
-   * checkpoints) is the model's history and never leaves the server (see
-   * agent/stella-stream.ts). Opens the session so a client that reconnects
-   * reads the same transcript the runs write. */
-  getStellaEntries(id: string): StellaEntry[] {
+  /**
+   * One window of a stella conversation, in the shape its client draws: the
+   * entries, oldest first, with the cursor for the next older window. Same
+   * contract as readTranscript, except that a conversation has no turns — an
+   * entry is a screen unit of its own, so any entry can start a window.
+   * Undefined when the conversation is not open (the caller opens it first).
+   */
+  readStellaConversation(
+    id: string,
+    query: WindowQuery,
+  ): WindowPage<StellaEntry> | undefined {
     const agent = this.pool.get(id);
-    if (agent === undefined) return [];
+    if (agent === undefined) return undefined;
+    // Project first, page over the projection: a page must count what the
+    // conversation shows, not what the model's history holds (most of a
+    // stella transcript is tool traffic nobody sees).
     const entries: StellaEntry[] = [];
     for (const message of agent.messages) {
       const entry = stellaEntryOf(message);
       if (entry !== null) entries.push(entry);
     }
-    return entries;
+    return readWindow(entries, query, {
+      cursor: stellaEntryCursorOf,
+      startsWindow: () => true,
+    });
   }
 
   /** Fire-and-forget prompt: completion and failures arrive as events

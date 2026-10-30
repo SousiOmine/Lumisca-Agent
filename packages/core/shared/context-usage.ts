@@ -71,18 +71,16 @@ export function summarizeContextUsage(
   let totalTokens = 0;
   let totalCacheRead = 0;
   for (const message of messages) {
-    if (message.role !== "assistant" || !message.usage) continue;
-    const tokens = contextTokensOf(message.usage);
     // A turn reports no tokens only when there was nothing to report (the
     // placeholder an aborted/failed call leaves behind): it carries no
     // context, and counting it would reset the meter to 0.
-    if (tokens === 0) continue;
-    const cacheRead = usageNumber(message.usage.cacheRead);
+    const contribution = contextUsageOfMessage(message);
+    if (contribution === undefined) continue;
     turns++;
-    currentTokens = tokens;
-    currentCacheRead = cacheRead;
-    totalTokens += tokens;
-    totalCacheRead += cacheRead;
+    currentTokens = contribution.tokens;
+    currentCacheRead = contribution.cacheRead;
+    totalTokens += contribution.tokens;
+    totalCacheRead += contribution.cacheRead;
   }
   return {
     turns,
@@ -196,4 +194,103 @@ export function formatContextUsageLine(
   return summary.averageCacheHitRate === undefined
     ? head
     : `${head} · Avg cache hit ${formatPercent1(summary.averageCacheHitRate)}`;
+}
+
+/** The tokens and cache reads one assistant message contributes to a
+ * summary; undefined for a message that contributes nothing (another role,
+ * no usage, or the zero-usage placeholder a failed/aborted call leaves
+ * behind — counting it would reset the meter to 0). */
+export function contextUsageOfMessage(
+  message: ContextUsageMessageLike,
+): { tokens: number; cacheRead: number } | undefined {
+  if (message.role !== "assistant" || !message.usage) return undefined;
+  const tokens = contextTokensOf(message.usage);
+  if (tokens === 0) return undefined;
+  return { tokens, cacheRead: usageNumber(message.usage.cacheRead) };
+}
+
+/**
+ * Fold the contribution of one more assistant message into a summary.
+ *
+ * The web client draws a WINDOW of a session's transcript (see the core's
+ * session/transcript-window.ts), so it cannot summarize the whole history
+ * itself: a meter computed from the window would report the window's average
+ * as the session's and lose its totals as soon as the reader paged back. The
+ * server summarizes the whole transcript once per snapshot, and this is how
+ * the client keeps that summary current as messages stream in without
+ * re-reading it.
+ */
+export function addContextUsage(
+  summary: ContextUsageSummary,
+  message: ContextUsageMessageLike,
+): ContextUsageSummary {
+  const contribution = contextUsageOfMessage(message);
+  if (contribution === undefined) return summary;
+  const totalTokens = summary.totalTokens + contribution.tokens;
+  const totalCacheRead = summary.totalCacheRead + contribution.cacheRead;
+  return {
+    turns: summary.turns + 1,
+    // The newest counted turn is the prompt the latest request sent.
+    currentTokens: contribution.tokens,
+    currentCacheRead: contribution.cacheRead,
+    totalTokens,
+    totalCacheRead,
+    ...(totalTokens > 0
+      ? { averageCacheHitRate: totalCacheRead / totalTokens }
+      : {}),
+  };
+}
+
+/**
+ * Drop one assistant message's contribution from a summary (a rewind removed
+ * it from the transcript). Totals only: which turn `currentTokens` should
+ * describe afterwards is decided against the messages that remain (see
+ * withLatestContextUsage), because a summary cannot know what came before the
+ * removed one.
+ */
+export function subtractContextUsage(
+  summary: ContextUsageSummary,
+  message: ContextUsageMessageLike,
+): ContextUsageSummary {
+  const contribution = contextUsageOfMessage(message);
+  if (contribution === undefined) return summary;
+  const totalTokens = Math.max(0, summary.totalTokens - contribution.tokens);
+  const totalCacheRead = Math.max(
+    0,
+    summary.totalCacheRead - contribution.cacheRead,
+  );
+  return {
+    turns: Math.max(0, summary.turns - 1),
+    currentTokens: summary.currentTokens,
+    currentCacheRead: summary.currentCacheRead,
+    totalTokens,
+    totalCacheRead,
+    ...(totalTokens > 0
+      ? { averageCacheHitRate: totalCacheRead / totalTokens }
+      : {}),
+  };
+}
+
+/**
+ * Point the summary's "current" side at the newest assistant turn among
+ * `messages` (the loaded window's tail: a view always holds the transcript's
+ * end, so this is the latest turn the server priced). A window with no priced
+ * turn keeps the summary's current values (the counted totals still describe
+ * the session, and the meter must not blink to zero).
+ */
+export function withLatestContextUsage(
+  summary: ContextUsageSummary,
+  messages: readonly ContextUsageMessageLike[],
+): ContextUsageSummary {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!;
+    const contribution = contextUsageOfMessage(message);
+    if (contribution === undefined) continue;
+    return {
+      ...summary,
+      currentTokens: contribution.tokens,
+      currentCacheRead: contribution.cacheRead,
+    };
+  }
+  return summary;
 }

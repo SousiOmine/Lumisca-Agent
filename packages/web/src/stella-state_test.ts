@@ -4,6 +4,7 @@ import {
   applyStellaEvent,
   emptyStellaState,
   entryKey,
+  prependOlderEntries,
   type StellaConversationState,
   stellaStateOf,
 } from "./stella-state.ts";
@@ -26,6 +27,7 @@ function state(
 Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
   const snapshot = {
     entries: [entry("user", "こんにちは", 1)],
+    older: "cursor-1",
     running: true,
     questions: [],
     handover: null,
@@ -36,6 +38,9 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
   };
   assertEquals(stellaStateOf(snapshot), {
     entries: [entry("user", "こんにちは", 1)],
+    // The cursor travels with the window: the conversation keeps its way
+    // back through the history before it.
+    older: "cursor-1",
     streamingText: "",
     running: true,
     questions: [],
@@ -137,4 +142,79 @@ Deno.test("applyStellaEvent: no-ops keep the previous object", () => {
   };
   const once = applyStellaEvent(idle, duplicate)!;
   assertEquals(applyStellaEvent(once, duplicate), null);
+});
+
+Deno.test("stellaStateOf: a re-read snapshot merges into paged history", () => {
+  // The client paged back and holds history the newest window does not: the
+  // snapshot must add what the socket missed, not replace what the reader
+  // loaded.
+  const first = entry("user", "最初", 1);
+  const second = entry("assistant", "返答", 2);
+  const third = entry("user", "続き", 3);
+  const current = state({
+    entries: [first, second, third],
+    older: "cursor-old",
+  });
+
+  const merged = stellaStateOf({
+    entries: [second, third, entry("assistant", "新しい返答", 4)],
+    older: "cursor-newer",
+    running: false,
+    questions: [],
+    handover: null,
+    agentName: "Aide",
+    sessionId: "s1",
+    rev: 9,
+  }, current);
+
+  assertEquals(merged.entries.map(entryKey), [
+    entryKey(first),
+    entryKey(second),
+    entryKey(third),
+    entryKey(entry("assistant", "新しい返答", 4)),
+  ]);
+  // The client keeps the way back it already had: the window that arrived
+  // started inside what it holds.
+  assertEquals(merged.older, "cursor-old");
+});
+
+Deno.test("stellaStateOf: a window that shares nothing replaces the state", () => {
+  const current = state({
+    entries: [entry("user", "古い", 1)],
+    older: "stale-cursor",
+  });
+  const merged = stellaStateOf({
+    entries: [entry("user", "新しい", 5)],
+    older: "fresh-cursor",
+    running: false,
+    questions: [],
+    handover: null,
+    agentName: "Aide",
+    sessionId: "s1",
+    rev: 9,
+  }, current);
+  assertEquals(merged.entries.map((e) => e.text), ["新しい"]);
+  // The held cursor names a position in a conversation the client is no
+  // longer at the end of: the window's cursor takes over.
+  assertEquals(merged.older, "fresh-cursor");
+});
+
+Deno.test("prependOlderEntries: a page goes in front; an empty one ends the walk", () => {
+  const current = state({
+    entries: [entry("user", "後", 3)],
+    older: "cursor-b",
+  });
+  const next = prependOlderEntries(
+    current,
+    [entry("user", "前", 1), entry("assistant", "返答", 2)],
+    "cursor-a",
+  );
+  assertEquals(next.entries.map((e) => e.timestamp), [1, 2, 3]);
+  assertEquals(next.older, "cursor-a");
+
+  // Nothing new means the beginning was reached: the client must not ask for
+  // the same page again.
+  const repeated = prependOlderEntries(current, current.entries, "cursor-b");
+  assertEquals(repeated.entries, current.entries);
+  assertEquals(repeated.older, null);
 });

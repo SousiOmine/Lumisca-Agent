@@ -1,6 +1,7 @@
 import { Hono } from "hono";
-import { MAX_PROMPT_IMAGES } from "@lumisca/core";
+import { MAX_PROMPT_IMAGES, summarizeContextUsage } from "@lumisca/core";
 import type {
+  AgentMessage,
   AskAnswer,
   BackgroundCommandInfo,
   CreateSessionInput,
@@ -12,10 +13,12 @@ import type {
   TaskInfo,
   ThinkingLevel,
   TodoPhase,
+  WindowQuery,
 } from "@lumisca/core";
 import {
   AppError,
   parseBody,
+  parseWindowQuery,
   requireBody,
   requireNonEmptyString,
   requireNumber,
@@ -182,6 +185,13 @@ export interface SessionApi {
   closeSession(id: string): Promise<void>;
   deleteSession(id: string): Promise<void>;
   getAgent(id: string): SessionAgent | undefined;
+  /** One window of the session's transcript (see readTranscript): the
+   * snapshot serves the newest one, and a client asks for older ones as the
+   * reader scrolls up. Undefined when the session is not open. */
+  readTranscript(
+    id: string,
+    query: WindowQuery,
+  ): { items: AgentMessage[]; older: string | null } | undefined;
   /** The model a new session would get, with the thinking control data the
    * draft tab renders (matches LumiscaCore.getDefaultModel). Null when
    * none resolves — including "no provider is configured at all", which
@@ -260,11 +270,20 @@ export function sessionRoutes(core: SessionApi): Hono {
     return c.json(sessionJson(requireSession(c.req.param("id"))));
   });
 
-  /** The session's live-state snapshot: the transcript plus everything a
-   * client needs to render the session honestly after a page (re)load or a
-   * WS drop (the web's tab restore and syncState). The event stream carries
-   * no snapshot, and events are never replayed, so each piece here has a
-   * client that would otherwise be shown a lie:
+  /** The session's live-state snapshot: a window of the transcript plus
+   * everything a client needs to render the session honestly after a page
+   * (re)load or a WS drop (the web's tab restore and syncState).
+   *
+   * The transcript is a WINDOW, not the whole history: a long session's
+   * transcript can be hundreds of messages, and sending all of it on every
+   * reconnect, tab restore and revision probe made opening and keeping a busy
+   * conversation in sync slow. `GET …/messages` serves the newest window and
+   * returns `older` — the cursor for the window before it, which a client
+   * echoes back to read further (see core's session/transcript-window.ts).
+   * `older: null` means the transcript's beginning.
+   *
+   * The event stream carries no snapshot, and events are never replayed, so
+   * each piece here has a client that would otherwise be shown a lie:
    * - `running`: a client that connected mid-run never saw `agent_start`,
    *   so without the flag it would present a live run as finished (work log
    *   collapsed under 作業完了);
@@ -284,7 +303,10 @@ export function sessionRoutes(core: SessionApi): Hono {
       // crash with a TypeError if that invariant ever changes.
       throw new AppError(`Session is not open: ${id}`, 404);
     }
-    const messages = agent.messages;
+    const page = core.readTranscript(id, parseWindowQuery(c.req.url));
+    if (page === undefined) {
+      throw new AppError(`Session is not open: ${id}`, 404);
+    }
     const running = agent.isStreaming;
     const questions = core.getPendingQuestions(id);
     const error = core.getSessionLastError(id);
@@ -293,11 +315,16 @@ export function sessionRoutes(core: SessionApi): Hono {
     // probe).
     const rev = core.getSessionRevision(id);
     return c.json({
-      messages,
+      messages: page.items,
+      // The way back through the history; null at its beginning.
+      older: page.older,
       running,
       questions,
       error,
       name: session.name,
+      // Context usage over the whole transcript, not the window: the client's
+      // older turns are not loaded, so it cannot count them itself.
+      usage: summarizeContextUsage(agent.messages),
       rev,
     });
   });

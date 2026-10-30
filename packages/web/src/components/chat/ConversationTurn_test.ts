@@ -8,8 +8,27 @@ import type {
   NotificationMessage,
 } from "../../types.ts";
 import { applyEvent, applyRunState } from "../../events.ts";
+import { summarizeContextUsage } from "@lumisca/core/shared";
 import { emptyView, isViewRunning } from "../../types.ts";
 import { buildTurns, ConversationTurn } from "./ConversationTurn.tsx";
+
+/** A session with no history: the runs in these tests are what the view
+ * draws. */
+const INFO = {
+  id: "s1",
+  workspaceId: "w1",
+  name: "s",
+  modelProvider: "p",
+  modelId: "m",
+  createdAt: 1,
+  updatedAt: 1,
+};
+
+const NO_HISTORY = {
+  messages: [] as AgentMessage[],
+  older: null,
+  usage: summarizeContextUsage([]),
+};
 
 function user(timestamp: number, steered?: boolean): AgentMessage {
   return {
@@ -408,15 +427,7 @@ Deno.test("a notification steered mid-run keeps the running turn last", () => {
   // into that run, so it must not start a turn. The running turn stays the
   // last one and ChatView keeps its work log expanded
   // (running = isViewRunning && it is the last turn).
-  let view = emptyView({
-    id: "s1",
-    workspaceId: "w1",
-    name: "s",
-    modelProvider: "p",
-    modelId: "m",
-    createdAt: 1,
-    updatedAt: 1,
-  });
+  let view = emptyView(INFO, NO_HISTORY);
   view = applyEvent(
     { type: "message_start", sessionId: "s1", message: user(1) },
     view,
@@ -458,15 +469,7 @@ Deno.test("a prompt steered mid-run keeps the running turn last", () => {
   // now for the prompt the user typed while the agent was working: the
   // server steers it into the run, so the turn stays the last one and
   // ChatView keeps its work log expanded while the agent keeps working.
-  let view = emptyView({
-    id: "s1",
-    workspaceId: "w1",
-    name: "s",
-    modelProvider: "p",
-    modelId: "m",
-    createdAt: 1,
-    updatedAt: 1,
-  });
+  let view = emptyView(INFO, NO_HISTORY);
   view = applyEvent(
     { type: "message_start", sessionId: "s1", message: user(1) },
     view,
@@ -538,7 +541,10 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
     }));
   };
 
-  const restored = applyRunState(emptyView(info, messages), true);
+  const restored = applyRunState(
+    emptyView(info, { ...NO_HISTORY, messages }),
+    true,
+  );
   const html = render(restored);
   assertStringIncludes(html, "作業中");
   assertEquals(html.includes("作業完了"), false);
@@ -546,7 +552,7 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
 
   // The same transcript with a stale "not running" answer (what the view
   // held before the snapshot arrived) is the reported symptom.
-  const stale = render(emptyView(info, messages));
+  const stale = render(emptyView(info, { ...NO_HISTORY, messages }));
   assertStringIncludes(stale, "作業完了");
   assertEquals(stale.includes("agent-work-log"), false);
 });

@@ -20,6 +20,7 @@ import {
 } from "../types.ts";
 import type { ComposerModel } from "../components/Composer.tsx";
 import { DRAFT_TAB, splitTabKey, tabKey } from "../tabs.ts";
+import { summarizeContextUsage } from "@lumisca/core/shared";
 
 export interface UseSessionActionsOptions {
   setTabs: Dispatch<SetStateAction<string[]>>;
@@ -78,7 +79,16 @@ export function useSessionActions(
       setActiveTab(key);
       setViews((prev) => {
         const next = new Map(prev);
-        next.set(key, emptyView(session));
+        // A new session has no transcript and nothing to count: the run's
+        // messages and their usage arrive as events.
+        next.set(
+          key,
+          emptyView(session, {
+            messages: [],
+            older: null,
+            usage: summarizeContextUsage([]),
+          }),
+        );
         return next;
       });
       try {

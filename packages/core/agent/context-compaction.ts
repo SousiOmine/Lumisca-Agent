@@ -35,6 +35,7 @@ import type {
   AgentTool,
   Api,
   AssistantMessage,
+  CheckpointMessage,
   LlmMessage,
   Message,
   Model,
@@ -352,7 +353,7 @@ export interface ContextCompactorOptions {
   insert: (index: number, message: AgentMessage) => void;
   /** Notify clients that history was condensed (optional: sub-agents have
    * no client surface). */
-  onCompacted?: (result: CompactionResult, message: AgentMessage) => void;
+  onCompacted?: (result: CompactionResult, message: CheckpointMessage) => void;
 }
 
 /** The measurement anchor: the newest provider-reported prompt size, how
@@ -641,7 +642,7 @@ export function checkpointMessage(
   summarizedTokens: number,
   summary: string,
   language: Locale = DEFAULT_LOCALE,
-): AgentMessage {
+): CheckpointMessage {
   return {
     role: "checkpoint",
     title: translate(language, "checkpoint.title", {
@@ -651,7 +652,7 @@ export function checkpointMessage(
     body:
       `${CHECKPOINT_PREAMBLE}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n${summary}\n</${CHECKPOINT_SUMMARY_TAG}>`,
     timestamp: Date.now(),
-  } as AgentMessage;
+  };
 }
 
 /** The summary text of a checkpoint (the body minus the preamble and the

@@ -33,12 +33,17 @@ export const stellaApi = {
       method: "GET",
     }),
 
-  /** Re-read the snapshot after a WS drop or a page reload. */
-  getSnapshot: (agentId: string) =>
-    request<StellaConversationSnapshot>(
-      conversationPath(agentId, "/messages"),
+  /** Re-read the snapshot after a WS drop or a page reload, or read the
+   * window before a cursor (see StellaConversationSnapshot.older). */
+  getSnapshot: (agentId: string, window: { older?: string } = {}) => {
+    const query = window.older === undefined
+      ? ""
+      : `?older=${encodeURIComponent(window.older)}`;
+    return request<StellaConversationSnapshot>(
+      conversationPath(agentId, `/messages${query}`),
       { method: "GET" },
-    ),
+    );
+  },
 
   /** The conversation's revision: a cheap counter to poll so the snapshot is
    * re-read only when something was missed. */

@@ -129,6 +129,18 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
 
 /** The attachment list a `chat_attach` result carries, or none when the
  * details are not the shape this build wrote (see shared/attachments.ts). */
+/** The cursor naming one conversation entry (see readWindow): the fields a
+ * client tells two entries apart by — the role and the timestamp the message
+ * carries, plus the first attachment's name, because an agent that sends a
+ * file and then says something in the same millisecond would otherwise have
+ * the two collapse into one. Opaque to clients, which only echo it. */
+export function stellaEntryCursorOf(entry: StellaEntry): string {
+  return JSON.stringify([
+    entry.role,
+    entry.timestamp,
+    entry.attachments[0]?.name ?? "",
+  ]);
+}
 /** The conversation's view of a pending-question list. The shapes are the
  * same today; the named type keeps the conversation's contract from drifting
  * with the ask hub's. */

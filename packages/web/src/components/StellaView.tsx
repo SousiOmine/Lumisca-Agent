@@ -35,6 +35,11 @@ interface StellaViewProps {
   onAbort: () => void;
   /** Rewind from a message onward (the transcript's undo). */
   onRewind: (timestamp: number) => Promise<void>;
+  /** Read the entries before the loaded window (the reader reached the top
+   * of the conversation). Returns whether a read started. */
+  onLoadOlder: () => boolean;
+  /** Whether that read is still in flight. */
+  loadingOlder: boolean;
   /** The user finished at the screen (the `vm_ask_user` hand-over). */
   onFinishHandover: (note: string, toolCallId: string) => Promise<void>;
   onOpenSettings: () => void;
@@ -69,6 +74,8 @@ export function StellaView(
     onPrompt,
     onAbort,
     onRewind,
+    onLoadOlder,
+    loadingOlder,
     onFinishHandover,
     onOpenSettings,
   }: StellaViewProps,
@@ -153,6 +160,8 @@ export function StellaView(
               attachBase={attachBase}
               onRewind={handleRewind}
               onSend={(text) => onPrompt(text)}
+              onLoadOlder={onLoadOlder}
+              loadingOlder={loadingOlder}
             />
           )}
         <div className="input-area">

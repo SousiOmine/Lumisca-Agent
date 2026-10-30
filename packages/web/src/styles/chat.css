@@ -32,6 +32,15 @@
   padding: 20px 0 10px;
 }
 
+/* The "loading earlier history" line: a quiet note where the older window will
+ * arrive (the transcript holds a window of history; see useTranscriptScroll). */
+.chat-history-note {
+  margin: 0;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
 .chat-empty {
   /* Half the visible height, so the placeholder sits where the conversation
    * will grow from. The height lives here (not in ChatView's inline style)

@@ -27,6 +27,13 @@ export {
 } from "./stella/agents.ts";
 export type { HistorySearchTarget } from "./session/history.ts";
 export { createHistorySearchTool } from "./session/history.ts";
+export {
+  MAX_TRANSCRIPT_WINDOW_ITEMS,
+  readWindow,
+  TRANSCRIPT_WINDOW_ITEMS,
+  type WindowPage,
+  type WindowQuery,
+} from "./session/transcript-window.ts";
 export type { Logger } from "./log.ts";
 export { refreshCatalogInBackground } from "./models/catalog-refresh.ts";
 export type { CatalogRefresher } from "./models/catalog-refresh.ts";
@@ -41,6 +48,7 @@ export type { WorkspaceFileEntry } from "./workspace/files.ts";
 export type { Workspace } from "./types/workspace.ts";
 export type { SessionInfo } from "./types/session.ts";
 export type { ClientEvent } from "./types/event.ts";
+export type { MessageIdentity } from "./types/event.ts";
 export { notificationText, toLlmMessages } from "./types/notification.ts";
 export type { NotificationPayload } from "./types/notification.ts";
 export type {

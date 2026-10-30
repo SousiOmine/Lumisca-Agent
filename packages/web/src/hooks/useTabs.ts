@@ -30,7 +30,7 @@ function restoreView(
   snapshot: SessionSnapshot,
   todos: TodoPhase[] = [],
 ): SessionView {
-  const v = emptyView(info, snapshot.messages);
+  const v = emptyView(info, snapshot);
   v.error = snapshot.error;
   v.todos = todos;
   v.pendingQuestions = snapshot.questions;

@@ -4,6 +4,7 @@ import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { errorText } from "../providers.ts";
 import {
   applyStellaEvent,
+  prependOlderEntries,
   type StellaConversationState,
   stellaStateOf,
 } from "../stella-state.ts";
@@ -51,6 +52,11 @@ export function useStella(enabled: boolean): {
   ) => Promise<void>;
   rewind: (timestamp: number) => Promise<void>;
   finishHandover: (note: string, toolCallId: string) => Promise<void>;
+  /** Read the entries before the loaded window (the reader reached the top
+   * of the conversation). Returns whether a read started. */
+  loadOlder: () => boolean;
+  /** Whether that read is still in flight. */
+  loadingOlder: boolean;
   /** Why the conversation could not be opened, or null. */
   error: string | null;
   loading: boolean;
@@ -68,6 +74,11 @@ export function useStella(enabled: boolean): {
   const [agentsVersion, setAgentsVersion] = useState(0);
   // Opening twice (a re-render, a retry) must not create two conversations.
   const opening = useRef<string | null>(null);
+  /** An older window is in flight; a second reach for the top waits for it
+   * rather than reading the same page twice. The state is what the transcript
+   * reads to keep the reader's position until the page lands. */
+  const olderInFlight = useRef(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   const reloadAgents = useCallback(() => {
     setAgentsVersion((version) => version + 1);
@@ -151,7 +162,13 @@ export function useStella(enabled: boolean): {
     const resync = async () => {
       try {
         const snapshot = await stellaApi.getSnapshot(activeAgentId);
-        if (!closed) setConversation(stellaStateOf(snapshot));
+        // Merged, not replaced: the client may hold windows the reader paged
+        // back to, and the snapshot is only the newest one (see stellaStateOf).
+        if (!closed) {
+          setConversation((current) =>
+            stellaStateOf(snapshot, current ?? undefined)
+          );
+        }
       } catch {
         // The socket onClose path retries; a failed resync must not throw.
       }
@@ -283,11 +300,51 @@ export function useStella(enabled: boolean): {
     [requireAgent],
   );
 
+  /** Read the entries before the loaded window (the reader reached the top
+   * of the conversation). Returns whether a read started. */
+  const loadOlder = useCallback((): boolean => {
+    const agentId = activeAgentId;
+    const older = conversation?.older ?? null;
+    if (agentId === null || older === null || olderInFlight.current) {
+      return false;
+    }
+    olderInFlight.current = true;
+    setLoadingOlder(true);
+    void (async () => {
+      try {
+        const snapshot = await stellaApi.getSnapshot(agentId, { older });
+        setConversation((current) => {
+          // A resync may have replaced the history while the page was in
+          // flight: placing it would splice two conversations together.
+          if (current === null || current.older !== older) return current;
+          return prependOlderEntries(current, snapshot.entries, snapshot.older);
+        });
+      } catch {
+        // The conversation moved under the cursor (a rewind): re-read the
+        // newest window, which leaves a cursor that exists.
+        try {
+          const snapshot = await stellaApi.getSnapshot(agentId);
+          setConversation((current) =>
+            current === null ? current : stellaStateOf(snapshot, current)
+          );
+        } catch {
+          // The next scroll attempt tries again.
+        }
+      } finally {
+        olderInFlight.current = false;
+        setLoadingOlder(false);
+      }
+    })();
+    return true;
+  }, [activeAgentId, conversation?.older]);
+
   return {
     agents,
     activeAgentId,
     select,
     conversation,
+    loadOlder,
+    loadingOlder,
     sessionId,
     prompt,
     abort,

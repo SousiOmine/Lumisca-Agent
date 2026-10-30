@@ -1,13 +1,14 @@
 import { useMemo } from "preact/compat";
 import { parseUiMarkup, type UiView } from "@lumisca/core/shared";
 import { useTranscriptScroll } from "../../hooks/useTranscriptScroll.ts";
+import { useT } from "../../i18n.ts";
 import { AttachmentCard } from "../chat/AttachmentCard.tsx";
 import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { UiCard } from "../chat/UiCard.tsx";
 import { CopyableUserMessage } from "../chat/CopyableUserMessage.tsx";
 import { RunningIndicator } from "../chat/RunningIndicator.tsx";
 import type { StellaEntry } from "../../types.ts";
-import type { StellaConversationState } from "../../stella-state.ts";
+import { entryKey, type StellaConversationState } from "../../stella-state.ts";
 
 /**
  * A stella conversation: the user's words and the agent's words.
@@ -29,6 +30,8 @@ export function StellaTranscript({
   attachBase,
   onRewind,
   onSend,
+  onLoadOlder,
+  loadingOlder,
 }: {
   conversation: StellaConversationState;
   /** Asset base of the conversation (see MarkdownBlock). */
@@ -39,12 +42,31 @@ export function StellaTranscript({
   onRewind: (timestamp: number, text: string) => void;
   /** Send a card's answer as the user's next message. */
   onSend: (text: string) => void;
+  /** Read the entries before the loaded window (the reader reached the
+   * top). Returns whether a read started. */
+  onLoadOlder: () => boolean;
+  /** Whether that read is still in flight. */
+  loadingOlder: boolean;
 }) {
-  const { scrollRef } = useTranscriptScroll();
+  // The transcript holds a WINDOW of the conversation (see the core's
+  // session/transcript-window.ts): reaching the top reads the page before it
+  // and keeps the entry the reader was looking at in place.
+  const t = useT();
+  const first = conversation.entries[0];
+  const { scrollRef } = useTranscriptScroll({
+    onReachTop: () => conversation.older !== null && onLoadOlder(),
+    loadingOlder,
+    firstMessageKey: first === undefined ? undefined : entryKey(first),
+  });
 
   return (
     <div className="chat-scroll" ref={scrollRef}>
       <div className="chat-column">
+        {loadingOlder && (
+          <p className="chat-history-note" role="status">
+            {t("chat.history.loadingOlder")}
+          </p>
+        )}
         {conversation.entries.map((entry, index) => (
           <EntryRow
             key={`${entry.role}-${entry.timestamp}-${index}`}

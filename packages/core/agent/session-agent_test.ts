@@ -799,7 +799,12 @@ Deno.test("compaction condenses the history before a request crosses the window"
       e.type === "messages_checkpoint",
   );
   assertEquals(checkpoints.length, 1);
-  assertEquals(checkpoints[0]!.index, checkpointIndex);
+  // The position travels as the identity of the message right after the
+  // checkpoint: clients hold a window of the transcript, so an index would
+  // not say where the row belongs in what they have.
+  const afterCheckpoint = agent.messages[checkpointIndex + 1]!;
+  assertEquals(checkpoints[0]!.before.role, afterCheckpoint.role);
+  assertEquals(checkpoints[0]!.before.timestamp, afterCheckpoint.timestamp);
   assertEquals(checkpoints[0]!.message.role, "checkpoint");
   // The newest turn survived: the model still sees the work in progress.
   // The loop's own advisory for the repeated call (a notification appended

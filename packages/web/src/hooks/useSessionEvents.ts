@@ -4,6 +4,7 @@ import { errorText } from "../providers.ts";
 import {
   applyEvent,
   applySnapshot,
+  prependOlderWindow,
   revisionGap,
   type SnapshotParts,
 } from "../events.ts";
@@ -242,6 +243,75 @@ export function useSessionEvents(
       return next;
     });
   }, [setViews]);
+
+  /** Read the history before the window a tab has loaded (the reader
+   * reached the top of the transcript) and put it in front.
+   *
+   * Each tab reads one page at a time; a request already in flight is not
+   * repeated (the reader can reach the top again while it lands), and the
+   * cursor the snapshot answers with is the next page's. A session whose
+   * history changed under the cursor (a rewind removed the message it named)
+   * answers with a conflict: the tab then reads its newest window again,
+   * which restores a cursor that exists instead of retrying forever.
+   *
+   * Returns whether a read started, which the scroll hook uses to hold the
+   * reader's position while the page lands. */
+  const loadingOlder = useRef(new Set<string>());
+  // The hook that started a read knows when it ended: the scroll hook needs
+  // that to release the position it holds (a read that adds nothing must not
+  // freeze the reader where they are).
+  const [olderLoading, setOlderLoading] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  const markLoading = useCallback((key: string, loading: boolean) => {
+    setOlderLoading((prev) => {
+      if (prev.has(key) === loading) return prev;
+      const next = new Set(prev);
+      if (loading) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+  const loadOlder = useCallback((key: string): boolean => {
+    const view = viewsRef.current.get(key);
+    if (view === undefined || view.older === null) return false;
+    if (loadingOlder.current.has(key)) return false;
+    loadingOlder.current.add(key);
+    markLoading(key, true);
+    void (async () => {
+      try {
+        const page = await sessionApi(key).getMessages({
+          older: view.older ?? undefined,
+        });
+        setViews((prev) => {
+          const current = prev.get(key);
+          if (current === undefined || current.older !== view.older) {
+            // The tab was replaced (or synced to a newer cursor) while the
+            // page was in flight: placing it would splice two histories.
+            return prev;
+          }
+          const history = prependOlderWindow(
+            current,
+            page.messages,
+            page.older,
+          );
+          if (history === current) return prev;
+          const next = new Map(prev);
+          next.set(key, { ...current, ...history });
+          return next;
+        });
+      } catch {
+        // A conflict (the cursor's message is gone) or a dropped connection:
+        // re-read the newest window, which leaves the tab with a cursor that
+        // exists. The reader's position is kept by the scroll hook.
+        await syncState([key]);
+      } finally {
+        loadingOlder.current.delete(key);
+        markLoading(key, false);
+      }
+    })();
+    return true;
+  }, [markLoading, setViews, syncState]);
 
   /** Clear per-session transient state (stuck streaming/tool indicators)
    * and re-fetch the session snapshot and the panel snapshots, so nothing
@@ -496,5 +566,13 @@ export function useSessionEvents(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleEvent, resync, syncState]);
 
-  return { views, setViews, setViewError, seedRevision, resyncPanels };
+  return {
+    views,
+    setViews,
+    setViewError,
+    seedRevision,
+    resyncPanels,
+    loadOlder,
+    olderLoading,
+  };
 }

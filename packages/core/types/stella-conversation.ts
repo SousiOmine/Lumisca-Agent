@@ -59,6 +59,12 @@ export interface StellaHandover {
  * Read in one handler so the pieces describe the same instant. */
 export interface StellaConversationSnapshot {
   entries: StellaEntry[];
+  /** The cursor for the window before these entries, or null at the
+   * conversation's beginning. A conversation is served one window at a time
+   * (see core's session/transcript-window.ts): a long one must not be sent
+   * whole on every reconnect, so a client reads further only when the reader
+   * scrolls up. */
+  older: string | null;
   /** A run is active (its `agent_start` is never replayed). */
   running: boolean;
   /** Questions awaiting the user's answers; empty when none. */

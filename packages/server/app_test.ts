@@ -288,6 +288,102 @@ Deno.test("session prompt roundtrip via API", async () => {
   }
 });
 
+Deno.test("messages snapshot serves a window and the way back", async () => {
+  // A long conversation is not sent whole on every (re)connect: the snapshot
+  // is the newest window, and `older` is the cursor for the window before it
+  // (see core's session/transcript-window.ts). The turn rule keeps a window
+  // from starting in the middle of one.
+  const { core, server, faux, base } = await setup();
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const ws = await (await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    })).json();
+    const session = await (await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    })).json();
+
+    // Three exchanges: six messages, plus the context publications of the
+    // first run.
+    const usage = { input: 100, output: 10, cacheRead: 900, cacheWrite: 0 };
+    faux.setResponses([
+      fauxAssistantMessage("one", { usage }),
+      fauxAssistantMessage("two", { usage }),
+      fauxAssistantMessage("three", { usage }),
+    ]);
+    for (const text of ["first", "second", "third"]) {
+      await json(base, `/api/sessions/${session.id}/prompt`, {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      });
+      await core.getAgent(session.id)!.waitForIdle();
+    }
+
+    type Snapshot = {
+      messages: Array<{ role: string }>;
+      older: string | null;
+      usage: { turns: number };
+    };
+
+    // One turn at a time: the newest window holds the last prompt and its
+    // answer, and starts at the prompt.
+    const newest = await (await json(
+      base,
+      `/api/sessions/${session.id}/messages?limit=2`,
+    )).json() as Snapshot;
+    assertEquals(conversationOf(newest.messages).length, 2);
+    assertEquals(conversationOf(newest.messages)[0]!.role, "user");
+    assert(newest.older !== null, "history exists before the window");
+
+    // The meter counts the WHOLE transcript, not the window: the client
+    // cannot count turns it did not load.
+    assertEquals(newest.usage.turns, 3);
+
+    // The cursor walks back one window at a time and ends at the beginning.
+    let older: string | null = newest.older;
+    let seen = newest.messages.length;
+    for (let guard = 0; older !== null && guard < 10; guard++) {
+      const page = await (await json(
+        base,
+        `/api/sessions/${session.id}/messages?limit=2&older=${
+          encodeURIComponent(older)
+        }`,
+      )).json() as Snapshot;
+      seen += page.messages.length;
+      older = page.older;
+    }
+    assertEquals(older, null, "the walk ends at the transcript's beginning");
+    assertEquals(seen, core.getAgent(session.id)!.messages.length);
+
+    // A cursor the transcript no longer has is a conflict, not a guess.
+    const stale = await json(
+      base,
+      `/api/sessions/${session.id}/messages?older=${
+        encodeURIComponent('["user",1,""]')
+      }`,
+    );
+    assertEquals(stale.status, 409);
+
+    // A page size the core cannot honour is the caller's mistake.
+    const bad = await json(
+      base,
+      `/api/sessions/${session.id}/messages?limit=0`,
+    );
+    assertEquals(bad.status, 400);
+
+    await removeDirRetry(root);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("messages snapshot reports a run that is still going", async () => {
   // The reported bug: a client that asks for the transcript while the agent
   // is working — a page load, a WS drop, a tab opened on the session — must

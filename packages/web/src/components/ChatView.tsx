@@ -13,7 +13,6 @@ import {
   compactionUsageRatio,
   inputBudgetTokens,
   parseNonNegativeIntSetting,
-  summarizeContextUsage,
 } from "@lumisca/core/shared";
 import { api } from "../api.ts";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
@@ -87,6 +86,12 @@ interface ChatViewProps {
    * the text the user typed after the command (`/compact ファイル操作を詳しく`),
    * which the summarizer uses as its extra focus. */
   onActionCommand?: (commandId: string, instructions?: string) => void;
+  /** Read the history before the loaded window (the reader reached the top
+   * of the transcript). Returns whether a read started. */
+  onLoadOlder: () => boolean;
+  /** Whether that read is still in flight (the transcript holds the reader's
+   * position until it lands). */
+  loadingOlder: boolean;
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
 }
@@ -108,6 +113,8 @@ export function ChatView(
     onThinkingLevelChange,
     onCancelGoal,
     onActionCommand,
+    onLoadOlder,
+    loadingOlder,
     onOpenSettings,
   }: ChatViewProps,
 ) {
@@ -270,10 +277,10 @@ export function ChatView(
   // against the current model's window, plus the session-average cache
   // hit rate. The window comes from the owning peer's model list ("" =
   // this server); without usage yet the meter stays hidden.
-  const summary = useMemo(
-    () => summarizeContextUsage(view.messages),
-    [view.messages],
-  );
+  // The summary comes from the view: the server counts the whole transcript
+  // (the view holds a window of it) and the reducer keeps it current as
+  // messages stream in, so the meter is not recomputed here.
+  const summary = view.usage;
   const currentModel = modelsByProvider.get(view.info.modelProvider)?.find(
     (m) => m.id === view.info.modelId,
   );
@@ -322,6 +329,9 @@ export function ChatView(
       </div>
       <Transcript
         messages={view.messages}
+        onLoadOlder={onLoadOlder}
+        loadingOlder={loadingOlder}
+        hasOlder={view.older !== null}
         streamingText={view.streamingText}
         runningTools={view.runningTools}
         running={isRunning}
