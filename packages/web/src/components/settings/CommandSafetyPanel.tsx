@@ -7,8 +7,10 @@ import {
 import type { CommandApproval } from "@lumisca/core/shared";
 import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
+import { useEffect } from "preact/compat";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSaveAction } from "../../hooks/useSave.ts";
+import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
 
 /** Settings → セキュリティ: the command safety check. When enabled, the
@@ -17,7 +19,10 @@ import { useT } from "../../i18n.ts";
  * the check cannot judge (no fast model, errors, timeouts) are blocked too. */
 export function CommandSafetyPanel() {
   const t = useT();
-  const [loaded, setLoaded] = useState(false);
+  // The preferences come from the shared settings store (read once for the
+  // page); only the approvals list is this panel's own fetch.
+  const settings = useSettings();
+  const loaded = settings.loaded;
   const [enabled, setEnabled] = useState(false);
   const [fastModelSet, setFastModelSet] = useState(true);
   const [approvals, setApprovals] = useState<CommandApproval[]>([]);
@@ -25,19 +30,15 @@ export function CommandSafetyPanel() {
 
   // The two loads are independent: fire both at once like before, with the
   // shared stale guard instead of a local flag.
+  useEffect(() => {
+    if (!loaded) return;
+    setEnabled(settings.values[COMMAND_SAFETY_ENABLED_KEY] === "1");
+    setFastModelSet(
+      parseModelPreference(settings.values[FAST_MODEL_KEY]) !== undefined,
+    );
+  }, [loaded, settings.values]);
+
   useAsyncEffect((isStale) => {
-    void api.getSettings()
-      .then((settings) => {
-        if (isStale()) return;
-        setEnabled(settings[COMMAND_SAFETY_ENABLED_KEY] === "1");
-        setFastModelSet(
-          parseModelPreference(settings[FAST_MODEL_KEY]) !== undefined,
-        );
-        setLoaded(true);
-      })
-      .catch((e) => {
-        if (!isStale()) fail(e);
-      });
     void api.getCommandSafety()
       .then((state) => {
         if (!isStale()) setApprovals(state.approvals);
@@ -51,7 +52,7 @@ export function CommandSafetyPanel() {
     const previous = enabled;
     setEnabled(next); // optimistic
     void save(
-      () => api.setSetting(COMMAND_SAFETY_ENABLED_KEY, next ? "1" : ""),
+      () => settingsStore.set(COMMAND_SAFETY_ENABLED_KEY, next ? "1" : ""),
       () => setEnabled(previous),
     );
   };

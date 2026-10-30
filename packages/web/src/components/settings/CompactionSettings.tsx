@@ -7,9 +7,8 @@ import {
   COMPACTION_RESERVE_TOKENS_KEY,
   parseNonNegativeIntSetting,
 } from "@lumisca/core/shared";
-import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
-import { useAsyncEffect } from "../../hooks/useAsync.ts";
+import { useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
 
 /** Quiet period before a typed token count is persisted (the same
@@ -37,7 +36,10 @@ const SAVED_NOTE_MS = 2_000;
  */
 export function CompactionSettings() {
   const t = useT();
-  const [loaded, setLoaded] = useState(false);
+  // The settings live in the shared store (read once for the whole page);
+  // this panel only owns the text the user is typing.
+  const settings = useSettings();
+  const loaded = settings.loaded;
   const [enabled, setEnabled] = useState(true);
   const [reserve, setReserve] = useState("");
   const [keepRecent, setKeepRecent] = useState("");
@@ -51,23 +53,17 @@ export function CompactionSettings() {
     undefined,
   );
 
-  useAsyncEffect((isStale) => {
-    void api.getSettings()
-      .then((settings) => {
-        if (isStale()) return;
-        setEnabled(settings[COMPACTION_ENABLED_KEY] !== "0");
-        setReserve(settings[COMPACTION_RESERVE_TOKENS_KEY] ?? "");
-        setKeepRecent(settings[COMPACTION_KEEP_RECENT_TOKENS_KEY] ?? "");
-        setLoaded(true);
-      })
-      .catch((e) => {
-        if (!isStale()) {
-          setError(
-            t("settings.compaction.saveFailed", { error: errorText(e) }),
-          );
-        }
-      });
-  }, []);
+  // Seed the fields from the store once it has loaded (it may already be
+  // loaded when the dialog opens a second time).
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!loaded || seeded.current) return;
+    seeded.current = true;
+    const values = settings.values;
+    setEnabled(values[COMPACTION_ENABLED_KEY] !== "0");
+    setReserve(values[COMPACTION_RESERVE_TOKENS_KEY] ?? "");
+    setKeepRecent(values[COMPACTION_KEEP_RECENT_TOKENS_KEY] ?? "");
+  }, [loaded, settings.values]);
 
   // A pending debounce must not fire after the dialog closed (the write
   // would still be correct, but the state update would be wasted).
@@ -86,7 +82,7 @@ export function CompactionSettings() {
     setSaving(true);
     setError(undefined);
     try {
-      await api.setSetting(key, value);
+      await settings.set(key, value);
       setSaved(true);
       clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaved(false), SAVED_NOTE_MS);

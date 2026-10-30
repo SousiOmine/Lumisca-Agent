@@ -1,9 +1,8 @@
-import { useState } from "preact/compat";
+import { useEffect, useState } from "preact/compat";
 import { COMPUTER_USE_ENABLED_KEY } from "@lumisca/core/shared";
-import { api } from "../../api.ts";
 import { errorText } from "../../providers.ts";
-import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSaveAction } from "../../hooks/useSave.ts";
+import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
 
 /** Settings → セキュリティ: computer use — the agent captures this machine's
@@ -17,27 +16,22 @@ import { useT } from "../../i18n.ts";
  * here like any other failure. */
 export function ComputerUsePanel() {
   const t = useT();
-  const [loaded, setLoaded] = useState(false);
+  // The flag lives in the shared settings store (read once for the page).
+  const settings = useSettings();
+  const loaded = settings.loaded;
   const [enabled, setEnabled] = useState(false);
-  const { saving, error, save, fail } = useSaveAction(errorText);
+  const { saving, error, save } = useSaveAction(errorText);
 
-  useAsyncEffect((isStale) => {
-    void api.getSettings()
-      .then((settings) => {
-        if (isStale()) return;
-        setEnabled(settings[COMPUTER_USE_ENABLED_KEY] === "1");
-        setLoaded(true);
-      })
-      .catch((e) => {
-        if (!isStale()) fail(e);
-      });
-  }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    setEnabled(settings.values[COMPUTER_USE_ENABLED_KEY] === "1");
+  }, [loaded, settings.values]);
 
   const setEnabledValue = (next: boolean) => {
     const previous = enabled;
     setEnabled(next); // optimistic
     void save(
-      () => api.setSetting(COMPUTER_USE_ENABLED_KEY, next ? "1" : ""),
+      () => settingsStore.set(COMPUTER_USE_ENABLED_KEY, next ? "1" : ""),
       () => setEnabled(previous),
     );
   };

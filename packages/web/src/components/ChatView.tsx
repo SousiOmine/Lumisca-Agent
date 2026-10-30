@@ -14,9 +14,7 @@ import {
   inputBudgetTokens,
   parseNonNegativeIntSetting,
 } from "@lumisca/core/shared";
-import { api } from "../api.ts";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
-import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { isViewRunning, type SessionView } from "../types.ts";
 import type {
   AskAnswer,
@@ -44,6 +42,7 @@ import { GoalPanel } from "./GoalPanel.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
 import { useProviderModels } from "../providers.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
+import { useSetting } from "../settingsStore.ts";
 import { useSkills } from "../hooks/useSkills.ts";
 import { useT } from "../i18n.ts";
 import { Transcript } from "./Transcript.tsx";
@@ -300,22 +299,13 @@ export function ChatView(
     : { summary, contextWindow };
   // Where the meter turns amber: the point the next compaction check
   // condenses the history from (`window - reserveTokens`). The reservation
-  // is a setting read once per view; an unset or unreadable value falls back
-  // to the compactor's default, so the meter is right out of the box.
-  const [compactionReserveTokens, setCompactionReserveTokens] = useState<
-    number | undefined
-  >(undefined);
-  useAsyncEffect(async (isStale) => {
-    try {
-      const settings = await api.getSettings();
-      if (isStale()) return;
-      setCompactionReserveTokens(
-        parseNonNegativeIntSetting(settings[COMPACTION_RESERVE_TOKENS_KEY]),
-      );
-    } catch {
-      // The meter keeps its default hint; nothing else depends on the value.
-    }
-  }, []);
+  // comes from the shared settings store (read once for the page, so a tab
+  // switch does not re-read the settings table); an unset or unreadable
+  // value falls back to the compactor's default, so the meter is right out
+  // of the box.
+  const compactionReserveTokens = parseNonNegativeIntSetting(
+    useSetting(COMPACTION_RESERVE_TOKENS_KEY),
+  );
   const contextWarnRatio = compactionUsageRatio(
     contextWindow,
     compactionReserveTokens ?? COMPACTION_DEFAULT_RESERVE_TOKENS,

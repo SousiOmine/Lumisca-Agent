@@ -12,9 +12,8 @@ import {
   serializeModelPreference,
 } from "@lumisca/core/shared";
 import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
-import { api } from "../../api.ts";
-import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useClickOutside } from "../../hooks/useClickOutside.ts";
+import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
 import { thinkingLevelLabel } from "../../format.ts";
 import {
@@ -91,20 +90,23 @@ export function ModelPreferencePanel(
     },
   ], [t]);
 
-  /** Load the stored preferences once. */
-  useAsyncEffect(async (isStale) => {
-    try {
-      const settings = await api.getSettings();
-      if (isStale()) return;
-      setValues({
-        [FAST_MODEL_KEY]: parseModelPreference(settings[FAST_MODEL_KEY]),
-        [IMAGE_MODEL_KEY]: parseModelPreference(settings[IMAGE_MODEL_KEY]),
-      });
-      setLoaded(true);
-    } catch (e) {
-      if (!isStale()) setLoadError(errorText(e));
-    }
-  }, []);
+  /** Load the stored preferences once, from the shared settings store. */
+  const settingsState = useSettings();
+  useEffect(() => {
+    if (!settingsState.loaded || settingsState.error !== null) return;
+    setValues({
+      [FAST_MODEL_KEY]: parseModelPreference(
+        settingsState.values[FAST_MODEL_KEY],
+      ),
+      [IMAGE_MODEL_KEY]: parseModelPreference(
+        settingsState.values[IMAGE_MODEL_KEY],
+      ),
+    });
+    setLoaded(true);
+  }, [settingsState.loaded, settingsState.error, settingsState.values]);
+  useEffect(() => {
+    if (settingsState.error !== null) setLoadError(settingsState.error);
+  }, [settingsState.error]);
 
   /** The stored + supported thinking levels of every thinking-capable
    * row, derived from the model catalog once its provider's models
@@ -198,7 +200,10 @@ export function ModelPreferencePanel(
     setSaving(rowKey);
     setSaveError(undefined);
     try {
-      await api.setSetting(rowKey, pref ? serializeModelPreference(pref) : "");
+      await settingsStore.set(
+        rowKey,
+        pref ? serializeModelPreference(pref) : "",
+      );
       setValues((prev) => ({ ...prev, [rowKey]: pref }));
       // Keep the picker open after a model pick so the thinking pane can
       // be tuned for the new model in the same opening (it closes on
