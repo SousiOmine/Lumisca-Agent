@@ -406,6 +406,10 @@ export class SessionAgent {
    * `session_error` event, never through the returned promise — the
    * fire-and-forget HTTP path listens on events instead, so awaiting here
    * only means "the run finished". */
+  async prompt(text: string, images?: ImageContent[]): Promise<void> {
+    await this.runPrompt(text, images, { firstMessageText: text });
+  }
+
   /** Reset the retry state for a fresh exchange. A user prompt, a
    * notification that starts its own run, or a goal-loop turn all start a
    * fresh exchange: they do not inherit the previous run's
@@ -414,30 +418,95 @@ export class SessionAgent {
     this.retry.reset();
   }
 
-  async prompt(text: string, images?: ImageContent[]): Promise<void> {
+  /**
+   * The ONE way an exchange starts from a message the user (or a routine)
+   * supplied. Every prompt path is a thin wrapper over this:
+   *
+   * - `prompt` (awaited, no title/routine extras),
+   * - `runRoutine` (carries the routine's name and returns its failure),
+   * - `deliverPrompt` (a fire-and-forget prompt, possibly a mode prompt),
+   * - `runMainTurn` (the goal loop's own turn: no goal loop recursion).
+   *
+   * The four used to repeat the same "wait for MCP → publish contexts →
+   * announce → reset retries → prompt → resume parked restarts → maybe run
+   * the goal loop" sequence, so a change to any step (the context publish a
+   * notification-driven run was missing) had to be made four times.
+   *
+   * `message` is already built and announced by callers that had to decide
+   * its shape before the wait (see promptWhileRunning); everything else is
+   * done here.
+   */
+  private async runPrompt(
+    text: string,
+    images: ImageContent[] | undefined,
+    options: {
+      /** The routine whose run this is (stamped so its stop button only
+       * interrupts its own run). */
+      routine?: { id: string; name: string };
+      /** A mode prompt: stored as a ModeMessage and used to start the goal
+       * mode's loop. */
+      mode?: ModePrompt;
+      /** Whether the goal loop may run after this turn (the loop's own
+       * turns pass false so they cannot recurse). */
+      runGoalLoop?: boolean;
+      /** Called before the first LLM request (title generation). */
+      firstMessageText?: string;
+      /** A message the caller already built AND announced (promptWhileRunning
+       * had to decide its `steered` stamp before waiting on a rewind). The
+       * run then does not rebuild or re-announce it. */
+      announced?: AgentMessage;
+    } = {},
+  ): Promise<{ failure: string | null }> {
     if (!this.mcp.done) await this.mcp.waitReady();
-    await this.rewinder.settle();
-    // The same delivery fact promptWhileRunning stamps: a prompt delivered
-    // while a run is active is queued into that run by the agent loop
-    // instead of starting one of its own (see Agent.prompt).
-    const message = this.buildUserMessage(text, images, this.joinsActiveRun());
+    // Skipped entirely when no rewind runs, so a fire-and-forget delivery
+    // reaches the agent in the caller's task (no microtask window in which
+    // waitForIdle could report the run finished).
+    if (this.rewinder.busy) await this.rewinder.settle();
+    if (this.closed) return { failure: null };
+    if (options.firstMessageText !== undefined) {
+      this.maybeGenerateTitle(options.firstMessageText);
+    }
+    // The delivery fact the announcement carries must describe the delivery
+    // below: a prompt delivered while a run is active is queued into that
+    // run by the agent loop instead of starting one of its own.
+    const message = options.announced ??
+      (options.mode !== undefined
+        ? buildModeMessage(
+          options.mode,
+          text,
+          images ?? [],
+          Date.now(),
+          this.joinsActiveRun(),
+        )
+        : this.buildUserMessage(
+          text,
+          images,
+          this.joinsActiveRun(),
+          options.routine?.name,
+        ));
     this.publishContexts();
-    this.maybeGenerateTitle(text);
-    this.announceMessage(message);
-    // A user prompt starts a fresh exchange: it does not inherit the
-    // previous run's vacant-response history.
+    if (options.announced === undefined) this.announceMessage(message);
+    if (options.mode !== undefined) this.startGoalIfNeeded(options.mode);
     this.resetRetryState();
+    if (options.routine !== undefined) {
+      this.activeRoutineId = options.routine.id;
+    }
+    let failure: string | null = null;
     try {
       await this.agent.prompt(message);
     } catch (error) {
+      failure = errorMessage(error);
       this.emit({
         type: "session_error",
         sessionId: this.sessionId,
-        message: errorMessage(error),
+        message: failure,
       });
+    } finally {
+      this.activeRoutineId = null;
     }
     await this.resumeAfterErrorRun();
-    await this.maybeRunGoalLoop();
+    if (options.runGoalLoop !== false) await this.maybeRunGoalLoop();
+    return { failure };
   }
 
   /** Kick off title generation on the first prompt of a fresh session (no
@@ -460,51 +529,17 @@ export class SessionAgent {
   /**
    * Run a routine's prompt to completion and report how it went.
    *
-   * Deliberately NOT a variant of `prompt`: a routine's run is awaited by
-   * the scheduler (it needs the outcome to record it) and it carries the
-   * routine's name on the message, so the user sees which routine spoke.
-   * Errors are returned, not emitted: the run's failure belongs on the
-   * routine's row (the settings list shows it), while the transcript keeps
-   * its own error row from the normal path.
+   * A routine's run is awaited by the scheduler (it needs the outcome to
+   * record it) and it carries the routine's name on the message, so the user
+   * sees which routine spoke. The failure is ALSO returned, not only emitted:
+   * the run's failure belongs on the routine's row (the settings list shows
+   * it), while the transcript keeps its own error row from the normal path.
    */
   async runRoutine(
     text: string,
     routine: { id: string; name: string },
   ): Promise<{ failure: string | null }> {
-    if (!this.mcp.done) await this.mcp.waitReady();
-    await this.rewinder.settle();
-    const message = this.buildUserMessage(
-      text,
-      undefined,
-      this.joinsActiveRun(),
-      routine.name,
-    );
-    this.publishContexts();
-    this.announceMessage(message);
-    this.resetRetryState();
-    // Stamped for the scheduler's stop: only the run a routine started may
-    // be interrupted by that routine's stop button.
-    this.activeRoutineId = routine.id;
-    let failure: string | null = null;
-    const unsubscribe = this.subscribeToRun((event) => {
-      if (event.type === "session_error") failure = event.message;
-    });
-    try {
-      await this.agent.prompt(message);
-    } catch (error) {
-      failure = errorMessage(error);
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message: failure,
-      });
-    } finally {
-      this.activeRoutineId = null;
-      unsubscribe();
-    }
-    await this.resumeAfterErrorRun();
-    await this.maybeRunGoalLoop();
-    return { failure };
+    return await this.runPrompt(text, undefined, { routine });
   }
 
   /** The routine whose run is in flight, or null for any other run. The
@@ -556,6 +591,7 @@ export class SessionAgent {
     mode?: ModePrompt,
     routine?: string,
   ): void {
+    // The first prompt of a session names it, whichever path delivered it.
     this.maybeGenerateTitle(mode ? mode.shortText : text);
     // Decided before the message is built: the stamp must describe the
     // delivery below, and the condition is the one deliverPrompt re-checks.
@@ -590,23 +626,23 @@ export class SessionAgent {
     mode?: ModePrompt,
   ): Promise<void> {
     try {
-      // Skipped entirely when no rewind runs: the steer decision below then
-      // stays in the caller's task (no microtask window for an abort to slip
-      // between the check and the delivery).
+      // A rewind in flight is about to abort the run: wait for it (runPrompt
+      // does the same before its own run), so this message is not truncated
+      // away with the messages the rewind removes.
       if (this.rewinder.busy) await this.rewinder.settle();
       if (this.closed) return;
       if (this.joinsActiveRun()) {
         this.agent.steer(message);
         return;
       }
-      // Starting a run from user input resets the vacant-response history
-      // (same contract as prompt()); a steer joins the current run and
-      // leaves the counter alone.
-      this.resetRetryState();
-      if (mode !== undefined) this.startGoalIfNeeded(mode);
-      await this.startRun(message);
+      // The text is only used when runPrompt builds the message; here the
+      // caller already did (its `steered` stamp had to be decided earlier).
+      await this.runPrompt("", undefined, {
+        announced: message,
+        ...(mode !== undefined ? { mode } : {}),
+      });
     } catch (error) {
-      // startRun reports its own failures; this guard only exists so a
+      // runPrompt reports its own failures; this guard only exists so a
       // fire-and-forget delivery can never become an unhandled rejection.
       this.emit({
         type: "session_error",
@@ -644,48 +680,12 @@ export class SessionAgent {
     this.emit({ type: "message_end", sessionId: this.sessionId, message });
   }
 
-  /** Start a run that carries a pre-built message (a user prompt or a
-   * notification). MCP attachment may still be in flight (a prompt sent
-   * right after session creation), so wait for it; a message for a run that
-   * is already active is queued by the agent itself (see Agent.prompt). A
-   * silent-error restart parked during the run is resumed afterwards, then
-   * the goal loop (when active) judges and continues.
-   *
-   * A run that dies with an exception (no turn to report) surfaces as a
-   * session_error: re-delivering the message would duplicate it in the
-   * transcript, and a message that was aborted must stay aborted. */
-  private async startRun(message: AgentMessage): Promise<void> {
-    if (!this.mcp.done) await this.mcp.waitReady();
-    try {
-      await this.agent.prompt(message);
-    } catch (error) {
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message: errorMessage(error),
-      });
-    }
-    await this.resumeAfterErrorRun();
-    await this.maybeRunGoalLoop();
-  }
-
   /** One main-agent turn without triggering the goal loop (the loop's own
    * `runTurn`): the judge's next prompt runs to completion, then the loop
-   * judges again. Separated from startRun/prompt so injected turns do not
-   * recurse into the loop. */
+   * judges again. `runGoalLoop: false` is what keeps injected turns from
+   * recursing into the loop. */
   private async runMainTurn(instruction: string): Promise<void> {
-    this.resetRetryState();
-    this.publishContexts();
-    try {
-      await this.agent.prompt(instruction);
-    } catch (error) {
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message: errorMessage(error),
-      });
-    }
-    await this.resumeAfterErrorRun();
+    await this.runPrompt(instruction, undefined, { runGoalLoop: false });
   }
 
   /** Best-effort title generation from the first user message. Failures
@@ -737,8 +737,8 @@ export class SessionAgent {
     this.emit({ type: "message_start", sessionId: this.sessionId, message });
     this.emit({ type: "message_end", sessionId: this.sessionId, message });
     // Same delivery contract as a user prompt: a notification that starts
-    // its own run begins a fresh exchange (resetRetryState) and waits for
-    // MCP attachment inside startRun; a steer joins the current run.
+    // its own run begins a fresh exchange and waits for MCP attachment
+    // inside runPrompt; a steer joins the current run.
     void this.deliverPrompt(message);
   }
 
@@ -1073,9 +1073,9 @@ export class SessionAgent {
 
   /** Restart a run that a silent-error turn killed: the parked retry
    * notification becomes the next prompt once the dead run has fully
-   * settled, so both run callers — prompt() (an awaited run) and startRun()
-   * (web / injected notifications) — hold off reporting completion until
-   * the restart chain has finished.
+   * settled, so every run caller — prompt() (an awaited run) and the
+   * fire-and-forget deliveries (web prompts, injected notifications) —
+   * holds off reporting completion until the restart chain has finished.
    *
    * A restart parked by a context overflow condenses the history first: the
    * request that was rejected cannot be re-sent unchanged, so the forced
