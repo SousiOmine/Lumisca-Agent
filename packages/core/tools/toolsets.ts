@@ -159,49 +159,50 @@ export interface ToolBackends {
   runner: CommandRunner;
 }
 
-/** Build the standard coding tool set, sandboxed to a workspace. */
+/** Build the standard coding tool set, sandboxed to a workspace.
+ *
+ * The list is a table rather than a chain of conditionals: a tool either
+ * needs something the caller may not have (an option), or it does not, and
+ * that is the one thing the table says. Adding a tool means adding a row —
+ * the shape `...(... ? [x] : [])` that every row used to repeat is what
+ * made the three sets drift apart. */
 export function createCodingTools(
   workspace: Workspace,
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
   const backends = options.backends ?? hostBackends(workspace);
   const { files, runner } = backends;
-
-  return [
-    ...fileTools(files),
-    createBashTool({
-      files,
-      runner,
-      env: options.env,
-      safety: options.safety,
-    }),
-    ...(options.background !== undefined
+  const skills = sessionSkills(workspace.folders, {
+    browserAvailable: options.browserAvailable,
+    computerAvailable: options.computerAvailable,
+  });
+  // Each row: the tool(s), or nothing when the option it needs is absent.
+  const rows: Array<Tool | Tool[] | undefined> = [
+    fileTools(files),
+    createBashTool({ files, runner, env: options.env, safety: options.safety }),
+    options.background !== undefined
       ? createAsyncBashTools({
         manager: options.background,
         files,
         safety: options.safety,
       })
-      : []),
+      : undefined,
     createEvalTool({ safety: options.safety }),
-    ...(options.attach !== undefined
-      ? [createChatAttachTool({ files, ...options.attach })]
-      : []),
-    ...(options.visuals !== undefined
-      ? [createVisualTool({ files, ...options.visuals })]
-      : []),
-    ...(options.webSearch !== undefined
+    options.attach !== undefined
+      ? createChatAttachTool({ files, ...options.attach })
+      : undefined,
+    options.visuals !== undefined
+      ? createVisualTool({ files, ...options.visuals })
+      : undefined,
+    options.webSearch !== undefined
       ? createWebSearchTools(options.webSearch)
-      : []),
-    createSkillTool({
-      skills: sessionSkills(workspace.folders, {
-        browserAvailable: options.browserAvailable,
-        computerAvailable: options.computerAvailable,
-      }),
-    }),
-    ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
-    ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
-    ...(options.task !== undefined ? options.task.parentTools() : []),
+      : undefined,
+    createSkillTool({ skills }),
+    options.ask !== undefined ? createAskTool(options.ask) : undefined,
+    options.todo !== undefined ? createTodoTool(options.todo) : undefined,
+    options.task?.parentTools(),
   ];
+  return rows.flatMap((row) => row === undefined ? [] : [row].flat());
 }
 
 /**
@@ -276,34 +277,35 @@ export function createStellaTools(options: {
   safety?: CommandSafety;
 }): Tool[] {
   const { files, runner } = options.backends;
-  return [
-    ...fileTools(files),
+  const rows: Array<Tool | Tool[] | undefined> = [
+    fileTools(files),
     createBashTool({
       files,
       runner,
       safety: options.safety,
       defaultCwd: options.cwd,
     }),
-    ...(options.background !== undefined
+    options.background !== undefined
       ? createAsyncBashTools({
         manager: options.background,
         files,
         safety: options.safety,
         defaultCwd: options.cwd,
       })
-      : []),
-    ...options.screen,
-    ...(options.chatUi !== undefined ? [options.chatUi] : []),
-    ...(options.attach !== undefined
-      ? [createChatAttachTool({ files, ...options.attach })]
-      : []),
-    ...(options.history !== undefined ? [options.history] : []),
-    ...(options.webSearch !== undefined
+      : undefined,
+    options.screen,
+    options.chatUi,
+    options.attach !== undefined
+      ? createChatAttachTool({ files, ...options.attach })
+      : undefined,
+    options.history,
+    options.webSearch !== undefined
       ? createWebSearchTools(options.webSearch)
-      : []),
+      : undefined,
     createSkillTool({ skills: options.skills }),
-    ...(options.task !== undefined ? options.task.parentTools() : []),
+    options.task?.parentTools(),
   ];
+  return rows.flatMap((row) => row === undefined ? [] : [row].flat());
 }
 
 /** Build the tool set of a chat session ("simple chat" without a
@@ -316,10 +318,10 @@ export function createStellaTools(options: {
 export function createChatTools(
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
-  return [
-    ...(options.webSearch !== undefined
+  const rows: Array<Tool | Tool[] | undefined> = [
+    options.webSearch !== undefined
       ? createWebSearchTools(options.webSearch)
-      : []),
+      : undefined,
     // Only global skills apply (no workspace folders to discover from).
     createSkillTool({
       skills: sessionSkills([], {
@@ -327,7 +329,8 @@ export function createChatTools(
         computerAvailable: options.computerAvailable,
       }),
     }),
-    ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
-    ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
+    options.ask !== undefined ? createAskTool(options.ask) : undefined,
+    options.todo !== undefined ? createTodoTool(options.todo) : undefined,
   ];
+  return rows.flatMap((row) => row === undefined ? [] : [row].flat());
 }
