@@ -46,7 +46,6 @@ import { useProviderModels } from "../providers.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { useSkills } from "../hooks/useSkills.ts";
 import { useT } from "../i18n.ts";
-import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
 import { Transcript } from "./Transcript.tsx";
 
 export { buildTurns } from "./chat/ConversationTurn.tsx";
@@ -118,7 +117,10 @@ export function ChatView(
     onOpenSettings,
   }: ChatViewProps,
 ) {
-  const { pinOnNextContent } = useTranscriptScroll();
+  // The transcript owns the scroll element, so a submit can only ASK it to
+  // jump (see TranscriptScrollOptions.pinToken): this view holds the intent,
+  // not the ref.
+  const [pinToken, setPinToken] = useState(0);
   const t = useT();
   const isRunning = isViewRunning(view);
 
@@ -206,7 +208,7 @@ export function ChatView(
     onPrompt(text, images, mode);
     onInputChange("");
     onImagesChange([]);
-    pinOnNextContent();
+    setPinToken((token) => token + 1);
   };
 
   /** A `run` or `action` command was picked at the start of the input (the
@@ -332,6 +334,7 @@ export function ChatView(
         onLoadOlder={onLoadOlder}
         loadingOlder={loadingOlder}
         hasOlder={view.older !== null}
+        pinToken={pinToken}
         streamingText={view.streamingText}
         runningTools={view.runningTools}
         running={isRunning}

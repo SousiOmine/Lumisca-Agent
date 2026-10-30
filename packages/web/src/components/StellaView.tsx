@@ -4,7 +4,6 @@ import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useT } from "../i18n.ts";
 import type { AppModeStatus } from "../types.ts";
 import { Composer } from "./Composer.tsx";
-import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
 import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
 import type { StellaConversationState } from "../stella-state.ts";
@@ -81,7 +80,9 @@ export function StellaView(
   }: StellaViewProps,
 ) {
   const t = useT();
-  const { pinOnNextContent } = useTranscriptScroll();
+  // The transcript owns the scroll element (see TranscriptScrollOptions.
+  // pinToken): this view only records that a submit happened.
+  const [pinToken, setPinToken] = useState(0);
   const visualBase = sessionVisualBase("", sessionId ?? "");
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const isRunning = conversation?.running === true;
@@ -104,7 +105,7 @@ export function StellaView(
     if (text.length === 0 || conversation === null) return;
     onPrompt(text);
     onInputChange("");
-    pinOnNextContent();
+    setPinToken((token) => token + 1);
   };
 
   /** A rewind refills the composer with the message's text, so a corrected
@@ -162,6 +163,7 @@ export function StellaView(
               onSend={(text) => onPrompt(text)}
               onLoadOlder={onLoadOlder}
               loadingOlder={loadingOlder}
+              pinToken={pinToken}
             />
           )}
         <div className="input-area">

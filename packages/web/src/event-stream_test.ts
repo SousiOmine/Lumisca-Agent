@@ -102,7 +102,10 @@ Deno.test("openEventStream: a dropped socket reports the close", () => {
       () => closed++,
     );
     const socket = FakeSocket.last!;
-    assertEquals(socket.url, "ws://127.0.0.1:8000/stella/conversations/a/events");
+    assertEquals(
+      socket.url,
+      "ws://127.0.0.1:8000/stella/conversations/a/events",
+    );
     socket.onclose!();
     assertEquals(closed, 1);
   } finally {

@@ -32,6 +32,7 @@ export function StellaTranscript({
   onSend,
   onLoadOlder,
   loadingOlder,
+  pinToken,
 }: {
   conversation: StellaConversationState;
   /** Asset base of the conversation (see MarkdownBlock). */
@@ -47,6 +48,10 @@ export function StellaTranscript({
   onLoadOlder: () => boolean;
   /** Whether that read is still in flight. */
   loadingOlder: boolean;
+  /** Bumped on submit: this component owns the scroll element, so the jump
+   * to the newest entry has to arrive as a prop (see useTranscriptScroll's
+   * pinToken). */
+  pinToken?: number;
 }) {
   // The transcript holds a WINDOW of the conversation (see the core's
   // session/transcript-window.ts): reaching the top reads the page before it
@@ -57,6 +62,7 @@ export function StellaTranscript({
     onReachTop: () => conversation.older !== null && onLoadOlder(),
     loadingOlder,
     firstMessageKey: first === undefined ? undefined : entryKey(first),
+    pinToken,
   });
 
   return (

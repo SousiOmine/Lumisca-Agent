@@ -19,6 +19,10 @@ interface TranscriptProps {
   hasOlder: boolean;
   /** Whether a read started by onLoadOlder is still in flight. */
   loadingOlder: boolean;
+  /** Bumped by the view on submit; the transcript owns the scroll element,
+   * so the "jump to the newest message" intent has to arrive here (see
+   * useTranscriptScroll's pinToken). */
+  pinToken?: number;
   streamingText: string;
   runningTools: SessionView["runningTools"];
   /** True while a run is active (the last turn then renders as running). */
@@ -59,6 +63,7 @@ export function Transcript(
     onRewind,
     onSend,
     empty,
+    pinToken,
   }: TranscriptProps,
 ) {
   // The transcript holds a WINDOW of the session's history (see the core's
@@ -71,6 +76,7 @@ export function Transcript(
     firstMessageKey: messages[0] === undefined
       ? undefined
       : messageKey(messages[0]),
+    pinToken,
   });
   const turns = useMemo(() => buildTurns(messages), [messages]);
   const toolResults = useMemo(() => {

@@ -29,6 +29,12 @@ export interface TranscriptScrollOptions {
   /** Identity of the first message the transcript holds (see the web's
    * messageKey). A change means history was inserted above it. */
   firstMessageKey?: string;
+  /** Bumped by the view when a message is submitted. The transcript that
+   * OWNS the scroll element is the one that has to react, so the intent
+   * travels as a prop instead of being called on the caller's own (empty)
+   * hook instance: the composer's view has no scroll element, and calling
+   * `pinOnNextContent` there set a flag on a ref nobody read. */
+  pinToken?: number;
 }
 
 /** Distance from the top (px) at which the previous window is requested. */
@@ -158,6 +164,9 @@ export function useTranscriptScroll(
     el.scrollTop = held.top + (el.scrollHeight - held.height);
   }, [firstKey, loadingOlder]);
 
+  /** Force the next content change to scroll to the bottom. The hook's own
+   * view can call it; a parent that does not own the element passes
+   * `pinToken` instead (see TranscriptScrollOptions.pinToken). */
   const pinOnNextContent = useCallback(() => {
     pendingSubmit.current = true;
     holding.current = false;
@@ -165,6 +174,17 @@ export function useTranscriptScroll(
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
+
+  // The parent's submit: pin once per token value. Tracked in a ref so the
+  // effect does not re-run for the token alone (the pin itself is a one-shot
+  // intent, not a re-render trigger).
+  const lastPinToken = useRef(options.pinToken);
+  useEffect(() => {
+    if (options.pinToken === undefined) return;
+    if (lastPinToken.current === options.pinToken) return;
+    lastPinToken.current = options.pinToken;
+    pinOnNextContent();
+  }, [options.pinToken, pinOnNextContent]);
 
   return { scrollRef, pinOnNextContent };
 }
