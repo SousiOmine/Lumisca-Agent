@@ -1,7 +1,6 @@
 import type { ClientEvent, ThinkingLevel } from "./types.ts";
-import { WS_HEARTBEAT_TYPE } from "@lumisca/core/shared";
-import { createHeartbeatWatchdog } from "./heartbeat.ts";
-import { peerRouted, tabCalls, token } from "./api-client.ts";
+import { peerRouted, tabCalls } from "./api-client.ts";
+import { type EventStreamOptions, openEventStream } from "./event-stream.ts";
 import { api, sessionRoutes } from "./api-local.ts";
 import { fed } from "./api-federation.ts";
 import { splitTabKey } from "./tabs.ts";
@@ -94,76 +93,22 @@ export function modelApi(peerId: string) {
   };
 }
 
-/** Connect to the WebSocket event stream. Returns a close function.
+/** Connect to the session event stream. Returns a close function.
  * Same origin as the page (the server serves both UI and API).
  * `onOpen` fires on every (re)connection so callers can re-sync state.
  *
  * The stream carries transport-level heartbeat frames (see
- * core/shared/heartbeat.ts): they are swallowed here and only refresh the
- * liveness watchdog, so no caller ever sees one. A socket that stays silent
- * past the deadline — a link that died without a close event, which is
- * exactly what an idle stream over a NAT/mobile network looks like — is
- * closed, firing the normal `onClose` path: re-sync and reconnect. */
+ * core/shared/heartbeat.ts): they are swallowed by the shared stream (see
+ * event-stream.ts) and only refresh the liveness watchdog, so no caller ever
+ * sees one. A socket that stays silent past the deadline — a link that died
+ * without a close event, which is exactly what an idle stream over a
+ * NAT/mobile network looks like — is closed, firing the normal `onClose`
+ * path: re-sync and reconnect. */
 export function connectEvents(
   onEvent: (event: ClientEvent) => void,
   onClose: () => void,
   onOpen?: () => void,
-  /** Timing overrides for the watchdog (tests drive it with tiny values). */
-  timings: { heartbeatTimeoutMs?: number; heartbeatCheckMs?: number } = {},
+  timings: EventStreamOptions["timings"] = {},
 ): () => void {
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  // Browsers cannot set WS headers, so an enabled token travels in the URL.
-  const suffix = token ? `?token=${encodeURIComponent(token)}` : "";
-  const ws = new WebSocket(`${proto}//${location.host}/ws${suffix}`);
-  let closed = false;
-
-  const watchdog = createHeartbeatWatchdog({
-    onDead: () => {
-      // Closing is the recovery: onclose re-syncs and reconnects.
-      try {
-        ws.close();
-      } catch {
-        // already closed
-      }
-    },
-    ...(timings.heartbeatTimeoutMs === undefined
-      ? {}
-      : { timeoutMs: timings.heartbeatTimeoutMs }),
-    ...(timings.heartbeatCheckMs === undefined
-      ? {}
-      : { checkMs: timings.heartbeatCheckMs }),
-  });
-  // A hidden page's timers are throttled, so its silence is not evidence;
-  // judge the deadline as soon as the page is visible again.
-  const onVisibility = () => {
-    if (!document.hidden) watchdog.check();
-  };
-  document.addEventListener("visibilitychange", onVisibility);
-
-  ws.onopen = () => {
-    watchdog.beat();
-    onOpen?.();
-  };
-  ws.onmessage = (e) => {
-    watchdog.beat();
-    try {
-      const parsed = JSON.parse(String(e.data)) as { type?: string };
-      // Heartbeats are transport-level: they never reach the caller.
-      if (parsed?.type === WS_HEARTBEAT_TYPE) return;
-      onEvent(parsed as ClientEvent);
-    } catch {
-      // ignore malformed messages
-    }
-  };
-  ws.onclose = () => {
-    watchdog.stop();
-    if (!closed) onClose();
-  };
-
-  return () => {
-    closed = true;
-    watchdog.stop();
-    document.removeEventListener("visibilitychange", onVisibility);
-    ws.close();
-  };
+  return openEventStream({ path: "/ws", timings }, onEvent, onClose, onOpen);
 }

@@ -3,9 +3,8 @@ import type {
   StellaConversationSnapshot,
   StellaEvent,
 } from "./types.ts";
-import { WS_HEARTBEAT_TYPE } from "@lumisca/core/shared";
-import { createHeartbeatWatchdog } from "./heartbeat.ts";
-import { request, token } from "./api-client.ts";
+import { request } from "./api-client.ts";
+import { openEventStream } from "./event-stream.ts";
 
 /**
  * The stella conversation API: one surface of its own, bound to an agent.
@@ -86,61 +85,20 @@ export const stellaApi = {
 
 /** Connect to one conversation's event stream. Returns a close function.
  *
- * The contract mirrors connectEvents (heartbeat watchdog, re-sync on
- * reconnect), and differs in only one way: the frames are `StellaEvent`s —
- * the conversation's events — with no session id and none of the model's
- * traffic. */
+ * The contract is the shared one (see event-stream.ts: heartbeat watchdog,
+ * re-sync on reconnect); only the path and the frame type differ. The frames
+ * are `StellaEvent`s — the conversation's events — with no session id and
+ * none of the model's traffic. */
 export function connectStellaEvents(
   agentId: string,
   onEvent: (event: StellaEvent) => void,
   onClose: () => void,
   onOpen?: () => void,
 ): () => void {
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const suffix = token ? `?token=${encodeURIComponent(token)}` : "";
-  const ws = new WebSocket(
-    `${proto}//${location.host}${
-      conversationPath(agentId, "/events")
-    }${suffix}`,
+  return openEventStream(
+    { path: conversationPath(agentId, "/events") },
+    onEvent,
+    onClose,
+    onOpen,
   );
-  let closed = false;
-  const watchdog = createHeartbeatWatchdog({
-    onDead: () => {
-      try {
-        ws.close();
-      } catch {
-        // already closed
-      }
-    },
-  });
-  const onVisibility = () => {
-    if (!document.hidden) watchdog.check();
-  };
-  document.addEventListener("visibilitychange", onVisibility);
-
-  ws.onopen = () => {
-    watchdog.beat();
-    onOpen?.();
-  };
-  ws.onmessage = (e) => {
-    watchdog.beat();
-    try {
-      const parsed = JSON.parse(String(e.data)) as { type?: string };
-      if (parsed?.type === WS_HEARTBEAT_TYPE) return;
-      onEvent(parsed as StellaEvent);
-    } catch {
-      // ignore malformed messages
-    }
-  };
-  ws.onclose = () => {
-    watchdog.stop();
-    if (!closed) onClose();
-  };
-
-  return () => {
-    closed = true;
-    watchdog.stop();
-    document.removeEventListener("visibilitychange", onVisibility);
-    ws.close();
-  };
 }
