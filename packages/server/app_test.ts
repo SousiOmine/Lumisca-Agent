@@ -2282,8 +2282,15 @@ Deno.test("server bundles and serves the client app", async () => {
     const res = await fetch(`${base}/assets/app.js`);
     assertEquals(res.status, 200);
     const js = await res.text();
-    assertEquals(js.length > 100_000, true, "bundle should include the app");
+    // The entry point is what proves the bundle is the app rather than an
+    // empty or stale file; a byte count only ever approximated that (it
+    // breaks whenever the UI happens to shrink and passes for a bundle that
+    // compiled the wrong entry).
     assertEquals(js.includes("input-composer"), true);
+    assert(
+      js.length > 10_000,
+      `the bundle is ${js.length} bytes: too small to hold the client app`,
+    );
   } finally {
     server.shutdown();
     core.close();

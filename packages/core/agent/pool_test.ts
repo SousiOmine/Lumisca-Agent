@@ -258,9 +258,16 @@ Deno.test("pool.applyMcpConfigChange leaves closed sessions alone", () => {
 });
 
 Deno.test("pool.setThinkingLevel ignores a closed session", () => {
-  const { pool } = makePool();
-  // No throw: the level is read from settings on the next open().
+  // The level is read from settings on the next open(), so a session that is
+  // not open must be a silent no-op — not a throw (a stale tab keeps asking)
+  // and not a write to some other session. `pool.require` is the throwing
+  // accessor; this one is deliberately not it.
+  const { pool, teardown } = makePool();
   pool.setThinkingLevel("missing", "high");
+  assertEquals(teardown.agentClosed, 0);
+  assertEquals(teardown.mcpRefreshed, 0);
+  // Nothing got opened as a side effect either: a closed session stays closed.
+  assertThrows(() => pool.require("missing"));
 });
 
 Deno.test("pool.rebuild ignores a session that is not open", () => {

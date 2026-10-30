@@ -1,17 +1,18 @@
 import { DatabaseSync } from "node:sqlite";
-import { IconMoon, IconPlus, IconSun } from "@tabler/icons-preact";
-import { createElement } from "preact";
-import { renderToString } from "preact-render-to-string";
 import { assertEquals } from "@std/assert";
 
 /**
- * Stack smoke tests: verify that the external building blocks with no
- * dedicated suite (node:sqlite, tabler icons SSR) work under Deno. These
- * guard against silent incompatibilities when the stack is upgraded.
+ * Stack smoke test: verify that the external building block with no dedicated
+ * suite (node:sqlite) works under Deno. It guards against silent
+ * incompatibilities when the stack is upgraded.
  *
  * The agent and model-registry scenarios live in their own suites
  * (ai/agent_test.ts, agent/session-agent_test.ts,
- * models/extra-providers_test.ts) — not duplicated here.
+ * models/extra-providers_test.ts) — not duplicated here. The tabler icons
+ * used to have a case here too; the components that draw them
+ * (components/TabBar_test.tsx) render them through the same
+ * preact-render-to-string path and assert the `<svg class="tabler-icon">`
+ * markup, so a broken icon package fails there first.
  */
 
 Deno.test("node:sqlite works in Deno", () => {
@@ -30,22 +31,4 @@ Deno.test("node:sqlite works in Deno", () => {
   };
   assertEquals(row.name, "my-workspace");
   db.close();
-});
-
-Deno.test("tabler icons render in Deno (SSR)", () => {
-  const html = renderToString(
-    createElement(
-      "div",
-      null,
-      createElement(IconPlus, { size: 16 }),
-      createElement(IconMoon, { size: 16 }),
-      createElement(IconSun, { size: 16 }),
-    ),
-  );
-  if (!html.includes("<svg")) {
-    throw new Error(`expected svg output, got: ${html.slice(0, 120)}`);
-  }
-  if (!html.includes('class="tabler-icon')) {
-    throw new Error(`expected tabler-icon class: ${html.slice(0, 200)}`);
-  }
 });

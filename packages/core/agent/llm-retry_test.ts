@@ -7,86 +7,57 @@ import {
   PROVIDER_DEFAULT_MAX_RETRIES,
 } from "./llm-retry.ts";
 
-function rateLimited(message: string): ReturnType<typeof fauxAssistantMessage> {
+/**
+ * `llm-retry.ts` is two thin adapters: a message-level view of the shared
+ * rate-limit classifier (`ai/rate-limit.ts`) and the provider retry budget.
+ *
+ * The classifier's wording — which 429s retry and which quota limits do not
+ * — is pinned once, in ai/rate-limit_test.ts. Copying that table here would
+ * let the two copies drift while the implementation they describe stays
+ * single. What this file has to prove is the message-level contract the
+ * classifier does not cover: only an error-stopped turn is a candidate at
+ * all, and the budget is filled without disturbing the caller's options.
+ */
+
+/** An error-stopped turn carrying a 429 (retryable wording). */
+function rateLimited(message: string) {
   return fauxAssistantMessage("", {
     stopReason: "error",
     errorMessage: message,
   });
 }
 
-Deno.test("isRetryableRateLimit: openai 429 rate_limit_exceeded qualifies", () => {
+Deno.test("isRetryableRateLimit reaches the shared classifier", () => {
+  // The retryable wording and its excluded quota cousins are one decision,
+  // made in ai/rate-limit.ts; one round trip each way is enough to prove the
+  // message shape is unwrapped and handed over.
   assertEquals(
     isRetryableRateLimit(
-      rateLimited(
-        "OpenAI API error (429): Rate limit exceeded. Please retry after a brief wait.",
-      ),
+      rateLimited("OpenAI API error (429): rate_limit_exceeded"),
     ),
     true,
   );
   assertEquals(
-    isRetryableRateLimit(
-      rateLimited(
-        "Error from provider: [rate_limit_exceeded] Rate limit exceeded",
-      ),
-    ),
-    true,
+    isRetryableRateLimit(rateLimited("insufficient_quota: out of budget")),
+    false,
   );
-  assertEquals(
-    isRetryableRateLimit(rateLimited("429 Too Many Requests")),
-    true,
-  );
-  assertEquals(
-    isRetryableRateLimit(
-      rateLimited("Upstream returned HTTP 429 (too many requests)"),
-    ),
-    true,
-  );
+  assertEquals(isRetryableRateLimit(rateLimited("connection reset")), false);
 });
 
-Deno.test("isRetryableRateLimit: quota/billing exhaustion does not", () => {
-  assertEquals(
-    isRetryableRateLimit(
-      rateLimited("insufficient_quota: you have hit your quota"),
-    ),
-    false,
-  );
-  assertEquals(
-    isRetryableRateLimit(rateLimited("quota exceeded for this account")),
-    false,
-  );
-  assertEquals(
-    isRetryableRateLimit(rateLimited("out of budget")),
-    false,
-  );
-  assertEquals(
-    isRetryableRateLimit(
-      rateLimited("GoUsageLimitError: monthly usage limit reached"),
-    ),
-    false,
-  );
-  assertEquals(
-    isRetryableRateLimit(
-      rateLimited("FreeUsageLimitError: enable available balance"),
-    ),
-    false,
-  );
-});
-
-Deno.test("isRetryableRateLimit: non-rate errors do not", () => {
-  // Normal stop, outputless is not an error.
+Deno.test("isRetryableRateLimit: only an error stop is a candidate", () => {
+  // A normal finish is never a failure, and an empty error message leaves
+  // nothing to classify — neither may be retried just because a pattern
+  // happens to sit in some unrelated field.
   assertEquals(isRetryableRateLimit(fauxAssistantMessage("")), false);
   assertEquals(
-    isRetryableRateLimit(
-      rateLimited("Provider is not configured: amazon-bedrock"),
-    ),
-    false,
-  );
-  assertEquals(
-    isRetryableRateLimit(rateLimited("connection reset")),
-    false,
-  );
-  assertEquals(
     isRetryableRateLimit(fauxAssistantMessage("", { stopReason: "aborted" })),
+    false,
+  );
+  assertEquals(
+    isRetryableRateLimit(fauxAssistantMessage("", {
+      stopReason: "error",
+      errorMessage: "",
+    })),
     false,
   );
 });
@@ -105,7 +76,8 @@ Deno.test("applyProviderRetryDefaults fills an unset budget", () => {
 });
 
 Deno.test("applyProviderRetryDefaults leaves a caller's budget alone", () => {
-  // A caller that owns the budget keeps it.
+  // A caller that owns the budget keeps it — the same object, so a caller
+  // comparing identity is not surprised.
   const onlyRetries: StreamOptions = { maxRetries: 1 };
   assertEquals(applyProviderRetryDefaults(onlyRetries), onlyRetries);
 });

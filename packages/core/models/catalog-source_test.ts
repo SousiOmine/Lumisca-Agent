@@ -173,9 +173,25 @@ Deno.test("loadCachedCatalog ignores corrupt caches", async () =>
     assertEquals(loadCachedCatalog(undefined), undefined);
   }));
 
-Deno.test("saveCachedCatalog is a no-op without a directory", () => {
-  saveCachedCatalog(undefined, { providers: minimalProviders() });
-});
+Deno.test("saveCachedCatalog is a no-op without a directory", () =>
+  withTempDir("lumisca-catalog-", (root) => {
+    // No directory means no place to cache (a core in memory): the call must
+    // return quietly rather than fall back to the working directory, which
+    // would scatter `models.json` wherever the process happened to start.
+    const before = [...Deno.readDirSync(root)].map((e) => e.name);
+    saveCachedCatalog(undefined, { providers: minimalProviders() });
+    assertEquals([...Deno.readDirSync(root)].map((e) => e.name), before);
+    assertEquals(
+      [...Deno.readDirSync(Deno.cwd())].some((e) =>
+        e.name === CACHED_CATALOG_FILE
+      ),
+      false,
+    );
+    // The same payload written to a real directory lands, so the no-op above
+    // is about the missing directory and not about the arguments.
+    saveCachedCatalog(root, { providers: minimalProviders() });
+    assertEquals(loadCachedCatalog(root) !== undefined, true);
+  }));
 
 Deno.test("buildCatalogProviders maps a foreign provider map like the snapshot path", () => {
   const fromSnapshot = builtinProviders();

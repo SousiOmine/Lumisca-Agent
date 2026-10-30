@@ -55,6 +55,11 @@ Deno.test("TabBar renders each tab's label, tooltip and active state", () => {
   // Exactly one tab is marked active, and only that one.
   assertEquals(html.match(/aria-selected="true"/g)?.length, 1);
   assertEquals(html.match(/class="tab active"/g)?.length, 1);
+  // The icons are tabler's, server-rendered: a package that stopped emitting
+  // its `<svg class="tabler-icon">` markup (a Deno/Preact upgrade is the
+  // usual cause) would leave the strip with blank buttons. This is the check
+  // that a standalone "icons render in Deno" smoke test used to make.
+  assertStringIncludes(html, 'class="tabler-icon');
 });
 
 Deno.test("TabBar marks a running tab and names the tool it runs", () => {

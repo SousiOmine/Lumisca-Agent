@@ -2,6 +2,11 @@ import { assertEquals } from "@std/assert";
 import type { ConnectionEntry } from "@lumisca/core";
 import { FederationClient } from "./federation.ts";
 
+/** The first reconnect backoff the restart test gives the client. Small
+ * enough that a leaked stream would retry many times during the wait, so the
+ * test still proves the leak; short enough that it costs milliseconds. */
+const RECONNECT_BASE_MS_FOR_TEST = 20;
+
 /** A registry entry as the settings store holds it; only `url` matters to
  * the self-check. */
 function peer(url: string): ConnectionEntry {
@@ -159,6 +164,10 @@ Deno.test("federation: restart leaves one live stream per peer", async () => {
     () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
     // Never this stub, so the peer stays visible.
     () => "http://127.0.0.1:1",
+    // A 20ms first backoff: the orphan this test hunts for would dial in
+    // again several times over the wait below, and the wait stays cheap.
+    // (It used to be 2.5s of real time against the production 2s delay.)
+    RECONNECT_BASE_MS_FOR_TEST,
   );
   try {
     client.start();
@@ -166,9 +175,9 @@ Deno.test("federation: restart leaves one live stream per peer", async () => {
     client.restart();
     await waitFor(() => connections === 2);
     assertEquals(connections, 2, "the restarted peer is connected once");
-    // Past the stream's 2s reconnect backoff: an orphaned stream would dial
-    // in again here, and keep doing so.
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    // Past the backoff (and a few multiples of it): an orphaned stream would
+    // dial in again here, and keep doing so.
+    await new Promise((resolve) => setTimeout(resolve, 250));
     assertEquals(connections, 2, "the dropped stream must not reconnect");
   } finally {
     client.close();

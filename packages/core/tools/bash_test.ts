@@ -5,7 +5,6 @@ import { createBashTool } from "./bash.ts";
 import { HostCommandRunner } from "./host/command-runner.ts";
 import { HostFileBackend } from "./host/files.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
-import { decodeOutput, detectOemLabel } from "./decode.ts";
 import { formatDuration } from "./duration.ts";
 import { defaultSpillDir, MAX_TOOL_OUTPUT } from "./truncate.ts";
 import { removeDirRetry, toolText } from "../test-utils.ts";
@@ -224,18 +223,10 @@ Deno.test({
   },
 });
 
-Deno.test("decodeOutput is stable against the real cmd.exe output", async () => {
-  if (Deno.build.os !== "windows") return;
-  const { stdout } = await new Deno.Command("cmd.exe", {
-    args: ["/d", "/s", "/c", "chcp"],
-    stdout: "piped",
-    stderr: "piped",
-  }).output();
-  const oemLabel = await detectOemLabel();
-  const text = decodeOutput(stdout, oemLabel);
-  assertEquals(text.includes("\uFFFD"), false);
-  assert(/\d{3}/.test(text), `code page missing: ${text}`);
-});
+// `decodeOutput`'s own suite (decode_test.ts) pins the OEM fallback and the
+// replacement-character path; the Windows tests above run the real shell
+// through it. A third copy that returns early on every other platform only
+// meant the test existed but never ran.
 
 Deno.test("bash tool passes env vars to the command", async () => {
   const { tool, root } = makeTool();

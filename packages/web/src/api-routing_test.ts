@@ -347,16 +347,10 @@ Deno.test("api-routing: a peer id containing ':' stays one peer", async () => {
   );
 });
 
-Deno.test("api-routing: tabKey/splitTabKey are the two halves sessionApi reads", () => {
-  // The complement of the tests above: the key builders themselves.
-  assertEquals(tabKey("", "sess-1"), "sess-1");
-  assertEquals(splitTabKey("sess-1"), { peerId: "", sessionId: "sess-1" });
-  assertEquals(tabKey("peer-1", "sess-1"), "peer-1:sess-1");
-  assertEquals(splitTabKey("peer-1:sess-1"), {
-    peerId: "peer-1",
-    sessionId: "sess-1",
-  });
-});
+// The key builders themselves are `tabs.ts`'s own unit, and its suite
+// (tabs_test.ts) pins them across every escaping shape this file only
+// samples one of; the routing tests above already prove sessionApi reads the
+// keys the builders produce.
 
 /** A WebSocket stand-in: connectEvents() only assigns handlers and closes
  * the socket, so the test drives the connection by hand. */

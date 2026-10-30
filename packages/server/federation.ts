@@ -40,6 +40,10 @@ class PeerEventStream {
     /** Announce the stream's state to the hub's UI clients (true when the
      * relay is up, false when it dropped — see ClientEvent's peer_stream). */
     private readonly onState: (connected: boolean) => void,
+    /** First reconnect delay (defaults to the production backoff). A test
+     * observes "the dropped stream never dials in again" by waiting past
+     * this, and it must not have to wait 2 seconds to say so. */
+    private readonly baseDelayMs: number = RECONNECT_BASE_MS,
   ) {}
 
   /** Open the stream (no-op when already connected, dropped, or the client
@@ -108,8 +112,9 @@ class PeerEventStream {
   private scheduleReconnect(): void {
     if (this.closed || this.isClosed() || this.timer !== null) return;
     const delay = Math.min(
-      RECONNECT_BASE_MS * 2 ** this.attempts,
-      RECONNECT_MAX_MS,
+      this.baseDelayMs * 2 ** this.attempts,
+      // The cap scales with the base so a test's short delays stay short.
+      Math.max(RECONNECT_MAX_MS, this.baseDelayMs * 16),
     );
     this.attempts++;
     this.timer = setTimeout(() => {
@@ -137,6 +142,9 @@ export class FederationClient {
     /** The hub's own origin (http://host:port), read lazily — the real
      * port is only known after the listener binds. */
     private readonly getSelfOrigin: () => string,
+    /** First reconnect delay for every peer stream (tests shorten it; the
+     * production value is the 2s backoff). */
+    private readonly reconnectBaseMs: number = RECONNECT_BASE_MS,
   ) {}
 
   /** Peers from the registry, excluding the hub itself. */
@@ -247,6 +255,7 @@ export class FederationClient {
               peerId: peer.id,
               connected,
             }),
+          this.reconnectBaseMs,
         );
         this.streams.set(peer.id, stream);
       }

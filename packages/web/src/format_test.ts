@@ -55,13 +55,25 @@ Deno.test("formatRelativeTime: a week old falls back to a date", () => {
 });
 
 Deno.test("formatDate/formatDateTime: numeric per language", () => {
-  assertEquals(formatDate(NOW, "en"), "9/15/2026");
-  assertEquals(formatDate(NOW, "ja"), "2026/9/15");
-  // Date + time keeps the language's order (the day part is asserted
-  // loosely: the exact separator and clock format are the runtime's).
-  const dateTime = formatDateTime(NOW, "en");
-  assertEquals(dateTime.includes("9/15/2026"), true, dateTime);
-  assertEquals(formatDateTime(NOW, "ja").includes("2026/9/15"), true);
+  // What the app relies on is the order the parts come in — English leads
+  // with the month, Japanese with the year — and that the value is numeric.
+  // The separators and the clock format belong to Intl and change with an
+  // ICU update; pinning them made this test fail on a routine upgrade
+  // without anything in the app having broken.
+  const en = formatDate(NOW, "en");
+  const ja = formatDate(NOW, "ja");
+  assertEquals(/\d/.test(en) && /\d/.test(ja), true, `${en} / ${ja}`);
+  assertEquals(/(^|\D)9(\D|$)/.test(en), true, en);
+  assertEquals(en.indexOf("9") < en.indexOf("2026"), true, `en: ${en}`);
+  assertEquals(ja.indexOf("2026") < ja.indexOf("9"), true, `ja: ${ja}`);
+
+  // Date + time keeps the language's date order and adds a clock.
+  const dateTimeEn = formatDateTime(NOW, "en");
+  assertEquals(dateTimeEn.includes("9"), true, dateTimeEn);
+  assertEquals(dateTimeEn.includes("2026"), true, dateTimeEn);
+  assertEquals(/\d:\d/.test(dateTimeEn), true, dateTimeEn);
+  const dateTimeJa = formatDateTime(NOW, "ja");
+  assertEquals(dateTimeJa.indexOf("2026") < dateTimeJa.indexOf("9"), true);
 });
 
 Deno.test("thinkingLevelLabel: the display names live in the catalogue", () => {

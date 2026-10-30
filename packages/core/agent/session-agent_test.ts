@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import {
   createAssistantMessageEventStream,
   fauxAssistantMessage,
@@ -18,12 +18,7 @@ import type {
 import { object, type Tool } from "../tools/schema.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { NotificationMessage } from "../ai/types.ts";
-import {
-  buildRetryNotification,
-  hasNoVisibleOutput,
-  isSilentErrorResponse,
-  MAX_EMPTY_RESPONSE_RETRIES,
-} from "./retry-policy.ts";
+import { MAX_EMPTY_RESPONSE_RETRIES } from "./retry-policy.ts";
 import { SessionAgent } from "./session-agent.ts";
 import type { SessionAgentOptions } from "./session-agent.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
@@ -194,30 +189,11 @@ Deno.test("stream calls carry the session id (conversation affinity)", async () 
   assertEquals(seen[0]?.sessionId, "s1");
 });
 
-Deno.test("hasNoVisibleOutput: true when there is no text and no tool call", () => {
-  assertEquals(hasNoVisibleOutput(fauxAssistantMessage("")), true);
-  assertEquals(
-    hasNoVisibleOutput(fauxAssistantMessage([fauxThinking("...")])),
-    true,
-  );
-});
-
-Deno.test("hasNoVisibleOutput: false with text or tool calls", () => {
-  assertEquals(hasNoVisibleOutput(fauxAssistantMessage("Hello")), false);
-  assertEquals(
-    hasNoVisibleOutput(
-      fauxAssistantMessage([fauxToolCall("read", { path: "a.txt" })]),
-    ),
-    false,
-  );
-  // Thinking alone is no output, but any text alongside it is.
-  assertEquals(
-    hasNoVisibleOutput(
-      fauxAssistantMessage([fauxThinking("..."), fauxText("Hi")]),
-    ),
-    false,
-  );
-});
+// `hasNoVisibleOutput` / `isSilentErrorResponse` / `buildRetryNotification`
+// are retry-policy.ts's own functions: their cases live in
+// retry-policy_test.ts. The run-level behaviour below (a vacant turn
+// being retried, a silent error restarting, the budgets) is what this
+// file has to prove.
 
 /** The stream-disconnection turn observed with deepseek-v4-flash via
  * opencode-go: thinking streamed, then the stream ended without a
@@ -250,66 +226,6 @@ function fauxQuotaError(): AssistantMessage {
 
 /** No-delay backoff sleep for rate-limit restart tests. */
 const instantSleep = (): Promise<void> => Promise.resolve();
-
-Deno.test("isSilentErrorResponse: transient outputless errors qualify", () => {
-  assertEquals(isSilentErrorResponse(fauxSilentError()), true);
-  assertEquals(
-    isSilentErrorResponse(
-      fauxAssistantMessage("", {
-        stopReason: "error",
-        errorMessage: "fetch failed",
-      }),
-    ),
-    true,
-  );
-});
-
-Deno.test("isSilentErrorResponse: output, non-errors and permanent failures do not", () => {
-  assertEquals(isSilentErrorResponse(fauxAssistantMessage("Hello")), false);
-  // Vacant but a normal stop: handled by the in-run retry, not this one.
-  assertEquals(isSilentErrorResponse(fauxAssistantMessage("")), false);
-  assertEquals(
-    isSilentErrorResponse(
-      fauxAssistantMessage([fauxText("partial")], {
-        stopReason: "error",
-        errorMessage: "connection reset",
-      }),
-    ),
-    false,
-  );
-  assertEquals(
-    isSilentErrorResponse(fauxAssistantMessage("", { stopReason: "aborted" })),
-    false,
-  );
-  // Permanent failures must surface immediately instead of being retried.
-  assertEquals(
-    isSilentErrorResponse(
-      fauxAssistantMessage("", {
-        stopReason: "error",
-        errorMessage: "Provider is not configured: amazon-bedrock",
-      }),
-    ),
-    false,
-  );
-  assertEquals(
-    isSilentErrorResponse(
-      fauxAssistantMessage("", { stopReason: "error", errorMessage: "boom" }),
-    ),
-    false,
-  );
-});
-
-Deno.test("buildRetryNotification: self-contained continue instruction", () => {
-  const notification = buildRetryNotification(2);
-  assertEquals(notification.role, "notification");
-  assertEquals(notification.kind, "retry");
-  assertEquals(notification.status, "neutral");
-  assert(notification.title.includes("2"), "title carries the attempt number");
-  assert(
-    notification.body.includes("Continue"),
-    "body tells the model to continue",
-  );
-});
 
 Deno.test("a vacant response is retried within the same run", async () => {
   const agent = makeAgent(streamSequence([

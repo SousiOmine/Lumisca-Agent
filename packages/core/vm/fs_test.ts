@@ -342,6 +342,10 @@ Deno.test("vm fs: shellQuote survives quotes and spaces", () => {
 });
 
 Deno.test("vm fs: grepCommand carries the flags the host tool documents", () => {
+  // The command string IS the contract with the machine's grep: the host
+  // tool's arguments (recursion, line numbers, binary skipping, the artifact
+  // prunes, the result cap) have to survive into it, and the pattern is
+  // quoted so a `|` stays one pattern instead of becoming a shell pipe.
   const command = grepCommand(["/home/agent"], {
     pattern: "foo|bar",
     caseSensitive: true,
@@ -350,19 +354,17 @@ Deno.test("vm fs: grepCommand carries the flags the host tool documents", () => 
     maxResults: 50,
     maxFileSize: 1024,
   });
-  // Recursive, line numbers, binary skipped, no case flag when sensitive.
   assert(command.includes("-r"), command);
   assert(command.includes("-n"), command);
   assert(command.includes("-I"), command);
   assert(!/(^| )-i( |$)/.test(command), command);
-  // The artifact list is pruned, and the pattern is quoted.
   assert(command.includes("--exclude-dir='.git'"), command);
   assert(command.includes("--regexp='foo|bar'"), command);
   assert(command.includes("head -n 50"), command);
-});
 
-Deno.test("vm fs: grepCommand adds -i for a case-insensitive search", () => {
-  const command = grepCommand(["/home/agent"], {
+  // Case-insensitivity is the one flag the caller can flip; the same
+  // builder must add it, and only then.
+  const insensitive = grepCommand(["/home/agent"], {
     pattern: "foo",
     caseSensitive: false,
     gitignore: true,
@@ -370,7 +372,8 @@ Deno.test("vm fs: grepCommand adds -i for a case-insensitive search", () => {
     maxResults: 10,
     maxFileSize: 1024,
   });
-  assert(/(^| )-i( |$)/.test(command), command);
+  assert(/(^| )-i( |$)/.test(insensitive), insensitive);
+  assert(!/(^| )-i( |$)/.test(command), command);
 });
 
 Deno.test("vm fs: walkCommand prunes artifacts and honors the hidden flag", () => {

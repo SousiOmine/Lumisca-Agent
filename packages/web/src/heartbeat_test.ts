@@ -1,85 +1,94 @@
 import { assertEquals } from "@std/assert";
 import { createHeartbeatWatchdog } from "./heartbeat.ts";
 
-/** Wait `ms` so the watchdog's real timers can run: the tests drive it with
- * millisecond values instead of the production seconds. */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * The watchdog judges the event stream's silence. Its deadline and its
+ * judgement are driven by an injected clock and by explicit `check()` calls,
+ * never by wall-clock timers: a loaded runner stalls the event loop for tens
+ * of milliseconds, and the real-timer version of the first test here reported
+ * a live socket as dead on CI (windows-latest, v0.9.1). Driving the clock is
+ * also stricter — a `beat()` that stopped moving the deadline is caught by
+ * the same run, because the next judgement steps past it.
+ *
+ * `checkMs` is set out of reach in every case so no interval can slip a
+ * judgement in between two assertions.
+ */
+
+/** A watchdog over a clock the test moves by hand. */
+function watchdog(options: {
+  timeoutMs?: number;
+  isHidden?: () => boolean;
+}) {
+  let now = 0;
+  let dead = 0;
+  const instance = createHeartbeatWatchdog({
+    onDead: () => dead++,
+    timeoutMs: options.timeoutMs ?? 30,
+    checkMs: 3_600_000,
+    isHidden: options.isHidden ?? (() => false),
+    now: () => now,
+  });
+  return {
+    instance,
+    dead: () => dead,
+    advance(ms: number) {
+      now += ms;
+    },
+  };
 }
 
-Deno.test("heartbeat: silence past the deadline reports the socket dead once", async () => {
-  let dead = 0;
-  const watchdog = createHeartbeatWatchdog({
-    onDead: () => dead++,
-    timeoutMs: 15,
-    checkMs: 5,
-    isHidden: () => false,
-  });
-  await sleep(80);
-  assertEquals(dead, 1, "a silent socket is reported exactly once");
-  watchdog.stop();
+Deno.test("heartbeat: silence past the deadline reports the socket dead once", () => {
+  const { instance, dead, advance } = watchdog({ timeoutMs: 30 });
+  advance(29);
+  instance.check();
+  assertEquals(dead(), 0, "under the deadline the socket is still alive");
+  advance(1);
+  instance.check();
+  assertEquals(dead(), 1, "a silent socket is reported");
+  // Fired once: the caller closes the socket, so a second report would only
+  // schedule a redundant reconnect.
+  instance.check();
+  assertEquals(dead(), 1, "the same death is not reported twice");
+  instance.stop();
 });
 
 Deno.test("heartbeat: a beating socket is never reported dead", () => {
-  // The deadline runs on the injected clock, not on real timers: a loaded
-  // runner stalls the event loop for tens of milliseconds, and the
-  // real-timer version of this test reported a live socket as dead on CI
-  // (windows-latest, v0.9.1). Driving the clock also makes the test
-  // stricter: a `beat()` that stopped moving the deadline is caught by the
-  // same run, because the next judgement steps past it.
-  let dead = 0;
-  let now = 0;
-  const watchdog = createHeartbeatWatchdog({
-    onDead: () => dead++,
-    timeoutMs: 30,
-    // Never fires: the test calls check() itself, so no wall-clock timer
-    // can slip a judgement between two beats.
-    checkMs: 3_600_000,
-    isHidden: () => false,
-    now: () => now,
-  });
+  const { instance, dead, advance } = watchdog({ timeoutMs: 30 });
   // Any frame counts, not just heartbeats: a busy stream is alive too.
   for (let i = 0; i < 10; i++) {
-    now += 20;
-    watchdog.check();
-    watchdog.beat();
+    advance(20);
+    instance.check();
+    instance.beat();
   }
-  assertEquals(dead, 0, "the beats keep every judgement under the deadline");
+  assertEquals(dead(), 0, "the beats keep every judgement under the deadline");
   // The same socket once its frames really stop: still judged.
-  now += 30;
-  watchdog.check();
-  assertEquals(dead, 1);
-  watchdog.stop();
+  advance(30);
+  instance.check();
+  assertEquals(dead(), 1);
+  instance.stop();
 });
 
-Deno.test("heartbeat: a hidden page does not judge, and judges on return", async () => {
+Deno.test("heartbeat: a hidden page does not judge, and judges on return", () => {
   let hidden = true;
-  let dead = 0;
-  const watchdog = createHeartbeatWatchdog({
-    onDead: () => dead++,
-    timeoutMs: 15,
-    checkMs: 5,
+  const { instance, dead, advance } = watchdog({
+    timeoutMs: 30,
     isHidden: () => hidden,
   });
-  await sleep(60);
-  assertEquals(dead, 0, "a hidden page's silence says nothing");
+  advance(120);
+  instance.check();
+  assertEquals(dead(), 0, "a hidden page's silence says nothing");
   // Returning to the foreground judges immediately, without waiting for the
   // next interval (connectEvents calls check() on visibilitychange).
   hidden = false;
-  watchdog.check();
-  assertEquals(dead, 1);
-  watchdog.stop();
+  instance.check();
+  assertEquals(dead(), 1);
+  instance.stop();
 });
 
-Deno.test("heartbeat: stop ends the watch", async () => {
-  let dead = 0;
-  const watchdog = createHeartbeatWatchdog({
-    onDead: () => dead++,
-    timeoutMs: 15,
-    checkMs: 5,
-    isHidden: () => false,
-  });
-  watchdog.stop();
-  await sleep(60);
-  assertEquals(dead, 0);
+Deno.test("heartbeat: stop ends the watch", () => {
+  const { instance, dead, advance } = watchdog({ timeoutMs: 30 });
+  instance.stop();
+  advance(1_000);
+  instance.check();
+  assertEquals(dead(), 0, "a stopped watchdog judges nothing");
 });

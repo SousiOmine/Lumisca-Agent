@@ -1,5 +1,6 @@
 import { assertEquals } from "@std/assert";
 import {
+  compactionUsageRatio,
   contextTokensOf,
   contextUsageRatio,
   estimateMessagesTokens,
@@ -13,6 +14,7 @@ import {
   hostForUrl,
   IMAGE_MODEL_KEY,
   IMAGE_TOKEN_ESTIMATE,
+  inputBudgetTokens,
   isLoopbackHost,
   parseModelPreference,
   serializeModelPreference,
@@ -128,6 +130,50 @@ Deno.test("contextUsageRatio is undefined without current tokens or window", () 
     contextUsageRatio(summarizeContextUsage([]), 1000),
     undefined,
   );
+  // A transcript past the window reports above 1; the meter clamps it, so
+  // the function must not clamp on its own.
+  assertEquals(
+    contextUsageRatio(
+      summarizeContextUsage([{ role: "assistant", usage: { input: 300_000 } }]),
+      200_000,
+    ),
+    1.5,
+  );
+});
+
+Deno.test("inputBudgetTokens narrows the window to the published input cap", () => {
+  // The window counts the completion, the cap is what a request may carry:
+  // the budget is the smaller of the two.
+  assertEquals(
+    inputBudgetTokens({ contextWindow: 1_050_000, maxInputTokens: 922_000 }),
+    922_000,
+  );
+  // A cap wider than the window never widens the budget.
+  assertEquals(
+    inputBudgetTokens({ contextWindow: 200_000, maxInputTokens: 922_000 }),
+    200_000,
+  );
+  // Either number alone is enough.
+  assertEquals(inputBudgetTokens({ contextWindow: 200_000 }), 200_000);
+  assertEquals(inputBudgetTokens({ maxInputTokens: 200_000 }), 200_000);
+  // Unusable values are ignored; with neither number there is no budget
+  // (compaction then stays off).
+  assertEquals(inputBudgetTokens({}), undefined);
+  assertEquals(inputBudgetTokens({ contextWindow: 0 }), undefined);
+  assertEquals(inputBudgetTokens({ maxInputTokens: Number.NaN }), undefined);
+  assertEquals(inputBudgetTokens({ contextWindow: -1 }), undefined);
+});
+
+Deno.test("compactionUsageRatio is the point the next check condenses from", () => {
+  // pi's rule: compact at `window - reserveTokens`.
+  assertEquals(compactionUsageRatio(200_000, 16_384), 0.91808);
+  assertEquals(compactionUsageRatio(4_000, 1_500), 0.625);
+  // Unknown window, a reservation that leaves no room, or no reservation:
+  // compaction is off, so the meter keeps its own hint.
+  assertEquals(compactionUsageRatio(undefined, 16_384), undefined);
+  assertEquals(compactionUsageRatio(10_000, 16_384), undefined);
+  assertEquals(compactionUsageRatio(10_000, 0), undefined);
+  assertEquals(compactionUsageRatio(10_000, -1), undefined);
 });
 
 Deno.test("token and percent formatters match the reference card", () => {

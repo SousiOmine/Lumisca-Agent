@@ -436,11 +436,57 @@ mod tests {
 
     #[test]
     fn the_listener_binds_loopback_only() {
-        // The bind address is hard-coded to 127.0.0.1; verify the port is
-        // not reachable on other interfaces by checking the local addr.
+        // `start()` binds 127.0.0.1 explicitly; this checks the consequence
+        // that matters rather than the constant. The port is not reachable
+        // on this machine's own non-loopback address, which is what a token
+        // holder on the network would need to drive the page.
         let server = start_server();
-        let addr = std::net::TcpListener::bind(("127.0.0.1", server.port))
-            .expect_err("port must be taken by the server");
-        let _ = addr; // Err is what we assert
+        let loopback = format!("127.0.0.1:{}", server.port);
+        TcpStream::connect(&loopback)
+            .expect("the server must answer on loopback")
+            .shutdown(std::net::Shutdown::Both)
+            .ok();
+
+        // The first address of this host that is not loopback. A machine
+        // with nothing but loopback (a CI sandbox) has nothing to prove
+        // here, so the test says so instead of passing vacuously.
+        let external = local_addresses()
+            .into_iter()
+            .find(|ip| !ip.is_loopback() && !ip.is_unspecified());
+        match external {
+            Some(ip) => {
+                let target = format!("{}:{}", ip, server.port);
+                let refused = TcpStream::connect_timeout(
+                    &target.parse().expect("address parses"),
+                    Duration::from_millis(500),
+                );
+                assert!(
+                    refused.is_err(),
+                    "the RPC port must not answer on {target}: the server \\
+                     binds loopback only"
+                );
+            }
+            None => eprintln!("no non-loopback address on this host: skipped"),
+        }
+    }
+
+    /// The IP addresses this host holds, read from the local routing table.
+    /// `UdpSocket::connect` picks the source address without sending
+    /// anything, and a DNS lookup of the host name covers the rest; both are
+    /// best-effort, so an empty list is a valid answer.
+    fn local_addresses() -> Vec<std::net::IpAddr> {
+        let mut found = Vec::new();
+        for probe in ["192.0.2.1:9", "198.51.100.1:9"] {
+            if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+                if socket.connect(probe).is_ok() {
+                    if let Ok(local) = socket.local_addr() {
+                        found.push(local.ip());
+                    }
+                }
+            }
+        }
+        found.sort();
+        found.dedup();
+        found
     }
 }
