@@ -2,8 +2,7 @@ import type {
   ContextProvider,
   ContextUpdate,
 } from "../agent/context-providers.ts";
-import { sessionSkills } from "../tools/toolsets.ts";
-import { formatAvailableSkills } from "./discover.ts";
+import { formatAvailableSkills, type SkillDef } from "./discover.ts";
 
 /**
  * The skill-catalog context provider: publishes the session's
@@ -15,23 +14,22 @@ import { formatAvailableSkills } from "./discover.ts";
  *   never needs to change while the session lives), and
  * - a skill added or removed on disk reaches an open session: the catalog is
  *   re-discovered before every run and republished only when it changed.
+ *
+ * What the catalog IS belongs to the caller: a workspace session discovers
+ * `.agents/skills` on this machine, and a stella session discovers the
+ * machine's own directory plus the host's global and built-in set
+ * (vm/skills.ts). The provider asks for the list rather than deriving it, so
+ * the published listing is the same set the session's skill tool can load —
+ * a catalog that named skills the tool could not read would be a lie.
  */
 
 /** Provider name of the skill catalog. */
 export const SKILLS_PROVIDER = "skills";
 
 export interface SkillCatalogOptions {
-  /** Workspace folders to discover skills from (empty for a chat session,
-   * which sees the global and built-in skills only). */
-  folders: string[];
-  /** Whether the session has a browser backend attached (gates the built-in
-   * web-browser skill, like the skill tool's own catalog). */
-  browserAvailable?: boolean;
-  /** Whether the session may drive this machine (gates the built-in
-   * computer-use skill, like the skill tool's own catalog). */
-  computerAvailable?: boolean;
-  /** Global skills directory override (tests); see sessionSkills. */
-  globalDirs?: string[];
+  /** The session's skill set, in precedence order. Read before every run,
+   * so a skill added or removed reaches an open session. */
+  skills: () => readonly SkillDef[];
 }
 
 interface CatalogState {
@@ -53,11 +51,7 @@ export function createSkillCatalogProvider(
   return {
     name: SKILLS_PROVIDER,
     next(): ContextUpdate[] {
-      const skills = sessionSkills(options.folders, {
-        browserAvailable: options.browserAvailable,
-        computerAvailable: options.computerAvailable,
-        globalDirs: options.globalDirs,
-      });
+      const skills = options.skills();
       const listing = formatAvailableSkills(skills);
       if (listing.length === 0) {
         // Nothing to announce for a session without skills. A catalog that

@@ -114,7 +114,7 @@ export function discoverSkills(
 /** The `<available_skills>` listing for the system prompt: one
  * `- name: description` line per skill, capped at MAX_AVAILABLE_SKILLS_BYTES
  * (skills past the cap stay loadable via the skill tool by name). */
-export function formatAvailableSkills(skills: SkillDef[]): string {
+export function formatAvailableSkills(skills: readonly SkillDef[]): string {
   let out = "";
   for (const skill of skills) {
     const line = `- ${skill.name}: ${skill.description}`;

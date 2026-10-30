@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   createAgentRepo,
+  MAX_AGENT_IDENTITY_CHARS,
   MAX_AGENT_NAME_CHARS,
   MAX_AGENT_ROLE_CHARS,
   normalizeAgentInput,
@@ -118,6 +119,57 @@ Deno.test("agents: rename and delete", () => {
   }
 });
 
+Deno.test("agents: the identity is the agent's own text, kept apart from the role", () => {
+  const { db, repo } = setup();
+  try {
+    const agent = repo.create({ name: "Aide", role: "Keep notes." });
+    // Empty until written: the role is the user's, not the agent's.
+    assertEquals(agent.identity, "");
+    assertEquals(repo.get(agent.id)?.identity, "");
+
+    repo.writeIdentity(agent.id, "  I take care of the notes.  ");
+    // Trimmed, and the user's role is untouched.
+    assertEquals(repo.get(agent.id)?.identity, "I take care of the notes.");
+    assertEquals(repo.get(agent.id)?.role, "Keep notes.");
+
+    // An empty string clears it (the tool's documented way to remove one).
+    repo.writeIdentity(agent.id, "");
+    assertEquals(repo.get(agent.id)?.identity, "");
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("agents: an over-long identity is refused, never truncated", () => {
+  const { db, repo } = setup();
+  try {
+    const agent = repo.create({ name: "Aide", role: "r" });
+    const error = assertThrows(
+      () =>
+        repo.writeIdentity(agent.id, "x".repeat(MAX_AGENT_IDENTITY_CHARS + 1)),
+      CoreError,
+    );
+    assertEquals(error.kind, "invalid");
+    // The stored text is unchanged (nothing was written).
+    assertEquals(repo.get(agent.id)?.identity, "");
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("agents: an identity write for a missing agent fails", () => {
+  const { db, repo } = setup();
+  try {
+    const error = assertThrows(
+      () => repo.writeIdentity("gone", "text"),
+      CoreError,
+    );
+    assertEquals(error.kind, "not_found");
+  } finally {
+    db.close();
+  }
+});
+
 // --- the creation tool ------------------------------------------------------
 
 Deno.test("agent_create: creates through the core's own entry point", async () => {
@@ -129,6 +181,7 @@ Deno.test("agent_create: creates through the core's own entry point", async () =
         id: "a1",
         name: input.name,
         role: input.role,
+        identity: "",
         createdAt: 0,
         updatedAt: 0,
       };

@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { createSkillCatalogProvider } from "./catalog.ts";
+import { discoverSkills } from "./discover.ts";
 
 /** A workspace root with one skill file of the given description. */
 async function writeSkill(
@@ -31,8 +32,9 @@ async function fixture(): Promise<{
     root,
     globals,
     provider: createSkillCatalogProvider({
-      folders: [root],
-      globalDirs: [globals],
+      // The catalog asks for the session's skill set every time it publishes,
+      // which is what lets a skill added on disk reach an open session.
+      skills: () => discoverSkills([root], { globalDirs: [globals] }),
     }),
   };
 }
@@ -74,6 +76,25 @@ Deno.test("skill catalog republishes when a skill changes on disk", async () => 
     await removeDirRetry(root);
     await removeDirRetry(globals);
   }
+});
+
+Deno.test("skill catalog publishes whatever the session's resolver returns", () => {
+  // A stella session's skills come from the machine, not from a workspace
+  // folder chain (vm/skills.ts). The provider must publish that set — the
+  // same one the session's skill tool can load — rather than discovering a
+  // workspace catalog of its own.
+  let skills = [{ name: "vm-notes", description: "Kept in the machine." }];
+  const provider = createSkillCatalogProvider({
+    skills: () => skills as never,
+  });
+  const first = provider.next()[0]!;
+  assertStringIncludes(first.body, "- vm-notes: Kept in the machine.");
+
+  skills = [...skills, { name: "second", description: "Later." }];
+  const update = provider.next();
+  assertEquals(update.length, 1);
+  assertEquals(update[0]!.title, "Skills (2 available)");
+  assertStringIncludes(update[0]!.body, "- second: Later.");
 });
 
 Deno.test("a rebased catalog is not republished, an unrebasable one is", async () => {

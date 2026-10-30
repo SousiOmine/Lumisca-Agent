@@ -91,3 +91,10 @@ export const TOOL_ROUTINE_RUN = "routine_run";
  * context). Preloaded: a session that was condensed needs to know it can
  * look back, and the tool costs one short definition. */
 export const TOOL_HISTORY_SEARCH = "history_search";
+
+/** Read and rewrite the agent's own description of itself (its identity,
+ * separate from the role the user wrote). Preloaded: an agent that cannot
+ * write about itself never does, and a write is published as a context
+ * message rather than by editing the system prompt (see
+ * stella/identity.ts). */
+export const TOOL_IDENTITY = "identity";

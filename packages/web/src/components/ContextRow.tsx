@@ -1,4 +1,4 @@
-import { IconFileText, IconSparkles } from "@tabler/icons-preact";
+import { IconFileText, IconSparkles, IconUser } from "@tabler/icons-preact";
 import type { ContextMessage } from "../types.ts";
 import { SystemRow } from "./SystemRow.tsx";
 
@@ -7,6 +7,8 @@ function providerIcon(provider: string) {
   switch (provider) {
     case "instructions":
       return <IconFileText size={13} />;
+    case "identity":
+      return <IconUser size={13} />;
     default:
       return <IconSparkles size={13} />;
   }

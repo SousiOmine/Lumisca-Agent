@@ -13,6 +13,7 @@ import type { FileBackend } from "../tools/file-backend.ts";
 import type { Tool } from "../tools/schema.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { HandoverHub } from "./handover.ts";
+import type { ContextProvider } from "../agent/context-providers.ts";
 
 export interface StellaRuntime {
   /** The session's working folder inside the machine: where relative paths
@@ -50,4 +51,12 @@ export interface StellaRuntime {
    * (the turns a compaction checkpoint replaced are no longer in the
    * model's context, but every message is still a row). */
   historyTool: Tool;
+  /** `identity`, which reads and rewrites the agent's own description of
+   * itself (the persona the agent writes, separate from the role the user
+   * gave it at creation). */
+  identityTool: Tool;
+  /** The identity's context provider: publishes what the agent wrote as a
+   * durable transcript message, so a write reaches the next run without
+   * touching the snapshotted system prompt (see stella/identity.ts). */
+  identityProvider: ContextProvider;
 }

@@ -12,6 +12,7 @@ import {
   IconSearch,
   IconSend,
   IconTerminal2,
+  IconUser,
   IconUsers,
   IconWorldSearch,
 } from "@tabler/icons-preact";
@@ -27,6 +28,7 @@ import {
   TOOL_EVAL,
   TOOL_GLOB,
   TOOL_GREP,
+  TOOL_IDENTITY,
   TOOL_LIST_DIR,
   TOOL_READ,
   TOOL_SEND_MESSAGE,
@@ -94,6 +96,9 @@ function toolIcon(name: string) {
     // asking the user a question
     case TOOL_ASK:
       return <IconMessageQuestion size={13} />;
+    // the agent's own text about itself
+    case TOOL_IDENTITY:
+      return <IconUser size={13} />;
     // task list
     case "TodoWrite":
     case "TodoRead":
@@ -207,6 +212,9 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
       return "update task list";
     case "TodoRead":
       return "read task list";
+    // the agent's own text about itself: the action is what the row is about
+    case TOOL_IDENTITY:
+      return typeof args.action === "string" ? args.action : "";
     default:
       // Generic: show first string arg value.
       for (const v of Object.values(args)) {

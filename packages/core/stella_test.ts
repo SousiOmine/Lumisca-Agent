@@ -6,6 +6,7 @@ import { createStellaTools } from "./tools/toolsets.ts";
 import { hostBackends } from "./tools/toolsets.ts";
 import { createVmTools } from "./vm/tools.ts";
 import { createHistorySearchTool } from "./stella/history.ts";
+import { createIdentityTool } from "./stella/identity.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
 import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
 import { AskHub } from "./tools/ask.ts";
@@ -265,6 +266,7 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
     skills: [],
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ messages: () => [] }),
+    identity: createIdentityTool({ read: () => "", write: () => {} }),
   });
   const names = tools.map((tool) => tool.name);
   // The coding tools are there...
@@ -294,6 +296,9 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   // away are unreachable without it. A caller that passes no history tool
   // (nothing to search) simply has none.
   assert(names.includes("history_search"), names.join(", "));
+  // And so is the identity: an agent that cannot write about itself never
+  // does. A caller with nowhere to store it passes no tool.
+  assert(names.includes("identity"), names.join(", "));
   void faux;
 });
 
@@ -323,6 +328,7 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     screen: createVmTools({ screen }),
     agents: createAgentCreateTool({ create: () => ({}) as never }),
     history: createHistorySearchTool({ messages: () => [] }),
+    identity: createIdentityTool({ read: () => "", write: () => {} }),
     background: new BackgroundProcessManager(),
     ask: new AskHub("s1", () => {}),
     todo: new TodoHub("s1", () => {}),
@@ -359,7 +365,14 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     "a stella tool needs a guideline section or an entry in noSection",
   );
   // The invariant is only meaningful while the set is the full one.
-  for (const expected of ["history_search", "vm_screenshot", "agent_create"]) {
+  for (
+    const expected of [
+      "history_search",
+      "identity",
+      "vm_screenshot",
+      "agent_create",
+    ]
+  ) {
     assertEquals(
       stellaTools.includes(expected),
       true,
@@ -481,6 +494,180 @@ Deno.test("stella conversation: history_search never reads another agent's rows"
     const text = lastHistoryResult(core, sessionB.id);
     assert(text.includes("No message matching"), text);
     assert(!text.includes("The code word is pelican."), text);
+  } finally {
+    await core.close();
+  }
+});
+
+/** The identity context messages of a session, in transcript order. */
+function identityMessages(core: LumiscaCore, sessionId: string) {
+  const agent = core.getAgent(sessionId)!;
+  return agent.messages.filter((message) =>
+    message.role === "context" && message.provider === "identity"
+  );
+}
+
+Deno.test("stella conversation: the identity a write produces reaches the next run", async () => {
+  const { faux, core, agent, session } = await stellaConversation("Scribe");
+  try {
+    // Nothing is published before the agent writes one: a first turn must
+    // not open with an empty identity block.
+    assertEquals(identityMessages(core, session.id), []);
+
+    // The agent writes about itself in one turn...
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("identity", {
+          action: "write",
+          content: "I keep the project's notes and know where things are.",
+        }),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("Wrote it."),
+    ]);
+    await promptSession(core, session.id, "Write down what your job is.");
+    // The text is stored on the agent row, not in the transcript yet: the
+    // run that wrote it already had its context.
+    assertEquals(
+      core.listStellaAgents().find((a) => a.id === agent.id)?.identity,
+      "I keep the project's notes and know where things are.",
+    );
+    assertEquals(identityMessages(core, session.id), []);
+
+    // ...and the text is in the transcript before the next run's first
+    // request. It arrives as a context message, so the snapshotted system
+    // prompt is never rewritten (the cache keeps serving its head).
+    faux.setResponses([fauxAssistantMessage("Noted.")]);
+    await promptSession(core, session.id, "What do you do?");
+
+    const published = identityMessages(core, session.id);
+    assertEquals(published.length, 1);
+    const message = published[0]!;
+    if (message.role !== "context") throw new Error("unreachable");
+    assert(
+      message.body.includes("I keep the project's notes"),
+      message.body,
+    );
+    // The prompt still carries the role the USER wrote, unchanged: the
+    // identity is context, not a prompt edit.
+    assertEquals(
+      (core.getSession(session.id)?.systemPrompt ?? "").includes(
+        "I keep the project's notes",
+      ),
+      false,
+    );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: each agent's identity is its own", async () => {
+  const { faux, core, session: sessionA } = await stellaConversation("One");
+  try {
+    const second = core.createStellaAgent({ name: "Two", role: "r" });
+    const sessionB = await core.getOrCreateStellaSession(second.id);
+
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("identity", {
+          action: "write",
+          content: "I am the first.",
+        }),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("done"),
+    ]);
+    await promptSession(core, sessionA.id, "Who are you?");
+
+    // The other counterpart has written nothing, so its transcript gains no
+    // identity message and its agent row stays empty.
+    faux.setResponses([fauxAssistantMessage("hello")]);
+    await promptSession(core, sessionB.id, "Who are you?");
+    assertEquals(identityMessages(core, sessionB.id), []);
+    const stored = core.listStellaAgents().find((a) => a.id === second.id);
+    assertEquals(stored?.identity, "");
+  } finally {
+    await core.close();
+  }
+});
+
+/** The skills listing of the machine's directory, as `scanVmSkillsDir`
+ * asks for it: one `podman exec` call whose script prints a marker line and
+ * the SKILL.md body per skill. A stub answers that call without a container,
+ * so the crossing (machine skills → session catalog) is testable here. */
+function vmSkillsRunner(skills: Array<{ name: string; description: string }>) {
+  const stdout = skills
+    .map((skill) =>
+      `\n__SKILL__${skill.name}\n---\nname: ${skill.name}\n` +
+      `description: ${skill.description}\n---\n\nBody.\n`
+    )
+    .join("");
+  return {
+    run: (command: readonly string[]) => {
+      // Only the skills listing answers with content: everything else (the
+      // working folder's mkdir, the screen probes) is a no-op success.
+      const listing = command.join(" ").includes(".agents/skills");
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: listing ? stdout : "",
+        stderr: "",
+        truncated: false,
+        timedOut: false,
+      });
+    },
+    runBytes: () =>
+      Promise.resolve({
+        exitCode: 0,
+        stdout: new Uint8Array(),
+        stderr: "",
+        truncated: false,
+        timedOut: false,
+      }),
+  };
+}
+
+Deno.test("stella conversation: a skill in the machine reaches the published catalog", async () => {
+  const faux = fauxProvider();
+  // The machine's own skills: they exist nowhere on this host, so a catalog
+  // built from workspace folders could not list them. This is the gap the
+  // provider seam closed.
+  const core = LumiscaCore.forTesting(
+    [faux.provider],
+    () => ({}),
+    vmSkillsRunner([{
+      name: "vm-notes",
+      description: "How notes are kept inside the machine.",
+    }]),
+  );
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  core.setStellaVm(fakeVm(RUNNING));
+  try {
+    const agent = core.createStellaAgent({
+      name: "Keeper",
+      role: "Keep notes.",
+    });
+    const session = await core.getOrCreateStellaSession(agent.id);
+
+    // The skill tool can load it...
+    const skills = core.listStellaSkills();
+    assert(
+      skills.some((skill) => skill.name === "vm-notes"),
+      JSON.stringify(skills),
+    );
+
+    // ...and the catalog the model reads names it too.
+    faux.setResponses([fauxAssistantMessage("Noted.")]);
+    await promptSession(core, session.id, "What can you do?");
+    const published = core.getAgent(session.id)!.messages.find((message) =>
+      message.role === "context" && message.provider === "skills"
+    );
+    assert(published !== undefined, "the skill catalog must be published");
+    if (published.role !== "context") throw new Error("unreachable");
+    assert(
+      published.body.includes(
+        "vm-notes: How notes are kept inside the machine.",
+      ),
+      published.body,
+    );
   } finally {
     await core.close();
   }

@@ -82,6 +82,7 @@ import {
   buildSystemPrompt,
 } from "./tools/mod.ts";
 import { runVmCommand, runVmCommandBytes } from "./vm/command.ts";
+import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
 import {
   createVmExec,
   createVmExecBytes,
@@ -106,6 +107,11 @@ import {
 } from "./stella/agents.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
 import { createHistorySearchTool } from "./stella/history.ts";
+import {
+  createIdentityProvider,
+  createIdentityTool,
+  type IdentityTarget,
+} from "./stella/identity.ts";
 import { createRoutineRepo, type RoutineRepo } from "./routine/repo.ts";
 import {
   createRoutineScheduler,
@@ -221,6 +227,11 @@ export class LumiscaCore {
   /** The stella skill catalog, refreshed before each open (see
    * refreshStellaSkills). */
   private stellaSkills: SkillDef[] = [];
+  /** How the machine's commands are run (see StellaRuntime): `podman` in
+   * production, an injected stub in tests. */
+  private readonly stellaRun:
+    | { run: VmCommandRunner; runBytes: VmCommandBytesRunner }
+    | undefined;
   /** The in-flight machine start, shared by callers that race on a cold
    * machine (see ensureStellaReady). */
   private stellaStarting: Promise<void> | undefined;
@@ -258,9 +269,17 @@ export class LumiscaCore {
       /** Transport of the web-search providers. Tests pass a stub so a key
        * check never reaches the network. */
       webSearchFetch?: FetchLike;
+      /** How the stella machine's commands are run (`podman`, in
+       * production). Tests pass a stub so the file/skill/screen seams work
+       * without a container; production leaves it unset. */
+      stellaRun?: {
+        run: VmCommandRunner;
+        runBytes: VmCommandBytesRunner;
+      };
     } = {},
   ) {
     this.globalSkillDirs = overrides.globalSkillDirs;
+    this.stellaRun = overrides.stellaRun;
     this.db = db;
     this.settings = settings;
     this.credentials = createDbCredentialStore(this.settings);
@@ -457,15 +476,24 @@ export class LumiscaCore {
    * every test file in one process, in parallel worker threads), so reading
    * it would make a test depend on the machine — and on whatever another
    * file happened to set at that moment. A test that wants ambient
-   * variables passes them explicitly. */
+   * variables passes them explicitly.
+   *
+   * `stellaRun` replaces the machine's command runner, so a test can give a
+   * stella session a skill directory (and any other exec-driven seam)
+   * without a container. Production never passes it. */
   static forTesting(
     extraProviders: Provider[] = [],
     env: EnvReader = () => ({}),
+    stellaRun?: { run: VmCommandRunner; runBytes: VmCommandBytesRunner },
   ): LumiscaCore {
     const core = new LumiscaCore(
       LumiscaDb.openInMemory(),
       createInMemorySettingsRepo(),
-      { globalSkillDirs: [], env },
+      {
+        globalSkillDirs: [],
+        env,
+        ...(stellaRun !== undefined ? { stellaRun } : {}),
+      },
     );
     for (const provider of extraProviders) {
       core.models.models.setProvider(provider);
@@ -1160,8 +1188,12 @@ export class LumiscaCore {
     if (this.stellaExecCache?.vm !== vm) {
       this.stellaExecCache = {
         vm,
-        exec: createVmExec({ run: runVmCommand }),
-        execBytes: createVmExecBytes({ runBytes: runVmCommandBytes }),
+        exec: createVmExec({
+          run: this.stellaRun?.run ?? runVmCommand,
+        }),
+        execBytes: createVmExecBytes({
+          runBytes: this.stellaRun?.runBytes ?? runVmCommandBytes,
+        }),
       };
     }
     return this.stellaExecCache;
@@ -1191,6 +1223,21 @@ export class LumiscaCore {
     const cwd = session.agentId === undefined
       ? VM_WORKDIR
       : vmAgentDir(session.agentId);
+    // The identity belongs to the AGENT row, not to the session, and a stella
+    // session always has one (the conversation is created FOR an agent). A
+    // session without one would have nowhere to keep the text, so it fails
+    // here rather than opening with an identity that is silently lost.
+    const agentId = session.agentId;
+    if (agentId === undefined) {
+      throw new CoreError(
+        "The stella session has no agent: its identity has nowhere to live",
+        "invalid",
+      );
+    }
+    const identity: IdentityTarget = {
+      read: () => this.stellaAgents.get(agentId)?.identity ?? "",
+      write: (content) => this.stellaAgents.writeIdentity(agentId, content),
+    };
     return {
       cwd,
       files: new VmFileBackend(exec, { cwd }),
@@ -1223,6 +1270,11 @@ export class LumiscaCore {
       historyTool: createHistorySearchTool({
         messages: (window) => this.messages.listBetween(session.id, window),
       }),
+      // The identity belongs to this agent: the tool writes it, and the
+      // provider publishes what was written as a context message, so the
+      // snapshotted system prompt never has to change.
+      identityTool: createIdentityTool(identity),
+      identityProvider: createIdentityProvider(identity),
     };
   }
 

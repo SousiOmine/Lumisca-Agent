@@ -9,6 +9,7 @@ import {
   TOOL_GLOB,
   TOOL_GREP,
   TOOL_HISTORY_SEARCH,
+  TOOL_IDENTITY,
   TOOL_LIST_DIR,
   TOOL_READ,
   TOOL_SEND_MESSAGE,
@@ -277,6 +278,23 @@ const HISTORY_SEARCH_SECTION: PromptSection = {
     "before asking the user to repeat something.",
 };
 
+/** The agent's own identity, in a stella session. Keyed on the tool: a
+ * session without it has no way to write about itself, and must not be
+ * pointed at one. The bullet carries what the tool description cannot: when
+ * reaching for it (once it has learned something about the job), and that a
+ * write is not a system-prompt edit. */
+const IDENTITY_SECTION: PromptSection = {
+  name: "tool:identity",
+  order: ORDER.tool + 136,
+  requires: [TOOL_IDENTITY],
+  text:
+    "- Your identity is what you write about yourself (your role, what you " +
+    "are responsible\n  for, the knowledge the work needs); it is not the role " +
+    "the user gave you. Write it\n  once you have learned something worth " +
+    "keeping across sessions, and update it when\n  that changes — a write " +
+    "reaches your next turn, not the current one.",
+};
+
 /** Adding a counterpart in a stella session (Terasuma's `tera_create`).
  * The tool cannot ask the questions, so the bullet carries when to reach
  * for it: the user has already said what the new agent should be. */
@@ -486,6 +504,7 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   VM_ASK_USER_SECTION,
   CHAT_UI_SECTION,
   HISTORY_SEARCH_SECTION,
+  IDENTITY_SECTION,
   AGENT_CREATE_SECTION,
   WEB_SEARCH_SECTION,
   VISUAL_IMAGE_SECTION,

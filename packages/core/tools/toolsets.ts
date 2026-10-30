@@ -238,6 +238,9 @@ export function createStellaTools(options: {
    * tool is not built (a caller without a message store has nothing to
    * search). */
   history?: Tool;
+  /** `identity`: the agent's own text about itself. Omitted → the tool is
+   * not built (a caller with nowhere to store it has nothing to write). */
+  identity?: Tool;
   /** The user's web-search provider (see ToolFactoryOptions.webSearch). */
   webSearch?: SearchProvider;
   background?: BackgroundProcessManager;
@@ -268,6 +271,7 @@ export function createStellaTools(options: {
     ...(options.chatUi !== undefined ? [options.chatUi] : []),
     ...(options.agents !== undefined ? [options.agents] : []),
     ...(options.history !== undefined ? [options.history] : []),
+    ...(options.identity !== undefined ? [options.identity] : []),
     ...(options.visuals !== undefined
       ? [createVisualTool({ files, ...options.visuals })]
       : []),

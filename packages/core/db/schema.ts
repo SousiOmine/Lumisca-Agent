@@ -218,6 +218,24 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
         ON routines(agent_id, created_at);
     `);
   },
+  // Each stella agent's identity: the text it writes about itself — its role,
+  // what it is responsible for, and the knowledge the work needs. It is
+  // separate from `role` (which the USER wrote at creation and never changes):
+  // this one is the agent's own, written by the `identity` tool.
+  //
+  // Stored rather than derived because it outlives any one session row and
+  // has no file to live in: the machine's home is reachable from every agent,
+  // and a persona is a property of the counterpart, not of a folder.
+  (db) => {
+    const columns = db
+      .prepare("PRAGMA table_info(stella_agents)")
+      .all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "identity")) {
+      db.exec(
+        "ALTER TABLE stella_agents ADD COLUMN identity TEXT NOT NULL DEFAULT ''",
+      );
+    }
+  },
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

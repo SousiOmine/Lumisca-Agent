@@ -27,7 +27,11 @@ import {
 } from "../browser/tools.ts";
 import { COMPUTER_TOOL_NAMES, createComputerTools } from "../computer/tools.ts";
 import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
-import { hostBackends, type ToolBackends } from "../tools/toolsets.ts";
+import {
+  hostBackends,
+  sessionSkills,
+  type ToolBackends,
+} from "../tools/toolsets.ts";
 import { CoreError } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { SearchProvider } from "../websearch/types.ts";
@@ -340,6 +344,7 @@ export class AgentFactory {
         chatUi: stella.chatUiTool,
         agents: stella.agentTool,
         history: stella.historyTool,
+        identity: stella.identityTool,
         background,
         ask: askHub,
         todo,
@@ -399,16 +404,28 @@ export class AgentFactory {
     // stays stable — the request's first tokens are what the provider's
     // prompt cache serves.
     const contextProviders = [
+      // What the catalog IS depends on where the session works: a workspace
+      // session discovers `.agents/skills`, and a stella session discovers
+      // the machine's own directory plus the host's global and built-in set
+      // (vm/skills.ts). Both resolve through the same seam, so the published
+      // listing is exactly what the session's skill tool can load.
       createSkillCatalogProvider({
-        folders: workspace.folders,
-        browserAvailable,
-        computerAvailable,
-        globalDirs: this.deps.globalSkillDirs,
+        skills: stella !== undefined
+          ? () => stella.skills()
+          : () =>
+            sessionSkills(workspace.folders, {
+              browserAvailable,
+              computerAvailable,
+              globalDirs: this.deps.globalSkillDirs,
+            }),
       }),
       createInstructionsProvider({
         folders: workspace.folders,
         personal: this.deps.personalInstructions,
       }),
+      // The identity is a stella agent's own text about itself; a session
+      // without one (every other session) has nothing to publish.
+      ...(stella !== undefined ? [stella.identityProvider] : []),
       createDateProvider(),
       // The tool_search / tool_call pair exists exactly while the
       // session's registry holds something to discover; the note follows

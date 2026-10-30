@@ -102,6 +102,8 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
 - **作業フォルダとパスの境界**: 相対パスと `bash` は `/home/agent/agents/<agent id>` を基点にしますが、境界はマシンのホーム `/home/agent` です。ほかの相手のフォルダにも絶対パスで触れます（`packages/core/vm/fs.ts` の `resolveVmPath`）。境界を変えるときはシステムプロンプト（`packages/core/tools/system-prompt.ts`）の記述も合わせてください。
 - **画面の受け渡し**: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。待機中は画面ペインが操作可能になり、エージェントは止まっています。待ちを解く経路（完了・停止・セッション終了）を増やすときは `cancelAll` とイベントの後始末も合わせて確認してください。
 - **ルーチン**: スケジュールは `daily` / `weekly` / `every` の 3 種類だけで、cron は扱いません。次回時刻は「保存済みの値」ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます（後回しにすると、長い実行が重複して走ります）。
+- **identity（相手の自己記述）**: 相手は `role`（ユーザーが作成時に書く）とは別に、`identity` ツールで自分の役割と知識を書けます。保存先は `stella_agents.identity`、モデルへは context メッセージとして届きます（`packages/core/stella/identity.ts`）。**システムプロンプトには書きません** — 書き換えのたびに先頭が変わるとキャッシュ済みプレフィックスを捨てるためです。反映は次のターンからで、圧縮は待ちません。
+- **スキル一覧の出どころ**: `<available_skills>` を公開する provider（`packages/core/skills/catalog.ts`）は、セッションごとの解決関数を受け取ります。stella ではマシン内の `.agents/skills` とホストのグローバル／組み込みを返すので、一覧と `skill` ツールが読める集合が一致します。
 
 ## 8. 開発用スクリプト
 
