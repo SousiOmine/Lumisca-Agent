@@ -566,11 +566,21 @@ export function useSessionEvents(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleEvent, resync, syncState]);
 
+  /** Forget the revision markers of tabs that no longer exist. A marker is
+   * only ever added (an event advances it, a snapshot seeds it), so a long
+   * session that opens and closes many tabs would grow the map for the life
+   * of the page. Nothing reads a closed tab's marker — the probe skips keys
+   * without a view — but keeping it is pure garbage. */
+  const forgetRevisions = useCallback((keys: Iterable<string>) => {
+    for (const key of keys) revsRef.current.delete(key);
+  }, []);
+
   return {
     views,
     setViews,
     setViewError,
     seedRevision,
+    forgetRevisions,
     resyncPanels,
     loadOlder,
     olderLoading,

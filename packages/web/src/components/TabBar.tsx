@@ -141,8 +141,27 @@ function TabBarView({
             key={id}
             role="tab"
             aria-selected={active}
+            // Tabs are reachable and switchable from the keyboard: Tab moves
+            // the focus into the strip, Enter / Space activates, and the
+            // arrow keys move between tabs (the standard tablist pattern).
+            tabIndex={active ? 0 : -1}
             className={`tab${active ? " active" : ""}`}
             onClick={() => onSelect(id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect(id);
+                return;
+              }
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+                return;
+              }
+              event.preventDefault();
+              const index = tabs.findIndex((tab) => tab.id === id);
+              const delta = event.key === "ArrowRight" ? 1 : -1;
+              const next = tabs[(index + delta + tabs.length) % tabs.length];
+              if (next !== undefined) onSelect(next.id);
+            }}
             onContextMenu={(e) => openMenu(id, e)}
             title={modelId ?? t("chrome.tabBar.newSession")}
           >

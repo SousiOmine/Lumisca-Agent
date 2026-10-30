@@ -57,6 +57,10 @@ export function useTabs(
    * have sub-agent tasks and background commands that no event has described
    * to this page yet. */
   resyncPanels: (key: string) => void,
+  /** Forget a closed tab's revision marker (see
+   * useSessionEvents.forgetRevisions): the map is only ever added to, so a
+   * page that opens and closes many tabs must drop what it no longer reads. */
+  forgetRevisions: (keys: Iterable<string>) => void,
 ) {
   const [tabs, setTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -172,6 +176,7 @@ export function useTabs(
         sessionApi(id).close().catch(console.error);
       }
     }
+    forgetRevisions(ids);
     const nextTabs = withDraftTab(tabs.filter((id) => !toClose.has(id)));
     setTabs(nextTabs);
     setViews((prev) => {

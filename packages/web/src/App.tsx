@@ -106,6 +106,7 @@ export function App({ initialData }: AppProps): ReactElement {
     setViews,
     setViewError,
     seedRevision,
+    forgetRevisions,
     resyncPanels,
     loadOlder,
     olderLoading,
@@ -120,7 +121,7 @@ export function App({ initialData }: AppProps): ReactElement {
     openDraftTab,
     closeTabs,
     reopenSession,
-  } = useTabs(setViews, seedRevision, resyncPanels);
+  } = useTabs(setViews, seedRevision, resyncPanels, forgetRevisions);
   // Closing a tab closes its session, which stops the run (and the
   // session's background commands and sub-agents). A close that would do
   // that to a running tab therefore asks first (CloseTabsDialog); the

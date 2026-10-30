@@ -1,11 +1,7 @@
-import {
-  type MouseEvent,
-  type ReactNode,
-  useEffect,
-  useState,
-} from "preact/compat";
+import { type MouseEvent, type ReactNode, useState } from "preact/compat";
 import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
 import { shellCall, type ShellState, windowApi } from "../shell.ts";
+import { useVisibleInterval } from "../hooks/useVisibleInterval.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
 
@@ -50,28 +46,24 @@ export function TitleBar({
   const [available, setAvailable] = useState(false);
   const [maximized, setMaximized] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
-      try {
-        const state = await shellCall<ShellState>("state");
-        if (cancelled) return;
+  // One read at a time, re-armed by the effect below: a fetch that is still
+  // in flight must not stack a second one behind it.
+  const [pollMs, setPollMs] = useState(POLL_MS);
+  useVisibleInterval(() => {
+    void shellCall<ShellState>("state").then(
+      (state) => {
         setAvailable(true);
         setMaximized(state.maximized);
-        timer = setTimeout(poll, POLL_MS);
-      } catch {
-        if (cancelled) return;
+        setPollMs(POLL_MS);
+      },
+      () => {
         setAvailable(false);
-        timer = setTimeout(poll, IDLE_POLL_MS);
-      }
-    };
-    timer = setTimeout(poll, 0);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) clearTimeout(timer);
-    };
-  }, []);
+        // Back off when the bridge is absent (a plain browser): it cannot
+        // come up later in this page.
+        setPollMs(IDLE_POLL_MS);
+      },
+    );
+  }, pollMs);
 
   // Plain browser: no shell bridge, so no window chrome — the tab bar
   // renders on its own with its default (full bar) styles.

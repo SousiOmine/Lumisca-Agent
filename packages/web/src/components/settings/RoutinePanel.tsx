@@ -14,6 +14,7 @@ import {
 import type { RoutineSchedule, RoutineStatus } from "@lumisca/core/shared";
 import type { RoutineView } from "../../types.ts";
 import { useLocale, useT } from "../../i18n.ts";
+import { NEVER, useVisibleInterval } from "../../hooks/useVisibleInterval.ts";
 import type { MessageKey, MessageParams } from "@lumisca/core/shared";
 
 /**
@@ -143,11 +144,13 @@ export function RoutinePanel({
   useEffect(() => {
     refreshRef.current = onRefresh;
   }, [onRefresh]);
-  useEffect(() => {
-    if (!hasRunning) return;
-    const timer = setInterval(() => refreshRef.current(), RUNNING_POLL_MS);
-    return () => clearInterval(timer);
-  }, [hasRunning]);
+  // Follow a running routine until it finishes. A hidden page does not
+  // poll: the list is re-read by the visibility handler when the user
+  // returns (see useVisibleInterval), which is when they could see it.
+  useVisibleInterval(
+    () => refreshRef.current(),
+    hasRunning ? RUNNING_POLL_MS : NEVER,
+  );
 
   const act = useCallback(
     async (id: string, action: () => Promise<void>) => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
+import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 import { errorText } from "../providers.ts";
 import type { AppModeStatus } from "../types.ts";
 
@@ -59,12 +60,13 @@ export function useAppMode(): {
   // conversation starts it, a first run finishes building it), so stella's
   // status is followed on a slow interval. 3s is fast enough that the screen
   // pane appears as soon as the machine is up, and slow enough that a
-  // `podman` call per tick is not a load.
-  useEffect(() => {
-    if (status?.mode !== "stella") return;
-    const timer = setInterval(() => void reload(), 3_000);
-    return () => clearInterval(timer);
-  }, [status?.mode, reload]);
+  // `podman` call per tick is not a load. A hidden page never polls (see
+  // useVisibleInterval): the machine cannot be watched while nobody looks.
+  const tracking = status?.mode === "stella";
+  useVisibleInterval(
+    () => void reload(),
+    tracking ? 3_000 : NEVER,
+  );
 
   const setMode = useCallback(async (mode: "code" | "stella") => {
     setError(null);
