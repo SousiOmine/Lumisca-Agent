@@ -768,3 +768,173 @@
     padding: 8px 10px;
   }
 }
+
+/* --- chat: UI cards (the chat_ui tool) ------------------------------------ */
+
+/* A card is the reply's structure: a table, a flow, a question. It is drawn
+ * inside the message body, so it keeps the message's width and inherits the
+ * text colours. */
+.ui-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ui-card-invalid {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.ui-card-invalid p {
+  margin: 0;
+}
+
+.ui-card-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ui-card-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ui-card-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ui-card-list.ordered {
+  list-style: decimal;
+}
+
+.ui-card-list:not(.ordered) {
+  list-style: disc;
+}
+
+.ui-card-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.ui-card-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+}
+
+.ui-card-table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.ui-card-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+
+.ui-card-choice,
+.ui-card-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ui-card-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.ui-card-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--lum-dur-fast) var(--lum-ease),
+    border-color var(--lum-dur-fast) var(--lum-ease);
+}
+
+.ui-card-option:hover {
+  background: var(--surface-3);
+}
+
+.ui-card-option.selected {
+  border-color: var(--accent-dim);
+  background: var(--accent-soft);
+}
+
+.ui-card-option-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ui-card-option-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.ui-card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ui-card-field-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.ui-card-field-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ui-card-required {
+  margin-left: 3px;
+  color: var(--error);
+}
+
+.ui-card-input {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.ui-card-submit {
+  align-self: flex-start;
+}
+
+.ui-flow {
+  max-width: 100%;
+  overflow-x: auto;
+}

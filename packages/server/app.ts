@@ -9,6 +9,7 @@ import {
   type Locale,
   type LumiscaCore,
   MCP_OAUTH_CALLBACK_PATH,
+  nextRunAt,
   parseAcceptLanguage,
   parseLocale,
   resolveLocale,
@@ -31,6 +32,7 @@ import { workspaceRoutes } from "./routes/workspaces.ts";
 import { skillRoutes } from "./routes/skills.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 import { stellaRoutes } from "./routes/stella.ts";
+import { routineRoutes } from "./routes/routines.ts";
 import { stellaScreenRoute } from "./stella-screen.ts";
 import { visualRoutes } from "./routes/visuals.ts";
 import { providerRoutes } from "./routes/providers.ts";
@@ -445,6 +447,20 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", mcpRoutes(core, languageFor));
   app.route("/api", sessionRoutes(core));
   app.route("/api", stellaRoutes(core));
+  // Routines: the scheduled requests of a stella conversation. Addressed by
+  // agent, because a routine belongs to one conversation.
+  app.route(
+    "/api",
+    routineRoutes({
+      listRoutinesOf: (agentId) => core.listRoutinesOf(agentId),
+      isRoutineRunning: (id) => core.isRoutineRunning(id),
+      runRoutineNow: (id) => core.runRoutineNow(id),
+      stopRoutine: (id) => core.stopRoutine(id),
+      getRoutineRepo: () => core.getRoutineRepo(),
+      listStellaAgents: () => core.listStellaAgents(),
+      nextRoutineRun: (schedule, from) => nextRunAt(schedule, from),
+    }),
+  );
   // The images a session published for its replies. Mounted after the
   // session routes (its path is its own `/sessions/:id/visual/:name`).
   app.route("/api", visualRoutes(core));

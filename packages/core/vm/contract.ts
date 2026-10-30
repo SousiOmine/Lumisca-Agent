@@ -13,9 +13,24 @@
  * correctly is worse than a constant.
  */
 
-/** The agent's home and working directory inside the VM. The stella file
- * backend's single root is this directory. */
+/** The agent's home and working directory inside the VM (also the path
+ * file tools resolve relative paths from, and where bash starts). */
 export const VM_WORKDIR = "/home/agent";
+
+/** The directory the per-agent working folders are listed under. Each
+ * stella agent gets one (`<this>/<agent id>`), the way Terasuma gives each
+ * Tera one: the folder is the agent's default home for relative paths, not
+ * a boundary — the file tools reach anywhere inside the machine. */
+export const VM_AGENTS_DIR = `${VM_WORKDIR}/agents`;
+
+/** The working folder of one stella agent (absolute, inside the machine). */
+export function vmAgentDir(agentId: string): string {
+  return `${VM_AGENTS_DIR}/${agentId}`;
+}
+
+/** Where background command logs and pid files live (outside any agent's
+ * working folder, so they are not part of the agent's own files). */
+export const VM_BG_DIR = `${VM_WORKDIR}/.lumisca-bg`;
 
 /** The virtual X display the container runs Xvfb on. */
 export const VM_DISPLAY = ":99";

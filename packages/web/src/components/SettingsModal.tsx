@@ -4,6 +4,7 @@ import {
   IconBrain,
   IconPalette,
   IconPlugConnected,
+  IconRepeat,
   IconServer,
   IconSettings,
   IconShield,
@@ -24,6 +25,8 @@ import { ModelList } from "./settings/ModelList.tsx";
 import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
 import { CompactionSettings } from "./settings/CompactionSettings.tsx";
 import { McpList } from "./settings/McpList.tsx";
+import { RoutinePanel } from "./settings/RoutinePanel.tsx";
+import type { useRoutines } from "../hooks/useRoutines.ts";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { AppearancePanel } from "./settings/AppearancePanel.tsx";
@@ -50,6 +53,10 @@ interface SettingsModalProps {
   /** Category selected when the modal opens (the model picker opens it
    * with "providers"). */
   initialCategory: SettingsCategory;
+  /** The routines of the active stella agent (empty in code mode, which has
+   * no agent), plus which agent they belong to. */
+  routines: ReturnType<typeof useRoutines>;
+  routineAgent: string | null;
   onClose: () => void;
 }
 
@@ -59,6 +66,7 @@ export type SettingsCategory =
   | "providers"
   | "models"
   | "mcp"
+  | "routines"
   | "servers"
   | "personalize"
   | "security";
@@ -111,6 +119,11 @@ const CATEGORIES: {
   },
   { id: "mcp", labelKey: "settings.nav.mcp", icon: <IconServer size={18} /> },
   {
+    id: "routines",
+    labelKey: "settings.nav.routines",
+    icon: <IconRepeat size={18} />,
+  },
+  {
     id: "security",
     labelKey: "settings.nav.security",
     icon: <IconShield size={18} />,
@@ -128,6 +141,8 @@ export function SettingsModal({
   notifyEnabled,
   onNotifyEnabledChange,
   initialCategory,
+  routines,
+  routineAgent,
   onClose,
 }: SettingsModalProps) {
   const t = useT();
@@ -280,6 +295,19 @@ export function SettingsModal({
             </>
           )}
           {category === "mcp" && <McpList />}
+          {category === "routines" && (
+            <RoutinePanel
+              routines={routines.routines}
+              loading={routines.loading}
+              error={routines.error}
+              agentName={routineAgent}
+              onRefresh={routines.refresh}
+              onSetEnabled={routines.setEnabled}
+              onRun={routines.run}
+              onStop={routines.stop}
+              onDelete={routines.remove}
+            />
+          )}
           {category === "security" && (
             <>
               <CommandSafetyPanel />

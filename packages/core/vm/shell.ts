@@ -24,7 +24,7 @@ import type {
   RunOptions,
   ShellRunResult,
 } from "../tools/command-backend.ts";
-import { VM_WORKDIR } from "./contract.ts";
+import { VM_BG_DIR } from "./contract.ts";
 import type { VmExec } from "./container.ts";
 
 /** Bound for starting a background command (the tool must return promptly). */
@@ -35,7 +35,7 @@ const POLL_INTERVAL_MS = 250;
 const POLL_MAX_BYTES = 64 * 1024;
 
 /** Where background command logs and pid files live inside the machine. */
-const BG_DIR = `${VM_WORKDIR}/.lumisca-bg`;
+const BG_DIR = VM_BG_DIR;
 
 /**
  * The foreground runner: one `bash -lc` inside the machine.

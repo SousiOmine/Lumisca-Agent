@@ -146,10 +146,10 @@ export function createReadFileTool(
       "`src/main.ts:50+20` (50 lines starting at 50), or " +
       "`src/main.ts:5-16,960-973` (multiple ranges). Raster images " +
       "(PNG/JPEG/GIF/WebP/BMP, up to 10MB) are passed to the model as images " +
-      "when read in full. A whole-file read returns at most 512KB: a cut " +
-      "read ends with `[output truncated to the last 65536 bytes]`, and a " +
-      "file that continues past the read ends with `[file continues; read " +
-      "with <path>:<line>+2000]`. A ranged read ends with `[end of file: N " +
+      "when read in full. A whole-file read keeps at most " +
+      `${Math.floor(DEFAULT_READ_LIMIT / 1024)}KB of the file: a file that ` +
+      "continues past that point ends with `[file continues; read with " +
+      "<path>:<line>+2000]`. A ranged read ends with `[end of file: N " +
       "lines]` when it reached the last line.",
     parameters: readSchema,
     execute: async (_id, params) => {

@@ -385,6 +385,12 @@ if (allowedHosts.length > 0) {
 // itself), plus the cleanup of leftovers from a previous update.
 update?.start();
 
+// The routine scheduler: reads the stored routines and starts their runs.
+// Started after the listener so a routine that fires right away has a
+// conversation layer to run in (the core is already open), and before the
+// shutdown hooks below, which close it through core.close().
+core.startRoutines();
+
 // The stop contract of a supervised server (shutdown.ts): SIGTERM is
 // systemd's ordinary stop request and exits 0, SIGINT reports 130, the drain
 // is bounded, and a second signal skips the rest of it.

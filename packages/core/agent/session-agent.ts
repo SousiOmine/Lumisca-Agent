@@ -26,6 +26,7 @@ import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
+import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
 import type { AskAnswer } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type {
@@ -51,6 +52,9 @@ import {
   contextStart,
 } from "./context-compaction.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+
+/** One observer of the events this agent emits (see subscribeToRun). */
+type RunListener = (event: ClientEvent) => void;
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
@@ -84,6 +88,10 @@ export interface SessionAgentOptions {
   /** Question hub backing the ask tool (one per session): registers the
    * questions the agent asks and resolves them with the user's answers. */
   askHub: AskHub;
+  /** Handover hub backing the screen hand-over (`vm_ask_user`, one per
+   * session): blocks the run while the user drives the machine, and is
+   * torn down with it. */
+  handoverHub?: HandoverHub;
   /** Task hub backing the task / task_output / send_message tools. The
    * agent registers itself as the delivery target for sub-agent completion
    * notifications and messages (see setParentDelivery). */
@@ -188,6 +196,9 @@ export class SessionAgent {
   /** Question hub backing the ask tool; rejects pending asks when the run
    * ends or the session closes (see rejectPendingAsks). */
   private readonly askHub: AskHub;
+  /** Handover hub backing `vm_ask_user`; cancelled with the run and the
+   * session (see cancelHandover). */
+  private readonly handoverHub: HandoverHub | null;
   /** Task hub backing the task / task_output / send_message tools; this
    * agent is its delivery target for sub-agent notifications while the
    * session is open (deregistered on close). */
@@ -207,6 +218,12 @@ export class SessionAgent {
    * run; this guards against re-triggering (e.g. after a failed first run
    * that left the transcript unpersisted). */
   private titleGenerated = false;
+  /** Extra listeners of the events this agent emits (see subscribeToRun):
+   * the routine runner watches for the run's failure without competing with
+   * the session's own event sink. */
+  private runListeners: Set<RunListener> | null = null;
+  /** The routine whose run is in flight (see runningRoutineId). */
+  private activeRoutineId: string | null = null;
 
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
@@ -219,6 +236,7 @@ export class SessionAgent {
     this.onEvent = options.onEvent;
     this.renameSession = options.renameSession;
     this.askHub = options.askHub;
+    this.handoverHub = options.handoverHub ?? null;
 
     // A vision-capable main model passes images through as-is; only a
     // text-only model with an analysis model configured needs rewriting.
@@ -418,6 +436,73 @@ export class SessionAgent {
     }
   }
 
+  /**
+   * Run a routine's prompt to completion and report how it went.
+   *
+   * Deliberately NOT a variant of `prompt`: a routine's run is awaited by
+   * the scheduler (it needs the outcome to record it) and it carries the
+   * routine's name on the message, so the user sees which routine spoke.
+   * Errors are returned, not emitted: the run's failure belongs on the
+   * routine's row (the settings list shows it), while the transcript keeps
+   * its own error row from the normal path.
+   */
+  async runRoutine(
+    text: string,
+    routine: { id: string; name: string },
+  ): Promise<{ failure: string | null }> {
+    if (!this.mcpReadyDone) await this.mcpReady;
+    await this.awaitRewind();
+    const message = this.buildUserMessage(
+      text,
+      undefined,
+      this.joinsActiveRun(),
+      routine.name,
+    );
+    this.publishContexts();
+    this.announceMessage(message);
+    this.resetRetryState();
+    // Stamped for the scheduler's stop: only the run a routine started may
+    // be interrupted by that routine's stop button.
+    this.activeRoutineId = routine.id;
+    let failure: string | null = null;
+    const unsubscribe = this.subscribeToRun((event) => {
+      if (event.type === "session_error") failure = event.message;
+    });
+    try {
+      await this.agent.prompt(message);
+    } catch (error) {
+      failure = errorMessage(error);
+      this.emit({
+        type: "session_error",
+        sessionId: this.sessionId,
+        message: failure,
+      });
+    } finally {
+      this.activeRoutineId = null;
+      unsubscribe();
+    }
+    await this.resumeAfterErrorRun();
+    await this.maybeRunGoalLoop();
+    return { failure };
+  }
+
+  /** The routine whose run is in flight, or null for any other run. The
+   * scheduler checks this before stopping anything. */
+  runningRoutineId(): string | null {
+    return this.activeRoutineId;
+  }
+
+  /** Observe the run's events for one call (the routine runner's error
+   * probe). Returns the unsubscribe function. */
+  private subscribeToRun(listener: RunListener): () => void {
+    if (this.runListeners === null) {
+      this.runListeners = new Set();
+    }
+    const set = this.runListeners;
+    set.add(listener);
+    return () => set.delete(listener);
+  }
+
   /** Send a user prompt even while a run is active (fire-and-forget; the
    * web UI path). An active run steers the message in at the next turn
    * boundary — the same mechanism background-command notifications use —
@@ -448,6 +533,7 @@ export class SessionAgent {
     text: string,
     images?: ImageContent[],
     mode?: ModePrompt,
+    routine?: string,
   ): void {
     this.maybeGenerateTitle(mode ? mode.shortText : text);
     // Decided before the message is built: the stamp must describe the
@@ -455,7 +541,7 @@ export class SessionAgent {
     const steered = this.joinsActiveRun();
     const message = mode
       ? buildModeMessage(mode, text, images ?? [], Date.now(), steered)
-      : this.buildUserMessage(text, images, steered);
+      : this.buildUserMessage(text, images, steered, routine);
     this.publishContexts();
     this.announceMessage(message);
     void this.deliverPrompt(message, mode);
@@ -517,6 +603,7 @@ export class SessionAgent {
     text: string,
     images?: ImageContent[],
     steered?: boolean,
+    routine?: string,
   ): AgentMessage {
     const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
     if (images !== undefined && images.length > 0) content.push(...images);
@@ -524,6 +611,7 @@ export class SessionAgent {
       role: "user",
       content,
       ...(steered === true ? { steered } : {}),
+      ...(routine !== undefined && routine !== "" ? { routine } : {}),
       timestamp: Date.now(),
     };
   }
@@ -677,6 +765,7 @@ export class SessionAgent {
 
   abort(): void {
     this.rejectPendingAsks();
+    this.cancelHandover();
     this.retry.abort();
     // An abort also stops the autonomous goal loop: the user must be able
     // to interrupt a running goal at any time. The goal is cleared so the
@@ -713,6 +802,32 @@ export class SessionAgent {
    * pending questions; throws when the ask is gone or malformed. */
   answerQuestion(toolCallId: string, answers: AskAnswer[]): void {
     this.askHub.answer(toolCallId, answers);
+  }
+
+  /** The hand-over this session is still waiting on, for the resync
+   * snapshot: `handover` events are never replayed, so a client that
+   * (re)connects while the run is blocked on the screen has no other way
+   * to learn that it may take over. */
+  getPendingHandover(): PendingHandover | null {
+    return this.handoverHub?.pendingHandover() ?? null;
+  }
+
+  /** Let the blocked run continue after the user finished at the screen.
+   * Throws when nothing is waiting (the HTTP layer answers 409). */
+  finishHandover(note: string, toolCallId?: string): void {
+    if (this.handoverHub === null) {
+      throw new CoreError(
+        "This session has no screen hand-over",
+        "unavailable",
+      );
+    }
+    this.handoverHub.finish(note, toolCallId);
+  }
+
+  /** Cancel a pending hand-over (the run ended, or the session closes).
+   * Idempotent. */
+  private cancelHandover(): void {
+    this.handoverHub?.cancelAll();
   }
 
   /** The questions this session is still waiting on (the ask tool), for the
@@ -1008,6 +1123,14 @@ export class SessionAgent {
     } catch {
       // Event sink failures must not break the agent loop.
     }
+    if (this.runListeners === null) return;
+    for (const listener of [...this.runListeners]) {
+      try {
+        listener(event);
+      } catch {
+        // An observer must not be able to break the run it observes.
+      }
+    }
   }
 
   private handleEvent(event: AgentEvent): void {
@@ -1068,8 +1191,10 @@ export class SessionAgent {
         break;
       case "agent_end":
         // The run ended (normally or aborted); any ask that is still
-        // pending can never be answered within this run.
+        // pending can never be answered within this run, and a hand-over
+        // that is still waiting has nothing left to wait for.
         this.rejectPendingAsks();
+        this.cancelHandover();
         this.emit({ type: "agent_end", sessionId: this.sessionId });
         break;
       default:

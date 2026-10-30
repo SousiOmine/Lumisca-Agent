@@ -57,6 +57,8 @@ interface StellaViewProps {
   ) => Promise<void>;
   /** Rewind from a user message onward (the transcript's undo). */
   onRewind: (timestamp: number) => Promise<void>;
+  /** The user finished at the screen (the `vm_ask_user` hand-over). */
+  onFinishHandover: (note: string, toolCallId: string) => Promise<void>;
   onOpenSettings: () => void;
 }
 
@@ -87,6 +89,7 @@ export function StellaView(
     onAbort,
     onAnswer,
     onRewind,
+    onFinishHandover,
     onOpenSettings,
   }: StellaViewProps,
 ) {
@@ -106,6 +109,9 @@ export function StellaView(
   const streamingText = open?.streamingText ?? "";
   const runningTools = open?.runningTools ?? EMPTY_TOOLS;
   const pendingQuestions = open?.pendingQuestions ?? EMPTY_QUESTIONS;
+  // The screen is the user's while the agent waits for them: the pane turns
+  // interactive and a bar above it says what to do and offers "done".
+  const handover = open?.pendingHandover ?? null;
   const isRunning = open !== undefined && isViewRunning(open);
   const visualBase = sessionVisualBase("", sessionInfo?.id ?? "");
   // The screen is not a tab and not a button: while the machine runs it is
@@ -242,6 +248,10 @@ export function StellaView(
                   ? open?.agentEndedAt
                   : undefined}
                 onRewind={handleRewind}
+                onSend={(text) => {
+                  if (sessionInfo === undefined) return;
+                  onPrompt(text);
+                }}
               />
             ))}
             {streamingText.length > 0 && (
@@ -301,6 +311,8 @@ export function StellaView(
         <StellaPane
           running={machineRunning}
           vncPort={status.vncPort}
+          handover={handover}
+          onFinishHandover={onFinishHandover}
           onClose={() => setScreenClosed(true)}
         />
       )}

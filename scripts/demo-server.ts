@@ -10,8 +10,8 @@
  *     --allow-run --allow-sys --allow-ffi scripts/demo-server.ts [port]
  *
  * Then open the printed URL, pick the "E2E Demo" workspace, and open the
- * "e2e-session" session. Prompts mentioning "bash" or "read" exercise the
- * matching tool; anything else answers with markdown.
+ * "e2e-session" session. Prompts mentioning "bash", "read" or "chat_ui"
+ * exercise the matching tool; anything else answers with markdown.
  */
 import { basename } from "node:path";
 import {
@@ -24,7 +24,13 @@ import {
   LumiscaCore,
   type StreamRequest,
 } from "../packages/core/mod.ts";
-import { TOOL_BASH, TOOL_READ } from "../packages/core/shared/mod.ts";
+import {
+  TOOL_BASH,
+  TOOL_CALL,
+  TOOL_CHAT_UI,
+  TOOL_READ,
+  TOOL_VM_ASK_USER,
+} from "../packages/core/shared/mod.ts";
 import { createVmManager } from "../packages/core/vm/container.ts";
 import { startServer } from "../packages/server/app.ts";
 import { repoRoot } from "./lib.ts";
@@ -67,6 +73,39 @@ function respond(context: StreamRequest): AssistantMessage {
         cwd: folder,
         command: LIST_COMMAND,
         timeout: 30,
+      }),
+    ]);
+  }
+  // The routine tools are discoverable (tool_search → tool_call), so the
+  // demo reaches them the way a model does: through the dispatcher.
+  if (text.includes("routine_create")) {
+    return fauxAssistantMessage([
+      fauxText("ルーチンを作ります。"),
+      fauxToolCall(TOOL_CALL, {
+        name: "routine_create",
+        args: {
+          name: "朝の確認",
+          prompt: "今日の予定を確認して要約してください",
+          schedule: { kind: "daily", time: "08:30" },
+        },
+      }),
+    ]);
+  }
+  if (text.includes(TOOL_VM_ASK_USER)) {
+    return fauxAssistantMessage([
+      fauxText("画面をお願いします。"),
+      fauxToolCall(TOOL_VM_ASK_USER, {
+        reason: "ログインフォームにパスワードが必要です",
+        instructions: "パスワードを入力してから「完了」を押してください",
+      }),
+    ]);
+  }
+  if (text.includes(TOOL_CHAT_UI)) {
+    return fauxAssistantMessage([
+      fauxText("カードで確認します。"),
+      fauxToolCall(TOOL_CHAT_UI, {
+        markup:
+          '<Card title="リリース確認">\n  <Text>この内容で進めますか。</Text>\n  <Table>\n    <Row><Cell>項目</Cell><Cell>値</Cell></Row>\n    <Row><Cell>版</Cell><Cell>0.9.4</Cell></Row>\n  </Table>\n  <Flow>\n    <Node id="a" shape="round">開始</Node>\n    <Node id="b">確認</Node>\n    <Edge from="a" to="b" label="はい" />\n  </Flow>\n  <Choice>\n    <Option description="そのまま公開します">進める</Option>\n    <Option>止める</Option>\n  </Choice>\n</Card>',
       }),
     ]);
   }

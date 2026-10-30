@@ -19,6 +19,8 @@
  * - `./misc.ts` — errorMessage, InitialData, decode/parse/format helpers,
  * - `./digest.ts` — FNV-1a change-detection digests and canonical JSON,
  * - `./loopback.ts` — loopback host detection and URL host spellings,
+ * - `./routine.ts` — routine schedules, their limits and the next-run rule,
+ * - `./ui-markup/` — the card markup a `chat_ui` call carries,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
 export * from "./app-mode.ts";
@@ -38,3 +40,5 @@ export * from "./misc.ts";
 export * from "./digest.ts";
 export * from "./loopback.ts";
 export * from "./heartbeat.ts";
+export * from "./routine.ts";
+export * from "./ui-markup/index.ts";

@@ -35,6 +35,8 @@ import {
   TOOL_WRITE,
 } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
+import { chatUiView } from "./chat/chat-ui.ts";
+import { UiCard } from "./chat/UiCard.tsx";
 import { ContentImages } from "./ContentImages.tsx";
 import { useExpandableRow } from "../hooks/useExpandableRow.ts";
 import { useT } from "../i18n.ts";
@@ -248,9 +250,23 @@ interface ToolCallProps {
   toolCall: ToolCallBlock;
   result?: ToolResultMessage;
   running: boolean;
+  /** Send a `chat_ui` card's answer as the user's next message. Omitted →
+   * the card renders without working buttons (a read-only transcript). */
+  onSend?: (text: string) => void;
 }
 
-export function ToolCall({ toolCall, result, running }: ToolCallProps) {
+export function ToolCall({
+  toolCall,
+  result,
+  running,
+  onSend,
+}: ToolCallProps) {
+  // A chat_ui call IS the card: drawing the tool line too would show the
+  // markup twice (once as a JSON blob, once as the card).
+  const card = chatUiView(toolCall);
+  if (card !== undefined) {
+    return <UiCard view={card} onSend={onSend ?? (() => {})} />;
+  }
   const { open, triggerProps } = useExpandableRow();
   const t = useT();
 

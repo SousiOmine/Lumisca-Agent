@@ -255,6 +255,16 @@ export const chat = {
     ja: "画面に接続しています…",
     en: "Connecting to the screen…",
   },
+  "chat.stella.handover.reason": {
+    ja: "エージェントが画面を任せようとしています",
+    en: "The agent is handing the screen to you",
+  },
+  "chat.stella.handover.notePlaceholder": {
+    ja: "何をしたか（任意）",
+    en: "What you did (optional)",
+  },
+  "chat.stella.handover.done": { ja: "完了", en: "Done" },
+  "chat.stella.handover.finishing": { ja: "送信中…", en: "Sending…" },
   "chat.stella.machine.screenFailed": {
     ja: "画面に接続できませんでした: {reason}",
     en: "Could not connect to the screen: {reason}",

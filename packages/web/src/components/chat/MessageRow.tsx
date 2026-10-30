@@ -9,6 +9,7 @@ import type {
   ToolResultMessage,
 } from "../../types.ts";
 import { ToolCall } from "../ToolCall.tsx";
+
 import { NotificationRow } from "../NotificationRow.tsx";
 import { ContextRow } from "../ContextRow.tsx";
 import { CheckpointRow } from "../CheckpointRow.tsx";
@@ -27,6 +28,7 @@ export function MessageRow({
   runningTools,
   visualBase,
   onRewind,
+  onSend,
 }: {
   message: AgentMessage;
   toolResults: Map<string, ToolResultMessage>;
@@ -37,6 +39,9 @@ export function MessageRow({
     text: string,
     images: UserMessageImage[],
   ) => void;
+  /** Send a `chat_ui` card's answer as the user's next message. Omitted →
+   * the card renders without working buttons (a read-only transcript). */
+  onSend?: (text: string) => void;
 }) {
   if (message.role === "toolResult") return null;
 
@@ -106,6 +111,7 @@ export function MessageRow({
             toolCall={tc}
             result={toolResults.get(tc.id)}
             running={runningTools.has(tc.id)}
+            onSend={onSend}
           />
         ))}
       </div>

@@ -32,6 +32,23 @@ import { CoreError } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { SessionPoolDeps } from "./pool.ts";
 import type { SessionResources } from "./pool.ts";
+import {
+  TOOL_ROUTINE_CREATE,
+  TOOL_ROUTINE_DELETE,
+  TOOL_ROUTINE_LIST,
+  TOOL_ROUTINE_RUN,
+  TOOL_ROUTINE_UPDATE,
+} from "../shared/mod.ts";
+
+/** Names of the routine tools (discoverable through tool_search): removed
+ * from every session that is not stella's, added back when it is. */
+const ROUTINE_TOOL_NAMES = [
+  TOOL_ROUTINE_CREATE,
+  TOOL_ROUTINE_LIST,
+  TOOL_ROUTINE_UPDATE,
+  TOOL_ROUTINE_DELETE,
+  TOOL_ROUTINE_RUN,
+];
 
 /** Module logger (debug-gated): attachment rebuilds are the first thing
  * to check when MCP tools misbehave. */
@@ -210,6 +227,13 @@ export class AgentFactory {
     if (!chatOnly) {
       registry.addTools(createPdfTools({ files: backends.files }));
     }
+    // The routine tools are discoverable rather than preloaded: a routine is
+    // created once and fires on its own, so five definitions would cost every
+    // turn of every conversation for nothing. Only a stella session has them:
+    // a routine belongs to an agent's one ongoing conversation, and code mode
+    // sessions are tabs the user opens and closes.
+    registry.removeTools(ROUTINE_TOOL_NAMES);
+    if (stella !== undefined) registry.addTools(stella.routineTools);
     // Reuse the session's manager when one exists (agent rebuild); create
     // it on first open. Shared by the async_bash tools and the session
     // agent: the tools start/check/kill commands, the agent turns
@@ -304,8 +328,10 @@ export class AgentFactory {
       // deliberately absent (see createStellaTools).
       ? createStellaTools({
         backends,
+        cwd: stella.cwd,
         skills: stella.skills(),
         screen: stella.screenTools,
+        chatUi: stella.chatUiTool,
         agents: stella.agentTool,
         history: stella.historyTool,
         background,
@@ -353,7 +379,7 @@ export class AgentFactory {
         // the persona comes from the agent registry, through the pool.
         session.stella === true
           ? (this.deps.stellaAgentPersona?.(session) ??
-            { name: "Lumisca", role: "" })
+            { name: "Lumisca", role: "", agentId: session.agentId })
           : undefined,
       );
       this.deps.updateSystemPrompt(session.id, systemPrompt);
@@ -419,6 +445,7 @@ export class AgentFactory {
       },
       backgroundManager: background,
       askHub,
+      ...(stella !== undefined ? { handoverHub: stella.handoverHub } : {}),
       taskHub: tasks,
       toolRegistry: registry,
       contextProviders,

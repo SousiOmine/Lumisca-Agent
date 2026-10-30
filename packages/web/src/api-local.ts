@@ -13,11 +13,13 @@ import type {
   McpTestResult,
   ModelInfo,
   ModePrompt,
+  PendingHandover,
   PendingImage,
   PendingQuestion,
   ProviderAuthType,
   ProviderInfo,
   ProviderLoginSnapshot,
+  RoutineView,
   SessionInfo,
   SkillInfo,
   StellaAgent,
@@ -56,6 +58,10 @@ export interface SessionSnapshot {
   /** Questions the agent is waiting on (the ask tool); empty when none is
    * pending. The run stays blocked until they are answered. */
   questions: PendingQuestion[];
+  /** The screen hand-over the run is blocked on (the `vm_ask_user` tool), or
+   * null. Without it a client that reconnects mid-handover would show the
+   * screen as the agent's while the run waits for the user. */
+  handover: PendingHandover | null;
   /** The last run failure, if any (cleared when a new run starts). Absent
    * when the session has not failed. */
   error?: string;
@@ -183,6 +189,25 @@ export const sessionRoutes = {
       method: "POST",
       body: JSON.stringify({ toolCallId, answers }),
     }),
+  /** The user finished at the screen (the `vm_ask_user` tool's hand-over):
+   * the run blocked on it continues. A 404 means nothing is waiting — a
+   * stale click on a screen that is no longer the user's. */
+  finishHandover: (
+    peerId: string,
+    sessionId: string,
+    note: string,
+    toolCallId?: string,
+  ) =>
+    sessionRequest<{ ok: boolean }>(
+      peerId,
+      sessionPath(sessionId, "/handover"),
+      {
+        method: "POST",
+        body: JSON.stringify(
+          toolCallId === undefined ? { note } : { note, toolCallId },
+        ),
+      },
+    ),
   /** Switch the session's model; the route answers the plain session record
    * (unlike getSession, it carries no last run error). */
   updateSessionModel: (
@@ -293,6 +318,37 @@ export const api = {
     ),
   /** The skills a stella session can load. */
   getStellaSkills: () => request<{ skills: SkillInfo[] }>("/api/stella/skills"),
+
+  // --- routines (scheduled requests of a stella conversation) --------------
+
+  /** One agent's routines, with the "running now" flag. */
+  listRoutines: (agentId: string) =>
+    request<{ routines: RoutineView[] }>(
+      `/api/stella/agents/${encodeURIComponent(agentId)}/routines`,
+    ),
+  /** Turn a routine on or off (the server recomputes its next run). */
+  setRoutineEnabled: (id: string, enabled: boolean) =>
+    request<{ routines: RoutineView[] }>(
+      `/api/routines/${encodeURIComponent(id)}`,
+      { method: "PATCH", body: JSON.stringify({ enabled }) },
+    ),
+  deleteRoutine: (id: string) =>
+    request<{ routines: RoutineView[] }>(
+      `/api/routines/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+  /** Start a run now (the server does not wait for it to finish). */
+  runRoutine: (id: string) =>
+    request<{ routines: RoutineView[] }>(
+      `/api/routines/${encodeURIComponent(id)}/run`,
+      { method: "POST" },
+    ),
+  /** Stop the run this routine started. */
+  stopRoutine: (id: string) =>
+    request<{ routines: RoutineView[] }>(
+      `/api/routines/${encodeURIComponent(id)}/stop`,
+      { method: "POST" },
+    ),
   listProviders: () => request<ProviderInfo[]>("/api/providers"),
   listModels: (providerId: string) =>
     request<ModelInfo[]>(`/api/providers/${providerId}/models`),

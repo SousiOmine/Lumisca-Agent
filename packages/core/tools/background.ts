@@ -523,6 +523,9 @@ export interface AsyncBashToolOptions {
    * command before it runs; a blocked command returns the reason as the
    * tool result). Omitted → the command runs unchecked. */
   safety?: CommandSafety;
+  /** The working directory used when the caller omits `cwd` (a session with
+   * one place to work; see BashToolOptions.defaultCwd). */
+  defaultCwd?: string;
 }
 
 const startSchema = object({
@@ -593,6 +596,21 @@ export function createAsyncBashTools(
       "the run does not stop it. The result reports the command's id and " +
       "pid; the shell is the same as bash.",
     parameters: startSchema,
+    // Same contract as the bash tool: a session with one working folder
+    // supplies it instead of making the model repeat it (see
+    // BashToolOptions.defaultCwd).
+    ...(options.defaultCwd !== undefined
+      ? {
+        prepareArguments: (args: unknown) => {
+          const record = typeof args === "object" && args !== null
+            ? args as Record<string, unknown>
+            : {};
+          return record.cwd === undefined
+            ? { ...record, cwd: options.defaultCwd as string }
+            : record;
+        },
+      }
+      : {}),
     execute: async (_id, params) => {
       const cwd = await requireResolved(files, params.cwd);
       const blocked = await safetyBlockResult(

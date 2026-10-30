@@ -40,6 +40,12 @@ interface PromptBody {
   mode?: unknown;
 }
 
+interface PendingHandover {
+  toolCallId: string;
+  reason: string;
+  instructions: string | null;
+}
+
 interface AnswerBody {
   toolCallId?: unknown;
   answers?: unknown;
@@ -212,6 +218,12 @@ export interface SessionApi {
   setSessionModel(id: string, provider: string, modelId: string): void;
   /** Resolve a pending ask (the ask tool) with the user's answers. */
   answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
+  /** The hand-over the session is waiting on (the screen is the user's), or
+   * null. Carried by the resync snapshot so a client that reconnects while
+   * the run is blocked can take over. */
+  getPendingHandover(id: string): PendingHandover | null;
+  /** The user finished at the screen: let the blocked run continue. */
+  finishHandover(id: string, note: string, toolCallId?: string): void;
   /** The session's current todo plan (empty when there is none). */
   getTodo(id: string): TodoPhase[];
   /** Snapshots of the session's sub-agent tasks (empty when there are none). */
@@ -286,6 +298,7 @@ export function sessionRoutes(core: SessionApi): Hono {
     const messages = agent.messages;
     const running = agent.isStreaming;
     const questions = core.getPendingQuestions(id);
+    const handover = core.getPendingHandover(id);
     const error = core.getSessionLastError(id);
     // The revision travels with the snapshot: the client seeds its
     // "everything seen up to here" marker from it (see the web's revision
@@ -295,6 +308,7 @@ export function sessionRoutes(core: SessionApi): Hono {
       messages,
       running,
       questions,
+      handover,
       error,
       name: session.name,
       rev,
@@ -447,6 +461,30 @@ export function sessionRoutes(core: SessionApi): Hono {
     const id = c.req.param("id");
     requireSession(id);
     core.answerQuestion(id, toolCallId, answers);
+    return c.json({ ok: true });
+  });
+
+  /** The user finished at the screen: the run blocked on `vm_ask_user`
+   * continues. `note` is what they did (optional; an empty note means "just
+   * done"). Throws 404 when nothing is waiting — a stale click on a screen
+   * that is no longer the user's. */
+  app.post("/sessions/:id/handover", async (c) => {
+    const body = await parseBody<{ note?: unknown; toolCallId?: unknown }>(c);
+    const note = body?.note ?? "";
+    if (typeof note !== "string") {
+      throw new AppError("note must be a string", 400);
+    }
+    const toolCallId = body?.toolCallId;
+    if (toolCallId !== undefined && typeof toolCallId !== "string") {
+      throw new AppError("toolCallId must be a string", 400);
+    }
+    const id = c.req.param("id");
+    requireSession(id);
+    core.finishHandover(
+      id,
+      note,
+      typeof toolCallId === "string" ? toolCallId : undefined,
+    );
     return c.json({ ok: true });
   });
 

@@ -39,6 +39,11 @@ export interface BashToolOptions {
   files: FileBackend;
   /** Where commands run: this machine, or the stella VM. */
   runner: CommandRunner;
+  /** The working directory used when the caller omits `cwd`. Only a session
+   * with a single place to work (the stella machine's per-agent folder) sets
+   * this; a coding workspace has no such default, so its `cwd` argument
+   * stays required. */
+  defaultCwd?: string;
   /** Extra env vars to expose. */
   env?: Record<string, string>;
   /** Default timeout in seconds. */
@@ -120,6 +125,21 @@ export function createBashTool(
       "is PowerShell (7 if installed, else Windows PowerShell, with Git Bash " +
       "or cmd.exe as a fallback); on macOS/Linux it is /bin/sh.",
     parameters: bashSchema,
+    // A session with one working folder does not make the model repeat it on
+    // every call (see defaultCwd). Injecting it here, before validation,
+    // keeps the schema — and every caller that passes `cwd` — unchanged.
+    ...(options.defaultCwd !== undefined
+      ? {
+        prepareArguments: (args: unknown) => {
+          const record = typeof args === "object" && args !== null
+            ? args as Record<string, unknown>
+            : {};
+          return record.cwd === undefined
+            ? { ...record, cwd: options.defaultCwd as string }
+            : record;
+        },
+      }
+      : {}),
     execute: async (_id, params, signal) => {
       // Resolve the working directory before the safety check so the check
       // judges the exact context the command would run in.

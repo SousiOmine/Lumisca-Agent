@@ -19,6 +19,7 @@ export const settings = {
   "settings.nav.providers": { ja: "APIプロバイダー", en: "API providers" },
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
+  "settings.nav.routines": { ja: "ルーチン", en: "Routines" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
 
   // --- appearance panel -----------------------------------------------------

@@ -150,6 +150,7 @@ export function useSessionEvents(
       started: number | undefined;
       ended: number | undefined;
       questions: SessionView["pendingQuestions"];
+      handover: SessionView["pendingHandover"];
       error: string | undefined;
       name: string;
     }>();
@@ -160,6 +161,7 @@ export function useSessionEvents(
         started: v.agentStartedAt,
         ended: v.agentEndedAt,
         questions: v.pendingQuestions,
+        handover: v.pendingHandover,
         error: v.error,
         name: v.info.name,
       });

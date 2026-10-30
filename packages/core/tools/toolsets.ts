@@ -214,12 +214,17 @@ export function createCodingTools(
  */
 export function createStellaTools(options: {
   backends: ToolBackends;
+  /** The session's working folder inside the machine: bash and async_bash
+   * start here when the model omits `cwd`. */
+  cwd?: string;
   /** Skills discovered for this session (vm/skills.ts), already merged with
    * the built-ins the session is entitled to. */
   skills: SkillDef[];
   screen: Tool[];
   /** `agent_create`: add another stella agent (the sidebar's counterparts). */
   agents?: Tool;
+  /** `chat_ui`: show a card in the chat. */
+  chatUi?: Tool;
   /** `history_search`: the conversation's own saved history. Omitted → the
    * tool is not built (a caller without a message store has nothing to
    * search). */
@@ -238,15 +243,18 @@ export function createStellaTools(options: {
       files,
       runner,
       safety: options.safety,
+      defaultCwd: options.cwd,
     }),
     ...(options.background !== undefined
       ? createAsyncBashTools({
         manager: options.background,
         files,
         safety: options.safety,
+        defaultCwd: options.cwd,
       })
       : []),
     ...options.screen,
+    ...(options.chatUi !== undefined ? [options.chatUi] : []),
     ...(options.agents !== undefined ? [options.agents] : []),
     ...(options.history !== undefined ? [options.history] : []),
     ...(options.visuals !== undefined

@@ -2,7 +2,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 export const MAX_TOOL_OUTPUT = 64 * 1024;
-export const DEFAULT_READ_LIMIT = 512 * 1024;
+/** How much of a file one whole-file `read` transfers (its head; the cut
+ * points at a line range for the rest). 50KB is what the model can take in
+ * one look without spending the turn on a single file. */
+export const DEFAULT_READ_LIMIT = 50 * 1024;
 
 /** Directory holding the complete output of truncated streams (see
  * {@link OutputSpiller}): by default under the OS temp dir, so nothing is

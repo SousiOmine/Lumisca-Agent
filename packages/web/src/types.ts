@@ -8,6 +8,7 @@
  * list is not repeated.
  */
 import type * as core from "@lumisca/core";
+import type { RoutineSchedule, RoutineStatus } from "@lumisca/core/shared";
 import type { Message, ToolCall } from "@lumisca/core";
 
 /** Shared domain types; single source of truth in packages/core. */
@@ -157,6 +158,33 @@ export interface PendingImage {
  * imports from `@lumisca/web`); re-exported here for web consumers. */
 export type { InitialData } from "@lumisca/core/shared";
 
+/** One routine (a scheduled request of a stella conversation), as the
+ * settings list shows it: the stored row plus whether it is running now
+ * (which lives in the scheduler, not the database). */
+export interface RoutineView {
+  id: string;
+  agentId: string;
+  agentName: string;
+  name: string;
+  prompt: string;
+  schedule: RoutineSchedule;
+  enabled: boolean;
+  nextRunAt: number | null;
+  lastRunAt: number | null;
+  lastStatus: RoutineStatus | null;
+  lastDetail: string | null;
+  running: boolean;
+}
+
+/** The screen hand-over the run is waiting on (`vm_ask_user`): the user
+ * drives the machine while this is set, and the run continues once they
+ * finish. */
+export interface PendingHandover {
+  toolCallId: string;
+  reason: string;
+  instructions: string | null;
+}
+
 /** One pending ask (the `ask` tool): questions awaiting the user's answers,
  * tied to the tool call that asked them. */
 export interface PendingQuestion {
@@ -193,6 +221,9 @@ export interface SessionView {
    * user's answers; rendered above the composer, cleared when the tool
    * call resolves or the run ends. */
   pendingQuestions: PendingQuestion[];
+  /** The screen hand-over the run is waiting on, or null. Makes the screen
+   * pane interactive and shows the "done" bar above it. */
+  pendingHandover: PendingHandover | null;
   /** The session's todo plan (todo tool), shown in the progress panel.
    * Replaced wholesale by every `todo` event. */
   todos: core.TodoPhase[];
@@ -236,6 +267,7 @@ export function emptyView(
     streamingText: "",
     runningTools: new Map(),
     pendingQuestions: [],
+    pendingHandover: null,
     todos: [],
     tasks: [],
     backgrounds: [],

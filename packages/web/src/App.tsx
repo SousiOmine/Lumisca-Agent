@@ -40,6 +40,7 @@ import { ModeSelectView } from "./components/ModeSelectView.tsx";
 import { StellaView } from "./components/StellaView.tsx";
 import { useAppMode } from "./hooks/useAppMode.ts";
 import { useStella } from "./hooks/useStella.ts";
+import { useRoutines } from "./hooks/useRoutines.ts";
 import { StellaSidebar } from "./components/StellaSidebar.tsx";
 
 export interface AppProps {
@@ -186,6 +187,7 @@ export function App({ initialData }: AppProps): ReactElement {
     abort,
     cancelGoal,
     answer,
+    finishHandover,
     rewind,
     compact,
     changeModel,
@@ -256,6 +258,10 @@ export function App({ initialData }: AppProps): ReactElement {
     : undefined;
   const stellaInfo = stellaView?.info ?? stella.info ?? undefined;
   const stellaAgent = stella.agents.find((a) => a.id === stella.activeAgentId);
+  // The settings dialog's routine list: the active counterpart's routines
+  // (code mode has no agent, so the list stays empty and says so).
+  const routines = useRoutines(stellaActive ? stella.activeAgentId : null);
+  const routineAgentName = stellaActive ? stellaAgent?.name ?? null : null;
 
   // The mode-selection screen, and nothing else, until a mode is chosen.
   if (modeStatus === null || modeStatus.mode === null) {
@@ -374,6 +380,10 @@ export function App({ initialData }: AppProps): ReactElement {
                   stella.sessionId !== null
                     ? rewind(stella.sessionId, timestamp)
                     : Promise.resolve()}
+                onFinishHandover={(note, toolCallId) =>
+                  stella.sessionId !== null
+                    ? finishHandover(stella.sessionId, note, toolCallId)
+                    : Promise.reject(new Error("No conversation"))}
                 onOpenSettings={() => setSettingsCategory("providers")}
               />
             </div>
@@ -393,6 +403,7 @@ export function App({ initialData }: AppProps): ReactElement {
               onImagesChange={(images) => updateDraft(draftKey, { images })}
               onPrompt={(text, images, mode) =>
                 activeTab && prompt(activeTab, text, images, mode)}
+              onCardAnswer={(text) => activeTab && prompt(activeTab, text, [])}
               onAbort={() => activeTab && abort(activeTab)}
               onRewind={(timestamp) =>
                 activeTab ? rewind(activeTab, timestamp) : Promise.resolve()}
@@ -452,6 +463,8 @@ export function App({ initialData }: AppProps): ReactElement {
           notifyEnabled={notifyEnabled}
           onNotifyEnabledChange={handleNotifyEnabledChange}
           initialCategory={settingsCategory}
+          routines={routines}
+          routineAgent={routineAgentName}
           onClose={closeSettings}
         />
       )}

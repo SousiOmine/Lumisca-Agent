@@ -2,16 +2,18 @@
  * The stella VM's implementation of {@link FileBackend}: every operation is
  * one `podman exec` inside the machine.
  *
- * The VM's home (`/home/agent`) is the backend's single root and the only
- * filesystem the agent's file tools can reach — nothing is mounted from the
+ * The VM's home (`/home/agent`) is the backend's root: relative paths
+ * resolve against the session's working folder below it, and every path the
+ * machine answers for must land inside the home. Nothing is mounted from the
  * host, which is what makes "the agent works inside its own machine" true
- * rather than a convention. Paths are validated the same way the host's are:
- * a request is resolved against the root, `..` is normalized away, and
- * anything landing outside is refused with the host's wording.
+ * rather than a convention. The root is the whole machine home rather than
+ * one agent's folder — like Terasuma, an agent may read and write the other
+ * agents' folders when the user asks it to, and the working folder is a
+ * default, not a wall.
  *
- * The cost of that isolation is one container call per operation, so the two
- * searches matter most. `find` does the walking inside the machine (one call,
- * with the same pruning rules the host walk applies), while the MATCHING runs
+ * The cost of one container call per operation is why the two searches
+ * matter most. `find` does the walking inside the machine (one call, with
+ * the same pruning rules the host walk applies), while the MATCHING runs
  * here against the returned paths — the same `globToRegExp` and
  * `GitignoreMatcher` the host uses. Sharing the matcher rather than
  * re-implementing glob and gitignore semantics in shell is what keeps the two
@@ -114,23 +116,28 @@ export function walkCommand(
  * The VM file backend.
  *
  * All paths the agent sees are absolute inside the machine, or relative to
- * its home. `resolve` accepts the shapes the host sandbox does — an absolute
- * path inside the root, or a path relative to it — and tolerates `~` the way
- * a shell would, because the machine's home IS the root.
+ * the session's working folder. `resolve` accepts the shapes the host sandbox
+ * does — an absolute path inside the machine's home, or a path relative to
+ * the working folder — and tolerates `~` the way a shell would, because the
+ * machine's home is where a shell would land too.
  */
 export class VmFileBackend implements FileBackend {
   readonly roots: readonly string[] = [VM_WORKDIR];
   readonly #exec: VmExec;
+  /** The folder relative paths resolve against (the session's working folder;
+   * the machine's home when a caller has none). */
+  readonly #cwd: string;
   /** `.gitignore` matchers per walk root, read through the exec seam and
    * cached for this backend's lifetime (a search runs on every turn). */
   readonly #gitignore = new Map<string, GitignoreMatcher | null>();
 
-  constructor(exec: VmExec) {
+  constructor(exec: VmExec, options: { cwd?: string } = {}) {
     this.#exec = exec;
+    this.#cwd = options.cwd ?? VM_WORKDIR;
   }
 
   resolve(requested: string): Promise<ResolvedPath> {
-    return Promise.resolve(resolveVmPath(requested));
+    return Promise.resolve(resolveVmPath(requested, this.#cwd));
   }
 
   async stat(path: string): Promise<BackendStat | undefined> {
@@ -361,10 +368,11 @@ export class VmFileBackend implements FileBackend {
     return found;
   }
 
-  /** The roots a search visits: the resolved `path`, or the machine's home.
-   * A path that does not exist fails with the host's wording. */
+  /** The roots a search visits: the resolved `path`, or the session's
+   * working folder. A path that does not exist fails with the host's
+   * wording. */
   private async searchRoots(requested: string | undefined): Promise<string[]> {
-    if (requested === undefined) return [VM_WORKDIR];
+    if (requested === undefined) return [this.#cwd];
     const resolved = await this.resolve(requested);
     if (!resolved.ok) throw new Error(resolved.reason);
     const stat = await this.stat(resolved.path);
@@ -430,10 +438,16 @@ function parseGrepLine(
   };
 }
 
-/** Resolve a model-supplied path against the machine's home: `~` is expanded
- * as a shell would, relative paths resolve from home, and anything landing
- * outside is refused with the wording the host sandbox uses. */
-export function resolveVmPath(requested: string): ResolvedPath {
+/** Resolve a model-supplied path inside the machine: `~` is expanded as a
+ * shell would, a relative path resolves from the working folder (`~` = the
+ * machine's home), and anything landing outside the home is refused with the
+ * wording the host sandbox uses. The home, not the working folder, is the
+ * boundary: one agent may reach another agent's folder, and the prompt says
+ * so. */
+export function resolveVmPath(
+  requested: string,
+  cwd: string = VM_WORKDIR,
+): ResolvedPath {
   if (typeof requested !== "string" || requested.length === 0) {
     return { ok: false, reason: "Path must be a non-empty string" };
   }
@@ -444,7 +458,7 @@ export function resolveVmPath(requested: string): ResolvedPath {
     : requested;
   const absolute = posix.isAbsolute(expanded)
     ? posix.normalize(expanded)
-    : posix.resolve(VM_WORKDIR, expanded);
+    : posix.resolve(cwd, expanded);
   if (!isInside(VM_WORKDIR, absolute)) {
     return { ok: false, reason: `Path is outside the workspace: ${requested}` };
   }

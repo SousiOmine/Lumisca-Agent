@@ -124,6 +124,10 @@ export interface UserMessage {
    * not start a run must not end the running turn. Not provider-facing:
    * the transport reads role and content only (see toCoreMessages). */
   steered?: boolean;
+  /** Set on a prompt a routine started (see shared/routine.ts): the
+   * routine's name. The UI shows it above the bubble, so the user can tell
+   * a scheduled request from something they typed. Never provider-facing. */
+  routine?: string;
   timestamp: number;
 }
 

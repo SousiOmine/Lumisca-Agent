@@ -78,6 +78,26 @@ export type ClientEvent =
    * carried so clients can replace their view idempotently (resync-safe).
    * Emitted on every mutation (plan / update / clear). */
   | { type: "todo"; sessionId: string; todos: TodoPhase[] }
+  /** The agent handed the machine's screen to the user (`vm_ask_user`) and
+   * the run is blocked until they finish. Clients make the screen pane
+   * interactive while it lasts; the resync snapshot carries the same
+   * pending handover (`handover` events are never replayed). */
+  | {
+    type: "handover";
+    sessionId: string;
+    toolCallId: string;
+    reason: string;
+    instructions: string | null;
+  }
+  /** The handover ended (the user finished, the run was aborted, or the
+   * session closed). `note` is what the user reported doing, empty when
+   * they only pressed done. Clients stop accepting input on the screen. */
+  | {
+    type: "handover_end";
+    sessionId: string;
+    toolCallId: string;
+    note: string;
+  }
   /** A sub-agent task started (the task tool). Clients add it to the tasks
    * panel; its live response arrives as `task_delta` events. */
   | {

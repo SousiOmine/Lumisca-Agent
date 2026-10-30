@@ -55,10 +55,29 @@ export const TOOL_VISUAL = "visual";
  * at — or click on — the machine it works in. */
 export const TOOL_VM_SCREENSHOT = "vm_screenshot";
 export const TOOL_VM_ACT = "vm_act";
+/** Hand the machine's screen to the user and wait (`vm_ask_user`). Preloaded
+ * for the same reason as the screen tools: an agent must know that asking a
+ * person is an option, or it will try to type the password itself. */
+export const TOOL_VM_ASK_USER = "vm_ask_user";
+
+/** Show a card in the chat (text, list, table, flow, choice, form). The card
+ * carries its own blocks; a Choice or Form click comes back as the user's
+ * next message, not as a tool result. Preloaded: the model must know it can
+ * ask with a card instead of a wall of prose. */
+export const TOOL_CHAT_UI = "chat_ui";
 
 /** Create another stella agent (a separate counterpart with its own name, role
  * and conversation). Terasuma's `tera_create`. */
 export const TOOL_AGENT_CREATE = "agent_create";
+
+/** Run a scheduled request in this conversation (`routine_*`). Discoverable
+ * rather than preloaded: a routine is created once and then runs on its own,
+ * so its five tool definitions would cost every turn for no gain. */
+export const TOOL_ROUTINE_CREATE = "routine_create";
+export const TOOL_ROUTINE_LIST = "routine_list";
+export const TOOL_ROUTINE_UPDATE = "routine_update";
+export const TOOL_ROUTINE_DELETE = "routine_delete";
+export const TOOL_ROUTINE_RUN = "routine_run";
 
 /** Search this conversation's saved history, including the turns a
  * compaction checkpoint replaced (so they are no longer in the model's

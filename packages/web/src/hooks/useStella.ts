@@ -115,6 +115,7 @@ export function useStella(
             ...base,
             error: snapshot.error,
             pendingQuestions: snapshot.questions,
+            pendingHandover: snapshot.handover,
             ...(snapshot.running ? { agentStartedAt: Date.now() } : {}),
           });
           return next;

@@ -188,6 +188,36 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
         ON sessions(agent_id) WHERE agent_id IS NOT NULL;
     `);
   },
+  // Routines: requests this conversation runs on a schedule. A row belongs
+  // to one agent (deleting the agent deletes its routines), and the
+  // schedule is one JSON value (three fixed shapes — see shared/routine.ts)
+  // rather than three columns of mostly-null fields.
+  //
+  // A routine's run is an ordinary user message; the message carries the
+  // routine's name (see `routine` on UserMessage), so the transcript needs
+  // no extra column to tell a scheduled request from a typed one.
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS routines (
+        id          TEXT PRIMARY KEY,
+        agent_id    TEXT NOT NULL REFERENCES stella_agents(id) ON DELETE CASCADE,
+        name        TEXT NOT NULL,
+        prompt      TEXT NOT NULL,
+        schedule    TEXT NOT NULL,
+        enabled     INTEGER NOT NULL,
+        next_run_at INTEGER,
+        last_run_at INTEGER,
+        last_status TEXT,
+        last_detail TEXT,
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_routines_due
+        ON routines(enabled, next_run_at);
+      CREATE INDEX IF NOT EXISTS idx_routines_agent
+        ON routines(agent_id, created_at);
+    `);
+  },
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

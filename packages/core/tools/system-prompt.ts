@@ -1,5 +1,6 @@
 import type { Workspace } from "../types/workspace.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
+import { VM_AGENTS_DIR, VM_WORKDIR } from "../vm/contract.ts";
 import {
   buildEnvironmentSection,
   type EnvironmentModel,
@@ -86,11 +87,16 @@ export function buildStellaSystemPrompt(
      * created with. This is what makes one stella conversation different from
      * another, so it belongs in the prompt rather than in a first message. */
     agent?: { name: string; role: string };
+    /** The session's working folder inside the machine (relative paths and
+     * bash start there). Omitted → the machine's home, which is what a
+     * conversation without an agent's folder gets. */
+    workdir?: string;
   } = {},
 ): string {
   // The persona, when the session has one. Written first because it is the
   // most specific fact about this session: a reader (and the model) should
   // know who this is before being told what the machine is.
+  const workdir = options.workdir ?? VM_WORKDIR;
   const persona = options.agent === undefined
     ? ""
     : `You are "${options.agent.name}".${
@@ -102,10 +108,16 @@ export function buildStellaSystemPrompt(
 machine that belongs to this conversation.
 
 The machine is a Linux desktop: a shell, a browser and a screen are there for
-whatever the work needs. Your home and working directory is /home/agent; the
-file tools resolve paths inside it, and bash starts there. Nothing outside
-the machine is reachable — that is deliberate: you experiment freely, and a
-mistake costs nothing on the user's own computer.
+whatever the work needs. Your working folder is ${workdir || "/home/agent"}
+(~ is /home/agent): the file tools resolve relative paths inside it and
+bash starts there. Nothing outside the machine is reachable — that is
+deliberate: you experiment freely, and a mistake costs nothing on the user's
+own computer.
+
+Other agents' working folders are sibling folders under
+${VM_AGENTS_DIR}, one folder per agent id. You may read and write there, but
+change another agent's files only when the user asks. Run
+\`ls ${VM_AGENTS_DIR}\` to list them.
 
 You talk with the user in a single, ongoing chat. There is no session list
 and no workspace to pick: this one conversation is the whole context, and it

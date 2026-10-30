@@ -2,6 +2,7 @@ import { IconX } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/compat";
 import { token } from "../api-client.ts";
 import { useT } from "../i18n.ts";
+import type { PendingHandover } from "../types.ts";
 
 /**
  * The machine's screen, live.
@@ -11,10 +12,11 @@ import { useT } from "../i18n.ts";
  * reachable from the browser — only the relay, behind the same token and Host
  * checks as every other route.
  *
- * The pane is view-only. The agent is the one that clicks: a user and an agent
- * moving the same pointer produces actions neither of them intended, and
- * stella's whole design is "the agent works in its machine while the user
- * watches". Taking over is a feature this mode does not have.
+ * The pane is view-only except during a hand-over: when the agent calls
+ * `vm_ask_user` the run stops and the screen becomes the user's (a password,
+ * a CAPTCHA, a consent dialog). Two pointers on one screen is a bug, so the
+ * two states are exclusive — while the agent works the pane is a window,
+ * while it waits the pane is an input device.
  */
 
 /** The slice of noVNC's RFB this pane uses. Declared locally because the
@@ -37,6 +39,11 @@ type RfbConstructor = new (
 interface StellaPaneProps {
   running: boolean;
   vncPort: number | null;
+  /** The hand-over the run is waiting on, or null. While set, the pane is
+   * interactive and the "done" bar is shown. */
+  handover: PendingHandover | null;
+  /** The user finished at the screen: send what they did (may be empty). */
+  onFinishHandover: (note: string, toolCallId: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -66,11 +73,22 @@ function waitForSize(element: HTMLElement, timeoutMs: number): Promise<void> {
   });
 }
 
-export function StellaPane({ running, vncPort, onClose }: StellaPaneProps) {
+export function StellaPane({
+  running,
+  vncPort,
+  handover,
+  onFinishHandover,
+  onClose,
+}: StellaPaneProps) {
   const t = useT();
   const hostRef = useRef<HTMLDivElement>(null);
+  const clientRef = useRef<RfbClient | null>(null);
   const [state, setState] = useState<ConnectionState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
+  const interactive = handover !== null;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -102,6 +120,9 @@ export function StellaPane({ running, vncPort, onClose }: StellaPaneProps) {
         const url = `${protocol}//${location.host}/api/stella/screen${query}`;
         const rfb = new RFB(host, url);
         client = rfb;
+        clientRef.current = rfb;
+        // The view-only flag follows the hand-over (see the effect below);
+        // it starts closed because the agent owns the pointer by default.
         rfb.viewOnly = true;
         rfb.scaleViewport = true;
         rfb.resizeSession = false;
@@ -150,6 +171,7 @@ export function StellaPane({ running, vncPort, onClose }: StellaPaneProps) {
 
     return () => {
       disposed = true;
+      clientRef.current = null;
       try {
         client?.disconnect();
       } catch {
@@ -158,8 +180,17 @@ export function StellaPane({ running, vncPort, onClose }: StellaPaneProps) {
     };
   }, [running, vncPort, t]);
 
+  // The view-only flag follows the hand-over: the agent owns the pointer
+  // while it works, the user owns it while the run waits for them. Applied
+  // to the live client (no reconnect: the picture and the handshake stay).
+  useEffect(() => {
+    const rfb = clientRef.current;
+    if (rfb === null) return;
+    rfb.viewOnly = !interactive;
+  }, [interactive, state]);
+
   return (
-    <aside className="stella-pane">
+    <aside className={`stella-pane${interactive ? " handover" : ""}`}>
       <header className="stella-pane-header">
         <span>{t("chat.stella.machine.screen")}</span>
         <button
@@ -172,6 +203,56 @@ export function StellaPane({ running, vncPort, onClose }: StellaPaneProps) {
           <IconX size={15} />
         </button>
       </header>
+      {handover !== null && (
+        <form
+          className="stella-handover"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (finishing) return;
+            setFinishing(true);
+            setFinishError(null);
+            onFinishHandover(note.trim(), handover.toolCallId)
+              .then(() => setNote(""))
+              .catch((failure) => {
+                setFinishError(
+                  failure instanceof Error ? failure.message : String(failure),
+                );
+              })
+              .finally(() => setFinishing(false));
+          }}
+        >
+          <p className="stella-handover-label">
+            {t("chat.stella.handover.reason")}
+          </p>
+          <p className="stella-handover-reason">{handover.reason}</p>
+          {handover.instructions !== null && (
+            <p className="stella-handover-instructions">
+              {handover.instructions}
+            </p>
+          )}
+          <div className="stella-handover-actions">
+            <input
+              type="text"
+              className="stella-handover-note"
+              placeholder={t("chat.stella.handover.notePlaceholder")}
+              value={note}
+              onChange={(event) => setNote(event.currentTarget.value)}
+            />
+            <button
+              type="submit"
+              className="btn primary"
+              disabled={finishing}
+            >
+              {finishing
+                ? t("chat.stella.handover.finishing")
+                : t("chat.stella.handover.done")}
+            </button>
+          </div>
+          {finishError !== null && (
+            <p className="error-text" role="alert">{finishError}</p>
+          )}
+        </form>
+      )}
       <div className="stella-pane-body">
         {!running && (
           <p className="stella-pane-note">

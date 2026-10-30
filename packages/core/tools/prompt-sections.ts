@@ -3,6 +3,7 @@ import {
   TOOL_ASK,
   TOOL_ASYNC_BASH,
   TOOL_BASH,
+  TOOL_CHAT_UI,
   TOOL_EDIT,
   TOOL_EVAL,
   TOOL_GLOB,
@@ -16,6 +17,7 @@ import {
   TOOL_TODO,
   TOOL_VISUAL,
   TOOL_VM_ACT,
+  TOOL_VM_ASK_USER,
   TOOL_VM_SCREENSHOT,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
@@ -275,6 +277,33 @@ const AGENT_CREATE_SECTION: PromptSection = {
     "agent appears in the sidebar, and this conversation\n  stays as it is.",
 };
 
+/** Handing the screen to the user. Keyed on the tool: an agent that cannot
+ * ask has no way to get past a password, and would try to type it. */
+const VM_ASK_USER_SECTION: PromptSection = {
+  name: "vm:ask_user",
+  order: ORDER.tool + 155,
+  requires: [TOOL_VM_ASK_USER],
+  text:
+    "- Some steps need a person at the screen: a password, a verification " +
+    "code, a CAPTCHA,\n  a consent dialog you cannot read. Call vm_ask_user " +
+    "instead of typing it yourself;\n  the run stops while the user drives " +
+    "the machine, and you take a screenshot when\n  it returns. Never ask " +
+    "the user to send a secret as a chat message — it would be\n  written " +
+    "into the transcript.",
+};
+
+/** Cards in the chat. Keyed on the tool. */
+const CHAT_UI_SECTION: PromptSection = {
+  name: "tool:chat_ui",
+  order: ORDER.tool + 158,
+  requires: [TOOL_CHAT_UI],
+  text:
+    "- Use chat_ui when structure helps: a table of numbers, a flow of steps, " +
+    "a choice\n  the user picks from. A Choice or Form click comes back as " +
+    "the user's next message,\n  so end your turn after showing one; do not " +
+    "repeat the question in your text.",
+};
+
 const TASK_SECTION: PromptSection = {
   name: "tool:task",
   order: ORDER.tool + 130,
@@ -438,6 +467,8 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   SKILL_SECTION,
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
+  VM_ASK_USER_SECTION,
+  CHAT_UI_SECTION,
   HISTORY_SEARCH_SECTION,
   AGENT_CREATE_SECTION,
   VISUAL_IMAGE_SECTION,

@@ -100,6 +100,18 @@ import {
 } from "./stella/agents.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
 import { createHistorySearchTool } from "./stella/history.ts";
+import { createRoutineRepo, type RoutineRepo } from "./routine/repo.ts";
+import {
+  createRoutineScheduler,
+  type RoutineRunner,
+  type RoutineScheduler,
+} from "./routine/scheduler.ts";
+import { createRoutineTools } from "./routine/tools.ts";
+import { HandoverHub, type PendingHandover } from "./vm/handover.ts";
+import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
+import { createVmAskUserTool } from "./vm/ask-user.ts";
+import { createChatUiTool } from "./tools/chat-ui.ts";
+import type { Routine } from "./shared/mod.ts";
 import {
   VmBackgroundSpawner,
   VmCommandRunner as VmCommandRunnerImpl,
@@ -148,6 +160,11 @@ export class LumiscaCore {
   private readonly savedPrompts: SavedPromptsService;
   private readonly sessions: SessionRepo;
   private readonly stellaAgents: AgentRepo;
+  /** Routines (scheduled requests) and the scheduler that fires them. The
+   * scheduler is created here so tests can drive it with a short tick; the
+   * server starts and stops it (see package.json tasks / server/mod.ts). */
+  private readonly routines: RoutineRepo;
+  private readonly routineScheduler: RoutineScheduler;
   private readonly messages: MessageRepo;
   private readonly requestShapes: RequestShapeRepo;
   private readonly pool: SessionPool;
@@ -199,6 +216,9 @@ export class LumiscaCore {
   /** The in-flight machine start, shared by callers that race on a cold
    * machine (see ensureStellaReady). */
   private stellaStarting: Promise<void> | undefined;
+  /** Hand-over hubs per session (see handoverFor). Dropped with the
+   * session. */
+  private readonly handoverHubs = new Map<string, HandoverHub>();
 
   private constructor(
     db: LumiscaDb,
@@ -209,6 +229,12 @@ export class LumiscaCore {
       savedPrompts?: SavedPromptsService;
       sessions?: SessionRepo;
       stellaAgents?: AgentRepo;
+      routines?: RoutineRepo;
+      /** Tick of the routine scheduler (tests shorten it so a scheduled run
+       * fires without waiting half a minute). */
+      routineTickMs?: number;
+      /** Delay before the scheduler's first tick (tests shorten it too). */
+      routineCatchUpDelayMs?: number;
       messages?: MessageRepo;
       requestShapes?: RequestShapeRepo;
       commandSafety?: CommandSafety;
@@ -235,6 +261,17 @@ export class LumiscaCore {
       new SavedPromptsService(this.settings);
     this.sessions = overrides.sessions ?? createSessionRepo(db);
     this.stellaAgents = overrides.stellaAgents ?? createAgentRepo(db);
+    this.routines = overrides.routines ?? createRoutineRepo(db);
+    this.routineScheduler = createRoutineScheduler({
+      repo: this.routines,
+      runner: this.routineRunner(),
+      ...(overrides.routineTickMs !== undefined
+        ? { tickMs: overrides.routineTickMs }
+        : {}),
+      ...(overrides.routineCatchUpDelayMs !== undefined
+        ? { catchUpDelayMs: overrides.routineCatchUpDelayMs }
+        : {}),
+    });
     this.messages = overrides.messages ?? createMessageRepo(db);
     this.requestShapes = overrides.requestShapes ??
       createRequestShapeRepo(db);
@@ -276,7 +313,16 @@ export class LumiscaCore {
       getLanguage: () => this.getLanguage(),
       getCompactionPolicy: () => this.getCompactionPolicy(),
       buildGeneratedPrompt: (workspace, model, tools, stella) =>
-        this.buildGeneratedPrompt(workspace, model, tools, stella),
+        this.buildGeneratedPrompt(
+          workspace,
+          model,
+          tools,
+          stella === undefined ? false : {
+            name: stella.name,
+            role: stella.role,
+            id: stella.agentId ?? "",
+          },
+        ),
       personalInstructions: () => {
         const personal = this.personalization.get();
         return personal.path === "" ? undefined : personal;
@@ -319,7 +365,7 @@ export class LumiscaCore {
         const agent = this.stellaAgents.get(agentId);
         return agent === undefined
           ? undefined
-          : { name: agent.name, role: agent.role };
+          : { name: agent.name, role: agent.role, id: agentId };
       },
       globalSkillDirs: this.globalSkillDirs,
     });
@@ -411,6 +457,9 @@ export class LumiscaCore {
    * folders afterwards must await it (on Windows a live child running
    * with the folder as its working directory blocks deletion). */
   async close(): Promise<void> {
+    // The timers first: a tick that fires while the sessions are closing
+    // would try to start a run on a pool that is shutting down.
+    this.routineScheduler.close();
     await this.pool.closeAll();
     // The machine is this application's; leaving it running would keep a
     // container (and a memory-hungry desktop inside it) alive after the app
@@ -418,6 +467,90 @@ export class LumiscaCore {
     // shutdown path, not swallowed here.
     if (this.stellaVm !== undefined) await this.stellaVm.stop();
     this.db.close();
+  }
+
+  // --- routines (scheduled requests) ---------------------------------------
+
+  /** The routine repository (the settings list reads it). */
+  getRoutineRepo(): RoutineRepo {
+    return this.routines;
+  }
+
+  /** Start the routine scheduler. The server calls this once the rest of the
+   * app is up; tests drive `runNow` / a short tick instead. */
+  startRoutines(): void {
+    this.routineScheduler.start();
+  }
+
+  stopRoutines(): void {
+    this.routineScheduler.close();
+  }
+
+  /** Whether a run of this routine is in flight (the settings list's
+   * "running now"). Never persisted: it describes this process. */
+  isRoutineRunning(id: string): boolean {
+    return this.routineScheduler.isRunning(id);
+  }
+
+  /** Run a routine now, without moving its schedule. Resolves when the run
+   * finished (the HTTP route does not wait — see routes). */
+  runRoutineNow(id: string): Promise<void> {
+    return this.routineScheduler.runNow(id);
+  }
+
+  /** Stop a running routine's run. Only the run this routine started is
+   * interrupted; a user's own run in the same conversation is left alone. */
+  stopRoutine(id: string): void {
+    this.routineScheduler.stop(id);
+  }
+
+  /** The routines of one agent, oldest first (the settings list, the tool
+   * list). */
+  listRoutinesOf(agentId: string): Routine[] {
+    return this.routines.listOf(agentId);
+  }
+
+  /** The scheduler's seam into the sessions: start a routine's run in its
+   * agent's conversation and wait for it, and stop the run it started. */
+  private routineRunner(): RoutineRunner {
+    return {
+      isRunning: (agentId) => {
+        const session = this.sessions.getByAgent(agentId);
+        if (session === undefined) return false;
+        const agent = this.pool.get(session.id);
+        return agent !== undefined && agent.isStreaming;
+      },
+      run: async (agentId, prompt, routine) => {
+        const session = this.sessions.getByAgent(agentId);
+        if (session === undefined) {
+          // The agent exists but its conversation was never opened, or it
+          // was deleted while the run was queued: opening it here would
+          // resurrect a deleted agent's row, so this is a real failure.
+          throw new CoreError(
+            `No conversation to run the routine in (agent ${agentId})`,
+            "not_found",
+          );
+        }
+        await this.openSession(session.id);
+        const agent = this.pool.require(session.id);
+        this.sessions.touch(session.id);
+        return await agent.runRoutine(prompt, {
+          id: routine.id,
+          name: routine.name,
+        });
+      },
+      stop: (agentId, routineId) => {
+        const session = this.sessions.getByAgent(agentId);
+        if (session === undefined) return;
+        const agent = this.pool.get(session.id);
+        if (agent === undefined) return;
+        // Only the run this routine started is stopped: a run the user
+        // started in the same conversation must not be cut by a routine's
+        // stop button.
+        if (agent.runningRoutineId() !== routineId) return;
+        agent.abort();
+      },
+    };
   }
 
   // --- browser lab --------------------------------------------------------
@@ -828,6 +961,10 @@ export class LumiscaCore {
     // The skill catalog is read from the machine, which the factory cannot
     // await (it builds synchronously): prime it here, before any open.
     await this.refreshStellaSkills();
+    // The agent's working folder: bash cannot start in a folder that does
+    // not exist (`podman exec --workdir` fails), and a fresh agent has no
+    // files yet.
+    await this.ensureStellaWorkdir(agent.id);
     this.stellaAgents.touch(agent.id);
     const existing = this.sessions.getByAgent(agent.id);
     if (existing !== undefined) {
@@ -958,6 +1095,29 @@ export class LumiscaCore {
     this.stellaVerdict = undefined;
   }
 
+  /** The hand-over hub of one session (see vm/handover.ts): created on
+   * first use and dropped on close, so a torn-down session leaves nothing
+   * waiting. */
+  private handoverFor(sessionId: string): HandoverHub {
+    const existing = this.handoverHubs.get(sessionId);
+    if (existing !== undefined) return existing;
+    const hub = new HandoverHub(sessionId, (event) => this.emit(event));
+    this.handoverHubs.set(sessionId, hub);
+    return hub;
+  }
+
+  /** The pending hand-over of a session (the resync snapshot carries it so a
+   * client that reconnects while the run is blocked can take over). */
+  getPendingHandover(sessionId: string): PendingHandover | null {
+    return this.pool.get(sessionId)?.getPendingHandover() ?? null;
+  }
+
+  /** The user finished at the screen: let the blocked run continue. */
+  finishHandover(sessionId: string, note: string, toolCallId?: string): void {
+    const agent = this.pool.require(sessionId);
+    agent.finishHandover(note, toolCallId);
+  }
+
   /** The exec seam of the attached machine: how the file, shell and screen
    * backends reach inside it. Undefined without a machine. */
   private stellaExec(): VmExec | undefined {
@@ -1001,16 +1161,34 @@ export class LumiscaCore {
     const execBytes = this.stellaExecBytes();
     if (exec === undefined || execBytes === undefined) return undefined;
     const skills = (): SkillDef[] => this.stellaSkills;
+    // The agent's working folder: relative paths and bash start here, the
+    // way a workspace folder does in code mode. It is a default place, not a
+    // boundary — the file backend's root is the machine's home, so one agent
+    // can reach another's folder when the user asks (see vm/fs.ts).
+    const cwd = session.agentId === undefined
+      ? VM_WORKDIR
+      : vmAgentDir(session.agentId);
     return {
-      files: new VmFileBackend(exec),
+      cwd,
+      files: new VmFileBackend(exec, { cwd }),
       runner: new VmCommandRunnerImpl(exec),
       backgroundSpawner: new VmBackgroundSpawner(exec),
       skills,
       refreshSkills: async () => {
         this.stellaSkills = await this.readStellaSkills();
       },
-      screenTools: createVmTools({
-        screen: createVmScreen({ exec, execBytes }),
+      screenTools: [
+        ...createVmTools({ screen: createVmScreen({ exec, execBytes }) }),
+        createVmAskUserTool({
+          handover: this.handoverFor(session.id),
+        }),
+      ],
+      chatUiTool: createChatUiTool(),
+      handoverHub: this.handoverFor(session.id),
+      routineTools: createRoutineTools({
+        repo: this.routines,
+        scheduler: this.routineScheduler,
+        agentId: session.agentId ?? "",
       }),
       // The tool goes through the same entry point as the API, so the
       // duplicate-name rule is enforced once.
@@ -1023,6 +1201,18 @@ export class LumiscaCore {
         messages: (window) => this.messages.listBetween(session.id, window),
       }),
     };
+  }
+
+  /** Create the agent's working folder inside the machine (idempotent).
+   * Called when its conversation opens, so the first bash call has a place
+   * to start. A machine that is not running is not an error here: the open
+   * path already required it, and a failure would only hide the real one. */
+  private async ensureStellaWorkdir(agentId: string): Promise<void> {
+    const exec = this.stellaExec();
+    if (exec === undefined) return;
+    await exec(["mkdir", "-p", "--", vmAgentDir(agentId)], {
+      timeoutMs: 30_000,
+    });
   }
 
   /** Re-read the stella skill catalog (the machine's own skills plus the
@@ -1683,7 +1873,7 @@ export class LumiscaCore {
     workspace: Workspace,
     model?: { provider: string; modelId: string },
     tools: readonly string[] = [],
-    stella: boolean | { name: string; role: string } = false,
+    stella: boolean | { name: string; role: string; id: string } = false,
   ): string {
     const resolved = model
       ? {
@@ -1703,7 +1893,10 @@ export class LumiscaCore {
         tools,
         model: resolved,
         language,
-        ...(stella === true ? {} : { agent: stella }),
+        ...(stella === true ? {} : {
+          agent: { name: stella.name, role: stella.role },
+          workdir: vmAgentDir(stella.id),
+        }),
       });
     }
     return workspace.chat

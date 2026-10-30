@@ -3,7 +3,7 @@ import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
 import { LumiscaCore } from "./core.ts";
 import { createVmManager } from "./vm/container.ts";
 
-import { VM_WORKDIR } from "./vm/contract.ts";
+import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
 import type { AgentMessage } from "./ai/types.ts";
 import { promptSession } from "./test-utils.ts";
 
@@ -41,7 +41,13 @@ Deno.test("stella live: a tool call runs inside the machine", {
     core.setStellaVm(vm);
     await core.getStellaAvailability();
 
-    const session = await core.getOrCreateStellaSession();
+    // A fresh core has no counterpart yet: stella has no default agent
+    // (the first run asks the user to name one), so the test makes its own.
+    const counterpart = core.createStellaAgent({
+      name: "Live Check",
+      role: "Verifies that tools run inside the machine.",
+    });
+    const session = await core.getOrCreateStellaSession(counterpart.id);
     // The agent is open; its tool set is the machine's (the VM tools are
     // preloaded and `eval` — the one host-process escape — is not).
     const agent = core.getAgent(session.id);
@@ -124,7 +130,11 @@ Deno.test(
       core.setStellaVm(vm);
       await core.getStellaAvailability();
 
-      const session = await core.getOrCreateStellaSession();
+      const counterpart = core.createStellaAgent({
+        name: "History Reader",
+        role: "Looks back at earlier turns.",
+      });
+      const session = await core.getOrCreateStellaSession(counterpart.id);
       assert(core.getAgent(session.id) !== undefined, "the agent must be open");
 
       // The tool is in the agent's preloaded set, without going through
@@ -156,3 +166,102 @@ Deno.test(
     }
   },
 );
+
+Deno.test(
+  "stella live: the working folder is per agent and the others stay reachable",
+  {
+    ignore: !(await machineReady()),
+  },
+  async () => {
+    const vm = createVmManager({ containerDir });
+    const faux = fauxProvider();
+    const core = LumiscaCore.forTesting([faux.provider]);
+    try {
+      await core.setProviderApiKey(faux.provider.id, "faux-key");
+      core.setStellaVm(vm);
+      await core.getStellaAvailability();
+      const agent = core.createStellaAgent({
+        name: "Live Worker",
+        role: "Writes files where it is asked to.",
+      });
+      const session = await core.getOrCreateStellaSession(agent.id);
+      const open = core.getAgent(session.id);
+      assert(open !== undefined, "the agent must be open");
+
+      // A relative path lands in THIS agent's folder (the working folder),
+      // and bash starts there without being told.
+      const workdir = vmAgentDir(agent.id);
+      faux.setResponses([
+        fauxAssistantMessage([
+          fauxToolCall("write", {
+            path: "relative.txt",
+            content: "from the working folder\n",
+          }),
+        ], { stopReason: "toolUse" }),
+        fauxAssistantMessage([
+          fauxToolCall("bash", { command: "pwd" }),
+        ], { stopReason: "toolUse" }),
+        fauxAssistantMessage("done"),
+      ]);
+      await promptSession(core, session.id, "write a relative file");
+
+      const read = await runInMachine(["cat", `${workdir}/relative.txt`]);
+      assertEquals(read, "from the working folder\n");
+
+      const bashResult = open.messages.find((message) =>
+        message.role === "toolResult" && message.toolName === "bash"
+      );
+      assert(bashResult !== undefined, "bash must have run");
+      const bashText = bashResult.role === "toolResult"
+        ? bashResult.content.map((block) =>
+          block.type === "text" ? block.text : ""
+        ).join("")
+        : "";
+      assert(bashText.includes(workdir), bashText);
+
+      // The root is the machine's home, not the working folder: an absolute
+      // path into another agent's folder is reachable (Terasuma's rule — the
+      // folder is a default place, not a wall).
+      const other = `/home/agent/agents/live-other`;
+      await runInMachine(["mkdir", "-p", other]);
+      await runInMachine(["sh", "-c", `printf 'other' > ${other}/f.txt`]);
+      faux.setResponses([
+        fauxAssistantMessage([
+          fauxToolCall("read", { path: `${other}/f.txt` }),
+        ], { stopReason: "toolUse" }),
+        fauxAssistantMessage("read it"),
+      ]);
+      await promptSession(core, session.id, "read the other folder");
+      const readResult = open.messages.filter((message) =>
+        message.role === "toolResult" && message.toolName === "read"
+      ).at(-1);
+      assert(readResult !== undefined, "read must have run");
+      const readText = readResult.role === "toolResult"
+        ? readResult.content.map((block) =>
+          block.type === "text" ? block.text : ""
+        ).join("")
+        : "";
+      assert(readText.includes("other"), readText);
+      assert(!readText.includes("outside the workspace"), readText);
+    } finally {
+      await runInMachine(["rm", "-rf", "/home/agent/agents/live-other"])
+        .catch(() => {});
+      await core.close();
+    }
+  },
+);
+
+/** Run a command in the machine for an assertion outside the core. */
+async function runInMachine(args: string[]): Promise<string> {
+  const result = await new Deno.Command("podman", {
+    args: ["exec", "--workdir", VM_WORKDIR, "lumisca-stella", ...args],
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  if (!result.success) {
+    throw new Error(
+      `podman exec failed: ${new TextDecoder().decode(result.stderr)}`,
+    );
+  }
+  return new TextDecoder().decode(result.stdout);
+}

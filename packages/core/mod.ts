@@ -371,3 +371,16 @@ export type {
   Model,
   Provider,
 } from "./ai/types.ts";
+
+// --- routines (scheduled requests) -----------------------------------------
+
+export type { RoutineRepo } from "./routine/repo.ts";
+export type { RoutineRunner, RoutineScheduler } from "./routine/scheduler.ts";
+export { scheduleText } from "./routine/tools.ts";
+export type { Routine, RoutineSchedule } from "./shared/routine.ts";
+export { nextRunAt, parseSchedule, scheduleProblem } from "./shared/routine.ts";
+
+// --- the stella machine's hand-over ----------------------------------------
+
+export type { HandoverHub, PendingHandover } from "./vm/handover.ts";
+export { createVmAskUserTool } from "./vm/ask-user.ts";

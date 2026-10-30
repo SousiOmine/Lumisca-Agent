@@ -5,6 +5,7 @@ import type {
   BackgroundView,
   ClientEvent,
   GoalInfo,
+  PendingHandover,
   PendingQuestion,
   SessionView,
   TaskInfo,
@@ -145,6 +146,18 @@ export function sameQuestions(
   return a.every((entry, i) => entry.toolCallId === b[i]!.toolCallId);
 }
 
+/** True when two pending hand-overs are the same one: the same tool call
+ * and the same text. The resync replaces the value and must not re-render a
+ * tab whose hand-over is unchanged. */
+function sameHandover(
+  a: PendingHandover | null,
+  b: PendingHandover | null,
+): boolean {
+  if (a === null || b === null) return a === b;
+  return a.toolCallId === b.toolCallId && a.reason === b.reason &&
+    a.instructions === b.instructions;
+}
+
 /** Whether an event's revision skips past what this view has seen: the
  * stream is ordered and reliable while it is up, so a count that jumps
  * means frames were lost (a socket that died without a close event, a
@@ -174,6 +187,9 @@ export interface LiveStateBefore {
   started: number | undefined;
   ended: number | undefined;
   questions: PendingQuestion[];
+  /** The pending hand-over as it stood (see applySnapshot's handover
+   * handling: a snapshot must not resurrect one that just ended). */
+  handover: PendingHandover | null;
   error: string | undefined;
   name: string;
 }
@@ -203,6 +219,8 @@ export function applySnapshot(
         view.agentEndedAt !== before.ended),
     questions: before !== undefined &&
       view.pendingQuestions !== before.questions,
+    handover: before !== undefined &&
+      view.pendingHandover !== before.handover,
     error: before !== undefined && view.error !== before.error,
     name: before !== undefined && view.info.name !== before.name,
   };
@@ -216,6 +234,12 @@ export function applySnapshot(
   const questions = snapshot === undefined || movedByEvent.questions
     ? view.pendingQuestions
     : snapshot.questions;
+  // The hand-over travels with the transcript too: a client that reconnects
+  // while the run waits for the user must make the screen interactive, and
+  // one that reconnects after it ended must not (the run continues).
+  const handover = snapshot === undefined || movedByEvent.handover
+    ? view.pendingHandover
+    : snapshot.handover;
   const error = snapshot === undefined || movedByEvent.error
     ? view.error
     : snapshot.error;
@@ -225,6 +249,9 @@ export function applySnapshot(
   const questionsChanged = snapshot !== undefined &&
     !movedByEvent.questions &&
     !sameQuestions(questions, view.pendingQuestions);
+  const handoverChanged = snapshot !== undefined &&
+    !movedByEvent.handover &&
+    !sameHandover(handover, view.pendingHandover);
   const errorChanged = snapshot !== undefined && !movedByEvent.error &&
     error !== view.error;
   const nameChanged = snapshot !== undefined && !movedByEvent.name &&
@@ -253,7 +280,8 @@ export function applySnapshot(
   if (
     messages.length === view.messages.length && !todoChanged &&
     !tasksChanged && !backgroundsChanged && !goalChanged &&
-    withRun === view && !questionsChanged && !errorChanged && !nameChanged
+    withRun === view && !questionsChanged && !handoverChanged &&
+    !errorChanged && !nameChanged
   ) {
     return view;
   }
@@ -261,6 +289,7 @@ export function applySnapshot(
     ...withRun,
     messages,
     ...(questionsChanged ? { pendingQuestions: questions } : {}),
+    ...(handoverChanged ? { pendingHandover: handover } : {}),
     ...(errorChanged ? { error } : {}),
     ...(nameChanged ? { info: { ...withRun.info, name } } : {}),
     ...(todoChanged ? { todos: todo } : {}),
@@ -399,6 +428,7 @@ export function applyEvent(
         ...view,
         error: undefined,
         pendingQuestions: [],
+        pendingHandover: null,
         agentStartedAt: Date.now(),
         agentEndedAt: undefined,
         thinkingStartAt: undefined,
@@ -461,6 +491,26 @@ export function applyEvent(
       return pendingQuestions.length === view.pendingQuestions.length
         ? { ...view, runningTools }
         : { ...view, runningTools, pendingQuestions };
+    }
+    case "handover": {
+      // The agent handed the screen to the user and the run is blocked:
+      // the pane becomes interactive and the "done" bar appears. Dedup by
+      // tool call id (a resync could re-deliver it).
+      if (view.pendingHandover?.toolCallId === event.toolCallId) return view;
+      return {
+        ...view,
+        pendingHandover: {
+          toolCallId: event.toolCallId,
+          reason: event.reason,
+          instructions: event.instructions,
+        },
+      };
+    }
+    case "handover_end": {
+      // The user finished (or the run was torn down): the screen is the
+      // agent's again.
+      if (view.pendingHandover === null) return null;
+      return { ...view, pendingHandover: null };
     }
     case "question": {
       // The agent asked the user a question; show it above the composer.
@@ -599,6 +649,7 @@ export function applyEvent(
         streamingText: "",
         runningTools: new Map(),
         pendingQuestions: [],
+        pendingHandover: null,
         error: undefined,
         agentStartedAt: undefined,
         agentEndedAt: undefined,
@@ -629,6 +680,7 @@ export function applyEvent(
       return view.agentStartedAt === undefined ? null : {
         ...view,
         pendingQuestions: [],
+        pendingHandover: null,
         agentEndedAt: Date.now(),
       };
     case "session_renamed":
