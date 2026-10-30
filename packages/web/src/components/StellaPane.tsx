@@ -2,7 +2,7 @@ import { IconX } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/compat";
 import { token } from "../api-client.ts";
 import { useT } from "../i18n.ts";
-import type { PendingHandover } from "../types.ts";
+import type { StellaHandover } from "../types.ts";
 
 /**
  * The machine's screen, live.
@@ -41,7 +41,7 @@ interface StellaPaneProps {
   vncPort: number | null;
   /** The hand-over the run is waiting on, or null. While set, the pane is
    * interactive and the "done" bar is shown. */
-  handover: PendingHandover | null;
+  handover: StellaHandover | null;
   /** The user finished at the screen: send what they did (may be empty). */
   onFinishHandover: (note: string, toolCallId: string) => Promise<void>;
   onClose: () => void;

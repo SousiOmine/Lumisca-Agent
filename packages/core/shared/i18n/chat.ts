@@ -240,6 +240,7 @@ export const chat = {
     ja: "依頼を入力してください…",
     en: "Enter a request…",
   },
+  "chat.stella.working": { ja: "作業中…", en: "Working…" },
   "chat.stella.machine.screen": { ja: "画面", en: "Screen" },
   "chat.stella.machine.screenEmpty": {
     ja: "マシンが起動すると、ここに画面が表示されます。",

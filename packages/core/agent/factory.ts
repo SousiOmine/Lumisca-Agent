@@ -263,9 +263,11 @@ export class AgentFactory {
     const askHub = new AskHub(session.id, (event) => this.deps.emit(event));
     // Reuse the session's todo hub when one exists (agent rebuild): the
     // plan is the session's progress, not the agent's, so it must survive.
-    // Created on first open; discarded when the session closes.
+    // Created on first open; discarded when the session closes. Not created
+    // for a stella session: its conversation has no progress panel, so the
+    // plan would have no reader (see createStellaTools).
     let todo = resources.todos;
-    if (todo === undefined) {
+    if (todo === undefined && stella === undefined) {
       todo = new TodoHub(session.id, (event) => this.deps.emit(event));
       resources.todos = todo;
     }
@@ -347,7 +349,6 @@ export class AgentFactory {
         identity: stella.identityTool,
         background,
         ask: askHub,
-        todo,
         task: tasks,
         safety: this.deps.commandSafety,
         visuals: { store: this.deps.visuals, sessionId: session.id },

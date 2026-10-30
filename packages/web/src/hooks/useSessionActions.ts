@@ -134,16 +134,6 @@ export function useSessionActions(
     [],
   );
 
-  /** The user finished at the screen (the `vm_ask_user` hand-over): the run
-   * blocked on it continues. Errors surface in the pane (the hand-over may
-   * already be gone — a stale click). */
-  const finishHandover = useCallback(
-    async (key: string, note: string, toolCallId: string) => {
-      await sessionApi(key).finishHandover(note, toolCallId);
-    },
-    [],
-  );
-
   /** Rewind the transcript from a user message onward (deletes the message
    * and everything after it; an active run is aborted server-side first).
    * The error is rethrown after being shown so the caller (ChatView) does
@@ -235,7 +225,6 @@ export function useSessionActions(
     abort,
     cancelGoal,
     answer,
-    finishHandover,
     rewind,
     compact,
     changeModel,

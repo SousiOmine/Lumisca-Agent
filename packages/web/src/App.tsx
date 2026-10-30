@@ -187,7 +187,6 @@ export function App({ initialData }: AppProps): ReactElement {
     abort,
     cancelGoal,
     answer,
-    finishHandover,
     rewind,
     compact,
     changeModel,
@@ -250,13 +249,11 @@ export function App({ initialData }: AppProps): ReactElement {
 
   // --- stella mode --------------------------------------------------------
   // The hook runs unconditionally (hooks cannot be conditional), but it only
-  // acts when stella is the current mode: `enabled` gates its requests.
+  // acts when stella is the current mode: `enabled` gates its requests. A
+  // stella conversation has its own endpoints and event stream (api-stella),
+  // so it never enters the tab views above.
   const stellaActive = modeStatus?.mode === "stella";
-  const stella = useStella(stellaActive, setViews);
-  const stellaView = stella.sessionId !== null
-    ? views.get(stella.sessionId)
-    : undefined;
-  const stellaInfo = stellaView?.info ?? stella.info ?? undefined;
+  const stella = useStella(stellaActive);
   const stellaAgent = stella.agents.find((a) => a.id === stella.activeAgentId);
   // The settings dialog's routine list: the active agent's routines
   // (code mode has no agent, so the list stays empty and says so).
@@ -361,29 +358,19 @@ export function App({ initialData }: AppProps): ReactElement {
                 agent={stellaAgent === undefined
                   ? null
                   : { name: stellaAgent.name }}
-                view={stellaView ?? null}
-                info={stellaInfo}
+                conversation={stella.conversation}
+                sessionId={stella.sessionId}
                 conversationError={stella.error}
                 status={modeStatus}
                 input={draft.input}
                 onInputChange={(input) => updateDraft(draftKey, { input })}
-                onPrompt={(text) =>
-                  stella.sessionId !== null &&
-                  prompt(stella.sessionId, text, [])}
-                onAbort={() =>
-                  stella.sessionId !== null && abort(stella.sessionId)}
+                onPrompt={(text) => stella.prompt(text)}
+                onAbort={() => stella.abort()}
                 onAnswer={(toolCallId, answers) =>
-                  stella.sessionId !== null
-                    ? answer(stella.sessionId, toolCallId, answers)
-                    : Promise.reject()}
-                onRewind={(timestamp) =>
-                  stella.sessionId !== null
-                    ? rewind(stella.sessionId, timestamp)
-                    : Promise.resolve()}
+                  stella.answer(toolCallId, answers)}
+                onRewind={(timestamp) => stella.rewind(timestamp)}
                 onFinishHandover={(note, toolCallId) =>
-                  stella.sessionId !== null
-                    ? finishHandover(stella.sessionId, note, toolCallId)
-                    : Promise.reject(new Error("No conversation"))}
+                  stella.finishHandover(note, toolCallId)}
                 onOpenSettings={() => setSettingsCategory("providers")}
               />
             </div>

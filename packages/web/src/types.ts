@@ -46,6 +46,11 @@ export type {
   SkillInfo,
   StellaAgent,
   StellaAvailability,
+  StellaConversationSnapshot,
+  StellaEntry,
+  StellaEvent,
+  StellaHandover,
+  StellaQuestion,
   SubagentStatus,
   SubagentType,
   TaskInfo,
@@ -183,15 +188,6 @@ export interface RoutineView {
   running: boolean;
 }
 
-/** The screen hand-over the run is waiting on (`vm_ask_user`): the user
- * drives the machine while this is set, and the run continues once they
- * finish. */
-export interface PendingHandover {
-  toolCallId: string;
-  reason: string;
-  instructions: string | null;
-}
-
 /** One pending ask (the `ask` tool): questions awaiting the user's answers,
  * tied to the tool call that asked them. */
 export interface PendingQuestion {
@@ -228,9 +224,6 @@ export interface SessionView {
    * user's answers; rendered above the composer, cleared when the tool
    * call resolves or the run ends. */
   pendingQuestions: PendingQuestion[];
-  /** The screen hand-over the run is waiting on, or null. Makes the screen
-   * pane interactive and shows the "done" bar above it. */
-  pendingHandover: PendingHandover | null;
   /** The session's todo plan (todo tool), shown in the progress panel.
    * Replaced wholesale by every `todo` event. */
   todos: core.TodoPhase[];
@@ -274,7 +267,6 @@ export function emptyView(
     streamingText: "",
     runningTools: new Map(),
     pendingQuestions: [],
-    pendingHandover: null,
     todos: [],
     tasks: [],
     backgrounds: [],

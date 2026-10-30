@@ -27,9 +27,10 @@ interface TranscriptProps {
   empty?: ComponentChildren;
 }
 
-/** The scrolling transcript both modes share: turns, the streaming tail, the
- * error row, and the follow-the-bottom scroll. The two modes differ in what
- * surrounds it, not in how it reads. */
+/** Code mode's scrolling transcript: turns, the streaming tail, the error
+ * row, and the follow-the-bottom scroll. A stella conversation has its own
+ * (components/stella/StellaTranscript.tsx): it receives different data, so
+ * it is a different component rather than a flag here. */
 export function Transcript(
   {
     messages,

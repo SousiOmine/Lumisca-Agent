@@ -34,7 +34,6 @@ function restoreView(
   v.error = snapshot.error;
   v.todos = todos;
   v.pendingQuestions = snapshot.questions;
-  v.pendingHandover = snapshot.handover;
   if (v.info.name !== snapshot.name) {
     v.info = { ...v.info, name: snapshot.name };
   }

@@ -308,12 +308,17 @@
   color: var(--text-dim);
 }
 
-/* Progress panels: present only while one of them has something in it. */
-.stella-panels {
+/* The run itself, where code mode's turn timer sits: a dot and one word. It
+ * borrows the conversation's left edge (the avatar column of the message it
+ * belongs to) so it reads as the agent being busy rather than as chrome. */
+.chat-running {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0 16px 6px;
+  align-items: center;
+  gap: 8px;
+  padding-left: 2px;
+  font-size: 12px;
+  color: var(--text-faint);
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
 }
 
 /* --- stella: the machine's screen ---------------------------------------- */

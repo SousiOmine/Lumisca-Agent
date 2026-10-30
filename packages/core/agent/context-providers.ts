@@ -19,8 +19,10 @@ import type { ContextMessage } from "../ai/types.ts";
 
 /** One message a provider wants published. */
 export interface ContextUpdate {
-  /** Head line: the UI row label. The body carries the model-facing frame,
-   * so the title stays a plain label. */
+  /** Head line: the row label code mode's transcript shows (stella's
+   * conversation has no context rows: its clients never read the title). The
+   * body carries the model-facing frame, so the title stays a plain
+   * label. */
   title: string;
   /** Model-facing text. */
   body: string;

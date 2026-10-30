@@ -90,13 +90,16 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   return turns;
 }
 
-/** One user prompt and the agent's reaction to it: the activity header,
- * the (expandable) work log of everything the turn produced except the
- * final assistant text (intermediate messages, tool calls, the turn's
- * compact rows), and that text below. Memoized — only the last
- * turn's `running` flag changes while a run streams, so the others skip
- * re-rendering; the callers keep the props referentially stable (see
- * ChatView). */
+/** One user prompt and the agent's reaction to it: the activity header, the
+ * (expandable) work log of everything the turn produced except the final
+ * assistant text (intermediate messages, tool calls, the turn's compact
+ * rows), and that text below. Memoized — only the last turn's `running` flag
+ * changes while a run streams, so the others skip re-rendering; the callers
+ * keep the props referentially stable (see ChatView).
+ *
+ * A stella conversation does not use this component at all: the server never
+ * sends it the model's rows (see components/stella/StellaTranscript.tsx), so
+ * there is no flag here to hide them. */
 export const ConversationTurn = memo(function ConversationTurn({
   turn,
   toolResults,

@@ -1484,6 +1484,22 @@ Deno.test("token auth guards the API, websocket and page", async () => {
     );
     assertEquals(wsOk.status !== 401 && wsOk.status !== 403, true);
 
+    // The conversation's own stream is under /api, so the same guard covers
+    // it (a token-less handshake never reaches the upgrade).
+    const stellaDenied = await app.fetch(
+      new Request("http://127.0.0.1:8000/api/stella/conversations/a/events", {
+        headers: HOST,
+      }),
+    );
+    assertEquals(stellaDenied.status, 401);
+    const stellaOk = await app.fetch(
+      new Request(
+        "http://127.0.0.1:8000/api/stella/conversations/a/events?token=secret-token",
+        { headers: HOST },
+      ),
+    );
+    assertEquals(stellaOk.status !== 401 && stellaOk.status !== 403, true);
+
     // The page itself is guarded too (the token is a real capability).
     const pageDenied = await app.fetch(
       new Request("http://127.0.0.1:8000/", { headers: HOST }),
@@ -2786,7 +2802,7 @@ Deno.test("stella API: an invalid mode is a 400", async () => {
   }
 });
 
-Deno.test("stella API: the conversation is created on demand and stays out of /sessions", async () => {
+Deno.test("stella API: the conversation is opened by agent and never listed as a session", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -2808,26 +2824,238 @@ Deno.test("stella API: the conversation is created on demand and stays out of /s
     assertEquals(created.status, 201);
     const agent = await created.json() as { id: string; name: string };
 
+    // The conversation is addressed by agent: a client never learns (or
+    // needs) the session id, so stella cannot drift into "a tab".
     const response = await json(
       base,
-      `/api/stella/session?agentId=${agent.id}`,
+      `/api/stella/conversations/${agent.id}`,
     );
     assertEquals(response.status, 200);
-    const session = await response.json() as {
-      id: string;
-      stella?: boolean;
-      agentId?: string;
-      name: string;
+    const snapshot = await response.json() as {
+      entries: unknown[];
+      running: boolean;
+      questions: unknown[];
+      handover: unknown;
+      agentName: string;
+      sessionId: string;
+      rev: number;
     };
-    assertEquals(session.stella, true);
-    assertEquals(session.agentId, agent.id);
-    // The conversation is named after the agent, so the transcript's title is
-    // the counterpart rather than a session label.
-    assertEquals(session.name, "Aide");
+    assertEquals(snapshot.entries, []);
+    assertEquals(snapshot.running, false);
+    assertEquals(snapshot.questions, []);
+    assertEquals(snapshot.handover, null);
+    // The conversation is named after the agent, so its title is the
+    // counterpart rather than a session label.
+    assertEquals(snapshot.agentName, "Aide");
+    assertEquals(typeof snapshot.sessionId, "string");
+
+    // A second call finds the same conversation instead of making another.
+    const again = await json(base, `/api/stella/conversations/${agent.id}`);
+    assertEquals(again.status, 200);
+    assertEquals(
+      (await again.json() as { sessionId: string }).sessionId,
+      snapshot.sessionId,
+    );
 
     // The session list must never offer it.
     const list = await json(base, "/api/sessions");
     assertEquals(await list.json(), []);
+
+    // The old session-addressed endpoint is gone: the client has no path
+    // back to "one conversation = one session".
+    const retired = await json(base, `/api/stella/session?agentId=${agent.id}`);
+    assertEquals(retired.status, 404);
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("stella API: the conversation carries the words, never the model's context", async () => {
+  // The reported symptom: `Date: …` and `On-demand tools` rows in stella's
+  // chat. They are `context` publications — the model's history — and the
+  // conversation endpoint must not serve them, while the session endpoint
+  // (code mode) keeps serving them for its own transcript.
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "stopped", vncPort: null, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(null),
+    });
+    const created = await json(base, "/api/stella/conversations", {
+      method: "POST",
+      body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
+    });
+    // No collection route: agents are created at /stella/agents.
+    assertEquals(created.status, 404);
+    const agentRes = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
+    });
+    const agent = await agentRes.json() as { id: string; name: string };
+
+    const opened = await json(base, `/api/stella/conversations/${agent.id}`);
+    const openedBody = await opened.json() as { sessionId: string };
+    const sessionId = openedBody.sessionId;
+
+    // The reply the model gives; the run also publishes the session's
+    // context (date, on-demand tools) ahead of it.
+    faux.setResponses([fauxAssistantMessage("一覧を出しました。")]);
+    const prompt = await json(
+      base,
+      `/api/stella/conversations/${agent.id}/prompt`,
+      {
+        method: "POST",
+        body: JSON.stringify({ text: "bash で一覧を出して" }),
+      },
+    );
+    assertEquals(prompt.status, 200);
+    // Wait for the run to finish (the prompt endpoint is fire-and-forget).
+    for (let i = 0; i < 200; i++) {
+      const res = await json(
+        base,
+        `/api/stella/conversations/${agent.id}/messages`,
+      );
+      const body = await res.json() as { running: boolean };
+      if (!body.running) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    const snapshotRes = await json(
+      base,
+      `/api/stella/conversations/${agent.id}/messages`,
+    );
+    const snapshot = await snapshotRes.json() as {
+      entries: Array<{ role: string; text: string; cards: string[] }>;
+      running: boolean;
+    };
+    // The user's prompt and the agent's words, in order, and nothing else.
+    assertEquals(snapshot.entries[0]?.role, "user");
+    assertEquals(snapshot.entries[0]?.text, "bash で一覧を出して");
+    assertEquals(
+      snapshot.entries.some((entry) => entry.role === "assistant"),
+      true,
+    );
+    for (const entry of snapshot.entries) {
+      assertEquals(entry.role === "user" || entry.role === "assistant", true);
+      // The model's context publications (date, on-demand tools) are not
+      // entries; nor are tool results or notifications.
+      assertEquals(entry.text.startsWith("Date:"), false, entry.text);
+      assertEquals(entry.text.startsWith("On-demand tools"), false, entry.text);
+    }
+
+    // The code-mode session endpoint still serves the whole transcript
+    // (context included): the split is in the endpoint, not in the store.
+    const sessionRes = await json(base, `/api/sessions/${sessionId}/messages`);
+    const session = await sessionRes.json() as {
+      messages: Array<{ role: string }>;
+    };
+    assertEquals(
+      session.messages.some((m) => m.role === "context"),
+      true,
+      "the model's context stays in the session transcript",
+    );
+    // The reply itself is part of both: the split is about the model's
+    // machinery, not about hiding the answer.
+    assertEquals(
+      snapshot.entries.at(-1)?.text,
+      "一覧を出しました。",
+      "the answer is the conversation's last entry",
+    );
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("stella API: the conversation's stream carries only the conversation", async () => {
+  // The stream is its own endpoint (`…/events`), not a filter of `/ws`: a
+  // stella client learns nothing about tool progress, the panels or the
+  // model's context, and no frame carries a session id (the socket belongs
+  // to one conversation).
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "running", vncPort: null, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(null),
+    });
+    const agentRes = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
+    });
+    const agent = await agentRes.json() as { id: string; name: string };
+    const opened = await json(base, `/api/stella/conversations/${agent.id}`);
+    assertEquals(opened.status, 200);
+
+    faux.setResponses([fauxAssistantMessage("はい、承知しました。")]);
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${server.addr.port}/api/stella/conversations/${agent.id}/events`,
+    );
+    const events: Array<Record<string, unknown>> = [];
+    const done = new Promise<void>((resolve, reject) => {
+      socket.onmessage = (e) => {
+        const event = JSON.parse(String(e.data));
+        // The heartbeat is transport-level (the client swallows it), as on
+        // the session stream.
+        if (event.type === "heartbeat") return;
+        events.push(event);
+        if (event.type === "agent_end") resolve();
+      };
+      socket.onerror = () => reject(new Error("socket failed"));
+      socket.onopen = () => {
+        void json(base, `/api/stella/conversations/${agent.id}/prompt`, {
+          method: "POST",
+          body: JSON.stringify({ text: "こんにちは" }),
+        });
+      };
+    });
+
+    await done;
+    socket.close();
+
+    const types = events.map((e) => e.type);
+    assertEquals(types.includes("agent_start"), true);
+    assertEquals(types.includes("agent_end"), true);
+    assertEquals(types.includes("entry"), true);
+    // None of the model's own traffic, and none of the surfaces this mode
+    // does not have.
+    for (
+      const forbidden of [
+        "message_start",
+        "message_end",
+        "tool_start",
+        "tool_end",
+        "todo",
+        "task_start",
+        "background_start",
+        "goal_start",
+        "messages_checkpoint",
+      ]
+    ) {
+      assertEquals(types.includes(forbidden), false, forbidden);
+    }
+    // No frame names a session: the socket is the conversation.
+    for (const event of events) {
+      assertEquals("sessionId" in event, false, String(event.type));
+    }
+    // The entries are the words: the prompt and the answer.
+    const entries = events.filter((e) => e.type === "entry").map((e) =>
+      e.entry as { role: string; text: string }
+    );
+    assertEquals(entries[0]?.role, "user");
+    assertEquals(entries[0]?.text, "こんにちは");
+    const answer = entries.find((entry) => entry.role === "assistant");
+    assertEquals(answer?.text, "はい、承知しました。");
   } finally {
     server.shutdown();
     await core.close();

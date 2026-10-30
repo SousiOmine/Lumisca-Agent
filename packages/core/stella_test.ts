@@ -11,7 +11,6 @@ import { createAgentCreateTool } from "./stella/tools.ts";
 import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
 import { AskHub } from "./tools/ask.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
-import { TodoHub } from "./tools/todo.ts";
 import { TaskHub } from "./tools/task-hub.ts";
 import type { StreamFn } from "./ai/types.ts";
 import type { VmScreen } from "./vm/screen.ts";
@@ -331,7 +330,6 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     identity: createIdentityTool({ read: () => "", write: () => {} }),
     background: new BackgroundProcessManager(),
     ask: new AskHub("s1", () => {}),
-    todo: new TodoHub("s1", () => {}),
     task: new TaskHub({
       sessionId: "s1",
       resolveRuntime: () => {
@@ -379,6 +377,13 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
       `${expected} must be built`,
     );
   }
+  // `todo` is the one coding tool a stella session does not get: its plan is
+  // shown in a progress panel, and this mode's conversation has none.
+  assertEquals(
+    stellaTools.includes("todo"),
+    false,
+    "stella must not build todo",
+  );
 });
 
 Deno.test("stella tool set: the prompt teaches the machine, not a workspace", async () => {

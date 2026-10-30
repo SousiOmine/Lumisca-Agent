@@ -52,6 +52,14 @@ export type {
   ContextProvider,
   ContextUpdate,
 } from "./agent/context-providers.ts";
+export type {
+  StellaConversationSnapshot,
+  StellaEntry,
+  StellaEvent,
+  StellaHandover,
+  StellaQuestion,
+} from "./types/stella-conversation.ts";
+export { stellaEntryOf, stellaEventsOf } from "./agent/stella-stream.ts";
 export type { ModeMessage } from "./ai/types.ts";
 export type { ModePrompt } from "./types/mode-message.ts";
 export { Agent, type AgentDefaults, type AgentInit } from "./ai/agent.ts";

@@ -214,12 +214,16 @@ export function createCodingTools(
  * - `history_search` is preloaded: the conversation outlives any one
  *   context window, and the turns a checkpoint condensed away are still in
  *   the message store — but the agent has to know it can ask for them.
+ * - `todo` is absent. Its plan is shown in a progress panel, and stella's
+ *   conversation has no panels (the agent says what it is doing in its own
+ *   words), so the tool would collect a plan nobody reads — one more schema
+ *   on every request and one more round trip per plan change.
  * - skills come from the machine and from the user's global set (see
  *   vm/skills.ts), not from a workspace folder chain.
  *
- * Everything else — ask, todo, sub-agents, the visual tool, discoverable
- * tools through the registry — is unchanged: stella is a different place to
- * work, not a reduced agent.
+ * Everything else — ask, sub-agents, the visual tool, discoverable tools
+ * through the registry — is unchanged: stella is a different place to work,
+ * not a reduced agent.
  */
 export function createStellaTools(options: {
   backends: ToolBackends;
@@ -245,7 +249,6 @@ export function createStellaTools(options: {
   webSearch?: SearchProvider;
   background?: BackgroundProcessManager;
   ask?: AskHub;
-  todo?: TodoHub;
   task?: TaskHub;
   safety?: CommandSafety;
   visuals?: VisualTarget;
@@ -280,7 +283,6 @@ export function createStellaTools(options: {
       : []),
     createSkillTool({ skills: options.skills }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
-    ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
     ...(options.task !== undefined ? options.task.parentTools() : []),
   ];
 }

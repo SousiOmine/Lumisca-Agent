@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ClientEvent } from "./types/event.ts";
 import type { SessionInfo } from "./types/session.ts";
+import type { StellaEntry } from "./types/stella-conversation.ts";
+import { stellaEntryOf } from "./agent/stella-stream.ts";
 import type { Workspace } from "./types/workspace.ts";
 import {
   createFileSettingsRepo,
@@ -896,6 +898,11 @@ export class LumiscaCore {
     return this.stellaAgents.latest();
   }
 
+  /** One agent by id, or undefined when it does not exist. */
+  getStellaAgent(id: string): StellaAgent | undefined {
+    return this.stellaAgents.get(id);
+  }
+
   /** Create an agent from a name and the role it works from. A name that is
    * already taken is refused (compared case-insensitively: "Researcher" and
    * "researcher" would be two indistinguishable rows in the sidebar). */
@@ -1534,6 +1541,31 @@ export class LumiscaCore {
    * failures of fire-and-forget prompts instead of losing them. */
   getSessionLastError(id: string): string | undefined {
     return this.pool.lastError(id);
+  }
+
+  /** The conversation a stella agent already has, or undefined before its
+   * first open. The client addresses a conversation by agent (stella has no
+   * session concept), so this is the lookup that needs no session id. */
+  findStellaSession(agentId: string): SessionInfo | undefined {
+    const session = this.sessions.getByAgent(agentId);
+    return session === undefined ? undefined : this.decorateSession(session);
+  }
+
+  /** The conversation's messages as its client draws them: the user's words,
+   * the agent's words and the cards. Everything else in the transcript (context
+   * publications, tool calls and results, notifications, compaction
+   * checkpoints) is the model's history and never leaves the server (see
+   * agent/stella-stream.ts). Opens the session so a client that reconnects
+   * reads the same transcript the runs write. */
+  getStellaEntries(id: string): StellaEntry[] {
+    const agent = this.pool.get(id);
+    if (agent === undefined) return [];
+    const entries: StellaEntry[] = [];
+    for (const message of agent.messages) {
+      const entry = stellaEntryOf(message);
+      if (entry !== null) entries.push(entry);
+    }
+    return entries;
   }
 
   /** Fire-and-forget prompt: completion and failures arrive as events
