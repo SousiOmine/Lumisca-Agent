@@ -5,17 +5,21 @@
 /* ---- modals --------------------------------------------------------------- */
 
 /* The backdrop dims whatever is underneath, in either theme: the scrim is
- * deliberately not a theme token. */
+ * deliberately not a theme token. Softening it (and blurring what is behind)
+ * keeps the dialog the only crisp shape on screen. */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
   display: grid;
   place-items: center;
   z-index: 50;
   animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
 }
 
+/* A dialog is a sheet of the same family as the chat pane: surface, hairline
+ * border, the large radius step, the panel shadow. */
 .modal {
   /* The caller's width (see Modal.tsx) — the token also carries the shared
    * default, so a dialog is always sized. */
@@ -23,13 +27,13 @@
   max-height: min(720px, calc(100dvh - 48px));
   overflow-y: auto;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: 0 12px 40px var(--shadow);
+  box-shadow: var(--shadow-panel);
   animation: lum-rise var(--lum-dur-mid) var(--lum-ease) both;
 }
 
@@ -135,9 +139,9 @@
   max-height: 300px;
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 4px;
-  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 6px;
+  background: var(--surface-2);
 }
 
 .model-item {
@@ -163,8 +167,9 @@
 }
 
 .model-item.selected {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .model-item .model-id {
@@ -193,6 +198,7 @@
 @media (max-width: 600px) {
   .modal-backdrop {
     place-items: stretch;
+    backdrop-filter: none;
   }
 
   .modal {
@@ -200,7 +206,7 @@
     max-width: none;
     height: 100dvh;
     max-height: 100dvh;
-    padding: 14px;
+    padding: 16px;
     border: none;
     border-radius: 0;
     box-shadow: none;

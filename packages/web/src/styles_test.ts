@@ -259,3 +259,40 @@ Deno.test("the app height follows the visual viewport", async () => {
     "--app-height must be declared in styles/tokens.css",
   );
 });
+
+Deno.test("corners come from the radius ramp", async () => {
+  // The shape of the UI is the radius steps, so a sheet that writes its own
+  // pixel value quietly reintroduces the small, square-cornered look the
+  // ramp replaced (58 rules once carried a literal 4px). Only the ramp, a
+  // reset, and a full circle (a dot, a round icon, a slider knob) are
+  // allowed.
+  const allowed = new Set([
+    "var(--radius-xs)",
+    "var(--radius-sm)",
+    "var(--radius)",
+    "var(--radius-lg)",
+    "var(--radius-xl)",
+    "var(--radius-pill)",
+  ]);
+  const offenders: string[] = [];
+  for await (const [name, css] of styleSheets()) {
+    for (const rule of cssRules(css)) {
+      for (const match of rule.body.matchAll(/border-radius:\s*([^;]+);/g)) {
+        const value = (match[1] ?? "").trim();
+        // A shorthand naming one to four corners of the ramp (the bottom
+        // edge of a menu, a blockquote's outer side) is still the ramp.
+        const parts = value.split(/\s+/).filter((part) =>
+          part !== "0" && !allowed.has(part)
+        );
+        if (parts.length > 0 && value !== "50%") {
+          offenders.push(`${name}: ${rule.selector} { ${value} }`);
+        }
+      }
+    }
+  }
+  assertEquals(
+    offenders.sort(),
+    [],
+    "border-radius values outside the documented ramp",
+  );
+});

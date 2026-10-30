@@ -1,4 +1,4 @@
-/* tokens.css — Fluent design tokens (dark + light theme variables).
+/* tokens.css — design tokens (dark + light theme variables).
  * Cascade position 1/15: order is defined by ../styles.css (@import order).
  * See ./README.md before adding new files.
  *
@@ -8,6 +8,25 @@
  * block comes last so it wins at equal specificity. Both theme blocks must
  * declare the same token names: a token that only one theme declares keeps
  * the other theme's value (../styles_test.ts guards this). */
+
+/* ---- design language ----------------------------------------------------
+ *
+ * Two layers do the work, and nothing else does:
+ *
+ *   1. A soft canvas with raised faces. The canvas is a faint, slightly cool
+ *      grey; every surface the user works on (a dialog, the chat, a card) is
+ *      the plain surface colour, drawn with a hairline border and a low,
+ *      diffuse shadow. The face therefore reads as a sheet lying on the
+ *      canvas, not as another shade of the same grey — which is what made
+ *      the old light theme look washed out.
+ *   2. Generous radii. Corners carry the shape: hairline borders and soft
+ *      shadows stay quiet on purpose, so a large radius reads as friendly
+ *      instead of heavy. The steps are listed below and no other value is
+ *      allowed (styles_test.ts guards this).
+ *
+ * Colour stays achromatic (see the theme blocks): no hue anywhere but the
+ * status colours, so selection and focus are carried by the neutral ramp,
+ * the radius and the shadow rather than by an accent hue. */
 
 /* ---- layout breakpoints -------------------------------------------------
  *
@@ -20,7 +39,8 @@
  *   900px  compact: tablet-like widths. Tighten spacing, allow wrapping,
  *                   drop fixed widths that no longer fit.
  *   600px  phone: one column; full-screen modals; the progress panels
- *                stack at the top of the chat.
+ *                stack at the top of the chat; the floating chat pane gives
+ *                up its margin and lands edge to edge (--app-inset).
  *
  * Touch ergonomics follow the input device, not the width
  * (`@media (hover: none), (pointer: coarse)`): hover-only affordances stay
@@ -33,8 +53,26 @@
 :root {
   --mono: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
   --ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --radius-sm: 4px;
-  --radius: 8px;
+
+  /* The radius ramp. Each step has one job, so a new surface picks a step
+   * instead of inventing a pixel value:
+   *   xs    inline code, kbd, meter bars
+   *   sm    rows: menu items, list entries, tabs
+   *   md    controls and small panes: inputs, cards, popovers
+   *   lg    dialogs and the floating cards inside the chat
+   *   xl    the composer, a user's message, the chat pane
+   *   pill  buttons, tags, toggles: anything read as a capsule */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 26px;
+  --radius-pill: 999px;
+
+  /* The margin a floating pane leaves around itself (the chat pane, the
+   * stella pane). Zero on a phone, where the screen belongs to the pane. */
+  --app-inset: 12px;
+
   --tab-height: 40px;
   /* Height of the banners the app stacks above the chat (the update banner
    * today). Zero here: the app replaces it with a measured value while a
@@ -60,12 +98,20 @@
    * (Composer), --modal-width is the shared dialog width (Modal). */
   --caret-x: 0px;
   --caret-y: 0px;
-  --modal-width: min(560px, calc(100vw - 48px));
+  --modal-width: min(600px, calc(100vw - 48px));
   /* shared motion tokens: keep durations short and easing uniform so
    * animations feel calm and professional */
   --lum-ease: cubic-bezier(0.2, 0, 0, 1);
   --lum-dur-fast: 120ms;
   --lum-dur-mid: 180ms;
+}
+
+/* Phone: the pane is the screen. A floating sheet with a margin around it
+ * would spend the width the transcript needs on empty canvas. */
+@media (max-width: 600px) {
+  :root {
+    --app-inset: 0px;
+  }
 }
 
 /* ---- theme: dark (default) ---------------------------------------------- */
@@ -76,65 +122,81 @@ html[data-theme="dark"] {
    * does not style itself (the <select> popup, form controls, scrollbars)
    * then follow the app theme instead of the OS one. */
   color-scheme: dark;
-  --bg: #1b1b1b;
-  --surface: #2d2d2d;
-  --surface-2: #383838;
-  --surface-3: #424242;
-  --border: #3b3b3b;
-  --border-strong: #4d4d4d;
-  --text: #ffffff;
-  --text-dim: #9d9d9d;
-  --text-faint: #6f6f6f;
-  --accent: #d6d6d6;
-  --accent-soft: rgba(255, 255, 255, 0.1);
-  --accent-dim: #9d9d9d;
-  --ok: #6ccb5f;
-  --error: #f1707b;
-  --error-soft: rgba(241, 112, 123, 0.12);
-  --shadow: rgba(0, 0, 0, 0.35);
-  --user-msg-bg: #141414;
+  /* The canvas sits well below the faces: a near-black ground makes the
+   * raised sheets and their large radii read as shapes instead of merging
+   * into one dark slab. */
+  --bg: #0c0c11;
+  --surface: #15151b;
+  --surface-2: #1b1b23;
+  --surface-3: #23232d;
+  --border: #26262f;
+  --border-strong: #3b3b47;
+  --text: #f3f3f7;
+  --text-dim: #a5a5b2;
+  --text-faint: #82828f;
+  --accent: #f3f3f7;
+  --accent-soft: rgba(255, 255, 255, 0.08);
+  --accent-dim: #a5a5b2;
+  --ok: #5fd3a2;
+  --error: #ff9a90;
+  --error-soft: rgba(255, 154, 144, 0.12);
+  --shadow: rgba(0, 0, 0, 0.55);
+  /* A pane lying on the canvas (the chat, a dialog): two layers, the first
+   * a crisp contact shadow, the second a wide diffuse one, so the edge reads
+   * as lifted without a visible dark frame. */
+  --shadow-panel:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 24px 60px -32px rgba(0, 0, 0, 0.75);
+  --user-msg-bg: #23232d;
   --input-bg: var(--surface);
   /* selected tab: a raised card floating above the bar (a lighter surface,
    * like a title-bar button on hover). The light theme raises the card too,
    * but its ramp is inverted (white on gray), so the card keeps its own
    * tokens instead of reusing the surface ramp. */
-  --tab-active-bg: #424242;
-  --tab-active-text: #ffffff;
+  --tab-active-bg: #23232d;
+  --tab-active-text: #f3f3f7;
   --tab-active-dim: rgba(255, 255, 255, 0.5);
   --tab-active-hover: rgba(255, 255, 255, 0.1);
   --tab-active-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
   /* the toggle switch's knob: it sits on --surface-3 while off and on
    * --accent while on, so it inverts with the theme (a white knob would
    * disappear on the light accent of the dark theme) */
-  --toggle-knob: #1b1b1b;
+  --toggle-knob: #15151b;
 }
 
 /* ---- theme: light ------------------------------------------------------- */
 
 html[data-theme="light"] {
   color-scheme: light;
-  --bg: #f2f2f2;
-  --surface: #f5f5f5;
-  --surface-2: #fafafa;
-  --surface-3: #efefef;
-  --border: #e3e3e3;
-  --border-strong: #c8c8c8;
-  --text: #1b1b1b;
-  --text-dim: #616161;
-  --text-faint: #9a9a9a;
-  --accent: #1b1b1b;
-  --accent-soft: rgba(0, 0, 0, 0.07);
-  --accent-dim: #616161;
+  /* Light is the "sheet on paper" theme: a faintly cool canvas, white
+   * faces. The ramp only ever darkens (surface > surface-2 > surface-3), so
+   * a nested row or a hover step reads as pressed into its parent instead
+   * of jumping brighter than it. */
+  --bg: #f4f5f9;
+  --surface: #ffffff;
+  --surface-2: #f5f6fa;
+  --surface-3: #eceef4;
+  --border: #e6e8f0;
+  --border-strong: #d0d3dd;
+  --text: #191920;
+  --text-dim: #52525e;
+  --text-faint: #70707d;
+  --accent: #191920;
+  --accent-soft: rgba(25, 25, 32, 0.06);
+  --accent-dim: #52525e;
   --ok: #107c10;
   --error: #c42b1c;
   --error-soft: rgba(196, 43, 28, 0.08);
-  --shadow: rgba(0, 0, 0, 0.14);
-  --user-msg-bg: #e9e9e9;
+  --shadow: rgba(20, 20, 40, 0.16);
+  --shadow-panel:
+    0 1px 2px rgba(23, 23, 42, 0.04),
+    0 24px 56px -30px rgba(23, 23, 42, 0.22);
+  --user-msg-bg: #eef0f5;
   --input-bg: #ffffff;
   --tab-active-bg: #ffffff;
-  --tab-active-text: #1b1b1b;
-  --tab-active-dim: rgba(0, 0, 0, 0.45);
-  --tab-active-hover: rgba(0, 0, 0, 0.08);
-  --tab-active-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --tab-active-text: #191920;
+  --tab-active-dim: rgba(25, 25, 32, 0.45);
+  --tab-active-hover: rgba(25, 25, 32, 0.07);
+  --tab-active-shadow: 0 2px 10px rgba(23, 23, 42, 0.14);
   --toggle-knob: #ffffff;
 }

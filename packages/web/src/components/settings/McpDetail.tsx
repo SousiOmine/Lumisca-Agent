@@ -311,7 +311,7 @@ export function McpDetail({
                 style={{
                   marginTop: 6,
                   border: "1px solid var(--border)",
-                  borderRadius: 8,
+                  borderRadius: "var(--radius)",
                   padding: "6px 8px",
                   maxHeight: 240,
                   overflowY: "auto",

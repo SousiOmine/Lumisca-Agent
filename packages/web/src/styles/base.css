@@ -18,8 +18,9 @@ body {
   color: var(--text);
   font-family: var(--ui);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   /* Mobile browsers otherwise inflate the text (notably in landscape on
    * iOS), which would undo the sizes the layouts are designed around; the
    * page is laid out for the viewport as it is. */
@@ -41,7 +42,7 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 input,
@@ -50,16 +51,16 @@ select {
   font-family: inherit;
   font-size: inherit;
   color: var(--text);
-  background: var(--surface);
+  background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 7px 10px;
+  border-radius: var(--radius);
+  padding: 8px 12px;
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
   outline: none;
 }
 
@@ -71,13 +72,15 @@ select:focus {
   font-family: var(--mono);
 }
 
+/* Buttons are capsules: the shape carries the affordance, so the fill and
+ * the border stay as quiet as the rest of the ramp. */
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  padding: 7px 14px;
   background: var(--surface-2);
   color: var(--text);
   font-size: 13px;
@@ -112,7 +115,7 @@ select:focus {
 }
 
 .btn.small {
-  padding: 3px 8px;
+  padding: 4px 10px;
   font-size: 12px;
 }
 
@@ -126,7 +129,7 @@ select:focus {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   color: var(--text-dim);
   transition:
     background var(--lum-dur-fast) var(--lum-ease),
@@ -151,7 +154,7 @@ select:focus {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 5px;
+  border-radius: var(--radius-pill);
 }
 
 ::-webkit-scrollbar-thumb:hover {

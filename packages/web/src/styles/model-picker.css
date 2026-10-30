@@ -19,13 +19,13 @@
   color: var(--text-dim);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   padding: 5px 10px;
   max-width: 100%;
 }
 
 .model-switch:hover {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 
@@ -70,14 +70,14 @@
   color: var(--text-dim);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   padding: 4px 8px;
   white-space: nowrap;
   cursor: pointer;
 }
 
 .ctx-meter:hover {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 
@@ -94,7 +94,7 @@
   width: 300px;
   max-width: calc(100vw - 40px);
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 8px 24px var(--shadow);
   padding: 12px 14px;
@@ -122,7 +122,7 @@
 
 .ctx-bar {
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
   border: 1px solid var(--border);
   overflow: hidden;
@@ -130,7 +130,7 @@
 
 .ctx-bar-fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--text);
   transition:
     width 200ms var(--lum-ease),
@@ -148,7 +148,7 @@
   z-index: 40;
   width: min(640px, calc(100vw - 40px));
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 8px 24px var(--shadow);
   overflow: hidden;
@@ -192,8 +192,9 @@
 }
 
 .mp-provider.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .mp-provider-name {
@@ -291,8 +292,9 @@
 }
 
 .mp-model.selected {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .mp-model-id {
@@ -387,7 +389,7 @@
   transform: translateX(-50%);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 /* filled portion, anchored at the bottom (weakest level) */
@@ -400,8 +402,8 @@
   height: calc((100% - 24px) * var(--tls-fill, 0));
   min-height: 14px;
   background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
   pointer-events: none;
   transition: height var(--lum-dur-mid) var(--lum-ease);
 }

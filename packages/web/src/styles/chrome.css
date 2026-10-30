@@ -7,15 +7,18 @@
 /* ---- custom title bar (desktop) ----------------------------------------- */
 /* The desktop window is undecorated (tauri.conf.json); this strip hosts
  * the tab bar on the left and the app menu + window controls on the
- * right, and its empty area is the drag handle (see TitleBar.tsx). */
+ * right, and its empty area is the drag handle (see TitleBar.tsx).
+ *
+ * The strip and the tab bar paint the canvas, not a surface: the chat below
+ * is a raised sheet, and painting the chrome as a second surface would put
+ * two faces at the same level with a line between them. */
 
 .titlebar {
   display: flex;
   align-items: stretch;
   height: var(--tab-height);
   flex: none;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: var(--bg);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -27,7 +30,6 @@
   min-width: 0;
   height: 100%;
   background: transparent;
-  border-bottom: none;
 }
 
 .titlebar-controls {
@@ -52,7 +54,7 @@
 }
 
 .titlebar-btn:hover {
-  background: var(--surface-3);
+  background: var(--surface-2);
   color: var(--text);
 }
 
@@ -67,16 +69,14 @@
 .tabbar {
   display: flex;
   align-items: stretch;
-  gap: 3px;
-  padding: 0 4px;
-  background: var(--surface);
+  gap: 4px;
+  padding: 0 6px;
+  background: var(--bg);
   height: var(--tab-height);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
   user-select: none;
-  /* the bar's own bottom edge: the tabs float above it as cards */
-  border-bottom: 1px solid var(--border);
   /* Chrome bar: never shrink when the chat history overflows the viewport. */
   flex: none;
 }
@@ -84,15 +84,15 @@
 .tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 7px 0 10px;
+  gap: 6px;
+  padding: 0 6px 0 12px;
   min-width: 104px;
-  max-width: 192px;
+  max-width: 200px;
   /* an invisible border keeps the box identical to the active card, so
    * selecting a tab never shifts the layout */
   border: 1px solid transparent;
-  border-radius: var(--radius);
-  margin: 3px 0;
+  border-radius: var(--radius-sm);
+  margin: 4px 0;
   color: var(--text-dim);
   font-size: 12.5px;
   position: relative;
@@ -105,7 +105,6 @@
 
 .tab:hover {
   background: var(--surface-2);
-  border-color: var(--border);
   color: var(--text);
 }
 
@@ -116,7 +115,7 @@
 .tab.active {
   background: var(--tab-active-bg);
   color: var(--tab-active-text);
-  border-color: var(--border-strong);
+  border-color: var(--border);
   box-shadow: var(--tab-active-shadow);
 }
 
@@ -131,9 +130,9 @@
 .tab .tab-close {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
   color: var(--text-faint);
   flex: none;
 }
@@ -157,9 +156,10 @@
 .tab-new {
   display: grid;
   place-items: center;
-  width: 38px;
-  border-radius: var(--radius);
-  margin: 3px 0;
+  width: 32px;
+  height: 32px;
+  align-self: center;
+  border-radius: var(--radius-pill);
   color: var(--text-dim);
   flex: none;
 }
@@ -175,7 +175,6 @@
   gap: 2px;
   margin-left: auto;
   padding: 0 8px;
-  border-left: 1px solid var(--border);
   flex: none;
 }
 
@@ -187,11 +186,11 @@
 .app-menu {
   z-index: 50;
   min-width: 200px;
-  padding: 4px;
+  padding: 6px;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px var(--shadow);
+  box-shadow: 0 12px 32px var(--shadow);
   animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
 }
 
@@ -230,11 +229,11 @@
   position: fixed;
   z-index: 50;
   min-width: 200px;
-  padding: 4px;
+  padding: 6px;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px var(--shadow);
+  box-shadow: 0 12px 32px var(--shadow);
   animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
 }
 
@@ -286,11 +285,11 @@
   top: 0;
   left: calc(100% - 2px);
   min-width: 190px;
-  padding: 4px;
+  padding: 6px;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px var(--shadow);
+  box-shadow: 0 12px 32px var(--shadow);
 }
 
 .tab-context-submenu.flip-left {
@@ -332,10 +331,10 @@
 .tab-badge {
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--accent);
+  color: var(--accent-dim);
   background: var(--accent-soft);
-  border-radius: var(--radius-sm);
-  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  padding: 1px 8px;
   white-space: nowrap;
   flex: none;
 }
@@ -351,18 +350,14 @@
  * OS default, and four of them never fit next to tabs in a 360px window). */
 @media (max-width: 600px) {
   .tabbar {
-    gap: 2px;
-    padding: 0 2px;
+    gap: 3px;
+    padding: 0 4px;
   }
 
   .tab {
     min-width: 84px;
     max-width: 150px;
     padding: 0 4px 0 8px;
-  }
-
-  .tab-new {
-    width: 34px;
   }
 
   .tabbar-actions {
@@ -376,7 +371,7 @@
 
 /* ---- touch devices -------------------------------------------------------- */
 
-/* The tab's close button is a 20px square — well under what a fingertip
+/* The tab's close button is a 22px disc — well under what a fingertip
  * hits. The context menu (right-click) has no touch equivalent, but every
  * action it offers is also on a visible control (close button, app menu), so
  * it stays a desktop affordance. */

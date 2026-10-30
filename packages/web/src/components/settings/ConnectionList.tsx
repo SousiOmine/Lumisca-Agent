@@ -12,9 +12,9 @@ import { useT } from "../../i18n.ts";
 const ACTIVE_TAG: CSSProperties = {
   fontSize: 11,
   padding: "2px 8px",
-  borderRadius: 999,
-  border: "1px solid var(--accent)",
-  color: "var(--accent)",
+  borderRadius: "var(--radius-pill)",
+  background: "var(--accent-soft)",
+  color: "var(--text-dim)",
   marginLeft: 8,
 };
 
@@ -315,7 +315,7 @@ function ServerCard({
         gap: 8,
         padding: "10px 12px",
         background: "var(--surface-2)",
-        borderRadius: 8,
+        borderRadius: "var(--radius)",
       }}
     >
       <span style={{ fontWeight: 600 }}>

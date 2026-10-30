@@ -15,12 +15,17 @@
    * to the viewport, so a hardcoded offset would put the panels on top of
    * a banner and swallow its buttons. The measured height of that band
    * arrives as a variable (see hooks/usePanelInset.ts); its default is a
-   * layout token. */
-  top: calc(var(--tab-height) + var(--app-banner-height, 0px) + 8px);
-  right: 12px;
+   * layout token. The chat pane itself floats by --app-inset, so the stack
+   * starts one inset in: the panels sit over the pane's top-right corner
+   * rather than the screen's. On a phone the inset is 0 and the fields
+   * below take the whole width. */
+  top: calc(
+    var(--tab-height) + var(--app-banner-height, 0px) + var(--app-inset) + 8px
+  );
+  right: calc(var(--app-inset) + 8px);
   z-index: 45;
   width: 264px;
-  max-width: calc(100vw - 24px);
+  max-width: calc(100vw - 2 * var(--app-inset) - 16px);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -32,9 +37,9 @@
 .todo-panel {
   width: 100%;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px var(--shadow);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
   font-size: 12px;
   animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
@@ -115,9 +120,9 @@
 .task-panel {
   width: 100%;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px var(--shadow);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
   font-size: 12px;
   animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
@@ -199,8 +204,8 @@
 .task-live {
   margin: 0;
   padding: 6px 8px;
-  background: var(--bg);
-  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  border-radius: var(--radius);
   color: var(--text-dim);
   font-family: var(--mono);
   font-size: 11px;
@@ -217,9 +222,9 @@
 .background-panel {
   width: 100%;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px var(--shadow);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
   font-size: 12px;
   animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
@@ -306,8 +311,8 @@
 .background-live {
   margin: 0;
   padding: 6px 8px;
-  background: var(--bg);
-  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  border-radius: var(--radius);
   color: var(--text-dim);
   font-family: var(--mono);
   font-size: 11px;
@@ -324,9 +329,9 @@
 .goal-panel {
   width: 100%;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px var(--shadow);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
   font-size: 12px;
   animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
@@ -394,7 +399,7 @@
   gap: 4px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   padding: 4px 8px;
   font-size: 12px;
   color: var(--text-dim);
@@ -463,8 +468,8 @@
 
 .question-card {
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -516,7 +521,7 @@
   width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 7px 10px;
   font-size: 13px;
   color: var(--text-dim);
@@ -532,7 +537,7 @@
 
 .question-option.selected {
   background: var(--accent-soft);
-  border-color: var(--accent);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 
@@ -571,7 +576,7 @@
 }
 
 .question-free-input:not(:placeholder-shown) {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
 }
 
 /* The submit row sticks to the bottom of the panel's scrollport while its

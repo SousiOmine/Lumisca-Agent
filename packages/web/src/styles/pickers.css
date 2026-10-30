@@ -69,7 +69,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 4px;
-  background: var(--bg);
+  background: var(--surface-2);
 }
 
 /* Plain variant (new-session screen): no box, just the rows separated by
@@ -134,7 +134,7 @@
 .recent-item-peer {
   padding: 0 6px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--text-faint);
   font-size: 10.5px;
   white-space: nowrap;
@@ -197,13 +197,13 @@
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 7px 10px;
   text-align: left;
 }
 
 .peer-picker-trigger:hover {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
 }
 
 .peer-picker-dot-wrapper {
@@ -253,7 +253,7 @@
   z-index: 40;
   min-width: 220px;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 4px;
   box-shadow: 0 8px 24px var(--shadow);
@@ -276,8 +276,9 @@
 }
 
 .peer-option.selected {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .peer-option.unreachable {
@@ -332,13 +333,13 @@
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 7px 10px;
   text-align: left;
 }
 
 .workspace-picker-trigger:hover {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
 }
 
 .workspace-picker-name {
@@ -368,7 +369,7 @@
   z-index: 40;
   min-width: 260px;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 4px;
   box-shadow: 0 8px 24px var(--shadow);
@@ -397,8 +398,9 @@
 }
 
 .workspace-option.selected {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .workspace-option-icon {

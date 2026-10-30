@@ -45,8 +45,8 @@
   grid-template-columns: 190px minmax(0, 1fr);
   height: min(420px, 55vh);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
   overflow: hidden;
 }
 
@@ -84,8 +84,9 @@
 }
 
 .folder-browser-place.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 500;
 }
 
 .folder-browser-place-name {
@@ -192,8 +193,9 @@
 }
 
 .folder-browser-row.dir.selected {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 500;
 }
 
 /* a file can be looked at, not picked */

@@ -8,13 +8,13 @@
       /* Splash shown while the desktop shell starts the bundled server.
          Colors match the app's dark theme (packages/web/src/styles/tokens.css). */
       :root {
-        --bg: #1b1b1b;
-        --surface: #2d2d2d;
-        --border: #3b3b3b;
-        --text: #ffffff;
-        --text-dim: #9d9d9d;
-        --accent: #d6d6d6;
-        --error: #f1707b;
+        --bg: #0c0c11;
+        --surface: #15151b;
+        --border: #26262f;
+        --text: #f3f3f7;
+        --text-dim: #a5a5b2;
+        --accent: #f3f3f7;
+        --error: #ff9a90;
       }
       * {
         box-sizing: border-box;
@@ -68,7 +68,7 @@
         cursor: pointer;
       }
       .titlebar-btn:hover {
-        background: #424242;
+        background: #23232d;
         color: #ffffff;
       }
       .titlebar-btn.close:hover {
@@ -129,16 +129,17 @@
         color: var(--text);
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: 999px;
         cursor: pointer;
       }
       .btn:hover {
         border-color: var(--text-dim);
       }
       .btn.primary {
-        color: #1b1b1b;
+        color: #0c0c11;
         background: var(--accent);
         border-color: var(--accent);
+        font-weight: 600;
       }
     </style>
   </head>

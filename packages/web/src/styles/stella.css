@@ -58,7 +58,8 @@
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
   color: var(--text);
   cursor: pointer;
   transition: border-color 140ms var(--lum-ease), transform 140ms
@@ -66,13 +67,13 @@
 }
 
 .mode-card:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
   transform: translateY(-1px);
 }
 
 .mode-card.current {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--border-strong);
+  background: var(--surface);
 }
 
 .mode-card:disabled {
@@ -86,7 +87,7 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -104,7 +105,7 @@
 
 .mode-card-action {
   margin-top: auto;
-  color: var(--accent);
+  color: var(--text);
   font-size: 12.5px;
   font-weight: 600;
 }
@@ -144,8 +145,8 @@
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 10px;
-  padding: 0 12px 12px;
+  gap: var(--app-inset);
+  padding: var(--app-inset);
 }
 
 /* The counterparts. Deliberately a plain list, not a card: one row per
@@ -224,7 +225,7 @@
 
 .stella-agent.active .stella-agent-name {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text);
 }
 
 /* The delete control appears on hover (and always on touch, see
@@ -239,7 +240,7 @@
   height: 22px;
   margin-right: 4px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: none;
   color: var(--text-dim);
   opacity: 0;
@@ -283,7 +284,10 @@
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
 }
 
 /* The conversation's title is the agent's name and nothing else: a subtitle
@@ -327,7 +331,8 @@
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
 
@@ -381,7 +386,7 @@
 
 @media (max-width: 900px) {
   .stella-shell {
-    padding: 0 8px 8px;
+    padding: 8px;
   }
 
   .stella {
@@ -455,4 +460,35 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-dim);
+}
+
+/* ---- narrow windows ------------------------------------------------------- */
+
+/* Phone: the panes are the screen. The floating margins, borders and radii
+ * (which exist to lift a sheet off the canvas) only cost width here — the
+ * same reason the chat pane drops them at this width. */
+@media (max-width: 600px) {
+  .stella-shell {
+    padding: 0;
+    gap: 0;
+  }
+
+  .stella {
+    gap: 0;
+  }
+
+  .stella-main,
+  .stella-pane {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .stella-pane {
+    border-top: 1px solid var(--border);
+  }
+
+  .mode-select {
+    padding: 20px 14px;
+  }
 }

@@ -34,7 +34,7 @@
   gap: 10px;
   padding: 8px 10px;
   background: var(--surface-2);
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 /* The clickable body of a `.setting-card`: a full-width button that reads as
@@ -62,7 +62,7 @@
   letter-spacing: 0.15em;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
   text-align: center;
   user-select: all;
 }
@@ -109,7 +109,7 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface-2);
   padding: 6px 8px;
 }
@@ -160,7 +160,7 @@
 /* Card wrapping one model row in the custom-provider form. */
 .user-provider-card {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 8px;
   margin-bottom: 8px;
   display: flex;
@@ -190,7 +190,7 @@
 /* saved prompts cards */
 .saved-prompt-card {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface-2);
   padding: 8px 10px;
   display: flex;
@@ -211,10 +211,10 @@
 .saved-prompt-id {
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--accent);
-  padding: 1px 6px;
+  color: var(--text-dim);
+  padding: 1px 8px;
   background: var(--accent-soft);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
 }
 
 .saved-prompt-label {
@@ -242,15 +242,15 @@
   word-break: break-word;
   max-height: 100px;
   overflow-y: auto;
-  background: var(--bg);
-  border-radius: var(--radius-sm);
-  padding: 6px 8px;
+  background: var(--surface-3);
+  border-radius: var(--radius);
+  padding: 8px 10px;
 }
 
 /* saved prompt edit/add form */
 .saved-prompt-form {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface-2);
   padding: 10px;
   margin-bottom: 8px;
@@ -286,7 +286,7 @@
   align-items: center;
   gap: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface-2);
   padding: 10px 12px;
 }
@@ -345,8 +345,8 @@
   z-index: 60;
   width: min(640px, calc(100vw - 40px));
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: 0 8px 24px var(--shadow);
   overflow: hidden;
   animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
@@ -381,7 +381,7 @@
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   text-align: left;
   font-size: 13px;
   color: var(--text-dim);
@@ -394,8 +394,8 @@
 }
 
 .settings-nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -418,7 +418,7 @@
   align-items: center;
   gap: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface-2);
   padding: 12px 14px;
 }
@@ -458,7 +458,7 @@
 
 .model-group {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -563,7 +563,7 @@
   position: absolute;
   inset: 0;
   background: var(--surface-3);
-  border-radius: 20px;
+  border-radius: var(--radius-pill);
   transition: background 200ms ease;
 }
 
@@ -594,7 +594,7 @@
   align-items: center;
   gap: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--surface-2);
   padding: 10px 12px;
 }
@@ -641,14 +641,14 @@
   width: 140px;
   height: 6px;
   flex: none;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--surface-3);
   overflow: hidden;
 }
 
 .update-progress-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--accent);
   transition: width 200ms ease;
 }
@@ -751,7 +751,7 @@
   padding: 10px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
 }
 
 .routine-row.disabled {
@@ -783,7 +783,7 @@
   padding: 0 6px;
   font-size: 10px;
   line-height: 16px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-3);
   color: var(--text-dim);
 }

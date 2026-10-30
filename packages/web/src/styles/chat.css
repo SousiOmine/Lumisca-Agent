@@ -4,6 +4,9 @@
 
 /* ---- chat --------------------------------------------------------------- */
 
+/* The transcript is a sheet lying on the canvas: a surface, a hairline
+ * border, a low shadow and the largest radius step. The margin is what puts
+ * the canvas underneath it (--app-inset, zero on a phone). */
 .chat {
   flex: 1;
   display: flex;
@@ -13,7 +16,12 @@
    * so .chat grows past the viewport and the page scrolls instead of
    * .chat-scroll. */
   min-height: 0;
-  background: var(--bg);
+  margin: var(--app-inset);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
 }
 
 .chat-scroll {
@@ -56,23 +64,36 @@
   gap: 2px;
 }
 
-/* user messages are set apart with a slightly darker background */
-.msg.user {
-  background: var(--user-msg-bg);
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+/* ---- user messages ------------------------------------------------------- */
+
+/* The agent's text sits on the sheet; only the user's own messages are set
+ * apart as a bubble — aligned to the right edge, so the reading order is
+ * "them on the sheet, me in a bubble". The bubble is a capsule of the
+ * surface ramp (never a second box with its own border), so it reads as the
+ * same paper, pressed in. */
+.msg-user-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  position: relative;
 }
 
-.msg-user-wrap {
-  position: relative;
+.msg.user {
+  max-width: 85%;
+  background: var(--user-msg-bg);
+  border-radius: var(--radius-xl);
+  padding: 11px 16px;
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
 }
 
 .msg-user-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 4px;
   margin-top: 2px;
+  padding-right: 4px;
 }
 
 .msg-action-btn {
@@ -80,8 +101,8 @@
   align-items: center;
   padding: 4px 6px;
   border: none;
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  border-radius: var(--radius-pill);
+  background: transparent;
   color: var(--text-dim);
   cursor: pointer;
   opacity: 0;
@@ -135,9 +156,9 @@
 .msg-image {
   max-width: 320px;
   max-height: 240px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: var(--surface-2);
   object-fit: contain;
 }
 
@@ -149,7 +170,7 @@
 .markdown img {
   max-width: 100%;
   height: auto;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 
 /* A diagram is content, not an icon between words: it stands on its own
@@ -166,8 +187,8 @@
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--error);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: var(--radius);
+  background: var(--surface-2);
 }
 
 .visual-error-title {
@@ -200,9 +221,9 @@
 .msg-body pre {
   font-family: var(--mono);
   font-size: 12.5px;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 10px 12px;
   overflow-x: auto;
   margin: 8px 0;
@@ -211,9 +232,9 @@
 .msg-body code {
   font-family: var(--mono);
   font-size: 12.5px;
-  background: var(--surface-2);
-  border-radius: 3px;
-  padding: 1px 4px;
+  background: var(--surface-3);
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
 }
 
 .msg-body pre code {
@@ -238,7 +259,7 @@
 .markdown h4 {
   margin: 14px 0 8px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .markdown h1 {
@@ -266,7 +287,8 @@
 .markdown blockquote {
   margin: 8px 0;
   padding: 4px 12px;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--text-dim);
 }
 
@@ -284,7 +306,7 @@
 }
 
 .markdown th {
-  background: var(--surface);
+  background: var(--surface-2);
   font-weight: 600;
 }
 
@@ -299,6 +321,7 @@
   width: 8px;
   height: 15px;
   background: var(--accent);
+  border-radius: var(--radius-xs);
   vertical-align: text-bottom;
   animation: blink 1s step-end infinite;
 }
@@ -384,7 +407,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 6px;
+  padding: 3px 8px;
   border-radius: var(--radius-sm);
   font-family: var(--mono);
   font-size: 12px;
@@ -417,7 +440,7 @@
 }
 
 .tool-line-name {
-  color: var(--accent);
+  color: var(--text);
   font-weight: 500;
   flex: none;
 }
@@ -467,7 +490,7 @@
 }
 
 .tool-detail {
-  padding: 4px 6px 4px 24px;
+  padding: 6px 8px 6px 26px;
   font-family: var(--mono);
   font-size: 12px;
   border-top: 1px solid var(--border);
@@ -503,19 +526,20 @@
 }
 
 /* ---- mode badge on user messages (review, etc.) ---------------------------
- * Rendered at the bottom-right OUTSIDE the gray message bubble (in the
- * actions row), as a faint label: the bubble itself stays clean and the
- * mode name recedes behind the message content. */
+ * Rendered at the bottom-right OUTSIDE the bubble (in the actions row),
+ * as a faint label: the bubble itself stays clean and the mode name
+ * recedes behind the message content. */
 
 .msg-mode-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0 4px;
-  border-radius: var(--radius-sm);
-  color: var(--text-faint);
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--text-dim);
   font-size: 10.5px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.6;
   letter-spacing: 0.03em;
 }
 
@@ -529,7 +553,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 6px;
+  padding: 3px 8px;
   border-radius: var(--radius-sm);
   font-family: var(--mono);
   font-size: 12px;
@@ -588,7 +612,7 @@
 }
 
 .notification-detail {
-  padding: 4px 6px 4px 24px;
+  padding: 6px 8px 6px 26px;
   font-family: var(--mono);
   font-size: 12px;
   border-top: 1px solid var(--border);
@@ -608,55 +632,7 @@
   margin: 0;
 }
 
-/* ---- tool calls (legacy boxed style, unused) ---------------------------- */
-
-.tool {
-  margin: 10px 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.tool-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  cursor: pointer;
-  color: var(--text-dim);
-}
-
-.tool-head:hover {
-  background: var(--surface-2);
-}
-
-.tool-head .chevron {
-  color: var(--text-faint);
-  display: grid;
-  place-items: center;
-  transition: transform 120ms ease;
-}
-
-.tool-head.open .chevron {
-  transform: rotate(90deg);
-}
-
-.tool-head .tool-name {
-  color: var(--accent);
-}
-
-.tool-head .tool-state {
-  margin-left: auto;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
+/* ---- rotating loader ---------------------------------------------------- */
 
 /* rotating loader for in-progress states (see ToolCall) */
 .spin {
@@ -669,43 +645,6 @@
   }
 }
 
-.tool-head .tool-state.running {
-  color: var(--accent);
-}
-
-.tool-head .tool-state.error {
-  color: var(--error);
-}
-
-.tool-head .tool-state.done {
-  color: var(--ok);
-}
-
-.tool-body {
-  border-top: 1px solid var(--border);
-  padding: 8px 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  overflow-x: auto;
-}
-
-.tool-args {
-  color: var(--text-dim);
-  white-space: pre-wrap;
-  margin-bottom: 8px;
-}
-
-.tool-result {
-  white-space: pre-wrap;
-  color: var(--text);
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.tool-result.error {
-  color: var(--error);
-}
-
 /* ---- narrow windows ------------------------------------------------------- */
 
 /* The transcript keeps its reading order; the margins that frame it on a
@@ -715,12 +654,23 @@
     gap: 14px;
     padding: 0 16px;
   }
+
+  .msg.user {
+    max-width: 92%;
+  }
 }
 
-/* Phone: the transcript is the screen — tighter margins, and the two things
- * that would otherwise overflow it (a wide table, a large image) stay inside
- * the column. */
+/* Phone: the sheet becomes the screen — the canvas margin, border, radius
+ * and shadow all go, and the two things that would otherwise overflow it (a
+ * wide table, a large image) stay inside the column. */
 @media (max-width: 600px) {
+  .chat {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
   .chat-column {
     padding: 0 12px;
   }
@@ -782,7 +732,7 @@
   padding: 14px 16px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
 }
 
 .ui-card-invalid {
@@ -867,7 +817,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 12px;
+  padding: 9px 12px;
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -882,7 +832,7 @@
 }
 
 .ui-card-option.selected {
-  border-color: var(--accent-dim);
+  border-color: var(--border-strong);
   background: var(--accent-soft);
 }
 
@@ -922,10 +872,10 @@
 
 .ui-card-input {
   width: 100%;
-  padding: 6px 10px;
+  padding: 7px 12px;
   background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   color: var(--text);
   font-size: 13px;
 }
