@@ -88,7 +88,7 @@ export const common = {
   /** Provisional name of a session, before the title generator names it
    * (see shared/misc.ts formatSessionName). */
   "common.sessionName": { ja: "セッション {date}", en: "Session {date}" },
-  /** Head line of a compaction checkpoint (see agent/context-compaction.ts).
+  /** Head line of a compaction checkpoint (see ai/context-compaction.ts).
    * It is stored with the message, so a checkpoint keeps the language it was
    * generated in. */
   "checkpoint.title": {

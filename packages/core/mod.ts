@@ -56,10 +56,7 @@ export type {
   NotificationMessage,
   NotificationStatus,
 } from "./ai/types.ts";
-export type {
-  ContextProvider,
-  ContextUpdate,
-} from "./agent/context-providers.ts";
+export type { ContextProvider, ContextUpdate } from "./ai/context-providers.ts";
 export type {
   StellaConversationSnapshot,
   StellaEntry,
@@ -113,7 +110,7 @@ export {
   DEFAULT_COMPACTION_POLICY,
   resolveCompactionBudgets,
   resolveCompactionPolicy,
-} from "./agent/context-compaction.ts";
+} from "./ai/context-compaction.ts";
 export { systemLanguageTags } from "./locale.ts";
 export { AGENT_MODES, findAgentMode } from "./modes/mod.ts";
 export type { AgentMode, AgentModeOption } from "./modes/mod.ts";

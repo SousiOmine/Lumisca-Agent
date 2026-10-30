@@ -23,7 +23,7 @@ import { requireIntegerInRange } from "../tools/validate.ts";
  * `history_search`: read back what was said earlier in this conversation.
  *
  * stella's premise is one ongoing chat, and a chat that outgrows the model's
- * window is condensed into checkpoints (agent/context-compaction.ts). The
+ * window is condensed into checkpoints (ai/context-compaction.ts). The
  * summary keeps the thread, but the exact wording of the older turns — a path
  * the user gave, a decision, an error message — is no longer sent to the
  * model. Every message is still a row in the database, so this tool reads

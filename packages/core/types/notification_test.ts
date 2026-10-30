@@ -5,7 +5,11 @@ import type {
   ModeMessage,
   NotificationMessage,
 } from "@lumisca/core";
-import { notificationText, toLlmMessages } from "./notification.ts";
+import {
+  notificationMessage,
+  notificationText,
+  toLlmMessages,
+} from "./notification.ts";
 
 function notification(
   overrides: Partial<NotificationMessage> = {},
@@ -127,4 +131,17 @@ Deno.test("toLlmMessages passes the images attached to a mode message", () => {
     content: [{ type: "text", text: modeMsg.fullPrompt }, image],
     timestamp: modeMsg.timestamp,
   });
+});
+
+Deno.test("notificationMessage stamps the payload", () => {
+  const before = Date.now();
+  const message = notificationMessage({
+    kind: "task",
+    title: "[Task agent_1 finished]",
+    body: "ok",
+    status: "success",
+  });
+  assertEquals(message.role, "notification");
+  assertEquals(message.kind, "task");
+  assertEquals(message.timestamp >= before, true);
 });

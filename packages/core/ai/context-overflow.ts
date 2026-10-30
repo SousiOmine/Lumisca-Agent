@@ -2,7 +2,7 @@
  * A provider's own words for a rejected request: the context-window
  * overflows, and the counts it reports beside them.
  *
- * Two layers read the same failure. The retry policy (agent/retry-policy.ts)
+ * Two layers read the same failure. The retry policy (ai/retry-policy.ts)
  * decides whether a failed turn is worth a condensed restart; the transport
  * (ai/output-cap-recovery.ts) reads the counts to shrink the completion cap
  * and re-send the request unchanged. Both must agree on what an overflow is,

@@ -58,8 +58,6 @@ export interface BashToolOptions {
    * model passes per call (`env`) wins over it; both win over the shell's
    * own environment (see tools/host/shell.ts). */
   env?: Record<string, string>;
-  /** Default timeout in seconds. */
-  defaultTimeoutSec?: number;
   /** Command safety check (the fast model judges the command before it
    * runs; a blocked command returns the reason as the tool result).
    * Omitted → the command runs unchecked. */
@@ -101,8 +99,6 @@ async function spillRecovery(
 export function createBashTool(
   options: BashToolOptions,
 ): Tool<typeof bashSchema> {
-  const defaultTimeoutSec = options.defaultTimeoutSec ??
-    DEFAULT_BASH_TIMEOUT_SEC;
   const { files, runner } = options;
   const spiller = new OutputSpiller(files, options.spillDir);
 
@@ -162,7 +158,7 @@ export function createBashTool(
         cwd,
       );
       if (blocked !== undefined) return blocked;
-      const timeoutSec = params.timeout ?? defaultTimeoutSec;
+      const timeoutSec = params.timeout ?? DEFAULT_BASH_TIMEOUT_SEC;
 
       const result = await runner.run(params.command, {
         cwd,

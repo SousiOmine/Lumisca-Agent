@@ -49,7 +49,7 @@ function guidelines(
  * touch, the machine it runs on, and the guidelines that apply to the tools
  * it actually has. Project memory (AGENTS.md) and the machine-level personal
  * instructions are NOT part of this prompt: they are published as context
- * messages (see agent/context-providers), so an edit reaches an open session
+ * messages (see ai/context-providers), so an edit reaches an open session
  * and the prompt itself stays stable.
  */
 export function buildSystemPrompt(

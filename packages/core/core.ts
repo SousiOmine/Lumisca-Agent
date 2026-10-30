@@ -86,7 +86,7 @@ import {
 } from "./session/request-shapes.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
 import { SessionPool } from "./agent/pool.ts";
-import { withProviderRetryDefaults } from "./agent/llm-retry.ts";
+import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
 import {
   buildChatSystemPrompt,
   buildStellaSystemPrompt,
@@ -1109,13 +1109,6 @@ export class LumiscaCore {
     return await this.stella.status();
   }
 
-  /** Stop the machine (`podman stop`). Called on shutdown only: the UI has no
-   * stop button, because a machine that disappears when the user is not
-   * looking costs minutes to bring back. */
-  async stopStellaVm(): Promise<void> {
-    await this.stella.stop();
-  }
-
   /** The hand-over hub of one session (see vm/handover.ts): created on
    * first use and dropped on close, so a torn-down session leaves nothing
    * waiting. */
@@ -1959,7 +1952,7 @@ export class LumiscaCore {
    * session's preloaded tool names, which decide which guideline sections
    * render. Workspace instructions (AGENTS.md) and the machine-level
    * personal instructions are NOT part of this string: they are published
-   * as dynamic context messages (see agent/context-providers), so an edit
+   * as dynamic context messages (see ai/context-providers), so an edit
    * reaches a session that is already open. */
   private buildGeneratedPrompt(
     workspace: Workspace,

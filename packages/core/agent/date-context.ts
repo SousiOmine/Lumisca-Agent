@@ -1,5 +1,8 @@
 import { today } from "../environment.ts";
-import type { ContextProvider, ContextUpdate } from "./context-providers.ts";
+import type {
+  ContextProvider,
+  ContextUpdate,
+} from "../ai/context-providers.ts";
 
 /**
  * The date context provider: publishes the current date as a durable
@@ -11,7 +14,7 @@ import type { ContextProvider, ContextUpdate } from "./context-providers.ts";
  * yesterday; changing the prompt instead would cost the provider's whole
  * cached prefix. As a context message it is paid once, appended (never
  * inserted), and republished only when the day actually changes — the same
- * shape as the other dynamic contexts (see agent/context-providers.ts).
+ * shape as the other dynamic contexts (see ai/context-providers.ts).
  */
 
 /** Provider name of the date context. */

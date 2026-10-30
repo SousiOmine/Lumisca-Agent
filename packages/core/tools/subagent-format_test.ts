@@ -5,7 +5,6 @@ import {
   formatTaskCompletion,
   formatTaskOutput,
 } from "./subagent-format.ts";
-import { notificationMessage } from "./subagent-format.ts";
 
 function info(
   overrides: Partial<TaskInfo> & { status: SubagentStatus },
@@ -119,17 +118,4 @@ Deno.test("formatTaskOutput keeps the running live tail readable", () => {
   assertEquals(text.includes("Live output (tail):"), true);
   // A running task's text is a tail, not a result: no warning guessing.
   assertEquals(text.includes("[warning]"), false);
-});
-
-Deno.test("notificationMessage stamps the payload", () => {
-  const before = Date.now();
-  const message = notificationMessage({
-    kind: "task",
-    title: "[Task agent_1 finished]",
-    body: "ok",
-    status: "success",
-  });
-  assertEquals(message.role, "notification");
-  assertEquals(message.kind, "task");
-  assertEquals(message.timestamp >= before, true);
 });

@@ -36,12 +36,12 @@ import type {
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { formatBackgroundNotification } from "../tools/background.ts";
-import { notificationMessage } from "../tools/subagent-format.ts";
+import { notificationMessage } from "../types/notification.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import { toLlmMessages } from "../types/notification.ts";
-import type { ContextProvider } from "./context-providers.ts";
-import { contextMessage } from "./context-providers.ts";
+import type { ContextProvider } from "../ai/context-providers.ts";
+import { contextMessage } from "../ai/context-providers.ts";
 import type { ModePrompt } from "../types/mode-message.ts";
 import { buildModeMessage } from "../types/mode-message.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
@@ -52,7 +52,7 @@ import {
   type CompactionResult,
   ContextCompactor,
   contextStart,
-} from "./context-compaction.ts";
+} from "../ai/context-compaction.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
 /** One observer of the events this agent emits (see subscribeToRun). */
@@ -745,7 +745,7 @@ export class SessionAgent {
   /** Convert the transcript for the LLM: the model's view starts at the
    * newest compaction checkpoint (everything before it stays in the
    * transcript, the database and the UI but is not sent — see
-   * agent/context-compaction.ts), notification messages become user
+   * ai/context-compaction.ts), notification messages become user
    * messages carrying their title + body (the prefix contract the system
    * prompt teaches), then image blocks are replaced by their analysis text
    * when the main model cannot see images. */

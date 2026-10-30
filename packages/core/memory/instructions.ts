@@ -1,7 +1,7 @@
 import type {
   ContextProvider,
   ContextUpdate,
-} from "../agent/context-providers.ts";
+} from "../ai/context-providers.ts";
 import { fnv1a } from "../shared/digest.ts";
 import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 import {

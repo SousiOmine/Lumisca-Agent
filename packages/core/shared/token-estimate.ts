@@ -3,7 +3,7 @@ import type { AgentMessage, LlmMessage } from "../ai/types.ts";
 
 /*
  * Token estimation for history that has no provider-reported usage to lean
- * on. The context compactor (agent/context-compaction.ts) measures a
+ * on. The context compactor (ai/context-compaction.ts) measures a
  * request from the newest assistant `usage` — the provider's own count —
  * and only has to *estimate* what was appended after it, so the figures here
  * are deltas, never the whole conversation. The same estimate prices a

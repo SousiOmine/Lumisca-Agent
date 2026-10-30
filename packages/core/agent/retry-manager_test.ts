@@ -6,7 +6,7 @@ import { MAX_OUTPUT_CAP_RETRIES, RetryManager } from "./retry-manager.ts";
 import {
   isContextOverflowError,
   MAX_EMPTY_RESPONSE_RETRIES,
-} from "./retry-policy.ts";
+} from "../ai/retry-policy.ts";
 
 /** An error-stopped, outputless assistant turn with the given message. */
 function errored(errorMessage: string): AgentMessage {

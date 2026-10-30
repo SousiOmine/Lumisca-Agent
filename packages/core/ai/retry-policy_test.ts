@@ -5,7 +5,7 @@ import {
   fauxThinking,
   fauxToolCall,
 } from "@lumisca/core";
-import type { AssistantMessage } from "../ai/types.ts";
+import type { AssistantMessage } from "./types.ts";
 import { isRetryableRateLimit } from "./llm-retry.ts";
 import {
   buildInterruptedRetryNotification,

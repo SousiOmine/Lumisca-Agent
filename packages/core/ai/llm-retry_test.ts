@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "@lumisca/core";
-import type { StreamOptions } from "../ai/types.ts";
+import type { StreamOptions } from "./types.ts";
 import {
   applyProviderRetryDefaults,
   isRetryableRateLimit,

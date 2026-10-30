@@ -1,6 +1,5 @@
 import type { AgentMessage } from "../ai/types.ts";
 import { contentText } from "../shared/mod.ts";
-import type { NotificationMessage } from "../ai/types.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import type { SubagentType, TaskInfo } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
@@ -56,18 +55,6 @@ export function lastAssistantText(messages: AgentMessage[]): string {
  * marks a notification delivered into the run that was already active
  * (see NotificationMessage.steered); only the delivery site knows it, so
  * the payload generators never set it. */
-export function notificationMessage(
-  payload: NotificationPayload,
-  steered?: boolean,
-): NotificationMessage {
-  return {
-    role: "notification",
-    ...payload,
-    ...(steered === true ? { steered } : {}),
-    timestamp: Date.now(),
-  };
-}
-
 /** Tail of a failed sub-agent's partial output, so a lost run still hands
  * over what it had produced. Bounded: the notification becomes a message in
  * the parent's transcript. */

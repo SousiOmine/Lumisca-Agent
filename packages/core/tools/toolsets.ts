@@ -244,6 +244,12 @@ export function createCodingTools(
  *
  * Everything else — sub-agents, discoverable tools through the registry — is
  * unchanged: stella is a different place to work, not a reduced agent.
+ *
+ * `identity` and `agent_create` are deliberately absent: both belong to the
+ * conversation's own agent (its self-description, the siblings only the user
+ * may ask for), so they live in the session's MAIN registry (see
+ * agent/factory.ts and tools/registries.ts), where a sub-agent's tool_search
+ * cannot reach them.
  */
 export function createStellaTools(options: {
   backends: ToolBackends;
@@ -254,22 +260,12 @@ export function createStellaTools(options: {
    * the built-ins the session is entitled to. */
   skills: SkillDef[];
   screen: Tool[];
-  /** `agent_create`: add another stella agent (one of the sidebar's agents).
-   * Superseded by the main registry (TC-7): a tool that belongs to this
-   * conversation's own agent is reached through tool_search, so it never
-   * reaches a sub-agent. Kept out of this option bag on purpose. */
-  agents?: Tool;
   /** `chat_ui`: show a card in the chat. */
   chatUi?: Tool;
   /** `history_search`: the conversation's own saved history. Omitted → the
    * tool is not built (a caller without a message store has nothing to
    * search). */
   history?: Tool;
-  /** `identity`: the agent's own text about itself. Like `agents`, it is
-   * reached through the session's main registry (see agent/factory.ts), so
-   * it is deliberately not part of this set: a tool a sub-agent could find
-   * would let it rewrite the identity of the agent that started it. */
-  identity?: Tool;
   /** `chat_attach`: hand files to the user. Omitted → the tool is not built
    * (a caller with no attachment store has nowhere to keep the bytes). */
   attach?: ChatAttachTarget;

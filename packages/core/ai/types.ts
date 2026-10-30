@@ -255,7 +255,7 @@ export interface NotificationMessage {
 }
 
 /**
- * A durable snapshot of dynamic context (agent/context-providers): the
+ * A durable snapshot of dynamic context (ai/context-providers): the
  * session's skill catalog, or the workspace instruction files. It is
  * appended to the transcript when the underlying context changes — and only
  * then — so the model always works from the current value while the system
@@ -282,7 +282,7 @@ export interface ContextMessage {
 /**
  * A compaction checkpoint: the summary that replaced an older span of the
  * transcript to keep the conversation inside the model's request limit (see
- * agent/context-compaction.ts). It is one durable message sitting where the
+ * ai/context-compaction.ts). It is one durable message sitting where the
  * replaced span was, so the history after a compaction reads as
  * checkpoint → retained recent messages.
  *
@@ -602,7 +602,7 @@ export interface StreamOptions {
   /** Retries the AI SDK performs for the initial provider request, with its
    * own backoff (the provider's Retry-After is honoured); 0 disables the
    * loop. The agent seeds it for every LLM call — see
-   * agent/llm-retry.ts. */
+   * ai/llm-retry.ts. */
   maxRetries?: number;
   /** Override the model's own output cap for this call (the transport sends
    * `model.maxTokens` otherwise). The compaction summarizer uses it: its

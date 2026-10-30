@@ -2,7 +2,6 @@ import { assertEquals } from "@std/assert";
 import { createTranslator } from "@lumisca/core/shared";
 import {
   formatDate,
-  formatDateTime,
   formatRelativeTime,
   thinkingLevelLabel,
 } from "./format.ts";
@@ -54,7 +53,7 @@ Deno.test("formatRelativeTime: a week old falls back to a date", () => {
   );
 });
 
-Deno.test("formatDate/formatDateTime: numeric per language", () => {
+Deno.test("formatDate: numeric per language", () => {
   // What the app relies on is the order the parts come in — English leads
   // with the month, Japanese with the year — and that the value is numeric.
   // The separators and the clock format belong to Intl and change with an
@@ -66,14 +65,6 @@ Deno.test("formatDate/formatDateTime: numeric per language", () => {
   assertEquals(/(^|\D)9(\D|$)/.test(en), true, en);
   assertEquals(en.indexOf("9") < en.indexOf("2026"), true, `en: ${en}`);
   assertEquals(ja.indexOf("2026") < ja.indexOf("9"), true, `ja: ${ja}`);
-
-  // Date + time keeps the language's date order and adds a clock.
-  const dateTimeEn = formatDateTime(NOW, "en");
-  assertEquals(dateTimeEn.includes("9"), true, dateTimeEn);
-  assertEquals(dateTimeEn.includes("2026"), true, dateTimeEn);
-  assertEquals(/\d:\d/.test(dateTimeEn), true, dateTimeEn);
-  const dateTimeJa = formatDateTime(NOW, "ja");
-  assertEquals(dateTimeJa.indexOf("2026") < dateTimeJa.indexOf("9"), true);
 });
 
 Deno.test("thinkingLevelLabel: the display names live in the catalogue", () => {

@@ -45,7 +45,7 @@ export interface AgentInit {
   /** Runs before every LLM request of the loop, with the run's abort signal
    * — after the previous turn's results landed and before the request is
    * derived from the transcript. The context compactor (see
-   * agent/context-compaction.ts) rewrites `state.messages` here, so the
+   * ai/context-compaction.ts) rewrites `state.messages` here, so the
    * request that follows already reflects the replacement; a long
    * tool-heavy turn therefore cannot grow past the window mid-turn. */
   beforeStep?: (signal: AbortSignal) => Promise<void>;

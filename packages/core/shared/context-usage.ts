@@ -130,7 +130,7 @@ export function contextUsageRatio(
 
 /** The usage ratio at which the next compaction check condenses the history:
  * `(contextWindow - reserveTokens) / contextWindow` (see
- * agent/context-compaction.ts). The context meter warns from here on, so the
+ * ai/context-compaction.ts). The context meter warns from here on, so the
  * amber bar and the checkpoint that follows describe the same moment.
  * Undefined when the window is unknown or the reservation leaves no room —
  * compaction is then off, and the meter keeps its own default hint. */

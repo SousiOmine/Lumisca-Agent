@@ -104,7 +104,7 @@ export const COMPACTION_DEFAULT_RESERVE_TOKENS = 16_384;
 export const COMPACTION_DEFAULT_KEEP_RECENT_TOKENS = 20_000;
 
 /** Compaction tuning read from the settings table; omitted fields keep the
- * compactor's defaults (see agent/context-compaction.ts). */
+ * compactor's defaults (see ai/context-compaction.ts). */
 export interface CompactionPolicyInput {
   enabled?: boolean;
   reserveTokens?: number;

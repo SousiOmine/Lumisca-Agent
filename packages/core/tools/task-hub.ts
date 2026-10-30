@@ -8,13 +8,13 @@ import {
   buildRetryNotification,
   hasNoVisibleOutput,
   isTransientStreamError,
-} from "../agent/retry-policy.ts";
+} from "../ai/retry-policy.ts";
 import {
   MAX_RATE_LIMIT_RETRIES,
   rateLimitRetryDelayMs,
   sleepAbortable,
 } from "../ai/rate-limit.ts";
-import { isRetryableRateLimit } from "../agent/llm-retry.ts";
+import { isRetryableRateLimit } from "../ai/llm-retry.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import { withOnDemandToolsNote } from "../mcp/context.ts";
@@ -41,7 +41,7 @@ import {
   sessionSkills,
   type ToolBackends,
 } from "./toolsets.ts";
-import { ContextCompactor } from "../agent/context-compaction.ts";
+import { ContextCompactor } from "../ai/context-compaction.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { createWebSearchTools } from "./web.ts";
@@ -49,9 +49,9 @@ import type { SearchProvider } from "../websearch/types.ts";
 import {
   formatTaskCompletion,
   lastAssistantText,
-  notificationMessage,
   subagentSystemPrompt,
 } from "./subagent-format.ts";
+import { notificationMessage } from "../types/notification.ts";
 import type { Subagent } from "./subagent-registry.ts";
 import { SubagentRegistry } from "./subagent-registry.ts";
 import {
@@ -509,7 +509,7 @@ export class TaskHub {
 
   /** Pre-step hook of one sub-agent: condense its history before a request
    * that would exceed its model's window is derived from it (see
-   * agent/context-compaction.ts — the main agent runs the same seam). The
+   * ai/context-compaction.ts — the main agent runs the same seam). The
    * compactor is cached per sub-agent so its measurement anchor survives the
    * turns. */
   private async compactBeforeStep(

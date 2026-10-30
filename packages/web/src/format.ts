@@ -82,8 +82,3 @@ export function formatDate(timestamp: number, locale: Locale): string {
     day: "numeric",
   });
 }
-
-/** A timestamp as date + time in the app language. */
-export function formatDateTime(timestamp: number, locale: Locale): string {
-  return new Date(timestamp).toLocaleString(localeTag(locale));
-}

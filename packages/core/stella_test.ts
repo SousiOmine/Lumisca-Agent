@@ -6,8 +6,6 @@ import { createStellaTools } from "./tools/toolsets.ts";
 import { hostBackends } from "./tools/toolsets.ts";
 import { createVmTools } from "./vm/tools.ts";
 import { createHistorySearchTool } from "./session/history.ts";
-import { createIdentityTool } from "./stella/identity.ts";
-import { createAgentCreateTool } from "./stella/tools.ts";
 import { createChatUiTool } from "./tools/chat-ui.ts";
 import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
@@ -266,8 +264,6 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
     skills: [],
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ messages: () => [] }),
-    identity: createIdentityTool({ read: () => "", write: () => {} }),
-    agents: createAgentCreateTool({ create: () => ({}) as never }),
     attach: {
       store: new SessionAttachmentStore(
         Deno.makeTempDirSync({ prefix: "lumisca-stella-attach-" }),
@@ -306,8 +302,8 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   // The identity and agent_create are NOT here: they belong to the
   // conversation's own agent, so they are discoverable (tool_search) and
   // live in the session's main registry only — a sub-agent must not rewrite
-  // its parent's identity or create siblings. The caller below passes both,
-  // so their absence is this tool set's decision, not a missing argument.
+  // its parent's identity or create siblings, so this set does not take
+  // them as options at all.
   assertEquals(names.includes("identity"), false);
   assertEquals(names.includes("agent_create"), false);
   // ask is absent for the same reason todo is: stella's conversation has no
@@ -345,9 +341,7 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     }),
     skills: [],
     screen: createVmTools({ screen }),
-    agents: createAgentCreateTool({ create: () => ({}) as never }),
     history: createHistorySearchTool({ messages: () => [] }),
-    identity: createIdentityTool({ read: () => "", write: () => {} }),
     chatUi: createChatUiTool(),
     attach: {
       store: new SessionAttachmentStore(

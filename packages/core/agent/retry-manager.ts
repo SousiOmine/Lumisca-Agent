@@ -12,13 +12,13 @@ import {
   isSilentErrorResponse,
   isTransientStreamError,
   MAX_EMPTY_RESPONSE_RETRIES,
-} from "./retry-policy.ts";
+} from "../ai/retry-policy.ts";
 import {
   MAX_RATE_LIMIT_RETRIES,
   rateLimitRetryDelayMs,
   sleepAbortable,
 } from "../ai/rate-limit.ts";
-import { isRetryableRateLimit } from "./llm-retry.ts";
+import { isRetryableRateLimit } from "../ai/llm-retry.ts";
 import type { NotificationMessage } from "../ai/types.ts";
 
 /** Outcome of classifying one assistant turn for retry. */

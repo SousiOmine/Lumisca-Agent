@@ -1,7 +1,7 @@
 import type {
   ContextProvider,
   ContextUpdate,
-} from "../agent/context-providers.ts";
+} from "../ai/context-providers.ts";
 
 /**
  * The on-demand-tools context provider: publishes the contract for the
@@ -14,7 +14,7 @@ import type {
  * the prompt at that moment would rewrite the request's first tokens — the
  * whole cached prefix — so the note travels the same way as every other
  * late fact: appended to history, published when the pair appears and only
- * then (see agent/context-providers.ts).
+ * then (see ai/context-providers.ts).
  *
  * Sub-agents have no context providers; their prompt carries the same note
  * from the start (see withOnDemandToolsNote), so the contract text stays in

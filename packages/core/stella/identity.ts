@@ -16,7 +16,7 @@
  * That last part is the whole design. Rewriting the system prompt mid-session
  * changes the request's first tokens, which throws away the provider's cached
  * prefix on every write — the one cost this codebase is careful about
- * everywhere else (see agent/context-providers.ts). Publishing a context
+ * everywhere else (see ai/context-providers.ts). Publishing a context
  * message instead appends to the transcript: the cache keeps serving the
  * unchanged head, and the model still reads the new text on its next turn.
  *
@@ -28,7 +28,7 @@
 import type {
   ContextProvider,
   ContextUpdate,
-} from "../agent/context-providers.ts";
+} from "../ai/context-providers.ts";
 import { fnv1a } from "../shared/digest.ts";
 import { TOOL_IDENTITY } from "../shared/mod.ts";
 import {

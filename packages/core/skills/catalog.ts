@@ -1,7 +1,7 @@
 import type {
   ContextProvider,
   ContextUpdate,
-} from "../agent/context-providers.ts";
+} from "../ai/context-providers.ts";
 import { formatAvailableSkills, type SkillDef } from "./discover.ts";
 
 /**

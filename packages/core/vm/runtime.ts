@@ -13,7 +13,7 @@ import type { FileBackend } from "../tools/file-backend.ts";
 import type { Tool } from "../tools/schema.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { HandoverHub } from "./handover.ts";
-import type { ContextProvider } from "../agent/context-providers.ts";
+import type { ContextProvider } from "../ai/context-providers.ts";
 
 export interface StellaRuntime {
   /** The session's working folder inside the machine: where relative paths

@@ -1,4 +1,4 @@
-import type { ContextMessage } from "../ai/types.ts";
+import type { ContextMessage } from "./types.ts";
 
 /**
  * Dynamic context providers.

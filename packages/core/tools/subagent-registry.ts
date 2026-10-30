@@ -1,5 +1,5 @@
 import type { Agent } from "../ai/agent.ts";
-import type { ContextCompactor } from "../agent/context-compaction.ts";
+import type { ContextCompactor } from "../ai/context-compaction.ts";
 import { CoreError } from "../errors.ts";
 import type { SubagentStatus, SubagentType, TaskInfo } from "../shared/mod.ts";
 

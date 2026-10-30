@@ -57,7 +57,7 @@ export type ClientEvent =
   }
   /** Older history was condensed into a checkpoint message because the
    * conversation reached the model's request limit (see
-   * agent/context-compaction.ts). The checkpoint was INSERTED immediately
+   * ai/context-compaction.ts). The checkpoint was INSERTED immediately
    * before `before`: every message stays in the transcript (and in the
    * database), and the model's view now starts after the checkpoint —
    * clients show the row where it sits without dropping anything.

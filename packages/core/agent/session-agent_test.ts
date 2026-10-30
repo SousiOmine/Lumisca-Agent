@@ -18,7 +18,7 @@ import type {
 import { object, type Tool } from "../tools/schema.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { NotificationMessage } from "../ai/types.ts";
-import { MAX_EMPTY_RESPONSE_RETRIES } from "./retry-policy.ts";
+import { MAX_EMPTY_RESPONSE_RETRIES } from "../ai/retry-policy.ts";
 import { SessionAgent } from "./session-agent.ts";
 import type { SessionAgentOptions } from "./session-agent.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
@@ -190,8 +190,8 @@ Deno.test("stream calls carry the session id (conversation affinity)", async () 
 });
 
 // `hasNoVisibleOutput` / `isSilentErrorResponse` / `buildRetryNotification`
-// are retry-policy.ts's own functions: their cases live in
-// retry-policy_test.ts. The run-level behaviour below (a vacant turn
+// are ai/retry-policy.ts's own functions: their cases live in
+// ai/retry-policy_test.ts. The run-level behaviour below (a vacant turn
 // being retried, a silent error restarting, the budgets) is what this
 // file has to prove.
 

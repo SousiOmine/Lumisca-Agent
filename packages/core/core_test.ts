@@ -3163,7 +3163,7 @@ Deno.test("rewind while a question is pending aborts the run cleanly", async () 
   core.close();
 });
 
-// ---- context compaction (see agent/context-compaction.ts) ------------------
+// ---- context compaction (see ai/context-compaction.ts) ------------------
 
 /** A model whose window is small enough that a few turns of history cross
  * the pressure threshold; the completion reserve is part of the budget the

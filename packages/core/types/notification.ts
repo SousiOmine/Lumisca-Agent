@@ -15,6 +15,21 @@ export type NotificationPayload = Omit<
   "role" | "timestamp" | "steered"
 >;
 
+/** Stamp a notification payload as a transcript message. The delivery site
+ * owns `steered` (only it knows whether the message joined a running turn),
+ * and the timestamp is assigned here so every producer agrees. */
+export function notificationMessage(
+  payload: NotificationPayload,
+  steered?: boolean,
+): NotificationMessage {
+  return {
+    role: "notification",
+    ...payload,
+    ...(steered === true ? { steered } : {}),
+    timestamp: Date.now(),
+  };
+}
+
 /** The agent-visible text of a notification: the title (its "[...]" head)
  * followed by the body on the next line when present. */
 export function notificationText(
