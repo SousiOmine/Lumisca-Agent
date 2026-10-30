@@ -17,6 +17,11 @@ export const panels = {
 
   // --- panel headings -------------------------------------------------------
   "panels.todo.title": { ja: "進捗", en: "Progress" },
+  "panels.todo.status.pending": { ja: "未着手", en: "Pending" },
+  "panels.todo.status.in_progress": { ja: "進行中", en: "In progress" },
+  "panels.todo.status.completed": { ja: "完了", en: "Done" },
+  "panels.todo.status.abandoned": { ja: "取りやめ", en: "Abandoned" },
+  "panels.todo.status.blocked": { ja: "保留", en: "Blocked" },
   "panels.task.title": { ja: "タスク", en: "Tasks" },
   "panels.goal.title": { ja: "ゴール", en: "Goal" },
   "panels.background.title": {
@@ -158,4 +163,17 @@ export const panels = {
     ja: "推論強度（思考レベル）",
     en: "Thinking level",
   },
+
+  // --- tool rows -----------------------------------------------------------
+  // The one-line summary a tool call shows in the transcript. The wording is
+  // the app's, not the model's: a row the user reads should follow the app
+  // language like every other label.
+  "panels.tool.askQuestions": {
+    ja: "{count} 件の質問",
+    en: "{count} questions",
+  },
+  "panels.tool.askOneQuestion": { ja: "1 件の質問", en: "1 question" },
+  "panels.tool.taskWaitSuffix": { ja: "（待機）", en: " (wait)" },
+  "panels.tool.sendTo": { ja: "{to} へ: {summary}", en: "to {to}: {summary}" },
+  "panels.tool.backgroundList": { ja: "一覧", en: "list" },
 } satisfies Record<string, LocalizedText>;

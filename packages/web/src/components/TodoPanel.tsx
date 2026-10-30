@@ -1,6 +1,7 @@
 import { IconListCheck } from "@tabler/icons-preact";
-import type { TodoPhase, TodoTask } from "../types.ts";
+import type { TodoPhase, TodoStatus, TodoTask } from "../types.ts";
 import { useT } from "../i18n.ts";
+import type { MessageKey } from "@lumisca/core/shared";
 import { CollapsiblePanel } from "./Panel.tsx";
 
 /** Marker glyph per status, mirroring the tool's text rendering. */
@@ -39,7 +40,7 @@ export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
               <li
                 key={task.id}
                 className={`todo-task ${task.status}`}
-                title={task.status}
+                title={statusLabel(t, task.status)}
               >
                 <span className="todo-task-mark">
                   {STATUS_MARKS[task.status]}
@@ -52,4 +53,21 @@ export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
       ))}
     </CollapsiblePanel>
   );
+}
+
+/** The catalogue key of one task status. Spelled out rather than built from
+ * the status value: the catalogue test finds callers by their literal key,
+ * and a template string would hide every one of these from it. */
+function statusLabel(
+  t: ReturnType<typeof useT>,
+  status: TodoStatus,
+): string {
+  const keys: Record<TodoStatus, MessageKey> = {
+    pending: "panels.todo.status.pending",
+    in_progress: "panels.todo.status.in_progress",
+    completed: "panels.todo.status.completed",
+    abandoned: "panels.todo.status.abandoned",
+    blocked: "panels.todo.status.blocked",
+  };
+  return t(keys[status]);
 }

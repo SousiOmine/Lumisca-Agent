@@ -7,6 +7,7 @@ import {
   IconX,
 } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
+import { confirmAction } from "../../confirm.ts";
 import { errorText } from "../../providers.ts";
 import type { SavedPrompt } from "../../types.ts";
 import {
@@ -98,7 +99,11 @@ export function PersonalizePanel() {
   const [promptsError, setPromptsError] = useState<string | null>(null);
 
   const handleDeletePrompt = async (id: string) => {
-    if (!confirm(t("settings.personalize.promptDeleteConfirm", { name: id }))) {
+    if (
+      !confirmAction(
+        t("settings.personalize.promptDeleteConfirm", { name: id }),
+      )
+    ) {
       return;
     }
     try {

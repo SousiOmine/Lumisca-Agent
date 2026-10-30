@@ -393,7 +393,10 @@ export function Composer({
               key={`${image.name ?? "image"}-${index}`}
               className="input-image"
             >
-              <img src={image.data} alt={image.name ?? "attachment"} />
+              <img
+                src={image.data}
+                alt={image.name ?? t("chat.composer.image.alt")}
+              />
               <button
                 type="button"
                 className="input-image-remove"

@@ -140,7 +140,7 @@ export function ProviderList({
               : (
                 <span className="provider-state configured">
                   {p.authType === "oauth"
-                    ? "OAuth"
+                    ? t("settings.provider.oauth")
                     : (p.source ?? t("settings.provider.apiKeyLabel"))}
                 </span>
               )}

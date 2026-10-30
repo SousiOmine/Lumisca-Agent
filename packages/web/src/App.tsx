@@ -1,6 +1,7 @@
 import {
   type ReactElement,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "preact/compat";
@@ -253,6 +254,20 @@ export function App({ initialData }: AppProps): ReactElement {
   );
   const openRecent = useCallback(() => setShowRecent(true), []);
   const openSettings = useCallback(() => setSettingsCategory("general"), []);
+  // Ctrl+T (the shortcut the app menu advertises): open the draft tab. Only
+  // code mode has tabs; stella's conversation is the whole surface. The
+  // handler is on the window because the shortcut must work from the
+  // composer as well as from a transcript.
+  useEffect(() => {
+    if (modeStatus?.mode !== "code") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key !== "t") return;
+      event.preventDefault();
+      openDraftTab();
+    };
+    globalThis.addEventListener("keydown", onKeyDown);
+    return () => globalThis.removeEventListener("keydown", onKeyDown);
+  }, [modeStatus?.mode, openDraftTab]);
 
   // --- stella mode --------------------------------------------------------
   // The hook runs unconditionally (hooks cannot be conditional), but it only
@@ -272,7 +287,7 @@ export function App({ initialData }: AppProps): ReactElement {
     return (
       <div className="app" ref={appRef}>
         <AppMenu
-          onNew={() => {}}
+          onNew={openDraftTab}
           onOpenRecent={openRecent}
           onOpenSettings={openSettings}
           onQuit={quit}
@@ -319,7 +334,11 @@ export function App({ initialData }: AppProps): ReactElement {
           // surface, and an empty strip beside it would suggest otherwise.
           // The bar chrome is reused so the strip looks the same in a plain
           // browser (where the title bar renders no wrapper) as on desktop.
-          ? <div className="tabbar stella-titlebar-label">stella</div>
+          ? (
+            <div className="tabbar stella-titlebar-label">
+              {t("chat.modeSelect.stella.title")}
+            </div>
+          )
           : (
             <TabBar
               tabs={tabSummaries}

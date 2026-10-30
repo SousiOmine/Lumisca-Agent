@@ -163,7 +163,9 @@ export function McpList() {
                     ? (
                       <>
                         <IconPlugConnected size={12} />
-                        {s.toolCount} tools
+                        {t("settings.mcp.toolCount", {
+                          count: s.toolCount,
+                        })}
                       </>
                     )
                     : s.status === "error"

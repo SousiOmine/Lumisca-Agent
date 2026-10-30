@@ -17,6 +17,7 @@ import {
   IconX,
 } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
+import { confirmAction } from "../../confirm.ts";
 import { useT } from "../../i18n.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import {
@@ -231,7 +232,7 @@ export function ProviderDetail({
   /** Delete a user-defined provider and return to the list. */
   const removeProvider = async () => {
     if (
-      !confirm(
+      !confirmAction(
         t("settings.provider.deleteConfirm", {
           name: provider?.name ?? providerId,
         }),

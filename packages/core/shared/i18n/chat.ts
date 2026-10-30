@@ -263,6 +263,7 @@ export const chat = {
   },
   "chat.stella.handover.done": { ja: "完了", en: "Done" },
   "chat.stella.handover.finishing": { ja: "送信中…", en: "Sending…" },
+  "chat.composer.image.alt": { ja: "添付画像", en: "Attachment" },
   "chat.stella.machine.screenFailed": {
     ja: "画面に接続できませんでした: {reason}",
     en: "Could not connect to the screen: {reason}",

@@ -902,4 +902,6 @@ export const settings = {
     ja: "変更に失敗しました: {error}",
     en: "Failed to change: {error}",
   },
+  "settings.mcp.toolCount": { ja: "{count} 個のツール", en: "{count} tools" },
+  "settings.provider.oauth": { ja: "OAuth 連携", en: "OAuth" },
 } satisfies Record<string, LocalizedText>;

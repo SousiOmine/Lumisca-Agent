@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/compat";
 import { IconCheck, IconPlus, IconTrash } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
+import { confirmAction } from "../../confirm.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";
 import type { UserProviderSummary } from "../../types.ts";
@@ -294,7 +295,9 @@ export function AddUserProviderForm({
   const handleDelete = async () => {
     if (!initial?.id) return;
     if (
-      !confirm(t("settings.provider.deleteConfirm", { name: initial.name }))
+      !confirmAction(
+        t("settings.provider.deleteConfirm", { name: initial.name }),
+      )
     ) return;
     setDeleting(true);
     setError(undefined);

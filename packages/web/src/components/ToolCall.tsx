@@ -92,7 +92,7 @@ type IconComponent = ComponentType<{ size?: number }>;
 
 interface ToolPresentation {
   icon: IconComponent;
-  summary?: (args: Args) => string;
+  summary?: (args: Args, t: Translate) => string;
 }
 
 function arg(args: Args, key: string): string {
@@ -130,14 +130,18 @@ function todoProgress(args: Args): string {
   return `${done}/${tasks.length}`;
 }
 
-function askSummary(args: Args): string {
+type Translate = ReturnType<typeof useT>;
+
+function askSummary(args: Args, t: Translate): string {
   const questions = Array.isArray(args.questions) ? args.questions : [];
   if (questions.length === 0) return "";
-  if (questions.length > 1) return `${questions.length} questions`;
+  if (questions.length > 1) {
+    return t("panels.tool.askQuestions", { count: questions.length });
+  }
   const first = questions[0] as { question?: unknown } | undefined;
   return typeof first?.question === "string"
     ? truncate(first.question, 50)
-    : "1 question";
+    : t("panels.tool.askOneQuestion");
 }
 
 function pdfSummary(args: Args): string {
@@ -169,7 +173,8 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   [TOOL_ASYNC_BASH]: { icon: IconTerminal2, summary: command },
   [TOOL_ASYNC_BASH_STATUS]: {
     icon: IconTerminal2,
-    summary: (args) => id(args) === "" ? "list" : `#${id(args)}`,
+    summary: (args, t) =>
+      id(args) === "" ? t("panels.tool.backgroundList") : `#${id(args)}`,
   },
   [TOOL_ASYNC_BASH_KILL]: { icon: IconTerminal2, summary: (a) => `#${id(a)}` },
   [TOOL_EVAL]: { icon: IconCode, summary: (a) => truncate(arg(a, "code"), 60) },
@@ -208,11 +213,18 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   },
   [TOOL_TASK_OUTPUT]: {
     icon: IconUsers,
-    summary: (a) => `${arg(a, "agent_id")}${a.wait === true ? " (wait)" : ""}`,
+    summary: (a, t) =>
+      `${arg(a, "agent_id")}${
+        a.wait === true ? t("panels.tool.taskWaitSuffix") : ""
+      }`,
   },
   [TOOL_SEND_MESSAGE]: {
     icon: IconSend,
-    summary: (a) => `to ${arg(a, "to")}: ${truncate(arg(a, "summary"), 40)}`,
+    summary: (a, t) =>
+      t("panels.tool.sendTo", {
+        to: arg(a, "to"),
+        summary: truncate(arg(a, "summary"), 40),
+      }),
   },
   [TOOL_AGENT_CREATE]: { icon: IconUser, summary: (a) => arg(a, "name") },
   [TOOL_ROUTINE_CREATE]: { icon: IconRepeat, summary: (a) => arg(a, "name") },
@@ -224,10 +236,10 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   [TOOL_CALL]: { icon: IconPlug, summary: (a) => arg(a, "name") },
 };
 
-function toolSummary(name: string, args: Args): string {
+function toolSummary(name: string, args: Args, t: Translate): string {
   const presentation = PRESENTATION[name];
   if (presentation !== undefined) {
-    return presentation.summary ? presentation.summary(args) : "";
+    return presentation.summary ? presentation.summary(args, t) : "";
   }
   for (const value of Object.values(args)) {
     if (typeof value === "string" && value.length > 0) {
@@ -281,7 +293,7 @@ export function ToolCall(
     : "pending";
 
   const args = toolCall.arguments as Args;
-  const summary = toolSummary(toolCall.name, args);
+  const summary = toolSummary(toolCall.name, args, t);
   const diffStat = toolDiffStat(toolCall.name, result);
   const Icon = PRESENTATION[toolCall.name]?.icon ?? IconLoader;
 
