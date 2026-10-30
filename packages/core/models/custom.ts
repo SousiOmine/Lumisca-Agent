@@ -43,9 +43,16 @@ export type EnvReader = () => Record<string, string>;
 /** The real environment, read afresh on every call. */
 export const processEnv: EnvReader = () => Deno.env.toObject();
 
-/** Defaults matching pi-coding-agent's modelFromJson (models.json). */
-const DEFAULT_CONTEXT_WINDOW = 128_000;
-const DEFAULT_MAX_TOKENS = 16_384;
+/** Nothing is invented for a model that does not state its window. A made-up
+ * 128k window used to be assumed for every models.json entry, and every
+ * budget in the app hangs off that number (compaction threshold, output
+ * clamp, context meter): on an 8k model the transcript then ran past the
+ * real window, and on a 1M model it compacted far too early. Undefined means
+ * "unknown", which turns compaction off for that model (see
+ * shared/context-usage.ts inputBudgetTokens) instead of guessing.
+ *
+ * Cost stays zeroed: a self-hosted endpoint publishes no prices, and zero is
+ * the honest answer there (the meter shows tokens, not money). */
 const DEFAULT_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 /** The models.json shape lumisca reads (a subset of pi-coding-agent's
@@ -67,7 +74,14 @@ interface ModelsFileModel {
   baseUrl?: string;
   reasoning?: boolean;
   input?: ("text" | "image")[];
+  /** The model's total window (models.dev `limit.context`). Omitted →
+   * unknown, and compaction stays off for that model. */
   contextWindow?: number;
+  /** The largest prompt one request may carry (models.dev `limit.input`).
+   * Some providers reject a prompt past this smaller number before the
+   * window itself is reached; omitted → the window is the only bound. */
+  maxInputTokens?: number;
+  /** The largest completion the model produces (models.dev `limit.output`). */
   maxTokens?: number;
   cost?: {
     input: number;
@@ -180,6 +194,14 @@ export function buildModel(
         "invalid contextWindow",
     );
   }
+  if (
+    definition.maxInputTokens !== undefined && definition.maxInputTokens <= 0
+  ) {
+    throw new Error(
+      `models.json provider "${providerId}", model "${definition.id}": ` +
+        "invalid maxInputTokens",
+    );
+  }
   if (definition.maxTokens !== undefined && definition.maxTokens <= 0) {
     throw new Error(
       `models.json provider "${providerId}", model "${definition.id}": ` +
@@ -195,8 +217,15 @@ export function buildModel(
     reasoning: definition.reasoning ?? false,
     input: definition.input ?? ["text"],
     cost: definition.cost ?? DEFAULT_COST,
-    contextWindow: definition.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
-    maxTokens: definition.maxTokens ?? DEFAULT_MAX_TOKENS,
+    ...(definition.contextWindow !== undefined
+      ? { contextWindow: definition.contextWindow }
+      : {}),
+    ...(definition.maxInputTokens !== undefined
+      ? { maxInputTokens: definition.maxInputTokens }
+      : {}),
+    ...(definition.maxTokens !== undefined
+      ? { maxTokens: definition.maxTokens }
+      : {}),
     headers: providerCfg.headers,
   };
 }
@@ -254,8 +283,6 @@ export function customProviderFromEnv(
       reasoning: false,
       input: ["text"],
       cost: DEFAULT_COST,
-      contextWindow: DEFAULT_CONTEXT_WINDOW,
-      maxTokens: DEFAULT_MAX_TOKENS,
     }],
   });
 }

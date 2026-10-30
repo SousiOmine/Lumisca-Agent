@@ -35,6 +35,8 @@ export interface UserProviderModel {
   reasoning?: boolean;
   input?: ("text" | "image")[];
   contextWindow?: number;
+  /** Largest prompt one request may carry (models.dev `limit.input`). */
+  maxInputTokens?: number;
   maxTokens?: number;
   cost?: {
     input: number;
@@ -202,6 +204,9 @@ export function parseUserProviderInput(
         : undefined,
       contextWindow: typeof m.contextWindow === "number"
         ? m.contextWindow
+        : undefined,
+      maxInputTokens: typeof m.maxInputTokens === "number"
+        ? m.maxInputTokens
         : undefined,
       maxTokens: typeof m.maxTokens === "number" ? m.maxTokens : undefined,
       cost: typeof m.cost === "object" && m.cost !== null

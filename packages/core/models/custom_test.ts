@@ -1,4 +1,5 @@
 import { removeDirRetry } from "../test-utils.ts";
+import { inputBudgetTokens } from "../shared/context-usage.ts";
 import { join } from "node:path";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
@@ -42,8 +43,10 @@ Deno.test("env vars register the custom provider", () => {
   assertEquals(models[0]!.id, "deepseek-chat");
   assertEquals(models[0]!.api, "openai-completions");
   assertEquals(models[0]!.baseUrl, "http://localhost:5002/v1");
-  assertEquals(models[0]!.contextWindow, 128_000);
-  assertEquals(models[0]!.maxTokens, 16_384);
+  // The window is unknown when the source does not state one: a made-up
+  // 128k used to drive the compaction threshold and the output clamp.
+  assertEquals(models[0]!.contextWindow, undefined);
+  assertEquals(models[0]!.maxTokens, undefined);
   assertEquals(models[0]!.reasoning, false);
 });
 
@@ -325,4 +328,32 @@ Deno.test("LumiscaCore.open registers the custom provider from env", async () =>
     core.close();
   }
   await removeDirRetry(dir);
+});
+
+Deno.test("a models.json entry may declare the input cap it publishes", async () => {
+  // models.dev publishes limit.input separately from limit.context; a
+  // provider rejects a prompt past the smaller number, so the app's budgets
+  // must be able to see it. models.json could express neither before.
+  const path = await writeModelsFile(JSON.stringify({
+    providers: {
+      gw: {
+        baseUrl: "http://localhost:1234/v1",
+        models: [{
+          id: "capped",
+          contextWindow: 1_050_000,
+          maxInputTokens: 922_000,
+        }],
+      },
+    },
+  }));
+  const core = LumiscaCore.forTesting([], envOf({ LUMISCA_MODELS_FILE: path }));
+  try {
+    const model = core.getModel("gw", "capped");
+    assertEquals(model?.contextWindow, 1_050_000);
+    assertEquals(model?.maxInputTokens, 922_000);
+    assertEquals(inputBudgetTokens(model!), 922_000);
+  } finally {
+    await core.close();
+    await Deno.remove(join(path, ".."), { recursive: true });
+  }
 });
