@@ -230,7 +230,7 @@ export function createStellaTools(options: {
    * the built-ins the session is entitled to. */
   skills: SkillDef[];
   screen: Tool[];
-  /** `agent_create`: add another stella agent (the sidebar's counterparts). */
+  /** `agent_create`: add another stella agent (one of the sidebar's agents). */
   agents?: Tool;
   /** `chat_ui`: show a card in the chat. */
   chatUi?: Tool;

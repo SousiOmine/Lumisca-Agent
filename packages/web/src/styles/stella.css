@@ -32,16 +32,10 @@
 }
 
 .mode-select-header h1 {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;
-}
-
-.mode-select-header p {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 13px;
 }
 
 .mode-select-cards {
@@ -149,7 +143,7 @@
   padding: var(--app-inset);
 }
 
-/* The counterparts. Deliberately a plain list, not a card: one row per
+/* The agents. Deliberately a plain list, not a card: one row per
  * person to talk to, so the eye lands on names and nothing else. */
 .stella-sidebar {
   width: 176px;

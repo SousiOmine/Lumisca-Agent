@@ -73,8 +73,8 @@ export const TOOL_VM_ASK_USER = "vm_ask_user";
  * ask with a card instead of a wall of prose. */
 export const TOOL_CHAT_UI = "chat_ui";
 
-/** Create another stella agent (a separate counterpart with its own name, role
- * and conversation). Terasuma's `tera_create`. */
+/** Create another stella agent (a separate agent with its own name, role and
+ * conversation). Terasuma's `tera_create`. */
 export const TOOL_AGENT_CREATE = "agent_create";
 
 /** Run a scheduled request in this conversation (`routine_*`). Discoverable

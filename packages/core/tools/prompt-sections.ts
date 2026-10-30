@@ -295,7 +295,7 @@ const IDENTITY_SECTION: PromptSection = {
     "reaches your next turn, not the current one.",
 };
 
-/** Adding a counterpart in a stella session (Terasuma's `tera_create`).
+/** Adding an agent in a stella session (Terasuma's `tera_create`).
  * The tool cannot ask the questions, so the bullet carries when to reach
  * for it: the user has already said what the new agent should be. */
 const AGENT_CREATE_SECTION: PromptSection = {
@@ -303,7 +303,7 @@ const AGENT_CREATE_SECTION: PromptSection = {
   order: ORDER.tool + 138,
   requires: [TOOL_AGENT_CREATE],
   text:
-    "- The sidebar can hold several counterparts, each with its own role and " +
+    "- The sidebar can hold several agents, each with its own role and " +
     "conversation.\n  When the user describes another one they want, call " +
     "agent_create with a name\n  and the role in their words — do not ask " +
     "them for those facts again in the tool;\n  it cannot talk back. The new " +

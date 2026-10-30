@@ -45,7 +45,7 @@ export interface StellaRuntime {
   /** The session's screen hand-over: the tool blocks inside it while the
    * user drives the machine, and the agent tears it down with the run. */
   handoverHub: HandoverHub;
-  /** `agent_create`, which adds another counterpart to the sidebar. */
+  /** `agent_create`, which adds another agent to the sidebar. */
   agentTool: Tool;
   /** `history_search`, which reads this conversation's saved history back
    * (the turns a compaction checkpoint replaced are no longer in the

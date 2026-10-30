@@ -25,7 +25,7 @@ export interface AgentCreateTarget {
 }
 
 /**
- * `agent_create`: add another counterpart to stella.
+ * `agent_create`: add another agent to stella.
  *
  * The agent, not the user, is the one who knows what a new role should be by
  * the time it asks — so this is a tool rather than a form. It deliberately
@@ -44,7 +44,7 @@ export function createAgentCreateTool(target: AgentCreateTarget): Tool<
     name: TOOL_AGENT_CREATE,
     label: "Agent Create",
     description:
-      "Create another agent: a separate counterpart with its own name, role " +
+      "Create another agent: a separate agent with its own name, role " +
       "and ongoing conversation, shown in the sidebar. Its role becomes its " +
       "system prompt, so it works that way from its first turn. A name that " +
       "is already used fails and creates nothing. Call this only after the " +

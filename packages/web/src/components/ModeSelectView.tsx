@@ -32,7 +32,6 @@ export function ModeSelectView(
       <div className="mode-select-inner">
         <header className="mode-select-header">
           <h1>{t("chat.modeSelect.title")}</h1>
-          <p>{t("chat.modeSelect.description")}</p>
         </header>
         <div className="mode-select-cards">
           <button

@@ -88,7 +88,7 @@ export function stellaRoutes(core: StellaApi): Hono {
     };
   };
 
-  // --- agents (the counterpart of each conversation) -----------------------
+  // --- agents (the agent of each conversation) -----------------------------
 
   /** The sidebar's list, most recently used first, plus which one a fresh
    * screen opens. */

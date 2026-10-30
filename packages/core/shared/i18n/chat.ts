@@ -172,12 +172,8 @@ export const chat = {
 
   // --- mode selection and stella -------------------------------------------
   "chat.modeSelect.title": {
-    ja: "使い方を選んでください",
-    en: "Choose how to work",
-  },
-  "chat.modeSelect.description": {
-    ja: "あとからアプリメニューで切り替えられます。",
-    en: "You can switch later from the app menu.",
+    ja: "モードを選択",
+    en: "Select a mode",
   },
   "chat.modeSelect.code.title": { ja: "code mode", en: "code mode" },
   "chat.modeSelect.code.description": {
@@ -188,10 +184,8 @@ export const chat = {
   },
   "chat.modeSelect.stella.title": { ja: "stella mode", en: "stella mode" },
   "chat.modeSelect.stella.description": {
-    ja:
-      "1 本の会話だけを持つ相手。専用の仮想マシンの中で作業し、その画面も見られます。セッションやワークスペースの選択はありません。",
-    en:
-      "One ongoing conversation with one assistant. It works inside its own virtual machine, whose screen you can watch. No sessions, no workspace picker.",
+    ja: "シームレスな開発体験",
+    en: "A seamless development experience",
   },
   "chat.modeSelect.stella.unavailable": {
     ja: "この環境では使えません: {reason}",
@@ -205,38 +199,38 @@ export const chat = {
     en: "Enter a request. The agent works inside its virtual machine.",
   },
   "chat.stella.noAgent": {
-    ja: "左の一覧から相手を選んでください",
-    en: "Pick a counterpart on the left",
+    ja: "左の一覧からエージェントを選んでください",
+    en: "Pick an agent on the left",
   },
   "chat.stella.machine.starting": {
     ja: "はじめての準備をしています（数分かかります）…",
     en: "Preparing the machine for the first time (this takes a few minutes)…",
   },
-  "chat.stella.agents.title": { ja: "相手", en: "Counterparts" },
-  "chat.stella.agents.new": { ja: "新しい相手", en: "New counterpart" },
+  "chat.stella.agents.title": { ja: "エージェント", en: "Agents" },
+  "chat.stella.agents.new": { ja: "新しいエージェント", en: "New agent" },
   "chat.stella.agents.name": { ja: "名前", en: "Name" },
   "chat.stella.agents.role": { ja: "役割", en: "Role" },
   "chat.stella.agents.roleHint": {
-    ja: "この相手が何をするか、どう振る舞うか",
-    en: "What this counterpart does and how it works",
+    ja: "このエージェントが何をするか、どう振る舞うか",
+    en: "What this agent does and how it works",
   },
   "chat.stella.agents.create": { ja: "作成", en: "Create" },
   "chat.stella.agents.creating": { ja: "作成中…", en: "Creating…" },
   "chat.stella.agents.delete": {
-    ja: "この相手を削除",
-    en: "Delete this counterpart",
+    ja: "このエージェントを削除",
+    en: "Delete this agent",
   },
   "chat.stella.agents.deleteTitle": {
     ja: "「{name}」を削除しますか？",
     en: 'Delete "{name}"?',
   },
   "chat.stella.agents.deleteBody": {
-    ja: "この相手との会話の履歴もすべて消えます。元に戻せません。",
+    ja: "このエージェントとの会話の履歴もすべて消えます。元に戻せません。",
     en: "Its whole conversation is deleted too. This cannot be undone.",
   },
   "chat.stella.agents.empty": {
-    ja: "まだ相手がいません。作成してください。",
-    en: "No counterpart yet. Create one.",
+    ja: "まだエージェントがいません。作成してください。",
+    en: "No agent yet. Create one.",
   },
   "chat.stella.conversationError": {
     ja: "会話を開けませんでした: {error}",

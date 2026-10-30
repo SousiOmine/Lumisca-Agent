@@ -70,8 +70,8 @@ export const panels = {
       "Requests {agent}'s conversation runs on a schedule. Ask the agent in the conversation to create or change one.",
   },
   "panels.routine.noAgent": {
-    ja: "相手を選ぶと、その会話のルーチンが表示されます。",
-    en: "Pick a counterpart to see the routines of its conversation.",
+    ja: "エージェントを選ぶと、その会話のルーチンが表示されます。",
+    en: "Pick an agent to see the routines of its conversation.",
   },
   "panels.routine.empty": {
     ja:

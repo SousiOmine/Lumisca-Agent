@@ -883,7 +883,7 @@ export class LumiscaCore {
     return await this.stella.availability();
   }
 
-  // --- stella agents (the counterpart of each conversation) ----------------
+  // --- stella agents (the agent of each conversation) -----------------------
 
   /** The agents in the sidebar, most recently used first. */
   listStellaAgents(): StellaAgent[] {

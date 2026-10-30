@@ -4,7 +4,7 @@ import { CoreError } from "../errors.ts";
 /**
  * The assistants of stella mode.
  *
- * stella's premise is one ongoing conversation with one counterpart, so the
+ * stella's premise is one ongoing conversation with one agent, so the
  * thing a user picks is not a session — it is WHO they are talking to. An
  * agent is a name and the role it works from; its conversation is the
  * `sessions` row that points at it, and that row carries the whole transcript
@@ -14,7 +14,7 @@ import { CoreError } from "../errors.ts";
  * no separate workspace folder (stella's files live in the machine, not per
  * agent) and no per-agent Discord webhook.
  *
- * Two texts describe the counterpart, and they have different authors:
+ * Two texts describe the agent, and they have different authors:
  * `role` is what the USER wrote when the agent was created (and never
  * changes), and `identity` is what the AGENT writes about itself with the
  * `identity` tool. Keeping them apart is what lets an agent learn its job

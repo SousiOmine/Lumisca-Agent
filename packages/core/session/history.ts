@@ -30,7 +30,7 @@ import { requireIntegerInRange } from "../tools/validate.ts";
  *
  * The search is over the ONE conversation that is asking: each stella agent
  * has its own transcript, and answering from another agent's would mix two
- * counterparts into one reply.
+ * agents into one reply.
  *
  * Two deliberate differences from a file search. The query is literal word
  * matching, not a regular expression: a term here is something the user said,

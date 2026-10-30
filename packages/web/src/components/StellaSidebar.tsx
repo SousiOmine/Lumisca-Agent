@@ -17,7 +17,7 @@ interface StellaSidebarProps {
 }
 
 /**
- * The list of counterparts, on the left.
+ * The list of agents, on the left.
  *
  * This is what stella has instead of a session list: not "conversations you
  * opened" but "who you can talk to". Each row is one agent, and each agent has
@@ -26,7 +26,7 @@ interface StellaSidebarProps {
  *
  * Creating one is a two-field form (a name and what it is for) rather than a
  * chat with a wizard: the role is a sentence the user already knows. The agent
- * can also add counterparts itself with `agent_create`, in which case the row
+ * can also add agents itself with `agent_create`, in which case the row
  * appears here without this dialog ever opening.
  */
 export function StellaSidebar(

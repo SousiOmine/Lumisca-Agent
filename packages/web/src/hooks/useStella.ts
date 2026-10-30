@@ -9,7 +9,7 @@ import {
 } from "../types.ts";
 
 /**
- * stella mode's state: the counterparts, which one is being talked to, and
+ * stella mode's state: the agents, which one is being talked to, and
  * that agent's conversation.
  *
  * The conversation is an ordinary session under the hood, so the WebSocket

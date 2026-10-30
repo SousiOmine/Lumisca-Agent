@@ -160,7 +160,7 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     `);
   },
   // stella's assistants ("agents"): the other half of "one ongoing
-  // conversation with one counterpart". Each row is a persona — a name and the
+  // conversation with one agent". Each row is a persona — a name and the
   // role it works from — and its conversation is the `sessions` row pointing
   // at it. Terasuma's Tera is the same idea.
   //
@@ -225,7 +225,7 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   //
   // Stored rather than derived because it outlives any one session row and
   // has no file to live in: the machine's home is reachable from every agent,
-  // and a persona is a property of the counterpart, not of a folder.
+  // and a persona is a property of the agent, not of a folder.
   (db) => {
     const columns = db
       .prepare("PRAGMA table_info(stella_agents)")

@@ -258,7 +258,7 @@ export function App({ initialData }: AppProps): ReactElement {
     : undefined;
   const stellaInfo = stellaView?.info ?? stella.info ?? undefined;
   const stellaAgent = stella.agents.find((a) => a.id === stella.activeAgentId);
-  // The settings dialog's routine list: the active counterpart's routines
+  // The settings dialog's routine list: the active agent's routines
   // (code mode has no agent, so the list stays empty and says so).
   const routines = useRoutines(stellaActive ? stella.activeAgentId : null);
   const routineAgentName = stellaActive ? stellaAgent?.name ?? null : null;
@@ -346,7 +346,7 @@ export function App({ initialData }: AppProps): ReactElement {
         )}
         {stellaActive
           ? (
-            // stella mode: the counterparts on the left, one conversation in
+            // stella mode: the agents on the left, one conversation in
             // the middle, the machine's screen beside it. Rendered instead of
             // the tab branch (not beside it): a tab strip is exactly the
             // session-list surface this mode exists to remove.

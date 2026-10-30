@@ -296,7 +296,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ mode }),
     }),
-  /** The counterparts of stella mode, most recently used first, and which
+  /** The agents of stella mode, most recently used first, and which
    * one a fresh screen opens. */
   getStellaAgents: () =>
     request<{ agents: StellaAgent[]; defaultAgentId: string | null }>(

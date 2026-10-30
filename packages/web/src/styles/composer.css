@@ -342,16 +342,18 @@
 .input-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
-/* Buttons grouped at the row's right edge: the abort button stays glued
-   to the submit button instead of floating in the space-between gap. */
+/* The buttons own the row's right edge, whether or not something sits to
+   their left: in code mode the model switch takes the space, in stella mode
+   the row holds nothing else and the buttons still end where they belong.
+   The abort button stays glued to the submit button. */
 .input-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 .input-composer .model-switch {
