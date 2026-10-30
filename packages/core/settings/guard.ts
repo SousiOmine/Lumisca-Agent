@@ -3,6 +3,7 @@ import {
   APP_MCP_SETTINGS_KEY,
   COMMAND_SAFETY_APPROVALS_KEY,
   CONNECTIONS_KEY,
+  WEB_SEARCH_KEY,
 } from "../shared/mod.ts";
 import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
 import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
@@ -25,6 +26,10 @@ export function protectedKeyReason(key: string): string | undefined {
   if (key === APP_MCP_SETTINGS_KEY) {
     // The app MCP config may contain secrets (env vars, headers).
     return "MCP configuration cannot be accessed through this endpoint";
+  }
+  if (key === WEB_SEARCH_KEY) {
+    // The web-search setting holds provider API keys; it has its own routes.
+    return "web search configuration cannot be accessed through this endpoint";
   }
   if (key === CONNECTIONS_KEY) {
     // The connection registry contains server tokens.

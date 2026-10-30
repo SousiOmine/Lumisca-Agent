@@ -45,6 +45,13 @@ export const TOOL_COMPUTER_LIST_WINDOWS = "computer_list_windows";
  * vision models; discoverable via tool_search, never preloaded — the same
  * contract as MCP and browser-lab tools). */
 export const TOOL_PDF_READ_PAGES = "pdf_read_pages";
+/** Search the web / read a page through the user's own search provider.
+ * Preloaded (not discoverable) for every session whose user configured a
+ * provider: a session without one never sees them, so the model is never
+ * told about a tool that would fail. */
+export const TOOL_WEB_SEARCH = "web_search";
+export const TOOL_WEB_FETCH = "web_fetch";
+
 /** Publish an image file so it can be shown inside the agent's reply (the
  * `visual:` image references). Coding sessions only: a chat session has no
  * workspace to publish from. */

@@ -24,6 +24,7 @@ import type { MessageRepo } from "../session/messages.ts";
 import type { RequestShapeRepo } from "../session/request-shapes.ts";
 import type { BrowserBackend } from "../browser/types.ts";
 import type { ComputerHost } from "../computer/types.ts";
+import type { SearchProvider } from "../websearch/types.ts";
 import type { StellaRuntime } from "../vm/runtime.ts";
 import { AgentFactory } from "./factory.ts";
 
@@ -135,6 +136,11 @@ export interface AgentRuntime {
    * no browser tools. A getter so a backend attached after the pool was
    * built still reaches new agents. */
   browser?: () => BrowserBackend | undefined;
+  /** The user's web-search provider, or undefined when none is configured:
+   * a session that cannot search is never given `web_search` / `web_fetch`.
+   * A getter so a provider configured after the pool was built reaches new
+   * agents, and so a changed default takes effect on the next open. */
+  webSearch?: () => SearchProvider | undefined;
   /** The machine's computer host (screen, mouse, keyboard), or undefined
    * when this session must not drive it — no host on this platform, or the
    * user has not enabled the feature. A getter so a feature toggled after

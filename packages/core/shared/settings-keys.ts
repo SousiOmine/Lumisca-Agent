@@ -45,6 +45,12 @@ export const COMMAND_SAFETY_ENABLED_KEY = "command_safety_enabled";
  * approval entries that were judged safe once and now skip the check. */
 export const COMMAND_SAFETY_APPROVALS_KEY = "command_safety_approvals";
 
+/** Settings-table key holding the web-search configuration: a JSON object
+ * naming the default provider and, per provider, its API key. It contains
+ * secrets, so it is protected from the generic settings surface (the
+ * /web-search routes read and write it). */
+export const WEB_SEARCH_KEY = "web_search";
+
 /** Settings-table key for computer use (the agent driving this machine's
  * screen, mouse and keyboard). "1" enables it; unset (or any other value)
  * = disabled — the feature is opt-in, because a run can click and type

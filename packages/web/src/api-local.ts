@@ -28,6 +28,10 @@ import type {
   TodoPhase,
   UserProviderInput,
   UserProviderSummary,
+  WebSearchProviderForm,
+  WebSearchProviderUpdate,
+  WebSearchSettingsView,
+  WebSearchTestView,
   Workspace,
   WorkspaceFileEntry,
 } from "./types.ts";
@@ -548,6 +552,35 @@ export const api = {
       `/api/settings/saved-prompts/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
+
+  /** Web search: which provider the agent uses and its stored key. The key
+   * itself is never sent back; a mutation answers with the whole setting. */
+  getWebSearchSettings: () => request<WebSearchSettingsView>("/api/web-search"),
+  addWebSearchProvider: (form: WebSearchProviderForm) =>
+    request<WebSearchSettingsView>("/api/web-search/providers", {
+      method: "POST",
+      body: JSON.stringify(form),
+    }),
+  updateWebSearchProvider: (id: string, form: WebSearchProviderUpdate) =>
+    request<WebSearchSettingsView>(
+      `/api/web-search/providers/${encodeURIComponent(id)}`,
+      { method: "PUT", body: JSON.stringify(form) },
+    ),
+  deleteWebSearchProvider: (id: string) =>
+    request<WebSearchSettingsView>(
+      `/api/web-search/providers/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+  setDefaultWebSearchProvider: (id: string | null) =>
+    request<WebSearchSettingsView>("/api/web-search/default", {
+      method: "PUT",
+      body: JSON.stringify({ id }),
+    }),
+  testWebSearchProvider: (form: WebSearchProviderForm) =>
+    request<WebSearchTestView>("/api/web-search/test", {
+      method: "POST",
+      body: JSON.stringify(form),
+    }),
 
   /** Server-side connection registry (the federated peer list). */
   getConnections: () =>

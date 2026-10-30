@@ -38,6 +38,7 @@ import { visualRoutes } from "./routes/visuals.ts";
 import { providerRoutes } from "./routes/providers.ts";
 import { settingRoutes } from "./routes/settings.ts";
 import { mcpRoutes } from "./routes/mcp.ts";
+import { webSearchRoutes } from "./routes/web-search.ts";
 import { connectionRoutes } from "./routes/connections.ts";
 import { federationRoutes } from "./routes/federation.ts";
 import { type UpdateApi, updateRoutes } from "./routes/update.ts";
@@ -445,6 +446,9 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", workspaceRoutes(core));
   app.route("/api", skillRoutes(core));
   app.route("/api", mcpRoutes(core, languageFor));
+  // Web search: its own surface because the setting holds API keys (the
+  // generic /settings surface filters it out).
+  app.route("/api", webSearchRoutes(core));
   app.route("/api", sessionRoutes(core));
   app.route("/api", stellaRoutes(core));
   // Routines: the scheduled requests of a stella conversation. Addressed by

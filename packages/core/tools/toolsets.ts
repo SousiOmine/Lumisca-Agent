@@ -16,6 +16,8 @@ import type { BackgroundProcessManager } from "./background.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import { createEvalTool } from "./eval.ts";
 import { createVisualTool, type VisualTarget } from "./visual.ts";
+import { createWebSearchTools } from "./web.ts";
+import type { SearchProvider } from "../websearch/types.ts";
 import type { Tool } from "./schema.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
@@ -139,6 +141,10 @@ export interface ToolFactoryOptions {
    * The workspace itself still supplies the skill catalog and the sandbox
    * for anything that reads project files directly. */
   backends?: ToolBackends;
+  /** The user's web-search provider. Omitted → `web_search` / `web_fetch`
+   * are not built: without a configured provider there is nothing to search
+   * with, and a tool that can only fail is not worth showing the model. */
+  webSearch?: SearchProvider;
 }
 
 /** The two backends a tool set is built on. */
@@ -173,6 +179,9 @@ export function createCodingTools(
     createEvalTool({ safety: options.safety }),
     ...(options.visuals !== undefined
       ? [createVisualTool({ files, ...options.visuals })]
+      : []),
+    ...(options.webSearch !== undefined
+      ? createWebSearchTools(options.webSearch)
       : []),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
@@ -229,6 +238,8 @@ export function createStellaTools(options: {
    * tool is not built (a caller without a message store has nothing to
    * search). */
   history?: Tool;
+  /** The user's web-search provider (see ToolFactoryOptions.webSearch). */
+  webSearch?: SearchProvider;
   background?: BackgroundProcessManager;
   ask?: AskHub;
   todo?: TodoHub;
@@ -260,6 +271,9 @@ export function createStellaTools(options: {
     ...(options.visuals !== undefined
       ? [createVisualTool({ files, ...options.visuals })]
       : []),
+    ...(options.webSearch !== undefined
+      ? createWebSearchTools(options.webSearch)
+      : []),
     createSkillTool({ skills: options.skills }),
     ...(options.ask !== undefined ? [createAskTool(options.ask)] : []),
     ...(options.todo !== undefined ? [createTodoTool(options.todo)] : []),
@@ -278,6 +292,9 @@ export function createChatTools(
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
   return [
+    ...(options.webSearch !== undefined
+      ? createWebSearchTools(options.webSearch)
+      : []),
     // Only global skills apply (no workspace folders to discover from).
     createSkillTool({
       skills: sessionSkills([], {

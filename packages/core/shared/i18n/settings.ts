@@ -20,6 +20,7 @@ export const settings = {
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
   "settings.nav.routines": { ja: "ルーチン", en: "Routines" },
+  "settings.nav.webSearch": { ja: "Web検索", en: "Web search" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
 
   // --- appearance panel -----------------------------------------------------
@@ -790,6 +791,86 @@ export const settings = {
   "settings.security.deleteApprovalAria": {
     ja: "承認を削除",
     en: "Remove approval",
+  },
+
+  // --- web search panel ------------------------------------------------------
+  "settings.webSearch.title": { ja: "Web検索", en: "Web search" },
+  "settings.webSearch.description": {
+    ja:
+      "エージェントが web_search / web_fetch で使う検索プロバイダです。1 つだけ既定として選びます。ページ取得の API を持つプロバイダ（Exa・Tavily・TinyFish）はその API で本文を読み、持たないもの（Brave・Perplexity）はページを直接取得して本文に変換します。既定を解除すると、エージェントは web ツールを持ちません。",
+    en:
+      "The search provider the agent uses for web_search / web_fetch. Exactly one is the default. Providers with a page API (Exa, Tavily, TinyFish) read pages through it; the others (Brave, Perplexity) fetch the page directly and convert its HTML to text. With the default cleared, the agent has no web tools.",
+  },
+  "settings.webSearch.empty": {
+    ja: "検索プロバイダがまだ登録されていません。",
+    en: "No search provider is configured yet.",
+  },
+  "settings.webSearch.add": { ja: "プロバイダを追加", en: "Add provider" },
+  "settings.webSearch.makeDefault": { ja: "既定にする", en: "Make default" },
+  "settings.webSearch.defaultBadge": { ja: "既定", en: "Default" },
+  "settings.webSearch.noDefault": {
+    ja: "既定のプロバイダが未設定です。エージェントは web ツールを使えません。",
+    en: "No default provider: the agent has no web tools.",
+  },
+  "settings.webSearch.useFetchApi": {
+    ja: "ページ取得: プロバイダの API",
+    en: "Page fetch: provider API",
+  },
+  "settings.webSearch.useFetchDirect": {
+    ja: "ページ取得: 直接取得",
+    en: "Page fetch: direct fetch",
+  },
+  "settings.webSearch.keySet": { ja: "APIキー登録済み", en: "API key set" },
+  "settings.webSearch.keyUnset": { ja: "APIキー未登録", en: "No API key" },
+  "settings.webSearch.remove": { ja: "削除", en: "Remove" },
+  "settings.webSearch.removeConfirm": {
+    ja:
+      "{name} を削除しますか？ エージェントはこのプロバイダで検索できなくなります。既定のプロバイダだった場合は、残っているプロバイダの 1 つが既定になります。",
+    en:
+      "Remove {name}? The agent can no longer search with it. If it was the default, another configured provider becomes the default.",
+  },
+  "settings.webSearch.loadFailed": {
+    ja: "Web検索の設定を読み込めませんでした: {error}",
+    en: "Could not load the web-search setting: {error}",
+  },
+
+  // --- web search dialog -----------------------------------------------------
+  "settings.webSearch.form.addTitle": {
+    ja: "検索プロバイダを追加",
+    en: "Add a search provider",
+  },
+  "settings.webSearch.form.editTitle": {
+    ja: "APIキーを変更",
+    en: "Change the API key",
+  },
+  "settings.webSearch.form.save": { ja: "保存", en: "Save" },
+  "settings.webSearch.form.provider": { ja: "プロバイダ", en: "Provider" },
+  "settings.webSearch.form.apiKey": { ja: "APIキー", en: "API key" },
+  "settings.webSearch.form.apiKeyKeep": {
+    ja: "空欄のまま保存すると、登録済みのキーを使い続けます。",
+    en: "Leave it empty to keep the stored key.",
+  },
+  "settings.webSearch.form.check": { ja: "接続を確認", en: "Check" },
+  "settings.webSearch.form.checking": { ja: "確認中…", en: "Checking…" },
+  "settings.webSearch.form.checked": {
+    ja: "検索できました（結果 {count} 件）。追加できます。",
+    en: "Search worked ({count} result(s)). You can add it now.",
+  },
+  "settings.webSearch.form.failed": {
+    ja: "検索できませんでした: {detail}",
+    en: "The search failed: {detail}",
+  },
+  "settings.webSearch.form.needKey": {
+    ja: "追加する前に、このキーで検索できることを確認してください。",
+    en: "Check that this key searches before adding it.",
+  },
+  "settings.webSearch.form.noProviders": {
+    ja: "追加できるプロバイダがありません。",
+    en: "Every provider is already configured.",
+  },
+  "settings.webSearch.form.saveFailed": {
+    ja: "保存できませんでした: {error}",
+    en: "Could not save: {error}",
   },
 
   // --- computer use panel ----------------------------------------------------

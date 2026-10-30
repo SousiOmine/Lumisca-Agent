@@ -32,6 +32,8 @@ import {
   TOOL_SEND_MESSAGE,
   TOOL_TASK,
   TOOL_TASK_OUTPUT,
+  TOOL_WEB_FETCH,
+  TOOL_WEB_SEARCH,
   TOOL_WRITE,
 } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
@@ -72,6 +74,8 @@ function toolIcon(name: string) {
     case "Search":
       return <IconSearch size={13} />;
     // web
+    case TOOL_WEB_SEARCH:
+    case TOOL_WEB_FETCH:
     case "WebFetch":
       return <IconWorldSearch size={13} />;
     // sub-agent
@@ -175,6 +179,9 @@ function toolSummary(name: string, args: Record<string, unknown>): string {
     case "Search":
       return typeof args.query === "string" ? truncate(args.query, 50) : "";
     // web
+    case TOOL_WEB_SEARCH:
+      return typeof args.query === "string" ? truncate(args.query, 50) : "";
+    case TOOL_WEB_FETCH:
     case "WebFetch":
       return typeof args.url === "string" ? truncate(args.url, 50) : "";
     // sub-agent

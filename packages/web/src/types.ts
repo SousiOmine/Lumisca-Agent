@@ -56,6 +56,13 @@ export type {
   TodoTask,
   UserProviderInput,
   UserProviderSummary,
+  WebSearchAvailableProviderView,
+  WebSearchProviderForm,
+  WebSearchProviderId,
+  WebSearchProviderUpdate,
+  WebSearchProviderView,
+  WebSearchSettingsView,
+  WebSearchTestView,
   Workspace,
   WorkspaceFileEntry,
 } from "@lumisca/core";

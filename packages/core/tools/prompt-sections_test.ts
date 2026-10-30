@@ -34,6 +34,8 @@ import {
   TOOL_TASK_OUTPUT,
   TOOL_TODO,
   TOOL_VISUAL,
+  TOOL_WEB_FETCH,
+  TOOL_WEB_SEARCH,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
 
@@ -198,6 +200,39 @@ Deno.test("the visual sections follow the tools they need", () => {
     ).includes("publish it with the visual"),
     false,
     "the image bullet requires the visual tool",
+  );
+});
+
+Deno.test("the web-search bullet follows the pair it is about", () => {
+  // A session without a configured provider has no web tools, and must not be
+  // told to search: the bullet names only tools that are there.
+  const withoutWeb = renderPromptSections(CODING_PROMPT_SECTIONS, [
+    TOOL_READ,
+    TOOL_BASH,
+  ]);
+  assertEquals(withoutWeb.includes("web_search"), false);
+
+  // Half the pair is not enough: a session that can search but not read the
+  // page in full would be pointed at a tool it lacks.
+  assertEquals(
+    renderPromptSections(CODING_PROMPT_SECTIONS, [TOOL_WEB_SEARCH])
+      .includes("Use web_search"),
+    false,
+  );
+
+  const withWeb = renderPromptSections(CODING_PROMPT_SECTIONS, [
+    TOOL_WEB_SEARCH,
+    TOOL_WEB_FETCH,
+  ]);
+  assert(withWeb.includes("Use web_search for anything that is not"));
+
+  // The chat set carries the same bullet for the same reason.
+  assert(
+    renderPromptSections(CHAT_PROMPT_SECTIONS, [
+      TOOL_WEB_SEARCH,
+      TOOL_WEB_FETCH,
+    ])
+      .includes("Use web_search"),
   );
 });
 

@@ -13,6 +13,7 @@ export const common = {
   "common.cancel": { ja: "キャンセル", en: "Cancel" },
   "common.save": { ja: "保存", en: "Save" },
   "common.delete": { ja: "削除", en: "Delete" },
+  "common.edit": { ja: "編集", en: "Edit" },
   "common.reload": { ja: "更新", en: "Refresh" },
   "common.loading": { ja: "読み込み中…", en: "Loading…" },
   "common.expandPanel": { ja: "パネルを展開", en: "Expand panel" },

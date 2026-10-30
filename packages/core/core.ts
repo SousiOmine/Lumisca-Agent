@@ -15,6 +15,12 @@ import {
   parseConnections,
 } from "./settings/connections.ts";
 import { assertNotProtected, filterExposedSettings } from "./settings/guard.ts";
+import {
+  createWebSearchSettingsStore,
+  type FetchLike,
+} from "./websearch/mod.ts";
+import { WebSearchService } from "./websearch/service.ts";
+import type { WebSearchSettingsView, WebSearchTestView } from "./shared/mod.ts";
 import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
 import type { CredentialStore, Provider } from "./ai/types.ts";
 import type {
@@ -176,6 +182,8 @@ export class LumiscaCore {
   /** MCP OAuth grants (see mcp/oauth.ts), shared with the session pool. */
   private readonly mcpOAuth: McpOAuthStore;
   private readonly commandSafety: CommandSafety;
+  /** The web-search setting and the provider built over it. */
+  private readonly webSearch: WebSearchService;
   /** Browser-lab backend (Desktop WebView host), or
    * undefined in plain server mode — the agent then gets no browser
    * tools. Attached by the server (server/mod.ts) before sessions open. */
@@ -247,6 +255,9 @@ export class LumiscaCore {
        * keys). Defaults to the real process environment; tests pass their
        * own so they never mutate the process-global one. */
       env?: EnvReader;
+      /** Transport of the web-search providers. Tests pass a stub so a key
+       * check never reaches the network. */
+      webSearchFetch?: FetchLike;
     } = {},
   ) {
     this.globalSkillDirs = overrides.globalSkillDirs;
@@ -287,6 +298,17 @@ export class LumiscaCore {
         getFastModel: () => this.models.getFastModel(),
         streamFn,
       });
+    // The web-search configuration lives in the settings file (one JSON
+    // entry, see websearch/settings.ts) and the manager turns it into the
+    // provider the tools use. Read through the getter on every session open
+    // and on every key check, so a change needs no rebuild request.
+    this.webSearch = new WebSearchService({
+      settings: createWebSearchSettingsStore(this.settings),
+      locale: () => this.getLanguage(),
+      ...(overrides.webSearchFetch === undefined
+        ? {}
+        : { fetch: overrides.webSearchFetch }),
+    });
     // One store of MCP OAuth grants, shared by the sign-in flow (settings)
     // and the session connections (pool), so a sign-in is immediately what
     // the next connection uses.
@@ -358,6 +380,7 @@ export class LumiscaCore {
       emit: (event) => this.emit(event),
       browser: () => this.browserBackend,
       computer: () => this.computerHostForSession(),
+      webSearch: () => this.webSearch.provider() ?? undefined,
       stellaRuntime: (session) => this.stellaRuntimeFor(session),
       stellaAgentPersona: (session) => {
         const agentId = session.agentId;
@@ -1308,6 +1331,51 @@ export class LumiscaCore {
    * (update/delete are refused). */
   private getOrCreateChatWorkspace(): Workspace {
     return this.workspaces.getOrCreateChatWorkspace();
+  }
+
+  // --- web search -----------------------------------------------------------
+
+  /** The web-search setting, as the settings screen shows it: which
+   * providers are configured, which one search uses, and which can still be
+   * added. Keys never leave this process; only whether one is stored. */
+  getWebSearchSettings(): WebSearchSettingsView {
+    return this.webSearch.view();
+  }
+
+  /** Add a search provider. The first one becomes the default, so a user who
+   * adds one provider has working search without a second step. */
+  addWebSearchProvider(
+    input: { id: string; apiKey: string },
+  ): WebSearchSettingsView {
+    return this.webSearch.add(input);
+  }
+
+  /** Replace one provider's key; an empty key keeps the stored one. */
+  updateWebSearchProvider(
+    id: string,
+    input: { apiKey: string },
+  ): WebSearchSettingsView {
+    return this.webSearch.update(id, input);
+  }
+
+  /** Remove a provider (the default moves to the next one when it was the
+   * default). */
+  removeWebSearchProvider(id: string): WebSearchSettingsView {
+    return this.webSearch.remove(id);
+  }
+
+  /** Choose the provider search uses; null turns search off. */
+  setDefaultWebSearchProvider(id: string | null): WebSearchSettingsView {
+    return this.webSearch.setDefault(id);
+  }
+
+  /** Search once with a key the user typed, saving nothing (the screen
+   * checks before it stores). A failure is the answer, not an exception. */
+  testWebSearchProvider(input: {
+    id: string;
+    apiKey: string | null;
+  }): Promise<WebSearchTestView> {
+    return this.webSearch.test(input);
   }
 
   // --- MCP configuration ----------------------------------------------------

@@ -44,6 +44,8 @@ import {
 import { ContextCompactor } from "../agent/context-compaction.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { createSkillTool } from "../skills/tool.ts";
+import { createWebSearchTools } from "./web.ts";
+import type { SearchProvider } from "../websearch/types.ts";
 import {
   formatTaskCompletion,
   lastAssistantText,
@@ -104,6 +106,7 @@ function generalTools(
   safety: CommandSafety | undefined,
   browserAvailable: boolean,
   computerAvailable: boolean,
+  webSearch: SearchProvider | undefined,
 ): Tool[] {
   return [
     ...fileTools(backends.files),
@@ -113,6 +116,7 @@ function generalTools(
       safety,
     }),
     createEvalTool({ safety }),
+    ...(webSearch === undefined ? [] : createWebSearchTools(webSearch)),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
         browserAvailable,
@@ -213,6 +217,10 @@ export class TaskHub {
    * open, like browserAvailable). Gates the built-in computer-use skill in
    * the sub-agent tool sets. */
   private computerAvailable = false;
+  /** The user's web-search provider (set by the pool on every open, like the
+   * gates above). A `general` sub-agent searches the web exactly like the
+   * main agent does; omitted → no web tools in its set. */
+  private webSearch: SearchProvider | undefined;
   /** The session's tool registry (set by the pool on every open): holds
    * every discoverable tool (MCP tools, browser-lab tools, future
    * extensions) whose definitions stay out of the LLM context. General
@@ -262,6 +270,13 @@ export class TaskHub {
    * session open/rebuild like setBrowserAvailable). */
   setComputerAvailable(computerAvailable: boolean): void {
     this.computerAvailable = computerAvailable;
+  }
+
+  /** Set the user's web-search provider (called on every session
+   * open/rebuild, so a provider configured or changed later reaches the
+   * sub-agents spawned after it). */
+  setWebSearch(provider: SearchProvider | undefined): void {
+    this.webSearch = provider;
   }
 
   /** Attach the session's shared MCP attachment and tool registry: general
@@ -395,6 +410,7 @@ export class TaskHub {
           this.safety,
           this.browserAvailable,
           this.computerAvailable,
+          this.webSearch,
         )
         : exploreTools(
           runtime.workspace,

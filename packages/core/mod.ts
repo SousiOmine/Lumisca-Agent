@@ -212,6 +212,15 @@ export type {
   WaitResult,
 } from "./browser/types.ts";
 export type { AskAnswer, AskOption, AskQuestion } from "./shared/mod.ts";
+export type {
+  WebSearchAvailableProviderView,
+  WebSearchProviderForm,
+  WebSearchProviderId,
+  WebSearchProviderUpdate,
+  WebSearchProviderView,
+  WebSearchSettingsView,
+  WebSearchTestView,
+} from "./shared/mod.ts";
 export type { TodoPhase, TodoStatus, TodoTask } from "./shared/mod.ts";
 export type { SubagentStatus, SubagentType, TaskInfo } from "./shared/mod.ts";
 export type { GoalInfo, GoalStatus } from "./shared/mod.ts";

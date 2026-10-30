@@ -19,6 +19,8 @@ import {
   TOOL_VM_ACT,
   TOOL_VM_ASK_USER,
   TOOL_VM_SCREENSHOT,
+  TOOL_WEB_FETCH,
+  TOOL_WEB_SEARCH,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
 
@@ -200,6 +202,19 @@ const SKILL_SECTION: PromptSection = {
   requires: [TOOL_SKILL],
   text: "- Load a skill before starting work that matches one in the " +
     "catalog.",
+};
+
+/** The web tools. One bullet, keyed on the search half: a session that can
+ * search is the one that needs to be told how the pair is meant to be used
+ * (and that what it reads is data, not orders). */
+const WEB_SEARCH_SECTION: PromptSection = {
+  name: "tool:web_search",
+  order: ORDER.tool + 112,
+  requires: [TOOL_WEB_SEARCH, TOOL_WEB_FETCH],
+  text: "- Use web_search for anything that is not in this repository or not " +
+    "in your\n  knowledge: a current API, a version, an error message you " +
+    "do not recognise.\n  Prefer the project's own code and documentation " +
+    "when they answer the question.",
 };
 
 /** Both halves of the visual feature, each a section of its own: a diagram
@@ -436,6 +451,7 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   ASK_SECTION,
   TODO_SECTION,
   SKILL_SECTION,
+  WEB_SEARCH_SECTION,
   VISUAL_DIAGRAM_SECTION,
   VISUAL_IMAGE_SECTION,
   TASK_SECTION,
@@ -471,6 +487,7 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   CHAT_UI_SECTION,
   HISTORY_SEARCH_SECTION,
   AGENT_CREATE_SECTION,
+  WEB_SEARCH_SECTION,
   VISUAL_IMAGE_SECTION,
   TASK_SECTION,
   NOTIFICATION_SECTION,
@@ -486,6 +503,7 @@ export const CHAT_PROMPT_SECTIONS: readonly PromptSection[] = [
   ASK_SECTION,
   TODO_SECTION,
   SKILL_SECTION,
+  WEB_SEARCH_SECTION,
   VISUAL_DIAGRAM_SECTION,
   QUALITY_SECTION,
   CHAT_ANSWERS_SECTION,

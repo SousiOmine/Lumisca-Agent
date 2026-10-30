@@ -30,6 +30,7 @@ import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
 import { hostBackends, type ToolBackends } from "../tools/toolsets.ts";
 import { CoreError } from "../errors.ts";
 import { createLogger } from "../log.ts";
+import type { SearchProvider } from "../websearch/types.ts";
 import type { SessionPoolDeps } from "./pool.ts";
 import type { SessionResources } from "./pool.ts";
 import {
@@ -176,6 +177,10 @@ export class AgentFactory {
       ? this.deps.computer()
       : undefined;
     const computerAvailable = computer !== undefined;
+    // The user's web-search provider. Resolved once per open (the tools hold
+    // it, so a rebuild picks up a changed default) and undefined when the
+    // user has not configured one; the tools are then simply absent.
+    const webSearch: SearchProvider | undefined = this.deps.webSearch?.();
     if (computer !== undefined) {
       registry.addTools(
         createComputerTools({ resolveHost: () => this.deps.computer?.() }),
@@ -318,6 +323,7 @@ export class AgentFactory {
       tasks.setMcp(mcp, registry);
       tasks.setBrowserAvailable(browserAvailable);
       tasks.setComputerAvailable(computerAvailable);
+      tasks.setWebSearch(webSearch);
       tasks.setLanguage(this.deps.getLanguage());
     } else {
       tasks = undefined;
@@ -340,6 +346,7 @@ export class AgentFactory {
         task: tasks,
         safety: this.deps.commandSafety,
         visuals: { store: this.deps.visuals, sessionId: session.id },
+        webSearch,
       })
       : chat
       ? createChatTools({
@@ -348,6 +355,7 @@ export class AgentFactory {
         safety: this.deps.commandSafety,
         browserAvailable,
         computerAvailable,
+        webSearch,
       })
       : createCodingTools(workspace, {
         background,
@@ -359,6 +367,7 @@ export class AgentFactory {
         computerAvailable,
         visuals: { store: this.deps.visuals, sessionId: session.id },
         backends,
+        webSearch,
       });
     // The system prompt is generated once per session, from the tool set
     // the session actually has (its guidelines are keyed on the preloaded

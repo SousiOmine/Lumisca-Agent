@@ -10,6 +10,7 @@ import {
   IconShield,
   IconUser,
   IconWorld,
+  IconWorldSearch,
   IconX,
 } from "@tabler/icons-preact";
 import type { MessageKey } from "@lumisca/core/shared";
@@ -32,6 +33,7 @@ import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { AppearancePanel } from "./settings/AppearancePanel.tsx";
 import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
 import { ComputerUsePanel } from "./settings/ComputerUsePanel.tsx";
+import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
 import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import type { Locale, ThemeSetting } from "../types.ts";
@@ -66,6 +68,7 @@ export type SettingsCategory =
   | "providers"
   | "models"
   | "mcp"
+  | "webSearch"
   | "routines"
   | "servers"
   | "personalize"
@@ -118,6 +121,11 @@ const CATEGORIES: {
     icon: <IconBrain size={18} />,
   },
   { id: "mcp", labelKey: "settings.nav.mcp", icon: <IconServer size={18} /> },
+  {
+    id: "webSearch",
+    labelKey: "settings.nav.webSearch",
+    icon: <IconWorldSearch size={18} />,
+  },
   {
     id: "routines",
     labelKey: "settings.nav.routines",
@@ -295,6 +303,7 @@ export function SettingsModal({
             </>
           )}
           {category === "mcp" && <McpList />}
+          {category === "webSearch" && <WebSearchPanel />}
           {category === "routines" && (
             <RoutinePanel
               routines={routines.routines}
