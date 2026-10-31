@@ -116,6 +116,7 @@ npm outdated                                                   # packages/deskto
 - **応答は圧縮し、アセットは再検証させる**: `hono/compress`（閾値 1 KB）を全応答に掛けます。`/assets/app.js` と `/styles.css` は `ETag` + `private, max-age=0, must-revalidate`（304 で本文なし）、ページと `/assets/initial-data.js` はトークンを運ぶため `no-store` です。規則は `packages/server/app-file-headers.ts` に集約しています。
 - **プロキシのタイムアウトは用途別**: `packages/server/federation.ts` の `proxyTimeoutFor` がパスから決めます（通常 30 秒、open／messages／compact／rewind は 120 秒、`/fed/peers` の到達性確認は 3 秒）。一律の短いタイムアウトは、遅いが正常なリモート処理を 502 にします。
 - **プロキシはヘッダを選んで透過する**: `content-disposition`・`cache-control`・`etag`・`vary`・`content-security-policy`・`x-content-type-options` は通します。`content-encoding` は通しません（ハブの `fetch` が解凍済み）。
+- **同一サーバーの判定はスキームを見ない**: CORS と WebSocket の Origin 検証は、Origin のホスト＋ポートが `Host` と一致するかで決めます（`packages/server/security.ts` の `sameServerAuthority`。MCP の `redirect_uri` も同じ関数）。TLS 終端（`tailscale serve` 等）は https を受けて http で転送するため、スキームまで比べるとページが自分自身のサーバーに対して cross-origin になります。そうなると `/ws` が 403 で拒否され、画面は 10 秒間隔のスナップショット取得だけが情報源になって「送信してから反映まで約 10 秒・本文が流れない」状態になります。別ポートと外部ホストは今も拒否します。
 
 ## 7. stella mode（仮想マシン）
 

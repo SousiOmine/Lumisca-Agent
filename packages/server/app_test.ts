@@ -1602,7 +1602,7 @@ Deno.test("cors only allows same-origin and the tauri webview origin", async () 
   }
 });
 
-Deno.test("cors and websocket reject other local ports (full-origin check)", async () => {
+Deno.test("cors and websocket reject other local ports (authority check)", async () => {
   const { core, server, base } = await setup();
   try {
     // Same host, different port: must be treated as cross-origin.
@@ -1625,6 +1625,20 @@ Deno.test("cors and websocket reject other local ports (full-origin check)", asy
       samePort.headers.get("access-control-allow-origin"),
       nameVariant,
       "loopback name variants on the same port are the same server",
+    );
+
+    // The page's scheme is the browser's hop to this server, not part of
+    // its identity: a TLS front end sends https while this server sees the
+    // same host over http. The CORS answer must follow the same rule as
+    // the WebSocket guard, or half of a remote install breaks at a time.
+    const viaTls = base.replace("http://", "https://");
+    const tlsPage = await fetch(`${base}/api/health`, {
+      headers: { Origin: viaTls },
+    });
+    assertEquals(
+      tlsPage.headers.get("access-control-allow-origin"),
+      viaTls,
+      "the same host over https is this server behind a TLS front end",
     );
   } finally {
     server.shutdown();
@@ -2317,6 +2331,41 @@ Deno.test("websocket rejects cross-origin connections", async () => {
       true,
       "same-origin must pass the origin guard",
     );
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("websocket accepts a TLS front end's https origin for the same host", async () => {
+  // `tailscale serve` (and any TLS-terminating proxy) terminates https and
+  // forwards plain http: the page's Origin says https: while the Host this
+  // server sees is the same host. Comparing whole origins made that page
+  // cross-origin against its own server — the WS was answered 403, the page
+  // got no events at all, and the UI fell back to its 10-second snapshot
+  // poll (remote sessions arrived seconds late, streaming text never flowed).
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const app = createApp(core, {
+    token: "t",
+    allowedHosts: ["host.tailnet.ts.net"],
+  });
+  const handshake = async (origin: string | undefined) => {
+    const res = await app.fetch(
+      new Request("http://host.tailnet.ts.net/ws?token=t", {
+        headers: {
+          host: "host.tailnet.ts.net",
+          ...(origin === undefined ? {} : { origin }),
+        },
+      }),
+    );
+    return res.status;
+  };
+  try {
+    assertEquals(await handshake("https://host.tailnet.ts.net"), 404);
+    assertEquals(await handshake("http://host.tailnet.ts.net"), 404);
+    // The scheme is what stops being compared; the host is not. Another
+    // site's https origin is still refused, and so is a real port mismatch.
+    assertEquals(await handshake("https://evil.example.com"), 403);
   } finally {
     core.close();
   }

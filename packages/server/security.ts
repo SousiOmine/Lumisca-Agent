@@ -63,23 +63,60 @@ const ALLOWED_ORIGINS = new Set([
   "http://tauri.localhost",
 ]);
 
-function isAllowedOrigin(origin: string, host: string | undefined): boolean {
-  if (ALLOWED_ORIGINS.has(origin)) return true;
+/** Whether `origin` (a browser's Origin header) names the server this
+ * request was addressed to, whose Host header is `host`.
+ *
+ * The scheme is deliberately not compared. A TLS-terminating front end
+ * (`tailscale serve`, a reverse proxy) accepts https from the browser and
+ * forwards plain http here, so a request's Host is the page's host while the
+ * page's Origin says `https:`. Comparing full origins made every such page
+ * cross-origin against its own server: the WebSocket handshake was answered
+ * 403 (`Forbidden: cross-origin WebSocket`), the page therefore received no
+ * event, and the UI fell back to its 10-second snapshot poll — remote
+ * sessions arrived up to ten seconds late and streaming text never flowed.
+ * Host and port are what identify the server; the scheme describes only the
+ * hop the browser took to reach it.
+ *
+ * `localhost` / `127.0.0.1` / `::1` are the same server under different
+ * names; those spellings are interchangeable here, and only for loopback
+ * (a remote name is not an alias of anything).
+ *
+ * The MCP sign-in uses this too: the redirect URI it registers must be the
+ * page's own origin, and the question "is that origin this server?" has one
+ * answer (see routes/mcp.ts).
+ */
+export function sameServerAuthority(
+  origin: string,
+  host: string | undefined,
+): boolean {
   try {
-    const expected = new URL(`http://${host}`);
     const actual = new URL(origin);
-    if (actual.origin === expected.origin) return true;
-    // `localhost` / `127.0.0.1` / `::1` are the same server but different
-    // origins; allow those loopback spellings only when the port matches,
-    // so a different local port can never pass the check (otherwise any
-    // other local dev server could read the API cross-origin).
-    return actual.protocol === expected.protocol &&
-      actual.port === expected.port &&
+    // A browser's Origin is an http(s) origin. Anything else (an opaque
+    // scheme, a `file:` page) names no server this API could be served by;
+    // the Tauri WebView's own schemes are in ALLOWED_ORIGINS below.
+    if (actual.protocol !== "http:" && actual.protocol !== "https:") {
+      return false;
+    }
+    // The Host header under the ORIGIN's scheme: that is what normalizes an
+    // explicit default port away (`Host: host:443` and `Origin:
+    // https://host` are the same authority), while a port that is really
+    // different stays different.
+    const expected = new URL(`${actual.protocol}//${host}`);
+    // Host and port together: a different port must never pass (any other
+    // local dev server would otherwise read the API cross-origin).
+    if (actual.host === expected.host) return true;
+    return actual.port === expected.port &&
       isLoopbackHost(actual.hostname) &&
       isLoopbackHost(hostnameOf(host));
   } catch {
     return false;
   }
+}
+
+/** Whether `origin` may read this server's responses. */
+function isAllowedOrigin(origin: string, host: string | undefined): boolean {
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  return sameServerAuthority(origin, host);
 }
 
 /** The security middleware chain: Host guard (DNS-rebinding protection),
@@ -157,8 +194,10 @@ export function installSecurityMiddleware(
     });
   }
 
-  // The desktop shell (Tauri WebView) calls the API from another origin.
-  // Only same-origin and the Tauri WebView origins may read responses.
+  // The desktop shell (Tauri WebView) calls the API from another origin,
+  // and a page behind a TLS-terminating front end is addressed over https
+  // while this server sees plain http. Only the same host (under either
+  // scheme) and the Tauri WebView origins may read responses.
   const corsHandler = cors({
     origin: (origin, c) =>
       isAllowedOrigin(origin, c.req.header("host")) ? origin : undefined,
@@ -170,7 +209,9 @@ export function installSecurityMiddleware(
   // Browsers send an Origin on WebSocket handshakes; CORS does not apply to
   // WS, so without this check any website could open ws://127.0.0.1:<port>/ws
   // and read every agent event. Non-browser clients (no Origin) are allowed —
-  // they are already gated by the loopback-only Host check above.
+  // they are already gated by the loopback-only Host check above. What the
+  // origin has to match is the host (see isAllowedOrigin): a page behind a
+  // TLS front end is same-host over https, not a foreign origin.
   app.use("/ws", async (c, next) => {
     const origin = c.req.header("origin");
     if (

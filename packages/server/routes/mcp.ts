@@ -8,6 +8,7 @@ import {
   type McpTestResult,
 } from "@lumisca/core";
 import { AppError, requireNonEmptyString } from "./util.ts";
+import { sameServerAuthority } from "../security.ts";
 import { renderMcpAuthPage } from "../render.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -53,9 +54,10 @@ async function putConfig(
  *
  * The `Origin` header is preferred because its scheme tells plain HTTP apart
  * from a TLS-terminating front end (a `tailscale serve` in front of the
- * server); it is trusted only for the host this request was addressed to,
- * which the security middleware validated. A client that sends no Origin
- * (curl, an older WebView) gets the request's own host over http.
+ * server); it is trusted only when it names the host this request was
+ * addressed to (`sameServerAuthority`, the check the CORS and WebSocket
+ * guards use). A client that sends no Origin (curl, an older WebView) gets
+ * the request's own host over http.
  */
 export function mcpRedirectUri(c: Context): string {
   // The Host header is what the security middleware validated; a served
@@ -66,16 +68,8 @@ export function mcpRedirectUri(c: Context): string {
     throw new AppError("Cannot determine this server's host", 400);
   }
   const origin = c.req.header("origin");
-  if (origin !== undefined) {
-    try {
-      const url = new URL(origin);
-      const httpish = url.protocol === "http:" || url.protocol === "https:";
-      if (httpish && url.host === host) {
-        return `${url.origin}${MCP_OAUTH_CALLBACK_PATH}`;
-      }
-    } catch {
-      // Not a URL: fall through to the request's own host.
-    }
+  if (origin !== undefined && sameServerAuthority(origin, host)) {
+    return `${new URL(origin).origin}${MCP_OAUTH_CALLBACK_PATH}`;
   }
   return `http://${host}${MCP_OAUTH_CALLBACK_PATH}`;
 }
