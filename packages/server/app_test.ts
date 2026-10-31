@@ -65,11 +65,19 @@ Deno.test("health and workspaces API", async () => {
   try {
     const health = await fetch(`${base}/api/health`);
     assertEquals(health.status, 200);
-    const healthBody = await health.json() as { ok: boolean; now: number };
+    const healthBody = await health.json() as {
+      ok: boolean;
+      now: number;
+      instanceId?: unknown;
+    };
     assertEquals(healthBody.ok, true);
     // The timestamp proves the event loop answered (liveness for hang
     // detection), not just the TCP listener.
     assertEquals(typeof healthBody.now, "number");
+    // The identity a federation peer is compared against: the same server
+    // under another URL must be recognisable as this one (see the
+    // federation client's self-check).
+    assertEquals(typeof healthBody.instanceId, "string");
 
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
     const create = await json(base, "/api/workspaces", {

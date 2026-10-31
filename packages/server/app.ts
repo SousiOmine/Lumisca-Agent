@@ -66,6 +66,12 @@ export interface AppOptions {
   /** The federation client, injected by startServer so it can start the
    * peer event streams once the origin is known. */
   fed?: FederationClient;
+  /** Identity this server answers in `/api/health` (defaults to a fresh
+   * uuid per app). It is what lets a hub tell its own name from a peer's:
+   * the same server is reachable as its tailnet name, its LAN address or
+   * through a proxy, and the URL alone cannot say so (see
+   * federation.ts's identityOf). */
+  instanceId?: string;
   /** Heartbeat cadence of the event stream (defaults to
    * `WS_HEARTBEAT_INTERVAL_MS`). Tests shorten it so a heartbeat frame
    * arrives within the test's lifetime; production never sets it. */
@@ -98,10 +104,12 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // peer id so the UI can route them to the right tabs. startServer injects
   // its own client (started once the real origin is known); direct
   // createApp usage gets a client with no self-guard.
+  const instanceId = options.instanceId ?? crypto.randomUUID();
   const fed = options.fed ??
     new FederationClient(
       () => core.getConnections(),
       () => options.selfOrigin?.current ?? "",
+      { selfId: () => instanceId },
     );
   if (!options.fed) fed.start();
 
@@ -127,8 +135,13 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   // `now` proves the event loop itself is alive (not just the listener
   // accepting connections): the desktop UI uses it to tell a hung server
-  // apart from a healthy one.
-  app.get("/api/health", (c) => c.json({ ok: true, now: Date.now() }));
+  // apart from a healthy one. `instanceId` identifies this running server:
+  // the federation client probes it to recognise this hub registered under
+  // another of its URLs (see federation.ts).
+  app.get(
+    "/api/health",
+    (c) => c.json({ ok: true, now: Date.now(), instanceId }),
+  );
 
   // --- page and static assets ----------------------------------------------
 
@@ -275,11 +288,13 @@ export function startServer(
   // ephemeral); the federation self-guard reads it through this holder,
   // and the peer event streams start once it is known.
   const selfOrigin: { current: string } = { current: "" };
+  const instanceId = crypto.randomUUID();
   const fed = new FederationClient(
     () => core.getConnections(),
     () => selfOrigin.current,
+    { selfId: () => instanceId },
   );
-  const app = createApp(core, { ...options, selfOrigin, fed });
+  const app = createApp(core, { ...options, selfOrigin, fed, instanceId });
   const server = Deno.serve(
     {
       hostname,

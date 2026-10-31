@@ -167,7 +167,7 @@ Deno.test("federation: restart leaves one live stream per peer", async () => {
     // A 20ms first backoff: the orphan this test hunts for would dial in
     // again several times over the wait below, and the wait stays cheap.
     // (It used to be 2.5s of real time against the production 2s delay.)
-    RECONNECT_BASE_MS_FOR_TEST,
+    { reconnectBaseMs: RECONNECT_BASE_MS_FOR_TEST },
   );
   try {
     client.start();
@@ -179,6 +179,104 @@ Deno.test("federation: restart leaves one live stream per peer", async () => {
     // dial in again here, and keep doing so.
     await new Promise((resolve) => setTimeout(resolve, 250));
     assertEquals(connections, 2, "the dropped stream must not reconnect");
+  } finally {
+    client.close();
+    await peerServer.shutdown();
+  }
+});
+
+Deno.test("federation: a frame the peer relayed from its own peer is not relayed again", async () => {
+  // `/ws` stamps every frame it sends: "" for an event of the server itself,
+  // the source peer's id for one it relayed. A hub that relays the second
+  // kind again sends the same event twice, and when the "peer" is the hub
+  // under another URL, the relayed copy comes back as an input and the relay
+  // never stops: the loop pegged a core and grew the process until the OOM
+  // killer took it down (taking every session with it).
+  const peerServer = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: () => {},
+  }, (req) => {
+    if (new URL(req.url).pathname !== "/ws") {
+      return new Response("not found", { status: 404 });
+    }
+    const { socket, response } = Deno.upgradeWebSocket(req);
+    socket.onopen = () => {
+      socket.send(JSON.stringify({
+        type: "agent_end",
+        sessionId: "local",
+        peerId: "",
+      }));
+      socket.send(JSON.stringify({
+        type: "agent_end",
+        sessionId: "relayed",
+        peerId: "someone-else",
+      }));
+    };
+    return response;
+  });
+  const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  const client = new FederationClient(
+    () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
+    () => "http://127.0.0.1:1",
+  );
+  const sessionIds: string[] = [];
+  client.subscribe((_peerId, event) => {
+    if (event.type === "agent_end") sessionIds.push(event.sessionId);
+  });
+  client.start();
+  try {
+    await waitFor(() => sessionIds.length >= 1);
+    // Past the point the second frame would have arrived: the relayed copy
+    // must never reach a listener.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assertEquals(sessionIds, ["local"]);
+  } finally {
+    client.close();
+    await peerServer.shutdown();
+  }
+});
+
+Deno.test("federation: the hub recognises itself under any URL", async () => {
+  // The URL check recognises loopback aliases only. The same server is also
+  // reachable as its tailnet name — which is exactly what the settings'
+  // connection list holds, because that list is the user's servers to switch
+  // to — and a hub that federates with itself there is the echo above. Its
+  // identity is its instanceId (a per-process uuid), not its address.
+  const selfId = crypto.randomUUID();
+  const sockets = new Set<WebSocket>();
+  const peerServer = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: () => {},
+  }, (req) => {
+    const path = new URL(req.url).pathname;
+    if (path === "/api/health") {
+      return Response.json({ ok: true, now: Date.now(), instanceId: selfId });
+    }
+    if (path === "/ws") {
+      const { socket, response } = Deno.upgradeWebSocket(req);
+      sockets.add(socket);
+      socket.onclose = () => sockets.delete(socket);
+      return response;
+    }
+    return new Response("not found", { status: 404 });
+  });
+  const url = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  const client = new FederationClient(
+    () => [{ id: "self", name: "self", url, token: "t" }],
+    // The stub is not this origin: only the identity probe can tell.
+    () => "http://127.0.0.1:1",
+    { reconnectBaseMs: RECONNECT_BASE_MS_FOR_TEST, selfId: () => selfId },
+  );
+  client.start();
+  try {
+    await waitFor(() => client.peers().length === 0);
+    assertEquals(client.peers(), [], "the hub's own entry is not a peer");
+    // Not one event stream may be opened, and nothing may dial in later.
+    assertEquals(sockets.size, 0, "the hub must not federate with itself");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assertEquals(sockets.size, 0, "the hub must not federate with itself");
   } finally {
     client.close();
     await peerServer.shutdown();
