@@ -89,15 +89,9 @@ export interface StellaStatus {
   starting: boolean;
 }
 
-/** A workspace as shown in the federated workspace picker: which peer owns
- * it ("" = this server) and how that peer is named. */
-export interface FederatedWorkspace {
-  peerId: string;
-  peerName: string;
-  workspace: core.Workspace;
-}
-
-/** Peer reachability, reported alongside the merged workspace list. */
+/** Peer reachability of the connection registry (`GET /api/fed/peers`), used
+ * by the session list to label the rows of sessions that run on another
+ * machine. */
 export interface PeerStatus {
   id: string;
   name: string;

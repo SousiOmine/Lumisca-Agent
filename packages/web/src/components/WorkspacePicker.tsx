@@ -7,27 +7,26 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-preact";
-import type { FederatedWorkspace } from "../types.ts";
-import { tabKey } from "../tabs.ts";
+import type { Workspace } from "../types.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
 
 interface WorkspacePickerProps {
-  workspaces: FederatedWorkspace[];
-  /** The folder-less chat workspace of the current peer ("simple chat"
-   * without a workspace), pinned as the first option when present. */
-  chat?: FederatedWorkspace;
-  /** Currently selected workspace (composite key; "" when none). */
+  workspaces: Workspace[];
+  /** The folder-less chat workspace ("simple chat" without a workspace),
+   * pinned as the first option. */
+  chat?: Workspace;
+  /** Currently selected workspace id ("" when none). */
   value: string;
-  onChange: (key: string) => void;
-  onEdit: (fws: FederatedWorkspace) => void;
-  onDelete: (fws: FederatedWorkspace) => void;
+  onChange: (id: string) => void;
+  onEdit: (workspace: Workspace) => void;
+  onDelete: (workspace: Workspace) => void;
   /** Called when the user wants to create a new workspace. */
   onCreate: () => void;
 }
 
-/** Custom workspace dropdown with per-item edit/delete actions.
- * Machine selection is handled by a separate PeerPicker. */
+/** Custom workspace dropdown with per-item edit/delete actions, listing the
+ * workspaces of the server this window displays. */
 export function WorkspacePicker({
   workspaces,
   chat,
@@ -42,9 +41,7 @@ export function WorkspacePicker({
   const rootRef = useRef<HTMLDivElement>(null);
 
   const selectable = [...(chat ? [chat] : []), ...workspaces];
-  const selected = selectable.find((w) =>
-    tabKey(w.peerId, w.workspace.id) === value
-  );
+  const selected = selectable.find((w) => w.id === value);
 
   // Close on outside click and Escape.
   useClickOutside(rootRef, () => setOpen(false), open);
@@ -57,14 +54,10 @@ export function WorkspacePicker({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title={selected
-          ? selected.workspace.name
-          : t("chrome.workspacePicker.select")}
+        title={selected ? selected.name : t("chrome.workspacePicker.select")}
       >
         <span className="workspace-picker-name">
-          {selected
-            ? selected.workspace.name
-            : t("chrome.workspacePicker.none")}
+          {selected ? selected.name : t("chrome.workspacePicker.none")}
         </span>
         <span className={`workspace-picker-chevron${open ? " open" : ""}`}>
           <IconChevronDown size={15} />
@@ -80,16 +73,13 @@ export function WorkspacePicker({
           )}
           {chat && (
             <div
-              key={tabKey(chat.peerId, chat.workspace.id)}
               role="option"
-              aria-selected={tabKey(chat.peerId, chat.workspace.id) === value}
+              aria-selected={chat.id === value}
               className={`workspace-option chat-workspace${
-                tabKey(chat.peerId, chat.workspace.id) === value
-                  ? " selected"
-                  : ""
+                chat.id === value ? " selected" : ""
               }`}
               onClick={() => {
-                onChange(tabKey(chat.peerId, chat.workspace.id));
+                onChange(chat.id);
                 setOpen(false);
               }}
             >
@@ -101,70 +91,64 @@ export function WorkspacePicker({
               </span>
             </div>
           )}
-          {workspaces.map((fws) => {
-            const key = tabKey(fws.peerId, fws.workspace.id);
-            return (
-              <div
-                key={key}
-                role="option"
-                aria-selected={key === value}
-                className={`workspace-option${
-                  key === value ? " selected" : ""
-                }`}
-                onClick={() => {
-                  onChange(key);
-                  setOpen(false);
-                }}
-              >
-                <span className="workspace-option-icon">
-                  <IconFolder size={14} />
-                </span>
-                <span
-                  className="workspace-option-name"
-                  title={fws.workspace.name}
-                >
-                  {fws.workspace.name}
-                </span>
-                <span className="workspace-option-meta">
-                  {t("chrome.workspacePicker.folderCount", {
-                    count: fws.workspace.folders.length,
+          {workspaces.map((ws) => (
+            <div
+              key={ws.id}
+              role="option"
+              aria-selected={ws.id === value}
+              className={`workspace-option${
+                ws.id === value ? " selected" : ""
+              }`}
+              onClick={() => {
+                onChange(ws.id);
+                setOpen(false);
+              }}
+            >
+              <span className="workspace-option-icon">
+                <IconFolder size={14} />
+              </span>
+              <span className="workspace-option-name" title={ws.name}>
+                {ws.name}
+              </span>
+              <span className="workspace-option-meta">
+                {t("chrome.workspacePicker.folderCount", {
+                  count: ws.folders.length,
+                })}
+              </span>
+              <span className="workspace-option-actions">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title={t("chrome.workspacePicker.edit")}
+                  aria-label={t("chrome.workspacePicker.editNamed", {
+                    name: ws.name,
                   })}
-                </span>
-                <span className="workspace-option-actions">
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    title={t("chrome.workspacePicker.edit")}
-                    aria-label={t("chrome.workspacePicker.editNamed", {
-                      name: fws.workspace.name,
-                    })}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpen(false);
-                      onEdit(fws);
-                    }}
-                  >
-                    <IconPencil size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    title={t("chrome.workspacePicker.delete")}
-                    aria-label={t("chrome.workspacePicker.deleteNamed", {
-                      name: fws.workspace.name,
-                    })}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpen(false);
-                      onDelete(fws);
-                    }}
-                  >
-                    <IconTrash size={14} />
-                  </button>
-                </span>
-              </div>
-            );
-          })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(false);
+                    onEdit(ws);
+                  }}
+                >
+                  <IconPencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title={t("chrome.workspacePicker.delete")}
+                  aria-label={t("chrome.workspacePicker.deleteNamed", {
+                    name: ws.name,
+                  })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(false);
+                    onDelete(ws);
+                  }}
+                >
+                  <IconTrash size={14} />
+                </button>
+              </span>
+            </div>
+          ))}
           <button
             type="button"
             className="workspace-option create"

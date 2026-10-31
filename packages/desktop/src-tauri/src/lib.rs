@@ -74,9 +74,10 @@ pub(crate) struct AppState {
     /// The spawned local server's captured output (in-memory tail +
     /// on-disk log), for crash diagnosis from the UI.
     server_log: Mutex<server_log::ServerLog>,
-    /// The last remote server the user switched to (url, token) — the
-    /// "current display" reported by the bridge state.
-    last_remote: Mutex<Option<(String, String)>>,
+    /// The last remote server the user switched to — the "current display"
+    /// reported by the bridge state, name included (the page cannot name
+    /// itself: a remote page's registry is that server's own).
+    last_remote: Mutex<Option<settings::SavedConnection>>,
     /// The connection `settings.json` holds for the next launch. Kept here
     /// so the splash's 150 ms poll of `state` never reads the file, and so
     /// the display and the persisted choice are written together.

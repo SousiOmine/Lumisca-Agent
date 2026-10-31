@@ -7,8 +7,9 @@ import { useAsyncEffect } from "./useAsync.ts";
 
 /** Load the skills the `/skill` palette offers for one session context: the
  * skills of `workspaceId`, or of a chat session when it is undefined —
- * fetched from the peer that owns the workspace (the machine that would run
- * the session's agent). Re-fetches when the workspace or the peer changes.
+ * fetched from the peer that owns the session (the machine that runs its
+ * agent; "" = this server). Re-fetches when the workspace or the peer
+ * changes.
  *
  * A failure yields an empty list plus the reason: an empty palette is
  * better than a stale one (it would offer skills the agent cannot load —

@@ -13,7 +13,7 @@ import {
   IconHome,
 } from "@tabler/icons-preact";
 import type { Translator } from "@lumisca/core/shared";
-import { workspaceApi } from "../api.ts";
+import { api } from "../api.ts";
 import type { FsBrowse, FsEntry, FsPlace, FsPlaceKind } from "../types.ts";
 import { errorText } from "../providers.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
@@ -139,9 +139,7 @@ function EntryRow(
  * touch screen has no double click, so a single tap opens there (see
  * EntryRow), and the button adds the folder the user is in. */
 export function FolderBrowser(
-  { peerId, peerName, onAdd, onBack }: {
-    peerId: string;
-    peerName: string;
+  { onAdd, onBack }: {
     onAdd: (path: string) => void;
     onBack: () => void;
   },
@@ -157,8 +155,6 @@ export function FolderBrowser(
   const [showHidden, setShowHidden] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  // Browsing happens on the peer that owns the workspace (its filesystem).
-  const wsApi = workspaceApi(peerId);
   const listRef = useRef<HTMLDivElement>(null);
   /** Navigation sequence: a response for a folder the user has already left
    * (rapid clicks on 上の階層) must never overwrite the newer one. */
@@ -169,7 +165,7 @@ export function FolderBrowser(
     setLoading(true);
     setError(undefined);
     try {
-      const listing = await wsApi.fsBrowse(path);
+      const listing = await api.fsBrowse(path);
       if (id !== visit.current) return;
       setOpen(listing);
       setSelected(null);
@@ -184,7 +180,7 @@ export function FolderBrowser(
 
   useAsyncEffect(async (isStale) => {
     try {
-      const list = await wsApi.fsPlaces();
+      const list = await api.fsPlaces();
       if (isStale()) return;
       setPlaces(list);
       // Open a folder right away, the way a file manager does: the home
@@ -195,7 +191,7 @@ export function FolderBrowser(
     } catch (e) {
       if (!isStale()) setError(errorText(e));
     }
-  }, [peerId]);
+  }, []);
 
   // Focus the list on open so ↑/↓ and Enter work without a click: the focus
   // stayed on the 選択 button that brought this view up, and that button is
@@ -254,9 +250,7 @@ export function FolderBrowser(
         title={t("chrome.folderBrowser.title")}
       />
       <p className="settings-note">
-        {peerId === ""
-          ? t("chrome.folderBrowser.selectPrompt")
-          : t("chrome.folderBrowser.selectPeerPrompt", { peerName, peerId })}
+        {t("chrome.folderBrowser.selectPrompt")}
       </p>
 
       <div className="folder-browser-panes">

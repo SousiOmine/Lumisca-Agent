@@ -7,9 +7,13 @@ import {
 } from "@tabler/icons-preact";
 import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
-import { connectionLabel, displayedConnectionId } from "../connections.ts";
+import {
+  connectionLabel,
+  CONNECTIONS_UPDATED_EVENT,
+  displayedConnectionId,
+  serverLabel,
+} from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
-import { CONNECTIONS_UPDATED_EVENT } from "../hooks/useWorkspaces.ts";
 import { useT } from "../i18n.ts";
 import { shellCall, type ShellState } from "../shell.ts";
 import type { ConnectionEntry } from "../types.ts";
@@ -35,9 +39,17 @@ interface ConnectionPickerProps {
  * switch with, so the title bar does not render and this control is not
  * shown.
  *
- * The list is read when the popover opens rather than at mount: the settings
- * dialog edits the same registry, and the popover must not show a server that
- * was deleted a moment ago.
+ * Both answers are read once on mount, not on every open: the trigger has to
+ * name the server while the popover is still closed (`common.loading` until
+ * then is a label that never arrives), and the shell's answer is fixed for
+ * the lifetime of the page — switching servers navigates the window and
+ * loads a new page. The registry is re-read when the settings dialog saves
+ * into it, so an open popover never lists a server deleted a moment ago.
+ *
+ * The displayed name is the shell's: the registry of a REMOTE page is that
+ * server's registry, which usually has no entry for itself, so matching the
+ * display against this list cannot name it. The shell remembers the name of
+ * the entry the window was switched to and reports it with the state.
  */
 export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const t = useT();
@@ -67,32 +79,30 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   };
 
   useEffect(() => {
-    if (open) void load();
-  }, [open]);
+    void load();
+  }, []);
 
-  // The settings dialog saves into the same registry: keep an open popover in
-  // step instead of showing the list it was opened with.
+  // The settings dialog saves into the same registry: keep the list (and an
+  // open popover) in step instead of showing the servers of the last read.
   useEffect(() => {
-    if (!open) return;
     const reload = () => void load();
     globalThis.addEventListener(CONNECTIONS_UPDATED_EVENT, reload);
     return () =>
       globalThis.removeEventListener(CONNECTIONS_UPDATED_EVENT, reload);
-  }, [open]);
+  }, []);
 
   const selected = state === null
     ? null
     : displayedConnectionId(servers ?? [], state);
 
-  /** The current server's label: the registry entry's name, or the origin it
-   * is showing when the registry has no entry for it (a server reached from
-   * the splash, or one deleted while it was displayed). */
+  /** The current server's label: the name the shell was switched with, or —
+   * for a server this page's registry knows nothing about — its origin. */
   const currentLabel = (): string => {
     if (state === null) return t("common.loading");
     if (state.mode === "local") return t("chrome.connections.local");
     const entry = (servers ?? []).find((s) => s.id === selected);
     if (entry !== undefined) return connectionLabel(entry);
-    return state.url ?? t("chrome.connections.unknown");
+    return serverLabel(state.name, state.url);
   };
 
   const connect = (target: ConnectionEntry | "local") => {
@@ -101,10 +111,13 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
     const switching = target === "local"
       ? shellCall("connect-local")
       // The shell owns the navigation: passing the URL through the bridge
-      // keeps the token out of this page's own history.
+      // keeps the token out of this page's own history. The name travels
+      // with it because the page that loads next cannot look it up: a
+      // remote page's registry is that server's own.
       : shellCall("connect-remote", {
         url: target.url.trim(),
         token: target.token,
+        name: connectionLabel(target),
       });
     void switching.then(
       () => {

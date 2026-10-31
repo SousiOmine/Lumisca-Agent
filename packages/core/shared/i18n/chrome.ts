@@ -23,13 +23,6 @@ export const chrome = {
     ja: "ローカルサーバー",
     en: "Local server",
   },
-  /** What the picker's trigger says when the registry has no entry for the
-   * server the window is showing (reached from the startup screen, or the
-   * entry was deleted while displayed). */
-  "chrome.connections.unknown": {
-    ja: "登録外のサーバー",
-    en: "Unregistered server",
-  },
   "chrome.connections.current": {
     ja: "接続先: {name}",
     en: "Connected to: {name}",
@@ -290,14 +283,6 @@ export const chrome = {
     ja: "ワークスペースの新規作成",
     en: "Create workspace",
   },
-  "chrome.workspaceModal.server": {
-    ja: "接続先サーバー: {server}",
-    en: "Server: {server}",
-  },
-  "chrome.workspaceModal.localServer": {
-    ja: "ローカルサーバー",
-    en: "Local server",
-  },
   "chrome.workspaceModal.nameLabel": {
     ja: "ワークスペース名",
     en: "Workspace name",
@@ -336,10 +321,6 @@ export const chrome = {
   "chrome.folderBrowser.selectPrompt": {
     ja: "参照先フォルダーを選択してください",
     en: "Select a folder to browse",
-  },
-  "chrome.folderBrowser.selectPeerPrompt": {
-    ja: "「{peerName} ({peerId})」のフォルダーを選択してください",
-    en: 'Select a folder from "{peerName} ({peerId})"',
   },
   "chrome.folderBrowser.placesLabel": { ja: "場所", en: "Places" },
   "chrome.folderBrowser.place.home": { ja: "ホーム", en: "Home" },
@@ -388,11 +369,5 @@ export const chrome = {
   "chrome.folderBrowser.fileNotSelectable": {
     ja: "ファイルは選択できません",
     en: "Files cannot be selected",
-  },
-
-  // --- peer picker ---------------------------------------------------------
-  "chrome.peerPicker.local": {
-    ja: "ローカル（このPC）",
-    en: "Local (this PC)",
   },
 } satisfies Record<string, LocalizedText>;

@@ -1,14 +1,8 @@
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/http-status";
-import type { Workspace } from "@lumisca/core";
 import { errorMessage } from "@lumisca/core";
 import { AppError } from "./util.ts";
 import type { FederationClient } from "../federation.ts";
-
-/** The slice of the core these routes need (interface segregation). */
-export interface FederationApi {
-  listWorkspaces(): Workspace[];
-}
 
 /**
  * Federated (hub-and-spoke) API. The UI is served by the hub; everything
@@ -19,11 +13,16 @@ export interface FederationApi {
  * A single generic proxy route replaces one mirror endpoint per API
  * surface: the peer's own routes are authoritative (validation included),
  * so an endpoint added to `/api` needs no `/fed` counterpart.
+ *
+ * Workspaces are not merged here any more. Which machine a window works on
+ * is the desktop title bar's choice (`components/ConnectionPicker.tsx`),
+ * which displays one server at a time: a list mixing several machines'
+ * folder sets asked the user to pick a machine twice (title bar and the new
+ * session screen) and made one of the two answers wrong. Sessions still
+ * come from peers for the session list, so the peers' reachability is
+ * reported.
  */
-export function federationRoutes(
-  core: FederationApi,
-  fed: FederationClient,
-): Hono {
+export function federationRoutes(fed: FederationClient): Hono {
   const app = new Hono();
 
   const requirePeer = (c: Context) => {
@@ -38,59 +37,38 @@ export function federationRoutes(
     return peer;
   };
 
-  /** Merged workspace list: the hub's own plus every peer's, with the
-   * peer's reachability alongside. */
-  app.get("/fed/workspaces", async (c) => {
-    const local = core.listWorkspaces().map((ws) => ({
-      peerId: "",
-      peerName: "",
-      workspace: ws,
-    }));
-    const remote = await Promise.all(
+  /** Reachability of every registered peer, with the name and URL of its
+   * registry entry. A peer that does not answer is reported (`ok: false`)
+   * instead of being dropped: the session list skips it, and the settings
+   * screen is where it is repaired.
+   *
+   * The probe is the peer's `/api/health`, which is the same answer the
+   * desktop shell's connection check reads: a machine that answers it is
+   * the machine whose sessions this hub can list and proxy. */
+  app.get("/fed/peers", async (c) => {
+    const peers = await Promise.all(
       fed.peers().map(async (peer) => {
         try {
-          const res = await fed.request(peer, "GET", "/api/workspaces");
-          const list = await res.json() as Workspace[];
+          await fed.request(peer, "GET", "/api/health");
           return {
-            peerId: peer.id,
-            peerName: peer.name,
-            // The registered base URL: the picker's label for a registry
-            // entry that has no name (the field is free text).
-            peerUrl: peer.url,
-            workspaces: list,
+            id: peer.id,
+            name: peer.name,
+            url: peer.url,
             ok: true as const,
             error: undefined as string | undefined,
           };
         } catch (error) {
           return {
-            peerId: peer.id,
-            peerName: peer.name,
-            peerUrl: peer.url,
-            workspaces: [] as Workspace[],
+            id: peer.id,
+            name: peer.name,
+            url: peer.url,
             ok: false as const,
             error: errorMessage(error),
           };
         }
       }),
     );
-    const workspaces = [
-      ...local,
-      ...remote.flatMap((r) =>
-        r.workspaces.map((ws) => ({
-          peerId: r.peerId,
-          peerName: r.peerName,
-          workspace: ws,
-        }))
-      ),
-    ];
-    const peers = remote.map((r) => ({
-      id: r.peerId,
-      name: r.peerName,
-      url: r.peerUrl,
-      ok: r.ok,
-      error: r.error,
-    }));
-    return c.json({ workspaces, peers });
+    return c.json({ peers });
   });
 
   /** Generic per-peer proxy: any method, any path below `/fed/:peerId/`.

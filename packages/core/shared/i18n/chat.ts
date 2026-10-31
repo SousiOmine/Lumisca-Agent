@@ -105,10 +105,6 @@ export const chat = {
     ja: "該当するコマンドがありません",
     en: "No matching commands",
   },
-  "chat.composer.remoteDefault": {
-    ja: "接続先サーバーで設定されたデフォルトモデルを使用します",
-    en: "Using the default model set on the connected server",
-  },
   "chat.composer.modelSelect": { ja: "モデルを選択", en: "Select model" },
   "chat.composer.modelSwitchTitle": {
     ja: "モデル・推論強度の選択",
@@ -125,7 +121,6 @@ export const chat = {
   // --- new session ---------------------------------------------------------
   "chat.newSession.title": { ja: "新しいセッション", en: "New session" },
   "chat.newSession.workspace": { ja: "ワークスペース", en: "Workspace" },
-  "chat.newSession.peer": { ja: "接続先サーバー", en: "Server" },
   "chat.newSession.defaultModelError": {
     ja: "デフォルトのモデルを取得できませんでした:",
     en: "Could not fetch the default model:",

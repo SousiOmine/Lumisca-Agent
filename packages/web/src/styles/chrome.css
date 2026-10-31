@@ -105,6 +105,17 @@
   color: var(--text);
 }
 
+/* The trigger borrows the window buttons' look, but not their shape: it is
+ * as wide as the server's name (capped above), so the generic square width
+ * must not clamp it. `.titlebar-btn` declares `width: 46px` and the narrow /
+ * touch rules below repeat it with media queries the later block would win:
+ * the fixed width here is the one that holds in every viewport, which is why
+ * it carries a second class's specificity. (It once lost, and the title bar
+ * showed an icon with no name — the exact question the control answers.) */
+.titlebar-btn.connection-picker-trigger {
+  width: auto;
+}
+
 .connection-picker-label {
   min-width: 0;
   overflow: hidden;

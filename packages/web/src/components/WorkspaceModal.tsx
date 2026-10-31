@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/compat";
 import { IconPlus, IconTrash } from "@tabler/icons-preact";
-import { workspaceApi } from "../api.ts";
+import { api } from "../api.ts";
 import type { Workspace } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 import { FolderBrowser } from "./FolderBrowser.tsx";
@@ -11,25 +11,16 @@ import { useT } from "../i18n.ts";
 interface WorkspaceModalProps {
   /** Present → edit mode (rename / change folders / delete). */
   workspace?: Workspace;
-  /** Peer owning the workspace ("" = this server). Browsing, saving and
-   * deleting are proxied to that peer, so workspaces can be registered
-   * and edited on other machines. */
-  peerId: string;
-  /** Peer name for the folder-browser caption. */
-  peerName: string;
   onSaved: (ws: Workspace) => void;
   /** The App-owned delete flow (confirm + API + state). */
-  onDelete: (
-    fws: { peerId: string; peerName: string; workspace: Workspace },
-  ) => Promise<void>;
+  onDelete: (workspace: Workspace) => Promise<void>;
   onClose: () => void;
 }
 
 type View = { kind: "main" } | { kind: "browse" };
 
 export function WorkspaceModal(
-  { workspace, peerId, peerName, onSaved, onDelete, onClose }:
-    WorkspaceModalProps,
+  { workspace, onSaved, onDelete, onClose }: WorkspaceModalProps,
 ) {
   const editing = workspace !== undefined;
   const t = useT();
@@ -42,8 +33,6 @@ export function WorkspaceModal(
   // folder picker (which returns paths on this machine) is meaningful.
   const [nativePicker, setNativePicker] = useState(false);
   const [picking, setPicking] = useState(false);
-  // All API calls target the peer that owns the workspace.
-  const wsApi = workspaceApi(peerId);
 
   useEffect(() => {
     nativeFolderPickerAvailable().then(setNativePicker);
@@ -76,11 +65,11 @@ export function WorkspaceModal(
     }
   };
 
-  // The native OS picker returns paths on this machine, so it only applies
-  // to workspaces owned by the displayed local server; otherwise fall back
-  // to the in-app browser.
+  // The native OS picker returns paths on this machine; against a remote
+  // server those are not the server's paths, so the in-app browser is used
+  // there (the shell reports which server is displayed).
   const chooseFolder = () => {
-    if (nativePicker && peerId === "") {
+    if (nativePicker) {
       pickNative();
     } else {
       setView({ kind: "browse" });
@@ -93,11 +82,11 @@ export function WorkspaceModal(
     setError(undefined);
     try {
       const ws = editing
-        ? await wsApi.update(workspace!.id, {
+        ? await api.updateWorkspace(workspace!.id, {
           name: name.trim(),
           folders,
         })
-        : await wsApi.create(name.trim(), folders);
+        : await api.createWorkspace(name.trim(), folders);
       onSaved(ws);
     } catch (e) {
       setError(errorText(e));
@@ -111,7 +100,7 @@ export function WorkspaceModal(
     setBusy(true);
     setError(undefined);
     try {
-      await onDelete({ peerId, peerName, workspace });
+      await onDelete(workspace);
       onClose();
     } catch (e) {
       setError(errorText(e));
@@ -131,8 +120,6 @@ export function WorkspaceModal(
       {view.kind === "browse"
         ? (
           <FolderBrowser
-            peerId={peerId}
-            peerName={peerName}
             onAdd={addFolder}
             onBack={() => setView({ kind: "main" })}
           />
@@ -144,14 +131,6 @@ export function WorkspaceModal(
                 ? t("chrome.workspaceModal.editTitle")
                 : t("chrome.workspaceModal.createTitle")}
             </h2>
-
-            <p className="settings-note">
-              {t("chrome.workspaceModal.server", {
-                server: peerId === ""
-                  ? t("chrome.workspaceModal.localServer")
-                  : peerName,
-              })}
-            </p>
 
             <label>
               {t("chrome.workspaceModal.nameLabel")}

@@ -91,7 +91,6 @@ export function App({ initialData }: AppProps): ReactElement {
   } = useAppMode();
   const {
     workspaces,
-    peers,
     loadError,
     loaded: workspacesLoaded,
     handleWorkspaceChanged,
@@ -488,13 +487,12 @@ export function App({ initialData }: AppProps): ReactElement {
             <NewSessionView
               workspaces={workspaces}
               workspacesLoaded={workspacesLoaded}
-              peers={peers}
               input={draft.input}
               onInputChange={(input) => updateDraft(draftKey, { input })}
               images={draft.images}
               onImagesChange={(images) => updateDraft(draftKey, { images })}
-              onStart={async (fws, model, text, images, mode) => {
-                await startSession(fws, model, text, images, mode);
+              onStart={async (workspace, model, text, images, mode) => {
+                await startSession(workspace, model, text, images, mode);
                 // The draft tab is replaced by the new session's tab; its
                 // draft was sent, so discard it (kept on failure so the
                 // user can retry).

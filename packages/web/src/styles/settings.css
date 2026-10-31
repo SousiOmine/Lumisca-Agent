@@ -47,6 +47,20 @@
   text-align: left;
 }
 
+/* One registry entry in settings → 接続先サーバー: a summary row that opens
+ * its fields. The chevron turns like the other disclosure controls. */
+.setting-card-chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-faint);
+  transition: transform 120ms var(--lum-ease);
+}
+
+.setting-card-chevron.open {
+  transform: rotate(180deg);
+}
+
 /* ---- settings --------------------------------------------------------------- */
 
 .settings-note {

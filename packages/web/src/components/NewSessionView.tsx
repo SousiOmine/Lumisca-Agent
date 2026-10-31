@@ -2,20 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "preact/compat";
 import { IconArrowUp } from "@tabler/icons-preact";
 import { api } from "../api.ts";
 import type {
-  FederatedWorkspace,
   ModelInfo,
   ModePrompt,
-  PeerStatus,
   PendingImage,
   ThinkingLevel,
+  Workspace,
 } from "../types.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { useSkills } from "../hooks/useSkills.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { useT } from "../i18n.ts";
 import { errorText, setModelThinkingLevel } from "../providers.ts";
-import { peerLabel } from "../peers.ts";
-import { splitTabKey, tabKey } from "../tabs.ts";
 import {
   actionCommandFromText,
   buildSlashCommands,
@@ -29,7 +26,6 @@ import {
   type SlashCommand,
   type SlashCommandItem,
 } from "./Composer.tsx";
-import { PeerPicker } from "./PeerPicker.tsx";
 import { RecentSessionsList } from "./RecentSessionsList.tsx";
 import { useRecentSessions } from "../hooks/useRecentSessions.ts";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
@@ -47,13 +43,11 @@ interface DraftModel extends ComposerModel {
 }
 
 interface NewSessionViewProps {
-  workspaces: FederatedWorkspace[];
+  workspaces: Workspace[];
   /** Whether the workspace list has arrived (initial data counts as
    * loaded; a failed load counts too). While false a restored workspace
    * key is kept as-is and re-validated once the list lands. */
   workspacesLoaded: boolean;
-  /** Peers that did not answer the workspace list fetch. */
-  peers: PeerStatus[];
   /** Draft (unsent) composer content, owned by the App under the draft
    * tab key so it survives switching away and back. */
   input: string;
@@ -61,7 +55,7 @@ interface NewSessionViewProps {
   images: PendingImage[];
   onImagesChange: (images: PendingImage[]) => void;
   onStart: (
-    fws: FederatedWorkspace,
+    workspace: Workspace,
     model: ComposerModel | null,
     text: string,
     images: PendingImage[],
@@ -70,9 +64,9 @@ interface NewSessionViewProps {
      * a plain user message. */
     mode?: ModePrompt,
   ) => Promise<void>;
-  onWorkspaceChanged: (fws: FederatedWorkspace) => void;
+  onWorkspaceChanged: (workspace: Workspace) => void;
   /** The single delete flow owned by the App (confirm + API + state). */
-  onDeleteWorkspace: (fws: FederatedWorkspace) => Promise<void>;
+  onDeleteWorkspace: (workspace: Workspace) => Promise<void>;
   /** Reopen a closed session in a tab (recent sessions list). */
   onReopenSession: (key: string) => void;
   /** Open the provider settings from the model picker's "設定画面" link. */
@@ -90,17 +84,15 @@ interface NewSessionViewProps {
  * workspace). Never a real row; excluded from the regular picker list. */
 const CHAT_ENTRY_ID = "@chat";
 
-function chatEntry(peerId: string, name: string): FederatedWorkspace {
+/** The pinned "chat without a workspace" entry, shown first in the picker
+ * when no stored workspace applies. */
+function chatEntry(name: string): Workspace {
   return {
-    peerId,
-    peerName: "",
-    workspace: {
-      id: CHAT_ENTRY_ID,
-      name,
-      folders: [],
-      createdAt: 0,
-      chat: true,
-    },
+    id: CHAT_ENTRY_ID,
+    name,
+    folders: [],
+    createdAt: 0,
+    chat: true,
   };
 }
 
@@ -117,13 +109,13 @@ function loadLastWorkspaceKey(): string {
 }
 
 /** The draft session tab: pick workspace/model and start from the center.
- * Workspaces from every federated server appear here; picking one on
- * another machine runs the agent there (peer default model). */
+ * The workspaces are those of the server this window displays; another
+ * machine is a different view of the app, reached from the desktop title
+ * bar's connection picker (which navigates the window there). */
 export function NewSessionView(
   {
     workspaces,
     workspacesLoaded,
-    peers,
     input,
     onInputChange,
     images,
@@ -142,17 +134,13 @@ export function NewSessionView(
   /** Message lookup of the app language (the slash menu's labels are
    * catalogue entries). */
   const t = useT();
-  const [selectedPeerId, setSelectedPeerId] = useState(
-    () => splitTabKey(pendingWorkspaceKey.current ?? "").peerId,
-  );
-  const [workspaceKey, setWorkspaceKey] = useState(
+  const [workspaceId, setWorkspaceId] = useState(
     pendingWorkspaceKey.current ?? "",
   );
   const [model, setModel] = useState<DraftModel | null>(null);
   const [modalWorkspace, setModalWorkspace] = useState<
-    FederatedWorkspace | undefined
+    Workspace | undefined
   >(undefined);
-  const [modalPeerId, setModalPeerId] = useState("");
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -204,138 +192,65 @@ export function NewSessionView(
     }
   }, [settingsVersion]);
 
-  // Filter workspaces by the selected peer. The pinned chat entry ("simple
-  // chat" without a workspace) is a synthetic selection available for every
-  // peer. The server already hides chat workspaces from the list API; the
-  // flag filter here is defensive (e.g. against an older server), since
-  // chat rows are never user-manageable.
-  const filteredWorkspaces = workspaces.filter(
-    (w) => w.peerId === selectedPeerId,
-  );
-  const pickerWorkspaces = filteredWorkspaces.filter(
-    (w) => !w.workspace.chat,
-  );
-  // A peer is selectable when it is the local server ("") or it appears in
-  // the peer list (registered connections; unreachable but registered is
-  // still a real machine) or owns a workspace in the fetched list. A
-  // restored peer outside this set is a deleted connection: the chat entry
-  // for it is synthetic and must not make the restored key look valid.
-  const selectablePeer = (peerId: string): boolean =>
-    peerId === "" ||
-    peers.some((p) => p.id === peerId) ||
-    workspaces.some((w) => w.peerId === peerId);
-  const chatOption = selectablePeer(selectedPeerId)
-    ? chatEntry(selectedPeerId, t("chat.newSession.chatName"))
-    : undefined;
+  // The server already hides chat workspaces from the list API; the flag
+  // filter here is defensive (e.g. against an older server), since chat rows
+  // are never user-manageable.
+  const pickerWorkspaces = workspaces.filter((w) => !w.chat);
+  const chatOption = chatEntry(t("chat.newSession.chatName"));
+  const selectable = [chatOption, ...pickerWorkspaces];
+
+  // A draft cannot start without a model, and with no provider configured
+  // the server has none to offer: the field stays unset and the start button
+  // is disabled, instead of creating a session on a model that could not
+  // stream.
+  const noModelToStart = model === null && noDefaultModel;
 
   // Keep a valid selection when the workspace list changes (e.g. after a
   // delete); fall back to the chat entry when nothing else remains. A
-  // restored key (localStorage) is applied once the list has arrived: the
-  // key is kept verbatim while the list is still loading — empty arrays
-  // and "not loaded yet" are indistinguishable by length alone, so the
-  // explicit `workspacesLoaded` flag gates the validation. After the list
-  // lands (even with zero workspaces), an invalid restored key falls back
-  // to the first selectable option (the chat entry), never leaving the
-  // draft screen stuck on an unselectable workspace.
+  // restored id (localStorage) is applied once the list has arrived: it is
+  // kept verbatim while the list is still loading — an empty list and "not
+  // loaded yet" are indistinguishable by length alone, so the explicit
+  // `workspacesLoaded` flag gates the validation. After the list lands (even
+  // with zero workspaces), an unknown restored id falls back to the chat
+  // entry, never leaving the draft screen stuck on a workspace that is not
+  // there.
   useEffect(() => {
-    // A restored peer that no longer exists (deleted connection) is
-    // invalid once the list arrives: revert the selection to the local
-    // server. The workspace key below then falls back with it — the
-    // synthetic chat entry would otherwise keep the restored key valid
-    // and every start would fail on the deleted peer.
-    if (workspacesLoaded && !selectablePeer(selectedPeerId)) {
-      setSelectedPeerId("");
-      return;
-    }
-    const selectable = [
-      ...(chatOption ? [chatOption] : []),
-      ...pickerWorkspaces,
-    ];
-    const fallback = selectable[0]
-      ? tabKey(selectable[0].peerId, selectable[0].workspace.id)
-      : "";
-    setWorkspaceKey((current) => {
+    const fallback = CHAT_ENTRY_ID;
+    setWorkspaceId((current) => {
       const pending = pendingWorkspaceKey.current;
       if (pending !== null) {
         pendingWorkspaceKey.current = null;
         if (!workspacesLoaded) return pending;
-        return selectable.some(
-            (w) => tabKey(w.peerId, w.workspace.id) === pending,
-          )
-          ? pending
-          : fallback;
+        return selectable.some((w) => w.id === pending) ? pending : fallback;
       }
-      return selectable.some(
-          (w) => tabKey(w.peerId, w.workspace.id) === current,
-        )
-        ? current
-        : fallback;
+      return selectable.some((w) => w.id === current) ? current : fallback;
     });
-  }, [workspaces, workspacesLoaded, selectedPeerId, peers]);
-
-  // Reset workspace selection when the peer changes. Skipped on the first
-  // run so a restored peer (from the last workspace) is not overwritten.
-  const peerChanged = useRef(false);
-  useEffect(() => {
-    if (!peerChanged.current) {
-      peerChanged.current = true;
-      return;
-    }
-    const selectable = [
-      ...(chatOption ? [chatOption] : []),
-      ...pickerWorkspaces,
-    ];
-    setWorkspaceKey(
-      selectable[0]
-        ? tabKey(
-          selectable[0].peerId,
-          selectable[0].workspace.id,
-        )
-        : "",
-    );
-  }, [selectedPeerId]);
+  }, [workspaces, workspacesLoaded]);
 
   // Remember the last selected workspace so it can be restored on the next
   // visit to the new session screen (after a restart or tab switch).
   useEffect(() => {
     try {
-      if (workspaceKey) {
-        localStorage.setItem(LAST_WORKSPACE_KEY, workspaceKey);
+      if (workspaceId) {
+        localStorage.setItem(LAST_WORKSPACE_KEY, workspaceId);
       } else {
         localStorage.removeItem(LAST_WORKSPACE_KEY);
       }
     } catch {
       // ignore storage failures
     }
-  }, [workspaceKey]);
+  }, [workspaceId]);
 
-  const selectedWorkspace = [
-    ...(chatOption ? [chatOption] : []),
-    ...pickerWorkspaces,
-  ].find(
-    (w) => tabKey(w.peerId, w.workspace.id) === workspaceKey,
-  );
-  // Sessions on another server are created with that server's default
-  // model, so the model picker is hidden for them.
-  const remoteWorkspace = (selectedWorkspace?.peerId ?? "") !== "";
-  // A local draft cannot start without a model, and with no provider
-  // configured the server has none to offer: the field stays unset and the
-  // start button is disabled, instead of creating a session on a model
-  // that could not stream. Remote drafts resolve the peer's own default
-  // model, so they are not judged here.
-  const noModelToStart = !remoteWorkspace && model === null && noDefaultModel;
+  const selectedWorkspace = selectable.find((w) => w.id === workspaceId);
 
   // Build the slash commands list including the /skill and /prompt submenus.
   // In chat mode only skills, actions and saved prompts are shown (agent
   // modes need a workspace).
-  const isChat = selectedWorkspace?.workspace.chat ?? false;
-  // The skills of the selected workspace (the `/skill` palette), fetched
-  // from the server that owns it; a chat draft asks for a chat session's
-  // skills (global and built-in only), exactly like the session it starts.
-  const { skills } = useSkills(
-    selectedWorkspace?.peerId ?? "",
-    isChat ? undefined : selectedWorkspace?.workspace.id,
-  );
+  const isChat = selectedWorkspace?.chat ?? false;
+  // The skills of the selected workspace (the `/skill` palette); a chat
+  // draft asks for a chat session's skills (global and built-in only),
+  // exactly like the session it starts.
+  const { skills } = useSkills("", isChat ? undefined : selectedWorkspace?.id);
   const allSlashCommands = useMemo<SlashCommand[]>(
     () => buildSlashCommands(savedPrompts, isChat, skills, t),
     [isChat, savedPrompts, skills, t],
@@ -356,7 +271,7 @@ export function NewSessionView(
     let trimmed = (message ?? input).trim();
     if (
       (!trimmed && images.length === 0) ||
-      !workspaceKey || !selectedWorkspace || busy || noModelToStart
+      !selectedWorkspace || busy || noModelToStart
     ) {
       return;
     }
@@ -398,17 +313,17 @@ export function NewSessionView(
     }
   };
 
-  const deleteWorkspace = async (fws: FederatedWorkspace) => {
+  const deleteWorkspace = async (workspace: Workspace) => {
     setError(undefined);
     try {
-      await onDeleteWorkspace(fws);
+      await onDeleteWorkspace(workspace);
     } catch (e) {
       setError(errorText(e));
     }
   };
 
   /** Set the thinking level for the draft's model (a per-model setting on
-   * this server; the draft is always local). */
+   * this server). */
   const changeThinkingLevel = async (level: ThinkingLevel) => {
     if (!model) return;
     try {
@@ -441,28 +356,17 @@ export function NewSessionView(
                 <WorkspacePicker
                   workspaces={pickerWorkspaces}
                   chat={chatOption}
-                  value={workspaceKey}
-                  onChange={setWorkspaceKey}
-                  onEdit={(fws) => {
-                    setModalWorkspace(fws);
-                    setModalPeerId(fws.peerId);
+                  value={workspaceId}
+                  onChange={setWorkspaceId}
+                  onEdit={(ws) => {
+                    setModalWorkspace(ws);
                     setShowWorkspaceModal(true);
                   }}
                   onDelete={deleteWorkspace}
                   onCreate={() => {
                     setModalWorkspace(undefined);
-                    setModalPeerId(selectedPeerId);
                     setShowWorkspaceModal(true);
                   }}
-                />
-              </label>
-              <label className="new-session-select">
-                <span>{t("chat.newSession.peer")}</span>
-                <PeerPicker
-                  peers={peers}
-                  workspaces={workspaces}
-                  value={selectedPeerId}
-                  onChange={setSelectedPeerId}
                 />
               </label>
             </div>
@@ -492,7 +396,6 @@ export function NewSessionView(
               autoFocus
               large
               model={model}
-              modelBar={remoteWorkspace ? "remote-default" : "picker"}
               onModelSelect={(provider, modelId, info?: ModelInfo) => {
                 modelTouched.current = true;
                 setModel({
@@ -512,13 +415,13 @@ export function NewSessionView(
               submitIconOnly
               submitDisabled={busy || noModelToStart ||
                 (!input.trim() && images.length === 0) ||
-                !workspaceKey}
+                !selectedWorkspace}
               onSubmit={() => void submit()}
               onOpenSettings={onOpenSettings}
-              mentionWorkspaceId={!selectedWorkspace?.workspace.chat
-                ? selectedWorkspace?.workspace.id
-                : undefined}
-              mentionPeerId={selectedWorkspace?.peerId}
+              mentionWorkspaceId={selectedWorkspace === undefined ||
+                  selectedWorkspace.chat
+                ? undefined
+                : selectedWorkspace.id}
               slashCommands={allSlashCommands.length > 0
                 ? allSlashCommands
                 : undefined}
@@ -547,21 +450,10 @@ export function NewSessionView(
       </div>
       {showWorkspaceModal && (
         <WorkspaceModal
-          workspace={modalWorkspace?.workspace}
-          peerId={modalPeerId}
-          peerName={modalWorkspace?.peerName ||
-            peerLabel(
-              peers.find((p) => p.id === modalPeerId),
-              modalPeerId,
-            )}
+          workspace={modalWorkspace}
           onSaved={(ws) => {
-            const fws = {
-              peerId: modalPeerId,
-              peerName: modalWorkspace?.peerName ?? "",
-              workspace: ws,
-            };
-            onWorkspaceChanged(fws);
-            setWorkspaceKey(tabKey(modalPeerId, ws.id));
+            onWorkspaceChanged(ws);
+            setWorkspaceId(ws.id);
             setShowWorkspaceModal(false);
           }}
           onDelete={deleteWorkspace}

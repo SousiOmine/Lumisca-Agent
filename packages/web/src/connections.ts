@@ -1,5 +1,17 @@
 import type { ConnectionEntry } from "./types.ts";
 
+/** Custom event dispatched after the connection registry (settings →
+ * 接続先サーバー) is mutated, so the title bar's picker shows the new list
+ * without a page reload. The registry belongs to this server alone (the
+ * workspaces of the displayed server do not come from it), so nothing else
+ * listens. */
+export const CONNECTIONS_UPDATED_EVENT = "lumisca:connections-updated";
+
+/** Announce a connection registry change (save / delete). */
+export function notifyConnectionsUpdated(): void {
+  globalThis.dispatchEvent(new CustomEvent(CONNECTIONS_UPDATED_EVENT));
+}
+
 /**
  * The connection registry, as the UI reads it: which server a registry entry
  * points at, what to call it, and which entry is the one being displayed.
@@ -85,4 +97,71 @@ export function connectionLabel(entry: ConnectionEntry): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * What to call the server the window is showing.
+ *
+ * The name comes from the shell: a remote page's own registry is that
+ * server's registry, so it usually does not contain an entry for itself and
+ * matching the display against the list (`displayedConnectionId`) finds
+ * nothing. The shell remembers the name of the entry the window was switched
+ * with, which is the only place that knows it.
+ *
+ * Without a recorded name the URL's origin step in (`connectionLabel`). The
+ * page URL is never shown: it carries the auth token in its query.
+ */
+export function serverLabel(
+  name: string | null | undefined,
+  url: string | null | undefined,
+): string {
+  const trimmed = (name ?? "").trim();
+  if (trimmed !== "") return trimmed;
+  return connectionLabel({ id: "", name: "", url: url ?? "", token: "" });
+}
+
+/**
+ * The name to fill in for a server whose name field is still empty, from the
+ * URL being typed: its host (with the port when one is spelled out), the part
+ * of an address a person recognises. `null` while the URL is not yet
+ * something to connect to — the name field stays empty instead of collecting
+ * a fragment of a half-typed address.
+ *
+ * The caller keeps applying this on every keystroke until the name is edited
+ * by hand, so an address typed one character at a time ends up with its final
+ * host rather than the first one that parsed.
+ */
+export function suggestConnectionName(url: string): string | null {
+  if (!isSupportedUrl(url)) return null;
+  try {
+    const { host } = new URL(url.trim());
+    return host === "" ? null : host;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Apply a URL typed into a registry entry, deriving the name from it while
+ * the name is still the address's own.
+ *
+ * The address is the required field and the name the optional one, so the
+ * ordinary order is address first; a list of nameless rows, and a title bar
+ * with nothing to call the current server, is what the derivation avoids. A
+ * name the user typed is never overwritten. A name derived from the previous
+ * address keeps following it — otherwise the first fragment that parsed
+ * (`https://h` → `h`) would count as typed and stick, and an address entered
+ * one character at a time would end with the wrong host.
+ */
+export function withUrl(entry: ConnectionEntry, url: string): ConnectionEntry {
+  const name = entry.name.trim();
+  const previous = suggestConnectionName(entry.url);
+  const followsAddress = name === "" ||
+    (previous !== null && name === previous);
+  return followsAddress
+    ? { ...entry, url, name: suggestConnectionName(url) ?? "" }
+    : {
+      ...entry,
+      url,
+    };
 }

@@ -1,14 +1,10 @@
 import type {
-  FederatedWorkspace,
-  FsBrowse,
-  FsPlace,
   ModelInfo,
   PeerStatus,
   ProviderInfo,
   SessionInfo,
   SkillInfo,
   ThinkingLevel,
-  Workspace,
   WorkspaceFileEntry,
 } from "./types.ts";
 import { fedRequest, request } from "./api-client.ts";
@@ -19,41 +15,18 @@ import { sessionRoutes } from "./api-local.ts";
  * local `api.*` method through the single `/api/fed/:peerId` proxy (paths
  * are the "/api"-relative form with the peer id added by fedRequest), and
  * the session-scoped ones are the shared table (see sessionRoutes), which
- * takes the peer id as its first argument for exactly that reason. */
+ * takes the peer id as its first argument for exactly that reason.
+ *
+ * Workspaces are not here: a workspace is the folder set of the server the
+ * window displays, and the desktop switches servers from the title bar
+ * (`components/ConnectionPicker.tsx`) instead of mixing several machines'
+ * workspaces into one list. Sessions still travel: a session that already
+ * exists on a peer is reopened from the session list and runs there. */
 export const fed = {
-  /** Merged workspace list (hub + peers) with peer reachability. */
-  workspaces: () =>
-    request<{ workspaces: FederatedWorkspace[]; peers: PeerStatus[] }>(
-      "/api/fed/workspaces",
-    ),
-  createWorkspace: (peerId: string, name: string, folders: string[]) =>
-    fedRequest<Workspace>(peerId, "/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name, folders }),
-    }),
-  updateWorkspace: (
-    peerId: string,
-    id: string,
-    input: { name?: string; folders?: string[] },
-  ) =>
-    fedRequest<Workspace>(peerId, `/workspaces/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      body: JSON.stringify(input),
-    }),
-  deleteWorkspace: (peerId: string, id: string) =>
-    fedRequest<{ ok: boolean }>(
-      peerId,
-      `/workspaces/${encodeURIComponent(id)}`,
-      { method: "DELETE" },
-    ),
-  /** A peer's folder-picker places (the sidebar: its user folders plus its
-   * filesystem roots). */
-  fsPlaces: (peerId: string) => fedRequest<FsPlace[]>(peerId, "/fs/places"),
-  fsBrowse: (peerId: string, path: string) =>
-    fedRequest<FsBrowse>(
-      peerId,
-      `/fs/browse?path=${encodeURIComponent(path)}`,
-    ),
+  /** Peer reachability: which registered machines answer, and under what
+   * name. The session list labels its rows with them; a peer that does not
+   * answer contributes no sessions. */
+  peers: () => request<{ peers: PeerStatus[] }>("/api/fed/peers"),
   workspaceFiles: (peerId: string, workspaceId: string, query: string) =>
     fedRequest<{ entries: WorkspaceFileEntry[] }>(
       peerId,
@@ -70,14 +43,6 @@ export const fed = {
         ? "/skills"
         : `/skills?workspaceId=${encodeURIComponent(workspaceId)}`,
     ),
-  createSession: (peerId: string, input: {
-    workspaceId?: string;
-    name?: string;
-  }) =>
-    fedRequest<SessionInfo>(peerId, "/sessions", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
   /** All sessions of a peer, newest first (for the recent sessions list). */
   listSessions: (peerId: string) =>
     fedRequest<SessionInfo[]>(peerId, "/sessions"),

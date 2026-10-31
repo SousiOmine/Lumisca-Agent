@@ -20,6 +20,17 @@ pub(crate) struct SavedConnection {
     /// part of the connection.
     pub(crate) url: String,
     pub(crate) token: String,
+    /// What to call this server in the title bar: the name of the registry
+    /// entry it was chosen from, or its host when that entry has none.
+    ///
+    /// The shell keeps it because the page cannot: a remote page's
+    /// connection registry is that server's own, which usually has no entry
+    /// for itself, so the displayed server cannot be looked up in the list
+    /// the window shows. Absent for a connection made from the startup
+    /// screen before this field existed — the picker falls back to the URL's
+    /// host.
+    #[serde(default)]
+    pub(crate) name: Option<String>,
 }
 
 /// Shell preferences.
@@ -128,6 +139,7 @@ mod tests {
             last_remote: Some(SavedConnection {
                 url: "https://host.tailnet.ts.net".into(),
                 token: "abc".into(),
+                name: Some("自宅".into()),
             }),
         };
         save_to(&file.0, &settings).unwrap();
@@ -145,6 +157,27 @@ mod tests {
                 auto_update: false,
                 last_remote: None,
             }
+        );
+    }
+
+    /// A file written before the name was remembered still loads: the
+    /// title bar falls back to the URL's host, and the token beside it must
+    /// not be lost.
+    #[test]
+    fn a_connection_without_a_name_keeps_the_rest() {
+        let file = TempFile::new("nameless");
+        std::fs::write(
+            &file.0,
+            format!(r#"{{"autoUpdate":true,"lastRemote":{REMOTE}}}"#),
+        )
+        .unwrap();
+        assert_eq!(
+            load_from(&file.0).last_remote,
+            Some(SavedConnection {
+                url: "https://host.tailnet.ts.net".into(),
+                token: "abc".into(),
+                name: None,
+            })
         );
     }
 
@@ -171,6 +204,7 @@ mod tests {
             Some(SavedConnection {
                 url: "https://host.tailnet.ts.net".into(),
                 token: "abc".into(),
+                name: None,
             })
         );
     }

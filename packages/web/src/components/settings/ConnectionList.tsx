@@ -1,15 +1,21 @@
 import { useEffect, useState } from "preact/compat";
 import type { CSSProperties } from "preact/compat";
-import { IconPlus, IconTrash } from "@tabler/icons-preact";
+import { IconChevronDown, IconPlus, IconTrash } from "@tabler/icons-preact";
 import type { ConnectionEntry } from "../../types.ts";
 import { api } from "../../api.ts";
 import { shellAvailable, shellCall, type ShellState } from "../../shell.ts";
 import { errorText } from "../../providers.ts";
-import { notifyConnectionsUpdated } from "../../hooks/useWorkspaces.ts";
+import {
+  connectionLabel,
+  isSupportedUrl,
+  notifyConnectionsUpdated,
+  pageUrl,
+  serverLabel,
+  withUrl,
+} from "../../connections.ts";
 import { Field } from "../Field.tsx";
 import { useT } from "../../i18n.ts";
 import { confirmAction } from "../../confirm.ts";
-import { isSupportedUrl, pageUrl } from "../../connections.ts";
 
 const ACTIVE_TAG: CSSProperties = {
   fontSize: 11,
@@ -23,13 +29,21 @@ const ACTIVE_TAG: CSSProperties = {
 /** Settings → 接続先サーバー. This list is the federation peer registry:
  * it lives in THIS server's database and is shared by web and desktop
  * clients alike. The desktop shell bridge only handles the local server
- * and UI switching; everything else goes through the same API. */
+ * and UI switching; everything else goes through the same API.
+ *
+ * Each entry is a collapsed row (its name, the address, and the actions that
+ * switch the window to it) that expands into the fields. Saving folds it
+ * back: the fields are a form, and a form that stays open after it is
+ * submitted reads as "nothing happened". A server just added opens expanded
+ * — it has no name to show yet, so a collapsed row would be an empty one. */
 export function ConnectionList() {
   const t = useT();
   /** null = probing the shell bridge. */
   const [desktop, setDesktop] = useState<boolean | null>(null);
   const [state, setState] = useState<ShellState | null>(null);
   const [servers, setServers] = useState<ConnectionEntry[]>([]);
+  /** Ids whose fields are open. Everything else shows its summary row. */
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +81,15 @@ export function ConnectionList() {
     }
   };
 
+  /** Open or close one entry's fields. */
+  const setExpandedId = (id: string, open: boolean) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
   const connectLocal = () =>
     run(async () => {
       await shellCall("connect-local");
@@ -80,10 +103,13 @@ export function ConnectionList() {
         throw new Error(t("settings.connection.badUrl"));
       }
       if (desktop) {
-        // The desktop shell switches the whole WebView.
+        // The shell switches the whole WebView, remembering the entry's
+        // name: a remote page's registry is that server's own, so its
+        // title bar cannot look this name up again.
         await shellCall("connect-remote", {
           url,
           token: server.token,
+          name: connectionLabel(server),
         });
       } else {
         // Browser: navigating away IS the switch.
@@ -98,7 +124,9 @@ export function ConnectionList() {
         : [...servers, server];
       await api.putConnections(next);
       setServers(next);
-      // The new/renamed peer must show up in the picker right away.
+      // Saved: the fields fold back to the row they describe.
+      setExpandedId(server.id, false);
+      // The new/renamed entry must show up in the title bar's picker.
       notifyConnectionsUpdated();
     });
 
@@ -108,6 +136,7 @@ export function ConnectionList() {
       const next = servers.filter((s) => s.id !== id);
       await api.putConnections(next);
       setServers(next);
+      setExpandedId(id, false);
       notifyConnectionsUpdated();
     });
 
@@ -116,11 +145,12 @@ export function ConnectionList() {
       prev.map((s) => (s.id === id ? { ...s, ...patch } : s))
     );
 
-  const add = () =>
-    setServers((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), name: "", url: "", token: "" },
-    ]);
+  /** Add an empty entry and open its fields: it has nothing to summarise. */
+  const add = () => {
+    const id = crypto.randomUUID();
+    setServers((prev) => [...prev, { id, name: "", url: "", token: "" }]);
+    setExpandedId(id, true);
+  };
 
   /** Browser-mode reachability probe: no-cors resolves when the server
    * answers at all (token auth would answer 401), rejects on network
@@ -174,7 +204,7 @@ export function ConnectionList() {
             {desktop
               ? state?.mode === "remote"
                 ? `${t("settings.connection.currentDisplay")} ${
-                  state.url ?? ""
+                  serverLabel(state.name, state.url)
                 }`
                 : `${t("settings.connection.currentDisplay")} ${
                   t("settings.connection.localServer")
@@ -219,6 +249,9 @@ export function ConnectionList() {
               key={server.id}
               server={server}
               busy={busy}
+              expanded={expanded.has(server.id)}
+              onToggle={() =>
+                setExpandedId(server.id, !expanded.has(server.id))}
               onProbe={desktop
                 ? (url, token) => bridgeTest(url, token)
                 : (url) => probe(url)}
@@ -251,6 +284,8 @@ export function ConnectionList() {
 function ServerCard({
   server,
   busy,
+  expanded,
+  onToggle,
   onProbe,
   onChange,
   onConnect,
@@ -259,6 +294,8 @@ function ServerCard({
 }: {
   server: ConnectionEntry;
   busy: boolean;
+  expanded: boolean;
+  onToggle: () => void;
   onProbe: (
     url: string,
     token: string,
@@ -294,6 +331,10 @@ function ServerCard({
     }
   };
 
+  const title = server.name.trim() !== "" || server.url.trim() !== ""
+    ? connectionLabel(server)
+    : t("settings.connection.unnamed");
+
   return (
     <div
       style={{
@@ -305,40 +346,39 @@ function ServerCard({
         borderRadius: "var(--radius)",
       }}
     >
-      <span style={{ fontWeight: 600 }}>
-        {server.name || t("settings.connection.unnamed")}
-      </span>
-      <Field label={t("settings.connection.serverNameLabel")}>
-        <input
-          value={server.name}
-          onChange={(e) => onChange({ name: e.currentTarget.value })}
-          placeholder={t("settings.connection.serverNamePlaceholder")}
-        />
-      </Field>
-      <Field label="URL">
-        <input
-          value={server.url}
-          onChange={(e) => onChange({ url: e.currentTarget.value })}
-          placeholder="https://host.tailnet.ts.net"
-          spellcheck={false}
-        />
-      </Field>
-      <Field label={t("settings.connection.tokenLabel")}>
-        <input
-          type="password"
-          value={server.token}
-          onChange={(e) => onChange({ token: e.currentTarget.value })}
-        />
-      </Field>
-      {result && (
-        <p
-          className={result.ok ? undefined : "error-text"}
-          style={result.ok ? { color: "var(--ok)", fontSize: 12.5 } : undefined}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <button
+          type="button"
+          className="btn setting-card-open"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          title={expanded
+            ? t("settings.connection.foldEntry")
+            : t("settings.connection.editEntry")}
         >
-          {result.text}
-        </p>
-      )}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontWeight: 600 }}>{title}</span>
+            {server.url.trim() !== "" && server.name.trim() !== "" && (
+              <span
+                className="settings-note"
+                style={{
+                  display: "block",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={server.url}
+              >
+                {server.url.trim()}
+              </span>
+            )}
+          </span>
+          <span
+            className={`setting-card-chevron${expanded ? " open" : ""}`}
+          >
+            <IconChevronDown size={14} />
+          </span>
+        </button>
         <button
           type="button"
           className="btn primary"
@@ -347,31 +387,72 @@ function ServerCard({
         >
           {t("settings.connection.view")}
         </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={busy || testing}
-          onClick={test}
-        >
-          {t("settings.connection.test")}
-        </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={busy || testing}
-          onClick={onSave}
-        >
-          {t("common.save")}
-        </button>
-        <button
-          type="button"
-          className="btn danger"
-          disabled={busy || testing}
-          onClick={onDelete}
-        >
-          <IconTrash size={14} />
-        </button>
       </div>
+
+      {expanded && (
+        <>
+          <Field label={t("settings.connection.serverNameLabel")}>
+            <input
+              value={server.name}
+              onChange={(e) => onChange({ name: e.currentTarget.value })}
+              placeholder={t("settings.connection.serverNamePlaceholder")}
+            />
+          </Field>
+          <Field label="URL">
+            <input
+              value={server.url}
+              onChange={(e) => onChange(withUrl(server, e.currentTarget.value))}
+              placeholder="https://host.tailnet.ts.net"
+              spellcheck={false}
+            />
+          </Field>
+          <Field label={t("settings.connection.tokenLabel")}>
+            <input
+              type="password"
+              value={server.token}
+              onChange={(e) => onChange({ token: e.currentTarget.value })}
+            />
+          </Field>
+          {result && (
+            <p
+              className={result.ok ? undefined : "error-text"}
+              style={result.ok
+                ? { color: "var(--ok)", fontSize: 12.5 }
+                : undefined}
+            >
+              {result.text}
+            </p>
+          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy || testing}
+              onClick={test}
+            >
+              {t("settings.connection.test")}
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={busy || testing || server.url.trim() === ""}
+              onClick={onSave}
+            >
+              {t("common.save")}
+            </button>
+            <button
+              type="button"
+              className="btn danger"
+              disabled={busy || testing}
+              onClick={onDelete}
+              title={t("common.delete")}
+              aria-label={t("common.delete")}
+            >
+              <IconTrash size={14} />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

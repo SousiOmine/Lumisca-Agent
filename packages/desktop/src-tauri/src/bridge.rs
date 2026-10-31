@@ -42,6 +42,12 @@ struct ConnectionState {
     mode: String,
     /// Page URL of the current display, if known.
     url: Option<String>,
+    /// What to call the displayed server (the name of the registry entry it
+    /// was switched with), or null when there is none to show: the local
+    /// server, or a remote reached without a name of its own. The page
+    /// cannot answer this — a remote page's registry is that server's own,
+    /// which usually has no entry for itself.
+    name: Option<String>,
     /// What the shell is doing with the connection: "starting" (local
     /// server booting), "connecting" (probing the remembered remote
     /// server), "ready", "error" (local start failed),
@@ -63,7 +69,7 @@ fn current_connection_token(app: &AppHandle) -> Option<String> {
         .last_remote
         .lock_recover()
         .as_ref()
-        .map(|(_, t)| t.clone());
+        .map(|conn| conn.token.clone());
     if remote.is_some() {
         return remote;
     }
@@ -125,12 +131,9 @@ pub(crate) fn handle_shell_request(
             } else {
                 "local"
             };
+            let remote = state.last_remote.lock_recover().clone();
             let url = if mode == "remote" {
-                state
-                    .last_remote
-                    .lock_recover()
-                    .as_ref()
-                    .map(|(u, t)| page_url(u, t))
+                remote.as_ref().map(|conn| page_url(&conn.url, &conn.token))
             } else {
                 state
                     .local
@@ -146,9 +149,11 @@ pub(crate) fn handle_shell_request(
             // is read from memory rather than from the settings file on
             // every poll.
             let saved = state.remembered.lock_recover().is_some();
+            let name = remote.as_ref().and_then(|conn| conn.name.clone());
             let state = ConnectionState {
                 mode: mode.to_string(),
                 url,
+                name,
                 status: startup.status.clone(),
                 error: startup.error.clone(),
                 saved,
@@ -163,7 +168,14 @@ pub(crate) fn handle_shell_request(
                 (Some(url), token) => (url, token.unwrap_or_default()),
                 _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
             };
-            let conn = SavedConnection { url, token };
+            // `name` is the registry entry's label (its name, or the host of
+            // a nameless entry). It is kept with the connection so the title
+            // bar can name the server after the page is loaded.
+            let conn = SavedConnection {
+                url,
+                token,
+                name: get("name"),
+            };
             match connection::connect_remote(app, &conn) {
                 Ok(page) => bridge_json(
                     StatusCode::OK,

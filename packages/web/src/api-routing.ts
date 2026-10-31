@@ -27,38 +27,19 @@ export function sessionApi(key: string) {
   };
 }
 
-/** Workspace CRUD + filesystem browsing routed to the peer that owns the
- * workspace ("" = this server). */
-export function workspaceApi(peerId: string) {
+/** Workspace CRUD + filesystem browsing of this server. A workspace is the
+ * folder set of the machine the window displays, and the desktop switches
+ * machines by navigating to another server (the title bar's connection
+ * picker), so these calls never target a peer. */
+export function workspaceApi() {
   return {
-    create: peerRouted(
-      peerId,
-      (name: string, folders: string[]) => api.createWorkspace(name, folders),
-      (p, name: string, folders: string[]) =>
-        fed.createWorkspace(p, name, folders),
-    ),
-    update: peerRouted(
-      peerId,
-      (id: string, input: { name?: string; folders?: string[] }) =>
-        api.updateWorkspace(id, input),
-      (p, id: string, input: { name?: string; folders?: string[] }) =>
-        fed.updateWorkspace(p, id, input),
-    ),
-    delete: peerRouted(
-      peerId,
-      (id: string) => api.deleteWorkspace(id),
-      (p, id: string) => fed.deleteWorkspace(p, id),
-    ),
-    fsPlaces: peerRouted(
-      peerId,
-      () => api.fsPlaces(),
-      (p) => fed.fsPlaces(p),
-    ),
-    fsBrowse: peerRouted(
-      peerId,
-      (path: string) => api.fsBrowse(path),
-      (p, path: string) => fed.fsBrowse(p, path),
-    ),
+    create: (name: string, folders: string[]) =>
+      api.createWorkspace(name, folders),
+    update: (id: string, input: { name?: string; folders?: string[] }) =>
+      api.updateWorkspace(id, input),
+    delete: (id: string) => api.deleteWorkspace(id),
+    fsPlaces: () => api.fsPlaces(),
+    fsBrowse: (path: string) => api.fsBrowse(path),
   };
 }
 

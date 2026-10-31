@@ -1,57 +1,37 @@
-import { useCallback, useEffect, useState } from "preact/compat";
-import { fed, workspaceApi } from "../api.ts";
+import { useCallback, useState } from "preact/compat";
+import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
 import { useT } from "../i18n.ts";
 import { useAsyncEffect } from "./useAsync.ts";
-import type { FederatedWorkspace, InitialData, PeerStatus } from "../types.ts";
+import type { InitialData, Workspace } from "../types.ts";
 import { confirmAction } from "../confirm.ts";
 
-/** Custom event dispatched after the connection registry (settings →
- * 接続先サーバー) is mutated, so the federated list is re-read without a
- * page reload: both the peer picker and the workspace list come from it. */
-export const CONNECTIONS_UPDATED_EVENT = "lumisca:connections-updated";
-
-/** Announce a connection registry change (save / delete). */
-export function notifyConnectionsUpdated(): void {
-  globalThis.dispatchEvent(new CustomEvent(CONNECTIONS_UPDATED_EVENT));
-}
-
-/** Workspace + peer state: the federated workspace list with peer
- * reachability, plus the shared create/update/delete flows. `loaded` tells
- * whether that list has arrived (a failed load counts too — the list is
- * then known to be empty/unusable, and callers must not wait for it
- * forever). The bootstrap data is only a preview of THIS server's
- * workspaces, so it never stands in for the load: the peers it does not
- * know about are exactly what the picker offers. */
+/** Workspace state of the server this window displays: the list, plus the
+ * shared create/update/delete flows. `loaded` tells whether that list has
+ * arrived (a failed load counts too — the list is then known to be
+ * unusable, and callers must not wait for it forever).
+ *
+ * The list is this server's own. Switching machines is the desktop title
+ * bar's job (`components/ConnectionPicker.tsx`), which navigates the window
+ * to another server; the page then loads that server's workspaces. The
+ * bootstrap data is a preview of the same list, so it seeds the first paint
+ * and the API read replaces it. */
 export function useWorkspaces(initialData?: InitialData) {
   /** Message lookup of the app language (the delete confirmation is a
    * catalogue string). */
   const t = useT();
-  const [workspaces, setWorkspaces] = useState<FederatedWorkspace[]>(
-    initialData?.workspaces.map((ws) => ({
-      peerId: "",
-      peerName: "",
-      workspace: ws,
-    })) ?? [],
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(
+    initialData?.workspaces ?? [],
   );
-  const [peers, setPeers] = useState<PeerStatus[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  /** Bumped to re-read the list (bootstrap and registry changes both land
-   * here). */
-  const [nonce, setNonce] = useState(0);
-
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
 
   useAsyncEffect(async (isStale) => {
     setLoadError(null);
     try {
-      // The federated list: this server's workspaces plus every peer's,
-      // with peer reachability for the picker.
-      const result = await fed.workspaces();
+      const list = await api.listWorkspaces();
       if (isStale()) return;
-      setWorkspaces(result.workspaces);
-      setPeers(result.peers);
+      setWorkspaces(list);
     } catch (error) {
       // A stale failure must not overwrite the newer list's verdict.
       if (!isStale()) setLoadError(errorText(error));
@@ -60,56 +40,37 @@ export function useWorkspaces(initialData?: InitialData) {
       // for it would block the draft screen's fallback forever.
       if (!isStale()) setLoaded(true);
     }
-  }, [nonce]);
-
-  useEffect(() => {
-    globalThis.addEventListener(CONNECTIONS_UPDATED_EVENT, reload);
-    return () => {
-      globalThis.removeEventListener(CONNECTIONS_UPDATED_EVENT, reload);
-    };
-  }, [reload]);
-
-  /** Insert or replace a workspace after it was created/edited. */
-  const handleWorkspaceChanged = useCallback((fws: FederatedWorkspace) => {
-    setWorkspaces((prev) => {
-      const exists = prev.some(
-        (w) => w.peerId === fws.peerId && w.workspace.id === fws.workspace.id,
-      );
-      if (exists) {
-        return prev.map((w) =>
-          w.peerId === fws.peerId && w.workspace.id === fws.workspace.id
-            ? fws
-            : w
-        );
-      }
-      return [fws, ...prev];
-    });
   }, []);
 
-  const handleWorkspaceDeleted = useCallback((peerId: string, id: string) => {
+  /** Insert or replace a workspace after it was created/edited. */
+  const handleWorkspaceChanged = useCallback((ws: Workspace) => {
     setWorkspaces((prev) =>
-      prev.filter((w) => !(w.peerId === peerId && w.workspace.id === id))
+      prev.some((w) => w.id === ws.id)
+        ? prev.map((w) => (w.id === ws.id ? ws : w))
+        : [ws, ...prev]
     );
   }, []);
 
+  const handleWorkspaceDeleted = useCallback((id: string) => {
+    setWorkspaces((prev) => prev.filter((w) => w.id !== id));
+  }, []);
+
   /** The single delete flow (confirm + API + state), shared by the draft
-   * tab and the workspace edit modal. Remote workspaces are deleted on the
-   * peer that owns them. */
-  const deleteWorkspace = useCallback(async (fws: FederatedWorkspace) => {
+   * tab and the workspace edit modal. */
+  const deleteWorkspace = useCallback(async (ws: Workspace) => {
     if (
       !confirmAction(
-        t("common.workspaceDeleteConfirm", { name: fws.workspace.name }),
+        t("common.workspaceDeleteConfirm", { name: ws.name }),
       )
     ) {
       return;
     }
-    await workspaceApi(fws.peerId).delete(fws.workspace.id);
-    handleWorkspaceDeleted(fws.peerId, fws.workspace.id);
+    await api.deleteWorkspace(ws.id);
+    handleWorkspaceDeleted(ws.id);
   }, [handleWorkspaceDeleted, t]);
 
   return {
     workspaces,
-    peers,
     loadError,
     loaded,
     handleWorkspaceChanged,

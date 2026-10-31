@@ -137,9 +137,9 @@ export function formatModelMeta(contextWindow?: number): string {
  * consumers.
  *
  * Deliberately incomplete: it carries what THIS server can answer without
- * waiting on anyone (its own workspaces). The federated half — the
- * registered peers and their workspaces — is only knowable by asking the
- * peers, so the client always fetches it itself (`/api/fed/workspaces`);
+ * waiting on anyone (its own workspaces; the ones a window shows are always
+ * the displayed server's own). The session list still asks the registered
+ * peers, so that half is fetched by the client itself (`/api/fed/peers`) —
  * a peer that is down must never delay the first paint. */
 export interface InitialData {
   workspaces: Workspace[];

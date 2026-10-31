@@ -747,6 +747,16 @@ export const settings = {
     en: "Enter the server URL (http:// or https://).",
   },
   "settings.connection.unnamed": { ja: "（無名）", en: "(unnamed)" },
+  /** The row of a registry entry is the way into its fields: the first opens
+   * them, the second folds them back. */
+  "settings.connection.editEntry": {
+    ja: "この接続先を編集",
+    en: "Edit this server",
+  },
+  "settings.connection.foldEntry": {
+    ja: "入力を閉じる",
+    en: "Hide the fields",
+  },
   /** Desktop only: the choice here is written to the shell's settings and
    * restored on the next launch. */
   "settings.connection.persistedNote": {

@@ -171,7 +171,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
   app.route("/api", connectionRoutes(core, () => fed.restart()));
-  app.route("/api", federationRoutes(core, fed));
+  app.route("/api", federationRoutes(fed));
   // Auto-update of the standalone server (absent in development, where the
   // routes are not registered at all and the UI gets a 404 → no controls).
   if (options.update !== undefined) {

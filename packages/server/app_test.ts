@@ -1987,7 +1987,7 @@ Deno.test("connections API: registry roundtrip, validation and protection", asyn
   }
 });
 
-Deno.test("federation: hub merges peers and proxies workspaces and sessions", async () => {
+Deno.test("federation: hub reports its peers and proxies their workspaces and sessions", async () => {
   // Peer first: the hub's federation client connects to it at startup.
   const peerFaux = fauxProvider();
   const peerCore = LumiscaCore.forTesting([peerFaux.provider]);
@@ -2028,17 +2028,14 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
         headers: auth,
       });
 
-      // Merged workspace list: hub + peer, self excluded.
-      const mergedRes = await json(hubBase, "/api/fed/workspaces", {
+      // Peer reachability: the registered peer answers, the hub itself is
+      // not listed (a hub is not its own peer), and the URL travels with the
+      // entry so the UI can label a nameless one by its host.
+      const peersRes = await json(hubBase, "/api/fed/peers", {
         headers: auth,
       });
-      assertEquals(mergedRes.status, 200);
-      const merged = await mergedRes.json() as {
-        workspaces: Array<{
-          peerId: string;
-          peerName: string;
-          workspace: { id: string; name: string };
-        }>;
+      assertEquals(peersRes.status, 200);
+      const { peers } = await peersRes.json() as {
         peers: Array<{
           id: string;
           name: string;
@@ -2047,17 +2044,29 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
           error?: string;
         }>;
       };
-      assertEquals(merged.workspaces.length, 2);
-      const hubEntry = merged.workspaces.find((w) => w.peerId === "");
-      const peerEntry = merged.workspaces.find((w) => w.peerId === "peer1");
-      assertEquals(hubEntry?.workspace.name, "hub-ws");
-      assertEquals(peerEntry?.workspace.name, "peer-ws");
-      assertEquals(peerEntry?.peerName, "自宅");
-      assertEquals(merged.peers.length, 1);
-      assertEquals(merged.peers[0]?.ok, true);
-      // The URL travels with the peer: the UI labels a nameless registry
-      // entry by its host instead of leaving the row blank.
-      assertEquals(merged.peers[0]?.url, peerBase);
+      assertEquals(peers.length, 1);
+      assertEquals(peers[0]?.id, "peer1");
+      assertEquals(peers[0]?.name, "自宅");
+      assertEquals(peers[0]?.url, peerBase);
+      assertEquals(peers[0]?.ok, true);
+
+      // The hub's own workspaces stay its own: they are not merged with a
+      // peer's, because a workspace belongs to the machine the window
+      // displays (switching machines is the title bar's job).
+      const hubWorkspaces = await json(hubBase, "/api/workspaces", {
+        headers: auth,
+      });
+      const hubList = await hubWorkspaces.json() as Array<{ name: string }>;
+      assertEquals(hubList.map((w) => w.name), ["hub-ws"]);
+      const peerWorkspaces = await json(hubBase, "/api/fed/peer1/workspaces", {
+        headers: auth,
+      });
+      const peerList = await peerWorkspaces.json() as Array<{
+        id: string;
+        name: string;
+      }>;
+      assertEquals(peerList.map((w) => w.name), ["peer-ws"]);
+      const peerWorkspaceId = peerList[0]?.id;
 
       // Create a workspace on the peer through the hub.
       const remoteCreate = await json(hubBase, "/api/fed/peer1/workspaces", {
@@ -2095,7 +2104,6 @@ Deno.test("federation: hub merges peers and proxies workspaces and sessions", as
       // is explicit: the default-model fallback would resolve to the
       // first builtin provider (unconfigured on CI), which used to pass
       // here only because the assertions never looked at the content.
-      const peerWorkspaceId = peerEntry?.workspace.id;
       assertEquals(typeof peerWorkspaceId, "string");
       peerFaux.setResponses([fauxAssistantMessage("Hi from peer!")]);
       const created = await json(hubBase, "/api/fed/peer1/sessions", {

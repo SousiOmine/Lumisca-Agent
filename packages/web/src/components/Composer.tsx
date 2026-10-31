@@ -82,12 +82,10 @@ interface ComposerProps {
    * lists the PEER's models, so switching a remote session's model works
    * against the machine that runs the agent. */
   peerId?: string;
-  /** What the footer says about the model. `picker` (the default) opens the
-   * model list; `remote-default` names that the model comes from the peer
-   * the session will be created on; `none` says nothing at all — stella's
-   * model is configuration, and a line explaining that is one more thing to
-   * read on every message. */
-  modelBar?: "picker" | "remote-default" | "none";
+  /** Whether the footer shows the model picker. `none` says nothing at all —
+   * stella's model is configuration, and a line explaining that is one more
+   * thing to read on every message. */
+  modelBar?: "picker" | "none";
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
   /** When set, typing `@` offers workspace files/folders to insert as
@@ -546,12 +544,6 @@ export function Composer({
       <div className="input-row">
         {modelBar === "none"
           ? null
-          : modelBar === "remote-default"
-          ? (
-            <span className="settings-note" style={{ alignSelf: "center" }}>
-              {t("chat.composer.remoteDefault")}
-            </span>
-          )
           : (
             <div className="model-switch-bar" ref={modelPickerRef}>
               <button

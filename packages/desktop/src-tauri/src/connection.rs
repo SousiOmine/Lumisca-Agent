@@ -150,10 +150,17 @@ pub(crate) fn connect_remote(app: &AppHandle, conn: &SavedConnection) -> Result<
         return Err(connect_failure(&conn.url, failure));
     }
     // The base URL is what the probe and the window use; the stored token
-    // may carry surrounding whitespace from the input field.
+    // may carry surrounding whitespace from the input field, and an empty
+    // name is no name (the title bar falls back to the URL's host).
     let saved = SavedConnection {
         url: target.base,
         token: conn.token.trim().to_string(),
+        name: conn
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string),
     };
     remember(app, Some(saved.clone()))?;
     display_remote(app, &saved)
@@ -195,8 +202,7 @@ fn remember(app: &AppHandle, conn: Option<SavedConnection>) -> Result<(), String
 /// Make `conn` the displayed server: state, then navigation.
 fn display_remote(app: &AppHandle, conn: &SavedConnection) -> Result<String, String> {
     let page = page_url(&conn.url, &conn.token);
-    *app.state::<AppState>().last_remote.lock_recover() =
-        Some((conn.url.clone(), conn.token.clone()));
+    *app.state::<AppState>().last_remote.lock_recover() = Some(conn.clone());
     navigate_main(app, &page)?;
     Ok(page)
 }

@@ -23,6 +23,11 @@ import { request } from "./api-client.ts";
 export interface ShellState {
   mode: "local" | "remote";
   url: string | null;
+  /** Name of the registry entry the window was switched to (the shell
+   * remembered it beside the URL), or null when the switch was not made from
+   * the registry — a server reached from the startup screen has no name to
+   * show, and the picker falls back to the URL's host. */
+  name: string | null;
   /** Whether the main window is maximized (custom title bar icon). */
   maximized: boolean;
 }

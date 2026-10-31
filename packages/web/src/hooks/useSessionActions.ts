@@ -4,7 +4,7 @@ import {
   useCallback,
   useRef,
 } from "preact/compat";
-import { api, fed, sessionApi } from "../api.ts";
+import { api, sessionApi } from "../api.ts";
 import {
   setModelThinkingLevel,
   syncThinkingLevelInViews,
@@ -12,11 +12,11 @@ import {
 import {
   type AskAnswer,
   emptyView,
-  type FederatedWorkspace,
   type ModePrompt,
   type PendingImage,
   type SessionView,
   type ThinkingLevel,
+  type Workspace,
 } from "../types.ts";
 import type { ComposerModel } from "../components/Composer.tsx";
 import { DRAFT_TAB, splitTabKey, tabKey } from "../tabs.ts";
@@ -43,33 +43,28 @@ export function useSessionActions(
   const modelChangeSeq = useRef(0);
 
   /** Create a session from the draft tab and send the first prompt. The
-   * session runs on the peer that owns the workspace (remote workspaces
-   * use the peer's default model). A chat entry (workspace.chat) starts a
-   * "simple chat" session: no workspaceId is sent, so the server creates
-   * it in its folder-less chat workspace. `mode` marks the first prompt
-   * as a mode prompt (e.g. plan mode): the server stores a ModeMessage
-   * (short text + badge) instead of a plain user message. */
+   * session runs on this server: a remote workspace is not offered on the
+   * new session screen any more (the desktop title bar picks the machine,
+   * one server at a time). A chat workspace starts a "simple chat" session:
+   * no workspaceId is sent, so the server creates it in its folder-less chat
+   * workspace. `mode` marks the first prompt as a mode prompt (e.g. plan
+   * mode): the server stores a ModeMessage (short text + badge) instead of a
+   * plain user message. */
   const startSession = useCallback(
     async (
-      fws: FederatedWorkspace,
+      workspace: Workspace,
       model: ComposerModel | null,
       text: string,
       images: PendingImage[],
       mode?: ModePrompt,
     ) => {
-      const { peerId, workspace } = fws;
-      const session = peerId === ""
-        ? await api.createSession({
-          ...(workspace.chat ? {} : { workspaceId: workspace.id }),
-          ...(model
-            ? { modelProvider: model.provider, modelId: model.modelId }
-            : {}),
-        })
-        : await fed.createSession(
-          peerId,
-          workspace.chat ? {} : { workspaceId: workspace.id },
-        );
-      const key = tabKey(peerId, session.id);
+      const session = await api.createSession({
+        ...(workspace.chat ? {} : { workspaceId: workspace.id }),
+        ...(model
+          ? { modelProvider: model.provider, modelId: model.modelId }
+          : {}),
+      });
+      const key = tabKey("", session.id);
       setTabs((prev) => {
         if (prev.includes(DRAFT_TAB)) {
           return prev.map((t) => (t === DRAFT_TAB ? key : t));
