@@ -1,4 +1,8 @@
-import { IconEye, IconEyeOff, IconSend } from "@tabler/icons-preact";
+import {
+  IconDeviceDesktop,
+  IconDeviceDesktopOff,
+  IconSend,
+} from "@tabler/icons-preact";
 import { useState } from "preact/compat";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useT } from "../i18n.ts";
@@ -101,13 +105,13 @@ export function StellaView(
   // interactive and a bar above it says what to do and offers "done".
   const handover = conversation?.handover ?? null;
   // The machine's screen is a panel the user opens and closes, like a side
-  // panel: it starts open (the machine is the promise of this mode, and
-  // watching the work is why it is drawn beside the conversation), the
-  // header's toggle hides and shows it, and closing it stays closed. It used
-  // to reopen on its own whenever a message was sent, which meant the button
-  // could not be trusted: one send brought back the pane the user had just
-  // dismissed.
-  const [screenOpen, setScreenOpen] = useState(true);
+  // panel: it starts closed — the conversation is what the mode is for, and a
+  // pane that opens itself takes that width before the user asks for it (it
+  // also holds a VNC connection from the first render). The header's toggle
+  // opens and closes it, the user's choice stays put after that, and sending a
+  // message never reopens it: a pane that comes back on its own makes the
+  // button untrustworthy.
+  const [screenOpen, setScreenOpen] = useState(false);
   // A hand-over is the agent stopping and asking the user to act ON the
   // screen. Showing it is not a convenience but the only way to continue the
   // run, so that one case overrides the user's choice — and taking the screen
@@ -170,7 +174,13 @@ export function StellaView(
              * between the two. Hidden while the machine cannot show a picture
              * at all — a disabled toggle would promise a pane that will not
              * appear — and while a hand-over is waiting for the user, because
-             * then the pane cannot be dismissed either. */
+             * then the pane cannot be dismissed either.
+             *
+             * The icon is the monitor itself (crossed out while the pane is
+             * closed), not an eye: this button is about the machine's screen,
+             * and a monitor says that without the eye's other meanings
+             * (watch, preview, privacy). The label and tooltip say what the
+             * next click does; the icon says what the pane is doing now. */
             }
             {machineRunning && !handedOver && (
               <button
@@ -189,7 +199,9 @@ export function StellaView(
                     : "chat.stella.machine.showScreen",
                 )}
               >
-                {showScreen ? <IconEyeOff size={15} /> : <IconEye size={15} />}
+                {showScreen
+                  ? <IconDeviceDesktop size={15} />
+                  : <IconDeviceDesktopOff size={15} />}
               </button>
             )}
           </header>
