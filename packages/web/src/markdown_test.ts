@@ -171,5 +171,5 @@ Deno.test("the error card is written in the app language", () => {
     t: createTranslator("ja"),
   });
   assertEquals(ja.includes("図を表示できません"), true);
-  assertEquals(ja.includes("中身が &lt;svg&gt; 要素ではありません"), true);
+  assertEquals(ja.includes("内容が &lt;svg&gt; 要素ではありません"), true);
 });
