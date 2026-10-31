@@ -157,23 +157,34 @@ const port = freePort();
 const base = `http://127.0.0.1:${port}`;
 const workDir = await Deno.makeTempDir({ prefix: "lumisca-smoke-" });
 
-/** Copy the package (binary + the files the release layout defines, see
+/** Copy the package (binary + the entries the release layout defines, see
  * installedFileNames) out of the build directory, so the started server
- * cannot replace the artifacts this run is checking. Returns the copied
- * binary's path. */
+ * cannot replace the artifacts this run is checking. An entry may be a
+ * directory (the stella machine's container files) and is copied whole.
+ * Returns the copied binary's path. */
 async function copyPackage(source: string, targetDir: string): Promise<string> {
   await Deno.mkdir(targetDir, { recursive: true });
   let copied = 0;
   for (const name of installedFileNames(source)) {
     const from = join(dirname(source), name);
-    try {
-      await Deno.copyFile(from, join(targetDir, name));
-      copied++;
-    } catch {
-      // Optional files (icudtl.dat is Windows-only): the sidecar's absence
-      // is what the packaged server must tolerate, so the copy tolerates it
-      // too.
+    const to = join(targetDir, name);
+    const info = await Deno.stat(from).catch(() => undefined);
+    if (info === undefined) {
+      // Optional entries (icudtl.dat is Windows-only, the container files
+      // ship with the server package only): the packaged server must
+      // tolerate their absence, so the copy does.
+      continue;
     }
+    if (info.isDirectory) {
+      await Deno.mkdir(to, { recursive: true });
+      for await (const file of Deno.readDir(from)) {
+        if (!file.isFile) continue;
+        await Deno.copyFile(join(from, file.name), join(to, file.name));
+      }
+    } else {
+      await Deno.copyFile(from, to);
+    }
+    copied++;
   }
   if (copied === 0) {
     usage(

@@ -153,6 +153,62 @@ Deno.test("applyStagedUpdate works for a tar.gz package too", async () => {
   });
 });
 
+Deno.test("applyStagedUpdate installs the stella container directory as one entry", async () => {
+  await withTempDir("lumisca-install-", async (installDir) => {
+    // The running version has an older container definition; the package
+    // carries a new one. It must be replaced as a whole, so no file of the
+    // previous definition is left behind.
+    await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
+    await Deno.mkdir(join(installDir, "stella-container"));
+    await Deno.writeTextFile(
+      join(installDir, "stella-container/Containerfile"),
+      "old-containerfile",
+    );
+    await Deno.writeTextFile(
+      join(installDir, "stella-container/stale.sh"),
+      "left over",
+    );
+    const staged = await newPackage(installDir, "tar.gz", [
+      { name: BINARY, content: "new-binary" },
+      { name: "stella-container/Containerfile", content: "new-containerfile" },
+      { name: "stella-container/entry.sh", content: "#!/bin/sh\n" },
+    ]);
+    const result = await applyStagedUpdate({
+      environment: { installDir, execPath: join(installDir, BINARY) },
+      staged,
+      currentVersion: CURRENT,
+      versionCheck: () => Promise.resolve(NEXT),
+    });
+
+    assertEquals(result.replaced, [BINARY, "stella-container"]);
+    assertEquals(
+      await Deno.readTextFile(
+        join(installDir, "stella-container/Containerfile"),
+      ),
+      "new-containerfile",
+    );
+    assertEquals(
+      await Deno.readTextFile(join(installDir, "stella-container/entry.sh")),
+      "#!/bin/sh\n",
+    );
+    // The previous directory is kept aside in full (it may hold files the
+    // new package no longer ships).
+    assertEquals(
+      await Deno.readTextFile(
+        join(installDir, `stella-container.old-${CURRENT}/Containerfile`),
+      ),
+      "old-containerfile",
+    );
+    assertEquals(
+      await Deno.readTextFile(
+        join(installDir, `stella-container.old-${CURRENT}/stale.sh`),
+      ),
+      "left over",
+    );
+    assertEquals(list(installDir).filter((name) => name.endsWith(".new")), []);
+  });
+});
+
 Deno.test("applyStagedUpdate rolls back when a file cannot be replaced", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     const { environment, staged } = await fixture(installDir);
@@ -253,6 +309,60 @@ Deno.test("applyStagedUpdate rolls back a file the package added", async () => {
   });
 });
 
+Deno.test("applyStagedUpdate rolls a container directory back as one entry", async () => {
+  await withTempDir("lumisca-install-", async (installDir) => {
+    await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
+    await Deno.writeTextFile(join(installDir, "assets.json"), "old-assets");
+    await Deno.mkdir(join(installDir, "stella-container"));
+    await Deno.writeTextFile(
+      join(installDir, "stella-container/Containerfile"),
+      "old-containerfile",
+    );
+    const staged = await newPackage(installDir, "tar.gz", [
+      { name: BINARY, content: "new-binary" },
+      { name: "stella-container/Containerfile", content: "new-containerfile" },
+      { name: "assets.json", content: "new-assets" },
+    ]);
+    // A non-empty directory where assets.json's backup has to go: the swap
+    // fails there, after the container directory has already landed, so the
+    // rollback has to remove a whole directory this apply created.
+    const blocked = join(installDir, `assets.json.old-${CURRENT}`);
+    await Deno.mkdir(blocked);
+    await Deno.writeTextFile(join(blocked, "keep"), "x");
+
+    await assertRejects(
+      () =>
+        applyStagedUpdate({
+          environment: { installDir, execPath: join(installDir, BINARY) },
+          staged,
+          currentVersion: CURRENT,
+          versionCheck: () => Promise.resolve(NEXT),
+        }),
+      InstallError,
+      "以前のファイルに戻しました",
+    );
+
+    // The directory is the previous version again, with no file of the new
+    // package left inside it.
+    assertEquals(
+      await Deno.readTextFile(
+        join(installDir, "stella-container/Containerfile"),
+      ),
+      "old-containerfile",
+    );
+    assertEquals(
+      [...Deno.readDirSync(join(installDir, "stella-container"))].map((e) =>
+        e.name
+      ),
+      ["Containerfile"],
+    );
+    assertEquals(
+      list(installDir).filter((name) => name.endsWith(".new")),
+      [],
+    );
+  });
+});
+
 Deno.test("applyStagedUpdate refuses a binary that is not the promised version", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     const { environment, staged } = await fixture(installDir);
@@ -307,6 +417,18 @@ Deno.test("cleanupStaleFiles removes update leftovers and nothing else", async (
     await Deno.writeTextFile(join(installDir, `${BINARY}.old-0.7.6`), "x");
     await Deno.writeTextFile(join(installDir, `assets.json.old-0.7.6`), "x");
     await Deno.writeTextFile(join(installDir, "icudtl.dat.new"), "x");
+    // A directory entry's leftovers are directories (the stella machine's
+    // container files are installed as one).
+    await Deno.mkdir(join(installDir, "stella-container.old-0.7.6"));
+    await Deno.writeTextFile(
+      join(installDir, "stella-container.old-0.7.6/Containerfile"),
+      "x",
+    );
+    await Deno.mkdir(join(installDir, "stella-container.new"));
+    await Deno.writeTextFile(
+      join(installDir, "stella-container.new/Containerfile"),
+      "x",
+    );
     await Deno.writeTextFile(join(installDir, "notes.txt"), "keep me");
     await Deno.writeTextFile(
       join(installDir, "restart-notes.old-1"),
@@ -320,6 +442,8 @@ Deno.test("cleanupStaleFiles removes update leftovers and nothing else", async (
         `${BINARY}.old-0.7.6`,
         "assets.json.old-0.7.6",
         "icudtl.dat.new",
+        "stella-container.old-0.7.6",
+        "stella-container.new",
       ]),
     );
     assertEquals(list(installDir), ["notes.txt", "restart-notes.old-1"]);

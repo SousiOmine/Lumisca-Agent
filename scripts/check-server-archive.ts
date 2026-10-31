@@ -149,6 +149,15 @@ if (extracted !== undefined) {
     const stagedFiles: string[] = [];
     for await (const entry of Deno.readDir(options.stage)) {
       if (entry.isFile) stagedFiles.push(entry.name);
+      // The stella machine's container files ship as one directory; the
+      // archive lists them individually (`<dir>/<file>`).
+      else if (entry.isDirectory) {
+        for await (
+          const file of Deno.readDir(join(options.stage, entry.name))
+        ) {
+          if (file.isFile) stagedFiles.push(`${entry.name}/${file.name}`);
+        }
+      }
     }
     const missing = stagedFiles.filter((name) => !extracted.includes(name));
     check(

@@ -11,7 +11,8 @@
     ],
     "resources": {
       "resources/server/lumisca-server.exe": "server/lumisca-server.exe",
-      "resources/server/icudtl.dat": "server/icudtl.dat"
+      "resources/server/icudtl.dat": "server/icudtl.dat",
+      "resources/server/stella-container": "server/stella-container"
     }
   }
 }

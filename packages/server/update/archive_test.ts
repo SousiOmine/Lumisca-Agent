@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { removeDirRetry } from "@lumisca/core/test-utils";
-import { ArchiveError, extractArchive, packageEntryName } from "./archive.ts";
+import { ArchiveError, extractArchive, packageEntryPath } from "./archive.ts";
 import { buildTarGz, buildZip, ustarHeader } from "./test-utils.ts";
 
 /** Top-level directory of a release package. It carries no version — see
@@ -24,34 +24,47 @@ async function writeArchive(
   return path;
 }
 
-Deno.test("packageEntryName keeps the flat package layout and refuses the rest", () => {
+Deno.test("packageEntryPath keeps the package layout and refuses the rest", () => {
   assertEquals(
-    packageEntryName(`${WINDOWS_PREFIX}/lumisca-server.exe`),
+    packageEntryPath(`${WINDOWS_PREFIX}/lumisca-server.exe`),
     "lumisca-server.exe",
   );
   assertEquals(
-    packageEntryName(`${WINDOWS_PREFIX}/assets.json`),
+    packageEntryPath(`${WINDOWS_PREFIX}/assets.json`),
     "assets.json",
   );
-  assertEquals(packageEntryName("assets.json"), "assets.json");
-  assertEquals(packageEntryName("./dir/icudtl.dat"), "icudtl.dat");
+  // The one directory the layout defines: the stella machine's container
+  // files, installed as `<install dir>/stella-container/<file>`.
+  assertEquals(
+    packageEntryPath(`${LINUX_PREFIX}/stella-container/Containerfile`),
+    "stella-container/Containerfile",
+  );
+  assertEquals(
+    packageEntryPath(`./dir/stella-container/entry.sh`),
+    "stella-container/entry.sh",
+  );
 
   for (
     const rejected of [
       "",
       "/",
+      "assets.json",
+      "./assets.json",
       "../escape.txt",
       `${WINDOWS_PREFIX}/../../escape.txt`,
-      `${WINDOWS_PREFIX}/nested/file.txt`,
+      `${WINDOWS_PREFIX}/nested/deeper/file.txt`,
       `C:/Windows/system32/evil.exe`,
+      `C:\\Windows\\system32\\evil.exe`,
       `${WINDOWS_PREFIX}\\lumisca-server.exe`,
       `${WINDOWS_PREFIX}/.hidden`,
       `${WINDOWS_PREFIX}/name with spaces.txt`,
+      `${WINDOWS_PREFIX}/stella-container/.hidden`,
       `${WINDOWS_PREFIX}/`,
+      `${WINDOWS_PREFIX}`,
     ]
   ) {
     assertEquals(
-      packageEntryName(rejected),
+      packageEntryPath(rejected),
       undefined,
       `must reject ${JSON.stringify(rejected)}`,
     );
@@ -78,6 +91,43 @@ Deno.test("zip: deflated and stored entries extract with their content", async (
     assertEquals(await Deno.readTextFile(`${out}/assets.json`), "{}");
     assertEquals(await Deno.readTextFile(`${out}/icudtl.dat`), "icu-data");
     assertEquals((await Deno.readTextFile(`${out}/README.txt`)).length, 5000);
+  } finally {
+    await removeDirRetry(archive);
+    await removeDirRetry(out);
+  }
+});
+
+Deno.test("zip: the stella container directory extracts under its own name", async () => {
+  const archive = await writeArchive(
+    await buildZip([
+      { name: `${LINUX_PREFIX}/lumisca-server`, content: "bin" },
+      {
+        name: `${LINUX_PREFIX}/stella-container/Containerfile`,
+        content: "FROM debian",
+      },
+      {
+        name: `${LINUX_PREFIX}/stella-container/entry.sh`,
+        content: "#!/bin/sh\n",
+      },
+    ]),
+    "package.zip",
+  );
+  const out = await tempDir();
+  try {
+    const written = await extractArchive(archive, "zip", out);
+    assertEquals(written, [
+      "lumisca-server",
+      "stella-container/Containerfile",
+      "stella-container/entry.sh",
+    ]);
+    assertEquals(
+      await Deno.readTextFile(`${out}/stella-container/Containerfile`),
+      "FROM debian",
+    );
+    assertEquals(
+      await Deno.readTextFile(`${out}/stella-container/entry.sh`),
+      "#!/bin/sh\n",
+    );
   } finally {
     await removeDirRetry(archive);
     await removeDirRetry(out);
@@ -135,7 +185,10 @@ Deno.test("zip: unsafe paths and duplicate names are refused", async () => {
     "escape.zip",
   );
   const nested = await writeArchive(
-    await buildZip([{ name: "dir/nested/evil.txt", content: "x" }]),
+    await buildZip([{
+      name: `${WINDOWS_PREFIX}/nested/deeper/evil.txt`,
+      content: "x",
+    }]),
     "nested.zip",
   );
   const duplicate = await writeArchive(

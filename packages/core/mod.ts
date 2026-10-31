@@ -12,6 +12,8 @@ export {
   stellaAvailability,
 } from "./vm/availability.ts";
 export {
+  VM_CONTAINER_DIR_NAME,
+  VM_CONTAINERFILE_NAME,
   VM_SCREEN_HEIGHT,
   VM_SCREEN_WIDTH,
   VM_SKILLS_DIR,

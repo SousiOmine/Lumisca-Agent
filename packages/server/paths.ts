@@ -1,4 +1,5 @@
 import { dirname, join } from "node:path";
+import { VM_CONTAINER_DIR_NAME } from "@lumisca/core";
 
 /**
  * Repository layout the server depends on (frontend sources, esbuild alias
@@ -43,6 +44,6 @@ export function stellaContainerDir(
   existsInInstall: (path: string) => boolean,
 ): string {
   const fromRepo = join(repoRoot, "packages", "core", "vm", "container");
-  const fromInstall = join(dirname(execPath), "stella-container");
+  const fromInstall = join(dirname(execPath), VM_CONTAINER_DIR_NAME);
   return existsInInstall(fromInstall) ? fromInstall : fromRepo;
 }

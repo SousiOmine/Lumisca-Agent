@@ -15,6 +15,7 @@
  * server. The archive is signature-verified before it gets here, so this is
  * defense in depth rather than the trust boundary.
  */
+import { dirname } from "node:path";
 import { type TarStreamEntry, UntarStream } from "@std/tar/untar-stream";
 import type { ArchiveFormat } from "./release.ts";
 
@@ -51,34 +52,48 @@ const ZIP_METHOD_DEFLATE = 8;
  * anything bigger is a broken archive, not a real one. */
 const MAX_ENTRY_BYTES = 4 * 1024 * 1024 * 1024;
 
+/** A conservative name space for every path component a package may carry:
+ * the release ships `lumisca-server(.exe)`, `assets.json`, `icudtl.dat` and
+ * the `stella-container/` definition files, and a future addition that does
+ * not fit fails here instead of landing somewhere unplanned. */
+const PACKAGE_COMPONENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** How many components a package entry may carry below its top-level
+ * directory: a file at the package root (`assets.json`) or one directory
+ * deep (`stella-container/Containerfile`). */
+const MAX_PACKAGE_DEPTH = 2;
+
 /**
- * The file name a package entry maps to, or undefined when the entry is not
- * a plain top-level file.
+ * The path a package entry installs as, relative to the install directory,
+ * or undefined when the entry is not a plain file of the package layout.
  *
- * Packages carry a single top-level directory (`lumisca-server-<platform>/`,
- * whose name carries no version on purpose: the release workflow explains
- * why) with flat files inside, so both forms are accepted: `dir/file` and
- * `file`. The directory itself is never inspected, only its depth, so an
- * archive from any release unpacks the same way.
- * Everything else — absolute paths, `..`, drive letters, nested directories,
- * names with separators or leading dots — is rejected.
+ * Every release package is packed by the release workflow into a single
+ * top-level directory (`lumisca-server-<platform>/`, whose name carries no
+ * version on purpose: the workflow explains why), so that directory is
+ * stripped here and the rest is the installed path. Inside it, files sit at
+ * the root (the binary and the assets it serves) or in the one directory the
+ * layout defines (`stella-container/`, which holds the stella machine's
+ * Containerfile and entry script).
+ *
+ * Everything else — absolute paths, `..`, drive letters, deeper nesting,
+ * directory entries, names with separators or leading dots — is rejected.
  */
-export function packageEntryName(path: string): string | undefined {
+export function packageEntryPath(path: string): string | undefined {
   if (path.includes("\\") || path.includes("\0")) return undefined;
   // A trailing separator names a directory, which is never a file to write.
   if (path.endsWith("/")) return undefined;
   const components = path.split("/").filter((part) =>
     part !== "" && part !== "."
   );
-  if (components.length === 0 || components.length > 2) return undefined;
+  // The top-level directory plus at least one file inside it. An entry that
+  // is the directory itself carries no file either.
+  if (components.length < 2) return undefined;
   if (components.some((part) => part === "..")) return undefined;
   if (components[0]!.endsWith(":")) return undefined;
-  const name = components[components.length - 1]!;
-  // A conservative name space: the release ships `lumisca-server(.exe)`,
-  // `assets.json` and `icudtl.dat`, and a future addition that does not fit
-  // fails here instead of landing somewhere unplanned.
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) return undefined;
-  return name;
+  const inner = components.slice(1);
+  if (inner.length > MAX_PACKAGE_DEPTH) return undefined;
+  if (!inner.every((part) => PACKAGE_COMPONENT.test(part))) return undefined;
+  return inner.join("/");
 }
 
 /** Read exactly `length` bytes at `offset`, or throw (a short read means
@@ -109,12 +124,26 @@ async function writeAll(file: Deno.FsFile, bytes: Uint8Array): Promise<void> {
   }
 }
 
+/** Create the directory an entry installs into (a package file may sit one
+ * directory deep, see {@link packageEntryPath}). */
+async function ensureParent(path: string): Promise<boolean> {
+  const parent = dirname(path);
+  try {
+    await Deno.mkdir(parent, { recursive: true });
+    return true;
+  } catch {
+    // Already there (the common case: files of one directory share it).
+    return false;
+  }
+}
+
 /** Write a stream to a file, returning the number of bytes written. */
 async function writeStream(
   stream: ReadableStream<Uint8Array>,
   path: string,
   mode?: number,
 ): Promise<number> {
+  await ensureParent(path);
   const file = await Deno.open(path, {
     create: true,
     write: true,
@@ -217,7 +246,7 @@ async function readZipEntries(file: Deno.FsFile): Promise<ZipEntry[]> {
     if (uncompressedSize > MAX_ENTRY_BYTES) {
       throw new ArchiveError(`エントリが大きすぎます: ${rawName}`);
     }
-    const name = packageEntryName(rawName);
+    const name = packageEntryPath(rawName);
     if (name === undefined) {
       throw new ArchiveError(`アーカイブに想定外のパスがあります: ${rawName}`);
     }
@@ -269,6 +298,7 @@ async function extractZip(
         entry.compressedSize,
       );
       const target = `${targetDir}/${entry.name}`;
+      await ensureParent(target);
       if (entry.method === ZIP_METHOD_STORED) {
         if (compressed.length !== entry.size) {
           throw new ArchiveError(`展開サイズが一致しません: ${entry.name}`);
@@ -361,7 +391,7 @@ async function extractTarGz(
       if (entry.readable === undefined) {
         throw new ArchiveError(`エントリの内容を読めません: ${entry.path}`);
       }
-      const name = packageEntryName(entry.path);
+      const name = packageEntryPath(entry.path);
       if (name === undefined) {
         throw new ArchiveError(
           `アーカイブに想定外のパスがあります: ${entry.path}`,
@@ -390,8 +420,7 @@ async function extractTarGz(
 /** Close a file whose readable stream may have closed the resource already
  * (`file.readable` releases the resource at EOF and on cancel, so the
  * explicit close after a successful extraction is a no-op error rather than
- * a fault). */
-function closeQuietly(file: Deno.FsFile): void {
+ * a fault). */ function closeQuietly(file: Deno.FsFile): void {
   try {
     file.close();
   } catch {

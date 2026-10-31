@@ -271,8 +271,10 @@ jobs:
           ARCHIVE="dist/server/lumisca-server-${VERSION}-${{ matrix.platform }}.tar.gz"
           STAGE="dist/server/stage/${{ matrix.stage }}"
           mkdir -p "dist/server/release/${DIR}"
-          cp "$STAGE"/* "dist/server/release/${DIR}/"
-          ls -l "dist/server/release/${DIR}"
+          # `.` + `-R`: the stage holds the stella machine's container files
+          # as a directory, which a plain `cp stage/*` would refuse.
+          cp -R "$STAGE"/. "dist/server/release/${DIR}/"
+          ls -lR "dist/server/release/${DIR}"
           tar -C dist/server/release -czf "$ARCHIVE" "$DIR"
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
           ls -l "$ARCHIVE"
@@ -286,8 +288,11 @@ jobs:
           $archive = "dist/server/lumisca-server-$version-${{ matrix.platform }}.zip"
           $stage = "dist/server/stage/${{ matrix.stage }}"
           New-Item -ItemType Directory -Force -Path "dist/server/release/$dir" | Out-Null
-          Copy-Item "$stage/*" "dist/server/release/$dir/"
-          Get-ChildItem "dist/server/release/$dir" | Select-Object Name, Length
+          # `-Recurse`: the stage holds the stella machine's container files
+          # as a directory, which a plain copy drops (an empty directory
+          # would reach the archive instead).
+          Copy-Item "$stage/*" "dist/server/release/$dir/" -Recurse
+          Get-ChildItem -Recurse "dist/server/release/$dir" | Select-Object FullName, Length
           Compress-Archive -Path "dist/server/release/$dir" -DestinationPath $archive -Force
           "ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Get-Item $archive | Select-Object Name, Length

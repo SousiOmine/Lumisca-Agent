@@ -37,7 +37,7 @@ import {
   writeAppliedUpdate,
 } from "./stage.ts";
 import { PORT_WAIT_ENV_KEY } from "../startup.ts";
-import { errorMessage } from "@lumisca/core";
+import { errorMessage, VM_CONTAINER_DIR_NAME } from "@lumisca/core";
 
 /** Where the running server lives. */
 export interface InstallEnvironment {
@@ -56,9 +56,16 @@ export class InstallError extends Error {
 }
 
 /** Files a package installs next to the binary (the package layout, see
- * scripts/build-server.ts: the binary + the assets it serves). */
+ * scripts/build-server.ts): the binary, the assets it serves, and the
+ * stella machine's container directory. A directory is listed (and
+ * installed) as a whole, under its own name. */
 export function installedFileNames(execPath: string): string[] {
-  return [basename(execPath), "assets.json", "icudtl.dat"];
+  return [
+    basename(execPath),
+    "assets.json",
+    "icudtl.dat",
+    VM_CONTAINER_DIR_NAME,
+  ];
 }
 
 /** Run `<binary> --version` and return its output. Used to prove a staged
@@ -89,12 +96,38 @@ function messageFromStderr(stderr: Uint8Array): string {
   return text === "" ? "" : `: ${text.split("\n").slice(0, 3).join(" / ")}`;
 }
 
-async function removeQuietly(path: string): Promise<void> {
+async function removeQuietly(
+  path: string,
+  options?: { recursive?: boolean },
+): Promise<void> {
   try {
-    await Deno.remove(path);
+    await Deno.remove(path, { recursive: options?.recursive ?? false });
   } catch {
-    // Missing, or still held by a process that has not exited yet.
+    // Missing, not empty (a leftover directory this call may not remove
+    // recursively), or still held by a process that has not exited yet.
   }
+}
+
+/** A top-level entry of an installed package: a file of the package root, or
+ * the one directory the layout defines (the stella machine's container
+ * files), which is installed and replaced as a whole. */
+interface PackageEntry {
+  name: string;
+  isDirectory: boolean;
+}
+
+/** The top-level entries a package's extracted files make up. A directory's
+ * files follow it in archive order, so it is listed once. */
+function packageEntries(files: readonly string[]): PackageEntry[] {
+  const entries: PackageEntry[] = [];
+  for (const file of files) {
+    const separator = file.indexOf("/");
+    const name = separator === -1 ? file : file.slice(0, separator);
+    if (!entries.some((entry) => entry.name === name)) {
+      entries.push({ name, isDirectory: separator !== -1 });
+    }
+  }
+  return entries;
 }
 
 export interface ApplyOptions {
@@ -160,15 +193,19 @@ export async function applyStagedUpdate(
     throw error;
   }
 
-  // 2. Move the new files into the install directory under `.new` names
-  //    (same volume, so this is a rename and cannot partially copy).
+  // 2. Move the new entries into the install directory under `.new` names
+  //    (same volume, so this is a rename and cannot partially copy). An
+  //    entry is a top-level item of the package: a file, or the stella
+  //    machine's container directory — which moves as one unit, so the
+  //    install never mixes two releases' files inside it.
+  const entries = packageEntries(files);
   const prepared: string[] = [];
   try {
-    for (const name of files) {
-      const target = join(installDir, `${name}.new`);
+    for (const entry of entries) {
+      const target = join(installDir, `${entry.name}.new`);
       await removeQuietly(target);
-      await Deno.rename(join(extractDir, name), target);
-      prepared.push(name);
+      await Deno.rename(join(extractDir, entry.name), target);
+      prepared.push(entry.name);
     }
   } catch (error) {
     for (const name of prepared) {
@@ -185,32 +222,35 @@ export async function applyStagedUpdate(
   //    landed. The binary goes first: a new binary with old assets is
   //    recoverable on its own, the reverse would serve a new UI from an old
   //    server.
-  const order = [
-    binaryName,
-    ...files.filter((name) => name !== binaryName),
+  const order: PackageEntry[] = [
+    entries.find((entry) => entry.name === binaryName)!,
+    ...entries.filter((entry) => entry.name !== binaryName),
   ];
   const backupSuffix = `.old-${options.currentVersion}`;
-  const backups: Array<{ backup: string; target: string }> = [];
+  const backups: Array<
+    { backup: string; target: string; isDirectory: boolean }
+  > = [];
   /** Targets this apply created (nothing was there before): rolling back
    * means deleting them, not restoring a backup. */
-  const added: string[] = [];
+  const added: Array<{ target: string; isDirectory: boolean }> = [];
   const failures: string[] = [];
 
-  for (const name of order) {
+  for (const entry of order) {
+    const { name, isDirectory } = entry;
     const target = join(installDir, name);
     const newPath = join(installDir, `${name}.new`);
     const backupPath = join(installDir, `${name}${backupSuffix}`);
     try {
-      await removeQuietly(backupPath);
+      await removeQuietly(backupPath, { recursive: isDirectory });
       const existing = await Deno.stat(target).then(() => true).catch(() =>
         false
       );
       if (existing) {
         await Deno.rename(target, backupPath);
-        backups.push({ backup: backupPath, target });
+        backups.push({ backup: backupPath, target, isDirectory });
       }
       await Deno.rename(newPath, target);
-      if (!existing) added.push(target);
+      if (!existing) added.push({ target, isDirectory });
     } catch (error) {
       failures.push(
         `${name}: ${errorMessage(error)}`,
@@ -225,12 +265,16 @@ export async function applyStagedUpdate(
     // the package ADDED (not part of the running version) must go too, or
     // the installation would be a mixture of two versions.
     for (const entry of backups.reverse()) {
-      await removeQuietly(entry.target);
+      await removeQuietly(entry.target, { recursive: entry.isDirectory });
       await Deno.rename(entry.backup, entry.target).catch(() => {});
     }
-    for (const target of added) await removeQuietly(target);
-    for (const name of order) {
-      await removeQuietly(join(installDir, `${name}.new`));
+    for (const entry of added) {
+      await removeQuietly(entry.target, { recursive: entry.isDirectory });
+    }
+    for (const entry of order) {
+      await removeQuietly(join(installDir, `${entry.name}.new`), {
+        recursive: entry.isDirectory,
+      });
     }
     await Deno.remove(extractDir, { recursive: true }).catch(() => {});
     throw new InstallError(
@@ -250,7 +294,7 @@ export async function applyStagedUpdate(
 
   return {
     version: options.staged.version,
-    replaced: order,
+    replaced: order.map((entry) => entry.name),
     backup: join(installDir, `${binaryName}${backupSuffix}`),
   };
 }
@@ -361,7 +405,8 @@ export async function cleanupStaleFiles(
     return removed;
   }
   for (const entry of entries) {
-    if (!entry.isFile) continue;
+    // A backup of a directory entry (the stella machine's container files)
+    // is a directory too, so this looks at files and directories alike.
     const isBackup = [...names].some((name) =>
       entry.name.startsWith(`${name}.old-`)
     );
@@ -369,7 +414,9 @@ export async function cleanupStaleFiles(
       names.has(entry.name.slice(0, -".new".length));
     if (!isBackup && !isStaged) continue;
     try {
-      await Deno.remove(join(environment.installDir, entry.name));
+      await Deno.remove(join(environment.installDir, entry.name), {
+        recursive: true,
+      });
       removed.push(entry.name);
     } catch {
       // Still locked: the next startup will collect it.
