@@ -7,7 +7,10 @@ import {
   refreshCatalogInBackground,
   resolveSettingsPath,
 } from "@lumisca/core";
-import { COMPUTER_USE_SESSION_TOKEN_KEY } from "@lumisca/core/shared";
+import {
+  COMPUTER_USE_SESSION_TOKEN_KEY,
+  errorMessage,
+} from "@lumisca/core/shared";
 import { disposeServer, startServer } from "./app.ts";
 import { validateHostConfig } from "./security.ts";
 import { stellaContainerDir } from "./paths.ts";
@@ -104,9 +107,7 @@ if (launcherCommand === "service") {
     Deno.exit(await runServiceCommand(Deno.args.slice(1)));
   } catch (error) {
     console.error(
-      `lumisca-server service: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `lumisca-server service: ${errorMessage(error)}`,
     );
     Deno.exit(1);
   }
@@ -222,7 +223,7 @@ export async function main(): Promise<void> {
   try {
     port = parseServerPort(startupEnv.LUMISCA_PORT, DEFAULT_PORT);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(errorMessage(error));
     Deno.exit(1);
   }
   // Only the updater's successor sets this: it starts before its predecessor
@@ -246,7 +247,7 @@ export async function main(): Promise<void> {
   } catch (error) {
     console.error(
       `Lumisca: データベースを開けませんでした (${dbPath}): ${
-        error instanceof Error ? error.message : String(error)
+        errorMessage(error)
       }`,
     );
     Deno.exit(1);

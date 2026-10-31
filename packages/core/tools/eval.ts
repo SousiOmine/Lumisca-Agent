@@ -1,6 +1,6 @@
 import { inspect } from "node:util";
 import { type Context, createContext, runInContext } from "node:vm";
-import { TOOL_EVAL } from "../shared/mod.ts";
+import { TOOL_EVAL, withTimeoutError } from "../shared/mod.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { errorMessage } from "../errors.ts";
 import {
@@ -50,28 +50,6 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
   return value !== null && value !== undefined &&
     (typeof value === "object" || typeof value === "function") &&
     typeof (value as { then?: unknown }).then === "function";
-}
-
-/** Await a thenable but bail out with the standard timeout error after
- * `ms`, so a hung network call cannot stall the tool forever. */
-async function awaitWithTimeout<T>(
-  value: PromiseLike<T>,
-  ms: number,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      value,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`Script execution timed out after ${ms}ms`)),
-          ms,
-        );
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 /** V8 reports top-level await in a script in different ways depending on
@@ -245,7 +223,11 @@ class EvalSession {
       );
     }
     if (isThenable(value)) {
-      value = await awaitWithTimeout(value, timeoutMs);
+      value = await withTimeoutError(
+        Promise.resolve(value),
+        timeoutMs,
+        () => new Error(`Script execution timed out after ${timeoutMs}ms`),
+      );
     }
     const output = this.output.join("\n") +
       (this.outputTruncated ? truncatedNote("console output") : "");

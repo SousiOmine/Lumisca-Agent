@@ -18,6 +18,7 @@
  * refuses would be a picture the user could choose and never see.
  */
 import { fnv1a } from "./digest.ts";
+import { RASTER_IMAGE_MIME_BY_EXTENSION } from "./mime.ts";
 
 /** Largest icon a user may upload (bytes). Small on purpose: an avatar is
  * drawn at 20–40 px, and a phone screenshot is already far more pixels than
@@ -27,14 +28,8 @@ export const MAX_AGENT_ICON_BYTES = 512 * 1024;
 /** Image formats an icon may be. Raster only: an SVG is a document that can
  * carry script, and an avatar is served to a browser as an `<img>` — the same
  * rule the attachment store follows (see INLINE_IMAGE_MIME_BY_EXTENSION). */
-export const AGENT_ICON_MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".bmp": "image/bmp",
-};
+export const AGENT_ICON_MIME_BY_EXTENSION: Readonly<Record<string, string>> =
+  RASTER_IMAGE_MIME_BY_EXTENSION;
 
 /** The content type of an icon whose name ends in `extension` (with its
  * dot, any case), or undefined when icons do not support that format. */

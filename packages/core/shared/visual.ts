@@ -18,19 +18,24 @@
  */
 
 /** Scheme of an image link that names a published visual. */
+import {
+  RASTER_IMAGE_MIME_BY_EXTENSION,
+  SVG_EXTENSION,
+  SVG_MIME_TYPE,
+} from "./mime.ts";
+
 export const VISUAL_REF_SCHEME = "visual:";
 
 /** Content type per extension a visual asset may carry. The same map
  * decides what the visual tool accepts, what the store writes and what the
- * asset route answers with. */
+ * asset route answers with.
+ *
+ * The rasters come from the shared table (./mime.ts); SVG is added here
+ * because this is the only store that accepts it — a reply embeds a visual
+ * through an `<img>`, which sandboxes the script an SVG may carry. */
 export const VISUAL_MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".bmp": "image/bmp",
-  ".svg": "image/svg+xml",
+  ...RASTER_IMAGE_MIME_BY_EXTENSION,
+  [SVG_EXTENSION]: SVG_MIME_TYPE,
 };
 
 /** The extensions of VISUAL_MIME_BY_EXTENSION, in a stable order (error
@@ -52,7 +57,7 @@ export const MAX_VISUAL_SVG_BYTES = 256 * 1024;
  * agrees on (the tool checks a file before reading it, the store checks the
  * bytes it is handed, the fence checks its own source). */
 export function maxVisualBytes(extension: string): number {
-  return extension.toLowerCase() === ".svg"
+  return extension.toLowerCase() === SVG_EXTENSION
     ? MAX_VISUAL_SVG_BYTES
     : MAX_VISUAL_ASSET_BYTES;
 }

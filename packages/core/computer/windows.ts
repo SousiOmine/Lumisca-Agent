@@ -34,6 +34,7 @@
  * implementation by platform).
  */
 import { CoreError, errorMessage } from "../errors.ts";
+import { concatBytes } from "../bytes.ts";
 import { MAX_CAPTURE_DIMENSION } from "./image.ts";
 import {
   CLICK_HOLD_MS,
@@ -46,9 +47,9 @@ import {
   MOVE_MS,
   MOVE_TICK_MS,
   parseKeyChord,
-  sleep,
   splitTypeText,
 } from "./motion.ts";
+import { sleep } from "../shared/misc.ts";
 import type {
   ComputerAction,
   ComputerActionResult,
@@ -277,19 +278,6 @@ export function buildKeyInput(
   return buffer;
 }
 
-/** Join INPUT structures into the array SendInput consumes. */
-export function concatInputs(parts: readonly Uint8Array[]): Uint8Array {
-  let length = 0;
-  for (const part of parts) length += part.length;
-  const out = new Uint8Array(length);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.length;
-  }
-  return out;
-}
-
 /** Typing one UTF-16 code unit: down + up as a Unicode key event. Surrogate
  * pairs are sent as their two code units, which is how the system
  * reassembles a character outside the BMP. */
@@ -304,7 +292,7 @@ export function buildUnicodeInputs(
       buildKeyInput(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, pointerSize),
     );
   }
-  return concatInputs(parts);
+  return concatBytes(parts);
 }
 
 /** One piece of a `type` action, split into Unicode runs and Enter presses
@@ -326,7 +314,7 @@ export function buildKeyChordInputs(
   for (const modifier of [...modifiers].reverse()) {
     parts.push(buildKeyInput(modifier, 0, KEYEVENTF_KEYUP, pointerSize));
   }
-  return concatInputs(parts);
+  return concatBytes(parts);
 }
 
 /** Named keys accepted in a key chord (lower case). */

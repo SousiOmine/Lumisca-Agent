@@ -1,5 +1,6 @@
 import { assert, assertEquals } from "@std/assert";
-import { grepCommand, shellQuote, VmFileBackend, walkCommand } from "./fs.ts";
+import { grepCommand, VmFileBackend, walkCommand } from "./fs.ts";
+import { shellQuote } from "./quote.ts";
 import { VM_WORKDIR } from "./contract.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
 import type { VmCommandResult } from "./command.ts";
@@ -341,10 +342,10 @@ Deno.test("vm fs: shellQuote survives quotes and spaces", () => {
   assertEquals(shellQuote("it's"), "'it'\\''s'");
 });
 
-Deno.test("vm fs: grepCommand carries the flags the host tool documents", () => {
+Deno.test("vm fs: grepCommand carries the rules the host backend applies", () => {
   // The command string IS the contract with the machine's grep: the host
-  // tool's arguments (recursion, line numbers, binary skipping, the artifact
-  // prunes, the result cap) have to survive into it, and the pattern is
+  // tool's rules (line numbers, binary skipping, the artifact prunes, the
+  // size cap, the result cap) have to survive into it, and the pattern is
   // quoted so a `|` stays one pattern instead of becoming a shell pipe.
   const command = grepCommand(["/home/agent"], {
     pattern: "foo|bar",
@@ -354,11 +355,18 @@ Deno.test("vm fs: grepCommand carries the flags the host tool documents", () => 
     maxResults: 50,
     maxFileSize: 1024,
   });
-  assert(command.includes("-r"), command);
+  // `find | xargs grep`, not `grep -r`: the size cap has no grep spelling.
+  assert(command.includes("find '/home/agent'"), command);
+  assert(command.includes("xargs -0 -r grep"), command);
   assert(command.includes("-n"), command);
+  assert(command.includes("-H"), command);
   assert(command.includes("-I"), command);
   assert(!/(^| )-i( |$)/.test(command), command);
-  assert(command.includes("--exclude-dir='.git'"), command);
+  // Artifact directories are pruned by name (the host walk's set).
+  assert(command.includes("-name '.git'"), command);
+  assert(command.includes("-prune"), command);
+  // The host skips files over the cap; find spells "at most N bytes" this way.
+  assert(command.includes("-size -1025c"), command);
   assert(command.includes("--regexp='foo|bar'"), command);
   assert(command.includes("head -n 50"), command);
 

@@ -153,6 +153,47 @@ export interface InitialData {
 
 // ---- async ----------------------------------------------------------------
 
+/** Wait `ms` milliseconds. The one home for the pattern: the computer-use
+ * hosts, the routine scheduler's slot poll, the VM's command polling and the
+ * container manager all pause between observations, and a copy per module is
+ * how the duration constants and the timer bookkeeping drift. */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** A pause that ends early when `signal` fires, rejecting with the error
+ * `describeAbort()` builds. Both abortable waits in the app need this and
+ * differ only in what an abort MEANS to their caller (a rate-limit backoff
+ * is a retry that will not happen; a VM wait is an interrupted tool call), so
+ * the timing lives here and the error stays their own. */
+export function sleepAbortable(
+  ms: number,
+  signal: AbortSignal | undefined,
+  describeAbort: () => Error,
+): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  if (signal === undefined) return sleep(ms);
+  if (signal.aborted) return Promise.reject(describeAbort());
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(describeAbort());
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** The error an aborted wait rejects with: the standard `AbortError`
+ * DOMException, so code that already classifies abort signals (the agent's
+ * stream handling) recognises it without another sentinel class. */
+export function abortError(): Error {
+  return new DOMException("Aborted", "AbortError");
+}
+
 /** Race a promise against a timeout: resolves with the promise's value, or
  * with `fallback` when `ms` elapses first. Shared by the web shell bridge
  * and the desktop notifications so the timeout pattern lives once. */
@@ -164,6 +205,34 @@ export function withTimeout<T>(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((resolve) => {
     timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
+/**
+ * Race a promise against a deadline that FAILS: when `ms` elapses first the
+ * returned promise rejects with `describeTimeout()`.
+ *
+ * The auxiliary LLM calls (the safety check, the goal judge, the eval tool's
+ * script) all need this shape rather than {@link withTimeout}'s fallback: a
+ * check that did not finish must not read as "no objection". The abort
+ * controller is the caller's — a well-behaved stream is closed by aborting
+ * it, and the race covers transports that ignore the signal.
+ */
+export function withTimeoutError<T>(
+  promise: Promise<T>,
+  ms: number,
+  describeTimeout: () => Error,
+  onTimeout?: () => void,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onTimeout?.();
+      reject(describeTimeout());
+    }, ms);
   });
   return Promise.race([promise, timeout]).finally(() => {
     if (timer !== undefined) clearTimeout(timer);

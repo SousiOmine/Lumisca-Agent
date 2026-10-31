@@ -205,7 +205,7 @@ export function WorkspaceModal(
                 disabled={busy || !name.trim() || folders.length === 0}
               >
                 {busy
-                  ? t("chrome.workspaceModal.saving")
+                  ? t("common.saving")
                   : editing
                   ? t("common.save")
                   : t("chrome.workspaceModal.create")}

@@ -55,9 +55,6 @@ import {
 } from "../ai/context-compaction.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
-/** One observer of the events this agent emits (see subscribeToRun). */
-type RunListener = (event: ClientEvent) => void;
-
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
 const log = createLogger("session-agent");
@@ -207,10 +204,6 @@ export class SessionAgent {
    * run; this guards against re-triggering (e.g. after a failed first run
    * that left the transcript unpersisted). */
   private titleGenerated = false;
-  /** Extra listeners of the events this agent emits (see subscribeToRun):
-   * the routine runner watches for the run's failure without competing with
-   * the session's own event sink. */
-  private runListeners: Set<RunListener> | null = null;
   /** The routine whose run is in flight (see runningRoutineId). */
   private activeRoutineId: string | null = null;
 
@@ -550,17 +543,6 @@ export class SessionAgent {
    * scheduler checks this before stopping anything. */
   runningRoutineId(): string | null {
     return this.activeRoutineId;
-  }
-
-  /** Observe the run's events for one call (the routine runner's error
-   * probe). Returns the unsubscribe function. */
-  private subscribeToRun(listener: RunListener): () => void {
-    if (this.runListeners === null) {
-      this.runListeners = new Set();
-    }
-    const set = this.runListeners;
-    set.add(listener);
-    return () => set.delete(listener);
   }
 
   /** Send a user prompt even while a run is active (fire-and-forget; the
@@ -960,14 +942,6 @@ export class SessionAgent {
       this.onEvent(event);
     } catch {
       // Event sink failures must not break the agent loop.
-    }
-    if (this.runListeners === null) return;
-    for (const listener of [...this.runListeners]) {
-      try {
-        listener(event);
-      } catch {
-        // An observer must not be able to break the run it observes.
-      }
     }
   }
 

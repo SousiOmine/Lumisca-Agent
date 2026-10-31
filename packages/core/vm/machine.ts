@@ -9,6 +9,7 @@ import { runVmCommand, runVmCommandBytes } from "./command.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import { stellaAvailability } from "./availability.ts";
 import type { StellaAvailability } from "./availability.ts";
+import type { StellaStatus } from "../shared/wire.ts";
 import { discoverVmSkills } from "./skills.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
 import type { SkillDef } from "../skills/discover.ts";
@@ -119,13 +120,7 @@ export class StellaMachine {
   }
 
   /** The machine's state, as the status endpoint reports it. */
-  async status(): Promise<{
-    availability: StellaAvailability;
-    state: string;
-    vncPort: number | null;
-    reason: string;
-    starting: boolean;
-  }> {
+  async status(): Promise<StellaStatus> {
     const vm = this.#vm;
     if (vm === undefined) {
       const availability = await this.availability();

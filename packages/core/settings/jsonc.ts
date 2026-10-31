@@ -4,6 +4,7 @@
  * to @std/jsonc; this module only shapes its errors. */
 
 import { parse } from "@std/jsonc";
+import { errorMessage } from "../shared/misc.ts";
 
 /** A settings file that cannot be parsed, or is not a JSON object. */
 export class SettingsFileError extends Error {
@@ -39,7 +40,7 @@ export function parseJsonc(text: string, path?: string): unknown {
   try {
     return parse(text);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = errorMessage(err);
     const where = path === undefined ? "" : ` in ${path}`;
     throw new SettingsFileError(
       `Invalid settings JSONC${where}: ${message}${

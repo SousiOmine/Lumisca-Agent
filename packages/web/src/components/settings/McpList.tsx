@@ -176,7 +176,7 @@ export function McpList() {
                           : <IconAlertTriangle size={12} />}
                         {s.needsAuth
                           ? t("settings.mcp.authNeeded")
-                          : t("settings.mcp.error")}
+                          : t("common.error")}
                       </>
                     )
                     : (
@@ -255,7 +255,7 @@ export function McpList() {
           disabled={!config}
         >
           <IconPlus size={14} />
-          {t("settings.mcp.addServer")}
+          {t("common.addServer")}
         </button>
       </div>
     </>

@@ -3,16 +3,13 @@ import { serializeMcpServers } from "@lumisca/core/shared";
 import type { McpAuthSnapshot, McpServerInfo } from "../types.ts";
 import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
+import { useSavedNotice } from "./useSave.ts";
 import { useT } from "../i18n.ts";
 
 /** Cadence of the status poll while a sign-in waits for the browser. The
  * flow itself runs on the server (the OAuth callback finishes it); the UI
  * only has to notice that it ended. */
 const POLL_MS = 1200;
-
-/** How long the copy button says "copied" (same as the provider login's
- * device-code copy). */
-const COPIED_NOTICE_MS = 2000;
 
 export interface McpSignIn {
   /** A sign-in is being started or waits for the browser (drives the
@@ -45,27 +42,23 @@ export function useMcpSignIn(onDone: () => void): McpSignIn {
   const [busy, setBusy] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { saved: copied, flash: flashCopied } = useSavedNotice();
   const [error, setError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
-  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
+
   /** Latest completion callback, so polling never restarts because the
    * caller re-created it (it is usually an inline closure). */
   const done = useRef(onDone);
   useEffect(() => {
     done.current = onDone;
   });
-  useEffect(() => () => clearTimeout(copiedTimer.current), []);
 
   /** Forget the running sign-in (the flow is over, one way or another). */
   const finish = (): void => {
     setSessionId(null);
     setAuthorizationUrl(null);
-    setCopied(false);
   };
 
   /** A settled snapshot: completion calls back, anything else is shown. */
@@ -76,7 +69,7 @@ export function useMcpSignIn(onDone: () => void): McpSignIn {
     }
     setError(
       snapshot.error !== undefined
-        ? t("settings.mcp.authFailed", { error: snapshot.error })
+        ? t("common.mcpAuth.failed", { error: snapshot.error })
         : t("settings.mcp.authStartFailed"),
     );
   };
@@ -150,12 +143,7 @@ export function useMcpSignIn(onDone: () => void): McpSignIn {
     if (authorizationUrl === null) return;
     try {
       await navigator.clipboard.writeText(authorizationUrl);
-      setCopied(true);
-      clearTimeout(copiedTimer.current);
-      copiedTimer.current = setTimeout(
-        () => setCopied(false),
-        COPIED_NOTICE_MS,
-      );
+      flashCopied();
     } catch (e) {
       setError(errorText(e));
     }

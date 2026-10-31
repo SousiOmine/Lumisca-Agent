@@ -1,7 +1,6 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
   bgraToRgb,
-  crc32,
   DEFAULT_MAX_DIMENSION,
   encodeCapture,
   encodePng,
@@ -10,6 +9,7 @@ import {
 import type { RawCapture } from "./types.ts";
 import { findCanvasIcuDataFile } from "../pdf/icu-data.ts";
 import { inflateSync } from "node:zlib";
+import { crc32 } from "../bytes.ts";
 
 /** @napi-rs/canvas is a real, independent PNG decoder already in the stack
  * (the PDF renderer uses it). Decoding our output with it proves the

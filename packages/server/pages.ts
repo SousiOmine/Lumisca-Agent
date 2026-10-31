@@ -4,7 +4,6 @@ import {
   LANGUAGE_KEY,
   type Locale,
   type LumiscaCore,
-  MCP_OAUTH_CALLBACK_PATH,
   parseAcceptLanguage,
   parseLocale,
   resolveLocale,
@@ -14,6 +13,7 @@ import {
 } from "@lumisca/core";
 import type { InitialData } from "@lumisca/core/shared";
 import type { Assets } from "./assets.ts";
+import { safePageHost } from "./security.ts";
 import { renderHtmlDocument } from "./render.ts";
 import {
   appFileHeaders,
@@ -78,7 +78,7 @@ export function registerPages(
     // the final response.
     return c.newResponse(
       renderHtmlDocument(css, resolvedThemeOf(core), {
-        pageHost: pageHostOf(c),
+        pageHost: safePageHost(c.req.header("host")),
         token: options.token,
         language,
       }),
@@ -167,25 +167,4 @@ export function registerPages(
   });
 
   return { renderPage };
-}
-
-/** The page's own host, so the CSP can name the WebSocket endpoint even when
- * the page is served remotely. Re-parsed (not the raw header) so userinfo or
- * quotes can never reach the CSP attribute. */
-function pageHostOf(c: Context): string {
-  const host = c.req.header("host");
-  if (!host) return "";
-  try {
-    return new URL(`http://${host}`).host;
-  } catch {
-    return "";
-  }
-}
-
-/** Paths the token guard lets through: the app's bundle and icon (no secret
- * in them) and the MCP OAuth callback. `/assets/initial-data.js` carries the
- * token itself and is deliberately absent. */
-export function unguardedPath(path: string): boolean {
-  return path === "/assets/app.js" || path === "/styles.css" ||
-    path === "/favicon.png" || path === MCP_OAUTH_CALLBACK_PATH;
 }

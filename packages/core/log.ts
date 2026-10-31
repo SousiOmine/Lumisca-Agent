@@ -12,6 +12,7 @@
  * remaining available when diagnosing MCP / federation / browser issues.
  * `info`/`warn`/`error` always print.
  */
+import { errorMessage } from "./shared/misc.ts";
 
 function debugEnabled(): boolean {
   try {
@@ -43,7 +44,7 @@ export interface Logger {
 export function createLogger(scope: string): Logger {
   const renderCause = (cause: unknown): string => {
     if (cause === undefined) return "";
-    const text = cause instanceof Error ? cause.message : String(cause);
+    const text = errorMessage(cause);
     return text.length > 0 ? `: ${text}` : "";
   };
   return {

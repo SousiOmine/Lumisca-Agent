@@ -156,8 +156,8 @@ export function TitleBar({
               type="button"
               className="titlebar-btn close"
               onClick={() => windowApi.close()}
-              title={t("chrome.titleBar.close")}
-              aria-label={t("chrome.titleBar.close")}
+              title={t("common.close")}
+              aria-label={t("common.close")}
             >
               <IconX size={15} />
             </button>

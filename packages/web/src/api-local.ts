@@ -318,17 +318,6 @@ export const api = {
       `/api/stella/agents/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
-  /** One agent's conversation, created on first use. This is also what starts
-   * the machine (a first run builds its image: the call can take minutes). */
-  getStellaSession: (agentId?: string) =>
-    request<SessionInfo>(
-      agentId === undefined
-        ? "/api/stella/session"
-        : `/api/stella/session?agentId=${encodeURIComponent(agentId)}`,
-    ),
-  /** The skills a stella session can load. */
-  getStellaSkills: () => request<{ skills: SkillInfo[] }>("/api/stella/skills"),
-
   // --- routines (scheduled requests of a stella conversation) --------------
 
   /** One agent's routines, with the "running now" flag. */

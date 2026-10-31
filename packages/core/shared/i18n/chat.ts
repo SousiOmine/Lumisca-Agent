@@ -92,7 +92,6 @@ export const chat = {
   },
   "chat.composer.submit": { ja: "送信", en: "Send" },
   "chat.composer.image.remove": { ja: "添付画像を削除", en: "Remove image" },
-  "chat.composer.mention.loading": { ja: "読み込み中…", en: "Loading…" },
   "chat.composer.mention.noMatch": {
     ja: "一致するファイルが見つかりません",
     en: "No matching files",
@@ -260,10 +259,6 @@ export const chat = {
   "chat.stella.agents.icon.choose": {
     ja: "画像を選択",
     en: "Choose a picture",
-  },
-  "chat.stella.agents.icon.saving": {
-    ja: "保存中…",
-    en: "Saving…",
   },
   "chat.stella.agents.icon.reset": {
     ja: "デフォルトに戻す",

@@ -17,6 +17,7 @@
  * second simultaneous request would mean two people on one screen.
  */
 import { CoreError } from "../errors.ts";
+import { abortError } from "../shared/misc.ts";
 import type { ClientEvent } from "../types/event.ts";
 
 /** A handover the user has not finished yet, as the resync snapshot carries
@@ -163,8 +164,4 @@ export class HandoverHub {
       new CoreError("The handover was cancelled", "unavailable"),
     );
   }
-}
-
-function abortError(): Error {
-  return new DOMException("Aborted", "AbortError");
 }

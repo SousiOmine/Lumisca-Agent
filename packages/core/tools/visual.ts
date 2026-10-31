@@ -2,6 +2,7 @@ import { basename, extname } from "node:path";
 import {
   isVisualExtension,
   maxVisualBytes,
+  SVG_EXTENSION,
   TOOL_VISUAL,
   VISUAL_EXTENSIONS,
   VISUAL_MIME_BY_EXTENSION,
@@ -76,7 +77,7 @@ export function createVisualTool(
         );
       }
       const { bytes } = await files.readHead(filePath, limit);
-      if (extension === ".svg") {
+      if (extension === SVG_EXTENSION) {
         // The same rule the fence follows: a diagram never carries script.
         // An image context would not run it, and the asset route refuses to
         // serve one that could, so a script can only ever be a surprise.

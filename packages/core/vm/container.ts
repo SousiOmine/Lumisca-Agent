@@ -10,6 +10,7 @@
  */
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
+import { concatBytes } from "../bytes.ts";
 import { firstLine } from "../lines.ts";
 import {
   VM_BUILD_TIMEOUT_MS,
@@ -38,9 +39,11 @@ import {
   VM_TEXT_OUTPUT_LIMIT,
   type VmCommandBytesResult,
   type VmCommandBytesRunner,
+  type VmCommandOptions,
   type VmCommandResult,
   type VmCommandRunner,
 } from "./command.ts";
+import { sleep } from "../shared/misc.ts";
 
 /** Where the machine is, as far as this application can tell. */
 export type VmState =
@@ -141,7 +144,7 @@ export async function containerFilesDigest(
     parts.push(await Deno.readFile(join(containerDir, name)));
     parts.push(encoder.encode("\u0000"));
   }
-  const digest = await crypto.subtle.digest("SHA-256", concat(parts));
+  const digest = await crypto.subtle.digest("SHA-256", concatBytes(parts));
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
@@ -540,7 +543,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
           }`,
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await sleep(300);
     }
   }
 
@@ -661,18 +664,35 @@ function detail(result: VmCommandResult): string {
   return text === "" ? `exit code ${result.exitCode}` : firstLine(text);
 }
 
-/** Join byte runs into one buffer (the digest of several files is taken over
- * one buffer, and `crypto.subtle` takes no chunk list). */
-function concat(parts: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
-  let length = 0;
-  for (const part of parts) length += part.length;
-  const out = new Uint8Array(length);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.length;
-  }
-  return out;
+/** The `podman exec` argv for one call. Both seams build the same command;
+ * only how its output comes back (text or bytes) differs. */
+function execArgv(
+  container: string,
+  command: readonly string[],
+  exec: VmExecOptions,
+): string[] {
+  return podman([
+    "exec",
+    ...(exec.stdin === undefined ? [] : ["--interactive"]),
+    ...Object.entries(exec.env ?? {}).flatMap((
+      [name, value],
+    ) => ["--env", `${name}=${value}`]),
+    "--workdir",
+    exec.workdir ?? VM_WORKDIR,
+    container,
+    ...command,
+  ]);
+}
+
+/** The per-call options both seams pass through. */
+function execOptions(exec: VmExecOptions): VmCommandOptions {
+  return {
+    timeoutMs: exec.timeoutMs,
+    ...(exec.signal !== undefined ? { signal: exec.signal } : {}),
+    ...(exec.stdin !== undefined ? { stdin: exec.stdin } : {}),
+    ...(exec.maxOutput !== undefined ? { maxOutput: exec.maxOutput } : {}),
+    ...(exec.keep !== undefined ? { keep: exec.keep } : {}),
+  };
 }
 
 /** Run a command inside the machine, with the container's name and workdir
@@ -683,28 +703,8 @@ export function createVmExec(options: {
   containerName?: string;
 }): VmExec {
   const container = options.containerName ?? VM_CONTAINER_NAME;
-  return (command, exec) => {
-    return options.run(
-      podman([
-        "exec",
-        ...(exec.stdin === undefined ? [] : ["--interactive"]),
-        ...Object.entries(exec.env ?? {}).flatMap((
-          [name, value],
-        ) => ["--env", `${name}=${value}`]),
-        "--workdir",
-        exec.workdir ?? VM_WORKDIR,
-        container,
-        ...command,
-      ]),
-      {
-        timeoutMs: exec.timeoutMs,
-        ...(exec.signal !== undefined ? { signal: exec.signal } : {}),
-        ...(exec.stdin !== undefined ? { stdin: exec.stdin } : {}),
-        ...(exec.maxOutput !== undefined ? { maxOutput: exec.maxOutput } : {}),
-        ...(exec.keep !== undefined ? { keep: exec.keep } : {}),
-      },
-    );
-  };
+  return (command, exec) =>
+    options.run(execArgv(container, command, exec), execOptions(exec));
 }
 
 /** The byte variant of {@link createVmExec}: the same argument shape, with
@@ -714,28 +714,8 @@ export function createVmExecBytes(options: {
   containerName?: string;
 }): VmExecBytes {
   const container = options.containerName ?? VM_CONTAINER_NAME;
-  return (command, exec) => {
-    return options.runBytes(
-      podman([
-        "exec",
-        ...(exec.stdin === undefined ? [] : ["--interactive"]),
-        ...Object.entries(exec.env ?? {}).flatMap((
-          [name, value],
-        ) => ["--env", `${name}=${value}`]),
-        "--workdir",
-        exec.workdir ?? VM_WORKDIR,
-        container,
-        ...command,
-      ]),
-      {
-        timeoutMs: exec.timeoutMs,
-        ...(exec.signal !== undefined ? { signal: exec.signal } : {}),
-        ...(exec.stdin !== undefined ? { stdin: exec.stdin } : {}),
-        ...(exec.maxOutput !== undefined ? { maxOutput: exec.maxOutput } : {}),
-        ...(exec.keep !== undefined ? { keep: exec.keep } : {}),
-      },
-    );
-  };
+  return (command, exec) =>
+    options.runBytes(execArgv(container, command, exec), execOptions(exec));
 }
 
 /** The canonical container name, re-exported for the backends. */

@@ -1,6 +1,7 @@
 import { useState } from "preact/compat";
 import { IconMessageQuestion, IconSend } from "@tabler/icons-preact";
 import type { AskAnswer, AskQuestion, PendingQuestion } from "../types.ts";
+import { errorMessage } from "@lumisca/core/shared";
 import { useT } from "../i18n.ts";
 
 /** Selected option indices per question id, inside one question card. */
@@ -124,7 +125,7 @@ function QuestionCard({
       );
       // The panel disappears once the tool_end event arrives.
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
       setSubmitting(false);
     }
   };

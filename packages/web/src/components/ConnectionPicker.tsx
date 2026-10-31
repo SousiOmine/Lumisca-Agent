@@ -5,13 +5,12 @@ import {
   IconServer,
   IconSettings,
 } from "@tabler/icons-preact";
-import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
 import {
   connectionLabel,
-  CONNECTIONS_UPDATED_EVENT,
   displayedConnectionId,
   serverLabel,
+  useConnections,
 } from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
@@ -39,8 +38,12 @@ interface ConnectionPickerProps {
  * switch with, so the title bar does not render and this control is not
  * shown.
  *
- * Both answers are read once on mount and refreshed when the settings
- * dialog saves into the registry. The shell's answer is fixed for the
+ * The registry comes from the shared store (`connections.ts`), so a save in
+ * the settings dialog reaches this popover without a re-fetch. The shell's
+ * answer is read once: it is fixed for the lifetime of the page — switching
+ * servers navigates the window and loads a new page — so it is not polled
+ * here; the title bar already polls it and hands it over through `state`
+ * when it changes. It is
  * lifetime of the page — switching servers navigates the window and loads
  * a new page — so it is not polled here; the title bar already polls it and
  * hands it over through `state` when it changes.
@@ -59,52 +62,36 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<ShellState | null>(null);
-  const [servers, setServers] = useState<ConnectionEntry[] | null>(null);
+  const { entries: servers } = useConnections();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useClickOutside(rootRef, () => setOpen(false), open);
 
-  /** Read the displayed server and the registry together: the label of one
-   * depends on the other. */
-  const load = async () => {
-    setError(null);
-    try {
-      const [{ connections }, shell] = await Promise.all([
-        api.getConnections(),
-        shellCall<ShellState>("state"),
-      ]);
-      setServers(connections);
-      setState(shell);
-    } catch (failure) {
-      setError(errorText(failure));
-    }
-  };
-
+  /** The displayed server, as the shell reports it. */
   useEffect(() => {
-    void load();
-  }, []);
-
-  // The settings dialog saves into the same registry: keep the list (and an
-  // open popover) in step instead of showing the servers of the last read.
-  useEffect(() => {
-    const reload = () => void load();
-    globalThis.addEventListener(CONNECTIONS_UPDATED_EVENT, reload);
-    return () =>
-      globalThis.removeEventListener(CONNECTIONS_UPDATED_EVENT, reload);
+    let stale = false;
+    shellCall<ShellState>("state").then((shell) => {
+      if (!stale) setState(shell);
+    }).catch((failure: unknown) => {
+      if (!stale) setError(errorText(failure));
+    });
+    return () => {
+      stale = true;
+    };
   }, []);
 
   const selected = state === null
     ? null
-    : displayedConnectionId(servers ?? [], state);
+    : displayedConnectionId(servers, state);
 
   /** The current server's label: the name the shell was switched with, or —
    * for a server this page's registry knows nothing about — its origin. */
   const currentLabel = (): string => {
     if (state === null) return t("common.loading");
     if (state.mode === "local") return t("chrome.connections.local");
-    const entry = (servers ?? []).find((s) => s.id === selected);
+    const entry = servers.find((s) => s.id === selected);
     if (entry !== undefined) return connectionLabel(entry);
     return serverLabel(state.name, state.url);
   };
@@ -140,10 +127,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
       <button
         type="button"
         className="titlebar-btn connection-picker-trigger"
-        onClick={() => {
-          if (!open) void load();
-          setOpen((value) => !value);
-        }}
+        onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
         title={t("chrome.connections.current", { name: currentLabel() })}

@@ -127,9 +127,11 @@ export {
 } from "./modes/goal.ts";
 export {
   buildChatSystemPrompt,
+  buildStellaSystemPrompt,
   buildSystemPrompt,
   createChatTools,
   createCodingTools,
+  createStellaTools,
 } from "./tools/mod.ts";
 export type {
   Infer,
@@ -345,11 +347,15 @@ export {
 export type { InitialData } from "./shared/mod.ts";
 export type { SavedPrompt } from "./shared/mod.ts";
 export {
+  abortError,
   decodeUtf8,
   formatSessionName,
   parseJsonOrThrow,
   safeJsonParse,
+  sleep,
+  sleepAbortable,
   withTimeout,
+  withTimeoutError,
 } from "./shared/mod.ts";
 export {
   diffLineCounts,

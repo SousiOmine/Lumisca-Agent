@@ -2,15 +2,15 @@ import { useEffect, useState } from "preact/compat";
 import type { CSSProperties } from "preact/compat";
 import { IconChevronDown, IconPlus, IconTrash } from "@tabler/icons-preact";
 import type { ConnectionEntry } from "../../types.ts";
-import { api } from "../../api.ts";
 import { shellAvailable, shellCall, type ShellState } from "../../shell.ts";
 import { errorText } from "../../providers.ts";
 import {
   connectionLabel,
   isSupportedUrl,
-  notifyConnectionsUpdated,
   pageUrl,
+  putConnections,
   serverLabel,
+  useConnections,
   withUrl,
 } from "../../connections.ts";
 import { Field } from "../Field.tsx";
@@ -41,7 +41,18 @@ export function ConnectionList() {
   /** null = probing the shell bridge. */
   const [desktop, setDesktop] = useState<boolean | null>(null);
   const [state, setState] = useState<ShellState | null>(null);
-  const [servers, setServers] = useState<ConnectionEntry[]>([]);
+  // The stored registry lives in a shared store (the title bar's picker reads
+  // the same one). This panel edits a DRAFT of it: a row's fields are local
+  // until Save, and an added-but-never-saved row must not appear in the
+  // picker. Save writes the draft through the store, so both surfaces see
+  // the result at once.
+  const { entries: stored } = useConnections();
+  const [draft, setDraft] = useState<readonly ConnectionEntry[] | null>(null);
+  const servers = draft ?? stored;
+  /** Edit the draft (starting from the stored registry on the first edit). */
+  const setServers = (
+    update: (current: readonly ConnectionEntry[]) => readonly ConnectionEntry[],
+  ) => setDraft(update(draft ?? stored));
   /** Ids whose fields are open. Everything else shows its summary row. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -54,19 +65,8 @@ export function ConnectionList() {
       if (ok) {
         shellCall<ShellState>("state").then(setState).catch(() => {});
       }
-      await load();
     })();
   }, []);
-
-  const load = async () => {
-    setError(null);
-    try {
-      const { connections } = await api.getConnections();
-      setServers(connections);
-    } catch (e) {
-      setError(errorText(e));
-    }
-  };
 
   /** Run an action; errors land in the top-level error line. */
   const run = async (fn: () => Promise<void>): Promise<void> => {
@@ -122,22 +122,21 @@ export function ConnectionList() {
       const next = servers.some((s) => s.id === server.id)
         ? servers.map((s) => (s.id === server.id ? server : s))
         : [...servers, server];
-      await api.putConnections(next);
-      setServers(next);
-      // Saved: the fields fold back to the row they describe.
+      await putConnections(next);
+      // Saved: the store now holds this list, so the panel edits it again
+      // instead of a draft of it, and the fields fold back to the row they
+      // describe.
+      setDraft(null);
       setExpandedId(server.id, false);
-      // The new/renamed entry must show up in the title bar's picker.
-      notifyConnectionsUpdated();
     });
 
   const remove = (id: string) =>
     run(async () => {
       if (!confirmAction(t("settings.connection.deleteConfirm"))) return;
       const next = servers.filter((s) => s.id !== id);
-      await api.putConnections(next);
-      setServers(next);
+      await putConnections(next);
+      setDraft(null);
       setExpandedId(id, false);
-      notifyConnectionsUpdated();
     });
 
   const update = (id: string, patch: Partial<ConnectionEntry>) =>
@@ -272,7 +271,7 @@ export function ConnectionList() {
 
           <div>
             <button type="button" className="btn" disabled={busy} onClick={add}>
-              <IconPlus size={14} /> {t("settings.connection.addServer")}
+              <IconPlus size={14} /> {t("common.addServer")}
             </button>
           </div>
         </div>

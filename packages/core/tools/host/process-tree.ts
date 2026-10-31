@@ -1,4 +1,5 @@
 import { decodeUtf8 } from "../../shared/mod.ts";
+import { sleep } from "../../shared/misc.ts";
 
 /** How many sweeps a POSIX tree gets before its root is killed, and how
  * long each waits: the sweep exists to catch a child spawned while the
@@ -115,7 +116,7 @@ async function killPosixTree(rootPid: number): Promise<void> {
     const descendants = posixDescendantPids(rootPid);
     if (descendants.length === 0) break;
     for (const pid of descendants) signalKill(pid);
-    await new Promise((resolve) => setTimeout(resolve, KILL_SWEEP_DELAY_MS));
+    await sleep(KILL_SWEEP_DELAY_MS);
   }
   signalKill(rootPid);
 }
@@ -144,7 +145,7 @@ export async function killProcessTree(
   if (Deno.build.os === "windows") {
     taskkillPids([...windowsDescendantPids(child.pid), child.pid]);
     for (let attempt = 0; attempt < 3; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await sleep(100);
       const stragglers = windowsDescendantPids(child.pid);
       if (stragglers.length === 0) return;
       taskkillPids(stragglers);

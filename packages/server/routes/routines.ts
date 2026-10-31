@@ -12,14 +12,8 @@
  */
 import { Hono } from "hono";
 import type { Routine, StellaAgent } from "@lumisca/core";
+import type { RoutineView } from "@lumisca/core/shared";
 import { AppError, parseBody, requireBoolean } from "./util.ts";
-
-/** One routine as the settings list shows it: the stored row plus whether it
- * is running right now (which lives in the scheduler, not the database). */
-export interface RoutineView extends Routine {
-  agentName: string;
-  running: boolean;
-}
 
 export interface RoutineApi {
   listRoutinesOf(agentId: string): Routine[];

@@ -15,7 +15,12 @@
  */
 import { bytesToBase64 } from "../base64.ts";
 import { CoreError } from "../errors.ts";
-import { TOOL_VM_ACT, TOOL_VM_SCREENSHOT } from "../shared/mod.ts";
+import {
+  abortError,
+  sleepAbortable,
+  TOOL_VM_ACT,
+  TOOL_VM_SCREENSHOT,
+} from "../shared/mod.ts";
 import {
   integer,
   object,
@@ -229,7 +234,7 @@ function createActTool({ screen }: VmToolsOptions): Tool<typeof actSchema> {
             1,
             MAX_WAIT_MS,
           );
-          await waitAbortable(durationMs, signal);
+          await sleepAbortable(durationMs, signal, abortError);
           return result(`waited ${durationMs}ms.`, { durationMs });
         }
         default:
@@ -250,28 +255,4 @@ function result(
   details: Record<string, unknown>,
 ): ToolResult {
   return { content: [{ type: "text", text }], details };
-}
-
-/** A wait that ends early when the run is aborted, so stopping a run does not
- * leave the agent asleep for the rest of its pause. */
-function waitAbortable(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal === undefined) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-  if (signal.aborted) return Promise.reject(abortError());
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(abortError());
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-function abortError(): Error {
-  return new DOMException("Aborted", "AbortError");
 }

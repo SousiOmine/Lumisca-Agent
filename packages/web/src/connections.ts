@@ -1,15 +1,85 @@
+import { useCallback, useEffect, useSyncExternalStore } from "preact/compat";
+import { errorMessage as errorText } from "@lumisca/core/shared";
+import { api } from "./api.ts";
+import { createStore } from "./store.ts";
 import type { ConnectionEntry } from "./types.ts";
 
-/** Custom event dispatched after the connection registry (settings →
- * 接続先サーバー) is mutated, so the title bar's picker shows the new list
- * without a page reload. The registry belongs to this server alone (the
- * workspaces of the displayed server do not come from it), so nothing else
- * listens. */
-export const CONNECTIONS_UPDATED_EVENT = "lumisca:connections-updated";
+/**
+ * The connection registry (`GET /api/connections`), as one shared store.
+ *
+ * Two surfaces need the same list: the settings dialog that edits it and the
+ * title bar's picker that switches to it. They used to tell each other to
+ * re-read through a `CustomEvent` on `globalThis` — an event is not a value,
+ * so each kept its own copy and the picker showed the previous list until its
+ * fetch returned.
+ */
 
-/** Announce a connection registry change (save / delete). */
-export function notifyConnectionsUpdated(): void {
-  globalThis.dispatchEvent(new CustomEvent(CONNECTIONS_UPDATED_EVENT));
+interface ConnectionsState {
+  /** The registry entries, in the server's order. */
+  entries: ConnectionEntry[];
+  /** True once a read settled (success or failure). */
+  loaded: boolean;
+  /** Last read failure, or null. */
+  error: string | null;
+}
+
+const store = createStore<ConnectionsState>({
+  entries: [],
+  loaded: false,
+  error: null,
+});
+
+/** One read in flight, shared by every caller. */
+let reading: Promise<void> | null = null;
+
+/** Re-read the registry (a no-op while a read is already in flight). */
+export function reloadConnections(): Promise<void> {
+  if (reading !== null) return reading;
+  reading = (async () => {
+    try {
+      const { connections } = await api.getConnections();
+      store.set({ entries: connections, loaded: true, error: null });
+    } catch (failure) {
+      store.set({ ...store.get(), loaded: true, error: errorText(failure) });
+    } finally {
+      reading = null;
+    }
+  })();
+  return reading;
+}
+
+/** Replace the whole registry and reflect the server's answer. The server
+ * stores the list it was given, so the write's own list is what every screen
+ * should show — reading it back would be a second round trip for the same
+ * bytes, and a failed write must not leave the store claiming it succeeded. */
+export async function putConnections(
+  next: readonly ConnectionEntry[],
+): Promise<void> {
+  await api.putConnections([...next]);
+  store.set({ entries: [...next], loaded: true, error: null });
+}
+
+/** The registry for a component (re-renders when it changes). */
+export function useConnections(): {
+  entries: ConnectionEntry[];
+  loaded: boolean;
+  error: string | null;
+  reload: () => void;
+} {
+  const subscribe = useCallback(
+    (listener: () => void) => store.subscribe(listener),
+    [],
+  );
+  const state = useSyncExternalStore(subscribe, () => store.get());
+  useEffect(() => {
+    if (!store.get().loaded) void reloadConnections();
+  }, []);
+  return {
+    entries: state.entries,
+    loaded: state.loaded,
+    error: state.error,
+    reload: () => void reloadConnections(),
+  };
 }
 
 /**

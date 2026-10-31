@@ -390,7 +390,7 @@ export function SettingsModal({
       onClose={onClose}
     >
       <div className="modal-header">
-        <h2>{t("settings.dialog.title")}</h2>
+        <h2>{t("common.settings")}</h2>
         <button
           type="button"
           className="btn push"

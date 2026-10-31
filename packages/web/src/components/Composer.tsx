@@ -448,7 +448,7 @@ export function Composer({
             {mention.loading && mention.items.length === 0
               ? (
                 <div className="mention-status">
-                  {t("chat.composer.mention.loading")}
+                  {t("common.loading")}
                 </div>
               )
               : mention.items.length === 0

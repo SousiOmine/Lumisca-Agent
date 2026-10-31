@@ -303,9 +303,8 @@ Deno.test("federation: a slow path gets a longer budget than an ordinary one", (
       "/api/sessions/s1/open",
       "/api/sessions/s1/compact",
       "/api/sessions/s1/rewind",
-      "/api/stella/session",
       "/api/stella/conversations/a/messages",
-      "/api/stella/conversations/a/compact",
+      "/api/stella/conversations/a/prompt",
     ]
   ) {
     assert(

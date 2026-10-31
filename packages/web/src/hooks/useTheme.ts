@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "preact/compat";
-import { api } from "../api.ts";
+import { settingsStore } from "../settingsStore.ts";
 import { errorMessage as errorText, THEME_KEY } from "@lumisca/core/shared";
 import type { ThemeSetting } from "../types.ts";
 
@@ -50,7 +50,10 @@ export function useTheme(initial: ThemeSetting = "dark"): {
     // Optimistic: the scheme applies immediately; a failed persist rolls
     // back to the value the server still holds.
     setSetting(next);
-    api.setSetting(THEME_KEY, next).catch((failure) => {
+    // Through the settings store, not `api.setSetting` directly: the store is
+    // what every other screen reads, so a theme picked here must land there
+    // too (a panel open beside this one would otherwise keep the old value).
+    settingsStore.set(THEME_KEY, next).catch((failure) => {
       setError(errorText(failure));
       if (chosen.current !== next) return; // a newer choice superseded this one
       chosen.current = previous;

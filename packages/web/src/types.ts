@@ -8,7 +8,6 @@
  * list is not repeated.
  */
 import type * as core from "@lumisca/core";
-import type { RoutineSchedule, RoutineStatus } from "@lumisca/core/shared";
 import type { Message, ToolCall } from "@lumisca/core";
 
 /** Shared domain types; single source of truth in packages/core. */
@@ -72,78 +71,21 @@ export type {
   WorkspaceFileEntry,
 } from "@lumisca/core";
 
-/** What the UI knows about stella mode's machine, read from the server
- * (`GET /api/stella/status`). The CHOSEN mode is not part of it: it belongs
- * to this client (see hooks/useAppMode.ts), so a desktop window switching
- * modes never drags a browser showing the same server along with it. */
-export interface StellaStatus {
-  /** Whether stella can run on the server this client talks to, with the
-   * reason when it cannot. */
-  availability: core.StellaAvailability;
-  /** The machine's state (`running`, `stopped`, `image_missing`, ...). */
-  state: string;
-  vncPort: number | null;
-  reason: string;
-  /** True while the machine is being prepared (a first run builds the image,
-   * which takes minutes — the one wait the UI shows). */
-  starting: boolean;
-}
-
-/** Peer reachability of the connection registry (`GET /api/fed/peers`), used
- * by the session list to label the rows of sessions that run on another
- * machine. */
-export interface PeerStatus {
-  id: string;
-  name: string;
-  /** The registered base URL (`scheme://host[:port]`). Kept alongside the
-   * name so a registry entry without one — the name field is free text —
-   * still has an identifiable label (see `peers.ts`). */
-  url: string;
-  ok: boolean;
-  error?: string;
-}
-
-/** A starting point of the workspace folder picker's sidebar
- * (`GET /api/fs/places`): an OS-typical user folder, or a filesystem root
- * (a drive on Windows). `kind` is a token the UI translates — a root is
- * labelled by its own path. */
-export type FsPlaceKind =
-  | "home"
-  | "desktop"
-  | "documents"
-  | "downloads"
-  | "root";
-
-export interface FsPlace {
-  kind: FsPlaceKind;
-  path: string;
-}
-
-/** A folder-picker entry: folders can be entered and picked as a workspace
- * folder, files are listed for orientation only (a workspace is built from
- * folders). */
-export interface FsEntry {
-  name: string;
-  path: string;
-  kind: "dir" | "file";
-}
-
-/** One step of the picker's address bar, from the filesystem root down to
- * the browsed folder. */
-export interface FsBreadcrumb {
-  name: string;
-  path: string;
-}
-
-/** A directory listing (`GET /api/fs/browse`): the address bar's chain plus
- * the folder's entries, folders first. The server walks the chain because
- * only it knows the platform's path separators. */
-export interface FsBrowse {
-  path: string;
-  parent: string | null;
-  breadcrumbs: FsBreadcrumb[];
-  entries: FsEntry[];
-}
+/** The folder picker's wire shapes, the federated peers' reachability and
+ * the stella machine's status are DEFINED once in
+ * `@lumisca/core/shared/wire.ts` — the server that answers those endpoints
+ * imports the same definitions, so a renamed field cannot pass a type check
+ * on one side only. Re-exported here because web modules import their types
+ * from this one file. */
+export type {
+  FsBreadcrumb,
+  FsBrowse,
+  FsEntry,
+  FsPlace,
+  FsPlaceKind,
+  PeerStatus,
+  StellaStatus,
+} from "@lumisca/core/shared";
 
 /** Assistant message with text/tool-call content, for rendering. */
 export type AssistantMessage = Extract<Message, { role: "assistant" }>;
@@ -166,23 +108,11 @@ export interface PendingImage {
  * imports from `@lumisca/web`); re-exported here for web consumers. */
 export type { InitialData } from "@lumisca/core/shared";
 
-/** One routine (a scheduled request of a stella conversation), as the
- * settings list shows it: the stored row plus whether it is running now
- * (which lives in the scheduler, not the database). */
-export interface RoutineView {
-  id: string;
-  agentId: string;
-  agentName: string;
-  name: string;
-  prompt: string;
-  schedule: RoutineSchedule;
-  enabled: boolean;
-  nextRunAt: number | null;
-  lastRunAt: number | null;
-  lastStatus: RoutineStatus | null;
-  lastDetail: string | null;
-  running: boolean;
-}
+/** One routine as the settings list shows it — the stored row plus the
+ * agent's name and whether it is running now. Defined in
+ * `@lumisca/core/shared/routine.ts` (the route that produces it and this
+ * panel both name it). */
+export type { RoutineView } from "@lumisca/core/shared";
 
 /** One pending ask (the `ask` tool): questions awaiting the user's answers,
  * tied to the tool call that asked them. */

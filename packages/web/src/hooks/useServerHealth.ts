@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { errorMessage } from "@lumisca/core/shared";
 import { onServerFailure, token } from "../api-client.ts";
 import { type LocalServerStatus, serverApi } from "../shell.ts";
 
@@ -164,7 +165,7 @@ export function useServerHealth(active: boolean): ServerHealth {
       await serverApi.restart();
       // Success navigates the whole WebView to the fresh server page.
     } catch (e) {
-      setRestartError(e instanceof Error ? e.message : String(e));
+      setRestartError(errorMessage(e));
     } finally {
       setRestarting(false);
     }

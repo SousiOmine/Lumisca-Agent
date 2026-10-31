@@ -9,15 +9,17 @@ import {
 } from "@lumisca/core/shared";
 import { errorText } from "../../providers.ts";
 import { useSettings } from "../../settingsStore.ts";
+import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
 
-/** Quiet period before a typed token count is persisted (the same
- * debounce the personalization editor uses). */
-const SAVE_DEBOUNCE_MS = 600;
-
-/** How long the "saved" note stays visible after a successful write. */
-const SAVED_NOTE_MS = 2_000;
+/** What one pending token-field commit needs (see typedCommit). */
+interface TypedCommit {
+  key: string;
+  raw: string;
+  current: string;
+  apply: (value: string) => void;
+}
 
 /**
  * Settings → モデル: the context compaction tuning. It follows pi's settings
@@ -44,15 +46,9 @@ export function CompactionSettings() {
   const [enabled, setEnabled] = useState(true);
   const [reserve, setReserve] = useState("");
   const [keepRecent, setKeepRecent] = useState("");
-  const [saved, setSaved] = useState(false);
+  const { saved, flash: flashSaved } = useSavedNotice();
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
 
   // Seed the fields from the store once it has loaded (it may already be
   // loaded when the dialog opens a second time).
@@ -66,12 +62,12 @@ export function CompactionSettings() {
     setKeepRecent(values[COMPACTION_KEEP_RECENT_TOKENS_KEY] ?? "");
   }, [loaded, settings.values]);
 
-  // A pending debounce must not fire after the dialog closed (the write
-  // would still be correct, but the state update would be wasted).
-  useEffect(() => () => {
-    clearTimeout(saveTimer.current);
-    clearTimeout(savedTimer.current);
-  }, []);
+  /** One pending piece of typing: which setting, the text, and how to put
+   * the field back if the write is refused. The debounced writer owns the
+   * timer (and cancels it on unmount); this is only its payload. */
+  const typedCommit = useDebouncedWrite<TypedCommit>((commit) => {
+    commitTokens(commit.key, commit.raw, commit.current, commit.apply);
+  });
 
   /** Persist one setting; a rejected write restores the previous value so
    * the field never shows something that was not stored. */
@@ -84,9 +80,7 @@ export function CompactionSettings() {
     setError(undefined);
     try {
       await settings.set(key, value);
-      setSaved(true);
-      clearTimeout(savedTimer.current);
-      savedTimer.current = setTimeout(() => setSaved(false), SAVED_NOTE_MS);
+      flashSaved();
     } catch (e) {
       restore();
       setError(t("settings.compaction.saveFailed", { error: errorText(e) }));
@@ -113,7 +107,7 @@ export function CompactionSettings() {
     current: string,
     apply: (value: string) => void,
   ) => {
-    clearTimeout(saveTimer.current);
+    typedCommit.cancel();
     const trimmed = raw.trim();
     const parsed = trimmed === ""
       ? undefined
@@ -137,11 +131,7 @@ export function CompactionSettings() {
     current: string,
     apply: (value: string) => void,
   ) => {
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(
-      () => commitTokens(key, raw, current, apply),
-      SAVE_DEBOUNCE_MS,
-    );
+    typedCommit.schedule({ key, raw, current, apply });
   };
 
   /** One token row (label, description, numeric field). */
@@ -211,7 +201,7 @@ export function CompactionSettings() {
 
       {saved && !saving && (
         <span className="settings-saved">
-          {t("settings.compaction.saved")}
+          {t("common.saved")}
         </span>
       )}
       {error && <div className="error-text">{error}</div>}

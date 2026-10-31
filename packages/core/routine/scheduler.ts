@@ -27,6 +27,7 @@ import type { Routine } from "../shared/routine.ts";
 import { nextRunAt } from "../shared/routine.ts";
 import type { RoutineRepo } from "./repo.ts";
 import { CoreError, errorMessage } from "../errors.ts";
+import { sleep } from "../shared/misc.ts";
 
 /** How often the scheduler looks for due routines. A minute's granularity
  * would be enough for the schedules it supports, but the tick also drives
@@ -113,9 +114,6 @@ export function createRoutineScheduler(
 
   let tickTimer: ReturnType<typeof setInterval> | null = null;
   let firstTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const sleep = (ms: number) =>
-    new Promise((resolve) => setTimeout(resolve, ms));
 
   /** One pass: start every due routine. Runs do not block the tick. */
   function tick(): void {

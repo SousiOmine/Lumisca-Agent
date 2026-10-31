@@ -12,6 +12,7 @@
  */
 
 import { errorMessage } from "../shared/misc.ts";
+import { concatBytes } from "../bytes.ts";
 import { WebSearchError } from "./errors.ts";
 import { htmlToText, pageTitle } from "./html.ts";
 import { MAX_DIRECT_FETCH_BYTES, MAX_DIRECT_FETCH_CHARS } from "./constants.ts";
@@ -365,21 +366,9 @@ async function readBody(response: Response, url: string): Promise<string> {
     reader.releaseLock();
   }
 
-  const text = new TextDecoder().decode(concat(chunks, bytes));
+  const text = new TextDecoder().decode(concatBytes(chunks, bytes));
   if (text.length > MAX_DIRECT_FETCH_CHARS) throw tooLarge(url);
   return text;
-}
-
-/** Join the read chunks into one buffer (no `node:Buffer`: this module is
- * plain Deno and runs under the test runner too). */
-function concat(chunks: readonly Uint8Array[], total: number): Uint8Array {
-  const joined = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    joined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return joined;
 }
 
 function tooLarge(url: string): WebSearchError {

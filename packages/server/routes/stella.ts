@@ -4,7 +4,6 @@ import type {
   AskAnswer,
   ClientEvent,
   SessionInfo,
-  SkillInfo,
   StellaAgent,
   StellaConversationSnapshot,
   StellaEntry,
@@ -12,21 +11,12 @@ import type {
   StellaQuestion,
   WindowQuery,
 } from "@lumisca/core";
-import type { StellaAvailability } from "@lumisca/core";
-import {
-  base64ToBytes,
-  CoreError,
-  errorMessage,
-  stellaEventsOf,
-} from "@lumisca/core";
+import type { StellaAvailability, StellaStatus } from "@lumisca/core/shared";
+import { base64ToBytes, stellaEventsOf } from "@lumisca/core";
 import {
   AGENT_ICON_FORMATS,
   agentIconExtensionOfMimeType,
-  createFrameBatcher,
-  type FrameBatcher,
   MAX_AGENT_ICON_BYTES,
-  WS_HEARTBEAT_INTERVAL_MS,
-  WS_HEARTBEAT_TYPE,
 } from "@lumisca/core/shared";
 import {
   AppError,
@@ -37,6 +27,7 @@ import {
 } from "./util.ts";
 import { parseAnswerBody } from "./sessions.ts";
 import { assetHeaders } from "./asset-headers.ts";
+import { createEventStream } from "./ws-stream.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface StellaApi {
@@ -60,7 +51,6 @@ export interface StellaApi {
     name: string,
   ): Promise<{ path: string; mimeType: string } | undefined>;
   deleteStellaAgent(id: string): Promise<void>;
-  getStellaAvailability(): Promise<StellaAvailability>;
   getStellaStatus(): Promise<{
     availability: StellaAvailability;
     state: string;
@@ -74,7 +64,6 @@ export interface StellaApi {
   /** The conversation a stella agent already has, or undefined. The client
    * addresses the conversation by agent, never by session id. */
   findStellaSession(agentId: string): SessionInfo | undefined;
-  listStellaSkills(): SkillInfo[];
   /** One window of the conversation as the client draws it (the model's own
    * rows are projected away — see agent/stella-stream.ts). Undefined when the
    * conversation is not open. */
@@ -182,14 +171,8 @@ export function stellaRoutes(
    * shared/app-mode.ts), so two clients showing one server never drag each
    * other between modes. */
   app.get("/stella/status", async (c) => {
-    const status = await core.getStellaStatus();
-    return c.json({
-      availability: status.availability,
-      state: status.state,
-      vncPort: status.vncPort,
-      reason: status.reason,
-      starting: status.starting,
-    });
+    const status: StellaStatus = await core.getStellaStatus();
+    return c.json(status);
   });
 
   // --- agents (the agent of each conversation) -----------------------------
@@ -213,29 +196,16 @@ export function stellaRoutes(
     const body = await parseBody<{ name?: unknown; role?: unknown }>(c);
     const name = requireNonEmptyString(body?.name, "name");
     const role = requireNonEmptyString(body?.role, "role");
-    try {
-      return c.json(core.createStellaAgent({ name, role }), 201);
-    } catch (error) {
-      // A duplicate name is a conflict (409), not a malformed request: the
-      // client shows it as "that name is taken" rather than as a typo.
-      throw new AppError(
-        errorMessage(error),
-        error instanceof CoreError && error.kind === "conflict" ? 409 : 400,
-      );
-    }
+    // A duplicate name is a CoreError("conflict"), which app.ts's onError
+    // maps to 409 — the client shows it as "that name is taken" rather than
+    // as a typo. Re-mapping it here would only re-derive the same table.
+    return c.json(core.createStellaAgent({ name, role }), 201);
   });
 
   app.patch("/stella/agents/:id", async (c) => {
     const body = await parseBody<{ name?: unknown }>(c);
     const name = requireNonEmptyString(body?.name, "name");
-    try {
-      return c.json(core.renameStellaAgent(c.req.param("id"), name));
-    } catch (error) {
-      throw new AppError(
-        errorMessage(error),
-        error instanceof CoreError && error.kind === "not_found" ? 404 : 400,
-      );
-    }
+    return c.json(core.renameStellaAgent(c.req.param("id"), name));
   });
 
   /** Delete an agent and its conversation. The client confirms first: the
@@ -265,32 +235,18 @@ export function stellaRoutes(
         400,
       );
     }
-    try {
-      return c.json(
-        await core.setStellaAgentIcon(c.req.param("id"), {
-          bytes: decodeBase64(data),
-          extension,
-        }),
-      );
-    } catch (error) {
-      throw new AppError(
-        errorMessage(error),
-        error instanceof CoreError && error.kind === "not_found" ? 404 : 400,
-      );
-    }
+    return c.json(
+      await core.setStellaAgentIcon(c.req.param("id"), {
+        bytes: decodeBase64(data),
+        extension,
+      }),
+    );
   });
 
   /** Back to the initial on a generated colour: the row's reference and the
    * file both go. Answers the updated agent, like the upload above. */
   app.delete("/stella/agents/:id/icon", async (c) => {
-    try {
-      return c.json(await core.clearStellaAgentIcon(c.req.param("id")));
-    } catch (error) {
-      throw new AppError(
-        errorMessage(error),
-        error instanceof CoreError && error.kind === "not_found" ? 404 : 400,
-      );
-    }
+    return c.json(await core.clearStellaAgentIcon(c.req.param("id")));
   });
 
   /** The picture itself.
@@ -332,18 +288,12 @@ export function stellaRoutes(
    * piece of machine state. */
   app.get("/stella/conversations/:agentId", async (c) => {
     const agentId = c.req.param("agentId");
-    try {
-      await core.ensureStellaReady();
-      const session = await core.getOrCreateStellaSession(agentId);
-      return c.json(
-        snapshotOf(session, agentId, parseWindowQuery(c.req.url)),
-      );
-    } catch (error) {
-      throw new AppError(
-        errorMessage(error),
-        error instanceof CoreError && error.kind === "not_found" ? 404 : 503,
-      );
-    }
+    // A cold machine's failure is a CoreError("unavailable") — 503 through
+    // the same mapping as every other route; an unknown agent is a
+    // CoreError("not_found") — 404.
+    await core.ensureStellaReady();
+    const session = await core.getOrCreateStellaSession(agentId);
+    return c.json(snapshotOf(session, agentId, parseWindowQuery(c.req.url)));
   });
 
   /** The conversation re-read after a WS drop or a page reload: a window of
@@ -447,68 +397,40 @@ export function stellaRoutes(
     "/stella/conversations/:agentId/events",
     upgradeWebSocket((c) => {
       const agentId = c.req.param("agentId");
-      let unsubscribe: (() => void) | undefined;
-      let heartbeat: ReturnType<typeof setInterval> | undefined;
-      let batcher: FrameBatcher<string, number> | undefined;
-      return {
-        onOpen(_event, ws) {
-          const write = (payload: unknown) => {
-            try {
-              ws.send(JSON.stringify(payload));
-            } catch {
-              // The socket closed between the event and the send.
-            }
-          };
-          /** Write one frame after whatever deltas are buffered (the
-           * conversation's order is its meaning: an entry replaces the
-           * streaming text, so it must never overtake part of it). */
-          const send = (payload: unknown) => {
-            batcher?.flush();
-            write(payload);
-          };
-          const session = agentId === undefined
-            ? undefined
-            : core.findStellaSession(agentId);
-          if (session === undefined) {
+      const session = agentId === undefined
+        ? undefined
+        : core.findStellaSession(agentId);
+      // A conversation is only streamed once it exists (the open endpoint
+      // creates it); a socket for an unknown agent has nothing to carry.
+      if (session === undefined) {
+        return {
+          onOpen(_event, ws) {
             ws.close(1013, "no conversation for this agent");
-            return;
-          }
-          const id = session.id;
-          // The conversation's text streams one delta per token, like the
-          // session stream (see core/shared/ws-batch.ts). The projection
-          // turns `message_delta` into `delta` alone, so the batch is
-          // written here rather than before the projection. One conversation
-          // per socket, so the key is constant.
-          batcher = createFrameBatcher<string, number>({
-            ...(deltaFlushMs === undefined ? {} : { flushMs: deltaFlushMs }),
-            flush: ({ delta, rev, events }) =>
-              write({ type: "delta", delta, rev, events }),
-          });
-          unsubscribe = core.subscribe((event) => {
-            // Only this conversation's events: the shared stream carries
-            // every session (code mode's tabs run at the same time).
-            if (!("sessionId" in event) || event.sessionId !== id) return;
-            const rev = core.getSessionRevision(id);
-            if (event.type === "message_delta") {
-              batcher?.delta(id, event.delta, rev);
-              return;
-            }
-            for (const projected of stellaEventsOf(event)) {
-              send({ ...projected, rev });
-            }
-          });
-          heartbeat = setInterval(
-            () => send({ type: WS_HEARTBEAT_TYPE }),
-            WS_HEARTBEAT_INTERVAL_MS,
-          );
-        },
-        onClose() {
-          if (heartbeat !== undefined) clearInterval(heartbeat);
-          batcher?.close();
-          batcher = undefined;
-          unsubscribe?.();
-        },
-      };
+          },
+          onClose() {},
+        };
+      }
+      const id = session.id;
+      return createEventStream({
+        ...(deltaFlushMs === undefined ? {} : { flushMs: deltaFlushMs }),
+        subscribe: (listener) => core.subscribe(listener),
+        // Only this conversation's events: the shared stream carries every
+        // session (code mode's tabs run at the same time).
+        accept: (event) => "sessionId" in event && event.sessionId === id,
+        revOf: () => core.getSessionRevision(id),
+        deltaKey: () => id,
+        // The conversation's text streams one delta per token, like the
+        // session stream, but the frame is `delta` alone: the entry it
+        // belongs to is the one the client is already drawing.
+        deltaFrame: ({ delta, rev, events }) => ({
+          type: "delta",
+          delta,
+          rev,
+          events,
+        }),
+        project: (event, rev) =>
+          stellaEventsOf(event).map((projected) => ({ ...projected, rev })),
+      });
     }),
   );
 

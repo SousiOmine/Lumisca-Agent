@@ -12,6 +12,20 @@ export const common = {
   "common.back": { ja: "戻る", en: "Back" },
   "common.cancel": { ja: "キャンセル", en: "Cancel" },
   "common.save": { ja: "保存", en: "Save" },
+  /** Busy state of any form that persists on its own (a debounced field, a
+   * dialog's save button). One wording for every such form: two surfaces
+   * that save the same way must not read differently. */
+  "common.saving": { ja: "保存中…", en: "Saving…" },
+  /** Success line a form shows after it persisted. */
+  "common.saved": { ja: "保存しました", en: "Saved" },
+  /** Failure line a form shows; `{error}` is the server's own message. */
+  "common.saveFailed": {
+    ja: "保存できませんでした: {error}",
+    en: "Could not save: {error}",
+  },
+  /** The heading/button that opens "add one more item" in a list whose items
+   * are servers, providers or connections — the same act, so the same text. */
+  "common.addServer": { ja: "サーバーを追加", en: "Add server" },
   "common.delete": { ja: "削除", en: "Delete" },
   "common.edit": { ja: "編集", en: "Edit" },
   "common.reload": { ja: "更新", en: "Refresh" },

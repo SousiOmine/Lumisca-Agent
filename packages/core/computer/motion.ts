@@ -46,10 +46,6 @@ export function interpolatePoint(from: Point, to: Point, ratio: number): Point {
   };
 }
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /** One piece of a `type` action: literal text, or a real Enter press. A
  * newline cannot ride along as a character — most controls drop a CR/LF code
  * unit (measured on Windows: "a\r\nb" arrives as "ab") — so it becomes an

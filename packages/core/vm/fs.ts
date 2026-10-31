@@ -39,6 +39,7 @@ import { BUILD_ARTIFACT_DIRS } from "../workspace/walk.ts";
 import { GitignoreMatcher, globToRegExp } from "../tools/gitignore.ts";
 import { VM_WORKDIR } from "./contract.ts";
 import type { VmExec } from "./container.ts";
+import { shellQuote } from "./quote.ts";
 
 /** Bound for one file operation (a local call; this only guards against a
  * wedged machine). */
@@ -50,46 +51,57 @@ const MAX_READ_BYTES = 32 * 1024 * 1024;
 /** Character budget for a search call's output. The tool truncates further;
  * this only bounds what crosses the boundary. */
 const SEARCH_OUTPUT_LIMIT = 4 * 1024 * 1024;
-/** Files larger than this are skipped by grep (the host's cap). */
-const GREP_MAX_FILE_SIZE = 8 * 1024 * 1024;
 /** How many files one grep call inspects at a time inside the machine. */
 const GREP_BATCH = 200;
-
-/** Quote a value for a POSIX shell: single quotes, with embedded ones
- * closed and reopened. */
-export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
 
 /**
  * The shell script that greps a set of roots inside the machine.
  *
- * `grep -r` emits `path:line: text`, the shape the model reads on the host
- * too. `--exclude-dir` prunes the artifact directories; `-I` skips binary
- * files; hidden files ARE searched (grep has no hidden flag, matching the
- * host tool). An unreadable file is skipped by grep itself, so a search never
- * fails on one.
+ * The output is `path:line: text`, the shape the host backend produces and
+ * the model reads, and the skip rules are the host's too:
+ *
+ * - artifact directories pruned (the same set the workspace walk skips),
+ * - symlinks never followed,
+ * - binary files skipped (`-I`),
+ * - hidden files ARE searched (grep has no hidden flag; the host's grep
+ *   searches them as well),
+ * - files larger than `request.maxFileSize` skipped.
+ *
+ * The size rule is why this is `find | xargs grep` instead of `grep -r`:
+ * grep has no size test, so a recursive grep would read a multi-gigabyte log
+ * that the host skips. `-size -<cap+1>c` is find's spelling of "at most
+ * `cap` bytes". `-H` keeps the `path:` prefix that a one-file xargs batch
+ * would otherwise drop, and an unreadable file is skipped by grep itself so
+ * a search never fails on one.
  */
 export function grepCommand(
   roots: readonly string[],
   request: GrepRequest,
 ): string {
-  const excludes = [...BUILD_ARTIFACT_DIRS]
-    .map((dir) => `--exclude-dir=${shellQuote(dir)}`)
-    .join(" ");
+  const prune = [...BUILD_ARTIFACT_DIRS]
+    .map((dir) => `-name ${shellQuote(dir)}`)
+    .join(" -o ");
   const flags = [
-    "-r",
     "-n",
+    "-H",
     "-I",
     request.caseSensitive ? "" : "-i",
-    excludes,
     `--regexp=${shellQuote(request.pattern)}`,
     "--",
   ].filter((part) => part !== "").join(" ");
-  const targets = roots.map(shellQuote).join(" ");
-  // `|| true`: grep exits 1 when nothing matched, which is not a failure, and
-  // `head` closing the pipe early would otherwise look like one.
-  return `grep ${flags} ${targets} 2>/dev/null | head -n ${request.maxResults} || true`;
+  const sizeTest = `-size -${request.maxFileSize + 1}c`;
+  // One `find` per root, grouped so a pipe feeds from all of them: a newline
+  // alone would end the pipeline.
+  const candidates = roots
+    .map((root) =>
+      `find ${shellQuote(root)} -type d \\( ${prune} \\) -prune -o ` +
+      `-type f ! -type l ${sizeTest} -print0 2>/dev/null`
+    )
+    .join("; ");
+  // `|| true`: grep exits 1 when nothing matched (and 123 when `head` closed
+  // the pipe early), neither of which is a failure of the search.
+  return `{ ${candidates}; } | xargs -0 -r grep ${flags} 2>/dev/null | ` +
+    `head -n ${request.maxResults} || true`;
 }
 
 /**
@@ -496,4 +508,4 @@ function isInside(root: string, path: string): boolean {
   return path.startsWith(prefix);
 }
 
-export { GREP_BATCH, GREP_MAX_FILE_SIZE };
+export { GREP_BATCH };

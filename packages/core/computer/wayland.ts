@@ -40,9 +40,9 @@ import {
   MOVE_MS,
   MOVE_TICK_MS,
   parseKeyChord,
-  sleep,
   splitTypeText,
 } from "./motion.ts";
+import { sleep } from "../shared/misc.ts";
 import { describeMonitor } from "./portal/display-config.ts";
 import { type PortalProbeOptions, probePortal } from "./portal/client.ts";
 import type {

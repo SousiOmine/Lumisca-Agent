@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from "preact/compat";
+import { errorMessage } from "@lumisca/core/shared";
 import { api } from "./api.ts";
 
 /**
@@ -70,7 +71,7 @@ class SettingsStore {
         this.publish({
           ...this.state,
           loaded: true,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         });
       } finally {
         this.reading = null;

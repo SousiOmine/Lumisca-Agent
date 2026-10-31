@@ -11,6 +11,8 @@
  * fast on.
  */
 
+import { sleepAbortable as sleepAbortableShared } from "../shared/misc.ts";
+
 /** Budget and delay shape of one retry loop. */
 export interface RateLimitRetryOptions {
   maxRetries?: number;
@@ -79,24 +81,14 @@ export class RetryAbortError extends Error {
   }
 }
 
-/** Sleep that rejects with RetryAbortError when `signal` fires. */
+/** Sleep that rejects with RetryAbortError when `signal` fires. The timing
+ * is shared/misc.ts's sleepAbortable; only what an abort MEANS here (a retry
+ * that will not happen) is this module's business. */
 export function sleepAbortable(
   ms: number,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (ms <= 0) return Promise.resolve();
-  if (signal?.aborted) return Promise.reject(new RetryAbortError());
-  return new Promise<void>((resolve, reject) => {
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(new RetryAbortError());
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
+  return sleepAbortableShared(ms, signal, () => new RetryAbortError());
 }
 
 export async function retryOnRateLimitError<T>(

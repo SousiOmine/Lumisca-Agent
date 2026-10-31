@@ -1,6 +1,6 @@
 import { errorMessage } from "../errors.ts";
 import { TOOL_GLOB, TOOL_GREP } from "../shared/mod.ts";
-import { MAX_GREP_FILE_SIZE } from "./host/files.ts";
+import { MAX_GREP_FILE_SIZE } from "./file-backend.ts";
 import {
   boolean,
   integer,

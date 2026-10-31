@@ -11,7 +11,6 @@ import type { LocalizedText } from "./types.ts";
  */
 export const settings = {
   // --- dialog chrome (SettingsModal) ----------------------------------------
-  "settings.dialog.title": { ja: "設定", en: "Settings" },
   "settings.nav.general": { ja: "一般", en: "General" },
   "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
@@ -166,8 +165,6 @@ export const settings = {
     en:
       "Example:\n- Write your responses in English.\n- Always run tests after making changes.",
   },
-  "settings.personalize.saving": { ja: "保存中…", en: "Saving…" },
-  "settings.personalize.saved": { ja: "保存しました", en: "Saved" },
   "settings.personalize.savedPrompts": {
     ja: "保存済みプロンプト",
     en: "Saved prompts",
@@ -362,7 +359,6 @@ export const settings = {
     en: "Add custom OpenAI-compatible provider",
   },
   "settings.provider.send": { ja: "送信", en: "Send" },
-  "settings.provider.edit": { ja: "編集", en: "Edit" },
   "settings.provider.done": { ja: "完了", en: "Done" },
 
   // --- user provider form ---------------------------------------------------
@@ -535,7 +531,6 @@ export const settings = {
     ja: "0 以上の整数を入力してください。",
     en: "Enter a whole number of 0 or more.",
   },
-  "settings.compaction.saved": { ja: "保存しました", en: "Saved" },
 
   "settings.model.loadFailed": {
     ja: "設定の読み込みに失敗しました: {error}",
@@ -550,10 +545,6 @@ export const settings = {
     en:
       "The MCP config file has been updated externally. Overwrite with the current contents?",
   },
-  "settings.mcp.saveFailed": {
-    ja: "保存できませんでした: {error}",
-    en: "Could not save: {error}",
-  },
   "settings.mcp.deleteConfirm": {
     ja: "MCPサーバー「{name}」を削除しますか？",
     en: 'Delete MCP server "{name}"?',
@@ -563,14 +554,11 @@ export const settings = {
       "MCPサーバーが登録されていません。下の「サーバーを追加」から設定してください。",
     en: 'No MCP servers registered. Use "Add server" below to set one up.',
   },
-  "settings.mcp.error": { ja: "エラー", en: "Error" },
   "settings.mcp.notStarted": { ja: "未起動", en: "Not started" },
   "settings.mcp.enabled": { ja: "有効", en: "Enabled" },
-  "settings.mcp.addServer": { ja: "サーバーを追加", en: "Add server" },
 
   // --- mcp detail -----------------------------------------------------------
   "settings.mcp.editTitle": { ja: "編集: {name}", en: "Edit: {name}" },
-  "settings.mcp.addTitle": { ja: "サーバーを追加", en: "Add server" },
   "settings.mcp.nameLabel": { ja: "名前", en: "Name" },
   "settings.mcp.namePlaceholder": {
     ja: "例: filesystem",
@@ -671,10 +659,6 @@ export const settings = {
     ja: "ブラウザでの認証を待機中…",
     en: "Waiting for the browser sign-in…",
   },
-  "settings.mcp.authFailed": {
-    ja: "認証に失敗しました: {error}",
-    en: "Sign-in failed: {error}",
-  },
   "settings.mcp.authStartFailed": {
     ja: "認証を開始できませんでした",
     en: "Could not start the sign-in",
@@ -701,7 +685,6 @@ export const settings = {
   // --- connection list -------------------------------------------------------
   /** Panel heading (the settings nav reuses `settings.nav.servers`). */
   "settings.connection.title": { ja: "接続先サーバー", en: "Servers" },
-  "settings.connection.addServer": { ja: "サーバーを追加", en: "Add server" },
   "settings.connection.test": { ja: "テスト", en: "Test" },
   "settings.connection.currentDisplay": {
     ja: "表示中のサーバー:",
@@ -875,7 +858,6 @@ export const settings = {
     ja: "APIキーを変更",
     en: "Change the API key",
   },
-  "settings.webSearch.form.save": { ja: "保存", en: "Save" },
   "settings.webSearch.form.add": {
     ja: "検索プロバイダーを追加",
     en: "Add the search provider",
@@ -903,10 +885,6 @@ export const settings = {
   "settings.webSearch.form.noProviders": {
     ja: "追加できるプロバイダーがありません。",
     en: "Every provider is already configured.",
-  },
-  "settings.webSearch.form.saveFailed": {
-    ja: "保存できませんでした: {error}",
-    en: "Could not save: {error}",
   },
 
   // --- computer use panel ----------------------------------------------------

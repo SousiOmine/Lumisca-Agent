@@ -203,3 +203,12 @@ export interface Routine {
   createdAt: number;
   updatedAt: number;
 }
+
+/** One routine as the settings list shows it: the stored row, the name of
+ * the agent whose conversation it belongs to, and whether a run is in flight
+ * right now (which lives in the scheduler, not the database). Defined here
+ * because the route and the panel both name it — see shared/wire.ts's note. */
+export interface RoutineView extends Routine {
+  agentName: string;
+  running: boolean;
+}

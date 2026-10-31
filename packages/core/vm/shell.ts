@@ -27,6 +27,8 @@ import type {
 import { firstLine } from "../lines.ts";
 import { VM_BG_DIR } from "./contract.ts";
 import type { VmExec } from "./container.ts";
+import { sleep } from "../shared/misc.ts";
+import { shellQuote } from "./quote.ts";
 
 /** Bound for starting a background command (the tool must return promptly). */
 const SPAWN_TIMEOUT_MS = 30_000;
@@ -186,7 +188,7 @@ export class VmBackgroundSpawner implements BackgroundSpawner {
   ): Promise<number | undefined> {
     for (;;) {
       if (!(await isAlive())) return undefined;
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      await sleep(POLL_INTERVAL_MS);
     }
   }
 
@@ -211,7 +213,7 @@ export class VmBackgroundSpawner implements BackgroundSpawner {
         if (rest.length > 0) yield rest;
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      await sleep(POLL_INTERVAL_MS);
     }
   }
 
@@ -242,9 +244,4 @@ function envPrefix(env: Record<string, string> | undefined): string {
   return `env ${
     entries.map(([name, value]) => `${name}=${shellQuote(value)}`).join(" ")
   } `;
-}
-
-/** Quote a value for a POSIX shell. */
-export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
 }

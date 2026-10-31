@@ -3,6 +3,7 @@
   "version": "0.10.2",
   "exports": {
     ".": "./mod.ts",
+    "./bytes": "./bytes.ts",
     "./shared": "./shared/mod.ts",
     "./modes": "./modes/mod.ts",
     "./skills/slash": "./skills/slash.ts",

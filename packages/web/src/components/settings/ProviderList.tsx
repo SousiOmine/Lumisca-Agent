@@ -1,10 +1,9 @@
 import { useState } from "preact/compat";
 import { IconPlus } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
-import { useAsyncEffect } from "../../hooks/useAsync.ts";
+import { useAsyncData } from "../../hooks/useAsync.ts";
 import { useT } from "../../i18n.ts";
 import { errorText, useProviderModels } from "../../providers.ts";
-import type { CatalogStatus } from "../../types.ts";
 import { SettingsSection } from "./SettingsSection.tsx";
 import { ProviderRow } from "./ProviderRow.tsx";
 
@@ -14,26 +13,26 @@ import { ProviderRow } from "./ProviderRow.tsx";
  * snapshot). */
 function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
   const t = useT();
-  const [status, setStatus] = useState<CatalogStatus | undefined>();
+  // Informational only: the provider list works without it, so a failed read
+  // stays invisible (the row says "checking…" and the refresh button retries).
+  const catalog = useAsyncData(
+    async () => (await api.catalogStatus()).status,
+    [],
+    () => "",
+  );
+  const status = catalog.data;
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | undefined>();
-
-  useAsyncEffect(async (isStale) => {
-    try {
-      const { status } = await api.catalogStatus();
-      if (!isStale()) setStatus(status);
-    } catch {
-      // Status is informational only; the provider list works without it.
-    }
-  }, []);
 
   const refresh = async () => {
     setRefreshing(true);
     setError(undefined);
     try {
-      const { status } = await api.refreshCatalog();
-      setStatus(status);
-      if (status.error) setError(status.error);
+      const { status: fresh } = await api.refreshCatalog();
+      // The manual refresh is newer than the store's read: adopt its answer
+      // as this row's status, then let a re-read confirm it.
+      catalog.reload();
+      if (fresh.error) setError(fresh.error);
       onRefreshed();
     } catch (e) {
       setError(errorText(e));

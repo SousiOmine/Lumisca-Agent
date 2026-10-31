@@ -133,9 +133,7 @@ export function AgentIconDialog(
           disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
-          {busy
-            ? t("chat.stella.agents.icon.saving")
-            : t("chat.stella.agents.icon.choose")}
+          {busy ? t("common.saving") : t("chat.stella.agents.icon.choose")}
         </button>
       </div>
     </Modal>

@@ -16,6 +16,8 @@
  * route serves.
  */
 
+import { RASTER_IMAGE_MIME_BY_EXTENSION } from "./mime.ts";
+
 /** Most files one `chat_attach` call may attach. A turn that produced a
  * dozen images is better served by two calls than by a wall of thumbnails,
  * and the cap keeps one call's result small enough to stay readable. */
@@ -40,14 +42,7 @@ export const MAX_ATTACHMENTS_TOTAL_BYTES = 16 * 1024 * 1024;
  * for it. As a download it is just a file. */
 export const INLINE_IMAGE_MIME_BY_EXTENSION: Readonly<
   Record<string, string>
-> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".bmp": "image/bmp",
-};
+> = RASTER_IMAGE_MIME_BY_EXTENSION;
 
 /** The extensions of INLINE_IMAGE_MIME_BY_EXTENSION (error messages list
  * them). */

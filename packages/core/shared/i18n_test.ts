@@ -1,4 +1,9 @@
 import { assert, assertEquals } from "@std/assert";
+import { chat } from "./i18n/chat.ts";
+import { chrome } from "./i18n/chrome.ts";
+import { common } from "./i18n/common.ts";
+import { panels } from "./i18n/panels.ts";
+import { settings } from "./i18n/settings.ts";
 import {
   createTranslator,
   DEFAULT_LOCALE,
@@ -12,6 +17,10 @@ import {
   resolveLocale,
   translate,
 } from "./i18n/mod.ts";
+
+/** Each area file's own table, for the duplicate-key check (the catalogue
+ * spread merges them, which is exactly what hides a collision). */
+const AREA_TABLES = { common, chrome, settings, chat, panels };
 
 // --- locale resolution ------------------------------------------------------
 
@@ -121,6 +130,81 @@ Deno.test("translate interpolates {name} placeholders", () => {
 });
 
 // --- catalogue invariants ---------------------------------------------------
+
+/** The catalogue's area files, by the name each exports (see messages.ts,
+ * which spreads them into one table). */
+const AREAS = ["common", "chrome", "settings", "chat", "panels"] as const;
+
+Deno.test("catalogue: no key is defined in two area files", () => {
+  // `messages` is a spread of the area tables, so a key present in two of
+  // them resolves to whichever is spread last — silently, and with no type
+  // error (both have the same shape). A key belongs to exactly one surface.
+  const owner = new Map<string, string>();
+  const duplicates: string[] = [];
+  for (const area of AREAS) {
+    const table = AREA_TABLES[area] as Record<string, unknown>;
+    for (const key of Object.keys(table)) {
+      const previous = owner.get(key);
+      if (previous !== undefined) {
+        duplicates.push(`${key} (${previous} and ${area})`);
+      } else {
+        owner.set(key, area);
+      }
+    }
+  }
+  assertEquals(
+    duplicates,
+    [],
+    `keys defined in two area files: ${duplicates.join(", ")}`,
+  );
+});
+
+Deno.test("catalogue: a generic action is not redefined per surface", () => {
+  // The generic verbs live in common.ts and every surface uses them: a save
+  // button, a delete icon's tooltip and a dialog's close are the same act
+  // wherever they appear. A surface that spells one of them again (the same
+  // two languages for a second key) has started its own copy: the next
+  // rewording fixes one of them, and the app ends up saying "Delete" in one
+  // place and "Remove" in another for the same button.
+  //
+  // Only the generic actions are checked. A short word may legitimately
+  // recur for DIFFERENT meanings (完了 is a todo's status and also a
+  // hand-over's button), and forcing those into one key would couple two
+  // unrelated surfaces.
+  const generic = new Set([
+    "common.close",
+    "common.cancel",
+    "common.save",
+    "common.delete",
+    "common.edit",
+    "common.reload",
+    "common.loading",
+  ]);
+  const wording = new Map<string, string>();
+  for (const key of generic) {
+    const entry = messages[key as keyof typeof messages];
+    wording.set(`${entry.ja}\u0000${entry.en}`, key);
+  }
+  const redefinitions: string[] = [];
+  for (const area of AREAS) {
+    const table = AREA_TABLES[area] as Record<
+      string,
+      { ja: string; en: string }
+    >;
+    for (const [key, entry] of Object.entries(table)) {
+      if (generic.has(key)) continue;
+      const owner = wording.get(`${entry.ja}\u0000${entry.en}`);
+      if (owner !== undefined) {
+        redefinitions.push(`${area}:${key} (use ${owner})`);
+      }
+    }
+  }
+  assertEquals(
+    redefinitions,
+    [],
+    `a generic action spelled again: ${redefinitions.join(", ")}`,
+  );
+});
 
 /** Placeholder names of a message, in order of appearance. */
 function placeholders(text: string): string[] {

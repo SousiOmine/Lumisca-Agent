@@ -173,6 +173,13 @@ export interface BackendGrepResult {
   files: number;
 }
 
+/** Files larger than this are skipped by grep on every backend (a model
+ * grepping a huge file costs more than the search is worth). Lives on the
+ * interface, not on one implementation: the host walk and the VM's `grep`
+ * script must skip the same files, or a search would answer differently
+ * depending on where the workspace is. */
+export const MAX_GREP_FILE_SIZE = 8 * 1024 * 1024;
+
 /** Cap for one line of grep output. */
 export const MAX_GREP_LINE_PREVIEW = 200;
 

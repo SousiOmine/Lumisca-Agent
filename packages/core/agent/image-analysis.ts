@@ -14,6 +14,14 @@ const ANALYSIS_SYSTEM_PROMPT =
   "- Note details relevant to coding or debugging (screenshots, diagrams).\n\n" +
   "Be precise and complete. Output only the description.";
 
+/** How many analyses one agent keeps. The cache exists so a long
+ * conversation does not re-describe the same screenshots on every turn; an
+ * unbounded map also means a session that pastes hundreds of images grows
+ * for the life of the process, and the OLDEST entries are the least likely
+ * to be sent again (a conversation's images age out of the window first).
+ * Insertion order is the eviction order (Map keeps it). */
+const MAX_CACHED_ANALYSES = 64;
+
 /** Text block substituting an analyzed image in the LLM payload. */
 function analysisTextBlock(description: string): TextContent {
   return { type: "text", text: `[image analysis]\n${description}` };
@@ -53,7 +61,7 @@ export class ImageAnalyzer {
       try {
         for (const i of missing) {
           const text = await this.analyze(images[i]!);
-          this.cache.set(keys[i]!, text);
+          this.remember(keys[i]!, text);
         }
       } catch {
         // Keep the original blocks on failure: the text-only model then
@@ -74,6 +82,16 @@ export class ImageAnalyzer {
       }
     }
     return out;
+  }
+
+  /** Cache one analysis, evicting the oldest when the cap is reached. */
+  private remember(key: string, text: string): void {
+    while (this.cache.size >= MAX_CACHED_ANALYSES) {
+      const oldest = this.cache.keys().next();
+      if (oldest.done === true) break;
+      this.cache.delete(oldest.value);
+    }
+    this.cache.set(key, text);
   }
 
   /** One analysis call for a single image: streams the vision model and

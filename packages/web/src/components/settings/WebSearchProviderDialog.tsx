@@ -171,7 +171,7 @@ export function WebSearchProviderDialog({
 
         {error !== null && (
           <p className="error-text">
-            {t("settings.webSearch.form.saveFailed", { error })}
+            {t("common.saveFailed", { error })}
           </p>
         )}
 
@@ -198,9 +198,7 @@ export function WebSearchProviderDialog({
             onClick={() => void save()}
           >
             {t(
-              adding
-                ? "settings.webSearch.form.add"
-                : "settings.webSearch.form.save",
+              adding ? "settings.webSearch.form.add" : "common.save",
             )}
           </button>
         </div>

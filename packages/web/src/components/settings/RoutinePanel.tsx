@@ -11,6 +11,7 @@ import {
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-preact";
+import { errorMessage } from "@lumisca/core/shared";
 import type { RoutineSchedule, RoutineStatus } from "@lumisca/core/shared";
 import type { RoutineView } from "../../types.ts";
 import { useLocale, useT } from "../../i18n.ts";
@@ -160,7 +161,7 @@ export function RoutinePanel({
         await action();
       } catch (failure) {
         setActionError(
-          failure instanceof Error ? failure.message : String(failure),
+          errorMessage(failure),
         );
       } finally {
         setBusy(null);

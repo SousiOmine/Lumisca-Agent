@@ -6,6 +6,7 @@ import {
   COMMAND_SAFETY_APPROVALS_KEY,
   COMMAND_SAFETY_ENABLED_KEY,
   safeJsonParse,
+  withTimeoutError,
 } from "../shared/mod.ts";
 
 /** The outcome of one safety check. `ok: false` carries the judge's reason,
@@ -214,20 +215,12 @@ export class CommandSafety {
     // signal — the check must never hang the agent loop. A timeout fails
     // the check (like an API error); only a reply that does not parse into
     // the expected JSON comes back as null.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        collect(),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            controller.abort();
-            reject(new Error("safety check timed out"));
-          }, CHECK_TIMEOUT_MS);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
+    return await withTimeoutError(
+      collect(),
+      CHECK_TIMEOUT_MS,
+      () => new Error("safety check timed out"),
+      () => controller.abort(),
+    );
   }
 }
 

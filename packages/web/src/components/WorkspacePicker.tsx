@@ -119,7 +119,7 @@ export function WorkspacePicker({
                 <button
                   type="button"
                   className="icon-btn"
-                  title={t("chrome.workspacePicker.edit")}
+                  title={t("common.edit")}
                   aria-label={t("chrome.workspacePicker.editNamed", {
                     name: ws.name,
                   })}
@@ -134,7 +134,7 @@ export function WorkspacePicker({
                 <button
                   type="button"
                   className="icon-btn"
-                  title={t("chrome.workspacePicker.delete")}
+                  title={t("common.delete")}
                   aria-label={t("chrome.workspacePicker.deleteNamed", {
                     name: ws.name,
                   })}

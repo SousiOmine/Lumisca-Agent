@@ -16,7 +16,6 @@ export const chrome = {
     ja: "元のサイズに戻す",
     en: "Restore",
   },
-  "chrome.titleBar.close": { ja: "閉じる", en: "Close" },
 
   // --- connection picker (which server this window shows) ------------------
   "chrome.connections.local": {
@@ -259,12 +258,10 @@ export const chrome = {
     ja: "{count} 件のフォルダー",
     en: "{count} folders",
   },
-  "chrome.workspacePicker.edit": { ja: "編集", en: "Edit" },
   "chrome.workspacePicker.editNamed": {
     ja: "「{name}」を編集",
     en: 'Edit "{name}"',
   },
-  "chrome.workspacePicker.delete": { ja: "削除", en: "Delete" },
   "chrome.workspacePicker.deleteNamed": {
     ja: "「{name}」を削除",
     en: 'Delete "{name}"',
@@ -306,7 +303,6 @@ export const chrome = {
     en:
       "Group related folders into a workspace. AI file read/write and command execution are restricted to the specified folders.",
   },
-  "chrome.workspaceModal.saving": { ja: "保存中…", en: "Saving…" },
   "chrome.workspaceModal.removeFolder": {
     ja: "削除",
     en: "Remove",

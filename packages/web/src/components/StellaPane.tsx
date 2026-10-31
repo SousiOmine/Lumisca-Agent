@@ -1,5 +1,6 @@
 import { IconX } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/compat";
+import { errorMessage } from "@lumisca/core/shared";
 import { token } from "../api-client.ts";
 import { useT } from "../i18n.ts";
 import type { StellaHandover } from "../types.ts";
@@ -219,7 +220,7 @@ export function StellaPane({
               .then(() => setNote(""))
               .catch((failure) => {
                 setFinishError(
-                  failure instanceof Error ? failure.message : String(failure),
+                  errorMessage(failure),
                 );
               })
               .finally(() => setFinishing(false));

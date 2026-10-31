@@ -116,6 +116,10 @@ export class McpManager {
   private dropClient(name: string): void {
     const client = this.clients.get(name);
     this.clients.delete(name);
+    // The discovered tools included this server's; a reconnected server may
+    // expose a different set (a restarted process, a new version), so the
+    // cache has to be read again.
+    this.toolsCache = null;
     if (client) void client.close();
   }
 

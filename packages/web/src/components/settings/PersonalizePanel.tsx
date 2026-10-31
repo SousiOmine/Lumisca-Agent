@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useState } from "preact/compat";
 import {
   IconCheck,
   IconEdit,
@@ -10,10 +10,8 @@ import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { errorText } from "../../providers.ts";
 import type { SavedPrompt } from "../../types.ts";
-import {
-  notifySavedPromptsUpdated,
-  useSavedPrompts,
-} from "../../hooks/useSavedPrompts.ts";
+import { useSavedPrompts } from "../../hooks/useSavedPrompts.ts";
+import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { Field } from "../Field.tsx";
 
@@ -28,15 +26,8 @@ export function PersonalizePanel() {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { saved, flash: flashSaved } = useSavedNotice();
   const [error, setError] = useState<string | null>(null);
-  const latest = useRef(content);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
 
   const load = async () => {
     setLoading(true);
@@ -44,7 +35,6 @@ export function PersonalizePanel() {
     try {
       const info = await api.getPersonalization();
       setContent(info.content);
-      latest.current = info.content;
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -54,45 +44,34 @@ export function PersonalizePanel() {
 
   useEffect(() => {
     void load();
-    return () => {
-      clearTimeout(saveTimer.current);
-      clearTimeout(savedTimer.current);
-    };
   }, []);
 
-  const persist = async () => {
-    const value = latest.current;
+  /** Persist the editor's text. The debounced writer supplies the value the
+   * user stopped typing on; `content` is read from the argument rather than
+   * from a ref so the write and the editor cannot disagree. */
+  const persist = async (value: string): Promise<void> => {
     setError(null);
     try {
       await api.putPersonalization(value);
-      if (latest.current !== value) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(() => void persist(), 600);
-        return;
-      }
       setSaving(false);
-      setSaved(true);
-      clearTimeout(savedTimer.current);
-      savedTimer.current = setTimeout(() => setSaved(false), 2000);
+      flashSaved();
     } catch (e) {
       setSaving(false);
       setError(errorText(e));
     }
   };
+  const pendingWrite = useDebouncedWrite((value: string) => persist(value));
 
   const onChange = (value: string) => {
     setContent(value);
-    latest.current = value;
-    setSaved(false);
     setSaving(true);
     setError(null);
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void persist(), 600);
+    pendingWrite.schedule(value);
   };
 
   // --- Saved prompts -----------------------------------------------------
 
-  const { prompts, error: promptsLoadError, reload: loadPrompts } =
+  const { prompts, error: promptsLoadError, reload: reloadPrompts } =
     useSavedPrompts();
   const [editingPrompt, setEditingPrompt] = useState<SavedPrompt | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -108,8 +87,9 @@ export function PersonalizePanel() {
     }
     try {
       await api.deleteSavedPrompt(id);
-      loadPrompts();
-      notifySavedPromptsUpdated();
+      // The store re-reads after a mutation, so the composer's menu and this
+      // list change together (see hooks/useSavedPrompts.ts).
+      reloadPrompts();
     } catch (e) {
       setPromptsError(errorText(e));
     }
@@ -125,8 +105,7 @@ export function PersonalizePanel() {
         input as { id: string; label: string; prompt: string },
       );
       setShowAddForm(false);
-      loadPrompts();
-      notifySavedPromptsUpdated();
+      reloadPrompts();
     } catch (e) {
       setPromptsError(errorText(e));
     }
@@ -139,8 +118,7 @@ export function PersonalizePanel() {
     try {
       await api.updateSavedPrompt(id, input);
       setEditingPrompt(null);
-      loadPrompts();
-      notifySavedPromptsUpdated();
+      reloadPrompts();
     } catch (e) {
       setPromptsError(errorText(e));
     }
@@ -165,12 +143,12 @@ export function PersonalizePanel() {
         <div className="settings-actions">
           {saving && (
             <span className="settings-note">
-              {t("settings.personalize.saving")}
+              {t("common.saving")}
             </span>
           )}
           {!saving && saved && (
             <span className="settings-saved">
-              {t("settings.personalize.saved")}
+              {t("common.saved")}
             </span>
           )}
         </div>

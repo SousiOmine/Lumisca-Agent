@@ -2,6 +2,7 @@ import { extname } from "node:path";
 import {
   decodeUtf8,
   diffLineCounts,
+  RASTER_IMAGE_MIME_BY_EXTENSION,
   TOOL_EDIT,
   TOOL_LIST_DIR,
   TOOL_READ,
@@ -13,17 +14,6 @@ import { bytesToBase64 } from "../base64.ts";
 import type { FsToolContext } from "./context.ts";
 import type { BackendDirEntry, LineRange } from "./file-backend.ts";
 import { requireExistingFile, requireResolved } from "./resolve.ts";
-
-/** Raster image extensions read as image content blocks (vision models see
- * the pixels). Vector images (SVG) are XML and stay on the text path. */
-const IMAGE_MIME_BY_EXT: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".bmp": "image/bmp",
-};
 
 /** Largest image handed to the model as an image block; anything bigger
  * falls back to the (garbled) text read. */
@@ -174,7 +164,8 @@ export function createReadFileTool(
         };
       }
       // Whole-file read: image blocks for raster images, else text.
-      const mimeType = IMAGE_MIME_BY_EXT[extname(filePath).toLowerCase()];
+      const mimeType =
+        RASTER_IMAGE_MIME_BY_EXTENSION[extname(filePath).toLowerCase()];
       if (mimeType !== undefined && size <= MAX_IMAGE_BYTES) {
         const { bytes } = await files.readHead(filePath, size);
         const name = filePath.split(/[\\/]/).pop() ?? filePath;

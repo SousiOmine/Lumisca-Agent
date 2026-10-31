@@ -1,12 +1,8 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-  useSyncExternalStore,
-} from "preact/compat";
+import { useCallback, useEffect, useSyncExternalStore } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
 import { api, modelApi } from "./api.ts";
 import { modelCatalog, type PeerCatalogState } from "./modelCatalog.ts";
+import { createStore } from "./store.ts";
 import { splitTabKey } from "./tabs.ts";
 import type {
   SessionView,
@@ -14,8 +10,51 @@ import type {
   UserProviderSummary,
 } from "./types.ts";
 
-/** User-defined OpenAI-compatible providers (the settings UI manages these).
- * The API key is never returned — `hasApiKey` reports whether one is set. */
+/** User-defined OpenAI-compatible providers, as one shared store.
+ *
+ * The settings dialog and the provider detail panel both ask the same
+ * question ("is this provider one the user added?"), and each used to hold
+ * its own copy: `SettingsModal` called `reload()` after a save, which
+ * refreshed ITS list while the detail panel beside it kept the previous
+ * answer. One store, one read, and a write is visible everywhere. */
+interface UserProvidersState {
+  providers: UserProviderSummary[];
+  loaded: boolean;
+  error: string | null;
+}
+
+const userProvidersStore = createStore<UserProvidersState>({
+  providers: [],
+  loaded: false,
+  error: null,
+});
+
+/** One read in flight, shared by every caller. */
+let userProvidersReading: Promise<void> | null = null;
+
+function reloadUserProviders(): Promise<void> {
+  if (userProvidersReading !== null) return userProvidersReading;
+  userProvidersReading = (async () => {
+    try {
+      const providers = await api.listUserProviders();
+      userProvidersStore.set({ providers, loaded: true, error: null });
+    } catch (e) {
+      userProvidersStore.set({
+        ...userProvidersStore.get(),
+        loaded: true,
+        error: errorText(e),
+      });
+    } finally {
+      userProvidersReading = null;
+    }
+  })();
+  return userProvidersReading;
+}
+
+/**
+ * User-defined OpenAI-compatible providers (the settings UI manages these).
+ * The API key is never returned — `hasApiKey` reports whether one is set.
+ */
 export function useUserProviders(): {
   providers: UserProviderSummary[];
   error: string | null;
@@ -24,20 +63,19 @@ export function useUserProviders(): {
    * delete button in ProviderDetail). */
   ids: Set<string>;
 } {
-  const [providers, setProviders] = useState<UserProviderSummary[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const reload = useCallback(() => {
-    setError(null);
-    api.listUserProviders()
-      .then(setProviders)
-      .catch((e) => setError(errorText(e)));
+  const subscribe = useCallback(
+    (listener: () => void) => userProvidersStore.subscribe(listener),
+    [],
+  );
+  const state = useSyncExternalStore(subscribe, () => userProvidersStore.get());
+  useEffect(() => {
+    if (!userProvidersStore.get().loaded) void reloadUserProviders();
   }, []);
-  useEffect(reload, [reload]);
   return {
-    providers,
-    error,
-    reload,
-    ids: new Set(providers.map((p) => p.id)),
+    providers: state.providers,
+    error: state.error,
+    reload: () => void reloadUserProviders(),
+    ids: new Set(state.providers.map((p) => p.id)),
   };
 }
 

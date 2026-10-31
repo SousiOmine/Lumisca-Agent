@@ -1,6 +1,7 @@
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/http-status";
 import { errorMessage } from "@lumisca/core";
+import type { PeerStatus } from "@lumisca/core/shared";
 import { AppError } from "./util.ts";
 import type { FederationClient } from "../federation.ts";
 
@@ -87,21 +88,22 @@ export function federationRoutes(fed: FederationClient): Hono {
             "/api/health",
             PEER_PROBE_TIMEOUT_MS,
           );
-          return {
+          const status: PeerStatus = {
             id: peer.id,
             name: peer.name,
             url: peer.url,
-            ok: true as const,
-            error: undefined as string | undefined,
+            ok: true,
           };
+          return status;
         } catch (error) {
-          return {
+          const status: PeerStatus = {
             id: peer.id,
             name: peer.name,
             url: peer.url,
-            ok: false as const,
+            ok: false,
             error: errorMessage(error),
           };
+          return status;
         }
       }),
     );

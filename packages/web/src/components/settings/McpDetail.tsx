@@ -190,7 +190,7 @@ export function McpDetail({
         onBack={onCancel}
         title={initial
           ? t("settings.mcp.editTitle", { name: initial.name })
-          : t("settings.mcp.addTitle")}
+          : t("common.addServer")}
       >
         <button type="button" className="btn push" onClick={onCancel}>
           {t("common.close")}
@@ -292,7 +292,7 @@ export function McpDetail({
 
         {saveError !== null && (
           <p className="error-text" style={{ margin: 0 }}>
-            {t("settings.mcp.saveFailed", { error: saveError })}
+            {t("common.saveFailed", { error: saveError })}
           </p>
         )}
 

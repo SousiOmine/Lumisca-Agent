@@ -1,7 +1,7 @@
 import type { Api, Model } from "../ai/types.ts";
 import type { AgentMessage, StreamFn } from "../ai/types.ts";
 import { streamText } from "../ai/stream.ts";
-import { contentText, safeJsonParse } from "../shared/mod.ts";
+import { contentText, safeJsonParse, withTimeoutError } from "../shared/mod.ts";
 
 /** System prompt for the judging model: decide whether the goal is
  * achieved from the recent transcript and, when it is not, write the next
@@ -76,23 +76,15 @@ export class GoalJudge {
       );
       return parseGoalVerdict(text);
     };
-    // Same timeout discipline as the safety checker: abort well-behaved
-    // streams and race providers that ignore the signal, so the check
-    // never hangs the agent loop.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        collect(),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            controller.abort();
-            reject(new Error("goal judgement timed out"));
-          }, GOAL_JUDGE_TIMEOUT_MS);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
+    // Same timeout discipline as the safety checker (shared/misc.ts
+    // withTimeoutError): abort well-behaved streams and race providers that
+    // ignore the signal, so the check never hangs the agent loop.
+    return await withTimeoutError(
+      collect(),
+      GOAL_JUDGE_TIMEOUT_MS,
+      () => new Error("goal judgement timed out"),
+      () => controller.abort(),
+    );
   }
 }
 

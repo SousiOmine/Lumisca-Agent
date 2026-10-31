@@ -1,5 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { shellQuote, VmBackgroundSpawner, VmCommandRunner } from "./shell.ts";
+import { VmBackgroundSpawner, VmCommandRunner } from "./shell.ts";
+import { shellQuote } from "./quote.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
 import type { VmCommandResult } from "./command.ts";
 

@@ -9,6 +9,7 @@
  *
  * This module is test-only: nothing in the server's module graph imports it.
  */
+import { crc32 } from "@lumisca/core/bytes";
 import { hashFileBlake2b512, MINISIGN_LAYOUT } from "./verify.ts";
 
 export interface FixtureFile {
@@ -18,26 +19,6 @@ export interface FixtureFile {
   content: string | Uint8Array<ArrayBuffer>;
   /** Write the entry uncompressed (exercises the stored path of a zip). */
   stored?: boolean;
-}
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let value = i;
-    for (let bit = 0; bit < 8; bit++) {
-      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    }
-    table[i] = value >>> 0;
-  }
-  return table;
-})();
-
-export function crc32(bytes: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
 }
 
 export async function deflateRaw(

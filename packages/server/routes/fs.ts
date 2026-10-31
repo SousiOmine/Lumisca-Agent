@@ -1,37 +1,24 @@
 import { join, parse, relative, sep } from "node:path";
 import { Hono } from "hono";
 import { isDirectory } from "@lumisca/core";
+import type {
+  FsBreadcrumb,
+  FsEntry,
+  FsPlace,
+  FsPlaceKind,
+} from "@lumisca/core/shared";
 import { AppError, requireNonEmptyString } from "./util.ts";
 
-/** A place the folder picker's sidebar can start browsing from: an
- * OS-typical user folder, or a filesystem root (a drive on Windows).
- * `kind` is a token the UI translates — a root is labelled by its path. */
-export type FsPlaceKind =
-  | "home"
-  | "desktop"
-  | "documents"
-  | "downloads"
-  | "root";
-
-export interface FsPlace {
-  kind: FsPlaceKind;
-  path: string;
-}
-
-/** A browse entry. Folders can be entered (and picked as a workspace
- * folder); files are listed for orientation only. */
-export interface FsEntry {
-  name: string;
-  path: string;
-  kind: "dir" | "file";
-}
-
-/** One step of the browser's address bar, from the filesystem root down to
- * the browsed folder. */
-export interface FsBreadcrumb {
-  name: string;
-  path: string;
-}
+/** The picker's wire shapes (FsPlace, FsEntry, FsBreadcrumb, FsBrowse) and
+ * the place kinds are DEFINED once in `@lumisca/core/shared/wire.ts`: the
+ * web UI that renders them imports the same definitions, so a field cannot
+ * be renamed on one side only. */
+export type {
+  FsBreadcrumb,
+  FsEntry,
+  FsPlace,
+  FsPlaceKind,
+} from "@lumisca/core/shared";
 
 /** A place the picker offers before its existence is checked. */
 export interface PlaceCandidate {

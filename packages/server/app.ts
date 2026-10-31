@@ -3,13 +3,7 @@ import { Hono } from "hono";
 import { compress } from "hono/compress";
 import { upgradeWebSocket } from "hono/deno";
 import { type LumiscaCore, nextRunAt } from "@lumisca/core";
-import {
-  createFrameBatcher,
-  type FrameBatcher,
-  hostForUrl,
-  WS_HEARTBEAT_INTERVAL_MS,
-  WS_HEARTBEAT_TYPE,
-} from "@lumisca/core/shared";
+import { hostForUrl } from "@lumisca/core/shared";
 import { Assets } from "./assets.ts";
 import { languageForRequest, registerPages } from "./pages.ts";
 import { installSecurityMiddleware } from "./security.ts";
@@ -31,6 +25,7 @@ import { federationRoutes } from "./routes/federation.ts";
 import { type UpdateApi, updateRoutes } from "./routes/update.ts";
 import { FederationClient } from "./federation.ts";
 import { jsonError } from "./routes/util.ts";
+import { createEventStream } from "./routes/ws-stream.ts";
 
 export interface AppOptions {
   /** Repository root (defaults to the current working directory). */
@@ -218,108 +213,59 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   // --- websocket event stream ------------------------------------------------
 
-  const ws = upgradeWebSocket(() => {
-    let unsubscribe: (() => void) | undefined;
-    let unsubscribeFed: (() => void) | undefined;
-    let heartbeat: ReturnType<typeof setInterval> | undefined;
-    /** Buffered text deltas of this socket, per session (see
-     * core/shared/ws-batch.ts). Created in onOpen: a socket's batch lives
-     * exactly as long as it does. */
-    let batcher: FrameBatcher<string, number> | undefined;
-    const write = (ws: { send(data: string): void }, payload: unknown) => {
-      // The socket may have closed between the event and the send (the
-      // unsubscribe below runs on close, but a concurrent event can race
-      // it); a throw here would kill the subscribe handler.
-      try {
-        ws.send(JSON.stringify(payload));
-      } catch {
-        // connection is gone; nothing to do
-      }
-    };
-    /** Write one frame, after whatever deltas are buffered: the stream's
-     * order is what tells the client which message a tool result belongs
-     * to. */
-    const send = (ws: { send(data: string): void }, payload: unknown) => {
-      batcher?.flush();
-      write(ws, payload);
-    };
-    return {
-      onOpen(_evt, ws) {
-        // Text deltas are one frame per token. Locally that costs nothing;
-        // over a tailnet or a WAN the many tiny frames arrive as bursts and
-        // the reply renders in jumps. Batching them into one frame per
-        // session per display interval keeps the flow smooth without
-        // delaying the first character measurably, and a batch carries the
-        // session id, the revision of its last delta and the number of
-        // events it covers (see core/shared/ws-batch.ts).
-        batcher = createFrameBatcher<string, number>({
-          ...(options.deltaFlushMs === undefined
-            ? {}
-            : { flushMs: options.deltaFlushMs }),
-          flush: ({ key, delta, rev, events }) =>
-            write(ws, {
-              peerId: "",
-              sessionId: key,
-              rev,
-              events,
-              type: "message_delta",
-              delta,
-            }),
-        });
-        unsubscribe = core.subscribe((event) => {
-          // Every event carries the peer id ("" = this server) so the UI
-          // routes it to the right session tab, and — for session events —
-          // the emitting session's revision, which lets the client detect a
-          // lost frame without another round trip (see
-          // core.getSessionRevision).
-          const rev = "sessionId" in event
-            ? core.getSessionRevision(event.sessionId)
-            : undefined;
-          if (event.type === "message_delta") {
-            batcher?.delta(event.sessionId, event.delta, rev);
-            return;
-          }
-          send(
-            ws,
-            {
-              peerId: "",
-              ...(rev === undefined ? {} : { rev }),
-              ...event,
-            },
-          );
-        });
-        // Federated peers' events, tagged with their id. The peer's own
-        // `peerId` marker ("" on its side) is stripped first, so the tag
-        // is always the id this hub knows. A relayed delta is already
-        // batched by the peer; it passes through in order (flush first, so
-        // this socket's own buffered text does not overtake it).
-        unsubscribeFed = fed.subscribe((peerId, event) => {
+  // One socket carries every session of this server and the events relayed
+  // from federated peers (tagged with the peer's id). The batching, the
+  // heartbeat and the teardown are routes/ws-stream.ts's; only what this
+  // stream lets through is stated here.
+  const ws = upgradeWebSocket(() =>
+    createEventStream({
+      ...(options.deltaFlushMs === undefined
+        ? {}
+        : { flushMs: options.deltaFlushMs }),
+      subscribe: (listener) => core.subscribe(listener),
+      // Every core event belongs to this stream (the projection below
+      // decides its shape).
+      accept: () => true,
+      revOf: (event) =>
+        "sessionId" in event
+          ? core.getSessionRevision(event.sessionId)
+          : undefined,
+      deltaKey: (event) => ("sessionId" in event ? event.sessionId : ""),
+      deltaFrame: ({ key, delta, rev, events }) => ({
+        peerId: "",
+        sessionId: key,
+        rev,
+        events,
+        type: "message_delta",
+        delta,
+      }),
+      project: (event, rev) => {
+        // Every event carries the peer id ("" = this server) so the UI
+        // routes it to the right session tab, and — for session events —
+        // the emitting session's revision, which lets the client detect a
+        // lost frame without another round trip (see
+        // core.getSessionRevision).
+        return [{
+          peerId: "",
+          ...(rev === undefined ? {} : { rev }),
+          ...event,
+        }];
+      },
+      // Federated peers' events, tagged with their id. The peer's own
+      // `peerId` marker ("" on its side) is stripped first, so the tag is
+      // always the id this hub knows. A relayed delta was already batched
+      // by the peer; it goes out through `send`, so this socket's own
+      // buffered text cannot overtake it.
+      relay: (writer) =>
+        fed.subscribe((peerId, event) => {
           const { peerId: _stale, ...rest } = event as Record<string, unknown>;
-          send(ws, { peerId, ...rest });
-        });
-        // Liveness of an idle stream: silence is indistinguishable from a
-        // socket that died without a close event (a NAT/proxy timeout, a
-        // suspended page), so the server proves it is still there on a
-        // fixed cadence (see core/shared/heartbeat.ts). The frame is
-        // transport-level, not a ClientEvent: the client swallows it and
-        // only refreshes its watchdog.
-        heartbeat = setInterval(() => {
-          send(ws, { type: WS_HEARTBEAT_TYPE });
-        }, options.heartbeatMs ?? WS_HEARTBEAT_INTERVAL_MS);
-      },
-      onClose() {
-        if (heartbeat !== undefined) clearInterval(heartbeat);
-        // Text the model already produced is flushed before the socket is
-        // gone (the socket may be closing on the client's side, but the
-        // batch is this side's buffer).
-        batcher?.close();
-        batcher = undefined;
-        unsubscribe?.();
-        unsubscribeFed?.();
-      },
-    };
-  });
-
+          writer.send({ peerId, ...rest });
+        }),
+      ...(options.heartbeatMs === undefined
+        ? {}
+        : { heartbeatMs: options.heartbeatMs }),
+    })
+  );
   app.get("/ws", ws);
   // The stella machine's screen relay. Mounted under /api so the Host guard,
   // the token and the CORS/Origin middleware above all apply — the container's

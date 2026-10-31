@@ -8,6 +8,7 @@
  * one definition instead of drifting apart per caller.
  */
 import { errorMessage } from "../errors.ts";
+import { concatBytes } from "../bytes.ts";
 
 /** The result of one command, already decoded and capped. */
 export interface VmCommandResult {
@@ -246,18 +247,7 @@ async function readStream(
     reader.releaseLock();
   }
   return {
-    bytes: concat(kept, keptLength),
+    bytes: concatBytes(kept, keptLength),
     truncated: total > limit,
   };
-}
-
-function concat(chunks: readonly Uint8Array[], length: number): Uint8Array {
-  if (chunks.length === 1) return chunks[0]!;
-  const out = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
 }

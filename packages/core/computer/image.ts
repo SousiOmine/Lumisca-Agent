@@ -18,6 +18,7 @@
 import { CoreError } from "../errors.ts";
 import type { RawCapture } from "./types.ts";
 import { deflateSync, inflateSync } from "node:zlib";
+import { concatBytes, crc32 } from "../bytes.ts";
 
 /** Longest side of the image a capture produces by default. Chosen to stay
  * inside the vision providers' image budget (1568 px long edge / ~1.15 MP):
@@ -198,7 +199,7 @@ export function encodePng(
   ihdr[12] = 0; // interlace: none
 
   const idat = zlibDeflate(filtered);
-  return concat([
+  return concatBytes([
     PNG_SIGNATURE,
     pngChunk("IHDR", ihdr),
     pngChunk("IDAT", idat),
@@ -224,44 +225,6 @@ function pngChunk(type: string, data: Uint8Array): Uint8Array {
   for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
   out.set(data, 8);
   view.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
-  return out;
-}
-
-/** CRC-32 (PNG's polynomial, reflected) over `data`. */
-export function crc32(data: Uint8Array): number {
-  const table = crcTable();
-  let crc = 0xffffffff;
-  for (let i = 0; i < data.length; i++) {
-    crc = table[(crc ^ data[i]!) & 0xff]! ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-/** The CRC table, built once per process (256 entries). */
-let crcTableCache: Uint32Array | undefined;
-function crcTable(): Uint32Array {
-  if (crcTableCache !== undefined) return crcTableCache;
-  const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) {
-      c = (c & 1) !== 0 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    }
-    table[n] = c >>> 0;
-  }
-  crcTableCache = table;
-  return table;
-}
-
-function concat(parts: Uint8Array[]): Uint8Array {
-  let length = 0;
-  for (const part of parts) length += part.length;
-  const out = new Uint8Array(length);
-  let offset = 0;
-  for (const part of parts) {
-    out.set(part, offset);
-    offset += part.length;
-  }
   return out;
 }
 
@@ -324,7 +287,7 @@ export function decodePngToBgra(png: Uint8Array): DecodedImage {
     throw new CoreError("the PNG has no image data", "unavailable");
   }
 
-  const raw = inflateSync(concat(chunks));
+  const raw = inflateSync(concatBytes(chunks));
   const stride = header.width * header.channels;
   const expected = (stride + 1) * header.height;
   if (raw.length < expected) {

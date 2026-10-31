@@ -4,8 +4,8 @@ import {
   LANGUAGE_KEY,
   type Locale,
 } from "@lumisca/core/shared";
-import { api } from "../api.ts";
 import { getLocale, setLocale } from "../i18n.ts";
+import { settingsStore } from "../settingsStore.ts";
 
 /** The selected app language: the UI source of truth while the page is
  * open, persisted to the server setting so it follows the user across
@@ -39,7 +39,10 @@ export function useLanguage(): {
     // fails.
     setLanguageState(next);
     setLocale(next);
-    api.setSetting(LANGUAGE_KEY, next).catch((failure) => {
+    // Through the settings store for the same reason useTheme uses it: the
+    // generic settings surface lists this key, and a value written around the
+    // store would leave that list showing the previous language.
+    settingsStore.set(LANGUAGE_KEY, next).catch((failure) => {
       setError(errorText(failure));
       if (chosen.current !== next) return; // a newer choice superseded this one
       chosen.current = previous;

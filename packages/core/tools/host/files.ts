@@ -20,10 +20,6 @@ import {
 import { MAX_TOOL_OUTPUT } from "../truncate.ts";
 import { mergeRanges, stripTrailingCR } from "../../lines.ts";
 
-/** Files larger than this are skipped by grep on every backend (a model
- * grepping a huge file costs more than the search is worth). */
-export const MAX_GREP_FILE_SIZE = 8 * 1024 * 1024;
-
 /** Files are read in batches of this many, overlapping I/O without
  * unbounded memory use. */
 const GREP_CONCURRENCY = 16;

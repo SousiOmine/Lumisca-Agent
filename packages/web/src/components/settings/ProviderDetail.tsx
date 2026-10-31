@@ -20,6 +20,7 @@ import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useT } from "../../i18n.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
+import { useSavedNotice } from "../../hooks/useSave.ts";
 import {
   errorText,
   useProviderModels,
@@ -70,20 +71,13 @@ export function ProviderDetail({
   const [savingKey, setSavingKey] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
-  const [savedNotice, setSavedNotice] = useState(false);
+  const { saved: savedNotice, flash: flashSaved } = useSavedNotice();
   const [loginFlow, setLoginFlow] = useState<LoginFlow | undefined>();
   const [loginBusy, setLoginBusy] = useState(false);
   const [promptValue, setPromptValue] = useState("");
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
   const pollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
-
-  useEffect(() => {
-    return () => clearTimeout(savedTimer.current);
-  }, []);
 
   const load = async () => {
     const authState = await api.providerAuth(providerId);
@@ -155,9 +149,7 @@ export function ProviderDetail({
     try {
       await api.setApiKey(providerId, key.trim());
       setKey("");
-      setSavedNotice(true);
-      clearTimeout(savedTimer.current);
-      savedTimer.current = setTimeout(() => setSavedNotice(false), 2000);
+      flashSaved();
       await load();
       // A freshly stored key changes the provider's `configured` verdict:
       // the catalog store feeds the model picker and the composer's send
@@ -534,7 +526,7 @@ export function ProviderDetail({
                 className="btn"
                 onClick={() => onEditUser(providerId)}
               >
-                <IconEdit size={14} /> {t("settings.provider.edit")}
+                <IconEdit size={14} /> {t("common.edit")}
               </button>
             )}
             <button

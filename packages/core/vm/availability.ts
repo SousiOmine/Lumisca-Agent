@@ -8,13 +8,14 @@
  * where the mode would be picked. The caller (the mode-selection screen) has
  * no fallback path to take: it renders the reason.
  */
+import type { StellaAvailability } from "../shared/wire.ts";
 import type { VmStatus } from "./container.ts";
 
-export type StellaAvailability =
-  | { available: true }
-  /** `reason` is a full sentence shown to the user: which prerequisite is
-   * missing and what to do about it. */
-  | { available: false; reason: string };
+// Importers of the verdict's type reach it through this module (the one that
+// decides it) and through `@lumisca/core/shared` (the web bundle); both name
+// the definition in shared/wire.ts.
+export type { StellaAvailability };
+
 /** Turn the machine's status into the availability verdict. Only the
  * prerequisites are judged here — whether the image has been built yet is
  * not a reason to hide the mode: starting the machine builds it. */

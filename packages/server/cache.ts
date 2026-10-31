@@ -1,8 +1,4 @@
 /** A small TTL cache: entries expire `ttlMs` after being set; with `max`
- * set, the oldest entry is evicted on overflow. Used by the workspace file
- * listing and the provider auth check, which both re-read cheaply but not
- * per request. */
-/** A small TTL cache: entries expire `ttlMs` after being set; with `max`
  * set, the oldest entry is evicted on overflow. Shared by the workspace
  * file cache and the provider auth cache so the pattern lives once. */
 export function ttlCache<K, V>(ttlMs: number, max?: number): {

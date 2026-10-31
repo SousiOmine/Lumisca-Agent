@@ -93,6 +93,7 @@ import {
 import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
 import type { VmManager, VmProgress } from "./vm/container.ts";
 import type { StellaAvailability } from "./vm/availability.ts";
+import type { StellaStatus } from "./shared/wire.ts";
 import { StellaMachine } from "./vm/machine.ts";
 import { createVmScreen } from "./vm/screen.ts";
 import { createVmTools } from "./vm/tools.ts";
@@ -532,6 +533,16 @@ export class LumiscaCore {
     // would try to start a run on a pool that is shutting down.
     this.routineScheduler.close();
     await this.pool.closeAll();
+    // Every session is gone now, so the per-session structures are too. A
+    // core is not reopened after close, but releasing them here is what
+    // makes the invariant ("nothing outlives its session") checkable. The
+    // two maps do not hold the same keys (a hand-over hub exists without
+    // ever emitting an event), so the union is what gets forgotten.
+    const forgotten = new Set([
+      ...this.sessionRevisions.keys(),
+      ...this.handoverHubs.keys(),
+    ]);
+    for (const sessionId of forgotten) this.forgetSession(sessionId);
     // The machine is this application's; leaving it running would keep a
     // container (and a memory-hungry desktop inside it) alive after the app
     // that owns it is gone. A stop that fails is logged by the server's
@@ -735,6 +746,19 @@ export class LumiscaCore {
    * covers those). */
   getSessionRevision(id: string): number {
     return this.sessionRevisions.get(id) ?? 0;
+  }
+
+  /** Drop every per-session structure this core keeps outside the pool.
+   *
+   * The revision counter and the hand-over hub both live as long as their
+   * session and are keyed by its id; without this they accumulate for the
+   * life of the process (a server opened for days on a workstation opens
+   * hundreds of sessions). One function so a new per-session map has one
+   * place to be cleaned up: the close path, the delete path and the
+   * shutdown path all come through here. */
+  private forgetSession(sessionId: string): void {
+    this.sessionRevisions.delete(sessionId);
+    this.handoverHubs.delete(sessionId);
   }
 
   // --- settings -----------------------------------------------------------
@@ -1171,13 +1195,7 @@ export class LumiscaCore {
    * and (b) whether the screen pane can connect. `starting` carries the
    * first-run build, which is the one wait the user does see.
    */
-  async getStellaStatus(): Promise<{
-    availability: StellaAvailability;
-    state: string;
-    vncPort: number | null;
-    reason: string;
-    starting: boolean;
-  }> {
+  async getStellaStatus(): Promise<StellaStatus> {
     return await this.stella.status();
   }
 
@@ -1576,7 +1594,7 @@ export class LumiscaCore {
     // gone: a client still holding the old count sees a difference and
     // re-reads the snapshot — the right reaction, since the reopened agent
     // starts from what was persisted.
-    this.sessionRevisions.delete(id);
+    this.forgetSession(id);
   }
 
   async deleteSession(id: string): Promise<void> {
@@ -1585,7 +1603,7 @@ export class LumiscaCore {
     // synchronously gone for callers that do not await.
     const closing = this.pool.delete(id);
     this.sessions.delete(id);
-    this.sessionRevisions.delete(id);
+    this.forgetSession(id);
     await closing;
     // The published visuals and the files the agent sent belong to the
     // session: once it is gone nothing can reference them (a message that

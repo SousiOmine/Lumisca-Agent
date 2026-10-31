@@ -4,7 +4,6 @@ import {
   buildKeyInput,
   buildMouseInput,
   buildUnicodeInputs,
-  concatInputs,
   createWindowsComputerHost,
   formatWindowId,
   inputSize,
@@ -14,6 +13,7 @@ import {
   pointerSizeFor,
   resolveKeyChord,
 } from "./windows.ts";
+import { concatBytes } from "../bytes.ts";
 
 /** The layout lookup a test stands in for VkKeyScanW: the virtual key of a
  * character is its upper-case ASCII code (VK for "s" is 0x53), which is
@@ -119,8 +119,8 @@ Deno.test("buildKeyChordInputs holds modifiers around the key", () => {
   assertEquals(entry(5), { vk: 0x11, flags: 0x0002 }, "ctrl up");
 });
 
-Deno.test("concatInputs joins the structures in order", () => {
-  const joined = concatInputs([
+Deno.test("concatBytes joins the structures in order", () => {
+  const joined = concatBytes([
     new Uint8Array([1, 2]),
     new Uint8Array([3]),
     new Uint8Array([4, 5]),

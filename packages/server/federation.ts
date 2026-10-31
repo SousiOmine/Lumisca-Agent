@@ -38,15 +38,19 @@ const PROXY_SLOW_TIMEOUT_MS = 120_000;
 /** Paths whose handlers do real work rather than read a row: opening a
  * session (which may restore an agent), reading a transcript window, and the
  * two explicit compactions. Matched by suffix because the peer's routes are
- * mounted under `/api` and the proxy forwards the remainder verbatim. */
+ * mounted under `/api` and the proxy forwards the remainder verbatim.
+ *
+ * Every pattern here names a route that EXISTS (see routes/sessions.ts and
+ * routes/stella.ts). A pattern for a path nobody serves is worse than dead
+ * code: it looks like a budget decision that was measured, and it hides the
+ * fact that the path is gone. */
 const SLOW_PATH_PATTERNS = [
   /^\/api\/sessions\/[^/]+\/messages(\?|$)/,
   /^\/api\/sessions\/[^/]+\/open$/,
   /^\/api\/sessions\/[^/]+\/compact$/,
   /^\/api\/sessions\/[^/]+\/rewind$/,
   /^\/api\/stella\/conversations\/[^/]+\/messages(\?|$)/,
-  /^\/api\/stella\/session(\?|$)/,
-  /^\/api\/stella\/conversations\/[^/]+\/compact$/,
+  /^\/api\/stella\/conversations\/[^/]+\/prompt$/,
 ];
 
 /** The budget one proxied path gets (see {@link PROXY_TIMEOUT_MS}). */
