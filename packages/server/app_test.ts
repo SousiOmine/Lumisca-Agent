@@ -19,7 +19,7 @@ import {
   startServer,
 } from "./app.ts";
 import { validateHostConfig } from "./security.ts";
-import { removeDirRetry } from "@lumisca/core/test-utils";
+import { MINI_PNG, removeDirRetry } from "@lumisca/core/test-utils";
 function setup(
   env?: () => Record<string, string>,
   options?: AppOptions,
@@ -49,6 +49,15 @@ function json(
  * that count or position turns count this array. */
 function conversationOf<T extends { role: string }>(messages: T[]): T[] {
   return messages.filter((m) => m.role !== "context");
+}
+
+/** The base64 body an icon upload takes: the same bytes the store's tests
+ * use, in the shape a browser's `FileReader` produces (minus the data-URL
+ * header, which the route also accepts). */
+function pngBase64(): string {
+  let binary = "";
+  for (const byte of MINI_PNG) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 Deno.test("health and workspaces API", async () => {
@@ -3242,6 +3251,248 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
     const after = await json(base, "/api/stella/agents");
     assertEquals((await after.json() as { agents: unknown[] }).agents, []);
     void duplicate;
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("stella API: an agent's icon is uploaded, served and replaced", async () => {
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(1),
+    });
+
+    const created = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Aide", role: "Help." }),
+    });
+    const agent = await created.json() as { id: string; icon: string };
+    // No picture yet: the client draws the initial instead.
+    assertEquals(agent.icon, "");
+
+    const upload = await json(base, `/api/stella/agents/${agent.id}/icon`, {
+      method: "PUT",
+      body: JSON.stringify({
+        data: pngBase64(),
+        mimeType: "image/png",
+      }),
+    });
+    assertEquals(upload.status, 200);
+    const withIcon = await upload.json() as { id: string; icon: string };
+    assertEquals(withIcon.id, agent.id);
+    assert(/^[0-9a-f]{12}\.png$/.test(withIcon.icon), withIcon.icon);
+
+    // The row the list serves carries the same name, so the sidebar can draw
+    // it without a second read.
+    const listed = await json(base, "/api/stella/agents");
+    const agents = (await listed.json() as {
+      agents: Array<{ id: string; icon: string }>;
+    }).agents;
+    assertEquals(agents[0]?.icon, withIcon.icon);
+
+    // The bytes are served with the stored content type and are cacheable:
+    // the URL names one immutable file.
+    const served = await fetch(
+      `${base}/api/stella/agents/${agent.id}/icon/${withIcon.icon}`,
+    );
+    assertEquals(served.status, 200);
+    assertEquals(served.headers.get("content-type"), "image/png");
+    assertEquals(
+      served.headers.get("cache-control"),
+      "private, max-age=31536000, immutable",
+    );
+    assertEquals(
+      (await served.arrayBuffer()).byteLength,
+      MINI_PNG.byteLength,
+    );
+
+    // A replacement gets a NEW name: a cached URL must keep showing the
+    // picture it showed.
+    const replaced = await json(base, `/api/stella/agents/${agent.id}/icon`, {
+      method: "PUT",
+      body: JSON.stringify({
+        data: pngBase64(),
+        mimeType: "image/png",
+      }),
+    });
+    const next = await replaced.json() as { icon: string };
+    assert(next.icon !== withIcon.icon);
+    assertEquals(
+      (await fetch(
+        `${base}/api/stella/agents/${agent.id}/icon/${next.icon}`,
+      )).status,
+      200,
+    );
+    // The old file is gone with it.
+    assertEquals(
+      (await fetch(
+        `${base}/api/stella/agents/${agent.id}/icon/${withIcon.icon}`,
+      )).status,
+      404,
+    );
+
+    // Clearing returns the agent to its initial and removes the file.
+    const cleared = await json(base, `/api/stella/agents/${agent.id}/icon`, {
+      method: "DELETE",
+    });
+    assertEquals(cleared.status, 200);
+    assertEquals((await cleared.json() as { icon: string }).icon, "");
+    assertEquals(
+      (await fetch(
+        `${base}/api/stella/agents/${agent.id}/icon/${next.icon}`,
+      )).status,
+      404,
+    );
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("stella API: an icon upload is refused with the reason it failed", async () => {
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(1),
+    });
+    const created = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Aide", role: "Help." }),
+    });
+    const agent = await created.json() as { id: string };
+    const path = `/api/stella/agents/${agent.id}/icon`;
+
+    /** The error message of a refused upload. */
+    const refusal = async (body: unknown): Promise<[number, string]> => {
+      const response = await json(base, path, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      const parsed = await response.json() as { error: string };
+      return [response.status, parsed.error];
+    };
+
+    // A format icons cannot be (SVG is a document that can carry script).
+    const [svgStatus, svgError] = await refusal({
+      data: btoa("<svg/>"),
+      mimeType: "image/svg+xml",
+    });
+    assertEquals(svgStatus, 400);
+    assert(svgError.includes("PNG, JPEG, GIF, WebP or BMP"), svgError);
+
+    // A body that is not the shape the route takes.
+    assertEquals((await refusal({ mimeType: "image/png" }))[0], 400);
+    assertEquals((await refusal({ data: pngBase64() }))[0], 400);
+
+    // Content that is not the image its type claims: the browser's type is a
+    // guess from the file name, so this is decided on the bytes.
+    const [fakeStatus, fakeError] = await refusal({
+      data: btoa("this is not a png"),
+      mimeType: "image/png",
+    });
+    assertEquals(fakeStatus, 400);
+    assert(fakeError.includes("not a PNG image"), fakeError);
+
+    // Over the size cap, refused before it is decoded.
+    const [bigStatus, bigError] = await refusal({
+      data: "A".repeat(Math.ceil(512 * 1024 * 4 / 3) + 2048),
+      mimeType: "image/png",
+    });
+    assertEquals(bigStatus, 400);
+    assert(bigError.includes("too large"), bigError);
+
+    // An unknown agent: the picture has nobody to belong to.
+    const missing = await json(base, "/api/stella/agents/nope/icon", {
+      method: "PUT",
+      body: JSON.stringify({ data: pngBase64(), mimeType: "image/png" }),
+    });
+    assertEquals(missing.status, 404);
+
+    // Nothing above changed the row.
+    const listed = await json(base, "/api/stella/agents");
+    const agents = (await listed.json() as {
+      agents: Array<{ icon: string }>;
+    }).agents;
+    assertEquals(agents[0]?.icon, "");
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("stella API: an icon URL answers only for a name that agent has", async () => {
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(1),
+    });
+    const first = await (await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "First", role: "r" }),
+    })).json() as { id: string };
+    const second = await (await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Second", role: "r" }),
+    })).json() as { id: string };
+    const withIcon = await (await json(
+      base,
+      `/api/stella/agents/${first.id}/icon`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ data: pngBase64(), mimeType: "image/png" }),
+      },
+    )).json() as { icon: string };
+
+    // Another agent cannot claim it by naming the file...
+    assertEquals(
+      (await fetch(
+        `${base}/api/stella/agents/${second.id}/icon/${withIcon.icon}`,
+      )).status,
+      404,
+    );
+    // ...nor can a name the store did not generate.
+    assertEquals(
+      (await fetch(
+        `${base}/api/stella/agents/${first.id}/icon/000000000000.png`,
+      )).status,
+      404,
+    );
+    // An agent that does not exist is not a 404-only path either: the route
+    // says the agent is missing rather than revealing whether a file exists.
+    assertEquals(
+      (await fetch(`${base}/api/stella/agents/nope/icon/${withIcon.icon}`))
+        .status,
+      404,
+    );
+
+    // Deleting the agent takes the file with it.
+    await json(base, `/api/stella/agents/${first.id}`, { method: "DELETE" });
+    assertEquals(
+      (await fetch(
+        `${base}/api/stella/agents/${first.id}/icon/${withIcon.icon}`,
+      )).status,
+      404,
+    );
   } finally {
     server.shutdown();
     await core.close();

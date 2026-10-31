@@ -304,6 +304,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ name, role }),
     }),
+  /** Set the agent's picture (`data` is a base64 image, with or without its
+   * data-URL header). Answers the updated agent. */
+  setStellaAgentIcon: (id: string, icon: { data: string; mimeType: string }) =>
+    request<StellaAgent>(
+      `/api/stella/agents/${encodeURIComponent(id)}/icon`,
+      { method: "PUT", body: JSON.stringify(icon) },
+    ),
+  /** Drop the picture: the agent goes back to its initial. */
+  clearStellaAgentIcon: (id: string) =>
+    request<StellaAgent>(
+      `/api/stella/agents/${encodeURIComponent(id)}/icon`,
+      { method: "DELETE" },
+    ),
   deleteStellaAgent: (id: string) =>
     request<{ ok: boolean }>(
       `/api/stella/agents/${encodeURIComponent(id)}`,

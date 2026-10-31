@@ -382,9 +382,8 @@ export function App({ initialData }: AppProps): ReactElement {
                 onChanged={stella.reloadAgents}
               />
               <StellaView
-                agent={stellaAgent === undefined
-                  ? null
-                  : { name: stellaAgent.name }}
+                agent={stellaAgent ?? null}
+                onAgentChanged={stella.replaceAgent}
                 conversation={stella.conversation}
                 sessionId={stella.sessionId}
                 conversationError={stella.error}

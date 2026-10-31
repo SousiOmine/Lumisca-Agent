@@ -2,17 +2,23 @@ import { IconSend } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/compat";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useT } from "../i18n.ts";
-import type { AppModeStatus } from "../types.ts";
+import type { AppModeStatus, StellaAgent } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
+import { AgentAvatar } from "./stella/AgentAvatar.tsx";
+import { AgentIconDialog } from "./stella/AgentIconDialog.tsx";
 import type { StellaConversationState } from "../stella-state.ts";
 
 interface StellaViewProps {
   /** The agent whose conversation this is (the sidebar picks it). Its name is
-   * the conversation's title; its absence (first run, before an agent exists)
-   * is why the composer is disabled. */
-  agent: { name: string } | null;
+   * the conversation's title and its avatar opens the icon dialog; its
+   * absence (first run, before an agent exists) is why the composer is
+   * disabled. */
+  agent: StellaAgent | null;
+  /** The agent row the server answered after an icon change, so the App can
+   * replace it without re-reading the list. */
+  onAgentChanged: (agent: StellaAgent) => void;
   /** The conversation, or null while there is nothing to show yet. */
   conversation: StellaConversationState | null;
   /** The conversation's session id, for the asset base of `visual:` images.
@@ -64,6 +70,7 @@ interface StellaViewProps {
 export function StellaView(
   {
     agent,
+    onAgentChanged,
     conversation,
     sessionId,
     conversationError,
@@ -83,6 +90,10 @@ export function StellaView(
   // The transcript owns the scroll element (see TranscriptScrollOptions.
   // pinToken): this view only records that a submit happened.
   const [pinToken, setPinToken] = useState(0);
+  // Picking a picture is a decision about the agent, so the control sits on
+  // the agent's own face in the header rather than in a settings dialog:
+  // it is where the user looks when they want that agent to look different.
+  const [editingIcon, setEditingIcon] = useState(false);
   const visualBase = sessionVisualBase("", sessionId ?? "");
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const isRunning = conversation?.running === true;
@@ -120,6 +131,20 @@ export function StellaView(
       <div className="stella-main">
         {agent !== null && (
           <header className="stella-header">
+            <button
+              type="button"
+              className="stella-header-avatar"
+              onClick={() => setEditingIcon(true)}
+              title={t("chat.stella.agents.icon.edit")}
+              aria-label={t("chat.stella.agents.icon.edit")}
+            >
+              <AgentAvatar
+                agentId={agent.id}
+                name={agent.name}
+                icon={agent.icon}
+                size={28}
+              />
+            </button>
             <h1>{agent.name}</h1>
             {status.starting && (
               <span className="stella-note" role="status">
@@ -206,6 +231,13 @@ export function StellaView(
           }}
           onFinishHandover={onFinishHandover}
           onClose={() => setScreenClosed(true)}
+        />
+      )}
+      {agent !== null && editingIcon && (
+        <AgentIconDialog
+          agent={agent}
+          onChanged={onAgentChanged}
+          onClose={() => setEditingIcon(false)}
         />
       )}
     </div>

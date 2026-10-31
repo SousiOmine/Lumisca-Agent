@@ -91,7 +91,7 @@ export class SessionVisualStore {
   /** Drop every asset of a session (the session itself is gone). No-op when
    * the session never published one. */
   deleteSession(sessionId: string): Promise<void> {
-    return this.#dir.deleteSession(sessionId);
+    return this.#dir.deleteOwner(sessionId);
   }
 }
 

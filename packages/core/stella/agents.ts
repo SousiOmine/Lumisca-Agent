@@ -14,6 +14,10 @@ import { CoreError } from "../errors.ts";
  * no separate workspace folder (stella's files live in the machine, not per
  * agent) and no per-agent Discord webhook.
  *
+ * An agent also has an icon — the picture the user picked for it — but that
+ * is presentation, not identity: it is stored as a name the icon store
+ * generated (stella/icons.ts) and never reaches the model.
+ *
  * Two texts describe the agent, and they have different authors:
  * `role` is what the USER wrote when the agent was created (and never
  * changes), and `identity` is what the AGENT writes about itself with the
@@ -33,6 +37,13 @@ export interface StellaAgent {
    * message, so a write reaches it from the next run — never as a
    * system-prompt edit (see stella/identity.ts). */
   identity: string;
+  /** The picture the user picked for this agent: a name the icon store
+   * generated (see stella/icons.ts), or "" when there is none. The client
+   * appends it to `/api/stella/agents/:id/icon/`; an agent without one is
+   * drawn as its initial on a colour derived from its id
+   * (shared/agent-avatar.ts). Never part of the model's context: it is how
+   * the agent looks, not who it is. */
+  icon: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -54,6 +65,10 @@ export interface AgentRepo {
    * here, so the tool and every other caller share one rule. An empty string
    * clears it. */
   writeIdentity(id: string, content: string): void;
+  /** Point the agent at a different icon (a name the icon store generated),
+   * or clear it with "". The store owns the file; this only records which
+   * one the row shows. */
+  setIcon(id: string, name: string): void;
   delete(id: string): void;
   /** The most recently used agent, or undefined when there is none (first
    * run). The sidebar and the conversation pick it by default. */
@@ -68,6 +83,7 @@ interface AgentRow {
   name: string;
   role: string;
   identity?: string | null;
+  icon?: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -78,6 +94,7 @@ function toAgent(row: AgentRow): StellaAgent {
     name: row.name,
     role: row.role,
     identity: row.identity ?? "",
+    icon: row.icon ?? "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -131,6 +148,12 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
   const writeIdentityStmt = db.db.prepare(
     "UPDATE stella_agents SET identity = ?, updated_at = ? WHERE id = ?",
   );
+  const setIconStmt = db.db.prepare(
+    // `updated_at` is deliberately left alone: it orders the sidebar by "who
+    // was talked to last" (list/touch), so picking a picture must not move a
+    // row to the top or change which agent a fresh screen opens.
+    "UPDATE stella_agents SET icon = ? WHERE id = ?",
+  );
   const deleteStmt = db.db.prepare("DELETE FROM stella_agents WHERE id = ?");
   // "Most recently used" has to be a strict order, and a millisecond clock is
   // too coarse for it: creating two agents and touching one inside the same
@@ -162,7 +185,15 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
       const id = input.id ?? crypto.randomUUID();
       const now = Date.now();
       insertStmt.run(id, name, role, now, now);
-      return { id, name, role, identity: "", createdAt: now, updatedAt: now };
+      return {
+        id,
+        name,
+        role,
+        identity: "",
+        icon: "",
+        createdAt: now,
+        updatedAt: now,
+      };
     },
 
     rename(id: string, name: string): void {
@@ -185,6 +216,16 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
       // The row is what the provider reads, so a write for an agent that no
       // longer exists fails instead of quietly doing nothing.
       const result = writeIdentityStmt.run(text, Date.now(), id);
+      if (Number(result.changes) === 0) {
+        throw new CoreError(`Agent not found: ${id}`, "not_found");
+      }
+    },
+
+    setIcon(id: string, name: string): void {
+      // The caller (core) has already stored the file and knows the name is
+      // one this build generated; an unknown agent still fails loudly,
+      // because a picture recorded for nobody would be a file nothing shows.
+      const result = setIconStmt.run(name, id);
       if (Number(result.changes) === 0) {
         throw new CoreError(`Agent not found: ${id}`, "not_found");
       }

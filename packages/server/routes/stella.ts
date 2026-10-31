@@ -13,8 +13,16 @@ import type {
   WindowQuery,
 } from "@lumisca/core";
 import type { StellaAvailability } from "@lumisca/core";
-import { CoreError, errorMessage, stellaEventsOf } from "@lumisca/core";
 import {
+  base64ToBytes,
+  CoreError,
+  errorMessage,
+  stellaEventsOf,
+} from "@lumisca/core";
+import {
+  AGENT_ICON_FORMATS,
+  agentIconExtensionOfMimeType,
+  MAX_AGENT_ICON_BYTES,
   WS_HEARTBEAT_INTERVAL_MS,
   WS_HEARTBEAT_TYPE,
 } from "@lumisca/core/shared";
@@ -26,6 +34,7 @@ import {
   requireNumber,
 } from "./util.ts";
 import { parseAnswerBody } from "./sessions.ts";
+import { assetHeaders } from "./asset-headers.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface StellaApi {
@@ -33,6 +42,19 @@ export interface StellaApi {
   defaultStellaAgent(): StellaAgent | undefined;
   createStellaAgent(input: { name: string; role: string }): StellaAgent;
   renameStellaAgent(id: string, name: string): StellaAgent;
+  /** Store the picture the user picked and point the agent at it. */
+  setStellaAgentIcon(
+    id: string,
+    input: { bytes: Uint8Array; extension: string },
+  ): Promise<StellaAgent>;
+  /** Return the agent to its initial on a generated colour. */
+  clearStellaAgentIcon(id: string): Promise<StellaAgent>;
+  /** The icon file one of an agent's names refers to (the route serves it).
+   * Undefined for an unknown name or a file that is gone. */
+  resolveStellaAgentIcon(
+    id: string,
+    name: string,
+  ): Promise<{ path: string; mimeType: string } | undefined>;
   deleteStellaAgent(id: string): Promise<void>;
   getAppMode(): "code" | "stella" | undefined;
   setAppMode(mode: "code" | "stella"): void;
@@ -82,6 +104,49 @@ export interface StellaApi {
    * from it; see stellaEventsOf). */
   subscribe(listener: (event: ClientEvent) => void): () => void;
   getSessionRevision(sessionId: string): number;
+}
+
+/**
+ * The upload body an icon route takes: the base64 bytes and the content type
+ * the browser reported. Validated here so the core only ever sees an
+ * admissible pair — an empty or oversized payload is refused with its own
+ * sentence instead of reaching the store as a broken image.
+ */
+function parseIconBody(
+  body: { data?: unknown; mimeType?: unknown } | undefined,
+): { data: string; mimeType: string } {
+  const data = body?.data;
+  const mimeType = body?.mimeType;
+  if (typeof data !== "string" || data.length === 0) {
+    throw new AppError("data (base64 image) is required", 400);
+  }
+  if (typeof mimeType !== "string" || mimeType.length === 0) {
+    throw new AppError("mimeType is required", 400);
+  }
+  // Measured on the encoded text first: a payload far past the limit is
+  // rejected without being decoded, and base64 is 4/3 of the bytes it
+  // carries (plus the data-URL header some clients leave on).
+  if (data.length > Math.ceil(MAX_AGENT_ICON_BYTES * 4 / 3) + 1024) {
+    throw new AppError(
+      `The icon is too large (limit ${MAX_AGENT_ICON_BYTES} bytes)`,
+      400,
+    );
+  }
+  return { data, mimeType };
+}
+
+/** Decode base64, with the data-URL header stripped (a client may send what
+ * `FileReader` produced). A malformed payload is a 400 rather than a
+ * store-level failure: it describes the request, not the server. */
+function decodeBase64(data: string): Uint8Array {
+  const payload = data.startsWith("data:")
+    ? data.slice(data.indexOf(",") + 1)
+    : data;
+  try {
+    return base64ToBytes(payload);
+  } catch {
+    throw new AppError("data is not valid base64", 400);
+  }
 }
 
 /**
@@ -189,6 +254,80 @@ export function stellaRoutes(core: StellaApi): Hono {
   app.delete("/stella/agents/:id", async (c) => {
     await core.deleteStellaAgent(c.req.param("id"));
     return c.json({ ok: true });
+  });
+
+  // --- agents' icons (the picture each is drawn with) ----------------------
+
+  /** Set the agent's picture. The body is the same shape a prompt's images
+   * take (`base64` + `mimeType`): the browser already has the bytes, and the
+   * image endpoints across the app speak that one shape.
+   *
+   * The content type decides the stored format, and the store then checks the
+   * bytes really are that format — a browser reports a type from the file's
+   * name, so it is a claim, not a fact. What comes back is the updated agent:
+   * the client draws `icon` and needs no second read. */
+  app.put("/stella/agents/:id/icon", async (c) => {
+    const body = await parseBody<{ data?: unknown; mimeType?: unknown }>(c);
+    const { data, mimeType } = parseIconBody(body);
+    const extension = agentIconExtensionOfMimeType(mimeType);
+    if (extension === undefined) {
+      throw new AppError(
+        `Icons must be ${AGENT_ICON_FORMATS} (got "${mimeType}")`,
+        400,
+      );
+    }
+    try {
+      return c.json(
+        await core.setStellaAgentIcon(c.req.param("id"), {
+          bytes: decodeBase64(data),
+          extension,
+        }),
+      );
+    } catch (error) {
+      throw new AppError(
+        errorMessage(error),
+        error instanceof CoreError && error.kind === "not_found" ? 404 : 400,
+      );
+    }
+  });
+
+  /** Back to the initial on a generated colour: the row's reference and the
+   * file both go. Answers the updated agent, like the upload above. */
+  app.delete("/stella/agents/:id/icon", async (c) => {
+    try {
+      return c.json(await core.clearStellaAgentIcon(c.req.param("id")));
+    } catch (error) {
+      throw new AppError(
+        errorMessage(error),
+        error instanceof CoreError && error.kind === "not_found" ? 404 : 400,
+      );
+    }
+  });
+
+  /** The picture itself.
+   *
+   * Named by the file the store generated, not by the agent alone: a
+   * replaced picture keeps the OLD URL valid for whatever already drew it
+   * (the answer is cacheable forever, and a URL that changed content would
+   * keep showing the old face), while a fresh upload gets a fresh name. The
+   * agent must exist — a name alone must not tell a caller whether one ever
+   * did — and the store answers only names it generated. */
+  app.get("/stella/agents/:id/icon/:name", async (c) => {
+    const agentId = c.req.param("id");
+    if (core.getStellaAgent(agentId) === undefined) {
+      throw new AppError(`Agent not found: ${agentId}`, 404);
+    }
+    const icon = await core.resolveStellaAgentIcon(
+      agentId,
+      c.req.param("name"),
+    );
+    if (icon === undefined) {
+      throw new AppError(`Icon not found: ${c.req.param("name")}`, 404);
+    }
+    const bytes = await Deno.readFile(icon.path);
+    return new Response(bytes, {
+      headers: assetHeaders({ mimeType: icon.mimeType }),
+    });
   });
 
   /** The stella conversation, created on first use, plus the snapshot the

@@ -62,6 +62,10 @@ export function useStella(enabled: boolean): {
   loading: boolean;
   /** Re-read the agent list (after a create / delete). */
   reloadAgents: () => void;
+  /** Replace one agent row with the version the server answered (an icon
+   * upload or clear), so the sidebar and the header redraw without a full
+   * re-read of the list. */
+  replaceAgent: (agent: StellaAgent) => void;
 } {
   const [agents, setAgents] = useState<StellaAgent[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
@@ -82,6 +86,16 @@ export function useStella(enabled: boolean): {
 
   const reloadAgents = useCallback(() => {
     setAgentsVersion((version) => version + 1);
+  }, []);
+
+  /** Swap one row in place. An icon change is the only caller: the list's
+   * ORDER is "most recently talked to" and a picture does not move it, so a
+   * full re-read (which could arrive out of order with a run's touch) would
+   * be more churn for the same result. */
+  const replaceAgent = useCallback((updated: StellaAgent) => {
+    setAgents((current) =>
+      current.map((agent) => agent.id === updated.id ? updated : agent)
+    );
   }, []);
 
   // The agent list. Read when stella becomes the mode and after a change;
@@ -354,5 +368,6 @@ export function useStella(enabled: boolean): {
     error,
     loading,
     reloadAgents,
+    replaceAgent,
   };
 }

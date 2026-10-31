@@ -107,6 +107,16 @@ export function sessionAttachmentBase(
     : `/api/fed/${encodeURIComponent(peerId)}${path}`;
 }
 
+/** URL of one stella agent's icon (always the local server: stella is a mode
+ * of this installation, not a peer's session). The name is the file the
+ * store generated, which is why the icon changes URL when the picture
+ * changes — the response is cached forever. */
+export function stellaAgentIconUrl(agentId: string, name: string): string {
+  return `/api/stella/agents/${encodeURIComponent(agentId)}/icon/${
+    encodeURIComponent(name)
+  }`;
+}
+
 /** Bind one API call to a peer or this server: `local` runs against this
  * server (peerId === ""), `remote` against the peer. Used by the per-session
  * / workspace / model dispatchers so each method is a one-liner instead of

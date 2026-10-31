@@ -204,6 +204,9 @@
 .stella-agent-name {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 4px 6px 8px;
   border: none;
   background: none;
@@ -212,9 +215,17 @@
   font-size: 13px;
   text-align: left;
   overflow: hidden;
+  cursor: pointer;
+}
+
+/* The name is what truncates: the avatar keeps its circle and the row keeps
+ * its shape, so a long name ends in an ellipsis instead of squeezing the
+ * face next to it. */
+.stella-agent-label {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
 }
 
 .stella-agent.active .stella-agent-name {
@@ -290,7 +301,7 @@
  * error (which must be visible). */
 .stella-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   padding: 10px 16px 6px;
@@ -301,6 +312,75 @@
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+/* The agent's face in the header doubles as the control that changes it: the
+ * picture is where the user looks when they want the agent to look
+ * different, so no separate "edit icon" button sits beside it. */
+.stella-header-avatar {
+  flex: none;
+  display: flex;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  cursor: pointer;
+}
+
+.stella-header-avatar:hover {
+  box-shadow: 0 0 0 2px var(--border-strong);
+}
+
+.stella-header-avatar:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
+/* --- agents: the avatar -------------------------------------------------- */
+
+/* The colour is the one place the UI carries a hue. Everything else is the
+ * achromatic ramp (styles/README.md), which is exactly what makes a hue
+ * readable as "this is who you are talking to" instead of as decoration.
+ * The hue arrives as --agent-avatar-hue from the component (derived from the
+ * agent's id); lightness and saturation are fixed so the white initial keeps
+ * its contrast in both themes. */
+.agent-avatar {
+  flex: none;
+  display: block;
+  border-radius: var(--radius-pill);
+  object-fit: cover;
+  background: var(--surface-3);
+  color: #ffffff;
+  user-select: none;
+}
+
+.agent-avatar-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  line-height: 1;
+  background: hsl(var(--agent-avatar-hue) 46% 42%);
+}
+
+/* The dialog's large preview, above the hint. */
+.agent-icon-preview {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 12px;
+}
+
+.agent-icon-hint {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* The file input is triggered by the dialog's button: a control with a
+ * browser-local caption and no style of its own cannot sit in this row. */
+.agent-icon-input {
+  display: none;
 }
 
 .stella-note {

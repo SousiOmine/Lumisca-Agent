@@ -124,7 +124,7 @@ export class SessionAttachmentStore {
   /** Drop every attachment of a session (the session itself is gone).
    * No-op when the session never attached anything. */
   deleteSession(sessionId: string): Promise<void> {
-    return this.#dir.deleteSession(sessionId);
+    return this.#dir.deleteOwner(sessionId);
   }
 }
 

@@ -244,6 +244,23 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
       "TEXT NOT NULL DEFAULT ''",
     );
   },
+  // Each stella agent's icon: the picture the USER picked for it, as a name
+  // the icon store generated (the file sits beside the database, like the
+  // visuals and the attachments). Empty means "no picture yet" — the row is
+  // then drawn as the name's initial on a colour derived from the id
+  // (shared/agent-avatar.ts), so the default needs no column.
+  //
+  // A name rather than a path: the store generates every name, so a message
+  // or a database row can never point the icon route at a file of its own
+  // choosing.
+  (db) => {
+    addColumnIfMissing(
+      db,
+      "stella_agents",
+      "icon",
+      "TEXT NOT NULL DEFAULT ''",
+    );
+  },
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

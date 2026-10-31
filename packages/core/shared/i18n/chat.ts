@@ -235,6 +235,32 @@ export const chat = {
     ja: "まだエージェントがいません。作成してください。",
     en: "No agent yet. Create one.",
   },
+  "chat.stella.agents.icon.edit": {
+    ja: "アイコンを変える",
+    en: "Change the icon",
+  },
+  "chat.stella.agents.icon.title": {
+    ja: "「{name}」のアイコン",
+    en: 'Icon of "{name}"',
+  },
+  "chat.stella.agents.icon.hint": {
+    ja:
+      "画像を選ぶと、このエージェントのアイコンになります。{formats} に対応しています（{size} まで）。選ばないときは名前の頭文字が表示されます。",
+    en:
+      "Pick a picture to use as this agent's icon. {formats} are supported (up to {size}). Without one, the first character of the name is shown.",
+  },
+  "chat.stella.agents.icon.choose": {
+    ja: "画像を選ぶ",
+    en: "Choose a picture",
+  },
+  "chat.stella.agents.icon.saving": {
+    ja: "保存中…",
+    en: "Saving…",
+  },
+  "chat.stella.agents.icon.reset": {
+    ja: "初期状態に戻す",
+    en: "Back to the initial",
+  },
   "chat.stella.conversationError": {
     ja: "会話を開けませんでした: {error}",
     en: "Could not open the conversation: {error}",

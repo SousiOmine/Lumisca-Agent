@@ -90,6 +90,12 @@
    * by the component (see ThinkingLevelSlider). The zero here keeps the
    * calc() that reads it valid — the same reason as --app-banner-height. */
   --tls-fill: 0;
+  /* Hue (0..359) of a stella agent's avatar, written per render by the
+   * component and derived from the agent's id (shared/agent-avatar.ts). It is
+   * the ONE hue in the UI — everything else is the achromatic ramp — which is
+   * what makes "who you are talking to" readable at a glance. The zero keeps
+   * the hsl() that reads it valid when nothing has set it. */
+  --agent-avatar-hue: 0;
   /* Values a component writes into its own element per render (styles_test.ts
    * requires every referenced variable to be declared here, and an inline
    * `left`/`width` could not be overridden by a narrow-layout rule — a

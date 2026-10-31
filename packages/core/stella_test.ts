@@ -14,7 +14,7 @@ import type { StreamFn } from "./ai/types.ts";
 import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
 import { APP_MODE_KEY } from "./shared/settings-keys.ts";
-import { promptSession } from "./test-utils.ts";
+import { MINI_PNG, promptSession } from "./test-utils.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
 
 /**
@@ -207,6 +207,111 @@ Deno.test("stella conversation: deleting an agent takes its conversation", async
     await core.deleteStellaAgent(agent.id);
     assertEquals(core.getSession(session.id), undefined);
     assertEquals(core.listStellaAgents(), []);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: an icon is stored, replaced and cleared as one file", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    assertEquals(agent.icon, "");
+
+    const first = await core.setStellaAgentIcon(agent.id, {
+      bytes: MINI_PNG,
+      extension: ".png",
+    });
+    assertEquals(first.icon, core.getStellaAgent(agent.id)?.icon);
+    const firstFile = await core.resolveStellaAgentIcon(agent.id, first.icon);
+    assertEquals(firstFile?.mimeType, "image/png");
+
+    // Replacing writes a new file and drops the one it replaced: an icon URL
+    // is cacheable forever, so the name has to change with the picture.
+    const second = await core.setStellaAgentIcon(agent.id, {
+      bytes: MINI_PNG,
+      extension: ".png",
+    });
+    assert(second.icon !== first.icon);
+    assert(
+      (await core.resolveStellaAgentIcon(agent.id, second.icon)) !== undefined,
+    );
+    assertEquals(
+      await core.resolveStellaAgentIcon(agent.id, first.icon),
+      undefined,
+    );
+
+    // Clearing returns the row to its initial and removes the file.
+    const cleared = await core.clearStellaAgentIcon(agent.id);
+    assertEquals(cleared.icon, "");
+    assertEquals(
+      await core.resolveStellaAgentIcon(agent.id, second.icon),
+      undefined,
+    );
+    // Clearing twice is a no-op, not a failure.
+    assertEquals((await core.clearStellaAgentIcon(agent.id)).icon, "");
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: deleting an agent drops its icon files", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const agent = core.createStellaAgent({ name: "Gone", role: "r" });
+    const withIcon = await core.setStellaAgentIcon(agent.id, {
+      bytes: MINI_PNG,
+      extension: ".png",
+    });
+    await core.deleteStellaAgent(agent.id);
+    // The picture belonged to the agent; nothing can name it now.
+    assertEquals(
+      await core.resolveStellaAgentIcon(agent.id, withIcon.icon),
+      undefined,
+    );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: an icon for a missing agent is refused", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    // The user deleted the agent while the picture was being saved.
+    await assertRejects(
+      () =>
+        core.setStellaAgentIcon("gone", {
+          bytes: MINI_PNG,
+          extension: ".png",
+        }),
+      CoreError,
+      "Agent not found",
+    );
+    await assertRejects(
+      () => core.clearStellaAgentIcon("gone"),
+      CoreError,
+      "Agent not found",
+    );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: an icon that is not an image is refused by the core", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const error = await assertRejects(
+      () =>
+        core.setStellaAgentIcon(agent.id, {
+          bytes: new TextEncoder().encode("<html></html>"),
+          extension: ".png",
+        }),
+      CoreError,
+    );
+    assertEquals(error.kind, "invalid");
+    // The row is untouched: a refused picture must not look like a change.
+    assertEquals(core.getStellaAgent(agent.id)?.icon, "");
   } finally {
     await core.close();
   }

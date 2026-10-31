@@ -14,6 +14,8 @@
  * - `./content.ts` — message content helpers,
  * - `./visual.ts` — published visuals (the `visual:` image references),
  * - `./attachments.ts` — files an agent sends to the user, and their limits,
+ * - `./agent-avatar.ts` — a stella agent's avatar: the initial and its
+ *   colour, and the icon formats' limits,
  * - `./mcp-config.ts` — MCP server config serialization,
  * - `./context-usage.ts` — context accounting and formatting,
  * - `./token-estimate.ts` — fixed-heuristic token estimates for history,
@@ -35,6 +37,7 @@ export * from "./providers.ts";
 export * from "./content.ts";
 export * from "./visual.ts";
 export * from "./attachments.ts";
+export * from "./agent-avatar.ts";
 export * from "./diff-stat.ts";
 export * from "./mcp-config.ts";
 export * from "./context-usage.ts";

@@ -6,6 +6,7 @@ import { useT } from "../i18n.ts";
 import type { StellaAgent } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 import { Field } from "./Field.tsx";
+import { AgentAvatar } from "./stella/AgentAvatar.tsx";
 
 interface StellaSidebarProps {
   agents: StellaAgent[];
@@ -98,12 +99,24 @@ export function StellaSidebar(
             key={agent.id}
             className={`stella-agent${agent.id === activeId ? " active" : ""}`}
           >
+            {
+              /* The picture is part of the row's name button, not a control of
+                its own: the row's one action is "open this conversation", and
+                changing the picture belongs to the conversation (its header),
+                not to a list the eye scans. */
+            }
             <button
               type="button"
               className="stella-agent-name"
               onClick={() => onSelect(agent.id)}
             >
-              {agent.name}
+              <AgentAvatar
+                agentId={agent.id}
+                name={agent.name}
+                icon={agent.icon}
+                size={20}
+              />
+              <span className="stella-agent-label">{agent.name}</span>
             </button>
             <button
               type="button"

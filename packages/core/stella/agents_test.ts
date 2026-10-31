@@ -193,6 +193,55 @@ Deno.test("agents: an identity write for a missing agent fails", () => {
   }
 });
 
+Deno.test("agents: the icon starts empty and records a store-generated name", () => {
+  const { db, repo } = setup();
+  try {
+    const agent = repo.create({ name: "Aide", role: "r" });
+    // No picture yet: the client draws the initial instead, so the default
+    // is "" rather than a name that would have to point at a file.
+    assertEquals(agent.icon, "");
+    assertEquals(repo.get(agent.id)?.icon, "");
+
+    repo.setIcon(agent.id, "9f3c2a1b4d5e.png");
+    assertEquals(repo.get(agent.id)?.icon, "9f3c2a1b4d5e.png");
+    // Back to the initial.
+    repo.setIcon(agent.id, "");
+    assertEquals(repo.get(agent.id)?.icon, "");
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("agents: setting an icon does not reorder the sidebar", () => {
+  const { db, repo } = setup();
+  try {
+    const first = repo.create({ name: "First", role: "r" });
+    repo.create({ name: "Second", role: "r" });
+    // The most recently created is the default.
+    assertEquals(repo.latest()?.name, "Second");
+    // `updated_at` orders "who was talked to last"; picking a picture is not
+    // talking to the agent.
+    repo.setIcon(first.id, "9f3c2a1b4d5e.png");
+    assertEquals(repo.latest()?.name, "Second");
+    assertEquals(repo.get(first.id)?.icon, "9f3c2a1b4d5e.png");
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("agents: an icon for a missing agent fails instead of being lost", () => {
+  const { db, repo } = setup();
+  try {
+    const error = assertThrows(
+      () => repo.setIcon("gone", "9f3c2a1b4d5e.png"),
+      CoreError,
+    );
+    assertEquals(error.kind, "not_found");
+  } finally {
+    db.close();
+  }
+});
+
 // --- the creation tool ------------------------------------------------------
 
 Deno.test("agent_create: creates through the core's own entry point", async () => {
@@ -205,6 +254,7 @@ Deno.test("agent_create: creates through the core's own entry point", async () =
         name: input.name,
         role: input.role,
         identity: "",
+        icon: "",
         createdAt: 0,
         updatedAt: 0,
       };

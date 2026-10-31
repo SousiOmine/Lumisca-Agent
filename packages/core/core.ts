@@ -105,6 +105,7 @@ import {
   type StellaAgent,
 } from "./stella/agents.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
+import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
 import { createHistorySearchTool } from "./session/history.ts";
 import {
   messageCursorOf,
@@ -196,6 +197,10 @@ export class LumiscaCore {
    * with the session pool (the `chat_attach` tool writes here) and read by
    * the server's attachment route. */
   private readonly attachments: SessionAttachmentStore;
+  /** Where the agents' icons live (see stella/icons.ts). Beside the database
+   * like the two stores above; written when a user uploads a picture and read
+   * by the icon route. */
+  private readonly agentIcons: AgentIconStore;
   /** MCP OAuth grants (see mcp/oauth.ts), shared with the session pool. */
   private readonly mcpOAuth: McpOAuthStore;
   private readonly commandSafety: CommandSafety;
@@ -253,6 +258,7 @@ export class LumiscaCore {
       workspaces?: WorkspaceService;
       visuals?: SessionVisualStore;
       attachments?: SessionAttachmentStore;
+      agentIcons?: AgentIconStore;
       globalSkillDirs?: string[];
       /** Environment the model layer reads (custom providers, ambient API
        * keys). Defaults to the real process environment; tests pass their
@@ -343,6 +349,13 @@ export class LumiscaCore {
     this.attachments = overrides.attachments ??
       new SessionAttachmentStore(
         join(tmpdir(), `lumisca-attachments-${crypto.randomUUID()}`),
+      );
+    // Icons follow the two stores above: beside the database when there is
+    // one, a temp directory for an in-memory core, and nothing on disk until
+    // an agent actually gets a picture.
+    this.agentIcons = overrides.agentIcons ??
+      new AgentIconStore(
+        join(tmpdir(), `lumisca-agent-icons-${crypto.randomUUID()}`),
       );
     this.pool = overrides.pool ?? new SessionPool({
       mcpOAuth: this.mcpOAuth,
@@ -459,6 +472,9 @@ export class LumiscaCore {
         ),
         attachments: new SessionAttachmentStore(
           join(dirname(dbPath), ATTACHMENTS_DIR_NAME),
+        ),
+        agentIcons: new AgentIconStore(
+          join(dirname(dbPath), AGENT_ICONS_DIR_NAME),
         ),
       },
     );
@@ -982,6 +998,72 @@ export class LumiscaCore {
   }
 
   /**
+   * Give an agent the picture the user picked, and return the updated row.
+   *
+   * The order matters: the new file is stored first, then the row points at
+   * it, then the old file is removed. A crash between the steps leaves an
+   * unreferenced file (the store's per-agent cap bounds how many), never a
+   * row pointing at bytes that are not there — an icon that fails to load
+   * would be a blank circle the user cannot explain.
+   *
+   * `extension` is the stored format (`.png`, `.jpg`, …); the caller derived
+   * it from what the browser reported, and the store verifies the bytes
+   * actually are that format rather than trusting the name.
+   */
+  async setStellaAgentIcon(
+    id: string,
+    input: { bytes: Uint8Array; extension: string },
+  ): Promise<StellaAgent> {
+    const agent = this.stellaAgents.get(id);
+    if (agent === undefined) {
+      throw new CoreError(`Agent not found: ${id}`, "not_found");
+    }
+    const name = await this.agentIcons.put(id, input.bytes, input.extension);
+    try {
+      this.stellaAgents.setIcon(id, name);
+    } catch (error) {
+      // The row refused the name (the agent was deleted while the bytes were
+      // written): the file has no owner now, so it goes with the failure.
+      await this.agentIcons.remove(id, name);
+      throw error;
+    }
+    if (agent.icon !== "" && agent.icon !== name) {
+      await this.agentIcons.remove(id, agent.icon);
+    }
+    const updated = this.stellaAgents.get(id);
+    if (updated === undefined) {
+      throw new CoreError(`Agent not found: ${id}`, "not_found");
+    }
+    return updated;
+  }
+
+  /** Return an agent to its initial on a generated colour: drop the picture
+   * (both the row's reference and the file). No-op when it had none. */
+  async clearStellaAgentIcon(id: string): Promise<StellaAgent> {
+    const agent = this.stellaAgents.get(id);
+    if (agent === undefined) {
+      throw new CoreError(`Agent not found: ${id}`, "not_found");
+    }
+    if (agent.icon === "") return agent;
+    const previous = agent.icon;
+    this.stellaAgents.setIcon(id, "");
+    await this.agentIcons.remove(id, previous);
+    return this.stellaAgents.get(id) ?? { ...agent, icon: "" };
+  }
+
+  /** The icon file an agent's picture names, with the content type to serve
+   * it as (`GET /api/stella/agents/:id/icon/:name`). Undefined for a name the
+   * store did not generate or a file that is gone. The store validates the
+   * name, so a caller cannot ask for anything outside the agent's own
+   * directory. */
+  resolveStellaAgentIcon(
+    id: string,
+    name: string,
+  ): Promise<{ path: string; mimeType: string } | undefined> {
+    return this.agentIcons.resolve(id, name);
+  }
+
+  /**
    * Delete an agent and its conversation.
    *
    * The transcript goes with it: `sessions.agent_id` has no cascade (the row
@@ -993,6 +1075,9 @@ export class LumiscaCore {
     const session = this.sessions.getByAgent(id);
     if (session !== undefined) await this.deleteSession(session.id);
     this.stellaAgents.delete(id);
+    // The picture belongs to the agent: once the row is gone nothing can
+    // name it, and the store's directory would outlive every reference.
+    await this.agentIcons.deleteAgent(id);
   }
 
   /**

@@ -18,6 +18,7 @@ export {
   VM_WORKDIR,
 } from "./vm/contract.ts";
 export { CoreError, errorMessage } from "./errors.ts";
+export { base64ToBytes, bytesToBase64, textToBase64 } from "./base64.ts";
 export { createLogger } from "./log.ts";
 export {
   createAgentRepo,
@@ -25,6 +26,7 @@ export {
   MAX_AGENT_ROLE_CHARS,
   type StellaAgent,
 } from "./stella/agents.ts";
+export { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
 export type { HistorySearchTarget } from "./session/history.ts";
 export { createHistorySearchTool } from "./session/history.ts";
 export {
