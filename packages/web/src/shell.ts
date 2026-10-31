@@ -3,21 +3,17 @@ import { request } from "./api-client.ts";
 
 /** Bridge to the desktop shell. The settings UI is served by the
  * (possibly remote) server, so it cannot call Tauri commands; instead it
- * fetches the shell bridge URL handled by the Tauri custom protocol.
+ * calls the shell's loopback listener (`/shell/<action>`, see
+ * packages/desktop/src-tauri/src/bridge_server.rs).
  *
- * How the custom protocol is reached depends on the webview engine:
- * - WebView2 (Windows) cannot fetch non-standard schemes, so wry re-homes
- *   the protocol to `http://<scheme>.localhost` (its resource filter
- *   intercepts that host and dispatches to the handler). The bridge must
- *   therefore use the http form there.
- * - WKWebView (macOS) and WebKitGTK (Linux) fetch the `lumisca://` scheme
- *   directly. The host is set to `lumisca.localhost` so the request path
- *   stays `/shell/<action>` — identical to the Windows form — keeping the
- *   Rust-side parsing platform-independent.
- *
- * The platform is detected from the user agent (WebView2 always carries
- * "Windows NT", WKWebView "Macintosh", WebKitGTK "X11; Linux"). In a plain
- * browser neither URL resolves, and shellAvailable() reports false.
+ * The origin is injected by the shell as `window.__LUMISCA_BRIDGE__` — an
+ * initialization script, so every navigation of the window carries it
+ * (the splash, the local server, a remote one). It is deliberately not a
+ * custom URI scheme (`lumisca://`): WebView2 (Windows) re-homes such a
+ * scheme to http, but WKWebView (macOS) refuses to fetch one from an
+ * http(s) page, so the bridge never answered there and the title bar — the
+ * connection picker and the window controls — never rendered. In a plain
+ * browser nothing sets the global, and shellAvailable() reports false.
  */
 
 export interface ShellState {
@@ -30,6 +26,10 @@ export interface ShellState {
   name: string | null;
   /** Whether the main window is maximized (custom title bar icon). */
   maximized: boolean;
+  /** The OS the shell runs on. The page is served by a possibly remote
+   * machine, so its own environment says nothing about the window it is
+   * displayed in: the window controls follow this value. */
+  platform: "macos" | "windows" | "linux";
 }
 
 declare global {
@@ -37,13 +37,14 @@ declare global {
    * declared in api.ts; repeated here so this module type-checks
    * standalone — global augmentations merge). */
   var __LUMISCA_TOKEN__: string | undefined;
+  /** The desktop shell's bridge origin (`http://127.0.0.1:<port>/shell`),
+   * injected as the main window's initialization script. Absent in a plain
+   * browser and in the browser lab. */
+  var __LUMISCA_BRIDGE__: string | undefined;
 }
 
-/** Bridge base URL (the `lumisca://` custom protocol; http-homed for
- * WebView2 on Windows, fetched as a custom scheme on macOS/Linux). */
-const BRIDGE = /Windows/i.test(navigator.userAgent)
-  ? "http://lumisca.localhost/shell"
-  : "lumisca://lumisca.localhost/shell";
+/** Bridge base URL, or undefined outside the desktop shell. */
+const BRIDGE = globalThis.__LUMISCA_BRIDGE__;
 
 /** Auth token of the currently connected server. The shell bridge only
  * answers requests carrying it as `key`, so only the page served by that
@@ -54,6 +55,11 @@ export async function shellCall<T>(
   action: string,
   params: Record<string, string> = {},
 ): Promise<T> {
+  if (BRIDGE === undefined) {
+    // Plain browser: there is no shell, and the callers (the title bar, the
+    // update controls) read the rejection as "desktop-only".
+    throw new Error("the desktop shell is not available");
+  }
   const query = new URLSearchParams(params);
   if (key) query.set("key", key);
   const res = await fetch(`${BRIDGE}/${action}?${query}`);
@@ -64,9 +70,10 @@ export async function shellCall<T>(
   return body as T;
 }
 
-/** Whether the desktop shell bridge is reachable (false in browsers).
- * Bounded by a timeout so a slow DNS failure does not stall the UI. */
+/** Whether the desktop shell's bridge is reachable (false in browsers).
+ * Bounded by a timeout so a slow answer does not stall the UI. */
 export function shellAvailable(): Promise<boolean> {
+  if (BRIDGE === undefined) return Promise.resolve(false);
   return withTimeout(
     shellCall<ShellState>("state").then(
       () => true,
@@ -81,6 +88,7 @@ export function shellAvailable(): Promise<boolean> {
  * AND display the local server (only then are picked paths on the machine
  * owning the workspaces; against a remote server they would be wrong). */
 export function nativeFolderPickerAvailable(): Promise<boolean> {
+  if (BRIDGE === undefined) return Promise.resolve(false);
   return withTimeout(
     shellCall<ShellState>("state").then(
       (s) => s.mode === "local",

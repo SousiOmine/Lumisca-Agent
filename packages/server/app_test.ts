@@ -2286,9 +2286,10 @@ Deno.test("server serves the app shell", async () => {
     // The document already declares the app language (font fallback,
     // hyphenation, screen readers) before the client bundle runs.
     assertEquals(html.includes('<html lang="ja"'), true);
-    // The desktop shell bridge (settings → 接続先サーバー) is allowed by
-    // the CSP; in plain browsers that host does not resolve.
-    assertEquals(html.includes("http://lumisca.localhost"), true);
+    // The desktop shell bridge (title bar: window controls and the
+    // connection picker) is allowed by the CSP; in plain browsers nothing
+    // listens there and the bridge is unused.
+    assertEquals(html.includes("http://127.0.0.1:*"), true);
 
     // The initial-data script carries the serialized state, the language
     // included — the client seeds its catalogue with it before the first

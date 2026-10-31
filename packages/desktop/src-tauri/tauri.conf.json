@@ -24,11 +24,12 @@
         "minWidth": 360,
         "minHeight": 480,
         "backgroundColor": "#0c0c11",
-        "decorations": false
+        "decorations": false,
+        "create": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://lumisca.localhost lumisca:; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'"
     }
   },
   "plugins": {

@@ -19,20 +19,25 @@ import { type Locale, translate } from "@lumisca/core/shared";
  * TLS (a front end such as `tailscale serve` terminating https for a
  * MagicDNS name) opens wss: to the very host the page came from and both
  * spellings are allowed. CSP3 would match 'self' for a same-host ws:
- * upgrade, but naming it explicitly is portable — and the shell bridge
- * used by the desktop app (settings → 接続先サーバー): the `lumisca://`
- * custom protocol, which WebView2 (Windows) re-homes to
- * http://lumisca.localhost while WKWebView (macOS) and WebKitGTK (Linux)
- * fetch the custom scheme directly, so both forms are allowed. In a plain
- * browser neither resolves and the bridge is unused.
+ * upgrade, but naming it explicitly is portable.
+ *
+ * connect-src also allows the desktop shell's bridge on loopback: the page
+ * drives the shell (window controls, server switching) through a listener
+ * that the shell starts and names to the page (`window.__LUMISCA_BRIDGE__`,
+ * see packages/desktop/src-tauri/src/bridge_server.rs). It is a plain http
+ * origin on 127.0.0.1 — a custom URI scheme was tried and works on
+ * Windows only, because WKWebView (macOS) refuses to fetch one from an
+ * http(s) page. Loopback is `potentially trustworthy`, so a page served
+ * over https may still call it. In a plain browser nothing listens there
+ * and the bridge is unused.
  */
 export function pageCsp(pageHost: string | undefined): string {
   // The fallback branch has no host to name, so it covers loopback only:
   // it is reached when the Host header is missing (never for a page served
   // over TLS, which always has one).
   const wsSrc = pageHost
-    ? `connect-src 'self' ws://${pageHost} wss://${pageHost} http://lumisca.localhost lumisca:`
-    : "connect-src 'self' ws://127.0.0.1:* ws://localhost:* http://lumisca.localhost lumisca:";
+    ? `connect-src 'self' ws://${pageHost} wss://${pageHost} http://127.0.0.1:*`
+    : "connect-src 'self' ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:*";
   return [
     "default-src 'self'",
     "script-src 'self'",

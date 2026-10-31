@@ -4,13 +4,14 @@
 //! so the sibling modules can borrow individual pieces without locking the
 //! whole app) and the Tauri builder in [`run`]. Everything else lives in
 //! the re-exported modules: [`server`] (local server process), [`bridge`]
-//! (the `lumisca://` protocol), [`update`] (auto-update), [`window`]
-//! (window navigation and the Win32 drag hack).
+//! and [`bridge_server`] (the shell bridge the page drives), [`update`]
+//! (auto-update), [`window`] (window navigation and the Win32 drag hack).
 
 use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::{Manager, WindowEvent};
 
 pub mod bridge;
+pub mod bridge_server;
 pub mod browser_lab;
 pub mod connection;
 pub mod health;
@@ -103,6 +104,9 @@ pub(crate) struct AppState {
     /// setup; None when the lab failed to start (logged — the agent then
     /// simply has no browser tools).
     browser_lab: Mutex<Option<browser_lab::BrowserLab>>,
+    /// The shell bridge's loopback listener. Its origin is injected into
+    /// every page the main window loads, so the page can drive the shell.
+    bridge: Mutex<Option<bridge_server::BridgeServer>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -125,6 +129,17 @@ pub fn run() {
                     None
                 }
             };
+            // The shell bridge first: the main window's initialization
+            // script carries its origin, and it has to be created below.
+            let bridge = match bridge_server::BridgeServer::start(handle.clone()) {
+                Ok(bridge) => Some(bridge),
+                Err(error) => {
+                    // Without the bridge the page is still usable; the
+                    // title bar's controls are not (see bridge_server.rs).
+                    eprintln!("[lumisca] shell bridge disabled: {error}");
+                    None
+                }
+            };
             app.manage(AppState {
                 local: Mutex::new(None),
                 server_log: Mutex::new(server_log::ServerLog::new(&handle)),
@@ -136,7 +151,14 @@ pub fn run() {
                 startup: Mutex::new(StartupStatus::new("starting", None)),
                 startup_task: Mutex::new(None),
                 browser_lab: Mutex::new(lab),
+                bridge: Mutex::new(bridge),
             });
+            // The main window is defined in tauri.conf.json with
+            // `create: false`, so it can be built here with the bridge's
+            // origin as an initialization script — the page's own scripts
+            // read it on mount, and every navigation (splash, local server,
+            // remote server) gets it again.
+            create_main_window(&handle)?;
             // Keep only the recent on-disk server log across runs, then mark
             // this run's boundary in it: the file is append-only and spans
             // app runs, so a timestamped header line is what separates one
@@ -185,24 +207,10 @@ pub fn run() {
             Ok(())
         })
         // The settings UI (served by the local or remote server) drives
-        // the local server and UI switching through this bridge.
-        //
-        // Requests are answered from a blocking worker, never inline:
-        // several actions wait for a long time by design (`pick-folder`
-        // opens a modal that waits for the user; `connect-local` polls for
-        // up to 30s), and the webview invokes this handler on the MAIN
-        // thread on macOS. Blocking there stops the main run loop, which
-        // the folder picker's sheet needs to deliver its completion — the
-        // picker then shows but can never be answered, freezing the app.
-        // wry's async responder is documented to be resolved from any
-        // thread, so the request runs on the blocking pool and the
-        // response is sent from there when the action completes.
-        .register_asynchronous_uri_scheme_protocol("lumisca", |ctx, request, responder| {
-            let app = ctx.app_handle().clone();
-            tauri::async_runtime::spawn_blocking(move || {
-                responder.respond(bridge::handle_shell_request(&app, request));
-            });
-        })
+        // the local server and UI switching through the loopback bridge
+        // started in setup (see bridge_server.rs) — not through a custom
+        // URI scheme, which WKWebView refuses to fetch from an http(s)
+        // page.
         .on_window_event(|window, event| {
             // The lab window is an ordinary top-level window, so nothing
             // follows the main window's geometry any more. Its own
@@ -229,12 +237,47 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// Stop every spawned service on app exit: the local server process and
-/// the browser lab (its WebView and RPC listener). Idempotent — called
-/// from the main window's Destroyed event and the updater's exit hook.
-/// `reason` is recorded in the captured server log, which is the only
-/// trace a hard-killed server leaves behind.
+/// Stop every spawned service on app exit: the local server process, the
+/// browser lab (its WebView and RPC listener) and the shell bridge (its
+/// loopback listener). Idempotent — called from the main window's Destroyed
+/// event and the updater's exit hook. `reason` is recorded in the captured
+/// server log, which is the only trace a hard-killed server leaves behind.
 pub(crate) fn shutdown_services(app: &tauri::AppHandle, reason: &str) {
     server::stop_local_server(app, reason);
     browser_lab::shutdown(app);
+    if let Some(state) = app.try_state::<AppState>() {
+        // Dropping the server joins its listener thread.
+        *state.bridge.lock_recover() = None;
+    }
+}
+
+/// Build the main window from tauri.conf.json's definition, adding the
+/// bridge's origin as an initialization script.
+///
+/// The window cannot be created by Tauri's config pass (`create: true`):
+/// the script has to name the bridge's port, and that is only known once
+/// the listener is bound in setup. An initialization script (rather than an
+/// inline `<script>` in the page) is what carries it across every
+/// navigation — the splash, the local server, a remote server — and past
+/// the page's CSP, which bans inline scripts.
+fn create_main_window(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .ok_or("tauri.conf.json must define the main window")?
+        .clone();
+    let state = app.state::<AppState>();
+    let script = match state.bridge.lock_recover().as_ref() {
+        Some(bridge) => bridge_server::main_window_initialization_script(&bridge.origin()),
+        None => String::new(),
+    };
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app, &config)?;
+    if !script.is_empty() {
+        builder = builder.initialization_script(script);
+    }
+    builder.build()?;
+    Ok(())
 }

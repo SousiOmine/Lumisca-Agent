@@ -3,6 +3,7 @@ import type { UpdateSource } from "../../hooks/useUpdateStatus.ts";
 import { LOCALES, type MessageKey } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
+import { Select } from "../Select.tsx";
 import type { Locale } from "../../types.ts";
 
 interface GeneralPanelProps {
@@ -49,25 +50,20 @@ function LanguageItem(
   const t = useT();
   return (
     <>
-      <div className="update-item">
-        <div className="update-info">
-          <span className="update-label">{t("settings.language.label")}</span>
-          <span className="update-desc">
-            {t("settings.language.description")}
-          </span>
-        </div>
-        <select
+      <SettingRow
+        label={t("settings.language.label")}
+        description={t("settings.language.description")}
+      >
+        <Select
+          label={t("settings.language.label")}
           value={language}
-          onChange={(e) => onLanguageChange(e.currentTarget.value as Locale)}
-          aria-label={t("settings.language.label")}
-        >
-          {LOCALES.map((locale) => (
-            <option key={locale} value={locale}>
-              {t(LANGUAGE_OPTION_KEYS[locale])}
-            </option>
-          ))}
-        </select>
-      </div>
+          options={LOCALES.map((locale) => ({
+            value: locale,
+            label: t(LANGUAGE_OPTION_KEYS[locale]),
+          }))}
+          onChange={onLanguageChange}
+        />
+      </SettingRow>
       <p className="settings-note">{t("settings.language.note")}</p>
       {error && (
         <p className="error-text" role="alert">

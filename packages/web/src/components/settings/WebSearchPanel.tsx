@@ -6,6 +6,8 @@ import { errorText } from "../../providers.ts";
 import { useT } from "../../i18n.ts";
 import { WebSearchProviderDialog } from "./WebSearchProviderDialog.tsx";
 import { confirmAction } from "../../confirm.ts";
+import { SettingsSection } from "./SettingsSection.tsx";
+import { ProviderRow } from "./ProviderRow.tsx";
 
 /** Which provider the dialog is editing: adding one, or changing a stored
  * key. */
@@ -17,9 +19,12 @@ type DialogMode =
  * Settings → プロバイダー → Web 検索: the search provider the agent's
  * `web_search` tool uses.
  *
- * It is a section of the provider category rather than a category of its own:
- * both lists answer "which service does this installation hold a key for", and
- * a separate entry made the search side easy to miss.
+ * It is the category's second section rather than a category of its own:
+ * both lists answer "which service does this installation hold a key for",
+ * and a separate entry made the search side easy to miss. It is also the
+ * same shape as the AI list — heading with its add button, a one-line
+ * explanation, then one row per service — so the two sections read as one
+ * list of services rather than two screens that happen to share a page.
  *
  * The agent searches with exactly one provider (the default). Adding one
  * checks the key first: a stored key that cannot search would make every
@@ -92,27 +97,24 @@ export function WebSearchPanel() {
     );
   }
 
+  const canAdd = !loading && (view?.available.length ?? 0) > 0;
+
   return (
-    <div className="settings-pane">
-      {
-        /* The category's own heading is "プロバイダー"; this section names the
-       * second kind of provider it lists. */
-      }
-      <div className="modal-header">
-        <h2>{t("settings.webSearch.title")}</h2>
+    <SettingsSection
+      title={t("settings.webSearch.title")}
+      description={t("settings.webSearch.description")}
+      action={
         <button
           type="button"
-          className="btn push"
-          disabled={loading || (view?.available.length ?? 0) === 0}
+          className="btn"
+          disabled={!canAdd}
           onClick={() => setDialog({ kind: "add" })}
         >
           <IconPlus size={14} />
           {t("settings.webSearch.add")}
         </button>
-      </div>
-
-      <p className="settings-note">{t("settings.webSearch.description")}</p>
-
+      }
+    >
       {error !== null && (
         <p className="error-text">
           {t("settings.webSearch.loadFailed", { error })}
@@ -122,7 +124,7 @@ export function WebSearchPanel() {
       {loading && <p className="settings-note">{t("common.loading")}</p>}
 
       {!loading && view !== null && view.providers.length === 0 && (
-        <div className="faint-box">{t("settings.webSearch.empty")}</div>
+        <p className="settings-note">{t("settings.webSearch.empty")}</p>
       )}
 
       {!loading && view !== null && view.providers.length > 0 &&
@@ -132,74 +134,66 @@ export function WebSearchPanel() {
 
       {!loading &&
         view?.providers.map((provider) => (
-          <div key={provider.id} className="setting-card">
-            <div className="setting-card-open" style={{ cursor: "default" }}>
-              <span style={{ flex: 1 }}>
-                {provider.name}
+          <ProviderRow
+            key={provider.id}
+            name={provider.name}
+            status={
+              <>
                 {provider.isDefault && (
-                  <span
-                    className="provider-state configured"
-                    style={{ marginLeft: 8 }}
-                  >
+                  <span className="provider-row-badge">
                     {t("settings.webSearch.defaultBadge")}
                   </span>
                 )}
-                <span className="settings-note" style={{ display: "block" }}>
-                  {[
-                    t(
-                      provider.supportsFetch
-                        ? "settings.webSearch.useFetchApi"
-                        : "settings.webSearch.useFetchDirect",
-                    ),
-                    t(
-                      provider.hasApiKey
-                        ? "settings.webSearch.keySet"
-                        : "settings.webSearch.keyUnset",
-                    ),
-                  ].join(" / ")}
-                </span>
-              </span>
-              {!provider.isDefault && (
+                {t(
+                  provider.hasApiKey
+                    ? "settings.webSearch.keySet"
+                    : "settings.webSearch.keyUnset",
+                )}
+              </>
+            }
+            trailing={
+              <>
+                {!provider.isDefault && (
+                  <button
+                    type="button"
+                    className="btn small"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      void mutate(
+                        provider.id,
+                        () => api.setDefaultWebSearchProvider(provider.id),
+                      )}
+                  >
+                    {t("settings.webSearch.makeDefault")}
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="btn"
+                  className="btn small"
                   disabled={busy !== null}
                   onClick={() =>
-                    void mutate(
-                      provider.id,
-                      () => api.setDefaultWebSearchProvider(provider.id),
-                    )}
+                    setDialog({
+                      kind: "edit",
+                      id: provider.id,
+                      name: provider.name,
+                    })}
                 >
-                  {t("settings.webSearch.makeDefault")}
+                  {t("common.edit")}
                 </button>
-              )}
-              <button
-                type="button"
-                className="btn"
-                disabled={busy !== null}
-                onClick={() =>
-                  setDialog({
-                    kind: "edit",
-                    id: provider.id,
-                    name: provider.name,
-                  })}
-              >
-                {t("common.edit")}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                disabled={busy !== null}
-                title={t("settings.webSearch.remove")}
-                aria-label={t("settings.webSearch.remove")}
-                onClick={() =>
-                  void remove(provider.id, provider.name)}
-              >
-                <IconTrash size={14} />
-              </button>
-            </div>
-          </div>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={busy !== null}
+                  title={t("settings.webSearch.remove")}
+                  aria-label={t("settings.webSearch.remove")}
+                  onClick={() => void remove(provider.id, provider.name)}
+                >
+                  <IconTrash size={14} />
+                </button>
+              </>
+            }
+          />
         ))}
-    </div>
+    </SettingsSection>
   );
 }

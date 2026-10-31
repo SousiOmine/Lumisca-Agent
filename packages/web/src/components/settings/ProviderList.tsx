@@ -5,11 +5,13 @@ import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useT } from "../../i18n.ts";
 import { errorText, useProviderModels } from "../../providers.ts";
 import type { CatalogStatus } from "../../types.ts";
+import { SettingsSection } from "./SettingsSection.tsx";
+import { ProviderRow } from "./ProviderRow.tsx";
 
-/** One-line catalog status with a manual refresh button. Shown at the top
- * of the provider list: the model catalog now syncs from models.dev at
- * startup (and on demand here), falling back to the cache/bundled
- * snapshot when offline. */
+/** One-line catalog status with a manual refresh button. Shown under the AI
+ * provider list: the model catalog syncs from models.dev at startup and on
+ * demand here, and reports which copy it is showing (live, cache, bundled
+ * snapshot). */
 function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
   const t = useT();
   const [status, setStatus] = useState<CatalogStatus | undefined>();
@@ -50,33 +52,24 @@ function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
     ? ` (${status.generatedAt.slice(0, 10)})`
     : "";
   return (
-    <div className="faint-box">
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-        }}
+    <div className="catalog-status">
+      <span className="settings-note">
+        {t("settings.provider.catalogStatus")} {status
+          ? `${sourceLabel}${generated}`
+          : t("settings.provider.catalogChecking")}
+      </span>
+      <button
+        type="button"
+        className="btn small"
+        onClick={refresh}
+        disabled={refreshing}
       >
-        <span style={{ flex: 1 }}>
-          {t("settings.provider.catalogStatus")} {status
-            ? `${sourceLabel}${generated}`
-            : t("settings.provider.catalogChecking")}
-        </span>
-        <button
-          type="button"
-          className="btn small"
-          onClick={refresh}
-          disabled={refreshing}
-        >
-          {refreshing
-            ? t("settings.provider.refreshing")
-            : t("settings.provider.refreshToLatest")}
-        </button>
-      </div>
+        {refreshing
+          ? t("settings.provider.refreshing")
+          : t("settings.provider.refreshToLatest")}
+      </button>
       {error && (
-        <p className="settings-note" style={{ marginTop: 6 }}>
+        <p className="settings-note">
           {t("settings.provider.refreshFailed", { error })}
         </p>
       )}
@@ -84,15 +77,13 @@ function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
   );
 }
 
-/** Settings → プロバイダー: the AI providers, configured first.
+/** Settings → プロバイダー: the AI providers, the first of the category's two
+ * sections (the web-search providers follow in `WebSearchPanel`).
  * User-defined providers are shown even when not yet configured, so they
  * stay reachable (to add a key, edit, or delete).
  *
- * The web-search providers are listed below the AI ones by the category
- * (SettingsModal) rather than here: both are "a service this installation
- * holds a key for", but the two lists load from different endpoints and one
- * screen with two sections is cheaper to read than two categories that each
- * describe half of the same question. */
+ * Both sections share one shape (`SettingsSection` + `ProviderRow`): the
+ * heading with its add button, a one-line explanation, then the services. */
 export function ProviderList({
   onAdd,
   onOpen,
@@ -108,60 +99,34 @@ export function ProviderList({
   );
 
   return (
-    <>
-      <div className="settings-pane">
-        <div className="modal-header">
-          <h2>{t("settings.provider.aiTitle")}</h2>
-        </div>
-
-        <CatalogStatusRow onRefreshed={reload} />
-
-        <div className="stack-8">
-          {configured.length === 0 && (
-            <div className="faint-box">
-              {t("settings.provider.noProviders")}
-            </div>
-          )}
-          {configured.map((p) => (
-            <button
-              type="button"
-              key={p.id}
-              className="btn"
-              style={{
-                textAlign: "left",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-              }}
-              onClick={() => onOpen(p.id)}
-            >
-              <span style={{ flex: 1 }}>{p.name}</span>
-              {p.userDefined
-                ? (
-                  <span className="provider-state">
-                    {p.configured
-                      ? t("settings.provider.configured")
-                      : t("settings.provider.notConfigured")}
-                  </span>
-                )
-                : (
-                  <span className="provider-state configured">
-                    {p.authType === "oauth"
-                      ? t("settings.provider.oauth")
-                      : (p.source ?? t("settings.provider.apiKeyLabel"))}
-                  </span>
-                )}
-            </button>
-          ))}
-        </div>
-
-        <div className="modal-actions">
-          <button type="button" className="btn primary" onClick={onAdd}>
-            <IconPlus size={14} />
-            {t("settings.provider.addProvider")}
-          </button>
-        </div>
-      </div>
-    </>
+    <SettingsSection
+      title={t("settings.provider.aiTitle")}
+      description={t("settings.provider.aiDescription")}
+      action={
+        <button type="button" className="btn" onClick={onAdd}>
+          <IconPlus size={14} />
+          {t("settings.provider.addProvider")}
+        </button>
+      }
+    >
+      {configured.length === 0 && (
+        <p className="settings-note">{t("settings.provider.noProviders")}</p>
+      )}
+      {configured.map((p) => (
+        <ProviderRow
+          key={p.id}
+          name={p.name}
+          status={p.userDefined
+            ? (p.configured
+              ? t("settings.provider.configured")
+              : t("settings.provider.notConfigured"))
+            : (p.authType === "oauth"
+              ? t("settings.provider.oauth")
+              : (p.source ?? t("settings.provider.apiKeyLabel")))}
+          onOpen={() => onOpen(p.id)}
+        />
+      ))}
+      <CatalogStatusRow onRefreshed={reload} />
+    </SettingsSection>
   );
 }

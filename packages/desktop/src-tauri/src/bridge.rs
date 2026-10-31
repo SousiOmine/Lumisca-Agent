@@ -1,26 +1,17 @@
-//! The `lumisca://` shell bridge.
+//! The shell bridge's actions.
 //!
 //! The settings UI is served by the (possibly remote) server, so it cannot
-//! call Tauri commands. Instead it fetches the shell bridge — the `lumisca://`
-//! custom protocol handled here — under the action path `/shell/<action>`.
-//! The bridge only manages the local server and UI switching; the peer
-//! registry lives in the server's own database.
-//!
-//! How the bridge URL reaches this handler differs per webview engine, but
-//! the request path is identical in every form (`/shell/<action>`):
-//! - Windows (WebView2) cannot fetch custom schemes, so wry re-homes the
-//!   protocol to `http://lumisca.localhost/...` (its resource filter
-//!   reverts it to `lumisca:///...` before dispatching here).
-//! - macOS (WKWebView) and Linux (WebKitGTK) fetch `lumisca://` directly;
-//!   the frontend uses `lumisca://lumisca.localhost/shell/...` so the host
-//!   does not swallow the first path segment.
+//! call Tauri commands. It drives the shell through the loopback listener in
+//! [`crate::bridge_server`], which forwards to [`handle_shell_action`]: one
+//! action per request, named in the path (`/shell/<action>`), parameters in
+//! the query string. The bridge only manages the local server and UI
+//! switching; the peer registry lives in the server's own database.
 //!
 //! Every request must carry `key` = the auth token of the CURRENTLY
 //! DISPLAYED server — a value only the page served by that server knows, so
-//! arbitrary pages in the webview cannot drive the bridge.
+//! arbitrary pages cannot drive the bridge.
 
-use std::collections::HashMap;
-use tauri::http::{header, Request as HttpRequest, Response as HttpResponse, StatusCode};
+use tauri::http::StatusCode;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
@@ -31,8 +22,8 @@ use crate::update::{
 };
 use crate::{connection, notify, AppState, LockRecover};
 
-/// JSON body of a lumisca://shell/* bridge response.
-type BridgeResponse = HttpResponse<Vec<u8>>;
+/// One bridge action's answer: the HTTP status and the JSON body.
+type BridgeReply = (StatusCode, Vec<u8>);
 
 /// Current display, shown by the settings UI. Also carries the local
 /// server startup progress for the splash page.
@@ -60,6 +51,13 @@ struct ConnectionState {
     saved: bool,
     /// Whether the main window is maximized (custom title bar icon).
     maximized: bool,
+    /// The OS the shell runs on ("macos", "windows", "linux"). The page
+    /// draws its window controls after the platform's own convention
+    /// (macOS puts round controls on the left, the others square glyphs on
+    /// the right), and it cannot infer that from its own environment: the
+    /// page is served by a possibly remote machine, so its user agent says
+    /// nothing about the window it is displayed in.
+    platform: String,
 }
 
 /// Current display's auth token (the bridge key).
@@ -77,36 +75,26 @@ fn current_connection_token(app: &AppHandle) -> Option<String> {
     local
 }
 
-fn bridge_json(status: StatusCode, value: serde_json::Value) -> BridgeResponse {
-    // `builder()` is defined on Response<()>; `.body()` yields Response<T>.
-    tauri::http::Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, "application/json")
-        // The page origin is dynamic (local or remote server); `*` is fine
-        // because the key gate above already authenticates the caller.
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-        .body(serde_json::to_vec(&value).unwrap_or_default())
-        .unwrap()
+fn bridge_json(status: StatusCode, value: serde_json::Value) -> BridgeReply {
+    (status, serde_json::to_vec(&value).unwrap_or_default())
 }
 
-fn bridge_error(status: StatusCode, message: &str) -> BridgeResponse {
+fn bridge_error(status: StatusCode, message: &str) -> BridgeReply {
     bridge_json(status, serde_json::json!({ "error": message }))
 }
 
-pub(crate) fn handle_shell_request(
+/// Answer one bridge action. `action` is everything after `/shell/`
+/// (`state`, `connect-remote`, `update/status`, ...) and `params` are the
+/// query string's parameters (`key` included).
+pub(crate) fn handle_shell_action(
     app: &AppHandle,
-    request: HttpRequest<Vec<u8>>,
-) -> BridgeResponse {
-    let parsed = match url::Url::parse(&request.uri().to_string()) {
-        Ok(parsed) => parsed,
-        Err(_) => return bridge_error(StatusCode::BAD_REQUEST, "invalid uri"),
-    };
-    // Action = everything after the `/shell/` prefix (`state`,
-    // `connect-remote`, `update/status`, ...), not just one segment.
-    let mut segments = parsed.path().trim_start_matches('/').split('/');
-    segments.next(); // skip "shell"
-    let action = segments.collect::<Vec<_>>().join("/");
-    let params: HashMap<String, String> = parsed.query_pairs().into_owned().collect();
+    action: &str,
+    params: &[(String, String)],
+) -> BridgeReply {
+    let params: std::collections::HashMap<&str, &str> = params
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.as_str()))
+        .collect();
 
     // Key gate: only the page of the currently displayed server may drive
     // the bridge, window controls included. Tokenless servers leave it
@@ -115,14 +103,14 @@ pub(crate) fn handle_shell_request(
     // token either, so the gate is open and the splash can drive the
     // window controls. Once a token exists, every action requires it.
     if let Some(current) = current_connection_token(app) {
-        let supplied = params.get("key").map(String::as_str);
+        let supplied = params.get("key").copied();
         if supplied != Some(current.as_str()) {
             return bridge_error(StatusCode::UNAUTHORIZED, "invalid key");
         }
     }
 
-    let get = |name: &str| params.get(name).cloned();
-    match action.as_str() {
+    let get = |name: &str| params.get(name).map(|value| value.to_string());
+    match action {
         "state" => {
             let state = app.state::<AppState>();
             let startup = state.startup.lock_recover();
@@ -158,6 +146,7 @@ pub(crate) fn handle_shell_request(
                 error: startup.error.clone(),
                 saved,
                 maximized,
+                platform: crate::bridge_server::platform_name().to_string(),
             };
             bridge_json(StatusCode::OK, serde_json::to_value(state).unwrap())
         }

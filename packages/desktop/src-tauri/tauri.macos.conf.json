@@ -1,5 +1,22 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lumisca",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 360,
+        "minHeight": 480,
+        "backgroundColor": "#0c0c11",
+        "create": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
+      }
+    ]
+  },
   "bundle": {
     "targets": ["app", "dmg"],
     "icon": [

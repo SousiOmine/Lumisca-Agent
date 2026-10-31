@@ -41,10 +41,10 @@
 //! Security: the lab window is a separate window (no capability file
 //! covers its label), and its page is always a REMOTE origin — the "main"
 //! capability resolves only for LOCAL origins, so every Tauri IPC call
-//! from the lab page is denied by the ACL. The lumisca:// shell bridge is
-//! additionally unreachable from the lab page (it requires the displayed
-//! server's token, which the page never has), and `lumisca:` navigations
-//! are blocked outright (BLOCKED_SCHEMES).
+//! from the lab page is denied by the ACL. The shell bridge (bridge_server)
+//! is unreachable from the lab page for the same reason: every action
+//! requires the displayed server's token as `key`, which the lab page never
+//! has, and the bridge's origin is injected into the main window only.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -68,9 +68,6 @@ use crate::{AppState, LockRecover};
 /// Label of the lab window. Deliberately NOT covered by any capability
 /// file, so the lab page can never call Tauri IPC (see the module docs).
 pub const LAB_WINDOW_LABEL: &str = "browser-lab";
-
-/// The lumisca:// shell bridge must never be reachable from the lab.
-const BLOCKED_SCHEMES: [&str; 1] = ["lumisca:"];
 
 /// How long the page gets to answer a CDP method call (Windows only: the
 /// CDP transport is WebView2's).
@@ -288,14 +285,7 @@ impl LabCore {
         // out from under a layout being tested. `open` sizes it instead.
         .resizable(false)
         .visible(false)
-        .initialization_script(self.probe_source)
-        // The lab page must never open the lumisca:// shell bridge: block
-        // those navigations outright.
-        .on_navigation(|candidate| {
-            !BLOCKED_SCHEMES
-                .iter()
-                .any(|scheme| candidate.as_str().starts_with(scheme))
-        });
+        .initialization_script(self.probe_source);
         let window = builder
             .build()
             .map_err(|e| RpcError::internal(format!("ブラウザウィンドウを作成できません: {e}")))?;

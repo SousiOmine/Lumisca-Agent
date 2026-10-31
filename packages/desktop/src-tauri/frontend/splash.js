@@ -4,15 +4,13 @@
 // only surfaces a startup failure — with the buttons that lead out of it.
 // Polling stops implicitly when the page is navigated away.
 //
-// Bridge base URL (the `lumisca://` custom protocol): WebView2 (Windows)
-// cannot fetch custom schemes, so wry re-homes it to
-// `http://<scheme>.localhost`; WKWebView (macOS) and WebKitGTK (Linux)
-// fetch the `lumisca://` scheme directly. The platform is detected from
-// the user agent; in a plain browser neither URL resolves and the window
-// controls simply do nothing.
-const BRIDGE = /Windows/i.test(navigator.userAgent)
-  ? "http://lumisca.localhost/shell"
-  : "lumisca://lumisca.localhost/shell";
+// Bridge base URL for the shell's actions. The document is the app's own
+// splash (served by Tauri, not by a server), and the shell injects the
+// listener's origin as an initialization script
+// (src/lib.rs, create_main_window): WebView2 re-homes custom schemes, but
+// WKWebView refuses to fetch them at all, so a fixed `lumisca://` URL
+// worked on Windows only.
+const BRIDGE = globalThis.__LUMISCA_BRIDGE__;
 const statusEl = document.getElementById("status");
 
 /** Whether the shell remembers a remote server (reported by `state`):
@@ -41,15 +39,34 @@ minBtn.addEventListener("click", () => windowAction("minimize"));
 maxBtn.addEventListener("click", () => windowAction("toggle-maximize"));
 closeBtn.addEventListener("click", () => windowAction("close"));
 
+/** Whether the OS draws the window chrome (macOS). Set from the bridge
+ * state once the shell answers; false until then (Windows and Linux draw
+ * their own controls). */
+let nativeChrome = false;
+
+/** macOS keeps the OS title bar (tauri.macos.conf.json), so the native
+ * traffic lights are already there: a drawn set would be a second one with
+ * a different look. The strip moves right of them instead, and the system
+ * owns dragging and the double-click zoom. */
+function applyPlatform(platform) {
+  if (platform !== "macos" || nativeChrome) return;
+  nativeChrome = true;
+  titlebar.classList.add("titled");
+  for (const control of titlebar.querySelectorAll("[data-window-control]")) {
+    control.hidden = true;
+  }
+}
+
 // Drag the window from anywhere on the title bar except the buttons;
-// double-click toggles maximize.
+// double-click toggles maximize. On macOS the system title bar already
+// does both.
 titlebar.addEventListener("mousedown", (e) => {
-  if (e.button !== 0 || e.target.closest("button")) return;
+  if (nativeChrome || e.button !== 0 || e.target.closest("button")) return;
   e.preventDefault();
   windowAction("start-drag");
 });
 titlebar.addEventListener("dblclick", (e) => {
-  if (e.target.closest("button")) return;
+  if (nativeChrome || e.target.closest("button")) return;
   windowAction("toggle-maximize");
 });
 
@@ -67,6 +84,7 @@ async function poll() {
     // and the shell is about to navigate: keep waiting.
     if (res.ok && body) {
       setMaximized(!!body.maximized);
+      applyPlatform(body.platform);
       savedRemote = !!body.saved;
       if (body.status === "error") {
         // The local server itself failed to start. A remembered remote

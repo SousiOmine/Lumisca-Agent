@@ -18,6 +18,13 @@ git status
 - **サーバーのビルド経路**  
   サーバーバイナリのビルドは `scripts/build-server.ts` に集約しています。デスクトップ同梱向けと単体配布向けの双方がこのスクリプトを経由します。動作確認は `deno task smoke:server` で行います。
 
+### デスクトップのシェルブリッジ
+
+ページはサーバーが配信するため Tauri のコマンドを呼べません。ウィンドウ操作・接続先の切り替え・更新は、シェルが立てる loopback の HTTP の口へ送ります（`packages/desktop/src-tauri/src/bridge_server.rs`、ページ側は `packages/web/src/shell.ts`）。origin はメインウィンドウの initialization script（`window.__LUMISCA_BRIDGE__`）でページへ渡します。
+
+- **独自スキームにしない**: WKWebView（macOS）は http(s) のページから独自スキームを fetch させず、`lumisca://` だった頃は macOS でタイトルバーごと描画されませんでした。CSP の `connect-src` に `http://127.0.0.1:*` を足すのを忘れないでください（`packages/server/render.ts`）。
+- **macOS のウィンドウ操作は OS のもの**: `tauri.macos.conf.json` で `decorations: true` + `titleBarStyle: "overlay"` にし、信号機ボタンはネイティブのものを使います。ページは帯を信号機の右から始め、閉じる／最小化／最大化のボタンを描きません。Windows / Linux はフレームレスのまま、ページが右端に描きます。どちらかは `state` の `platform` が答えます。
+
 ## 2. 自動アップデート
 
 デスクトップ版とサーバー単体版で更新方式が異なります。
@@ -93,9 +100,11 @@ npm outdated                                                   # packages/deskto
 
 「一般 / 外観 / カスタマイズ / 接続先サーバー / プロバイダー / モデル設定 / MCPサーバー / ルーチン（stella のみ）/ セキュリティ」です。
 
-- **プロバイダー**は AI プロバイダーと Web 検索プロバイダーを同じ画面に並べます（別カテゴリにすると検索側を見落とします）。
+- **プロバイダー**は AI プロバイダーと Web 検索プロバイダーを同じ画面に並べます（別カテゴリにすると検索側を見落とします）。2 つは同じ部品（`settings/SettingsSection.tsx` と `settings/ProviderRow.tsx`）で描きます。見出し＋追加、1 行の説明、行の一覧という同じ形にしないと、同じ画面の途中で読み方を変えることになります。
+- **選択肢は自作の `components/Select.tsx`** を使います。ネイティブの `<select>` は OS の見た目で描かれ、説明行や現在値のチェックを持てません（言語選択・テーマ選択が該当）。
+- **設定の行は面を塗りません**。`SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。ダイアログ自体が浮いた面なので、行に面を足すとタイルの集合になり、塗りが本文のコントラストを落とします。
 - **モードに属する項目**は `SettingsModal` のカテゴリ表で `mode` を持たせます。ルーチンは stella のみ、computer use は code mode のみです。設定が効かないモードで見せると、動かないスイッチになります。
-- **接続先**はデスクトップのタイトルバー右上のドロップダウン（`components/ConnectionPicker.tsx`）だけから切り替えます。新規セッション画面にはサーバー選択を置きません（同じ問いに 2 箇所で答えると、片方が必ず間違った答えになります）。ワークスペース一覧は表示中のサーバー自身のものです。表示名はシェルが `settings.json` の `lastRemote` に名前ごと記録して `state` で返します（リモートのページのレジストリはそのサーバー自身のもので、自分自身の項目を持たないため）。純粋関数は `packages/web/src/connections.ts` にあります。
+- **接続先**はデスクトップのタイトルバー上のドロップダウン（`components/ConnectionPicker.tsx`）だけから切り替えます。新規セッション画面にはサーバー選択を置きません（同じ問いに 2 箇所で答えると、片方が必ず間違った答えになります）。ワークスペース一覧は表示中のサーバー自身のものです。表示名はシェルが `settings.json` の `lastRemote` に名前ごと記録して `state` で返します（リモートのページのレジストリはそのサーバー自身のもので、自分自身の項目を持たないため）。純粋関数は `packages/web/src/connections.ts` にあります。
 - **設定の接続先サーバー**の一覧は編集用です。行は畳んだ状態が既定で、押すと入力欄が開き、保存で閉じます。名前が空のまま URL を入力したらホスト名を補完します（手で入れた名前は上書きしません）。
 
 ## 7. stella mode（仮想マシン）

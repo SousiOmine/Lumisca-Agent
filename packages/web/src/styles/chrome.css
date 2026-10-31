@@ -23,6 +23,16 @@
   -webkit-user-select: none;
 }
 
+/* macOS: the OS keeps its title bar (tauri.macos.conf.json sets
+ * decorations + titleBarStyle overlay), and the traffic lights sit in this
+ * strip's top-left corner. The tabs start to the right of them, and the
+ * strip keeps no background of its own so the window's own material shows
+ * through the transparent title bar. */
+.titlebar.titled {
+  padding-left: 78px;
+  background: transparent;
+}
+
 /* The tab bar inside the title bar drops its own chrome (background and
  * bottom border) and fills the space left of the window controls. */
 .titlebar .tabbar {

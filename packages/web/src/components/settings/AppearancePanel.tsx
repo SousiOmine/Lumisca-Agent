@@ -1,6 +1,8 @@
 import type { ThemeSetting } from "../../types.ts";
 import type { MessageKey } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
+import { SettingRow } from "../SettingRow.tsx";
+import { Select } from "../Select.tsx";
 
 interface AppearancePanelProps {
   theme: ThemeSetting;
@@ -28,22 +30,17 @@ export function AppearancePanel(
   const t = useT();
   return (
     <div className="settings-pane">
-      <div className="appearance-item">
-        <span className="appearance-label">
-          {t("settings.appearance.theme.label")}
-        </span>
-        <select
+      <SettingRow label={t("settings.appearance.theme.label")}>
+        <Select
+          label={t("settings.appearance.theme.label")}
           value={theme}
-          onChange={(e) => onThemeChange(e.currentTarget.value as ThemeSetting)}
-          aria-label={t("settings.appearance.theme.label")}
-        >
-          {THEME_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {t(option.label)}
-            </option>
-          ))}
-        </select>
-      </div>
+          options={THEME_OPTIONS.map((option) => ({
+            value: option.value,
+            label: t(option.label),
+          }))}
+          onChange={onThemeChange}
+        />
+      </SettingRow>
       {error && (
         <p className="error-text" role="alert">
           {t("settings.appearance.saveFailed", { error })}

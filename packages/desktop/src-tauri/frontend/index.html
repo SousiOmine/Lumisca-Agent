@@ -32,9 +32,12 @@
         flex-direction: column;
         user-select: none;
       }
-      /* Custom title bar: the desktop window is undecorated
+      /* Custom title bar: the window is undecorated on Windows and Linux
          (tauri.conf.json), so the splash draws its own drag handle and
-         window controls. */
+         window controls. On macOS the OS keeps its title bar
+         (tauri.macos.conf.json: decorations + titleBarStyle overlay), so
+         the native traffic lights stay where users expect them and this
+         strip starts to their right. */
       .titlebar {
         display: flex;
         align-items: center;
@@ -43,6 +46,11 @@
         background: var(--surface);
         border-bottom: 1px solid var(--border);
         user-select: none;
+      }
+      .titlebar.titled {
+        padding-left: 78px;
+        background: transparent;
+        border-bottom: none;
       }
       .titlebar-wordmark {
         padding: 0 12px;
@@ -151,6 +159,7 @@
           type="button"
           class="titlebar-btn"
           id="btn-min"
+          data-window-control
           title="最小化"
           aria-label="最小化"
         >
@@ -170,6 +179,7 @@
           type="button"
           class="titlebar-btn"
           id="btn-max"
+          data-window-control
           title="最大化"
           aria-label="最大化"
         >
@@ -202,6 +212,7 @@
           type="button"
           class="titlebar-btn close"
           id="btn-close"
+          data-window-control
           title="閉じる"
           aria-label="閉じる"
         >

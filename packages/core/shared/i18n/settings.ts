@@ -248,6 +248,15 @@ export const settings = {
       "登録されたプロバイダーがありません。「プロバイダーを追加」ボタンから設定してください。",
     en: 'No providers registered. Use the "Add provider" button to set one up.',
   },
+  /** One-line explanation under the AI provider heading, mirroring the
+   * search section's own description: the two sections are one list of
+   * services, so each says what its keys are for. */
+  "settings.provider.aiDescription": {
+    ja:
+      "エージェントが応答の生成に使用する AI プロバイダーです。API キーまたはアカウント連携で設定します。",
+    en:
+      "The AI providers the agent uses to generate replies. Configure each with an API key or an account login.",
+  },
   "settings.provider.configured": { ja: "設定済み", en: "Configured" },
   "settings.provider.notConfigured": { ja: "未設定", en: "Not configured" },
   "settings.provider.addProvider": {

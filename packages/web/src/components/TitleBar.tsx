@@ -6,8 +6,8 @@ import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
 import { ConnectionPicker } from "./ConnectionPicker.tsx";
 
-/** Poll interval while the shell is reachable: only the maximize/restore
- * icon depends on the window state, so a modest interval is fine. */
+/** Poll interval while the shell is reachable: the connection picker names
+ * the current server from it, so a modest interval is fine. */
 const POLL_MS = 500;
 /** Back-off when the shell is unreachable (plain browser) — the bridge
  * cannot come up later in the same page, so poll rarely. */
@@ -28,15 +28,25 @@ interface TitleBarProps {
   onManageConnections: () => void;
 }
 
-/** Window chrome for the undecorated desktop window (see
- * tauri.conf.json): a single strip holding the tab bar on the left and
- * the app menu + minimize / maximize / close buttons on the right. The
- * empty area of the strip is the drag handle.
+/** Window chrome for the desktop window: a single strip holding the tab
+ * bar, the app menu, the connection picker and the window controls.
  *
- * The page is served from http://127.0.0.1 (or a remote server), so it
- * has no Tauri IPC and the native `data-tauri-drag-region` path cannot
- * work; dragging and double-click-to-maximize go through the shell
- * bridge instead. */
+ * Which controls are drawn is the platform's convention, not a choice:
+ *
+ * - macOS keeps the OS's own window controls (`decorations` +
+ *   `titleBarStyle: "overlay"` in tauri.macos.conf.json). The traffic
+ *   lights are the native ones, inset into the transparent title bar, and
+ *   the window server owns their look, hover and placement — a copy drawn
+ *   by the page could not match them. The strip therefore starts to the
+ *   right of them (`--traffic-inset`, see chrome.css) and the empty area
+ *   is left to the system for dragging and double-click zooming, so this
+ *   component does not route those through the bridge there.
+ * - Windows and Linux are undecorated (`decorations: false`), so the page
+ *   draws square minimize / maximize / close buttons at the right edge and
+ *   moves the window through the bridge (`window/start-drag`).
+ *
+ * The page is served from http://127.0.0.1 (or a remote server), so it has
+ * no Tauri IPC and the native `data-tauri-drag-region` path cannot work. */
 export function TitleBar({
   children,
   onNew,
@@ -47,21 +57,21 @@ export function TitleBar({
   onManageConnections,
 }: TitleBarProps) {
   const t = useT();
-  const [available, setAvailable] = useState(false);
-  const [maximized, setMaximized] = useState(false);
+  const [state, setState] = useState<ShellState | null>(null);
 
   // One read at a time, re-armed by the effect below: a fetch that is still
-  // in flight must not stack a second one behind it.
+  // in flight must not stack a second one behind it. The whole state is
+  // kept (not just the maximized flag): the picker names the server from
+  // it, and the platform decides which controls to draw.
   const [pollMs, setPollMs] = useState(POLL_MS);
   useVisibleInterval(() => {
     void shellCall<ShellState>("state").then(
-      (state) => {
-        setAvailable(true);
-        setMaximized(state.maximized);
+      (next) => {
+        setState(next);
         setPollMs(POLL_MS);
       },
       () => {
-        setAvailable(false);
+        setState(null);
         // Back off when the bridge is absent (a plain browser): it cannot
         // come up later in this page.
         setPollMs(IDLE_POLL_MS);
@@ -71,7 +81,9 @@ export function TitleBar({
 
   // Plain browser: no shell bridge, so no window chrome — the tab bar
   // renders on its own with its default (full bar) styles.
-  if (!available) return <>{children}</>;
+  if (state === null) return <>{children}</>;
+
+  const nativeControls = state.platform === "macos";
 
   /** Tabs, the app menu, the connection picker (its popover extends below
    * the strip) and the window buttons must stay clickable, not drag. */
@@ -80,19 +92,20 @@ export function TitleBar({
       null;
 
   const onMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || isInteractive(e)) return;
+    // The native title bar already moves and zooms the window.
+    if (nativeControls || e.button !== 0 || isInteractive(e)) return;
     e.preventDefault();
     windowApi.startDrag().catch(() => {});
   };
 
   const onDblClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (isInteractive(e)) return;
+    if (nativeControls || isInteractive(e)) return;
     windowApi.toggleMaximize().catch(() => {});
   };
 
   return (
     <div
-      className="titlebar"
+      className={`titlebar${nativeControls ? " titled" : ""}`}
       onMouseDown={onMouseDown}
       onDblClick={onDblClick}
     >
@@ -113,37 +126,43 @@ export function TitleBar({
           isDesktop
           buttonClass="titlebar-btn"
         />
-        <button
-          type="button"
-          className="titlebar-btn"
-          onClick={() => windowApi.minimize()}
-          title={t("chrome.titleBar.minimize")}
-          aria-label={t("chrome.titleBar.minimize")}
-        >
-          <IconMinus size={15} />
-        </button>
-        <button
-          type="button"
-          className="titlebar-btn"
-          onClick={() => windowApi.toggleMaximize()}
-          title={maximized
-            ? t("chrome.titleBar.restore")
-            : t("chrome.titleBar.maximize")}
-          aria-label={maximized
-            ? t("chrome.titleBar.restore")
-            : t("chrome.titleBar.maximize")}
-        >
-          {maximized ? <IconCopy size={13} /> : <IconSquare size={12} />}
-        </button>
-        <button
-          type="button"
-          className="titlebar-btn close"
-          onClick={() => windowApi.close()}
-          title={t("chrome.titleBar.close")}
-          aria-label={t("chrome.titleBar.close")}
-        >
-          <IconX size={15} />
-        </button>
+        {!nativeControls && (
+          <>
+            <button
+              type="button"
+              className="titlebar-btn"
+              onClick={() => windowApi.minimize()}
+              title={t("chrome.titleBar.minimize")}
+              aria-label={t("chrome.titleBar.minimize")}
+            >
+              <IconMinus size={15} />
+            </button>
+            <button
+              type="button"
+              className="titlebar-btn"
+              onClick={() => windowApi.toggleMaximize()}
+              title={state.maximized
+                ? t("chrome.titleBar.restore")
+                : t("chrome.titleBar.maximize")}
+              aria-label={state.maximized
+                ? t("chrome.titleBar.restore")
+                : t("chrome.titleBar.maximize")}
+            >
+              {state.maximized
+                ? <IconCopy size={13} />
+                : <IconSquare size={12} />}
+            </button>
+            <button
+              type="button"
+              className="titlebar-btn close"
+              onClick={() => windowApi.close()}
+              title={t("chrome.titleBar.close")}
+              aria-label={t("chrome.titleBar.close")}
+            >
+              <IconX size={15} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

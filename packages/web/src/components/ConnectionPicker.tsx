@@ -33,23 +33,27 @@ interface ConnectionPickerProps {
  * サーバー, one dialog deeper than the question — a page served by a remote
  * machine looks exactly like the local one.
  *
- * It lives in the desktop title bar next to the app menu, in the corner every
- * desktop window keeps its "where am I" affordance. In a plain browser there
+ * It lives in the desktop title bar in the corner every desktop window keeps
+ * its "where am I" affordance, beside the app menu. In a plain browser there
  * is no such ambiguity (the address bar is the answer) and no bridge to
  * switch with, so the title bar does not render and this control is not
  * shown.
  *
- * Both answers are read once on mount, not on every open: the trigger has to
- * name the server while the popover is still closed (`common.loading` until
- * then is a label that never arrives), and the shell's answer is fixed for
- * the lifetime of the page — switching servers navigates the window and
- * loads a new page. The registry is re-read when the settings dialog saves
- * into it, so an open popover never lists a server deleted a moment ago.
+ * Both answers are read once on mount and refreshed when the settings
+ * dialog saves into the registry. The shell's answer is fixed for the
+ * lifetime of the page — switching servers navigates the window and loads
+ * a new page — so it is not polled here; the title bar already polls it and
+ * hands it over through `state` when it changes.
  *
  * The displayed name is the shell's: the registry of a REMOTE page is that
  * server's registry, which usually has no entry for itself, so matching the
  * display against this list cannot name it. The shell remembers the name of
  * the entry the window was switched to and reports it with the state.
+ *
+ * The popover is drawn by the app rather than by the platform (`<select>`
+ * would be): it lists a switchable choice of whole servers with their
+ * address, marks the current one, and ends with the two ways into the
+ * registry, which a native list cannot carry.
  */
 export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const t = useT();
@@ -136,8 +140,11 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
       <button
         type="button"
         className="titlebar-btn connection-picker-trigger"
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="listbox"
+        onClick={() => {
+          if (!open) void load();
+          setOpen((value) => !value);
+        }}
+        aria-haspopup="menu"
         aria-expanded={open}
         title={t("chrome.connections.current", { name: currentLabel() })}
       >
@@ -149,11 +156,11 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
       </button>
 
       {open && (
-        <div className="connection-picker-popover" role="listbox">
+        <div className="connection-picker-popover" role="menu">
           <button
             type="button"
-            role="option"
-            aria-selected={state?.mode === "local"}
+            role="menuitemradio"
+            aria-checked={state?.mode === "local"}
             className={`connection-option${
               state?.mode === "local" ? " selected" : ""
             }`}
@@ -178,8 +185,8 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
             <button
               key={server.id}
               type="button"
-              role="option"
-              aria-selected={selected === server.id}
+              role="menuitemradio"
+              aria-checked={selected === server.id}
               className={`connection-option${
                 selected === server.id ? " selected" : ""
               }`}
@@ -203,6 +210,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
           <div className="connection-picker-sep" />
           <button
             type="button"
+            role="menuitem"
             className="connection-option manage"
             onClick={() => {
               setOpen(false);
@@ -216,6 +224,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
           </button>
           <button
             type="button"
+            role="menuitem"
             className="connection-option manage"
             onClick={() => {
               setOpen(false);

@@ -20,11 +20,10 @@ Deno.test("pageCsp allows the page's own host over ws and wss", () => {
   assertEquals(sources.includes("'self'"), true);
   assertEquals(sources.includes("ws://host.tailnet.ts.net"), true);
   assertEquals(sources.includes("wss://host.tailnet.ts.net"), true);
-  // The desktop shell bridge, however the webview reaches the custom
-  // protocol (WebView2 re-homes it to http://lumisca.localhost; macOS and
-  // Linux fetch the scheme directly).
-  assertEquals(sources.includes("http://lumisca.localhost"), true);
-  assertEquals(sources.includes("lumisca:"), true);
+  // The desktop shell bridge: a loopback listener the shell names to the
+  // page. It must be allowed from a remote (https) page too, because the
+  // window controls belong to the window, not to the server it shows.
+  assertEquals(sources.includes("http://127.0.0.1:*"), true);
 });
 
 Deno.test("pageCsp names the page's own host with its port", () => {
