@@ -47,7 +47,7 @@ export const chrome = {
     en: "Close all tabs to the left",
   },
   "chrome.tabBar.closeAllOthers": {
-    ja: "これ以外のタブをすべて閉じる",
+    ja: "他のタブをすべて閉じる",
     en: "Close all other tabs",
   },
 
@@ -70,7 +70,7 @@ export const chrome = {
   },
   "chrome.tabClose.keepRunningNote": {
     ja:
-      "「実行を続けて閉じる」なら、実行中のセッションはサーバー側で続きます（他のタブは閉じます。セッション履歴から開き直せます）。",
+      "「実行を続けて閉じる」を選択した場合、セッションはサーバー側でバックグラウンド実行を継続します（タブは閉じられますが、セッション履歴から再度開くことができます）。",
     en:
       'With "Close and keep running", the running sessions continue on the server (the other tabs still close; reopen them from the session history).',
   },
@@ -110,12 +110,12 @@ export const chrome = {
     en: "Restart to apply (running sessions will be stopped).",
   },
   "chrome.update.systemdNote": {
-    ja: "systemd が新しいバージョンで起動します。",
-    en: "systemd will start the new version.",
+    ja: "サービスの再起動後に新しいバージョンが適用されます。",
+    en: "The service will start with the new version after restarting.",
   },
   "chrome.update.nextStart": {
-    ja: "次回の起動で適用されます（LUMISCA_UPDATE_RESTART=none）。",
-    en: "Will apply on the next start (LUMISCA_UPDATE_RESTART=none).",
+    ja: "次回の起動時に適用されます。",
+    en: "Will apply on the next launch.",
   },
   "chrome.update.installRestart": {
     ja: "インストールするとアプリが再起動します。",
@@ -126,7 +126,7 @@ export const chrome = {
     ja: "今すぐインストール",
     en: "Install now",
   },
-  "chrome.update.dismiss": { ja: "後で閉じる", en: "Dismiss" },
+  "chrome.update.dismiss": { ja: "閉じる", en: "Dismiss" },
 
   // --- server down banner --------------------------------------------------
   "chrome.serverDown.crashed": {
@@ -324,11 +324,11 @@ export const chrome = {
     en: "Downloads",
   },
   "chrome.folderBrowser.noPlaces": {
-    ja: "ブラウズできる場所が見つかりません",
+    ja: "参照可能な場所が見つかりません",
     en: "No places to browse",
   },
   "chrome.folderBrowser.chooseStart": {
-    ja: "左の場所からフォルダーを選んでください",
+    ja: "左の一覧からフォルダーを選択してください",
     en: "Choose a folder from the places on the left",
   },
   "chrome.folderBrowser.emptyFolder": {
@@ -336,7 +336,7 @@ export const chrome = {
     en: "This folder is empty",
   },
   "chrome.folderBrowser.hiddenOnly": {
-    ja: "隠し項目のみがあります",
+    ja: "隠し項目のみが存在します",
     en: "Only hidden items are here",
   },
   "chrome.folderBrowser.goUp": { ja: "上の階層へ", en: "Go up" },
@@ -345,7 +345,7 @@ export const chrome = {
     en: "Show hidden items",
   },
   "chrome.folderBrowser.hideHidden": {
-    ja: "隠し項目を隠す",
+    ja: "隠し項目を非表示",
     en: "Hide hidden items",
   },
   "chrome.folderBrowser.selectThis": {

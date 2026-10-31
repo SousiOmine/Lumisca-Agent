@@ -70,17 +70,17 @@ export const panels = {
   "panels.routine.title": { ja: "ルーチン", en: "Routines" },
   "panels.routine.description": {
     ja:
-      "{agent} の会話で、決めた時刻に依頼を実行します。作成と変更は会話からエージェントに頼んでください。",
+      "{agent} との会話で、設定したスケジュールに従って依頼を実行します。作成や変更は会話内でエージェントに依頼してください。",
     en:
       "Requests {agent}'s conversation runs on a schedule. Ask the agent in the conversation to create or change one.",
   },
   "panels.routine.noAgent": {
-    ja: "エージェントを選ぶと、その会話のルーチンが表示されます。",
+    ja: "エージェントを選択すると、そのエージェントのルーチンが表示されます。",
     en: "Pick an agent to see the routines of its conversation.",
   },
   "panels.routine.empty": {
     ja:
-      "まだありません。「毎朝 8 時にデプロイを確認して」のようにエージェントへ頼むと作成できます。",
+      "登録されたルーチンはありません。「毎朝 8 時にデプロイを確認して」のようにエージェントに依頼すると作成できます。",
     en:
       'None yet. Ask the agent for one ("check the deploy every morning at 8").',
   },
@@ -124,7 +124,7 @@ export const panels = {
     en: "This card could not be displayed",
   },
   "panels.ui.submit": { ja: "送信", en: "Send" },
-  "panels.ui.multiple": { ja: "複数選べます", en: "Select any number" },
+  "panels.ui.multiple": { ja: "複数選択可", en: "Select any number" },
   "panels.ui.flow": { ja: "フローチャート", en: "Flowchart" },
   "panels.ui.yes": { ja: "はい", en: "Yes" },
   "panels.ui.no": { ja: "いいえ", en: "No" },

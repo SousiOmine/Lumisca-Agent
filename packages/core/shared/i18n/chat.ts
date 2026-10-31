@@ -22,7 +22,7 @@ export const chat = {
     en: "Changes against the base branch",
   },
   "chat.mode.review.option.baseDiff.description": {
-    ja: "現在のブランチと main などのベースブランチの差分をレビュー",
+    ja: "現在のブランチと main などのベースブランチとの差分をレビュー",
     en: "Review the diff against the base branch (main, …)",
   },
   "chat.mode.review.option.baseDiff.shortText": {
@@ -68,14 +68,14 @@ export const chat = {
   },
   "chat.slash.prompt.label": { ja: "保存済みプロンプト", en: "Saved prompts" },
   "chat.slash.prompt.description": {
-    ja: "保存したプロンプトテンプレートを挿入",
+    ja: "保存したプロンプトテンプレートを挿入します",
     en: "Insert a saved prompt template",
   },
 
   // --- chat view -----------------------------------------------------------
   "chat.empty.workspace": {
     ja:
-      "作業内容（タスク）を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律して進めます。",
+      "作業内容（タスク）を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律的に進めます。",
     en:
       "Enter a task. The AI will autonomously operate files and run commands in your workspace.",
   },
@@ -157,7 +157,7 @@ export const chat = {
     en: "Diagram not shown",
   },
   "chat.visual.error.root": {
-    ja: "中身が <svg> 要素ではありません",
+    ja: "内容が <svg> 要素ではありません",
     en: "Its content is not an <svg> element",
   },
   "chat.visual.error.script": {
@@ -181,7 +181,7 @@ export const chat = {
   "chat.modeSelect.code.title": { ja: "code mode", en: "code mode" },
   "chat.modeSelect.code.description": {
     ja:
-      "ワークスペースのコードを読んで直すエージェント。セッションをタブで並べて管理し、このマシンのファイルとシェルをそのまま使います。",
+      "ワークスペースのコードを読み取り・編集するエージェント。セッションをタブで並べて管理し、このマシンのファイルとシェルを直接利用します。",
     en:
       "A coding agent for your workspaces. Sessions live in tabs, and it uses this machine's files and shell directly.",
   },
@@ -191,10 +191,10 @@ export const chat = {
     en: "A seamless development experience",
   },
   "chat.modeSelect.stella.unavailable": {
-    ja: "この環境では使えません: {reason}",
+    ja: "この環境では利用できません: {reason}",
     en: "Not available on this machine: {reason}",
   },
-  "chat.modeSelect.choose": { ja: "これにする", en: "Use this" },
+  "chat.modeSelect.choose": { ja: "このモードを選択", en: "Use this" },
   "chat.modeSelect.current": { ja: "使用中", en: "In use" },
 
   "chat.stella.empty": {
@@ -206,7 +206,7 @@ export const chat = {
     en: "Pick an agent on the left",
   },
   "chat.stella.machine.starting": {
-    ja: "はじめての準備をしています（数分かかります）…",
+    ja: "初回セットアップを行っています（数分かかります）…",
     en: "Preparing the machine for the first time (this takes a few minutes)…",
   },
   "chat.stella.agents.title": { ja: "エージェント", en: "Agents" },
@@ -214,7 +214,7 @@ export const chat = {
   "chat.stella.agents.name": { ja: "名前", en: "Name" },
   "chat.stella.agents.role": { ja: "役割", en: "Role" },
   "chat.stella.agents.roleHint": {
-    ja: "このエージェントが何をするか、どう振る舞うか",
+    ja: "このエージェントの役割や振る舞い",
     en: "What this agent does and how it works",
   },
   "chat.stella.agents.create": { ja: "作成", en: "Create" },
@@ -228,15 +228,17 @@ export const chat = {
     en: 'Delete "{name}"?',
   },
   "chat.stella.agents.deleteBody": {
-    ja: "このエージェントとの会話の履歴もすべて消えます。元に戻せません。",
+    ja:
+      "このエージェントとの会話履歴もすべて削除されます。この操作は取り消せません。",
     en: "Its whole conversation is deleted too. This cannot be undone.",
   },
   "chat.stella.agents.empty": {
-    ja: "まだエージェントがいません。作成してください。",
+    ja:
+      "登録されているエージェントがありません。「新しいエージェント」から作成してください。",
     en: "No agent yet. Create one.",
   },
   "chat.stella.agents.icon.edit": {
-    ja: "アイコンを変える",
+    ja: "アイコンを変更",
     en: "Change the icon",
   },
   "chat.stella.agents.icon.title": {
@@ -245,12 +247,12 @@ export const chat = {
   },
   "chat.stella.agents.icon.hint": {
     ja:
-      "画像を選ぶと、このエージェントのアイコンになります。{formats} に対応しています（{size} まで）。選ばないときは名前の頭文字が表示されます。",
+      "画像を選択すると、このエージェントのアイコンとして設定されます。{formats} に対応しています（{size} まで）。設定しない場合は名前の頭文字が表示されます。",
     en:
       "Pick a picture to use as this agent's icon. {formats} are supported (up to {size}). Without one, the first character of the name is shown.",
   },
   "chat.stella.agents.icon.choose": {
-    ja: "画像を選ぶ",
+    ja: "画像を選択",
     en: "Choose a picture",
   },
   "chat.stella.agents.icon.saving": {
@@ -258,7 +260,7 @@ export const chat = {
     en: "Saving…",
   },
   "chat.stella.agents.icon.reset": {
-    ja: "初期状態に戻す",
+    ja: "デフォルトに戻す",
     en: "Back to the initial",
   },
   "chat.stella.conversationError": {
@@ -280,11 +282,11 @@ export const chat = {
     en: "Connecting to the screen…",
   },
   "chat.stella.handover.reason": {
-    ja: "エージェントが画面を任せようとしています",
+    ja: "エージェントから画面操作が引き継がれました",
     en: "The agent is handing the screen to you",
   },
   "chat.stella.handover.notePlaceholder": {
-    ja: "何をしたか（任意）",
+    ja: "操作内容（任意）",
     en: "What you did (optional)",
   },
   "chat.stella.handover.done": { ja: "完了", en: "Done" },

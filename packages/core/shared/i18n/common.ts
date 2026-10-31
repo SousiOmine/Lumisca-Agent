@@ -59,9 +59,9 @@ export const common = {
   },
   "common.tokenRequired.note": {
     ja:
-      "トークンの値はサーバーの設定（LUMISCA_TOKEN / service.env）を確認してください。ブラウザが Cookie を拒否している場合もこの画面になります。",
+      "トークンの値はサーバーの設定を確認してください。ブラウザで Cookie が無効になっている場合にもこの画面が表示されます。",
     en:
-      "The token value is in the server's configuration (LUMISCA_TOKEN / service.env). This screen also appears when the browser rejects cookies.",
+      "Check your server configuration for the token value. This screen also appears when the browser rejects cookies.",
   },
 
   // --- MCP OAuth callback page (server/render.ts) ---------------------------
@@ -131,7 +131,7 @@ export const common = {
     en: '"{name}" has finished',
   },
   "notify.question": {
-    ja: "「{name}」に質問があります{detail}",
+    ja: "「{name}」から質問があります{detail}",
     en: '"{name}" has a question{detail}',
   },
   "notify.questionDetail": { ja: "：{gist}", en: ": {gist}" },

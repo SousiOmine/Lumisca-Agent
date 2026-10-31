@@ -45,7 +45,7 @@ export const settings = {
   },
   "settings.language.note": {
     ja:
-      "変更は新しいセッションから反映されます。開始済みのセッションは、開始時の言語のままです。",
+      "変更は新しいセッションから反映されます。開始済みのセッションは、開始時の言語のまま継続されます。",
     en:
       "The change applies to new sessions. Sessions already started keep the language they began in.",
   },
@@ -72,10 +72,8 @@ export const settings = {
     en: "v{version} applied. It will take effect after a restart.",
   },
   "settings.general.appliedRestartSystemd": {
-    ja:
-      "v{version} を適用しました。再起動すると有効になります（systemd が新しいバージョンで起動します）。",
-    en:
-      "v{version} applied. It will take effect after a restart (systemd will start the new version).",
+    ja: "v{version} を適用しました。サービスの再起動後に有効になります。",
+    en: "v{version} applied. It will take effect after the service restarts.",
   },
   "settings.general.appliedNextStart": {
     ja: "v{version} を適用しました。次回の起動で有効になります。",
@@ -141,9 +139,9 @@ export const settings = {
   },
   "settings.general.autoRestartDisabled": {
     ja:
-      "このサーバーは自動再起動が無効です（LUMISCA_UPDATE_RESTART=none）。監視側で再起動してください。",
+      "自動再起動が無効に設定されています。手動または監視サービスから再起動してください。",
     en:
-      "Auto-restart is disabled on this server (LUMISCA_UPDATE_RESTART=none). Please restart from the supervisor.",
+      "Auto-restart is disabled. Please restart manually or from your supervisor service.",
   },
   "settings.general.autoUpdateNotAvailable": {
     ja: "このサーバーでは自動アップデートを利用できません",
@@ -187,11 +185,11 @@ export const settings = {
   },
   "settings.personalize.noPrompts": {
     ja:
-      "保存されたプロンプトはありません。右上の「追加」ボタンから登録してください。",
+      "登録されているプロンプトはありません。右上の「追加」ボタンから登録してください。",
     en: 'No saved prompts. Use the "Add" button to register one.',
   },
   "settings.personalize.promptDeleteConfirm": {
-    ja: 'プロンプト "{name}" を削除しますか？',
+    ja: "プロンプト「{name}」を削除しますか？",
     en: 'Delete prompt "{name}"?',
   },
   "settings.personalize.idLabel": { ja: "識別子", en: "ID" },
@@ -326,7 +324,7 @@ export const settings = {
     en: "API key saved",
   },
   "settings.provider.deleteConfirm": {
-    ja: 'プロバイダー "{name}" を削除しますか？',
+    ja: "プロバイダー「{name}」を削除しますか？",
     en: 'Delete provider "{name}"?',
   },
   "settings.provider.duplicateHeader": {
@@ -402,7 +400,7 @@ export const settings = {
   },
   "settings.userProvider.apiKeyLabel": { ja: "APIキー", en: "API key" },
   "settings.userProvider.apiKeyKeepBlank": {
-    ja: "（空白で維持）",
+    ja: "（空欄で現在の設定を維持）",
     en: "(leave blank to keep)",
   },
   "settings.userProvider.apiKeyPlaceholderSet": {
@@ -500,9 +498,9 @@ export const settings = {
   },
   "settings.compaction.enabledDesc": {
     ja:
-      "コンテキストが上限に近づいたとき、古い履歴を要約し、モデルに見せる範囲を絞ります。履歴自体は残ります。",
+      "コンテキストの上限に近づいたとき、過去の会話履歴を自動で要約して消費量を抑えます。会話履歴自体は保持されます。",
     en:
-      "Summarizes older history and narrows what the model sees once the context approaches the window. The history itself is kept.",
+      "Automatically summarizes older conversation history when approaching the context limit to reduce usage. The conversation history itself is kept.",
   },
   "settings.compaction.reserveTokens": {
     ja: "予約トークン",
@@ -510,7 +508,7 @@ export const settings = {
   },
   "settings.compaction.reserveTokensDesc": {
     ja:
-      "モデルのコンテキスト上限からこの分を空けて圧縮します。既定は 16384 です。",
+      "モデルのコンテキスト上限からこのトークン数分の余裕を残して圧縮を実行します。既定値は 16384 です。",
     en: "Compact this far below the model's context window. Default 16384.",
   },
   "settings.compaction.keepRecentTokens": {
@@ -518,7 +516,7 @@ export const settings = {
     en: "Kept tokens",
   },
   "settings.compaction.keepRecentTokensDesc": {
-    ja: "圧縮後もそのまま残す直近のトークン数です。既定は 20000 です。",
+    ja: "圧縮後も要約せずに保持する直近のトークン数です。既定値は 20000 です。",
     en: "Newest tokens kept verbatim after a compaction. Default 20000.",
   },
   "settings.compaction.saveFailed": {
@@ -654,7 +652,7 @@ export const settings = {
   // --- mcp OAuth sign-in ----------------------------------------------------
   /** Shown in place of a failure when the server asked for a sign-in. */
   "settings.mcp.authRequired": {
-    ja: "このサーバーは OAuth 認証が必要です",
+    ja: "このサーバーには OAuth 認証が必要です",
     en: "This server requires an OAuth sign-in",
   },
   "settings.mcp.authStart": {
@@ -662,7 +660,7 @@ export const settings = {
     en: "Sign in with browser",
   },
   "settings.mcp.authWaiting": {
-    ja: "ブラウザでの認証を待っています…",
+    ja: "ブラウザでの認証を待機中…",
     en: "Waiting for the browser sign-in…",
   },
   "settings.mcp.authFailed": {
@@ -698,7 +696,7 @@ export const settings = {
   "settings.connection.addServer": { ja: "サーバーを追加", en: "Add server" },
   "settings.connection.test": { ja: "テスト", en: "Test" },
   "settings.connection.currentDisplay": {
-    ja: "現在の表示:",
+    ja: "表示中のサーバー:",
     en: "Currently showing:",
   },
   "settings.connection.localServer": {
@@ -720,8 +718,8 @@ export const settings = {
     en: "Delete this server?",
   },
   "settings.connection.testSuccess": {
-    ja: "疎通確認に成功しました（認証トークンは接続時に検証されます）",
-    en: "Connection test succeeded (auth token is verified on connect)",
+    ja: "サーバーへの接続に成功しました",
+    en: "Connection succeeded",
   },
   "settings.connection.unreachable": {
     ja: "サーバーに到達できません: {url}",
@@ -734,8 +732,8 @@ export const settings = {
     en: "e.g. Home server",
   },
   "settings.connection.tokenLabel": {
-    ja: "トークン（LUMISCA_TOKEN と同じ値）",
-    en: "Token (same value as LUMISCA_TOKEN)",
+    ja: "認証トークン",
+    en: "Auth token",
   },
   /** Scheme rule of the URL field. The desktop shell can only connect to
    * http:// (a LAN/Tailscale address served directly) and https:// (a
@@ -746,17 +744,15 @@ export const settings = {
     en: "The URL must start with http:// or https://",
   },
   "settings.connection.urlHint": {
-    ja:
-      "URL は http:// でも https:// でも登録できます。https はサーバーの前段で TLS を終端する構成（例: tailscale serve）で使い、サーバー側の起動引数に --allowed-hosts <MagicDNS 名> を指定してください。",
-    en:
-      "URLs may be http:// or https://. For https, terminate TLS in front of the server (e.g. tailscale serve) and start the server with --allowed-hosts <MagicDNS name>.",
+    ja: "接続先サーバーの URL を入力してください（http:// または https://）。",
+    en: "Enter the server URL (http:// or https://).",
   },
   "settings.connection.unnamed": { ja: "（無名）", en: "(unnamed)" },
   /** Desktop only: the choice here is written to the shell's settings and
    * restored on the next launch. */
   "settings.connection.persistedNote": {
     ja:
-      "選んだ接続先は保存され、次回の起動時もそのサーバーを表示します。表示できない場合は起動画面で再試行とローカルサーバーへの切り替えを選べます。",
+      "選択した接続先は保存され、次回の起動時もそのサーバーを表示します。接続できない場合は起動画面で再試行やローカルサーバーへの切り替えを選択できます。",
     en:
       "The chosen server is saved and reopened on the next launch. If it cannot be reached, the startup screen offers a retry and the local server.",
   },
@@ -767,21 +763,22 @@ export const settings = {
     en: "Command safety check",
   },
   "settings.security.description": {
-    ja: "bash / eval / async_bash を実行するたびに高速モデルで判定します。",
+    ja:
+      "コマンドを実行する前に、危険な操作が含まれていないか安全性を自動で確認します。",
     en:
-      "Evaluates each bash / eval / async_bash command with the fast model before execution.",
+      "Automatically checks commands for dangerous operations before execution.",
   },
   "settings.security.tooltip": {
     ja:
-      "シェルコマンド（bash等）の実行前に、AIが危険な操作を含んでいないか安全性を自動で検証します。安全と判定されたコマンドは承認リストに記録され、次回からは判定なしで実行されます。危険と判定されたコマンドのほか、判定できなかったコマンド（判定が失敗・タイムアウトした場合）も実行されず、停止理由がエージェントに返されます。",
+      "コマンド実行前に安全性を自動で検証します。一度承認されたコマンドは次回以降そのまま実行され、危険と判定されたコマンドは実行がブロックされます。",
     en:
-      "Before executing shell commands (bash etc.), the AI automatically checks whether they contain dangerous operations. Commands judged safe are recorded in the approval list and run without checking next time. Commands judged dangerous, as well as those that could not be judged (failure, timeout), are blocked and the reason is reported to the agent.",
+      "Automatically verifies the safety of commands before execution. Approved commands run automatically next time, while dangerous commands are blocked.",
   },
   "settings.security.fastModelMissing": {
     ja:
-      "【重要】高速モデルが未設定です。このまま有効にすると、すべてのコマンドが安全確認不可として実行拒否されます。先に「モデル設定」より「高速モデル」を指定してください。",
+      "高速モデルが未設定です。有効にするには「モデル設定」で高速モデルを指定してください。",
     en:
-      '[Important] No fast model is set. If enabled without one, all commands will be blocked as unverifiable. Set a "Fast model" in "Models" first.',
+      'No fast model is configured. Please set a "Fast model" in "Models" first.',
   },
   "settings.security.approvedCommands": {
     ja: "承認済みコマンド",
@@ -805,23 +802,24 @@ export const settings = {
   "settings.webSearch.title": { ja: "Web検索", en: "Web search" },
   "settings.webSearch.description": {
     ja:
-      "エージェントが web_search / web_fetch で使う検索プロバイダです。1 つだけ既定として選びます。ページ取得の API を持つプロバイダ（Exa・Tavily・TinyFish）はその API で本文を読み、持たないもの（Brave・Perplexity）はページを直接取得して本文に変換します。既定を解除すると、エージェントは web ツールを持ちません。",
+      "エージェントが Web 検索やページの閲覧に使用する検索プロバイダーを設定します。利用するプロバイダーを 1 つ既定として選択してください。",
     en:
-      "The search provider the agent uses for web_search / web_fetch. Exactly one is the default. Providers with a page API (Exa, Tavily, TinyFish) read pages through it; the others (Brave, Perplexity) fetch the page directly and convert its HTML to text. With the default cleared, the agent has no web tools.",
+      "Configure the search provider used by the agent for web searches and fetching pages. Select one provider as the default.",
   },
   "settings.webSearch.empty": {
-    ja: "検索プロバイダがまだ登録されていません。",
+    ja: "検索プロバイダーが登録されていません。",
     en: "No search provider is configured yet.",
   },
-  "settings.webSearch.add": { ja: "プロバイダを追加", en: "Add provider" },
+  "settings.webSearch.add": { ja: "プロバイダーを追加", en: "Add provider" },
   "settings.webSearch.makeDefault": { ja: "既定にする", en: "Make default" },
   "settings.webSearch.defaultBadge": { ja: "既定", en: "Default" },
   "settings.webSearch.noDefault": {
-    ja: "既定のプロバイダが未設定です。エージェントは web ツールを使えません。",
+    ja:
+      "既定のプロバイダーが未設定です。エージェントは Web 検索ツールを使用できません。",
     en: "No default provider: the agent has no web tools.",
   },
   "settings.webSearch.useFetchApi": {
-    ja: "ページ取得: プロバイダの API",
+    ja: "ページ取得: プロバイダーの API",
     en: "Page fetch: provider API",
   },
   "settings.webSearch.useFetchDirect": {
@@ -833,7 +831,7 @@ export const settings = {
   "settings.webSearch.remove": { ja: "削除", en: "Remove" },
   "settings.webSearch.removeConfirm": {
     ja:
-      "{name} を削除しますか？ エージェントはこのプロバイダで検索できなくなります。既定のプロバイダだった場合は、残っているプロバイダの 1 つが既定になります。",
+      "「{name}」を削除しますか？ エージェントはこのプロバイダーで検索できなくなります。既定のプロバイダーだった場合は、残りのプロバイダーのいずれかが既定になります。",
     en:
       "Remove {name}? The agent can no longer search with it. If it was the default, another configured provider becomes the default.",
   },
@@ -844,7 +842,7 @@ export const settings = {
 
   // --- web search dialog -----------------------------------------------------
   "settings.webSearch.form.addTitle": {
-    ja: "検索プロバイダを追加",
+    ja: "検索プロバイダーを追加",
     en: "Add a search provider",
   },
   "settings.webSearch.form.editTitle": {
@@ -852,28 +850,28 @@ export const settings = {
     en: "Change the API key",
   },
   "settings.webSearch.form.save": { ja: "保存", en: "Save" },
-  "settings.webSearch.form.provider": { ja: "プロバイダ", en: "Provider" },
+  "settings.webSearch.form.provider": { ja: "プロバイダー", en: "Provider" },
   "settings.webSearch.form.apiKey": { ja: "APIキー", en: "API key" },
   "settings.webSearch.form.apiKeyKeep": {
-    ja: "空欄のまま保存すると、登録済みのキーを使い続けます。",
+    ja: "空欄のまま保存すると、登録済みの API キーを維持します。",
     en: "Leave it empty to keep the stored key.",
   },
   "settings.webSearch.form.check": { ja: "接続を確認", en: "Check" },
   "settings.webSearch.form.checking": { ja: "確認中…", en: "Checking…" },
   "settings.webSearch.form.checked": {
-    ja: "検索できました（結果 {count} 件）。追加できます。",
+    ja: "検索に成功しました（結果: {count} 件）。追加できます。",
     en: "Search worked ({count} result(s)). You can add it now.",
   },
   "settings.webSearch.form.failed": {
-    ja: "検索できませんでした: {detail}",
+    ja: "検索に失敗しました: {detail}",
     en: "The search failed: {detail}",
   },
   "settings.webSearch.form.needKey": {
-    ja: "追加する前に、このキーで検索できることを確認してください。",
+    ja: "追加する前に、「接続を確認」で検索できることを確認してください。",
     en: "Check that this key searches before adding it.",
   },
   "settings.webSearch.form.noProviders": {
-    ja: "追加できるプロバイダがありません。",
+    ja: "追加できるプロバイダーがありません。",
     en: "Every provider is already configured.",
   },
   "settings.webSearch.form.saveFailed": {
@@ -883,18 +881,18 @@ export const settings = {
 
   // --- computer use panel ----------------------------------------------------
   "settings.computerUse.title": {
-    ja: "computer use（画面操作）",
+    ja: "Computer Use（画面操作）",
     en: "Computer use (screen control)",
   },
   "settings.computerUse.description": {
     ja:
-      "エージェントがこのマシンの画面を撮影し、マウスとキーボードを操作できるようにします。有効にすると computer use ツールが tool_search で見つかるようになり、computer use スキルが使い方を案内します。変更はすぐに反映されます（実行中のセッションがあると変更できません）。Windows と Linux（Wayland セッション）に対応します。Linux では初回のみ、画面撮影と画面共有の許可をデスクトップが確認します。",
+      "エージェントが画面を確認し、マウスやキーボードを操作できるようにします。Windows および Linux（Wayland）に対応しています（Linux では初回に画面キャプチャの許可が必要です）。",
     en:
-      "Lets the agent capture this machine's screen and control its mouse and keyboard. When enabled, the computer-use tools become discoverable through tool_search and the computer-use skill explains how to use them. Changes apply immediately (they are refused while a session is running). Windows and Linux (Wayland sessions); on Linux the desktop asks for screenshot and screen-sharing permission once.",
+      "Allows the agent to view the screen and control the mouse and keyboard. Supported on Windows and Linux (Wayland).",
   },
   "settings.computerUse.tooltip": {
     ja:
-      "computer use: エージェントが実画面を撮影し、クリックや入力を行います。既定は無効です。",
+      "Computer Use: エージェントが実画面を撮影し、クリックや入力を行います。既定は無効です。",
     en:
       "Computer use: the agent captures the real screen and clicks or types on it. Disabled by default.",
   },
