@@ -39,7 +39,9 @@ import { assetHeaders } from "./asset-headers.ts";
 /** The slice of the core these routes need (interface segregation). */
 export interface StellaApi {
   listStellaAgents(): StellaAgent[];
-  defaultStellaAgent(): StellaAgent | undefined;
+  /** Create the starter agent a fresh installation talks to, unless one
+   * already exists. Returns the agent a client opens. */
+  ensureStellaAgent(): StellaAgent;
   createStellaAgent(input: { name: string; role: string }): StellaAgent;
   renameStellaAgent(id: string, name: string): StellaAgent;
   /** Store the picture the user picked and point the agent at it. */
@@ -56,8 +58,6 @@ export interface StellaApi {
     name: string,
   ): Promise<{ path: string; mimeType: string } | undefined>;
   deleteStellaAgent(id: string): Promise<void>;
-  getAppMode(): "code" | "stella" | undefined;
-  setAppMode(mode: "code" | "stella"): void;
   getStellaAvailability(): Promise<StellaAvailability>;
   getStellaStatus(): Promise<{
     availability: StellaAvailability;
@@ -165,58 +165,38 @@ function decodeBase64(data: string): Uint8Array {
 export function stellaRoutes(core: StellaApi): Hono {
   const app = new Hono();
 
-  /** Choose the mode. A dedicated route rather than the generic settings
-   * surface: switching to stella is a capability check (the machine must be
-   * usable), not a value write. Switching is allowed while a run is going in
-   * either mode — the modes are separate surfaces and stopping someone's work
-   * to change a view would be surprising. */
-  app.put("/stella/mode", async (c) => {
-    const body = await parseBody<{ mode?: unknown }>(c);
-    const mode = body?.mode;
-    if (mode !== "code" && mode !== "stella") {
-      throw new AppError('mode must be "code" or "stella"', 400);
-    }
-    try {
-      core.setAppMode(mode);
-    } catch (error) {
-      throw new AppError(
-        errorMessage(error),
-        503,
-      );
-    }
-    return c.json(await statusBody());
-  });
-
-  /** The stored mode plus what this host can do, in one call: the client
-   * needs both to decide between showing its tabs and showing the mode
-   * picker. */
+  /** What this host can do, and how the machine is doing: the mode-selection
+   * screen needs both to decide whether stella can be picked, and stella's
+   * view needs the machine's state to connect its screen.
+   *
+   * The chosen mode is deliberately NOT here: it belongs to each client (see
+   * shared/app-mode.ts), so two clients showing one server never drag each
+   * other between modes. */
   app.get("/stella/status", async (c) => {
-    return c.json(await statusBody());
-  });
-
-  /** The one shape every stella route answers with: the stored mode plus the
-   * machine's state. One builder so the mode route's answer and the status
-   * route's answer cannot describe different worlds. */
-  const statusBody = async () => {
     const status = await core.getStellaStatus();
-    return {
-      mode: core.getAppMode() ?? null,
+    return c.json({
       availability: status.availability,
       state: status.state,
       vncPort: status.vncPort,
       reason: status.reason,
       starting: status.starting,
-    };
-  };
+    });
+  });
 
   // --- agents (the agent of each conversation) -----------------------------
 
   /** The sidebar's list, most recently used first, plus which one a fresh
-   * screen opens. */
+   * screen opens.
+   *
+   * Reading the list is also what guarantees the installation has at least
+   * one agent: a first run would otherwise open stella mode onto an empty
+   * sidebar and a disabled composer, which is a wall in front of the one
+   * thing the mode exists for (see ensureStellaAgent). */
   app.get("/stella/agents", (c) => {
+    const starter = core.ensureStellaAgent();
     return c.json({
       agents: core.listStellaAgents(),
-      defaultAgentId: core.defaultStellaAgent()?.id ?? null,
+      defaultAgentId: starter.id,
     });
   });
 

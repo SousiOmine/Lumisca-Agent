@@ -14,7 +14,12 @@ type DialogMode =
   | { kind: "edit"; id: string; name: string };
 
 /**
- * Settings → web search.
+ * Settings → プロバイダー → Web 検索: the search provider the agent's
+ * `web_search` tool uses.
+ *
+ * It is a section of the provider category rather than a category of its own:
+ * both lists answer "which service does this installation hold a key for", and
+ * a separate entry made the search side easy to miss.
  *
  * The agent searches with exactly one provider (the default). Adding one
  * checks the key first: a stored key that cannot search would make every
@@ -89,6 +94,10 @@ export function WebSearchPanel() {
 
   return (
     <div className="settings-pane">
+      {
+        /* The category's own heading is "プロバイダー"; this section names the
+       * second kind of provider it lists. */
+      }
       <div className="modal-header">
         <h2>{t("settings.webSearch.title")}</h2>
         <button

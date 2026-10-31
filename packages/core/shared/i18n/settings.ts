@@ -16,11 +16,10 @@ export const settings = {
   "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
   "settings.nav.servers": { ja: "接続先サーバー", en: "Servers" },
-  "settings.nav.providers": { ja: "APIプロバイダー", en: "API providers" },
+  "settings.nav.providers": { ja: "プロバイダー", en: "Providers" },
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
   "settings.nav.routines": { ja: "ルーチン", en: "Routines" },
-  "settings.nav.webSearch": { ja: "Web検索", en: "Web search" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
 
   // --- appearance panel -----------------------------------------------------
@@ -799,6 +798,8 @@ export const settings = {
   },
 
   // --- web search panel ------------------------------------------------------
+  /** A section heading under the プロバイダー category (not a category of its
+   * own: the nav key `settings.nav.providers` names the category). */
   "settings.webSearch.title": { ja: "Web検索", en: "Web search" },
   "settings.webSearch.description": {
     ja:
@@ -810,7 +811,13 @@ export const settings = {
     ja: "検索プロバイダーが登録されていません。",
     en: "No search provider is configured yet.",
   },
-  "settings.webSearch.add": { ja: "プロバイダーを追加", en: "Add provider" },
+  /** The list's own button (the dialog's confirm button uses
+   * `settings.webSearch.form.add`, which is the same words in a narrower
+   * place). */
+  "settings.webSearch.add": {
+    ja: "追加",
+    en: "Add",
+  },
   "settings.webSearch.makeDefault": { ja: "既定にする", en: "Make default" },
   "settings.webSearch.defaultBadge": { ja: "既定", en: "Default" },
   "settings.webSearch.noDefault": {
@@ -850,6 +857,10 @@ export const settings = {
     en: "Change the API key",
   },
   "settings.webSearch.form.save": { ja: "保存", en: "Save" },
+  "settings.webSearch.form.add": {
+    ja: "検索プロバイダーを追加",
+    en: "Add the search provider",
+  },
   "settings.webSearch.form.provider": { ja: "プロバイダー", en: "Provider" },
   "settings.webSearch.form.apiKey": { ja: "APIキー", en: "API key" },
   "settings.webSearch.form.apiKeyKeep": {
@@ -902,4 +913,10 @@ export const settings = {
   },
   "settings.mcp.toolCount": { ja: "{count} 個のツール", en: "{count} tools" },
   "settings.provider.oauth": { ja: "OAuth 連携", en: "OAuth" },
+  /** Section heading of the AI providers inside the プロバイダー category
+   * (the web-search providers are listed under it on the same screen). */
+  "settings.provider.aiTitle": {
+    ja: "AIプロバイダー",
+    en: "AI providers",
+  },
 } satisfies Record<string, LocalizedText>;

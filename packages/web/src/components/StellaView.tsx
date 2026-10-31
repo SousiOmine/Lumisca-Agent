@@ -1,8 +1,8 @@
-import { IconSend } from "@tabler/icons-preact";
-import { useEffect, useState } from "preact/compat";
+import { IconEye, IconEyeOff, IconSend } from "@tabler/icons-preact";
+import { useState } from "preact/compat";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useT } from "../i18n.ts";
-import type { AppModeStatus, StellaAgent } from "../types.ts";
+import type { StellaAgent, StellaStatus } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
@@ -31,8 +31,8 @@ interface StellaViewProps {
   conversationError: string | null;
   /** The machine's state: `starting` covers the first-run image build (the
    * one wait the user sees); `state` decides whether the screen pane can
-   * connect. */
-  status: AppModeStatus;
+   * connect. null while the first read is in flight. */
+  status: StellaStatus | null;
   /** Unsent composer text, owned by the App so it survives a remount. */
   input: string;
   onInputChange: (value: string) => void;
@@ -100,16 +100,21 @@ export function StellaView(
   // The screen is the user's while the agent waits for them: the pane turns
   // interactive and a bar above it says what to do and offers "done".
   const handover = conversation?.handover ?? null;
-  // The screen is not a tab and not a button: while the machine runs it is
-  // simply there, beside the conversation, because "the agent works somewhere
-  // you can see" is the promise of this mode. Closing it is allowed (a narrow
-  // window needs the room) and it comes back with the next message.
-  const [screenClosed, setScreenClosed] = useState(false);
-  useEffect(() => {
-    if (isRunning) setScreenClosed(false);
-  }, [isRunning]);
-  const machineRunning = status.state === "running";
-  const showScreen = machineRunning && !screenClosed;
+  // The machine's screen is a panel the user opens and closes, like a side
+  // panel: it starts open (the machine is the promise of this mode, and
+  // watching the work is why it is drawn beside the conversation), the
+  // header's toggle hides and shows it, and closing it stays closed. It used
+  // to reopen on its own whenever a message was sent, which meant the button
+  // could not be trusted: one send brought back the pane the user had just
+  // dismissed.
+  const [screenOpen, setScreenOpen] = useState(true);
+  // A hand-over is the agent stopping and asking the user to act ON the
+  // screen. Showing it is not a convenience but the only way to continue the
+  // run, so that one case overrides the user's choice — and taking the screen
+  // back afterwards leaves the panel as the user last wanted it.
+  const handedOver = handover !== null;
+  const machineRunning = status?.state === "running";
+  const showScreen = machineRunning && (screenOpen || handedOver);
 
   const submit = () => {
     const text = input.trim();
@@ -146,16 +151,46 @@ export function StellaView(
               />
             </button>
             <h1>{agent.name}</h1>
-            {status.starting && (
+            {status?.starting === true && (
               <span className="stella-note" role="status">
                 {t("chat.stella.machine.starting")}
               </span>
             )}
-            {status.state !== "running" && !status.starting &&
+            {status !== null && status.state !== "running" &&
+              !status.starting &&
               status.reason !== "" && (
               <span className="stella-note error-text" role="alert">
                 {status.reason}
               </span>
+            )}
+            {
+              /* The screen toggle sits at the header's right edge, opposite
+             * the agent it belongs to: the pane it shows and hides is the
+             * second column of this view, so the control lives on the edge
+             * between the two. Hidden while the machine cannot show a picture
+             * at all — a disabled toggle would promise a pane that will not
+             * appear — and while a hand-over is waiting for the user, because
+             * then the pane cannot be dismissed either. */
+            }
+            {machineRunning && !handedOver && (
+              <button
+                type="button"
+                className={`stella-screen-toggle${showScreen ? " on" : ""}`}
+                onClick={() => setScreenOpen((open) => !open)}
+                aria-pressed={showScreen}
+                title={t(
+                  showScreen
+                    ? "chat.stella.machine.hideScreen"
+                    : "chat.stella.machine.showScreen",
+                )}
+                aria-label={t(
+                  showScreen
+                    ? "chat.stella.machine.hideScreen"
+                    : "chat.stella.machine.showScreen",
+                )}
+              >
+                {showScreen ? <IconEyeOff size={15} /> : <IconEye size={15} />}
+              </button>
             )}
           </header>
         )}
@@ -223,14 +258,17 @@ export function StellaView(
       {showScreen && (
         <StellaPane
           running={machineRunning}
-          vncPort={status.vncPort}
+          vncPort={status?.vncPort ?? null}
           handover={handover === null ? null : {
             toolCallId: handover.toolCallId,
             reason: handover.reason,
             instructions: handover.instructions,
           }}
           onFinishHandover={onFinishHandover}
-          onClose={() => setScreenClosed(true)}
+          // The pane's own × means the same thing as the header's toggle. A
+          // hand-over is the one state where leaving is not the user's call
+          // (the run is blocked on this pane), so there is no × at all.
+          onClose={handedOver ? undefined : () => setScreenOpen(false)}
         />
       )}
       {agent !== null && editingIcon && (

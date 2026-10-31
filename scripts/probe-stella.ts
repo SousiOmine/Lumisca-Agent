@@ -8,10 +8,9 @@
  *
  *   1. what the server reports (`GET /api/stella/status`) before anything is
  *      started — the mode must be offered or refused, with a reason;
- *   2. whether the mode can be stored (`PUT /api/stella/mode`);
- *   3. whether the machine starts (image build included), and what its screen
+ *   2. whether the machine starts (image build included), and what its screen
  *      reports (`podman exec … xdotool getdisplaygeometry`);
- *   4. whether the machine stops again.
+ *   3. whether the machine stops again.
  *
  * Run from the repository root:
  *   deno run --allow-net --allow-read --allow-write --allow-env --allow-run \
@@ -62,14 +61,12 @@ if (status.state === "podman_missing") {
 }
 log("\nstella mode is available on this machine.");
 
-// 2. The core-level mode switch, with the verdict a real client reads first.
+// 2. The verdict a real client reads before it offers the mode.
 const core = LumiscaCore.forTesting();
 try {
   core.setStellaVm(vm);
   const availability = await core.getStellaAvailability();
   log(`availability: ${JSON.stringify(availability)}`);
-  core.setAppMode("stella");
-  log(`stored mode: ${core.getAppMode()}`);
 } finally {
   void core.close();
 }

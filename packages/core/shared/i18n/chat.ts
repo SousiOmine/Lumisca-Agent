@@ -237,6 +237,17 @@ export const chat = {
       "登録されているエージェントがありません。「新しいエージェント」から作成してください。",
     en: "No agent yet. Create one.",
   },
+  /** The starter agent the server creates on a fresh installation, so the
+   * sidebar is never empty (LumiscaCore.ensureStellaAgent). The role is the
+   * instruction the agent works from, so it stays a plain sentence about the
+   * machine it lives in. */
+  "chat.stella.agents.starterName": { ja: "アシスタント", en: "Assistant" },
+  "chat.stella.agents.starterRole": {
+    ja:
+      "仮想マシンの中で作業する開発アシスタント。依頼に応じて調査、実装、検証を行い、結果を短く報告します。",
+    en:
+      "A development assistant that works inside the machine: investigate, implement and verify what it is asked to do, and report the result briefly.",
+  },
   "chat.stella.agents.icon.edit": {
     ja: "アイコンを変更",
     en: "Change the icon",
@@ -273,6 +284,17 @@ export const chat = {
   },
   "chat.stella.working": { ja: "作業中…", en: "Working…" },
   "chat.stella.machine.screen": { ja: "画面", en: "Screen" },
+  /** The header's show/hide control of the screen pane: the pane is a panel
+   * the user opens and closes, so the label says which way the next click
+   * goes. */
+  "chat.stella.machine.showScreen": {
+    ja: "画面を表示",
+    en: "Show the screen",
+  },
+  "chat.stella.machine.hideScreen": {
+    ja: "画面を隠す",
+    en: "Hide the screen",
+  },
   "chat.stella.machine.screenEmpty": {
     ja: "マシンが起動すると、ここに画面が表示されます。",
     en: "The machine's screen appears here once it runs.",

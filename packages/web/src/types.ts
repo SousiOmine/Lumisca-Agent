@@ -72,11 +72,13 @@ export type {
   WorkspaceFileEntry,
 } from "@lumisca/core";
 
-/** The app-mode state the UI reads at startup (`GET /api/stella/status`):
- * which mode the user picked, and whether stella can run on the server it is
- * talking to. */
-export interface AppModeStatus {
-  mode: "code" | "stella" | null;
+/** What the UI knows about stella mode's machine, read from the server
+ * (`GET /api/stella/status`). The CHOSEN mode is not part of it: it belongs
+ * to this client (see hooks/useAppMode.ts), so a desktop window switching
+ * modes never drags a browser showing the same server along with it. */
+export interface StellaStatus {
+  /** Whether stella can run on the server this client talks to, with the
+   * reason when it cannot. */
   availability: core.StellaAvailability;
   /** The machine's state (`running`, `stopped`, `image_missing`, ...). */
   state: string;

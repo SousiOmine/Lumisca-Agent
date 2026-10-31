@@ -199,7 +199,7 @@ export function WebSearchProviderDialog({
           >
             {t(
               adding
-                ? "settings.webSearch.add"
+                ? "settings.webSearch.form.add"
                 : "settings.webSearch.form.save",
             )}
           </button>

@@ -89,15 +89,28 @@ npm outdated                                                   # packages/deskto
 - **LLM プロンプト**: システムプロンプトやツール定義の英語文面は翻訳対象外です。回答言語はセッションごとの指示で制御します。
 - **検証**: 文言の変更後は `deno test packages/core/shared/i18n_test.ts` を実行して整合性を確認してください。
 
+### 設定のカテゴリ
+
+「一般 / 外観 / カスタマイズ / 接続先サーバー / プロバイダー / モデル設定 / MCPサーバー / ルーチン（stella のみ）/ セキュリティ」です。
+
+- **プロバイダー**は AI プロバイダーと Web 検索プロバイダーを同じ画面に並べます（別カテゴリにすると検索側を見落とします）。
+- **モードに属する項目**は `SettingsModal` のカテゴリ表で `mode` を持たせます。ルーチンは stella のみ、computer use は code mode のみです。設定が効かないモードで見せると、動かないスイッチになります。
+- **接続先**はデスクトップのタイトルバー右上のドロップダウン（`components/ConnectionPicker.tsx`）から切り替えます。一覧はレジストリ、表示中の判定はシェルの `state` で、突き合わせは `packages/web/src/connections.ts` の純粋関数です。
+
 ## 7. stella mode（仮想マシン）
 
-stella mode は、podman コンテナを仮想マシンとして与え、その中だけでエージェントを動かす動作モードです。実装は `packages/core/vm/` にあり、会話は mode ごとに 1 本だけ存在します。
+stella mode は、podman コンテナを仮想マシンとして与え、その中だけでエージェントを動かす動作モードです。実装は `packages/core/vm/` にあり、会話は相手（agent）ごとに 1 本だけ存在します。
+
+どちらのモードを表示するかは**クライアントごと**の選択です（`packages/web/src/hooks/useAppMode.ts`、`localStorage` の `lumisca.appMode`）。サーバーの設定テーブルには置きません — デスクトップとブラウザが同じサーバーを表示していても、片方の切り替えがもう片方を巻き込まないためです。サーバーが答えるのは能力とマシンの状態だけです（`GET /api/stella/status`）。
 
 - **必要環境**: Linux と rootless podman。podman が使えない環境では stella mode を選べません（理由を画面に表示します）。Windows / macOS は対象外です。
 - **イメージ**: `packages/core/vm/container/Containerfile` から初回起動時にビルドします（数分）。配布物では `scripts/build-server.ts` が `stella-container/` をバイナリの隣へ同梱し、`packages/server/paths.ts` がその場所を解決します。Containerfile を変えたらイメージを作り直してください（画面の「作り直す」）。
 - **契約値**: 画面サイズ（1280x800）、DISPLAY、uid/gid、作業ディレクトリは `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方に書かれています。起動時に実コンテナと突き合わせ、ずれていれば起動を失敗させます。
 - **隔離の範囲**: ホストのファイルは VM にマウントしません。VM はセキュリティ境界ではなく作業場所の区切りであり、CPU・メモリ・ディスクの上限や外向きネットワークの制限は設けていません。
 - **ライフサイクル**: 起動は自動（会話を開く前）。停止はサーバー終了時と画面の「停止」。モードの切り替えだけでは停止しません。
+- **エージェントは常に 1 人以上**: `GET /api/stella/agents` の初回読み出しでスターターを作ります（`LumiscaCore.ensureStellaAgent`、名前と役割はメッセージカタログ）。空のサイドバーだけの stella mode を作らないためで、条件は一覧が空かどうかだけです。全員を削除しても次の読み出しで戻ります。
+- **画面パネル**: 会話の右列にマシンの画面を出します。ヘッダー右上のトグルで表示・非表示を切り替え、既定は表示、閉じたままを保ちます（送信で勝手に開き直しません）。`vm_ask_user` の受け渡し中だけは、実行がそこで止まっているため必ず開きます。
+- **computer use は code mode だけ**: `agent/factory.ts` が stella セッションへは渡しません（VM には `vm_screenshot` / `vm_act` がある）。設定画面でもこの項目は code mode でだけ出ます（`SettingsModal` の `mode` 付きカテゴリ）。
 - **eval ツールは渡しません。** サーバープロセス内で JavaScript を実行するため、VM の外に出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使ってください。同じ理由で、このモードのサブエージェントにも `eval` は渡しません（`SubagentRuntime.eval` が `false`）。
 - **ツールの集合**: ファイル・シェル・画面・`chat_ui`・`chat_attach`・`history_search`・`skill`・サブエージェントがプリロードされます。`ask` と `todo` はありません（質問に答えるパネルも進捗パネルも、この会話には無いため）。`identity` と `agent_create` は**プリロードせず**、セッションの main レジストリに置いて `tool_search` で見つけさせます（使い方は組み込みスキル `identity` / `agent-create` が教えます）。
 - **ツールレジストリの分離**: セッションは `main` と `subagent` の 2 つのレジストリを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけに入ります。stella のサブエージェントは VM の中で code mode と同じツール集合で動きますが、この 3 種は `tool_search` でも見つかりません。

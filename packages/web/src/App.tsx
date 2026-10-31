@@ -8,6 +8,7 @@ import {
 import type { InitialData } from "./types.ts";
 import { isViewRunning, type SessionView } from "./types.ts";
 import { closeTargets, DRAFT_TAB, splitTabKey } from "./tabs.ts";
+import type { AppMode } from "@lumisca/core/shared";
 import { useT } from "./i18n.ts";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useLanguage } from "./hooks/useLanguage.ts";
@@ -83,8 +84,8 @@ export function App({ initialData }: AppProps): ReactElement {
   // The mode gates the whole body below: unknown (no choice stored yet) shows
   // the selection screen, so neither mode's hooks run before its mode exists.
   const {
-    status: modeStatus,
-    loading: modeLoading,
+    mode,
+    status: machineStatus,
     error: modeError,
     setMode,
   } = useAppMode();
@@ -255,12 +256,29 @@ export function App({ initialData }: AppProps): ReactElement {
   );
   const openRecent = useCallback(() => setShowRecent(true), []);
   const openSettings = useCallback(() => setSettingsCategory("general"), []);
+  // Picking a mode is local and synchronous (localStorage), but stella needs
+  // the server's verdict first: `busy` covers that read, so the cards cannot
+  // be double-clicked into two different modes while it is in flight.
+  const [modeBusy, setModeBusy] = useState(false);
+  /** Choose the mode and close the switch dialog. A refusal (stella on a
+   * server without a usable machine) keeps the dialog open showing its
+   * reason — closing it would hide why nothing happened. */
+  const chooseMode = (next: AppMode) => {
+    setModeBusy(true);
+    void setMode(next).then(
+      () => {
+        setModeBusy(false);
+        setShowModeSelect(false);
+      },
+      () => setModeBusy(false),
+    );
+  };
   // Ctrl+T (the shortcut the app menu advertises): open the draft tab. Only
   // code mode has tabs; stella's conversation is the whole surface. The
   // handler is on the window because the shortcut must work from the
   // composer as well as from a transcript.
   useEffect(() => {
-    if (modeStatus?.mode !== "code") return;
+    if (mode !== "code") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.key !== "t") return;
       event.preventDefault();
@@ -268,14 +286,14 @@ export function App({ initialData }: AppProps): ReactElement {
     };
     globalThis.addEventListener("keydown", onKeyDown);
     return () => globalThis.removeEventListener("keydown", onKeyDown);
-  }, [modeStatus?.mode, openDraftTab]);
+  }, [mode, openDraftTab]);
 
   // --- stella mode --------------------------------------------------------
   // The hook runs unconditionally (hooks cannot be conditional), but it only
   // acts when stella is the current mode: `enabled` gates its requests. A
   // stella conversation has its own endpoints and event stream (api-stella),
   // so it never enters the tab views above.
-  const stellaActive = modeStatus?.mode === "stella";
+  const stellaActive = mode === "stella";
   const stella = useStella(stellaActive);
   const stellaAgent = stella.agents.find((a) => a.id === stella.activeAgentId);
   // The settings dialog's routine list: the active agent's routines
@@ -283,8 +301,10 @@ export function App({ initialData }: AppProps): ReactElement {
   const routines = useRoutines(stellaActive ? stella.activeAgentId : null);
   const routineAgentName = stellaActive ? stellaAgent?.name ?? null : null;
 
-  // The mode-selection screen, and nothing else, until a mode is chosen.
-  if (modeStatus === null || modeStatus.mode === null) {
+  // The mode-selection screen, and nothing else, until this client picks a
+  // mode. The choice is per client (hooks/useAppMode.ts), so a second window
+  // on the same server is never dragged into it.
+  if (mode === null) {
     return (
       <div className="app" ref={appRef}>
         <AppMenu
@@ -296,20 +316,21 @@ export function App({ initialData }: AppProps): ReactElement {
           isDesktop={update.source === "shell"}
           buttonClass="app-menu-standalone"
         />
-        {modeLoading
-          ? <div className="mode-select-loading">{t("common.loading")}</div>
-          : modeStatus === null
+        {machineStatus === null
           ? (
             <div className="mode-select-loading">
-              {t("common.serverUnreachable", { error: modeError ?? "" })}
+              {modeError === null
+                ? t("common.loading")
+                : t("common.serverUnreachable", { error: modeError })}
             </div>
           )
           : (
             <ModeSelectView
-              status={modeStatus}
+              status={machineStatus}
+              mode={mode}
               error={modeError}
-              busy={false}
-              onChoose={(mode) => void setMode(mode)}
+              busy={modeBusy}
+              onChoose={chooseMode}
             />
           )}
       </div>
@@ -329,6 +350,7 @@ export function App({ initialData }: AppProps): ReactElement {
         onOpenSettings={openSettings}
         onQuit={quit}
         onSwitchMode={() => setShowModeSelect(true)}
+        onManageConnections={() => setSettingsCategory("servers")}
       >
         {stellaActive
           // stella mode has no tab strip: one conversation is the whole
@@ -337,7 +359,27 @@ export function App({ initialData }: AppProps): ReactElement {
           // browser (where the title bar renders no wrapper) as on desktop.
           ? (
             <div className="tabbar stella-titlebar-label">
-              {t("chat.modeSelect.stella.title")}
+              <span className="stella-titlebar-text">
+                {t("chat.modeSelect.stella.title")}
+              </span>
+              {
+                /* On desktop the app menu lives in the title bar's controls; in
+               * a plain browser this strip is the only chrome stella mode
+               * has, so the menu (settings, mode switch, session history)
+               * has to stay reachable from here. */
+              }
+              {update.source !== "shell" && (
+                <div className="tabbar-actions">
+                  <AppMenu
+                    onNew={openDraftTab}
+                    onOpenRecent={openRecent}
+                    onOpenSettings={openSettings}
+                    onQuit={quit}
+                    onSwitchMode={() => setShowModeSelect(true)}
+                    isDesktop={false}
+                  />
+                </div>
+              )}
             </div>
           )
           : (
@@ -387,7 +429,7 @@ export function App({ initialData }: AppProps): ReactElement {
                 conversation={stella.conversation}
                 sessionId={stella.sessionId}
                 conversationError={stella.error}
-                status={modeStatus}
+                status={machineStatus}
                 input={draft.input}
                 onInputChange={(input) => updateDraft(draftKey, { input })}
                 onPrompt={(text) => stella.prompt(text)}
@@ -480,6 +522,7 @@ export function App({ initialData }: AppProps): ReactElement {
           initialCategory={settingsCategory}
           routines={routines}
           routineAgent={routineAgentName}
+          mode={mode}
           onClose={closeSettings}
         />
       )}
@@ -498,26 +541,14 @@ export function App({ initialData }: AppProps): ReactElement {
           onKeepRunning={() => resolveClose(true)}
         />
       )}
-      {showModeSelect && modeStatus !== null && (
+      {showModeSelect && (
         <Modal onClose={() => setShowModeSelect(false)}>
           <ModeSelectView
-            status={modeStatus}
+            status={machineStatus}
+            mode={mode}
             error={modeError}
-            busy={false}
-            onChoose={(mode) => {
-              if (mode === modeStatus.mode) {
-                setShowModeSelect(false);
-                return;
-              }
-              void setMode(mode).then(
-                () =>
-                  setShowModeSelect(false),
-                // A refusal (stella on a host without a usable machine) keeps
-                // the dialog open showing its reason: closing it would hide
-                // why nothing happened.
-                () => {},
-              );
-            }}
+            busy={modeBusy}
+            onChoose={chooseMode}
           />
         </Modal>
       )}

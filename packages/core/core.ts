@@ -55,17 +55,15 @@ import type { CompactionPolicyInput } from "./shared/mod.ts";
 import type { BackgroundCommandInfo } from "./tools/background.ts";
 import type { PendingQuestion } from "./tools/ask.ts";
 import {
-  APP_MODE_KEY,
-  type AppMode,
   COMPUTER_USE_ENABLED_KEY,
   CONNECTIONS_KEY,
   formatSessionName,
-  isAppMode,
   LANGUAGE_KEY,
   type Locale,
   parseCompactionPolicyInput,
   resolveLocale,
   type SavedPrompt,
+  translate,
 } from "./shared/mod.ts";
 import { systemLanguageTags } from "./locale.ts";
 import { CoreError, errorMessage } from "./errors.ts";
@@ -899,40 +897,7 @@ export class LumiscaCore {
     this.savedPrompts.delete(id);
   }
 
-  // --- app mode and the stella machine -------------------------------------
-
-  /** The stored operating mode, or undefined while the user has not picked
-   * one (the client then shows the selection screen). */
-  getAppMode(): AppMode | undefined {
-    const raw = this.settings.get(APP_MODE_KEY);
-    return isAppMode(raw) ? raw : undefined;
-  }
-
-  /**
-   * Record the operating mode.
-   *
-   * Switching to stella requires a usable machine: refusing here (rather
-   * than accepting the choice and failing later) is what keeps the mode
-   * honest — stella mode without its VM has no tools and no purpose, and a
-   * failure in the middle of a conversation would be indistinguishable from
-   * a bug. Switching away never stops the machine: it takes minutes to
-   * build and seconds to boot, and a user flipping to code mode for one task
-   * expects to find stella where they left it.
-   */
-  setAppMode(mode: AppMode): void {
-    if (mode === "stella") {
-      // The machine must be able to run here at all; whether it is up right
-      // now is not this call's business (the first conversation starts it).
-      if (this.stella.get() === undefined) {
-        throw new CoreError(
-          "stella mode is not available: the virtual machine is not set up " +
-            "for this installation",
-          "unavailable",
-        );
-      }
-    }
-    this.settings.set(APP_MODE_KEY, mode);
-  }
+  // --- the stella machine --------------------------------------------------
 
   /** Attach the stella machine (the server does this at start-up, once it
    * has resolved where the container files live). Detach with undefined. */
@@ -959,10 +924,32 @@ export class LumiscaCore {
     return this.stellaAgents.list();
   }
 
-  /** The agent a fresh stella screen opens by default: the last one used, or
-   * undefined on a first run (the client then offers to make one). */
-  defaultStellaAgent(): StellaAgent | undefined {
-    return this.stellaAgents.latest();
+  /**
+   * Make sure the installation has someone to talk to, and return the agent a
+   * client should open.
+   *
+   * A first run used to greet the user with an empty sidebar and a disabled
+   * composer: stella's premise is a conversation, so "you have nobody to talk
+   * to yet" is a wall in front of the one thing the mode is for. The starter
+   * agent is therefore created by the server, once — its name and role come
+   * from the message catalogue (the role is a sentence the user would have
+   * written anyway, and it is editable only by recreating the agent, which is
+   * why it is phrased as a general-purpose one).
+   *
+   * It is created on the FIRST READ and then never again: an empty list is
+   * exactly what a first run looks like, and a user who deliberately deleted
+   * every agent still gets one back the next time they open stella mode (the
+   * alternative — an empty mode with no way in — is the state this exists to
+   * prevent). The check is the list itself, so nothing has to be remembered
+   * separately.
+   */
+  ensureStellaAgent(): StellaAgent {
+    const existing = this.stellaAgents.latest();
+    if (existing !== undefined) return existing;
+    return this.stellaAgents.create({
+      name: translate(this.getLanguage(), "chat.stella.agents.starterName"),
+      role: translate(this.getLanguage(), "chat.stella.agents.starterRole"),
+    });
   }
 
   /** One agent by id, or undefined when it does not exist. */

@@ -4,6 +4,7 @@ import { shellCall, type ShellState, windowApi } from "../shell.ts";
 import { useVisibleInterval } from "../hooks/useVisibleInterval.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
+import { ConnectionPicker } from "./ConnectionPicker.tsx";
 
 /** Poll interval while the shell is reachable: only the maximize/restore
  * icon depends on the window state, so a modest interval is fine. */
@@ -23,6 +24,8 @@ interface TitleBarProps {
   onQuit: () => void;
   /** Open the mode-selection screen (see AppMenu). */
   onSwitchMode: () => void;
+  /** Open settings → 接続先サーバー (the picker's "manage" entry). */
+  onManageConnections: () => void;
 }
 
 /** Window chrome for the undecorated desktop window (see
@@ -41,6 +44,7 @@ export function TitleBar({
   onOpenSettings,
   onQuit,
   onSwitchMode,
+  onManageConnections,
 }: TitleBarProps) {
   const t = useT();
   const [available, setAvailable] = useState(false);
@@ -69,10 +73,11 @@ export function TitleBar({
   // renders on its own with its default (full bar) styles.
   if (!available) return <>{children}</>;
 
-  /** Tabs, the app menu and window buttons must stay clickable, not
-   * drag. */
+  /** Tabs, the app menu, the connection picker (its popover extends below
+   * the strip) and the window buttons must stay clickable, not drag. */
   const isInteractive = (e: MouseEvent<HTMLDivElement>) =>
-    (e.target as HTMLElement).closest("button, .tab") !== null;
+    (e.target as HTMLElement).closest("button, .tab, .connection-picker") !==
+      null;
 
   const onMouseDown = (e: MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0 || isInteractive(e)) return;
@@ -93,6 +98,12 @@ export function TitleBar({
     >
       {children}
       <div className="titlebar-controls">
+        {
+          /* Which server this window shows. The window's own state, so it
+         * belongs to the window chrome rather than to a settings dialog: a
+         * page served by a remote machine looks exactly like the local one. */
+        }
+        <ConnectionPicker onManage={onManageConnections} />
         <AppMenu
           onNew={onNew}
           onOpenRecent={onOpenRecent}

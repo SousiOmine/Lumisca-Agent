@@ -1,7 +1,6 @@
 import { CoreError } from "../errors.ts";
 import {
   APP_MCP_SETTINGS_KEY,
-  APP_MODE_KEY,
   COMMAND_SAFETY_APPROVALS_KEY,
   COMMAND_SAFETY_ENABLED_KEY,
   COMPACTION_ENABLED_KEY,
@@ -95,7 +94,6 @@ export function filterExposedSettings(
  * provider/model pair. */
 const MUTABLE_KEYS: ReadonlySet<string> = new Set([
   THEME_KEY,
-  APP_MODE_KEY,
   LANGUAGE_KEY,
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,

@@ -44,7 +44,9 @@ interface StellaPaneProps {
   handover: StellaHandover | null;
   /** The user finished at the screen: send what they did (may be empty). */
   onFinishHandover: (note: string, toolCallId: string) => Promise<void>;
-  onClose: () => void;
+  /** Close the pane. Omitted while the agent waits for the user: the run is
+   * blocked on this pane, so there is nothing to close it into. */
+  onClose?: () => void;
 }
 
 type ConnectionState = "idle" | "connecting" | "connected" | "disconnected";
@@ -193,15 +195,17 @@ export function StellaPane({
     <aside className={`stella-pane${interactive ? " handover" : ""}`}>
       <header className="stella-pane-header">
         <span>{t("chat.stella.machine.screen")}</span>
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onClose}
-          title={t("common.close")}
-          aria-label={t("common.close")}
-        >
-          <IconX size={15} />
-        </button>
+        {onClose !== undefined && (
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onClose}
+            title={t("common.close")}
+            aria-label={t("common.close")}
+          >
+            <IconX size={15} />
+          </button>
+        )}
       </header>
       {handover !== null && (
         <form

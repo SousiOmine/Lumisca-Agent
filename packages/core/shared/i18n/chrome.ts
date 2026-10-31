@@ -18,6 +18,35 @@ export const chrome = {
   },
   "chrome.titleBar.close": { ja: "閉じる", en: "Close" },
 
+  // --- connection picker (which server this window shows) ------------------
+  "chrome.connections.local": {
+    ja: "ローカルサーバー",
+    en: "Local server",
+  },
+  /** What the picker's trigger says when the registry has no entry for the
+   * server the window is showing (reached from the startup screen, or the
+   * entry was deleted while displayed). */
+  "chrome.connections.unknown": {
+    ja: "登録外のサーバー",
+    en: "Unregistered server",
+  },
+  "chrome.connections.current": {
+    ja: "接続先: {name}",
+    en: "Connected to: {name}",
+  },
+  "chrome.connections.empty": {
+    ja: "登録された接続先はありません",
+    en: "No server is registered",
+  },
+  "chrome.connections.manage": {
+    ja: "接続先を管理",
+    en: "Manage servers",
+  },
+  "chrome.connections.add": {
+    ja: "サーバーを追加",
+    en: "Add a server",
+  },
+
   // --- tab bar -------------------------------------------------------------
   "chrome.tabBar.label": { ja: "セッションタブ", en: "Session tabs" },
   "chrome.tabBar.newSession": {

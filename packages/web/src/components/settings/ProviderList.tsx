@@ -84,9 +84,15 @@ function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
   );
 }
 
-/** Settings → provider list: configured first, then everything else.
+/** Settings → プロバイダー: the AI providers, configured first.
  * User-defined providers are shown even when not yet configured, so they
- * stay reachable (to add a key, edit, or delete). */
+ * stay reachable (to add a key, edit, or delete).
+ *
+ * The web-search providers are listed below the AI ones by the category
+ * (SettingsModal) rather than here: both are "a service this installation
+ * holds a key for", but the two lists load from different endpoints and one
+ * screen with two sections is cheaper to read than two categories that each
+ * describe half of the same question. */
 export function ProviderList({
   onAdd,
   onOpen,
@@ -103,56 +109,58 @@ export function ProviderList({
 
   return (
     <>
-      <div className="modal-header">
-        <h2>{t("settings.nav.providers")}</h2>
-      </div>
+      <div className="settings-pane">
+        <div className="modal-header">
+          <h2>{t("settings.provider.aiTitle")}</h2>
+        </div>
 
-      <CatalogStatusRow onRefreshed={reload} />
+        <CatalogStatusRow onRefreshed={reload} />
 
-      <div className="stack-8">
-        {configured.length === 0 && (
-          <div className="faint-box">
-            {t("settings.provider.noProviders")}
-          </div>
-        )}
-        {configured.map((p) => (
-          <button
-            type="button"
-            key={p.id}
-            className="btn"
-            style={{
-              textAlign: "left",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-            onClick={() => onOpen(p.id)}
-          >
-            <span style={{ flex: 1 }}>{p.name}</span>
-            {p.userDefined
-              ? (
-                <span className="provider-state">
-                  {p.configured
-                    ? t("settings.provider.configured")
-                    : t("settings.provider.notConfigured")}
-                </span>
-              )
-              : (
-                <span className="provider-state configured">
-                  {p.authType === "oauth"
-                    ? t("settings.provider.oauth")
-                    : (p.source ?? t("settings.provider.apiKeyLabel"))}
-                </span>
-              )}
+        <div className="stack-8">
+          {configured.length === 0 && (
+            <div className="faint-box">
+              {t("settings.provider.noProviders")}
+            </div>
+          )}
+          {configured.map((p) => (
+            <button
+              type="button"
+              key={p.id}
+              className="btn"
+              style={{
+                textAlign: "left",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+              }}
+              onClick={() => onOpen(p.id)}
+            >
+              <span style={{ flex: 1 }}>{p.name}</span>
+              {p.userDefined
+                ? (
+                  <span className="provider-state">
+                    {p.configured
+                      ? t("settings.provider.configured")
+                      : t("settings.provider.notConfigured")}
+                  </span>
+                )
+                : (
+                  <span className="provider-state configured">
+                    {p.authType === "oauth"
+                      ? t("settings.provider.oauth")
+                      : (p.source ?? t("settings.provider.apiKeyLabel"))}
+                  </span>
+                )}
+            </button>
+          ))}
+        </div>
+
+        <div className="modal-actions">
+          <button type="button" className="btn primary" onClick={onAdd}>
+            <IconPlus size={14} />
+            {t("settings.provider.addProvider")}
           </button>
-        ))}
-      </div>
-
-      <div className="modal-actions">
-        <button type="button" className="btn primary" onClick={onAdd}>
-          <IconPlus size={14} />
-          {t("settings.provider.addProvider")}
-        </button>
+        </div>
       </div>
     </>
   );

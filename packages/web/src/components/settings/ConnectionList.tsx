@@ -9,6 +9,7 @@ import { notifyConnectionsUpdated } from "../../hooks/useWorkspaces.ts";
 import { Field } from "../Field.tsx";
 import { useT } from "../../i18n.ts";
 import { confirmAction } from "../../confirm.ts";
+import { isSupportedUrl, pageUrl } from "../../connections.ts";
 
 const ACTIVE_TAG: CSSProperties = {
   fontSize: 11,
@@ -18,21 +19,6 @@ const ACTIVE_TAG: CSSProperties = {
   color: "var(--text-dim)",
   marginLeft: 8,
 };
-
-/** The page URL to open for a connection (`?token=` — the page is
- * token-guarded in production mode). */
-function pageUrl(url: string, token: string): string {
-  return `${url.replace(/\/+$/, "")}/?token=${encodeURIComponent(token)}`;
-}
-
-/** Whether the URL field holds something a connection can be made to: the
- * desktop shell accepts http:// (a LAN/Tailscale address served directly)
- * and https:// (a TLS-terminating front end such as `tailscale serve` in
- * front of a MagicDNS name). Checked here so a missing scheme — the input
- * is free text — reports the rule instead of a confusing "cannot reach". */
-function isSupportedUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url.trim());
-}
 
 /** Settings → 接続先サーバー. This list is the federation peer registry:
  * it lives in THIS server's database and is shared by web and desktop

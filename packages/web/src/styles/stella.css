@@ -388,6 +388,47 @@
   color: var(--text-dim);
 }
 
+/* The screen's show/hide control, at the header's right edge.
+ *
+ * The pane it drives is this view's second column, so the control sits on the
+ * boundary between the two and reads as "the panel on the right". The `on`
+ * state is the pressed look of the toggle rather than a hover convention:
+ * what it reports is whether the pane is on screen, which has to be visible
+ * from the button alone (the pane can be off-screen past the fold on a narrow
+ * window). */
+.stella-screen-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    background 120ms var(--lum-ease),
+    color 120ms var(--lum-ease),
+    border-color 120ms var(--lum-ease);
+}
+
+.stella-screen-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.stella-screen-toggle.on {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.stella-screen-toggle:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 1px;
+}
+
 /* The run itself, where code mode's turn timer sits: a dot and one word. It
  * borrows the conversation's left edge (the avatar column of the message it
  * belongs to) so it reads as the agent being busy rather than as chrome. */
@@ -569,5 +610,16 @@
 
   .mode-select {
     padding: 20px 14px;
+  }
+}
+
+/* ---- touch devices -------------------------------------------------------- */
+
+/* The screen toggle is the only way back to a closed pane, so it is a
+ * fingertip-sized target. */
+@media (hover: none), (pointer: coarse) {
+  .stella-screen-toggle {
+    width: 34px;
+    height: 34px;
   }
 }

@@ -19,6 +19,7 @@
  * - `./mcp-config.ts` — MCP server config serialization,
  * - `./context-usage.ts` — context accounting and formatting,
  * - `./token-estimate.ts` — fixed-heuristic token estimates for history,
+ * - `./app-mode.ts` — the operating mode the VIEW shows (code / stella),
  * - `./misc.ts` — errorMessage, InitialData, decode/parse/format helpers,
  * - `./digest.ts` — FNV-1a change-detection digests and canonical JSON,
  * - `./loopback.ts` — loopback host detection and URL host spellings,
@@ -27,7 +28,6 @@
  * - `./ui-markup/` — the card markup a `chat_ui` call carries,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
-export * from "./app-mode.ts";
 export * from "./settings-keys.ts";
 export * from "./i18n/mod.ts";
 export * from "./tool-names.ts";
@@ -42,6 +42,7 @@ export * from "./diff-stat.ts";
 export * from "./mcp-config.ts";
 export * from "./context-usage.ts";
 export * from "./token-estimate.ts";
+export * from "./app-mode.ts";
 export * from "./misc.ts";
 export * from "./digest.ts";
 export * from "./loopback.ts";

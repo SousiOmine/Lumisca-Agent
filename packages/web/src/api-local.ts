@@ -1,6 +1,5 @@
 import type {
   AgentMessage,
-  AppModeStatus,
   AskAnswer,
   BackgroundCommandInfo,
   CatalogStatus,
@@ -22,6 +21,7 @@ import type {
   SessionInfo,
   SkillInfo,
   StellaAgent,
+  StellaStatus,
   TaskInfo,
   ThinkingLevel,
   TodoPhase,
@@ -285,14 +285,10 @@ export const api = {
 
   // --- stella mode -------------------------------------------------------
 
-  /** The stored mode and what this server can do, in one call. */
-  getStellaStatus: () => request<AppModeStatus>("/api/stella/status"),
-  /** Choose the mode. Refused (503) when stella cannot run here. */
-  setAppMode: (mode: "code" | "stella") =>
-    request<AppModeStatus>("/api/stella/mode", {
-      method: "PUT",
-      body: JSON.stringify({ mode }),
-    }),
+  /** What this server can do for stella mode, and how its machine is doing.
+   * The chosen mode is the client's own (hooks/useAppMode.ts), so it is not
+   * read here. */
+  getStellaStatus: () => request<StellaStatus>("/api/stella/status"),
   /** The agents of stella mode, most recently used first, and which
    * one a fresh screen opens. */
   getStellaAgents: () =>

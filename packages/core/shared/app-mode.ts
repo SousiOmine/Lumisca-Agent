@@ -1,11 +1,11 @@
 /**
  * The application's operating mode: whose world the UI shows.
  *
- * The choice lives on the server (a setting — see settings-keys.ts) because
- * it decides how the page is framed and which session the client talks to.
- * It is deliberately not per-tab or per-URL: a machine runs one of the two,
- * and switching is a deliberate act from the app menu, not a thing that
- * happens by opening another tab.
+ * The choice belongs to the VIEW, not to the server: two clients (the
+ * desktop window and a browser, or two browsers) show the same server in
+ * whichever mode each of them picked, and switching in one must never reach
+ * into the other. It therefore lives in the client's own storage
+ * (web/src/hooks/useAppMode.ts) and never in the settings table.
  */
 
 /** The modes. `code` is the coding agent (workspaces, sessions, tabs);

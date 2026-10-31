@@ -305,8 +305,17 @@ export class AgentFactory {
     // getter answers undefined when this machine cannot provide it (no
     // backend, no display, or the user has not enabled the feature). The
     // same value gates the built-in skills those tools come with.
+    //
+    // Computer use is code mode's: it drives THIS machine's screen, mouse and
+    // keyboard, and a stella session works inside its own virtual machine —
+    // the session gets the machine's screen tools (`vm_screenshot` /
+    // `vm_act`), so a second, host-facing way to look at a screen would be a
+    // way out of the machine as well as a duplicate of the one it has. The
+    // gate is applied here, where "where this session works" is decided,
+    // rather than in the tools, so the skill catalog and the capability flags
+    // a sub-agent inherits agree with the tool set.
     const browser = this.deps.browser?.();
-    const computer = this.deps.computer?.();
+    const computer = stella === undefined ? this.deps.computer?.() : undefined;
     return {
       stella,
       backends,

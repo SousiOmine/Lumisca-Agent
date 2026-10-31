@@ -66,6 +66,142 @@
   color: #ffffff;
 }
 
+/* stella mode's strip: the mode's name, and (in a plain browser, where the
+ * title bar renders no controls) the app menu at the right edge. */
+.stella-titlebar-text {
+  align-self: center;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ---- connection picker (which server this window shows) ------------------ */
+
+/* The trigger sits in the window controls, but it is not a square glyph
+ * button: it carries the server's name. It keeps the bar's height so the row
+ * stays one strip, and its width follows the name up to a cap — a long
+ * tailnet host must not push the app menu and the window buttons off the
+ * edge. */
+.connection-picker {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.connection-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  max-width: 200px;
+  padding: 0 8px 0 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.connection-picker-trigger:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.connection-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-picker-chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  transition: transform 120ms var(--lum-ease);
+}
+
+.connection-picker-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Anchored to the window's right edge: the trigger is the last flexible
+ * thing before the window buttons, and a list that grew leftward from it
+ * would leave the screen. */
+.connection-picker-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 45;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+.connection-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background 100ms ease;
+}
+
+.connection-option:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.connection-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The server being shown: the accent tint the other menus use for the
+ * current choice. */
+.connection-option.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.connection-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-option.manage,
+.connection-option.manage:hover {
+  color: var(--text-dim);
+  background: none;
+}
+
+.connection-option.manage:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.connection-picker-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+.connection-picker-note {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
 .tabbar {
   display: flex;
   align-items: stretch;

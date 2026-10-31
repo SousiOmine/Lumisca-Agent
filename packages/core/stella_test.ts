@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
 import { LumiscaCore } from "./core.ts";
 import type { VmManager, VmStatus } from "./vm/container.ts";
@@ -13,7 +13,6 @@ import { TaskHub } from "./tools/task-hub.ts";
 import type { StreamFn } from "./ai/types.ts";
 import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
-import { APP_MODE_KEY } from "./shared/settings-keys.ts";
 import { MINI_PNG, promptSession } from "./test-utils.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
 
@@ -54,71 +53,7 @@ const NO_PODMAN: VmStatus = {
   reason: "podman: command not found",
 };
 
-Deno.test("app mode: unset until chosen, then stored", async () => {
-  const core = await stellaCore(RUNNING);
-  try {
-    // No silent default: "not chosen" is its own state, which is what makes
-    // the client show the selection screen.
-    assertEquals(core.getAppMode(), undefined);
-    core.setAppMode("code");
-    assertEquals(core.getAppMode(), "code");
-    assertEquals(core.getSetting(APP_MODE_KEY), "code");
-  } finally {
-    void core.close();
-  }
-});
-
-Deno.test("app mode: an unknown stored value reads as not chosen", async () => {
-  const core = await stellaCore(RUNNING);
-  try {
-    core.setSetting(APP_MODE_KEY, "something-else");
-    assertEquals(core.getAppMode(), undefined);
-  } finally {
-    void core.close();
-  }
-});
-
-Deno.test("app mode: stella is refused when the machine cannot exist here", async () => {
-  // No machine attached at all: there is nothing to start, so the mode must
-  // not be storable (a mode whose whole premise is missing).
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
-  try {
-    const availability = await core.getStellaAvailability();
-    assertEquals(availability.available, false);
-    const error = assertThrows(() => core.setAppMode("stella"), CoreError);
-    assert(
-      error.message.includes("not set up"),
-      `the reason must say the machine is missing: ${error.message}`,
-    );
-    assertEquals(core.getAppMode(), undefined);
-  } finally {
-    void core.close();
-  }
-});
-
-Deno.test("app mode: a machine that is merely not running still allows stella", async () => {
-  // This is the point of starting on demand: podman missing is fatal, a
-  // stopped container is not (the first message starts it).
-  const core = await stellaCore(NO_PODMAN);
-  try {
-    void core;
-  } finally {
-    void core.close();
-  }
-  const stopped = await stellaCore({
-    state: "stopped",
-    vncPort: null,
-    reason: "",
-  });
-  try {
-    stopped.setAppMode("stella");
-    assertEquals(stopped.getAppMode(), "stella");
-  } finally {
-    void stopped.close();
-  }
-});
-
-Deno.test("app mode: no machine attached reports its own reason", async () => {
+Deno.test("stella availability: no machine attached reports its own reason", async () => {
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
   try {
     const availability = await core.getStellaAvailability();
@@ -135,28 +70,59 @@ Deno.test("app mode: no machine attached reports its own reason", async () => {
   }
 });
 
-Deno.test("app mode: switching away never stops the machine", async () => {
-  let stops = 0;
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+Deno.test("stella availability: a stopped machine is still usable", async () => {
+  // This is the point of starting on demand: podman missing is fatal, a
+  // stopped container is not (the first message starts it).
+  const core = await stellaCore({
+    state: "stopped",
+    vncPort: null,
+    reason: "",
+  });
   try {
-    core.setStellaVm({
-      ...fakeVm(RUNNING),
-      stop: () => {
-        stops++;
-        return Promise.resolve();
-      },
-    });
-    // The client reads the status before offering the mode; the switch
-    // requires that verdict to exist.
-    await core.getStellaAvailability();
-    core.setAppMode("stella");
-    core.setAppMode("code");
-    // Building a machine takes minutes; flipping the view must not throw it
-    // away.
-    assertEquals(stops, 0);
+    assertEquals(await core.getStellaAvailability(), { available: true });
   } finally {
-    void core.close();
+    await core.close();
+  }
+});
+
+Deno.test("stella availability: podman missing is not", async () => {
+  const core = await stellaCore(NO_PODMAN);
+  try {
+    const availability = await core.getStellaAvailability();
+    assertEquals(availability.available, false);
+    if (!availability.available) {
+      assert(availability.reason.includes("podman"), availability.reason);
+    }
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: the starter agent exists once and is the default", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    assertEquals(core.listStellaAgents(), []);
+    const starter = core.ensureStellaAgent();
+    // A name and a role: the agent's prompt is built from them, so neither
+    // may be blank.
+    assert(starter.name.length > 0, starter.name);
+    assert(starter.role.length > 0, starter.role);
+    // A second call returns the same row (the list is the check).
+    assertEquals(core.ensureStellaAgent().id, starter.id);
+    assertEquals(core.listStellaAgents().map((a) => a.id), [starter.id]);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: a user's own agent is never replaced by the starter", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const mine = core.createStellaAgent({ name: "Mine", role: "My work." });
+    assertEquals(core.ensureStellaAgent().id, mine.id);
+    assertEquals(core.listStellaAgents().length, 1);
+  } finally {
+    await core.close();
   }
 });
 

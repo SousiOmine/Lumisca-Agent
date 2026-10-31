@@ -10,10 +10,9 @@ import {
   IconShield,
   IconUser,
   IconWorld,
-  IconWorldSearch,
   IconX,
 } from "@tabler/icons-preact";
-import type { MessageKey } from "@lumisca/core/shared";
+import type { AppMode, MessageKey } from "@lumisca/core/shared";
 import { useT } from "../i18n.ts";
 import { Modal } from "./Modal.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
@@ -58,6 +57,9 @@ interface SettingsModalProps {
    * no agent), plus which agent they belong to. */
   routines: ReturnType<typeof useRoutines>;
   routineAgent: string | null;
+  /** The mode this client shows: categories that belong to one mode are
+   * hidden in the other. */
+  mode: AppMode;
   onClose: () => void;
 }
 
@@ -80,6 +82,12 @@ interface SettingsCategoryEntry {
   id: SettingsCategory;
   labelKey: MessageKey;
   icon: ReactNode;
+  /** Which mode the category belongs to, when it belongs to one. A preference
+   * that only means something inside one mode is not shown in the other: an
+   * entry that can never have an effect reads as a bug, and the two modes
+   * work in different places (this machine's desktop vs. a virtual machine's
+   * screen, tabs and session lists vs. one conversation). */
+  mode?: AppMode;
   /** The screen this category shows. */
   render: (panels: PanelContext) => ReactNode;
 }
@@ -90,7 +98,6 @@ export type SettingsCategory =
   | "providers"
   | "models"
   | "mcp"
-  | "webSearch"
   | "routines"
   | "servers"
   | "personalize"
@@ -168,21 +175,30 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     render: ({ providersView, setProvidersView, userProviders }) => {
       switch (providersView.kind) {
         case "list":
+          // One category, two providers of one kind: the AI providers whose
+          // keys make the agent think, and the search providers whose keys
+          // let it look things up. They share a screen because they share a
+          // question ("what does this installation talk to, and with which
+          // credentials"), and because a separate category made the search
+          // side easy to miss entirely.
           return (
-            <ProviderList
-              onAdd={() => setProvidersView({ kind: "add" })}
-              onOpen={(id) => {
-                if (userProviders.ids.has(id)) {
-                  setProvidersView({ kind: "editUser", providerId: id });
-                } else {
-                  setProvidersView({
-                    kind: "detail",
-                    providerId: id,
-                    from: "list",
-                  });
-                }
-              }}
-            />
+            <>
+              <ProviderList
+                onAdd={() => setProvidersView({ kind: "add" })}
+                onOpen={(id) => {
+                  if (userProviders.ids.has(id)) {
+                    setProvidersView({ kind: "editUser", providerId: id });
+                  } else {
+                    setProvidersView({
+                      kind: "detail",
+                      providerId: id,
+                      from: "list",
+                    });
+                  }
+                }}
+              />
+              <WebSearchPanel />
+            </>
           );
         case "add":
           return (
@@ -270,15 +286,12 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     render: () => <McpList />,
   },
   {
-    id: "webSearch",
-    labelKey: "settings.nav.webSearch",
-    icon: <IconWorldSearch size={18} />,
-    render: () => <WebSearchPanel />,
-  },
-  {
     id: "routines",
     labelKey: "settings.nav.routines",
     icon: <IconRepeat size={18} />,
+    // Routines schedule requests on a stella agent's conversation; code mode
+    // has no such conversation to schedule anything on.
+    mode: "stella",
     render: ({ props }) => (
       <RoutinePanel
         routines={props.routines.routines}
@@ -297,10 +310,14 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "security",
     labelKey: "settings.nav.security",
     icon: <IconShield size={18} />,
-    render: () => (
+    // The command check guards every bash / eval call, so both modes have it.
+    // Computer use drives THIS machine's screen, which is code mode's world:
+    // a stella session works inside its virtual machine and is given the
+    // machine's own screen tools instead (agent/factory.ts).
+    render: ({ props }) => (
       <>
         <CommandSafetyPanel />
-        <ComputerUsePanel />
+        {props.mode === "code" && <ComputerUsePanel />}
       </>
     ),
   },
@@ -319,6 +336,7 @@ export function SettingsModal({
   initialCategory,
   routines,
   routineAgent,
+  mode,
   onClose,
 }: SettingsModalProps) {
   const t = useT();
@@ -327,6 +345,12 @@ export function SettingsModal({
     kind: "list",
   });
   const userProviders = useUserProviders();
+  // Only the categories that mean something in the mode this client shows.
+  // The union of `SettingsCategory` is what the modal can navigate to; the
+  // entries are what it offers.
+  const categories = CATEGORIES.filter(
+    (entry) => entry.mode === undefined || entry.mode === mode,
+  );
 
   const openCategory = (id: SettingsCategory) => {
     setCategory(id);
@@ -350,6 +374,7 @@ export function SettingsModal({
       initialCategory,
       routines,
       routineAgent,
+      mode,
       onClose,
     },
     providersView,
@@ -379,7 +404,7 @@ export function SettingsModal({
 
       <div className="settings-body">
         <nav className="settings-nav">
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <button
               type="button"
               key={c.id}
@@ -395,7 +420,7 @@ export function SettingsModal({
         </nav>
 
         <div className="settings-content">
-          {CATEGORIES.find((c) => c.id === category)?.render(panels)}
+          {categories.find((c) => c.id === category)?.render(panels)}
         </div>
       </div>
     </Modal>

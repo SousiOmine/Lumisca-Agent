@@ -1,15 +1,19 @@
 import { IconCode, IconSparkles } from "@tabler/icons-preact";
 import { useT } from "../i18n.ts";
-import type { AppModeStatus } from "../types.ts";
+import type { StellaStatus } from "../types.ts";
+import type { AppMode } from "@lumisca/core/shared";
 
 interface ModeSelectViewProps {
-  /** The status read at startup; `mode` is null until a choice is stored. */
-  status: AppModeStatus;
+  /** What this server can do; null while the first read is in flight (both
+   * cards stay disabled: neither mode can be honest about itself yet). */
+  status: StellaStatus | null;
+  /** The mode this client already shows, or null before it picked one. */
+  mode: AppMode | null;
   /** Why the last attempt to switch failed (e.g. stella refused). */
   error: string | null;
   /** True while the choice is being stored. */
   busy: boolean;
-  onChoose: (mode: "code" | "stella") => void;
+  onChoose: (mode: AppMode) => void;
 }
 
 /**
@@ -23,10 +27,10 @@ interface ModeSelectViewProps {
  * it is right there.
  */
 export function ModeSelectView(
-  { status, error, busy, onChoose }: ModeSelectViewProps,
+  { status, mode, error, busy, onChoose }: ModeSelectViewProps,
 ) {
   const t = useT();
-  const stellaAvailable = status.availability.available;
+  const stellaAvailable = status?.availability.available === true;
   return (
     <div className="mode-select">
       <div className="mode-select-inner">
@@ -36,8 +40,8 @@ export function ModeSelectView(
         <div className="mode-select-cards">
           <button
             type="button"
-            className={`mode-card${status.mode === "code" ? " current" : ""}`}
-            disabled={busy}
+            className={`mode-card${mode === "code" ? " current" : ""}`}
+            disabled={busy || status === null}
             onClick={() => onChoose("code")}
           >
             <span className="mode-card-icon">
@@ -50,14 +54,14 @@ export function ModeSelectView(
               {t("chat.modeSelect.code.description")}
             </span>
             <span className="mode-card-action">
-              {status.mode === "code"
+              {mode === "code"
                 ? t("chat.modeSelect.current")
                 : t("chat.modeSelect.choose")}
             </span>
           </button>
           <button
             type="button"
-            className={`mode-card${status.mode === "stella" ? " current" : ""}`}
+            className={`mode-card${mode === "stella" ? " current" : ""}`}
             disabled={busy || !stellaAvailable}
             onClick={() => onChoose("stella")}
           >
@@ -73,7 +77,7 @@ export function ModeSelectView(
             {stellaAvailable
               ? (
                 <span className="mode-card-action">
-                  {status.mode === "stella"
+                  {mode === "stella"
                     ? t("chat.modeSelect.current")
                     : t("chat.modeSelect.choose")}
                 </span>
@@ -81,9 +85,9 @@ export function ModeSelectView(
               : (
                 <span className="mode-card-unavailable">
                   {t("chat.modeSelect.stella.unavailable", {
-                    reason: status.availability.available
-                      ? ""
-                      : status.availability.reason,
+                    reason: status?.availability.available === false
+                      ? status.availability.reason
+                      : "",
                   })}
                 </span>
               )}

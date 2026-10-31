@@ -2856,19 +2856,17 @@ Deno.test("compact condenses the history via the API", async () => {
 
 // --- stella mode ------------------------------------------------------------
 
-Deno.test("stella API: the status reports the mode and the availability", async () => {
+Deno.test("stella API: the status reports the availability and the machine", async () => {
   const { core, server, base } = await setup();
   try {
-    // No machine attached (the test core has none): the mode is offered but
-    // stella is not, and the reason is a sentence the screen shows.
+    // No machine attached (the test core has none): stella is not offered,
+    // and the reason is a sentence the selection screen shows.
     const status = await json(base, "/api/stella/status");
     assertEquals(status.status, 200);
     const body = await status.json() as {
-      mode: string | null;
       availability: { available: boolean; reason?: string };
       state: string;
     };
-    assertEquals(body.mode, null);
     assertEquals(body.availability.available, false);
     assertEquals(body.state, "unavailable");
     assert(
@@ -2876,57 +2874,47 @@ Deno.test("stella API: the status reports the mode and the availability", async 
         body.availability.reason?.includes("not set up"),
       JSON.stringify(body),
     );
+    // The chosen mode belongs to the CLIENT, so the server never reports
+    // one: two clients showing the same server pick their own.
+    assertEquals("mode" in body, false, JSON.stringify(body));
   } finally {
     server.shutdown();
     void core.close();
   }
 });
 
-Deno.test("stella API: choosing code mode is stored and reported", async () => {
+Deno.test("stella API: the first agent list creates the starter agent", async () => {
   const { core, server, base } = await setup();
   try {
-    const put = await json(base, "/api/stella/mode", {
-      method: "PUT",
-      body: JSON.stringify({ mode: "code" }),
-    });
-    assertEquals(put.status, 200);
-    const body = await put.json() as { mode: string | null };
-    assertEquals(body.mode, "code");
-    // And it is the stored value, not a response-only echo.
-    assertEquals(core.getAppMode(), "code");
-  } finally {
-    server.shutdown();
-    void core.close();
-  }
-});
+    const first = await json(base, "/api/stella/agents");
+    const body = await first.json() as {
+      agents: Array<{ id: string; name: string; role: string }>;
+      defaultAgentId: string | null;
+    };
+    // A fresh installation has someone to talk to: an empty sidebar in front
+    // of a disabled composer would be a wall in front of the whole mode.
+    assertEquals(body.agents.length, 1);
+    assertEquals(body.defaultAgentId, body.agents[0]!.id);
+    assert(body.agents[0]!.name.length > 0, JSON.stringify(body));
+    assert(body.agents[0]!.role.length > 0, JSON.stringify(body));
 
-Deno.test("stella API: stella mode is refused when the machine cannot exist", async () => {
-  const { core, server, base } = await setup();
-  try {
-    // The test core has no machine attached, so the mode must not be
-    // storable: there would be nothing to start.
-    const put = await json(base, "/api/stella/mode", {
-      method: "PUT",
-      body: JSON.stringify({ mode: "stella" }),
-    });
-    assertEquals(put.status, 503);
-    const body = await put.json() as { error: string };
-    assert(body.error.includes("not set up"), body.error);
-    assertEquals(core.getAppMode(), undefined);
-  } finally {
-    server.shutdown();
-    void core.close();
-  }
-});
+    // Reading again does not create a second one.
+    const again = await json(base, "/api/stella/agents");
+    assertEquals(
+      ((await again.json()) as { agents: unknown[] }).agents.length,
+      1,
+    );
 
-Deno.test("stella API: an invalid mode is a 400", async () => {
-  const { core, server, base } = await setup();
-  try {
-    const put = await json(base, "/api/stella/mode", {
-      method: "PUT",
-      body: JSON.stringify({ mode: "turbo" }),
-    });
-    assertEquals(put.status, 400);
+    // Deleting it is allowed, and the next read brings the mode back into a
+    // usable state.
+    await core.deleteStellaAgent(body.agents[0]!.id);
+    const restored = await json(base, "/api/stella/agents");
+    const after = await restored.json() as {
+      agents: Array<{ id: string }>;
+      defaultAgentId: string | null;
+    };
+    assertEquals(after.agents.length, 1);
+    assertEquals(after.defaultAgentId, after.agents[0]!.id);
   } finally {
     server.shutdown();
     void core.close();
@@ -3206,8 +3194,15 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
       vncPort: () => Promise.resolve(1),
     });
 
-    const empty = await json(base, "/api/stella/agents");
-    assertEquals(await empty.json(), { agents: [], defaultAgentId: null });
+    // The first read creates the starter agent (a fresh stella mode must
+    // have someone to talk to), so the list is never empty.
+    const initial = await json(base, "/api/stella/agents");
+    const starter = await initial.json() as {
+      agents: Array<{ id: string; name: string }>;
+      defaultAgentId: string | null;
+    };
+    assertEquals(starter.agents.length, 1);
+    assertEquals(starter.defaultAgentId, starter.agents[0]!.id);
 
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
@@ -3220,8 +3215,8 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
       agents: Array<{ id: string; name: string }>;
       defaultAgentId: string | null;
     };
-    assertEquals(body.agents.length, 1);
-    // A single agent is the default one a fresh screen opens.
+    assertEquals(body.agents.length, 2);
+    // The agent just created is the one a fresh screen opens.
     assertEquals(body.defaultAgentId, agent.id);
 
     // A duplicate name is refused (the sidebar would be ambiguous).
@@ -3249,7 +3244,8 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
     assertEquals(deleted.status, 200);
     assertEquals(core.getSession(session.id), undefined);
     const after = await json(base, "/api/stella/agents");
-    assertEquals((await after.json() as { agents: unknown[] }).agents, []);
+    const remaining = await after.json() as { agents: Array<{ id: string }> };
+    assertEquals(remaining.agents.map((a) => a.id), [starter.agents[0]!.id]);
     void duplicate;
   } finally {
     server.shutdown();
