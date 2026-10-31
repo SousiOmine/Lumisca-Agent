@@ -122,6 +122,22 @@ export const common = {
     ja: "高速モデルの応答を解釈できませんでした",
     en: "The fast model's reply could not be read",
   },
+  /** Why a run ended without doing anything: the model answered with
+   * neither text nor a tool call, and the vacant-response retries ran
+   * out (see ai/retry-policy.ts). Without this the turn just stopped,
+   * which reads as the agent ignoring the prompt. */
+  "session.vacantResponse": {
+    ja:
+      "モデルの応答が空でした（本文もツール呼び出しもありません）。{count} 回まで自動で再試行しましたが回復しませんでした。もう一度送信してください。",
+    en: "The model answered with neither text nor a tool call. Retried " +
+      "automatically {count} times without recovering. Send the message " +
+      "again to continue.",
+  },
+  /** Why a run ended on a rate-limit/error budget that had been retried. */
+  "session.retryExhausted": {
+    ja: "自動再試行の上限（{count} 回）に達したため停止しました: {message}",
+    en: "Stopped after {count} automatic retries: {message}",
+  },
 
   // --- desktop notifications (web/src/notify.ts) ----------------------------
   /** Name used for a session without a title in a notification. */

@@ -97,6 +97,21 @@ export class Agent {
   private runningInner = false;
   private closed = false;
   private abortRequested = false;
+  /** Identity of the run `__run` is executing (increments per run). A run
+   * that was abandoned outside a turn boundary keeps it so its late turn can
+   * recognise itself as stale (see {@link abandonedRunId}). */
+  private runId = 0;
+  /** The run that {@link abort} closed while its turn was still in flight
+   * (0 when none). Such a turn may return at any time — or never; nothing it
+   * produces may enter the transcript or start another turn, because a
+   * newer run (or a rewind) owns the session by then. */
+  private abandonedRunId = 0;
+  /** Resolves the waiter of the CURRENT run (see {@link startRun}). Called
+   * when the run ends on its own and when abort abandons it, whichever
+   * comes first. `runId` guards it: a run that was abandoned keeps
+   * executing its turn, and its eventual return must not resolve the
+   * waiter of a run that started after it. */
+  private resolveRun: { runId: number; resolve: () => void } | undefined;
   /** The thinking level used by the current run, snapshotted at run start so
    * a mid-run level change never leaks into the in-flight exchange. */
   private runThinkingLevel: ModelThinkingLevel = "off";
@@ -219,10 +234,118 @@ export class Agent {
     this.steerQueue.push(message);
   }
 
+  /** Stop the current run.
+   *
+   * The abort reaches the exchange at its NEXT turn boundary (a provider
+   * call ends, a tool returns): `exchangeLoop` checks the flag between
+   * steps. That alone is not enough to end a run — a tool that ignores its
+   * abort signal would hold the loop, the run's promise and `isStreaming`
+   * open forever, and the session would never accept another prompt (see
+   * the settle path below). So the run is ALSO closed outside the
+   * boundary: the session here is idle-at-the-boundary (`state.isStreaming`
+   * is cleared, the queues dropped, `agent_end` emitted) and the turn that
+   * was in flight is settled later, whenever its call finally returns.
+   *
+   * `agent_end` is emitted immediately either way: the session agent's
+   * teardown (pending asks, hand-overs) hangs off it, and the client's run
+   * state follows it. */
   abort(): void {
     this.abortRequested = true;
     this.abortController.abort();
+    this.settleAbandonedRun();
     this.emit({ type: "agent_end" });
+  }
+
+  /** Close the session of a run that is being abandoned outside a turn
+   * boundary (a tool that will not return). Nothing the in-flight turn
+   * produces afterwards may enter the transcript or start another turn — a
+   * newer run (or a rewind) owns the session by then — so the turn is
+   * marked stale here (see {@link abandonedRunId}).
+   *
+   * A no-op while the loop is between turns (or idle): the loop itself
+   * stops at the next boundary and clears its own state. */
+  private settleAbandonedRun(): void {
+    if (!this.runningInner || !this.state.isStreaming) return;
+    this.abandonedRunId = this.runId;
+    this.state.isStreaming = false;
+    this.steerQueue.length = 0;
+    // The abandoned turn may be holding a tool call that will never write
+    // its result. A provider rejects the NEXT request when an assistant
+    // message's tool calls have no results (AI_MissingToolResultsError), so
+    // the transcript is healed here, while the stop is still ours to
+    // record: the calls get a "stopped" result and the UI gets their end
+    // events (the tool line's spinner).
+    this.healUnansweredToolCalls();
+    // The run's promise is settled now, not when the abandoned turn
+    // returns: `waitForIdle` and a prompt that waited for the aborted run
+    // must proceed, and the tool may never return at all.
+    this.runningInner = false;
+    this.settleRun(this.abandonedRunId);
+    // A prompt that arrives from here on must not wait on (or steer into)
+    // the run that is gone: it starts its own.
+    this.abortRequested = false;
+    this.running = Promise.resolve();
+  }
+
+  /** Give every tool call at the transcript's end a result, for a run that
+   * was stopped before its tool could answer. Only the trailing assistant
+   * message is considered: an earlier turn's calls already have their
+   * results (anything else would be a transcript the provider refuses, and
+   * rewriting history here would hide the real bug). */
+  private healUnansweredToolCalls(): void {
+    const messages = this.state.messages;
+    let index = messages.length - 1;
+    while (index >= 0 && messages[index]!.role === "toolResult") index--;
+    const tail = messages[index];
+    if (tail === undefined || tail.role !== "assistant") return;
+    const answered = new Set<string>();
+    for (let i = index + 1; i < messages.length; i++) {
+      const message = messages[i]!;
+      if (message.role === "toolResult") answered.add(message.toolCallId);
+    }
+    const unanswered = (tail.content as ReadonlyArray<{
+      type?: string;
+      id?: string;
+      name?: string;
+    }>)
+      .filter((block) => block.type === "toolCall")
+      .filter((block) => block.id !== undefined && !answered.has(block.id));
+    if (unanswered.length === 0) return;
+    for (const call of unanswered) {
+      const result: ToolResultMessage = {
+        role: "toolResult",
+        toolCallId: call.id!,
+        toolName: call.name ?? "",
+        content: [{ type: "text", text: "Stopped by the user." }],
+        details: {},
+        isError: true,
+        timestamp: this.nextTimestamp(),
+      };
+      messages.push(result);
+      this.emit({
+        type: "tool_execution_end",
+        toolCallId: call.id!,
+        toolName: call.name ?? "",
+      });
+      this.announce(result);
+    }
+  }
+
+  /** Whether the turn running under `runId` belongs to a run this agent has
+   * already abandoned: its results are not history the session wants. */
+  private isStaleRun(runId: number): boolean {
+    return this.abandonedRunId === runId;
+  }
+
+  /** Resolve the waiter of `runId`, once per run. Called by the run's own
+   * end and by abort, which may come first — whichever runs first wins; the
+   * other is a no-op. A stale run (one that was abandoned) resolves nothing:
+   * the waiter belongs to the run that replaced it. */
+  private settleRun(runId: number): void {
+    const waiter = this.resolveRun;
+    if (waiter === undefined || waiter.runId !== runId) return;
+    this.resolveRun = undefined;
+    waiter.resolve();
   }
 
   clearAllQueues(): void {
@@ -252,13 +375,28 @@ export class Agent {
     }
   }
 
-  /** Start (or continue) an exchange, empty the steer queue as it goes. */
+  /** Start (or continue) an exchange, empty the steer queue as it goes.
+   *
+   * The promise `this.running` is the run's promise as the WAITERS see it:
+   * it resolves when the run ends, including when abort abandons a turn
+   * that never returns (see {@link settleAbandonedRun}). `__run` keeps
+   * executing that abandoned turn, but nobody waits on it any more. */
   private async startRun(first?: AgentMessage): Promise<void> {
-    this.running = this.__run(first);
-    await this.running;
+    const id = ++this.runId;
+    const settled = new Promise<void>((resolve) => {
+      this.resolveRun = { runId: id, resolve };
+    });
+    // The run's own promise settles the waiter when it returns normally;
+    // an abandoned run was settled by abort already (settleRun is
+    // idempotent).
+    void this.__run(id, first).catch(() => {}).finally(() =>
+      this.settleRun(id)
+    );
+    this.running = settled;
+    await settled;
   }
 
-  private async __run(first?: AgentMessage): Promise<void> {
+  private async __run(runId: number, first?: AgentMessage): Promise<void> {
     if (this.runningInner) return;
     // A fresh signal for this run: the previous run's abort must never reach
     // into it (see the abortController field).
@@ -282,19 +420,24 @@ export class Agent {
         this.append(queued);
       }
 
-      await this.exchangeLoop();
+      await this.exchangeLoop(runId);
 
       // Drain any steer/followUp messages queued during the run as new turns.
       while (!this.abortRequested && this.steerQueue.length > 0) {
         if (this.closed) break;
         const next = this.steerQueue.shift()!;
         this.append(next);
-        await this.exchangeLoop();
+        await this.exchangeLoop(runId);
       }
     } finally {
-      this.state.isStreaming = false;
-      this.runningInner = false;
-      this.emit({ type: "agent_end" });
+      // A run that was abandoned mid-turn (a tool that did not return) has
+      // already had its state cleared and its waiter resolved by abort: the
+      // turn is only now returning, and it owns nothing.
+      if (!this.isStaleRun(runId)) {
+        this.state.isStreaming = false;
+        this.runningInner = false;
+        this.emit({ type: "agent_end" });
+      }
     }
   }
 
@@ -354,9 +497,9 @@ export class Agent {
    * at the next turn boundary instead of only after the whole tool chain
    * finishes — the UI already announces them immediately, and deferring
    * them to the end of the chain left the agent blind to them mid-loop. */
-  private async exchangeLoop(): Promise<void> {
+  private async exchangeLoop(runId: number): Promise<void> {
     for (;;) {
-      if (this.abortRequested) return;
+      if (this.abortRequested || this.isStaleRun(runId)) return;
       if (this.steerQueue.length > 0) {
         const queued = this.steerQueue.shift()!;
         this.append(queued);
@@ -367,10 +510,13 @@ export class Agent {
       // what the request below is derived from.
       if (this.beforeStep !== undefined) {
         await this.beforeStep(this.abortController.signal);
-        if (this.abortRequested) return;
+        if (this.abortRequested || this.isStaleRun(runId)) return;
       }
-      const { assistant, executedIds } = await this.step();
-      if (this.abortRequested) return;
+      const { assistant, executedIds } = await this.step(runId);
+      // An abandoned run's turn may return long after the session moved on
+      // (or never): what it produced is not history this transcript wants,
+      // and no further turn of it may start.
+      if (this.abortRequested || this.isStaleRun(runId)) return;
       this.emit({ type: "turn_end", message: assistant });
       const pending = assistant.content.filter(
         (b): b is ToolCall => b.type === "toolCall",
@@ -382,12 +528,12 @@ export class Agent {
       // the transcript and must never run twice.
       const missing = pending.filter((call) => !executedIds.has(call.id));
       if (missing.length > 0) {
-        await this.executeTools(missing);
+        await this.executeTools(runId, missing);
       }
       // Advisory loop hygiene, after the calls' results landed (so the
       // reminder is the last thing the model reads before the next request).
       this.noteToolCalls(pending);
-      if (this.abortRequested) return;
+      if (this.abortRequested || this.isStaleRun(runId)) return;
     }
   }
 
@@ -395,8 +541,14 @@ export class Agent {
    * calls via their execute functions) and record the resulting
    * AssistantMessage, emitting message_start/deltas/message_end and
    * tool_execution_start/end events. Returns the assistant message plus
-   * the ids the SDK executed (empty for test doubles that bypass it). */
-  private async step(): Promise<{
+   * the ids the SDK executed (empty for test doubles that bypass it).
+   *
+   * A turn whose run was abandoned while it was in flight returns nothing
+   * to the transcript: the session already moved on (a new run, or a
+   * rewind that deleted the messages this turn would follow), so its
+   * assistant message and tool results are dropped and no event is emitted
+   * for them. The run's own loop noticed nothing — it is gone. */
+  private async step(runId: number): Promise<{
     assistant: AssistantMessage;
     executedIds: Set<string>;
   }> {
@@ -529,6 +681,16 @@ export class Agent {
         ...final,
         content: [{ type: "thinking", thinking }, ...final.content],
       };
+    }
+
+    // The run was abandoned while this turn was in flight (a tool that did
+    // not return, a stream the provider kept open past the stop button): the
+    // transcript already belongs to the next run or to a rewind, so nothing
+    // of this turn is written or announced. A turn that merely ENDED because
+    // the stop reached its boundary still lands (see abort: it heals the
+    // unmet tool calls as part of the stop).
+    if (this.isStaleRun(runId)) {
+      return { assistant: final!, executedIds };
     }
 
     // The assistant message and its tool results enter the transcript here,
@@ -677,10 +839,15 @@ export class Agent {
 
   /** Fallback: execute tool calls the SDK did not run. Only test doubles
    * (faux provider) that bypass the SDK's tool loop reach here — the real
-   * Vercel transport executes via the tools' execute functions. */
-  private async executeTools(toolCalls: ToolCall[]): Promise<void> {
+   * Vercel transport executes via the tools' execute functions. Runs under
+   * the run's identity like `step`: a call that returns after its run was
+   * abandoned must not write its result into a transcript that moved on. */
+  private async executeTools(
+    runId: number,
+    toolCalls: ToolCall[],
+  ): Promise<void> {
     for (const call of toolCalls) {
-      if (this.abortRequested) return;
+      if (this.abortRequested || this.isStaleRun(runId)) return;
       const tool = this.state.tools.find((t) => t.name === call.name) ??
         ({} as AgentTool);
       this.emit({
@@ -727,6 +894,11 @@ export class Agent {
         toolCallId: call.id,
         toolName: call.name,
       });
+      // The end event above tells a live client the line's spinner is done;
+      // the RESULT itself is dropped when the run was abandoned while the
+      // call ran (see isStaleRun) — the transcript may already belong to a
+      // newer run or a rewind.
+      if (this.isStaleRun(runId)) return;
       const result: ToolResultMessage = {
         role: "toolResult",
         toolCallId: call.id,

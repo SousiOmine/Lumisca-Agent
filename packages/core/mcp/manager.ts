@@ -2,6 +2,8 @@ import type { McpConfig, McpServerConfig } from "./config.ts";
 import { errorMessage } from "../errors.ts";
 import {
   formatContent,
+  MCP_TOOL_CALL_TIMEOUT_MS,
+  McpCallTimeoutError,
   McpServerClient,
   McpToolError,
   type McpToolInfo,
@@ -148,13 +150,21 @@ export class McpManager {
     return tools;
   }
 
-  /** Call a tool of a named server; the result is text-only. Crashed
-   * servers are reconnected and the call retried once. */
+  /** Call a tool of a named server; the result is text-only. A server that
+   * crashed (the transport died) is reconnected and the call retried once.
+   *
+   * Two failures are NOT retried: the server's own isError result
+   * (McpToolError, final by contract) and a call that never answered
+   * (McpCallTimeoutError). Re-sending to a server that just kept the
+   * request open doubles the wait for nothing — the turn is already held
+   * by the tool, and the agent has to learn that the server is not
+   * answering. */
   async callTool(
     serverName: string,
     toolName: string,
     args: unknown,
     signal?: AbortSignal,
+    timeoutMs: number = MCP_TOOL_CALL_TIMEOUT_MS,
   ): Promise<string> {
     this.assertOpen();
     const server = this.config.servers.find((s) => s.name === serverName);
@@ -163,15 +173,22 @@ export class McpManager {
     }
     const client = await this.getClient(server);
     try {
-      const content = await client.callTool(toolName, args, signal);
+      const content = await client.callTool(toolName, args, signal, timeoutMs);
       return formatContent(content);
     } catch (error) {
-      // Application-level errors (isError results) are final; transport or
-      // server failures get one reconnect-and-retry attempt.
-      if (error instanceof McpToolError) throw error;
+      // A stop is final: the caller's signal is already aborted, so a
+      // reconnect-and-resend would either hit the same cancelled request or
+      // report the abort reason as a server failure.
+      if (signal?.aborted === true) throw error;
+      if (isFinalCallFailure(error)) throw error;
       this.dropClient(server.name);
       const retried = await this.getClient(server);
-      const content = await retried.callTool(toolName, args, signal);
+      const content = await retried.callTool(
+        toolName,
+        args,
+        signal,
+        timeoutMs,
+      );
       return formatContent(content);
     }
   }
@@ -215,4 +232,13 @@ export class McpManager {
     this.clients.clear();
     this.toolsCache = null;
   }
+}
+
+/** Failures that must reach the caller unchanged: the server answered with
+ * an error of its own (McpToolError), or it never answered at all
+ * (McpCallTimeoutError — a reconnect would only hang again). Everything
+ * else (a dropped transport, a dead child process) gets the one
+ * reconnect-and-retry attempt. */
+function isFinalCallFailure(error: unknown): boolean {
+  return error instanceof McpToolError || error instanceof McpCallTimeoutError;
 }

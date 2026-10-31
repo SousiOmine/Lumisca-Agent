@@ -12,7 +12,7 @@ import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
 import { McpManager } from "./manager.ts";
 import { createMcpTools, sanitizeServerName } from "./tools.ts";
 import { McpService } from "./service.ts";
-import { probeMcpServer } from "./client.ts";
+import { McpCallTimeoutError, probeMcpServer } from "./client.ts";
 import { startFakeMcpServer } from "./fake-http.ts";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -272,6 +272,79 @@ Deno.test("aborting a call rejects and does not kill the server", async () => {
       .map((c) => (c.type === "text" ? c.text : ""))
       .join("");
     assertEquals(text, "echo:ok");
+  } finally {
+    await manager.close();
+    await removeDirRetry(cwd);
+  }
+});
+
+Deno.test("a call that never answers fails at its time limit and is not retried", async () => {
+  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const manager = makeManager(cwd);
+  try {
+    const tools = await createMcpTools(manager);
+    // The fixture's slow tool answers after 2 s; this bound cuts it short.
+    // A retried call would take another 2 s (two full waits), so the
+    // elapsed time is what proves no reconnect-and-resend happened.
+    const started = performance.now();
+    let error: unknown;
+    try {
+      await manager.callTool("fake", "slow", {}, undefined, 300);
+    } catch (e) {
+      error = e;
+    }
+    const elapsed = performance.now() - started;
+    assert(
+      error instanceof McpCallTimeoutError,
+      `error: ${errorMessage(error)}`,
+    );
+    assert(
+      errorMessage(error).includes("did not answer within 0.3s"),
+      `message: ${errorMessage(error)}`,
+    );
+    assert(elapsed < 1500, `call took ${Math.round(elapsed)}ms`);
+
+    // The server stays connected: the next call is answered from the same
+    // processes, not from a fresh (slow) startup.
+    const echo = tools.find((t) => t.name === "mcp__fake__echo")!;
+    const result = await echo.execute("2", { text: "ok" }, undefined);
+    assertEquals(
+      result.content.map((c) => (c.type === "text" ? c.text : "")).join(""),
+      "echo:ok",
+    );
+  } finally {
+    await manager.close();
+    await removeDirRetry(cwd);
+  }
+});
+
+Deno.test("an aborted call stays an abort, not a timeout", async () => {
+  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const manager = makeManager(cwd);
+  try {
+    await createMcpTools(manager);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort("stopped by user"), 100);
+    let error: unknown;
+    try {
+      await manager.callTool(
+        "fake",
+        "slow",
+        {},
+        controller.signal,
+        60_000,
+      );
+    } catch (e) {
+      error = e;
+    }
+    // A stop pressed during a call must read as a stop: reporting it as a
+    // timeout would tell the agent its MCP server is broken (and the
+    // session agent's retry policy would try it again).
+    assert(!(error instanceof McpCallTimeoutError), "reported as a timeout");
+    assert(
+      errorMessage(error).includes("stopped by user"),
+      `message: ${errorMessage(error)}`,
+    );
   } finally {
     await manager.close();
     await removeDirRetry(cwd);

@@ -39,9 +39,13 @@ Deno.test("classify: a vacant normal stop retries in-run up to the cap", () => {
     const decision = retries.classify(fauxAssistantMessage(""), false);
     assertEquals(decision.action, "followUp");
   }
-  // The budget is spent: the turn ends normally instead of looping.
-  assertEquals(retries.classify(fauxAssistantMessage(""), false), {
-    action: "none",
+  // The budget is spent: the turn ends normally instead of looping, and the
+  // decision says so — a run that stops with nothing to show has to be
+  // reported to the user (see SessionAgent.handleTurnEnd).
+  const exhausted = retries.classify(fauxAssistantMessage(""), false);
+  assertEquals(exhausted, {
+    action: "exhausted",
+    count: MAX_EMPTY_RESPONSE_RETRIES,
   });
 });
 
@@ -69,9 +73,12 @@ Deno.test("classify: a rate-limited turn parks a restart with its own budget", (
     );
     assertEquals(retries.hasPendingRestart, true);
   }
-  // The rate-limit budget is spent; the notification stops being parked.
+  // The rate-limit budget is spent; the notification stops being parked and
+  // the exhausted budget is reported with the provider's own error text.
   assertEquals(retries.classify(errored("429 rate_limit_exceeded"), false), {
-    action: "none",
+    action: "exhausted",
+    count: MAX_RATE_LIMIT_RETRIES,
+    message: "429 rate_limit_exceeded",
   });
 });
 

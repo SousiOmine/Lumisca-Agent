@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import {
   createAssistantMessageEventStream,
   fauxAssistantMessage,
@@ -244,12 +244,17 @@ Deno.test("a vacant response is retried within the same run", async () => {
 });
 
 Deno.test("consecutive vacant responses stop retrying after the limit", async () => {
-  const agent = makeAgent(streamSequence(
-    Array.from(
-      { length: MAX_EMPTY_RESPONSE_RETRIES + 1 },
-      () => fauxAssistantMessage(""),
+  const { errors, onEvent } = collectSessionErrors();
+  const agent = makeAgent(
+    streamSequence(
+      Array.from(
+        { length: MAX_EMPTY_RESPONSE_RETRIES + 1 },
+        () => fauxAssistantMessage(""),
+      ),
     ),
-  ));
+    [],
+    onEvent,
+  );
   await agent.prompt("hello");
 
   const messages = agent.messages;
@@ -257,6 +262,14 @@ Deno.test("consecutive vacant responses stop retrying after the limit", async ()
   // normally with the final vacant response still in the transcript.
   assertEquals(retryNotifications(messages).length, MAX_EMPTY_RESPONSE_RETRIES);
   assertEquals(messages.at(-1)?.role, "assistant");
+  // A run that produced nothing and has no retries left must SAY so: the
+  // turn used to end silently, which reads as the agent ignoring the
+  // prompt.
+  assertEquals(errors.length, 1);
+  assert(
+    errors[0]!.includes(`${MAX_EMPTY_RESPONSE_RETRIES}`),
+    `error: ${errors[0]}`,
+  );
 });
 
 Deno.test("a tool call resets the retry counter within a run", async () => {
@@ -612,6 +625,52 @@ Deno.test("a run after a stop still reaches the model", async () => {
 
   agent.promptWhileRunning("again");
   await waitFor(() => calls() === 2, "the model call after the stop");
+  assertEquals(textsOf(agent.messages).at(-1), "after the stop");
+});
+
+Deno.test("a stop while a tool never returns leaves the session usable", async () => {
+  // The reported failure: a tool the abort cannot release (a silent MCP
+  // server, a hung await) held the run and `isStreaming` open forever, so
+  // every later prompt was queued into a session that never ran again —
+  // the stop button looked like it worked and then the agent went silent.
+  const events: ClientEvent[] = [];
+  const stuckTool: Tool = {
+    name: "stuck",
+    label: "Stuck",
+    description: "Never returns and ignores the abort signal.",
+    parameters: object({}),
+    execute: () => new Promise(() => {}),
+  };
+  let calls = 0;
+  const streamFn: StreamFn = () => {
+    const stream = createAssistantMessageEventStream();
+    calls++;
+    const message = calls === 1
+      ? fauxAssistantMessage([fauxToolCall("stuck", {}, "t1")], {
+        stopReason: "toolUse",
+      })
+      : fauxAssistantMessage("after the stop");
+    stream.push({ type: "start", partial: message });
+    stream.end(message);
+    return stream;
+  };
+  const agent = makeAgent(streamFn, [stuckTool], (e) => events.push(e));
+
+  agent.promptWhileRunning("go");
+  await waitFor(() => calls === 1, "the first model call");
+  await waitFor(() => agent.isStreaming, "the run to start");
+  agent.abort();
+  // The stop must settle the run: the tool will never return, so nothing
+  // else can.
+  await agent.waitForIdle();
+  assertEquals(agent.isStreaming, false);
+  assertEquals(
+    events.filter((e) => e.type === "agent_end").length >= 1,
+    true,
+  );
+
+  agent.promptWhileRunning("again");
+  await waitFor(() => calls === 2, "the model call after the stop");
   assertEquals(textsOf(agent.messages).at(-1), "after the stop");
 });
 

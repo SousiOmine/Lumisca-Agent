@@ -95,6 +95,42 @@ export class McpToolError extends Error {
   }
 }
 
+/** Upper bound for one tool call, in addition to the caller's abort. The
+ * SDK's own default (60 s) applies to the request it sends; this bound
+ * covers a server that keeps the request open, answers a progress-paged
+ * call slowly, or never answers at all. A call that hits it fails as a
+ * tool error rather than holding the agent's turn — the run cannot be
+ * ended by a stop button while a stdio server is merely slow, and a
+ * provider-side silence would otherwise look like the agent thinking. */
+export const MCP_TOOL_CALL_TIMEOUT_MS = 120_000;
+/** A tool call that did not answer within its time limit. Distinct from a
+ * transport failure: reconnecting and re-sending would only hang again, so
+ * the manager surfaces it instead of retrying (see McpManager.callTool). */
+export class McpCallTimeoutError extends Error {
+  constructor(toolName: string, timeoutMs: number) {
+    super(
+      `MCP tool ${toolName} did not answer within ${formatSeconds(timeoutMs)}`,
+    );
+    this.name = "McpCallTimeoutError";
+  }
+}
+
+/** "120s", "0.3s": whole seconds stay whole, sub-second bounds keep one
+ * decimal (a short bound injected by a test must not read as "0s"). */
+function formatSeconds(ms: number): string {
+  const seconds = ms / 1000;
+  return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
+}
+
+/** Whether an SDK failure is its request timeout (ErrorCode.RequestTimeout,
+ * -32001) rather than a broken transport. */
+function isMcpRequestTimeout(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === -32001) return true;
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === "string" && /request timed out/i.test(message);
+}
+
 /**
  * One connected MCP server, backed by the official Model Context Protocol
  * TypeScript SDK. Stdio servers spawn a child process; HTTP servers use the
@@ -131,20 +167,43 @@ export class McpServerClient {
   }
 
   /** Call a tool; rejects when the server reports isError or the call is
-   * aborted. Returns the raw content blocks. */
+   * aborted. Returns the raw content blocks.
+   *
+   * The request carries the caller's abort AND {@link
+   * MCP_TOOL_CALL_TIMEOUT_MS}: a server that never answers must fail the
+   * call instead of holding the agent's turn open (the SDK's default
+   * request timeout alone is a minute per attempt, and a hung server keeps
+   * answering nothing). */
   async callTool(
     name: string,
     args: unknown,
     signal?: AbortSignal,
-    timeoutMs?: number,
+    timeoutMs: number = MCP_TOOL_CALL_TIMEOUT_MS,
   ): Promise<McpContentBlock[]> {
     // Note: the SDK signature is callTool(params, resultSchema?, options?);
     // options (signal/timeout) belong in the third position.
-    const result = await this.client.callTool(
-      { name, arguments: args },
-      undefined,
-      { signal, timeout: timeoutMs },
-    );
+    let result: { isError?: boolean; content: unknown };
+    try {
+      result = await this.client.callTool(
+        { name, arguments: args },
+        undefined,
+        { signal, timeout: timeoutMs },
+      );
+    } catch (error) {
+      // The caller's abort is a stop, not a broken server: the SDK
+      // reports a cancelled request with the same ErrorCode as its own
+      // timeout, so the signal has to be consulted first (otherwise a stop
+      // pressed mid-call reaches the agent as "the MCP server is broken"
+      // and is not retried).
+      if (signal?.aborted === true) throw error;
+      // The SDK reports its request timeout as an McpError. Callers must be
+      // able to tell "the server never answered" from "the connection
+      // dropped": the first is not worth reconnecting and re-sending (the
+      // server would just hang again), the second is.
+      throw isMcpRequestTimeout(error)
+        ? new McpCallTimeoutError(name, timeoutMs)
+        : error;
+    }
     if (result.isError === true) {
       throw new McpToolError(
         `MCP tool ${name} failed: ${

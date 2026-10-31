@@ -1065,11 +1065,30 @@ export class SessionAgent {
    * Permanent failures surface immediately — they can never recover. A
    * transient failure that cut a response off *after* it produced output
    * also parks a restart, which asks the model to continue from where it
-   * stopped instead of repeating the answer. */
+   * stopped instead of repeating the answer.
+   *
+   * An "exhausted" decision ends the run empty: the retries are spent and
+   * the turn produced nothing, so the user is told (a run that stops
+   * without text, a tool call or an error reads as the agent ignoring the
+   * prompt). */
   private handleTurnEnd(message: AgentMessage): void {
     const decision = this.retry.classify(message, this.closed);
     if (decision.action === "followUp") {
       this.agent.followUp(decision.notification);
+    }
+    if (decision.action === "exhausted") {
+      this.emit({
+        type: "session_error",
+        sessionId: this.sessionId,
+        message: decision.message === undefined
+          ? translate(this.language, "session.vacantResponse", {
+            count: decision.count,
+          })
+          : translate(this.language, "session.retryExhausted", {
+            count: decision.count,
+            message: decision.message,
+          }),
+      });
     }
     // "park" decisions are consumed by resumeAfterErrorRun once the dead
     // run settles; "none" needs nothing.

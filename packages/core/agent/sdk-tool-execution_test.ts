@@ -22,6 +22,7 @@ import { createReadFileTool } from "../tools/filesystem.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import { object, string, type Tool } from "../tools/schema.ts";
+import { contentText } from "../shared/mod.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 
 function fakeModel(): Model<Api> {
@@ -345,6 +346,73 @@ Deno.test("the tool result keeps its details for the UI and stays text for the m
   const secondPrompt = JSON.stringify(fake.prompts[1]);
   assertEquals(secondPrompt.includes("Edited a.ts"), true);
   assertEquals(secondPrompt.includes("addedLines"), false);
+});
+
+// ---- stop while the SDK runs a tool ---------------------------------------
+
+Deno.test("a stop during an SDK-executed tool leaves a session that still runs", async () => {
+  // The reported failure: the SDK executes the tool, the tool ignores the
+  // abort signal (a silent MCP server, a hung `eval`), and the stop button
+  // looked like it worked while the session never ran again. Two things must
+  // hold: the run settles, and the next request is accepted (a tool call
+  // without a result is rejected by the provider).
+  const stuck: AgentTool = {
+    name: "stuck",
+    label: "Stuck",
+    description: "Never returns and ignores the abort signal.",
+    parameters: { type: "object", properties: {} },
+    execute: () => new Promise(() => {}),
+  };
+  const fake = scriptedLanguageModel([
+    toolCallParts("t1", "stuck", {}),
+    answerParts("after the stop"),
+  ]);
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: "test",
+      model: fakeModel(),
+      tools: [stuck],
+      thinkingLevel: "off",
+    },
+    streamFn: createStreamFn({
+      languageModelFor: () => Promise.resolve(fake.model as never),
+    }),
+    sessionId: "s1",
+  });
+
+  const first = agent.prompt("go");
+  // Let the request reach the tool.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  agent.abort();
+  await Promise.race([
+    first,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("the run did not settle")), 2_000)
+    ),
+  ]);
+  assertEquals(agent.isStreaming, false);
+
+  // The next turn is accepted and answered: whatever the stop left behind
+  // (a dangling tool call, or nothing at all when the SDK ended on an
+  // `abort` part) must not poison the next request. `prompt` resolves when
+  // the run settles — the run here is the SECOND one, whose first turn has
+  // no tool calls.
+  await agent.prompt("again");
+  const last = agent.messages.at(-1) as AssistantMessage;
+  assertEquals(contentText(last.content), "after the stop");
+  // Every tool call in the transcript has its result.
+  const calls = new Set<string>();
+  const results = new Set<string>();
+  for (const message of agent.messages) {
+    if (message.role === "assistant") {
+      for (const block of message.content) {
+        if (block.type === "toolCall") calls.add(block.id);
+      }
+    } else if (message.role === "toolResult") {
+      results.add(message.toolCallId);
+    }
+  }
+  assertEquals([...calls].filter((id) => !results.has(id)), []);
 });
 
 // ---- read tool images through the whole path ------------------------------

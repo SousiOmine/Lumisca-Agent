@@ -279,6 +279,35 @@ Deno.test("eval times out a promise that never resolves", async () => {
   );
 });
 
+Deno.test("eval times out top-level await that never settles", async () => {
+  // The async wrapper's promise is the snippet's completion: `runInContext`
+  // only bounds the synchronous part, so an unawaited wrapper used to hold
+  // the tool call — and the whole run — for good. Both an explicit await
+  // and a stream/socket that never answers must end at the timeout.
+  for (
+    const code of [
+      "await new Promise(() => {})",
+      "const never = await new Promise(() => {}); console.log(never)",
+    ]
+  ) {
+    const tool = makeEval();
+    const started = performance.now();
+    const result = await tool.execute(
+      "1",
+      { code, timeout: 100 },
+      undefined,
+    );
+    assert(
+      toolText(result).includes("timed out"),
+      `${code}: ${toolText(result)}`,
+    );
+    assert(
+      performance.now() - started < 2_000,
+      `${code}: took ${Math.round(performance.now() - started)}ms`,
+    );
+  }
+});
+
 Deno.test("eval returns the safety reason when the check blocks", async () => {
   const safety = {
     check: () => ({

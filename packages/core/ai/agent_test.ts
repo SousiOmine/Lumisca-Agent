@@ -6,6 +6,7 @@ import type {
   Api,
   Model,
   StreamFn,
+  ToolResultMessage,
 } from "./types.ts";
 import { Agent } from "./agent.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
@@ -214,6 +215,111 @@ function userText(message: AgentMessage): string {
     )
     .join("");
 }
+
+/** A tool that never returns and ignores its abort signal: the shape of a
+ * stuck MCP server, a hung `eval` await or a tool blocked on a pipe. */
+function neverReturningTool(): AgentTool {
+  return {
+    name: "never",
+    label: "Never",
+    description: "Never returns and ignores the abort signal.",
+    parameters: {},
+    execute: () => new Promise(() => {}),
+  };
+}
+
+/** A stream function that asks for a tool on the first call and answers
+ * with text on every later one (what a session after a stop looks like). */
+function toolThenAnswerStreamFn(
+  toolName: string,
+): { streamFn: StreamFn; calls: () => number } {
+  let calls = 0;
+  const streamFn: StreamFn = () => {
+    const stream = createAssistantMessageEventStream();
+    calls++;
+    const message = calls === 1
+      ? fauxAssistantMessage([fauxToolCall(toolName, {}, "t1")], {
+        stopReason: "toolUse",
+      })
+      : fauxAssistantMessage("second run answered");
+    stream.push({ type: "start", partial: message });
+    stream.end(message);
+    return stream;
+  };
+  return { streamFn, calls: () => calls };
+}
+
+Deno.test("a stop settles the run even when a tool never returns", async () => {
+  // The tool runs in the SDK's tool loop; this double bypasses the SDK and
+  // the agent's own executeTools is the one that holds — both are the same
+  // exchange from the run's point of view.
+  const { streamFn, calls } = toolThenAnswerStreamFn("never");
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: "You are a test agent.",
+      model: fakeModel(),
+      tools: [neverReturningTool()],
+    },
+    streamFn,
+    sessionId: "s1",
+  });
+
+  const first = agent.prompt("one");
+  await tick();
+  agent.abort();
+
+  // The run's promise must settle: a rewind waits for it, and the session
+  // would otherwise never accept another prompt.
+  await first;
+  await agent.waitForIdle();
+  assertEquals(agent.isStreaming, false);
+
+  // The session works again: the next prompt starts its own run and the
+  // model answers (the stuck tool belongs to the abandoned run).
+  await agent.prompt("two");
+  assertEquals(calls(), 2);
+  assertEquals(assistantText(agent.messages.at(-1)), "second run answered");
+});
+
+Deno.test("an abandoned turn's tool call is answered with a stop, not left dangling", async () => {
+  // A slow (but finite) tool: the stop lands while it runs, and the tool
+  // returns afterwards. Its own result belongs to the abandoned run and must
+  // not appear — but the call it is answering is already in the transcript,
+  // and a provider rejects the next request when an assistant message's tool
+  // calls have no results (AI_MissingToolResultsError). So the stop writes
+  // one synthetic result, and the abandoned tool's late result is dropped.
+  const { streamFn } = toolThenAnswerStreamFn("slow_tool");
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: "You are a test agent.",
+      model: fakeModel(),
+      tools: [slowTool(40)],
+    },
+    streamFn,
+    sessionId: "s1",
+  });
+
+  const first = agent.prompt("one");
+  await tick();
+  agent.abort();
+  await first;
+  // Let the abandoned tool return and the loop unwind.
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const toolResults = agent.messages.filter((m) => m.role === "toolResult");
+  assertEquals(toolResults.length, 1);
+  assertEquals(
+    (toolResults[0] as ToolResultMessage).toolCallId,
+    "t1",
+  );
+  assertEquals((toolResults[0] as ToolResultMessage).isError, true);
+  // Transcript order stays assistant(toolCalls) → toolResults.
+  assertEquals(agent.messages.map((m) => m.role), [
+    "user",
+    "assistant",
+    "toolResult",
+  ]);
+});
 
 Deno.test("a steer during a tool loop is processed at the next turn boundary, not at the end", async () => {
   // Turn 1 asks for the tool; the tool result keeps the loop going. While

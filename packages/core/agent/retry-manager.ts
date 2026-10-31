@@ -24,6 +24,10 @@ import type { NotificationMessage } from "../ai/types.ts";
 /** Outcome of classifying one assistant turn for retry. */
 export type RetryDecision =
   | { action: "none" }
+  /** The response was vacant and this was the LAST retry the budget
+   * allowed: the run ends empty, and the user has to be told why (the
+   * session agent reports it; `count` is how many retries were spent). */
+  | { action: "exhausted"; count: number; message?: string }
   | { action: "followUp"; notification: NotificationMessage }
   | {
     action: "park";
@@ -238,8 +242,12 @@ export class RetryManager {
       // Outputless but not retryable: a vacant normal stop retries in-run
       // (followUp); a permanent error surfaces.
       if (assistant.stopReason === "error") return { action: "none" };
-      if (closed || this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES) {
-        return { action: "none" };
+      if (closed) return { action: "none" };
+      if (this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES) {
+        // The budget is spent: the turn ends with nothing to show and
+        // nothing left to try. Say so — a run that stops without text, a
+        // tool call or an error reads as the agent ignoring the prompt.
+        return { action: "exhausted", count: this.emptyResponseRetries };
       }
       this.emptyResponseRetries++;
       return {
@@ -251,7 +259,13 @@ export class RetryManager {
     if (closed) return { action: "none" };
     if (rateLimit) {
       if (this.rateLimitRetries >= MAX_RATE_LIMIT_RETRIES) {
-        return { action: "none" };
+        return {
+          action: "exhausted",
+          count: this.rateLimitRetries,
+          ...(assistant.errorMessage !== undefined
+            ? { message: assistant.errorMessage }
+            : {}),
+        };
       }
       this.rateLimitRetries++;
       const notification = buildRateLimitRetryNotification(
@@ -262,7 +276,13 @@ export class RetryManager {
     }
     // Transient stream error with no output.
     if (this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES) {
-      return { action: "none" };
+      return {
+        action: "exhausted",
+        count: this.emptyResponseRetries,
+        ...(assistant.errorMessage !== undefined
+          ? { message: assistant.errorMessage }
+          : {}),
+      };
     }
     this.emptyResponseRetries++;
     const notification = buildRetryNotification(this.emptyResponseRetries);

@@ -217,8 +217,11 @@ class EvalSession {
    * an async wrapper (top-level await is only valid in modules): the
    * wrapper cannot return a completion value, so such calls report results
    * via `console.log` and `globalThis` state — the description tells the
-   * agent this. Any promise-like completion of plain code is awaited
-   * within the remaining timeout. */
+   * agent this. Every promise the snippet produces, including the wrapper's
+   * own, is awaited within the remaining timeout: an async wrapper that
+   * awaited forever used to hold the tool call (and with it the run) for
+   * good, because `runInContext`'s timeout only bounds the synchronous
+   * part. */
   async evaluate(
     code: string,
     timeoutMs: number,
@@ -233,9 +236,9 @@ class EvalSession {
       if (!hasAwait(code)) throw error;
       // Genuine syntax errors surface again from the wrapper (under the
       // async interpretation); runtime errors and timeouts there are
-      // reported as-is.
-      value = undefined;
-      await runInContext(
+      // reported as-is. The wrapper's promise IS the snippet: awaiting it
+      // is what makes the timeout (and a failing await) observable at all.
+      value = runInContext(
         `(async () => {\n${code}\n})()`,
         this.context,
         { timeout: timeoutMs },
