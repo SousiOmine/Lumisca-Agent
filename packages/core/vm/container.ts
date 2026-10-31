@@ -9,14 +9,16 @@
  * believing the machine is up.
  */
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { firstLine } from "../lines.ts";
 import {
   VM_BUILD_TIMEOUT_MS,
   VM_CONTAINER_NAME,
   VM_CONTAINERFILE_NAME,
+  VM_COPY_TIMEOUT_MS,
   VM_DISPLAY,
   VM_GID,
+  VM_IMAGE_DIGEST_LABEL,
   VM_IMAGE_NAME,
   VM_MANAGED_LABEL,
   VM_REMOVE_TIMEOUT_MS,
@@ -25,7 +27,9 @@ import {
   VM_SCREEN_WIDTH,
   VM_STATUS_CACHE_MS,
   VM_STOP_TIMEOUT_MS,
+  VM_SUDO_PROBE,
   VM_UID,
+  VM_USER,
   VM_VNC_PORT,
   VM_WORKDIR,
 } from "./contract.ts";
@@ -44,6 +48,12 @@ export type VmState =
   | "podman_missing"
   /** podman works; the image has never been built. */
   | "image_missing"
+  /** The image exists, but was built from container files that have since
+   * changed (the Containerfile was edited, or a release shipped a new one).
+   * Starting rebuilds it and recreates the container, keeping the agent's
+   * home; the old machine is not reused because it is not the machine this
+   * installation describes. */
+  | "image_stale"
   /** The image exists; no container has been created yet. */
   | "container_missing"
   /** The container exists but is not running. */
@@ -83,7 +93,8 @@ export interface VmManager {
   /** Ask podman where the machine is. Cached briefly (see VM_STATUS_CACHE_MS);
    * `fresh` bypasses the cache after an operation that changed the state. */
   status(options?: { fresh?: boolean }): Promise<VmStatus>;
-  /** Bring the machine up, building/creating/starting what is missing.
+  /** Bring the machine up, building/creating/starting what is missing (and
+   * rebuilding an image whose container files changed since it was built).
    * Returns the final status; throws with a readable reason when it could
    * not be reached. */
   start(): Promise<VmStatus>;
@@ -101,6 +112,41 @@ function podman(args: readonly string[]): string[] {
   return ["podman", ...args];
 }
 
+/**
+ * SHA-256 over every file in the directory the machine is built from, or null
+ * when the directory cannot be read.
+ *
+ * The whole directory, not only the Containerfile: it COPYs entry.sh, and a
+ * changed entry script is as much a different machine as a changed
+ * instruction. The name goes in with the bytes, so adding, removing or
+ * renaming a file also changes the digest. Exported for the test that proves
+ * an edit changes it.
+ */
+export async function containerFilesDigest(
+  containerDir: string,
+): Promise<string | null> {
+  let names: string[];
+  try {
+    names = [...Deno.readDirSync(containerDir)]
+      .filter((entry) => entry.isFile)
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    return null;
+  }
+  const encoder = new TextEncoder();
+  const parts: Uint8Array[] = [];
+  for (const name of names) {
+    parts.push(encoder.encode(`${name}\u0000`));
+    parts.push(await Deno.readFile(join(containerDir, name)));
+    parts.push(encoder.encode("\u0000"));
+  }
+  const digest = await crypto.subtle.digest("SHA-256", concat(parts));
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 export function createVmManager(options: VmManagerOptions): VmManager {
   const run = options.run ?? runVmCommand;
   const containerfilePath = join(
@@ -111,6 +157,38 @@ export function createVmManager(options: VmManagerOptions): VmManager {
   let cached: { at: number; status: VmStatus } | null = null;
 
   const report = (progress: VmProgress) => options.onProgress?.(progress);
+
+  /** The digest of the container files as they are on disk now, or null when
+   * they cannot be read (a deployment that lost them: the image on disk is
+   * then the only definition and must not be rebuilt from nothing). */
+  const containerDigest = () => containerFilesDigest(options.containerDir);
+
+  /** The digest recorded in the image's label, or null when the image has no
+   * usable record (built before the label existed, which counts as stale). */
+  async function imageDigest(): Promise<string | null> {
+    const result = await run(
+      podman([
+        "image",
+        "inspect",
+        "--format",
+        `{{ index .Labels "${VM_IMAGE_DIGEST_LABEL}" }}`,
+        VM_IMAGE_NAME,
+      ]),
+      { timeoutMs: 30_000, maxOutput: 4096 },
+    );
+    if (result.exitCode !== 0) return null;
+    const value = result.stdout.trim();
+    return value === "" || value === "<no value>" ? null : value;
+  }
+
+  /** Whether the image still matches the container files on disk. Unknown
+   * files (a deployment without them) leave the image alone: there is
+   * nothing to rebuild from. */
+  async function imageIsStale(): Promise<boolean> {
+    const wanted = await containerDigest();
+    if (wanted === null) return false;
+    return await imageDigest() !== wanted;
+  }
 
   async function status(readFresh = false): Promise<VmStatus> {
     const now = Date.now();
@@ -154,6 +232,17 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       ]),
       { timeoutMs: 30_000, maxOutput: 4096 },
     );
+    // An image built from older container files (the Containerfile was edited,
+    // or a release shipped a new one) is not the machine this installation
+    // describes. It is judged before the container, because a machine still
+    // running on it must be replaced rather than reported as healthy.
+    if (await imageIsStale()) {
+      return {
+        state: "image_stale",
+        vncPort: inspect.exitCode === 0 ? await readVncPort() : null,
+        reason: "",
+      };
+    }
     if (inspect.exitCode !== 0) {
       return { state: "container_missing", vncPort: null, reason: "" };
     }
@@ -231,8 +320,9 @@ export function createVmManager(options: VmManagerOptions): VmManager {
 
   /** Check the running container against the contract values. Returns the
    * mismatch as a sentence, or null when everything matches. A drifted image
-   * would break screenshots (DISPLAY), file ownership (uid/gid) or the shell
-   * (workdir) silently, so start-up refuses it instead. */
+   * would break screenshots (DISPLAY), file ownership (uid/gid), the shell
+   * (workdir) or root inside the machine (sudo) silently, so start-up
+   * refuses it instead. */
   async function verifyContract(): Promise<string | null> {
     const probe = await run(
       podmanExec([
@@ -269,6 +359,17 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     ) {
       return `the machine's screen is ${width}x${height}, expected ${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT}`;
     }
+    // The agent's sudo must be passwordless. An image built before the rule
+    // existed would leave root reachable only through a prompt nobody can
+    // answer, so the machine is refused rather than started into that state.
+    const sudo = await run(podmanExec(VM_SUDO_PROBE), {
+      timeoutMs: 30_000,
+      maxOutput: 4096,
+    });
+    if (sudo.exitCode !== 0) {
+      return `the machine's "${VM_USER}" account cannot run sudo without a ` +
+        `password: ${detail(sudo)}`;
+    }
     return null;
   }
 
@@ -278,12 +379,18 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         `The machine's image definition is missing: ${containerfilePath}`,
       );
     }
+    const digest = await containerDigest();
     report({ phase: "building_image" });
     const result = await run(
       podman([
         "build",
         "--tag",
         VM_IMAGE_NAME,
+        // The definition's digest travels with the image, so the next start
+        // can tell whether the image still matches the files on disk.
+        ...(digest === null
+          ? []
+          : ["--label", `${VM_IMAGE_DIGEST_LABEL}=${digest}`]),
         "--file",
         containerfilePath,
         options.containerDir,
@@ -297,12 +404,14 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     }
   }
 
+  /** Create the container from the image, without starting it. Starting is a
+   * separate step because a replacement container receives the agent's home
+   * before its first process runs (see recreateContainer). */
   async function createContainer(): Promise<void> {
     report({ phase: "creating_container" });
     const result = await run(
       podman([
-        "run",
-        "--detach",
+        "create",
         "--name",
         VM_CONTAINER_NAME,
         "--label",
@@ -324,6 +433,80 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       throw new Error(
         `Could not create the machine: ${detail(result)}`,
       );
+    }
+  }
+
+  /** Replace the container, keeping the agent's home.
+   *
+   * The home is the agent's work — the files it wrote, the folders its
+   * conversations work in — and it lives inside the container, so recreating
+   * the container would otherwise erase it. It travels through a temporary
+   * directory (`podman cp`) rather than being mounted, because the machine's
+   * isolation is the point: nothing of the host is reachable from inside.
+   * Files root wrote (through sudo) come back owned by the agent account —
+   * the copy crosses the userns mapping — which is the right owner for
+   * anything under the agent's home.
+   *
+   * `rebuildImage` is what differs between the two callers: a broken container
+   * only needs a fresh one from the same image, while a stale image needs the
+   * image itself rebuilt first. The home is saved before either starts, and
+   * if saving fails the container is left untouched — better a machine that
+   * still starts than one whose files are half-moved. */
+  async function recreateContainer(
+    options: { rebuildImage: boolean },
+  ): Promise<void> {
+    const home = await Deno.makeTempDir({ prefix: "lumisca-stella-home-" });
+    try {
+      const present = await run(
+        podman(["container", "exists", VM_CONTAINER_NAME]),
+        { timeoutMs: 30_000 },
+      );
+      const keepHome = present.exitCode === 0;
+      if (keepHome) {
+        // Stop before copying: a running machine keeps writing to its home.
+        await run(podman(["stop", "--time", "5", VM_CONTAINER_NAME]), {
+          timeoutMs: VM_STOP_TIMEOUT_MS,
+          maxOutput: VM_TEXT_OUTPUT_LIMIT,
+        });
+        const copyOut = await run(
+          podman(["cp", `${VM_CONTAINER_NAME}:${VM_WORKDIR}`, home]),
+          { timeoutMs: VM_COPY_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
+        );
+        if (copyOut.exitCode !== 0) {
+          throw new Error(
+            `Could not save the machine's files before replacing it, so it ` +
+              `was left as it was: ${detail(copyOut)}`,
+          );
+        }
+        await run(podman(["rm", "--force", VM_CONTAINER_NAME]), {
+          timeoutMs: VM_REMOVE_TIMEOUT_MS,
+        });
+      }
+      if (options.rebuildImage) await buildImage();
+      await createContainer();
+      if (keepHome) {
+        // `podman cp <container>:<home> <dir>` unpacks the home INTO the
+        // directory, under its own base name, so the copy back is from
+        // `<dir>/agent`.
+        const saved = join(home, basename(VM_WORKDIR));
+        const copyIn = await run(
+          podman([
+            "cp",
+            `${saved}/.`,
+            `${VM_CONTAINER_NAME}:${VM_WORKDIR}/`,
+          ]),
+          { timeoutMs: VM_COPY_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
+        );
+        if (copyIn.exitCode !== 0) {
+          throw new Error(
+            `The machine was replaced but its files could not be put back ` +
+              `(they are kept in ${saved}): ${detail(copyIn)}`,
+          );
+        }
+      }
+      await startContainer();
+    } finally {
+      await Deno.remove(home, { recursive: true }).catch(() => {});
     }
   }
 
@@ -374,21 +557,28 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         case "image_missing":
           await buildImage();
           await createContainer();
+          await startContainer();
+          break;
+        case "image_stale":
+          // The container files changed under the image. Rebuild it and carry
+          // the agent's home across: the files are the agent's work, and a
+          // machine built from older instructions is not the machine this
+          // installation describes (it may lack anything the definition now
+          // grants).
+          await recreateContainer({ rebuildImage: true });
           break;
         case "container_missing":
           await createContainer();
+          await startContainer();
           break;
         case "stopped":
           if (before.reason !== "") {
             // The container exists but is broken (a drifted image, a dead
-            // entry point). Recreating it is the only way forward, and
-            // nothing of the agent's work is lost: the home lives inside the
-            // container by design.
-            report({ phase: "creating_container" });
-            await run(podman(["rm", "--force", VM_CONTAINER_NAME]), {
-              timeoutMs: VM_REMOVE_TIMEOUT_MS,
-            });
-            await createContainer();
+            // entry point). Recreating it is the only way forward. Its home
+            // is the agent's work, so it is carried into the new container;
+            // losing it would make "the machine misbehaved" cost the user
+            // everything the agent had done.
+            await recreateContainer({ rebuildImage: false });
           } else {
             await startContainer();
           }
@@ -410,9 +600,15 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     async stop() {
       const current = await status(true);
       if (current.state === "podman_missing") return;
-      if (current.state !== "running" && current.state !== "stopped") return;
-      // A machine that is already stopped is not an error: stopping is
-      // idempotent, and the app calls it on every shutdown.
+      if (
+        current.state === "image_missing" ||
+        current.state === "container_missing"
+      ) {
+        return;
+      }
+      // Running, stopped, or stale (a container may still be running the
+      // image being replaced): stopping is idempotent and the app calls it on
+      // every shutdown, so an already stopped machine is not an error.
       await run(podman(["stop", "--time", "5", VM_CONTAINER_NAME]), {
         timeoutMs: VM_STOP_TIMEOUT_MS,
         maxOutput: VM_TEXT_OUTPUT_LIMIT,
@@ -463,6 +659,20 @@ export type { VmCommandBytesResult };
 function detail(result: VmCommandResult): string {
   const text = result.stderr.trim() || result.stdout.trim();
   return text === "" ? `exit code ${result.exitCode}` : firstLine(text);
+}
+
+/** Join byte runs into one buffer (the digest of several files is taken over
+ * one buffer, and `crypto.subtle` takes no chunk list). */
+function concat(parts: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
+  let length = 0;
+  for (const part of parts) length += part.length;
+  const out = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
 }
 
 /** Run a command inside the machine, with the container's name and workdir

@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium \
       curl ca-certificates \
       git tmux ripgrep less \
+      sudo \
  && rm -rf /var/lib/apt/lists/*
 
 # Node.js, from the official build: the Debian package is older than what
@@ -40,14 +41,31 @@ RUN set -eu; \
     tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1; \
     rm /tmp/node.tar.gz
 
-# The account the agent's processes run as. Not root: Chromium refuses to use
-# its sandbox as root, and files written here must be the agent's own.
+# The account the agent's processes run as. Not root by default: Chromium
+# refuses to use its sandbox as root, and files written here must be the
+# agent's own. Root is one `sudo` away (see below) rather than the default.
 #
 # The uid/gid match vm/contract.ts, which starts the container with
 # --userns keep-id so they map onto the host user. Debian's base image has no
 # group 1000, so one is created with the user (`--user-group`); naming an
 # existing group here fails the build.
 RUN useradd --create-home --uid 1000 --user-group --shell /bin/bash agent
+
+# The agent may become root inside this machine: `sudo` with no password.
+#
+# The machine is the agent's own computer, and installing a package, enabling
+# a service or editing a file under /etc is ordinary work there. Refusing it
+# would only push the agent towards container-wide workarounds it cannot
+# explain. Nothing outside the container is reachable from that root: the
+# container has no host mount, its own capabilities are the container's (a
+# rootless podman's `mount` still fails), and uid 0 inside maps to the
+# unprivileged host user through `--userns keep-id`. The rule is written
+# against the user's NAME (the file applies to the account, not to a uid),
+# and `visudo --check` makes a malformed file fail the build instead of
+# producing an image whose sudo silently does nothing.
+RUN printf 'agent ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/agent \
+ && chmod 0440 /etc/sudoers.d/agent \
+ && visudo --check --file=/etc/sudoers.d/agent
 
 COPY entry.sh /usr/local/bin/entry.sh
 RUN chmod 0755 /usr/local/bin/entry.sh

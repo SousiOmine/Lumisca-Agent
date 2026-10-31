@@ -1,6 +1,6 @@
 import type { Workspace } from "../types/workspace.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
-import { VM_AGENTS_DIR, VM_WORKDIR } from "../vm/contract.ts";
+import { VM_AGENTS_DIR, VM_USER, VM_WORKDIR } from "../vm/contract.ts";
 import {
   buildEnvironmentSection,
   type EnvironmentModel,
@@ -108,11 +108,18 @@ export function buildStellaSystemPrompt(
 machine that belongs to this conversation.
 
 The machine is a Linux desktop: a shell, a browser and a screen are there for
-whatever the work needs. Your working folder is ${workdir || "/home/agent"}
-(~ is /home/agent): the file tools resolve relative paths inside it and
+whatever the work needs. Your working folder is ${workdir}
+(~ is ${VM_WORKDIR}): the file tools resolve relative paths inside it and
 bash starts there. Nothing outside the machine is reachable — that is
 deliberate: you experiment freely, and a mistake costs nothing on the user's
 own computer.
+
+Inside it your account is \`${VM_USER}\` and \`sudo\` works without a password:
+installing packages, enabling services and editing anything under /etc are
+ordinary tools here. Use \`sudo -n\` for anything non-interactive (a plain
+\`sudo\` on a command that would ask for a password waits forever), and leave
+the machine's own screen services alone unless the task is about them —
+Xvfb, openbox, Chromium, x11vnc and websockify are what you are looking at.
 
 Other agents' working folders are sibling folders under
 ${VM_AGENTS_DIR}, one folder per agent id. You may read and write there, but

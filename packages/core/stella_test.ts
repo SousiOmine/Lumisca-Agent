@@ -306,6 +306,15 @@ Deno.test("stella conversation: its system prompt is the machine's", async () =>
       !prompt.includes("running without a file workspace"),
       prompt.slice(0, 200),
     );
+    // Root inside the machine is part of the machine: the agent is told its
+    // account and that sudo needs no password. A prompt that stayed silent
+    // would leave it assuming it cannot install anything.
+    assert(prompt.includes("`agent`"), prompt.slice(0, 800));
+    assert(prompt.includes("sudo"), prompt.slice(0, 800));
+    assert(
+      prompt.includes("without a password"),
+      `the prompt must say sudo needs no password: ${prompt.slice(0, 800)}`,
+    );
   } finally {
     await core.close();
   }

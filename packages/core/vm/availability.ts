@@ -15,7 +15,6 @@ export type StellaAvailability =
   /** `reason` is a full sentence shown to the user: which prerequisite is
    * missing and what to do about it. */
   | { available: false; reason: string };
-
 /** Turn the machine's status into the availability verdict. Only the
  * prerequisites are judged here — whether the image has been built yet is
  * not a reason to hide the mode: starting the machine builds it. */
@@ -30,6 +29,7 @@ export function stellaAvailability(status: VmStatus): StellaAvailability {
           "or use code mode.",
       };
     case "image_missing":
+    case "image_stale":
     case "container_missing":
     case "stopped":
     case "running":
