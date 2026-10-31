@@ -731,6 +731,76 @@ Deno.test("rewind truncates messages via the API and rejects bad bodies", async 
   }
 });
 
+Deno.test("the event stream batches a reply's deltas into few frames", async () => {
+  // A run streams one text delta per token. Forwarding each as its own frame
+  // is free on a loopback socket and expensive on a link with a real round
+  // trip: the frames arrive as bursts and the reply renders in jumps. The
+  // batch must keep the text whole and in order, and it must not merge two
+  // sessions (one socket carries every open tab).
+  const { core, server, faux, base } = await setup(undefined, {
+    deltaFlushMs: 5,
+  });
+  try {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const ws = await (await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    })).json();
+    // Many text blocks = many text deltas (the faux stream emits one delta
+    // per text block).
+    const words = Array.from({ length: 120 }, (_, i) => `w${i} `);
+    faux.setResponses([
+      fauxAssistantMessage(words.map((text) => ({ type: "text", text }))),
+    ]);
+    const session = await (await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+      }),
+    })).json();
+
+    const socket = new WebSocket(`ws://127.0.0.1:${server.addr.port}/ws`);
+    const frames: Array<Record<string, unknown>> = [];
+    await new Promise<void>((resolve) => {
+      socket.onmessage = (e) => {
+        const frame = JSON.parse(String(e.data)) as Record<string, unknown>;
+        if (frame.type === "heartbeat") return;
+        frames.push(frame);
+        if (frame.type === "agent_end") resolve();
+      };
+      socket.onopen = () => {
+        void json(base, `/api/sessions/${session.id}/prompt`, {
+          method: "POST",
+          body: JSON.stringify({ text: "Hi" }),
+        });
+      };
+    });
+    socket.close();
+
+    const deltas = frames.filter((f) => f.type === "message_delta");
+    assert(
+      deltas.length < words.length / 4,
+      `${deltas.length} delta frames for ${words.length} tokens: not batched`,
+    );
+    // The frames carry the session they belong to (a batch is one
+    // transcript's text), the text in order, and the count they cover.
+    const text = deltas.map((f) => f.delta as string).join("");
+    assertEquals(text, words.join(""));
+    assertEquals(deltas.every((f) => f.sessionId === session.id), true);
+    assertEquals(
+      deltas.reduce((sum, f) => sum + (f.events as number), 0),
+      words.length,
+    );
+
+    await removeDirRetry(root);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("websocket streams agent events", async () => {
   const { core, server, faux, base } = await setup();
   try {
@@ -809,16 +879,23 @@ Deno.test("websocket streams agent events", async () => {
 
     // Every frame for the session carries the emitting server's revision,
     // one step per event: a client compares it against what it has seen and
-    // re-reads the snapshot when it jumps (see LumiscaCore's revision).
-    const revs = events
-      .filter((e) => e.sessionId === session.id && typeof e.rev === "number")
-      .map((e) => e.rev as number);
-    assertEquals(revs.length > 0, true);
-    assertEquals(
-      revs.every((rev, i) => rev === i + 1),
-      true,
-      `revisions must advance by one: ${revs.join(", ")}`,
+    // re-reads the snapshot when it jumps (see LumiscaCore's revision). A
+    // batched delta frame covers several events at once, so it also says
+    // how many — the count must be continuous from the client's point of
+    // view, or every batch would be read as lost frames.
+    const tracked = events.filter(
+      (e) => e.sessionId === session.id && typeof e.rev === "number",
     );
+    assertEquals(tracked.length > 0, true);
+    let expected = 1;
+    for (const frame of tracked) {
+      assertEquals(
+        frame.rev,
+        expected + (frame.events as number ?? 1) - 1,
+        `revision ${frame.rev} does not follow ${expected - 1}`,
+      );
+      expected = (frame.rev as number) + 1;
+    }
 
     await removeDirRetry(root);
   } finally {
@@ -2432,6 +2509,65 @@ Deno.test("server bundles and serves the client app", async () => {
       js.length > 10_000,
       `the bundle is ${js.length} bytes: too small to hold the client app`,
     );
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("the app's files are compressed and revalidated", async () => {
+  // The app is opened over a tailnet or a WAN as often as on loopback, and
+  // everything it serves is text: the bundle is ~600 KB, the stylesheet is
+  // inlined into the page (~140 KB), and JSON snapshots repeat. Without
+  // compression each of those is several times its size on the wire, and
+  // without a validator every reload pays for it in full.
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+    // `fetch` decodes transparently, so the header is what proves the work
+    // happened (and the decoded body is still the app).
+    const gz = await fetch(`${base}/assets/app.js`, {
+      headers: { "accept-encoding": "gzip" },
+    });
+    assertEquals(gz.headers.get("content-encoding"), "gzip");
+    const js = await gz.text();
+    assertEquals(js.includes("input-composer"), true);
+    // The stylesheet and the page are text too.
+    for (const path of ["/styles.css", "/"]) {
+      const res = await fetch(`${base}${path}`, {
+        headers: { "accept-encoding": "gzip" },
+      });
+      assertEquals(
+        res.headers.get("content-encoding"),
+        "gzip",
+        `${path} was not compressed`,
+      );
+    }
+
+    // A stable URL gets a validator and re-checks: the second read is a
+    // bodyless 304, which is what a reload costs instead of the payload.
+    const first = await fetch(`${base}/assets/app.js`);
+    const etag = first.headers.get("etag");
+    assert(etag !== null, "the bundle carries no validator");
+    assert(first.headers.get("cache-control")?.includes("private") === true);
+    const revalidated = await fetch(`${base}/assets/app.js`, {
+      headers: { "if-none-match": etag },
+    });
+    assertEquals(revalidated.status, 304);
+    assertEquals((await revalidated.arrayBuffer()).byteLength, 0);
+
+    // The page and the bootstrap script carry the auth token: nothing may
+    // keep a copy.
+    for (const path of ["/", "/assets/initial-data.js"]) {
+      const res = await fetch(`${base}${path}`);
+      assertEquals(
+        res.headers.get("cache-control"),
+        "no-store",
+        `${path} is cacheable`,
+      );
+    }
   } finally {
     server.shutdown();
     core.close();

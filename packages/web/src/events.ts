@@ -325,9 +325,20 @@ export function sameQuestions(
  * peer's relay gap) and the view must re-read its snapshot. `known`
  * undefined means nothing was seen yet for that session (its first event
  * only seeds the marker: nothing was expected before it), and a count that
- * does not advance (a duplicate delivery) is not a gap. */
-export function revisionGap(known: number | undefined, rev: number): boolean {
-  return known !== undefined && rev > known + 1;
+ * does not advance (a duplicate delivery) is not a gap.
+ *
+ * `events` is how many events the frame accounts for: the server batches a
+ * run's text deltas into one frame per display interval (see
+ * core/shared/ws-batch.ts), so one frame advances the count by several. The
+ * frame says how many, which is what keeps "one frame for six tokens" from
+ * being read as "five frames went missing" — a false gap would re-read the
+ * snapshot on every batch and make the remote path slower than before. */
+export function revisionGap(
+  known: number | undefined,
+  rev: number,
+  events = 1,
+): boolean {
+  return known !== undefined && rev > known + events;
 }
 
 /** The fetched snapshots of one session, as the resync collects them. Any

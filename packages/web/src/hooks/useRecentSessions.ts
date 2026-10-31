@@ -35,16 +35,38 @@ export function useRecentSessions(): {
       // Peer reachability comes from the federation's peer probe;
       // unreachable peers contribute no sessions. A peer that fails its own
       // list adds nothing instead of failing the whole load.
-      let peers: PeerStatus[] = [];
-      try {
-        peers = (await fed.peers()).peers;
-      } catch {
-        // The peer probe is unavailable; the local sessions below still
-        // apply.
-      }
-      const [local, ...remote] = await Promise.all([
+      //
+      // The probe and this server's own list run together: the local
+      // sessions are the ones that are always there, and a peer on a slow
+      // link must not make the whole list wait for it (the probe answers
+      // per machine, so the answer arrives with the slowest peer).
+      const [local, probe] = await Promise.all([
         api.listSessions(),
-        ...peers.filter((p) => p.ok).map((p) => {
+        fed.peers().then(
+          (result) => result.peers,
+          () => [] as PeerStatus[],
+        ),
+      ]);
+      // This server's rows are shown as soon as they arrive: a peer's list
+      // is a second, optional round trip, and while it is in flight the list
+      // is still usable (the remote rows are added a moment later).
+      const rows = (list: SessionInfo[], peerId: string, peerName: string) =>
+        list.map((info) => ({
+          key: tabKey(peerId, info.id),
+          info,
+          peerId,
+          peerName,
+        }));
+      const localItems = rows(local, "", "");
+      setItems((prev) => {
+        const merged = new Map(prev.map((row) => [row.key, row]));
+        for (const row of localItems) merged.set(row.key, row);
+        return [...merged.values()].sort((a, b) =>
+          b.info.updatedAt - a.info.updatedAt
+        );
+      });
+      const remote = await Promise.all(
+        probe.filter((p) => p.ok).map((p) => {
           // The row label of a peer's session: the registry name, its host
           // when the name field is empty, the id as the last resort.
           const peerName = peerLabel(p, p.id);
@@ -53,21 +75,11 @@ export function useRecentSessions(): {
             () => ({ peerId: p.id, peerName, list: [] as SessionInfo[] }),
           );
         }),
-      ]);
+      );
       const merged: RecentSessionItem[] = [
-        ...local.map((info) => ({
-          key: tabKey("", info.id),
-          info,
-          peerId: "",
-          peerName: "",
-        })),
+        ...localItems,
         ...remote.flatMap(({ peerId, peerName, list }) =>
-          list.map((info) => ({
-            key: tabKey(peerId, info.id),
-            info,
-            peerId,
-            peerName,
-          }))
+          rows(list, peerId, peerName)
         ),
       ].sort((a, b) => b.info.updatedAt - a.info.updatedAt);
       setItems(merged);

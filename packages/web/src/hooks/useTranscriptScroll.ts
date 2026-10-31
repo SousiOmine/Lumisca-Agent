@@ -94,7 +94,10 @@ export function useTranscriptScroll(
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const pin = () => {
+    /** The frame a coalesced pin is scheduled on (see pin below). */
+    let pinFrame: number | undefined;
+    const pinNow = () => {
+      pinFrame = undefined;
       if (pendingSubmit.current) {
         pendingSubmit.current = false;
         el.scrollTop = el.scrollHeight;
@@ -105,6 +108,14 @@ export function useTranscriptScroll(
       if (holding.current) return;
       if (!userScrolledUp.current) el.scrollTop = el.scrollHeight;
     };
+    // A ResizeObserver fires once per layout change, and a streaming reply
+    // changes the layout many times within one frame. Writing scrollTop per
+    // notification forces a synchronous reflow each time; the coalesced
+    // write does it once, at the frame the browser is about to paint.
+    const pin = () => {
+      if (pinFrame !== undefined) return;
+      pinFrame = requestAnimationFrame(pinNow);
+    };
     const onScroll = () => {
       userScrolledUp.current =
         el.scrollHeight - el.scrollTop - el.clientHeight >= STICK_DISTANCE;
@@ -113,7 +124,9 @@ export function useTranscriptScroll(
       if (el.scrollTop > OLDER_DISTANCE) return;
       reachTop(el);
     };
-    pin();
+    // The first pin runs synchronously: a restored transcript must open at
+    // its bottom (a deferred write would paint the top first).
+    pinNow();
     el.addEventListener("scroll", onScroll, { passive: true });
     // A ResizeObserver fires on every layout change (streaming deltas, tool
     // state, images, error rows), so the follow needs no list of sources.
@@ -122,6 +135,7 @@ export function useTranscriptScroll(
     const content = el.firstElementChild;
     if (content) observer.observe(content);
     return () => {
+      if (pinFrame !== undefined) cancelAnimationFrame(pinFrame);
       el.removeEventListener("scroll", onScroll);
       observer.disconnect();
     };

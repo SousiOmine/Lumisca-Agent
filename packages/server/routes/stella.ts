@@ -22,6 +22,8 @@ import {
 import {
   AGENT_ICON_FORMATS,
   agentIconExtensionOfMimeType,
+  createFrameBatcher,
+  type FrameBatcher,
   MAX_AGENT_ICON_BYTES,
   WS_HEARTBEAT_INTERVAL_MS,
   WS_HEARTBEAT_TYPE,
@@ -162,8 +164,15 @@ function decodeBase64(data: string): Uint8Array {
  * host answers with its reason instead of a 404, so the mode-selection screen
  * can explain itself.
  */
-export function stellaRoutes(core: StellaApi): Hono {
+export function stellaRoutes(
+  core: StellaApi,
+  /** How long a streamed delta waits for company before it is sent as one
+   * frame (defaults to `WS_DELTA_FLUSH_MS`). Tests shorten it; production
+   * never sets it. */
+  options: { deltaFlushMs?: number } = {},
+): Hono {
   const app = new Hono();
+  const { deltaFlushMs } = options;
 
   /** What this host can do, and how the machine is doing: the mode-selection
    * screen needs both to decide whether stella can be picked, and stella's
@@ -440,14 +449,22 @@ export function stellaRoutes(core: StellaApi): Hono {
       const agentId = c.req.param("agentId");
       let unsubscribe: (() => void) | undefined;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
+      let batcher: FrameBatcher<string, number> | undefined;
       return {
         onOpen(_event, ws) {
-          const send = (payload: unknown) => {
+          const write = (payload: unknown) => {
             try {
               ws.send(JSON.stringify(payload));
             } catch {
               // The socket closed between the event and the send.
             }
+          };
+          /** Write one frame after whatever deltas are buffered (the
+           * conversation's order is its meaning: an entry replaces the
+           * streaming text, so it must never overtake part of it). */
+          const send = (payload: unknown) => {
+            batcher?.flush();
+            write(payload);
           };
           const session = agentId === undefined
             ? undefined
@@ -457,15 +474,27 @@ export function stellaRoutes(core: StellaApi): Hono {
             return;
           }
           const id = session.id;
+          // The conversation's text streams one delta per token, like the
+          // session stream (see core/shared/ws-batch.ts). The projection
+          // turns `message_delta` into `delta` alone, so the batch is
+          // written here rather than before the projection. One conversation
+          // per socket, so the key is constant.
+          batcher = createFrameBatcher<string, number>({
+            ...(deltaFlushMs === undefined ? {} : { flushMs: deltaFlushMs }),
+            flush: ({ delta, rev, events }) =>
+              write({ type: "delta", delta, rev, events }),
+          });
           unsubscribe = core.subscribe((event) => {
             // Only this conversation's events: the shared stream carries
             // every session (code mode's tabs run at the same time).
             if (!("sessionId" in event) || event.sessionId !== id) return;
+            const rev = core.getSessionRevision(id);
+            if (event.type === "message_delta") {
+              batcher?.delta(id, event.delta, rev);
+              return;
+            }
             for (const projected of stellaEventsOf(event)) {
-              send({
-                ...projected,
-                rev: core.getSessionRevision(id),
-              });
+              send({ ...projected, rev });
             }
           });
           heartbeat = setInterval(
@@ -475,6 +504,8 @@ export function stellaRoutes(core: StellaApi): Hono {
         },
         onClose() {
           if (heartbeat !== undefined) clearInterval(heartbeat);
+          batcher?.close();
+          batcher = undefined;
           unsubscribe?.();
         },
       };

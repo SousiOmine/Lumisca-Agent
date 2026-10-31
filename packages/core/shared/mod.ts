@@ -47,6 +47,7 @@ export * from "./misc.ts";
 export * from "./digest.ts";
 export * from "./loopback.ts";
 export * from "./heartbeat.ts";
+export * from "./ws-batch.ts";
 export * from "./web-search.ts";
 export * from "./routine.ts";
 export * from "./ui-markup/index.ts";

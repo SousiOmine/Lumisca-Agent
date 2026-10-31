@@ -1,8 +1,11 @@
 import { join } from "node:path";
 import { Hono } from "hono";
+import { compress } from "hono/compress";
 import { upgradeWebSocket } from "hono/deno";
 import { type LumiscaCore, nextRunAt } from "@lumisca/core";
 import {
+  createFrameBatcher,
+  type FrameBatcher,
   hostForUrl,
   WS_HEARTBEAT_INTERVAL_MS,
   WS_HEARTBEAT_TYPE,
@@ -76,6 +79,11 @@ export interface AppOptions {
    * `WS_HEARTBEAT_INTERVAL_MS`). Tests shorten it so a heartbeat frame
    * arrives within the test's lifetime; production never sets it. */
   heartbeatMs?: number;
+  /** How long a streamed delta waits for company before it is sent as one
+   * frame (defaults to `WS_DELTA_FLUSH_MS`). Tests shorten it so a run's
+   * whole reply arrives in a frame or two without waiting out the display
+   * interval; production never sets it. */
+  deltaFlushMs?: number;
 }
 
 /** Cleanup hooks per app instance, reached via disposeServer. */
@@ -115,6 +123,16 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   // Host guard, token, CORS, and the WS Origin check.
   installSecurityMiddleware(app, options, (c) => languageForRequest(core, c));
+
+  // Compress the bodies a client actually pays for. The app is opened over a
+  // tailnet or a WAN as often as on loopback, and everything it serves is
+  // text: a 600 KB client bundle, a 140 KB stylesheet inlined into the page,
+  // and JSON snapshots of a transcript. Uncompressed, each is several times
+  // its size on a link where that is the difference between a second and
+  // several. The threshold keeps small answers (a health probe, a panel
+  // snapshot with one row) from paying for a compressor that would not win;
+  // images and fonts are not compressible and are skipped by content type.
+  app.use("*", compress());
 
   // Route handlers throw instead of catching: unify error responses here.
   app.onError((error, c) => {
@@ -160,7 +178,14 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // generic /settings surface filters it out).
   app.route("/api", webSearchRoutes(core));
   app.route("/api", sessionRoutes(core));
-  app.route("/api", stellaRoutes(core));
+  app.route(
+    "/api",
+    stellaRoutes(core, {
+      ...(options.deltaFlushMs === undefined
+        ? {}
+        : { deltaFlushMs: options.deltaFlushMs }),
+    }),
+  );
   // Routines: the scheduled requests of a stella conversation. Addressed by
   // agent, because a routine belongs to one conversation.
   app.route(
@@ -197,7 +222,11 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     let unsubscribe: (() => void) | undefined;
     let unsubscribeFed: (() => void) | undefined;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
-    const send = (ws: { send(data: string): void }, payload: unknown) => {
+    /** Buffered text deltas of this socket, per session (see
+     * core/shared/ws-batch.ts). Created in onOpen: a socket's batch lives
+     * exactly as long as it does. */
+    let batcher: FrameBatcher<string, number> | undefined;
+    const write = (ws: { send(data: string): void }, payload: unknown) => {
       // The socket may have closed between the event and the send (the
       // unsubscribe below runs on close, but a concurrent event can race
       // it); a throw here would kill the subscribe handler.
@@ -207,8 +236,36 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         // connection is gone; nothing to do
       }
     };
+    /** Write one frame, after whatever deltas are buffered: the stream's
+     * order is what tells the client which message a tool result belongs
+     * to. */
+    const send = (ws: { send(data: string): void }, payload: unknown) => {
+      batcher?.flush();
+      write(ws, payload);
+    };
     return {
       onOpen(_evt, ws) {
+        // Text deltas are one frame per token. Locally that costs nothing;
+        // over a tailnet or a WAN the many tiny frames arrive as bursts and
+        // the reply renders in jumps. Batching them into one frame per
+        // session per display interval keeps the flow smooth without
+        // delaying the first character measurably, and a batch carries the
+        // session id, the revision of its last delta and the number of
+        // events it covers (see core/shared/ws-batch.ts).
+        batcher = createFrameBatcher<string, number>({
+          ...(options.deltaFlushMs === undefined
+            ? {}
+            : { flushMs: options.deltaFlushMs }),
+          flush: ({ key, delta, rev, events }) =>
+            write(ws, {
+              peerId: "",
+              sessionId: key,
+              rev,
+              events,
+              type: "message_delta",
+              delta,
+            }),
+        });
         unsubscribe = core.subscribe((event) => {
           // Every event carries the peer id ("" = this server) so the UI
           // routes it to the right session tab, and — for session events —
@@ -216,13 +273,26 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
           // lost frame without another round trip (see
           // core.getSessionRevision).
           const rev = "sessionId" in event
-            ? { rev: core.getSessionRevision(event.sessionId) }
-            : {};
-          send(ws, { peerId: "", ...rev, ...event });
+            ? core.getSessionRevision(event.sessionId)
+            : undefined;
+          if (event.type === "message_delta") {
+            batcher?.delta(event.sessionId, event.delta, rev);
+            return;
+          }
+          send(
+            ws,
+            {
+              peerId: "",
+              ...(rev === undefined ? {} : { rev }),
+              ...event,
+            },
+          );
         });
         // Federated peers' events, tagged with their id. The peer's own
         // `peerId` marker ("" on its side) is stripped first, so the tag
-        // is always the id this hub knows.
+        // is always the id this hub knows. A relayed delta is already
+        // batched by the peer; it passes through in order (flush first, so
+        // this socket's own buffered text does not overtake it).
         unsubscribeFed = fed.subscribe((peerId, event) => {
           const { peerId: _stale, ...rest } = event as Record<string, unknown>;
           send(ws, { peerId, ...rest });
@@ -239,6 +309,11 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       },
       onClose() {
         if (heartbeat !== undefined) clearInterval(heartbeat);
+        // Text the model already produced is flushed before the socket is
+        // gone (the socket may be closing on the client's side, but the
+        // batch is this side's buffer).
+        batcher?.close();
+        batcher = undefined;
         unsubscribe?.();
         unsubscribeFed?.();
       },

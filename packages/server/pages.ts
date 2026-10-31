@@ -15,6 +15,11 @@ import {
 import type { InitialData } from "@lumisca/core/shared";
 import type { Assets } from "./assets.ts";
 import { renderHtmlDocument } from "./render.ts";
+import {
+  appFileHeaders,
+  contentEtag,
+  etagMatches,
+} from "./app-file-headers.ts";
 
 /** Theme preference from the core settings ("system" when unset/unknown).
  * The client resolves "system" via prefers-color-scheme; the shell falls back
@@ -78,7 +83,12 @@ export function registerPages(
         language,
       }),
       200,
-      { "content-type": "text/html; charset=utf-8" },
+      {
+        "content-type": "text/html; charset=utf-8",
+        // The document carries the auth token: a shared cache (or the
+        // browser's own on-disk copy) must not keep it.
+        ...appFileHeaders("no-store"),
+      },
     );
   };
 
@@ -92,15 +102,42 @@ export function registerPages(
       : "";
     return c.body(`window.__INITIAL_DATA__ = ${safeData};${tokenLine}`, 200, {
       "content-type": "application/javascript; charset=utf-8",
+      // This one carries the token itself.
+      ...appFileHeaders("no-store"),
     });
   });
+
+  /** Answer a revalidatable app file, or 304 when the client already has
+   * this exact build. The bundle is ~600 KB and its URL is stable across
+   * builds, so the round trip is what a reload costs instead of the payload
+   * — the difference between opening the app over a tailnet in a second and
+   * in several. */
+  const serveRevalidatable = (
+    c: Context,
+    body: string,
+    contentType: string,
+  ): Response => {
+    const etag = contentEtag(body);
+    const headers = {
+      "content-type": contentType,
+      ...appFileHeaders("revalidate", etag),
+    };
+    if (etagMatches(c.req.header("if-none-match"), etag)) {
+      // A 304 keeps the validator and the policy (the browser reuses its
+      // copy), and carries no body.
+      return c.body(null, 304, headers);
+    }
+    return c.body(body, 200, headers);
+  };
 
   app.get("/assets/app.js", async (c) => {
     try {
       const js = await assets.getAppJs();
-      return c.body(js, 200, {
-        "content-type": "application/javascript; charset=utf-8",
-      });
+      return serveRevalidatable(
+        c,
+        js,
+        "application/javascript; charset=utf-8",
+      );
     } catch (error) {
       return c.text(
         `Client bundle build failed: ${errorMessage(error)}`,
@@ -112,7 +149,7 @@ export function registerPages(
   app.get("/styles.css", async (c) => {
     try {
       const css = await assets.getCss();
-      return c.body(css, 200, { "content-type": "text/css; charset=utf-8" });
+      return serveRevalidatable(c, css, "text/css; charset=utf-8");
     } catch (error) {
       return c.text(`Stylesheet build failed: ${errorMessage(error)}`, 500);
     }

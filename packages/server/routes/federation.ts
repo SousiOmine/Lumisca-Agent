@@ -4,6 +4,34 @@ import { errorMessage } from "@lumisca/core";
 import { AppError } from "./util.ts";
 import type { FederationClient } from "../federation.ts";
 
+/** How long the peer-reachability probe may take (see the route below): long
+ * enough for a slow tailnet hop, short enough that one unreachable peer does
+ * not hold the session list for a full request budget. */
+const PEER_PROBE_TIMEOUT_MS = 3000;
+
+/** Response headers a proxied answer keeps. Each one is a statement only the
+ * machine that produced the body can make:
+ *
+ * - `content-disposition`: the name a download keeps (`chat_attach`);
+ * - `cache-control`: whether the client may reuse the answer (the asset
+ *   routes say "forever", and that must survive the hub);
+ * - `etag` / `vary`: the validators a cache re-checks with;
+ * - `content-security-policy`: what an SVG served by the peer may execute;
+ * - `x-content-type-options`: no type sniffing of that body.
+ *
+ * Not `content-encoding`: the hub's own fetch decoded the body, so the
+ * client would be told to decompress plain text. Not `content-length` for
+ * the same reason (and a re-compressed response has a new length).
+ */
+const PROXIED_RESPONSE_HEADERS = [
+  "content-disposition",
+  "cache-control",
+  "etag",
+  "vary",
+  "content-security-policy",
+  "x-content-type-options",
+] as const;
+
 /**
  * Federated (hub-and-spoke) API. The UI is served by the hub; everything
  * below `/fed/:peerId/` proxies to the peer that owns the resource, so the
@@ -44,12 +72,21 @@ export function federationRoutes(fed: FederationClient): Hono {
    *
    * The probe is the peer's `/api/health`, which is the same answer the
    * desktop shell's connection check reads: a machine that answers it is
-   * the machine whose sessions this hub can list and proxy. */
+   * the machine whose sessions this hub can list and proxy. It runs with a
+   * short budget of its own: the question is "is this machine up", and the
+   * session list waits on the answer before it can show anything, so one
+   * unreachable peer must not hold the whole list for a full request
+   * budget. */
   app.get("/fed/peers", async (c) => {
     const peers = await Promise.all(
       fed.peers().map(async (peer) => {
         try {
-          await fed.request(peer, "GET", "/api/health");
+          await fed.requestWithTimeout(
+            peer,
+            "GET",
+            "/api/health",
+            PEER_PROBE_TIMEOUT_MS,
+          );
           return {
             id: peer.id,
             name: peer.name,
@@ -73,7 +110,15 @@ export function federationRoutes(fed: FederationClient): Hono {
 
   /** Generic per-peer proxy: any method, any path below `/fed/:peerId/`.
    * The body is passed through verbatim and the peer's response is
-   * streamed back with its status and content type. */
+   * streamed back.
+   *
+   * A proxied response is not just its JSON: the peer decides the type, the
+   * download name (`chat_attach`'s files), whether the result may be cached,
+   * and what an SVG may execute. Dropping those headers made a file arrive
+   * under a random name and an SVG arrive without its policy — the browser
+   * was told less than the machine that owns the file said. `content-encoding`
+   * is deliberately NOT copied: this server's own `fetch` decoded the body,
+   * so passing the header on would make the client decompress plain text. */
   app.all("/fed/:peerId/*", async (c) => {
     const peer = requirePeer(c);
     // Hono 4.x does not expose the splat via param("*") (matches but
@@ -91,9 +136,13 @@ export function federationRoutes(fed: FederationClient): Hono {
       undefined,
       raw.length > 0 ? raw : undefined,
     );
-    const headers = {
+    const headers: Record<string, string> = {
       "content-type": res.headers.get("content-type") ?? "application/json",
     };
+    for (const name of PROXIED_RESPONSE_HEADERS) {
+      const value = res.headers.get(name);
+      if (value !== null) headers[name] = value;
+    }
     const status = res.status as ContentfulStatusCode;
     return res.body === null
       ? c.body(null, status, headers)

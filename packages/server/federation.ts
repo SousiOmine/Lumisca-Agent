@@ -22,6 +22,40 @@ const RECONNECT_MAX_MS = 30_000;
  * anyway. */
 const IDENTITY_PROBE_MS = 3000;
 
+/** Budget of one proxied request. A peer on a tailnet answers a reads in
+ * well under a second, so this is generous for the ordinary call — and it
+ * used to be the ONLY budget, which is what made the long ones fail: opening
+ * a session on a cold machine (an agent restored from disk, a VM image being
+ * checked), a transcript snapshot of a compacted conversation and an on-
+ * demand compaction all legitimately take longer, and a proxy that gives up
+ * at ten seconds turns a slow answer into an error the peer never made. */
+const PROXY_TIMEOUT_MS = 30_000;
+
+/** Budget of the paths that are legitimately slow (see above). Chosen to sit
+ * under the desktop's own limits while comfortably above the work. */
+const PROXY_SLOW_TIMEOUT_MS = 120_000;
+
+/** Paths whose handlers do real work rather than read a row: opening a
+ * session (which may restore an agent), reading a transcript window, and the
+ * two explicit compactions. Matched by suffix because the peer's routes are
+ * mounted under `/api` and the proxy forwards the remainder verbatim. */
+const SLOW_PATH_PATTERNS = [
+  /^\/api\/sessions\/[^/]+\/messages(\?|$)/,
+  /^\/api\/sessions\/[^/]+\/open$/,
+  /^\/api\/sessions\/[^/]+\/compact$/,
+  /^\/api\/sessions\/[^/]+\/rewind$/,
+  /^\/api\/stella\/conversations\/[^/]+\/messages(\?|$)/,
+  /^\/api\/stella\/session(\?|$)/,
+  /^\/api\/stella\/conversations\/[^/]+\/compact$/,
+];
+
+/** The budget one proxied path gets (see {@link PROXY_TIMEOUT_MS}). */
+export function proxyTimeoutFor(path: string): number {
+  return SLOW_PATH_PATTERNS.some((pattern) => pattern.test(path))
+    ? PROXY_SLOW_TIMEOUT_MS
+    : PROXY_TIMEOUT_MS;
+}
+
 /** Registry key of a peer for the identity probe. The id alone would keep an
  * entry the user re-pointed at another machine excluded forever, and the URL
  * alone would mix two entries that name the same address. */
@@ -235,14 +269,37 @@ export class FederationClient {
     return this.peers().find((peer) => peer.id === id);
   }
 
-  /** Proxy a request to a peer (token header attached, 10s timeout).
-   * `rawBody` (when given) is sent verbatim; otherwise `body` is
-   * JSON-serialized. Throws PeerError: 502 when unreachable, or the
-   * peer's own status with its error message. */
+  /** Proxy a request to a peer (token header attached; the budget depends on
+   * the path, see proxyTimeoutFor). `rawBody` (when given) is sent verbatim;
+   * otherwise `body` is JSON-serialized. Throws PeerError: 502 when
+   * unreachable (or too slow), or the peer's own status with its error
+   * message. */
   async request(
     peer: ConnectionEntry,
     method: string,
     path: string,
+    body?: unknown,
+    rawBody?: string,
+  ): Promise<Response> {
+    return await this.requestWithTimeout(
+      peer,
+      method,
+      path,
+      proxyTimeoutFor(path),
+      body,
+      rawBody,
+    );
+  }
+
+  /** {@link request} with an explicit budget (the peer probe uses a short
+   * one: its answer only says whether a machine is up, and waiting a full
+   * request budget per peer makes the UI's peer list as slow as its slowest
+   * machine). */
+  async requestWithTimeout(
+    peer: ConnectionEntry,
+    method: string,
+    path: string,
+    timeoutMs: number,
     body?: unknown,
     rawBody?: string,
   ): Promise<Response> {
@@ -258,7 +315,7 @@ export class FederationClient {
         },
         body: rawBody ??
           (body === undefined ? undefined : JSON.stringify(body)),
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
       throw new PeerError(

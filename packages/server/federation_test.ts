@@ -1,6 +1,7 @@
-import { assertEquals } from "@std/assert";
-import type { ConnectionEntry } from "@lumisca/core";
-import { FederationClient } from "./federation.ts";
+import { assert, assertEquals } from "@std/assert";
+import { type ConnectionEntry, fauxProvider, LumiscaCore } from "@lumisca/core";
+import { FederationClient, proxyTimeoutFor } from "./federation.ts";
+import { startServer } from "./app.ts";
 
 /** The first reconnect backoff the restart test gives the client. Small
  * enough that a leaked stream would retry many times during the wait, so the
@@ -279,6 +280,97 @@ Deno.test("federation: the hub recognises itself under any URL", async () => {
     assertEquals(sockets.size, 0, "the hub must not federate with itself");
   } finally {
     client.close();
+    await peerServer.shutdown();
+  }
+});
+
+Deno.test("federation: a slow path gets a longer budget than an ordinary one", () => {
+  // A transcript snapshot, a cold session open and an explicit compaction do
+  // real work; an ordinary read answers from a row. One budget for both is
+  // what made the remote path fail on the slow ones (a 10 s cut-off turned a
+  // slow answer into an error the peer never produced).
+  assert(
+    proxyTimeoutFor("/api/sessions/s1/messages") > proxyTimeoutFor(
+      "/api/sessions",
+    ),
+  );
+  assert(
+    proxyTimeoutFor("/api/sessions/s1/messages?limit=40") >
+      proxyTimeoutFor("/api/sessions/s1"),
+  );
+  for (
+    const slow of [
+      "/api/sessions/s1/open",
+      "/api/sessions/s1/compact",
+      "/api/sessions/s1/rewind",
+      "/api/stella/session",
+      "/api/stella/conversations/a/messages",
+      "/api/stella/conversations/a/compact",
+    ]
+  ) {
+    assert(
+      proxyTimeoutFor(slow) > proxyTimeoutFor("/api/providers"),
+      `${slow} must get the slow budget`,
+    );
+  }
+  // A path that merely contains a slow-looking segment is not one.
+  assertEquals(
+    proxyTimeoutFor("/api/sessions/s1/messagesX"),
+    proxyTimeoutFor("/api/sessions"),
+  );
+});
+
+Deno.test("the fed proxy keeps the headers only the peer can set", async () => {
+  // A proxied answer is not just its JSON. The peer decides the download
+  // name (`chat_attach`), whether a client may cache the bytes, and what an
+  // SVG may execute; dropping those made a remote file arrive under a random
+  // name. `content-encoding` is deliberately absent: the hub's fetch decoded
+  // the body, so passing it on would make the client decompress plain text.
+  const peerServer = Deno.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    onListen: () => {},
+  }, (req) => {
+    if (new URL(req.url).pathname === "/api/health") {
+      return Response.json({ ok: true, now: Date.now(), instanceId: "peer" });
+    }
+    return new Response("hello", {
+      headers: {
+        "content-type": "image/svg+xml",
+        "content-disposition": "inline; filename*=UTF-8''a%20b.svg",
+        "cache-control": "private, max-age=31536000, immutable",
+        etag: 'W/"abc"',
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "default-src 'none'; sandbox",
+      },
+    });
+  });
+  const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  core.setConnections([{ id: "p1", name: "p1", url: peerUrl, token: "t" }]);
+  const server = startServer(core, 0, {});
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+    const res = await fetch(`${base}/api/fed/p1/sessions/s1/attachment/x.svg`);
+    assertEquals(res.status, 200);
+    assertEquals(await res.text(), "hello");
+    assertEquals(
+      res.headers.get("content-disposition"),
+      "inline; filename*=UTF-8''a%20b.svg",
+    );
+    assertEquals(
+      res.headers.get("cache-control"),
+      "private, max-age=31536000, immutable",
+    );
+    assertEquals(res.headers.get("etag"), 'W/"abc"');
+    assertEquals(res.headers.get("x-content-type-options"), "nosniff");
+    assertEquals(
+      res.headers.get("content-security-policy"),
+      "default-src 'none'; sandbox",
+    );
+  } finally {
+    server.shutdown();
+    await core.close();
     await peerServer.shutdown();
   }
 });

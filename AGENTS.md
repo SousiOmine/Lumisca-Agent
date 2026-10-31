@@ -108,6 +108,15 @@ npm outdated                                                   # packages/deskto
 - **設定の接続先サーバー**の一覧は編集用です。行は畳んだ状態が既定で、押すと入力欄が開き、保存で閉じます。名前が空のまま URL を入力したらホスト名を補完します（手で入れた名前は上書きしません）。
 - **自分自身とは連携しない**: サーバーは `connections` の各項目へ `/ws` を張ってイベントを中継しますが、その項目が自分自身なら中継しません。判定は URL ではなく `/api/health` の `instanceId`（プロセスごとの uuid）で行います。tailnet 名・LAN アドレス・リバースプロキシ経由の自分は URL の文字列では見分けられないためです。中継済みのフレーム（`peerId` が入っているもの）を再中継しないのも同じ理由で、自分自身への接続があるとエコーが止まらず、CPU を 1 コア占有したままメモリを使い切ります（`packages/server/federation.ts`）。
 
+### リモート接続での応答（差分の結合・圧縮・プロキシ）
+
+- **本文の差分はセッション単位でまとめる**: `/ws` と stella の会話ストリームは `message_delta` / `delta` を 16 ms 分まとめて 1 フレームにします（`packages/core/shared/ws-batch.ts`）。**キーはセッション id**です。1 本のソケットが複数タブのイベントを運ぶので、キーを分けないと別タブの語が混ざります。ツール開始・メッセージ確定・実行終了などのイベントは遅延させず、送る前に保留分を flush します（順序が崩れると本文が確定メッセージの後に届きます）。
+- **rev はイベント数のまま**: フレームには含めた最後の `rev` と、含めたイベント数 `events` を載せます。クライアントの `revisionGap` は `events` を使います。ここを「1 フレーム = 1 イベント」に戻すと、結合のたびにスナップショットを取り直します。
+- **クライアントも rAF でまとめる**: サーバーがまとめても描画前に複数フレームが届きます。`useSessionEvents` / `useStella` は保留中の delta をアニメーションフレーム単位で反映し、他のイベントの適用前に必ず flush します（`resync` も同様）。
+- **応答は圧縮し、アセットは再検証させる**: `hono/compress`（閾値 1 KB）を全応答に掛けます。`/assets/app.js` と `/styles.css` は `ETag` + `private, max-age=0, must-revalidate`（304 で本文なし）、ページと `/assets/initial-data.js` はトークンを運ぶため `no-store` です。規則は `packages/server/app-file-headers.ts` に集約しています。
+- **プロキシのタイムアウトは用途別**: `packages/server/federation.ts` の `proxyTimeoutFor` がパスから決めます（通常 30 秒、open／messages／compact／rewind は 120 秒、`/fed/peers` の到達性確認は 3 秒）。一律の短いタイムアウトは、遅いが正常なリモート処理を 502 にします。
+- **プロキシはヘッダを選んで透過する**: `content-disposition`・`cache-control`・`etag`・`vary`・`content-security-policy`・`x-content-type-options` は通します。`content-encoding` は通しません（ハブの `fetch` が解凍済み）。
+
 ## 7. stella mode（仮想マシン）
 
 stella mode は、podman コンテナを仮想マシンとして与え、その中だけでエージェントを動かす動作モードです。実装は `packages/core/vm/` にあり、会話は相手（agent）ごとに 1 本だけ存在します。

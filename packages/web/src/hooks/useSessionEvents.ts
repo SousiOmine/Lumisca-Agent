@@ -313,6 +313,47 @@ export function useSessionEvents(
     return true;
   }, [markLoading, setViews, syncState]);
 
+  /** Text deltas of the frames received since the last animation frame, per
+   * tab key. The server already batches one run's tokens into one frame per
+   * display interval (see core/shared/ws-batch.ts), but a busy machine can
+   * deliver several frames before the browser paints once; applying each in
+   * turn re-renders the whole view (and re-lays out the transcript) several
+   * times per frame. The buffer makes the state update once per painted
+   * frame, and every other event flushes it first so the text can never
+   * arrive after the message it belongs to. */
+  const pendingDeltas = useRef(new Map<string, string>());
+  const deltaFrame = useRef<number | undefined>(undefined);
+
+  /** Write the buffered deltas into the views (one state update per tab). */
+  const flushDeltas = useCallback(() => {
+    if (deltaFrame.current !== undefined) {
+      cancelAnimationFrame(deltaFrame.current);
+      deltaFrame.current = undefined;
+    }
+    if (pendingDeltas.current.size === 0) return;
+    const batch = pendingDeltas.current;
+    pendingDeltas.current = new Map();
+    setViews((prev) => {
+      let next: Map<string, SessionView> | null = null;
+      for (const [key, text] of batch) {
+        const target = (next ?? prev).get(key);
+        if (target === undefined) continue;
+        const nextView = applyEvent(
+          {
+            type: "message_delta",
+            sessionId: target.info.id,
+            delta: text,
+          },
+          target,
+        );
+        if (nextView === null || nextView === target) continue;
+        next ??= new Map(prev);
+        next.set(key, nextView);
+      }
+      return next ?? prev;
+    });
+  }, [setViews]);
+
   /** Clear per-session transient state (stuck streaming/tool indicators)
    * and re-fetch the session snapshot and the panel snapshots, so nothing
    * is lost after a WS drop. The run state, the pending questions and the
@@ -322,6 +363,9 @@ export function useSessionEvents(
    * until the next `agent_start`. syncState reconciles all of them from the
    * server's answer (the snapshot carries them). */
   const resync = useCallback(async () => {
+    // Buffered text was produced before this resync: write it first, or the
+    // reset below would drop the last frame of a reply.
+    flushDeltas();
     setViews((prev) => {
       const next = new Map(prev);
       for (const [id, v] of next) {
@@ -335,7 +379,7 @@ export function useSessionEvents(
       return next;
     });
     await syncState();
-  }, [syncState]);
+  }, [flushDeltas, syncState]);
 
   /** Apply a WS event to the matching session view (pure reducer). Events
    * carry the peer id ("" = this server); the tab key resolves the view.
@@ -347,7 +391,15 @@ export function useSessionEvents(
    * must stay the single writer of view state, so notification sends are
    * fire-and-forget and never block or reorder the state update. */
   const handleEvent = useCallback(
-    (event: ClientEvent & { peerId?: string; rev?: number }) => {
+    (
+      event: ClientEvent & {
+        peerId?: string;
+        rev?: number;
+        /** Events this frame accounts for when the server batched several
+         * (see revisionGap). Absent on a frame that carries exactly one. */
+        events?: number;
+      },
+    ) => {
       if (event.type === "session_created") return;
       // A peer's relay came back: the sessions watched through it may have
       // missed events while it was down (the peer's own stream drops are
@@ -362,15 +414,36 @@ export function useSessionEvents(
         return;
       }
       const key = tabKey(event.peerId ?? "", event.sessionId);
+      // Text deltas are buffered until the next frame (see pendingDeltas):
+      // several frames can land between two paints, and each one would
+      // otherwise re-render the whole transcript.
+      if (event.type === "message_delta") {
+        const buffered = pendingDeltas.current.get(key) ?? "";
+        pendingDeltas.current.set(key, buffered + event.delta);
+        if (deltaFrame.current === undefined) {
+          deltaFrame.current = requestAnimationFrame(() => {
+            deltaFrame.current = undefined;
+            flushDeltas();
+          });
+        }
+        return;
+      }
+      // Every other event is about a different thing (a tool started, a
+      // message is complete): it must land after the text that precedes it,
+      // so the buffer goes first.
+      flushDeltas();
       // A revision that skips ahead means frames were lost (a socket that
       // died without a close event, a peer's relay gap): this tab's view
       // cannot be trusted, so re-read its snapshot. Only the client's own
       // open tabs are tracked — the stream carries every session's events,
       // and the first frame of an untracked session only seeds the marker
-      // (nothing was expected before it).
+      // (nothing was expected before it). `events` is the frame's own count
+      // of the events it covers, so a batched delta frame (the server sends
+      // one per display interval, see core/shared/ws-batch.ts) is not read
+      // as a gap.
       if (event.rev !== undefined && viewsRef.current.has(key)) {
         const known = revsRef.current.get(key);
-        if (revisionGap(known, event.rev)) {
+        if (revisionGap(known, event.rev, event.events ?? 1)) {
           void syncState([key]);
         }
         revsRef.current.set(key, event.rev);
@@ -411,7 +484,7 @@ export function useSessionEvents(
         return next;
       });
     },
-    [syncState],
+    [flushDeltas, syncState],
   );
 
   /** Record an error on a session view (no-op when the tab is gone). The
@@ -507,6 +580,10 @@ export function useSessionEvents(
     // disconnected case).
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return;
+      // A hidden page's animation frames are suspended: whatever text was
+      // buffered before it hid is still pending, and must land before the
+      // resync below compares the view with the server's snapshot.
+      flushDeltas();
       if (connected) {
         syncState();
       } else {
@@ -558,21 +635,31 @@ export function useSessionEvents(
       cleanup();
       stopSyncTimer();
       clearInterval(probeTimer);
+      // Text buffered for the next frame must land before the views are
+      // left alone (the page may be navigating away, and the snapshot on
+      // return would be the only remaining source).
+      flushDeltas();
       document.removeEventListener("visibilitychange", onVisibility);
     };
     // options.* are stable callbacks from the caller (App wires the health
     // monitor's noteFailure once); re-subscribing the socket on every App
     // render would flap the connection, so the effect stays mount-only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleEvent, resync, syncState]);
+  }, [flushDeltas, handleEvent, resync, syncState]);
 
   /** Forget the revision markers of tabs that no longer exist. A marker is
    * only ever added (an event advances it, a snapshot seeds it), so a long
    * session that opens and closes many tabs would grow the map for the life
    * of the page. Nothing reads a closed tab's marker — the probe skips keys
-   * without a view — but keeping it is pure garbage. */
+   * without a view — but keeping it is pure garbage. Buffered text of a
+   * closed tab would also keep arriving on the next frame, which would
+   * resurrect a view that is gone (the reducer finds no target and drops it,
+   * but there is no reason to carry the text). */
   const forgetRevisions = useCallback((keys: Iterable<string>) => {
-    for (const key of keys) revsRef.current.delete(key);
+    for (const key of keys) {
+      revsRef.current.delete(key);
+      pendingDeltas.current.delete(key);
+    }
   }, []);
 
   return {

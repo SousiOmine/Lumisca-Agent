@@ -172,6 +172,28 @@ export function useStella(enabled: boolean): {
     let close: (() => void) | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
+    // Text received since the last animation frame (see flushDelta): the
+    // server batches a reply's tokens per display interval, but more than
+    // one frame can land before the browser paints. Applying each would
+    // re-render the conversation (and its markdown) several times per frame.
+    let pendingDelta = "";
+    let deltaFrame: number | undefined;
+
+    /** Write the buffered text into the conversation once per painted
+     * frame. */
+    const flushDelta = () => {
+      if (deltaFrame !== undefined) {
+        cancelAnimationFrame(deltaFrame);
+        deltaFrame = undefined;
+      }
+      if (pendingDelta.length === 0) return;
+      const delta = pendingDelta;
+      pendingDelta = "";
+      setConversation((current) => {
+        if (current === null) return current;
+        return applyStellaEvent(current, { type: "delta", delta }) ?? current;
+      });
+    };
 
     const resync = async () => {
       try {
@@ -193,6 +215,20 @@ export function useStella(enabled: boolean): {
       close = connectStellaEvents(
         activeAgentId,
         (event) => {
+          if (event.type === "delta") {
+            pendingDelta += event.delta;
+            if (deltaFrame === undefined) {
+              deltaFrame = requestAnimationFrame(() => {
+                deltaFrame = undefined;
+                flushDelta();
+              });
+            }
+            return;
+          }
+          // Every other event replaces or ends the streamed text (an entry
+          // takes its place, a run ends): it must land after what preceded
+          // it.
+          flushDelta();
           setConversation((current) => {
             if (current === null) return current;
             return applyStellaEvent(current, event) ?? current;
@@ -200,6 +236,7 @@ export function useStella(enabled: boolean): {
         },
         () => {
           if (closed) return;
+          flushDelta();
           void resync();
           retry = setTimeout(
             connect,
@@ -209,6 +246,7 @@ export function useStella(enabled: boolean): {
         },
         () => {
           attempt = 0;
+          flushDelta();
           void resync();
         },
       );
@@ -233,6 +271,8 @@ export function useStella(enabled: boolean): {
       closed = true;
       if (retry !== undefined) clearTimeout(retry);
       clearInterval(probeTimer);
+      // Text already produced must not be dropped with the socket.
+      flushDelta();
       close?.();
     };
     // `conversation === null` gates the first connection: there is no
