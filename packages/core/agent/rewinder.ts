@@ -4,6 +4,7 @@ import type { AgentMessage } from "../ai/types.ts";
 import type { GoalRunner } from "./goal-runner.ts";
 import type { RetryManager } from "./retry-manager.ts";
 import type { TranscriptStore } from "./transcript.ts";
+import { messageIdentityOf } from "../session/transcript-window.ts";
 import type { MessageIdentity } from "../types/event.ts";
 
 /** What a rewind needs from its session: the live transcript and the pieces
@@ -26,8 +27,9 @@ export interface RewindDeps {
 }
 
 /** One message the truncation dropped, as clients know it (see
- * MessageIdentity): role + timestamp, plus the tool call id for tool
- * results, so a client drops exactly these and nothing else. */
+ * MessageIdentity): role + timestamp, plus the tool call id for tool results
+ * and the provider for context snapshots, so a client drops exactly these and
+ * nothing else. */
 export type RemovedMessage = MessageIdentity;
 
 /**
@@ -109,13 +111,7 @@ export class Rewinder {
     );
     let removed: RemovedMessage[] = [];
     const truncateFrom = (cut: number) => {
-      removed = messages.splice(cut).map((message) => ({
-        role: message.role,
-        timestamp: message.timestamp,
-        ...(message.role === "toolResult"
-          ? { toolCallId: message.toolCallId }
-          : {}),
-      }));
+      removed = messages.splice(cut).map(messageIdentityOf);
       deps.transcript.forgetFrom(messages, cut);
     };
     if (index !== -1) {

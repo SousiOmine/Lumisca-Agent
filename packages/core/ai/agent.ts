@@ -315,6 +315,23 @@ export class Agent {
     this.state.messages.push(message);
   }
 
+  /** The timestamp of the next message this agent appends. Strictly
+   * increasing, so the transcript's order is also its timestamp order: the
+   * clients keep a window of the transcript, identify messages by role +
+   * timestamp and drop a live message older than their newest one (see web's
+   * applyMessage), while the window merge anchors on those identities.
+   *
+   * The clock alone is not enough. A prompt-side message and the context
+   * snapshots published just before it can share a millisecond, and the
+   * transport stamps the assistant message when the stream finalizes —
+   * sometimes BEFORE the tool results it just produced. Inheriting the
+   * previous message's stamp fixes both without inventing a virtual clock:
+   * the transcript already knows the order it wants. */
+  nextTimestamp(): number {
+    const previous = this.state.messages.at(-1)?.timestamp ?? 0;
+    return Math.max(Date.now(), previous + 1);
+  }
+
   /** Append a message to the transcript without starting a run. Used by
    * the session agent for context snapshots (skill catalog, workspace
    * instructions), which must be in history before the run they precede. */
@@ -396,8 +413,11 @@ export class Agent {
     // Tool results the SDK produced during this turn. Buffered while
     // streaming (events go out immediately) and appended to the transcript
     // AFTER the assistant message, so the order stays
-    // assistant(toolCalls) → toolResults — the order providers expect.
-    const pendingResults: ToolResultMessage[] = [];
+    // assistant(toolCalls) → toolResults — the order providers expect. The
+    // timestamp is missing on purpose: it is stamped when the buffer is
+    // flushed into the transcript (see below), after the assistant message it
+    // must follow.
+    const pendingResults: Omit<ToolResultMessage, "timestamp">[] = [];
 
     const llmMessages = await this.convertToLlm(this.state.messages);
     this.noteRequest(llmMessages as unknown[]);
@@ -486,7 +506,6 @@ export class Agent {
           >,
           details,
           isError: event.isError,
-          timestamp: Date.now(),
         });
       } else if (event.type === "done") {
         final = event.message;
@@ -512,12 +531,23 @@ export class Agent {
       };
     }
 
-    this.state.messages.push(final!);
-    for (const result of pendingResults) {
-      this.state.messages.push(result);
-    }
+    // The assistant message and its tool results enter the transcript here,
+    // so they are stamped here too: the turn's own messages must follow the
+    // prompt that started it, and each result must follow the assistant
+    // message it belongs to (a stream can finalize the answer after the
+    // results finished, which the transport's own stamping did not account
+    // for). Order and timestamps describe the same transcript; the clients
+    // keep a window and identify messages by role + timestamp (see
+    // MessageIdentity, and web's applyMessage / mergeNewestWindow).
+    final = { ...final!, timestamp: this.nextTimestamp() };
+    this.state.messages.push(final);
+    const results = pendingResults.map((result): ToolResultMessage => ({
+      ...result,
+      timestamp: this.nextTimestamp(),
+    }));
+    this.state.messages.push(...results);
     this.state.errorMessage = errorMessage ?? this.state.errorMessage;
-    this.emit({ type: "message_end", message: final! });
+    this.emit({ type: "message_end", message: final });
     // The turn's tool results are messages of the transcript like any
     // other, so they are announced too — after their assistant message, the
     // order they hold in the transcript. The live UI pairs each result with
@@ -525,10 +555,10 @@ export class Agent {
     // from the toolResult message); without this announcement those marks
     // only appear when the view happens to re-read the transcript snapshot
     // (a reload, a WS reconnect, or a return to the foreground).
-    for (const result of pendingResults) {
+    for (const result of results) {
       this.announce(result);
     }
-    return { assistant: final!, executedIds };
+    return { assistant: final, executedIds };
   }
 
   /** Announce a message this agent appended to the transcript (the session
@@ -638,6 +668,9 @@ export class Agent {
       }
     }
     if (reminder === undefined) return;
+    // Stamped on the way in, like every message this agent appends (see
+    // nextTimestamp): the builder has no transcript to look at.
+    reminder.timestamp = this.nextTimestamp();
     this.state.messages.push(reminder);
     this.announce(reminder);
   }
@@ -701,7 +734,10 @@ export class Agent {
         content: outcome.content,
         details: outcome.details,
         isError: outcome.isError,
-        timestamp: Date.now(),
+        // Appended now and stamped now: a result must follow the assistant
+        // message it belongs to in time as well as in order (see
+        // nextTimestamp).
+        timestamp: this.nextTimestamp(),
       };
       this.state.messages.push(result);
       this.announce(result);

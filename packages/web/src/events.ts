@@ -19,18 +19,33 @@ import type {
 import type { SessionSnapshot } from "./api-local.ts";
 
 /** Identity key for dedup: messages are keyed by role + timestamp (the
- * same pair used by the persisted rows), except tool results, which are
- * keyed by their tool call id instead — a turn's parallel tool calls can
- * finish within the same millisecond, and a shared timestamp would make
- * the live upsert replace one of them and the resync merge skip it for
- * good (a message is never re-added once its key is known). The minimal
- * shape also accepts the entries carried by the messages_truncated event,
- * which name the same fields. */
+ * same pair used by the persisted rows), with one extra field for the two
+ * roles whose millisecond is not unique:
+ *
+ * - a tool result is keyed by its tool call id (a turn's parallel calls can
+ *   finish within the same millisecond, and a shared timestamp would make
+ *   the live upsert replace one of them and the resync merge skip it for
+ *   good — a message is never re-added once its key is known);
+ * - a context snapshot by its provider (the dynamic contexts are published
+ *   in one loop and share the millisecond; without this two of them look
+ *   like one message, the resync merge re-anchors on the wrong index and the
+ *   row is inserted again on every sync).
+ *
+ * The minimal shape also accepts the entries carried by the
+ * messages_truncated event, which name the same fields. */
 export function messageKey(
-  m: { role: string; timestamp: number; toolCallId?: unknown },
+  m: {
+    role: string;
+    timestamp: number;
+    toolCallId?: unknown;
+    provider?: unknown;
+  },
 ): string {
   if (m.role === "toolResult" && typeof m.toolCallId === "string") {
     return `${m.role}:${m.toolCallId}`;
+  }
+  if (m.role === "context" && typeof m.provider === "string") {
+    return `${m.role}:${m.provider}:${m.timestamp}`;
   }
   return `${m.role}:${m.timestamp}`;
 }
@@ -63,9 +78,13 @@ export interface LoadedHistory {
  * kept writing while the socket was down), and — when compaction spliced a
  * checkpoint into the history — a row in the middle.
  *
- * The merge anchors each incoming message on the one with the same identity
- * and inserts what it lacks in front of the anchor it precedes; messages that
- * follow the last anchor are the transcript's newest and extend the end.
+ * The merge anchors each incoming message on an occurrence of the same
+ * identity in the view: messages sharing one key (two tool results of the
+ * same call cannot, but the same identity CAN appear twice in a corrupted
+ * history) are matched in order, each anchor consumed once. Anchoring on
+ * "the index of the key" instead let two view messages share an anchor, and
+ * every resync then inserted the same rows again — the transcript grew
+ * without anything new happening.
  *
  * The cursor (the identity of the oldest loaded message) is recomputed here
  * rather than taken from either side: it stays the view's while the view's
@@ -91,10 +110,17 @@ export function mergeNewestWindow(
     return { messages: filterRemoved(fetched, removed), older: window.older };
   }
 
-  const indexByKey = new Map(
-    existing.map((message, index) => [messageKey(message), index] as const),
-  );
-  if (!fetched.some((message) => indexByKey.has(messageKey(message)))) {
+  // Every identity in the view, with the positions it occupies: an incoming
+  // message takes the next unused one, so a duplicated identity consumes one
+  // view message each instead of piling up on the last.
+  const anchorsByKey = new Map<string, number[]>();
+  existing.forEach((message, index) => {
+    const key = messageKey(message);
+    const positions = anchorsByKey.get(key);
+    if (positions === undefined) anchorsByKey.set(key, [index]);
+    else positions.push(index);
+  });
+  if (!fetched.some((message) => anchorsByKey.has(messageKey(message)))) {
     // No overlap: the view is behind by a whole page or more.
     return { messages: filterRemoved(fetched, removed), older: window.older };
   }
@@ -105,7 +131,8 @@ export function mergeNewestWindow(
   let pending: AgentMessage[] = [];
   let cursor = 0;
   for (const message of fetched) {
-    const anchor = indexByKey.get(messageKey(message));
+    const positions = anchorsByKey.get(messageKey(message));
+    const anchor = positions?.shift();
     if (anchor === undefined) {
       pending.push(message);
       continue;
@@ -163,15 +190,34 @@ function cursorAfterMerge(
  * a page never repeats itself and never skips. Messages already loaded are
  * dropped (compaction can shift a page's boundary), and a page that adds
  * nothing ends the walk for good — the reader must not be sent round the same
- * window twice. */
+ * window twice.
+ *
+ * "Already loaded" is per occurrence, not per identity: a page may legitimately
+ * carry the same identity twice (a duplicated key in the history), and
+ * dropping both because the view holds one would lose the other. */
 export function prependOlderWindow(
   history: LoadedHistory,
   fetched: AgentMessage[],
   nextOlder: string | null,
 ): LoadedHistory {
   if (fetched.length === 0) return { messages: history.messages, older: null };
-  const known = new Set(history.messages.map(messageKey));
-  const added = fetched.filter((message) => !known.has(messageKey(message)));
+  const loaded = new Map<string, number>();
+  for (const message of history.messages) {
+    const key = messageKey(message);
+    loaded.set(key, (loaded.get(key) ?? 0) + 1);
+  }
+  const added: AgentMessage[] = [];
+  for (const message of fetched) {
+    const key = messageKey(message);
+    const remaining = loaded.get(key);
+    if (remaining !== undefined && remaining > 0) {
+      loaded.set(key, remaining - 1);
+      continue;
+    }
+    added.push(message);
+  }
+  // A page that adds nothing ends the walk: the reader must not be sent
+  // round the same window twice.
   if (added.length === 0) return { messages: history.messages, older: null };
   return { messages: [...added, ...history.messages], older: nextOlder };
 }

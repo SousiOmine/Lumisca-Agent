@@ -11,14 +11,18 @@ import type { SessionInfo } from "./session.ts";
 /**
  * How a client tells two messages of one transcript apart: the role and the
  * timestamp the message was stamped with, plus the tool call id for a tool
- * result (parallel results can share a millisecond, and the identity must stay
- * unambiguous). The web calls this a message key; the transcript windows name
- * their cursor with it, and a rewind reports what it removed by it.
+ * result and the publishing provider for a context snapshot. Both exist
+ * because a millisecond is not unique: parallel tool results finish together,
+ * and the dynamic contexts are published in one loop (see
+ * SessionAgent.publishContexts). The web calls this a message key; the
+ * transcript windows name their cursor with it, and a rewind reports what it
+ * removed by it.
  */
 export interface MessageIdentity {
   role: string;
   timestamp: number;
   toolCallId?: string;
+  provider?: string;
 }
 
 /** Events emitted by the core and forwarded to any client (WebSocket, HTTP). */

@@ -59,17 +59,31 @@ export interface WindowPage<T> {
 
 /**
  * The identity of one transcript message, as clients tell two apart (see the
- * web's `messageKey`). Parallel tool results can share a millisecond, so a
- * result is identified by its tool call id as well.
+ * web's `messageKey`). Two roles need a field beyond role + timestamp,
+ * because a millisecond is not unique:
+ *
+ * - a tool result is identified by its tool call id (parallel calls finish
+ *   together),
+ * - a context snapshot by its provider (the dynamic contexts are published
+ *   in one loop and share the millisecond).
  */
 export function messageIdentityOf(message: AgentMessage): MessageIdentity {
-  return message.role === "toolResult"
-    ? {
-      role: message.role,
-      timestamp: message.timestamp,
-      toolCallId: message.toolCallId,
-    }
-    : { role: message.role, timestamp: message.timestamp };
+  switch (message.role) {
+    case "toolResult":
+      return {
+        role: message.role,
+        timestamp: message.timestamp,
+        toolCallId: message.toolCallId,
+      };
+    case "context":
+      return {
+        role: message.role,
+        timestamp: message.timestamp,
+        provider: message.provider,
+      };
+    default:
+      return { role: message.role, timestamp: message.timestamp };
+  }
 }
 
 /** The cursor naming one message. */
@@ -84,6 +98,7 @@ export function identityCursor(identity: MessageIdentity): string {
     identity.role,
     identity.timestamp,
     identity.toolCallId ?? "",
+    identity.provider ?? "",
   ]);
 }
 

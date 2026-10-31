@@ -4,6 +4,7 @@ import {
   applyRunState,
   applySnapshot,
   filterRemoved,
+  type LoadedHistory,
   mergeBackgrounds,
   mergeNewestWindow,
   mergeTasks,
@@ -36,6 +37,18 @@ function message(
   text = "hello",
 ): AgentMessage {
   return { role, timestamp, content: [{ type: "text", text }] } as AgentMessage;
+}
+
+/** A dynamic-context snapshot (see ai/context-providers): the provider is
+ * part of its identity, because several are published in one millisecond. */
+function context(provider: string, timestamp: number): AgentMessage {
+  return {
+    role: "context",
+    provider,
+    title: `${provider} (1 available)`,
+    body: "b",
+    timestamp,
+  } as AgentMessage;
 }
 
 function view(overrides: Partial<SessionView> = {}): SessionView {
@@ -1255,6 +1268,102 @@ Deno.test("events: prependOlderWindow puts a page in front and dedups", () => {
   const repeated = prependOlderWindow(current, current.messages, "cursor-b");
   assertEquals(repeated.messages, current.messages);
   assertEquals(repeated.older, null);
+});
+
+Deno.test("events: prependOlderWindow keeps a page's second copy of a key", () => {
+  // A page may carry the same identity twice (a duplicated key in the
+  // history). Dropping every fetched message whose key the view already holds
+  // would lose both copies instead of the one that is really there.
+  const current = {
+    messages: [context("date", 300), message("user", 400)],
+    older: "cursor-b",
+  };
+  const page = [
+    context("skills", 100),
+    context("date", 300),
+    message("user", 400),
+  ];
+  const next = prependOlderWindow(current, page, "cursor-a");
+  assertEquals(
+    next.messages.map(messageKey),
+    ["context:skills:100", "context:date:300", "user:400"],
+  );
+  assertEquals(next.older, "cursor-a");
+});
+
+Deno.test("events: mergeNewestWindow never grows on a repeated resync", () => {
+  // The reported symptom: the top of a code-mode transcript showed the same
+  // context rows again and again. The dynamic contexts are published in one
+  // loop, so two of them can share a millisecond; keyed by role + timestamp
+  // alone, the merge anchored both incoming rows on the view's LAST copy of
+  // that key (a Map is built with "the last index wins"), which re-inserted a
+  // row on every sync. Anchoring per occurrence keeps the window fixed.
+  const window = [
+    context("skills", 70),
+    context("instructions", 71),
+    context("date", 71),
+    context("mcp", 71),
+    message("user", 68),
+    message("assistant", 900),
+  ];
+  let history: LoadedHistory = { messages: window, older: "cursor" };
+  for (let i = 0; i < 5; i++) {
+    history = mergeNewestWindow(
+      history,
+      { messages: window, older: "cursor" },
+      new Set(),
+    );
+  }
+  assertEquals(history.messages.map(messageKey), window.map(messageKey));
+});
+
+Deno.test("events: context snapshots of one millisecond coexist and key apart", () => {
+  // Same millisecond, different providers: one message each. Keyed by role +
+  // timestamp they looked like one message, so the live upsert replaced the
+  // first with the second and the resync merge re-inserted it forever.
+  const instructions = context("instructions", 71);
+  const date = context("date", 71);
+  assert(messageKey(instructions) !== messageKey(date));
+
+  let v = view();
+  v = applyEvent(
+    { type: "message_end", sessionId: "s1", message: instructions },
+    v,
+  )!;
+  v = applyEvent({ type: "message_end", sessionId: "s1", message: date }, v)!;
+  assertEquals(v.messages.map(messageKey), [
+    "context:instructions:71",
+    "context:date:71",
+  ]);
+
+  // A resync carrying both neither duplicates nor drops one.
+  const merged = mergeNewestWindow(
+    v,
+    { messages: [instructions, date], older: null },
+    new Set(),
+  );
+  assertEquals(merged.messages.map(messageKey), [
+    "context:instructions:71",
+    "context:date:71",
+  ]);
+});
+
+Deno.test("events: a rewound context snapshot is tombstoned by provider", () => {
+  // The server names what it removed by its identity; the provider is what
+  // tells two snapshots of one millisecond apart, so a rewind of the date
+  // notice must not take the instructions notice with it.
+  let v = view({
+    messages: [context("instructions", 71), context("date", 71)],
+  });
+  v = applyEvent(
+    {
+      type: "messages_truncated",
+      sessionId: "s1",
+      removed: [{ role: "context", timestamp: 71, provider: "date" }],
+    },
+    v,
+  )!;
+  assertEquals(v.messages.map(messageKey), ["context:instructions:71"]);
 });
 
 Deno.test("events: a live message moves the context meter", () => {

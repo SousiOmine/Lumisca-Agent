@@ -187,13 +187,31 @@ Deno.test("messageCursorOf: parallel tool results are told apart", () => {
   );
 });
 
+Deno.test("messageCursorOf: context snapshots of one millisecond are told apart", () => {
+  // The dynamic contexts are published in one loop, so two of them can share
+  // a millisecond. Role + timestamp alone would name one message for two
+  // rows, and a client merging a window would insert the same row again on
+  // every resync (see web's mergeNewestWindow).
+  const skills = message("context", 10);
+  const date = { ...message("context", 10), provider: "date" };
+  assert(messageCursorOf(skills) !== messageCursorOf(date));
+  assertEquals(
+    messageCursorOf(skills),
+    messageCursorOf(message("context", 10)),
+  );
+});
+
 Deno.test("identityCursor: the fields are encoded as JSON, opaque to clients", () => {
   assertEquals(
     identityCursor({ role: "user", timestamp: 5 }),
-    '["user",5,""]',
+    '["user",5,"",""]',
   );
   assertEquals(
     identityCursor({ role: "toolResult", timestamp: 5, toolCallId: "c1" }),
-    '["toolResult",5,"c1"]',
+    '["toolResult",5,"c1",""]',
+  );
+  assertEquals(
+    identityCursor({ role: "context", timestamp: 5, provider: "date" }),
+    '["context",5,"","date"]',
   );
 });

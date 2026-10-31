@@ -1685,6 +1685,71 @@ Deno.test("the date is published once as a context message, not rewritten into t
   await removeDirRetry(root);
 });
 
+Deno.test("a run's transcript order is also its timestamp order", async () => {
+  // The clients keep a window of the transcript and identify messages by role
+  // + timestamp (see MessageIdentity): a view drops a live message older than
+  // its newest one, and a resync merge anchors on those identities. So the
+  // transcript's order must agree with its timestamps, or the prompt of a
+  // fresh session lands before the context that introduced it (and drops out
+  // of the live view), and two publications of one millisecond look like one
+  // message.
+  const { core, faux, providerId, modelId } = setup();
+  const { ws, root } = await makeWorkspace(core);
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+
+  faux.setResponses([fauxAssistantMessage("ok")]);
+  await promptSession(core, session.id, "first");
+  const agent = core.getAgent(session.id)!;
+
+  const contexts = agent.messages.filter((m) => m.role === "context");
+  assert(contexts.length > 1, "the run must publish several contexts");
+  const stamps = agent.messages.map((m) => m.timestamp);
+  assert(
+    stamps.every((stamp, index) => index === 0 || stamp > stamps[index - 1]!),
+    `timestamps must increase along the transcript: ${stamps.join(",")}`,
+  );
+  // A run's tool traffic is stamped the same way: each result follows the
+  // assistant message it belongs to (the transport stamps the answer when the
+  // stream finalizes, which can be after the results it produced).
+  faux.setResponses([
+    fauxAssistantMessage([
+      fauxToolCall("write", { path: "a.txt", content: "x" }, "c1"),
+    ]),
+    fauxAssistantMessage("done"),
+  ]);
+  await promptSession(core, session.id, "write");
+  const all = agent.messages;
+  const resultIndex = all.findIndex((m) => m.role === "toolResult");
+  assert(resultIndex > 0, "the run must record its tool result");
+  assert(
+    all[resultIndex]!.timestamp > all[resultIndex - 1]!.timestamp,
+    "a tool result must follow its assistant message in time as well",
+  );
+
+  const stamps2 = all.map((m) => m.timestamp);
+  assert(
+    stamps2.every((stamp, index) => index === 0 || stamp > stamps2[index - 1]!),
+    `timestamps must keep increasing: ${stamps2.join(",")}`,
+  );
+  // The identities the clients key on are unique: role + provider for a
+  // context snapshot, role + tool call id for a tool result.
+  const keys = all.map((m) =>
+    m.role === "context"
+      ? `${m.role}:${m.provider}:${m.timestamp}`
+      : m.role === "toolResult"
+      ? `${m.role}:${m.toolCallId}`
+      : `${m.role}:${m.timestamp}`
+  );
+  assertEquals(new Set(keys).size, keys.length, keys.join(" "));
+
+  core.close();
+  await removeDirRetry(root);
+});
+
 Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");

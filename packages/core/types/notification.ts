@@ -17,7 +17,9 @@ export type NotificationPayload = Omit<
 
 /** Stamp a notification payload as a transcript message. The delivery site
  * owns `steered` (only it knows whether the message joined a running turn),
- * and the timestamp is assigned here so every producer agrees. */
+ * and the timestamp is assigned here so every producer agrees. The session
+ * agent re-stamps the message it injects, so a notification lands after the
+ * message that preceded it (see SessionAgent.stamp). */
 export function notificationMessage(
   payload: NotificationPayload,
   steered?: boolean,

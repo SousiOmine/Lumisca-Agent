@@ -373,7 +373,7 @@ export class SessionAgent {
         const message = contextMessage(
           provider.name,
           update,
-          Date.now(),
+          this.agent.nextTimestamp(),
         );
         this.agent.appendMessage(message);
         this.announceMessage(message);
@@ -469,22 +469,26 @@ export class SessionAgent {
     // The delivery fact the announcement carries must describe the delivery
     // below: a prompt delivered while a run is active is queued into that
     // run by the agent loop instead of starting one of its own.
+    const steered = this.joinsActiveRun();
+    // The contexts are published FIRST: they are the run's preamble, so they
+    // must precede the prompt in the transcript (and, with the timestamp,
+    // in time — see Agent.nextTimestamp).
+    this.publishContexts();
     const message = options.announced ??
       (options.mode !== undefined
         ? buildModeMessage(
           options.mode,
           text,
           images ?? [],
-          Date.now(),
-          this.joinsActiveRun(),
+          this.agent.nextTimestamp(),
+          steered,
         )
         : this.buildUserMessage(
           text,
           images,
-          this.joinsActiveRun(),
+          steered,
           options.routine?.name,
         ));
-    this.publishContexts();
     if (options.announced === undefined) this.announceMessage(message);
     if (options.mode !== undefined) this.startGoalIfNeeded(options.mode);
     this.resetRetryState();
@@ -596,10 +600,17 @@ export class SessionAgent {
     // Decided before the message is built: the stamp must describe the
     // delivery below, and the condition is the one deliverPrompt re-checks.
     const steered = this.joinsActiveRun();
-    const message = mode
-      ? buildModeMessage(mode, text, images ?? [], Date.now(), steered)
-      : this.buildUserMessage(text, images, steered, routine);
+    // Same order as runPrompt: the preamble, then the prompt it introduces.
     this.publishContexts();
+    const message = mode
+      ? buildModeMessage(
+        mode,
+        text,
+        images ?? [],
+        this.agent.nextTimestamp(),
+        steered,
+      )
+      : this.buildUserMessage(text, images, steered, routine);
     this.announceMessage(message);
     void this.deliverPrompt(message, mode);
   }
@@ -669,7 +680,7 @@ export class SessionAgent {
       content,
       ...(steered === true ? { steered } : {}),
       ...(routine !== undefined && routine !== "" ? { routine } : {}),
-      timestamp: Date.now(),
+      timestamp: this.agent.nextTimestamp(),
     };
   }
 
@@ -731,7 +742,14 @@ export class SessionAgent {
    * running turn's work log (see web's buildTurns). */
   private injectNotification(payload: NotificationPayload): void {
     if (this.closed) return;
-    const message = notificationMessage(payload, this.joinsActiveRun());
+    // Re-stamped: a payload is built when the producer noticed it, but it is
+    // appended to the transcript now, so it must follow the message before it
+    // (see Agent.nextTimestamp). `steered` is this site's decision, not the
+    // producer's.
+    const message: AgentMessage = {
+      ...notificationMessage(payload, this.joinsActiveRun()),
+      timestamp: this.agent.nextTimestamp(),
+    };
     // Announce the notification to clients (the agent appends it to the
     // transcript without re-emitting — see Agent.append).
     this.emit({ type: "message_start", sessionId: this.sessionId, message });
