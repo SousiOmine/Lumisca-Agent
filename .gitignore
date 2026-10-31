@@ -149,6 +149,9 @@ lumisca.db-*
 *.db-wal
 # Published visuals of a dev server (the store sits beside the database).
 .lumisca-visuals/
+# Full outputs of truncated tool results (`bash`'s spill): the agent's own
+# tools write them at the workspace root.
+.lumisca-tool-output/
 packages/desktop/src-tauri/target/
 packages/browser-rpc/target/
 packages/desktop/src-tauri/gen/
