@@ -25,15 +25,15 @@
     "npm:@opencode-ai/models@*": "0.0.112",
     "npm:@opencode-ai/models@0.0.112": "0.0.112",
     "npm:@opencode-ai/models@0.0.99": "0.0.99",
-    "npm:@preact/preset-vite@2.10.6": "2.10.6_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_@types+node@26.1.2_esbuild@0.28.2_preact@11.0.2__preact-render-to-string@6.8.1_preact-render-to-string@6.8.1__preact@11.0.2",
-    "npm:@tabler/icons-preact@3.49.0": "3.49.0_preact@11.0.1__preact-render-to-string@6.8.1_preact-render-to-string@6.8.1__preact@11.0.1",
+    "npm:@preact/preset-vite@2.10.6": "2.10.6_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_preact@11.1.0__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.0",
+    "npm:@tabler/icons-preact@3.50.0": "3.50.0_preact@11.1.0__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.0",
     "npm:@types/node@*": "26.1.2",
     "npm:ai@7.0.153": "7.0.153_zod@4.4.3",
     "npm:esbuild@0.28.2": "0.28.2",
-    "npm:hono@4.13.13": "4.13.13",
-    "npm:marked@18.1.1": "18.1.1",
-    "npm:preact-render-to-string@6.8.1": "6.8.1_preact@11.0.2",
-    "npm:preact@11.0.2": "11.0.2_preact-render-to-string@6.8.1",
+    "npm:hono@4.13.14": "4.13.14",
+    "npm:marked@18.1.2": "18.1.2",
+    "npm:preact-render-to-string@6.8.2": "6.8.2_preact@11.1.0",
+    "npm:preact@11.1.0": "11.1.0_preact-render-to-string@6.8.2",
     "npm:sucrase@*": "3.35.1",
     "npm:sucrase@3.35.0": "3.35.0",
     "npm:sucrase@3.35.1": "3.35.1",
@@ -467,7 +467,7 @@
       "os": ["win32"],
       "cpu": ["x64"]
     },
-    "@hono/node-server@2.1.5_hono@4.13.13": {
+    "@hono/node-server@2.1.5_hono@4.13.14": {
       "integrity": "sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==",
       "dependencies": [
         "hono"
@@ -629,7 +629,7 @@
     "@pkgjs/parseargs@0.11.0": {
       "integrity": "sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg=="
     },
-    "@preact/preset-vite@2.10.6_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_@types+node@26.1.2_esbuild@0.28.2_preact@11.0.2__preact-render-to-string@6.8.1_preact-render-to-string@6.8.1__preact@11.0.2": {
+    "@preact/preset-vite@2.10.6_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_preact@11.1.0__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.0": {
       "integrity": "sha512-ZZ5RIT2ZVXg8UxRA8VZpoT8CdpDG7RFIqOT4bELqNBp85+HKvQBbgmh3gsoW1UOQXx26TLe+ZRNKI7q281Kckw==",
       "dependencies": [
         "@babel/core",
@@ -649,16 +649,16 @@
     "@prefresh/babel-plugin@0.5.3": {
       "integrity": "sha512-57LX2SHs4BX2s1IwCjNzTE2OJeEepRCNf1VTEpbNcUyHfMO68eeOWGDIt4ob9aYlW6PEWZ1SuwNikuoIXANDtQ=="
     },
-    "@prefresh/core@1.5.11_preact@11.0.2__preact-render-to-string@6.8.1_preact-render-to-string@6.8.1__preact@11.0.2": {
+    "@prefresh/core@1.5.11_preact@11.1.0__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.0": {
       "integrity": "sha512-Ml00PP8jeHaADxfQqxUs4+M5JS+T5J26UnvPVfsrmlpGw2I3e9XtM0DMeuzkmvg+Tn7VdHSMpLBrDPG0iHoDqQ==",
       "dependencies": [
-        "preact@11.0.2_preact-render-to-string@6.8.1"
+        "preact"
       ]
     },
     "@prefresh/utils@1.2.1": {
       "integrity": "sha512-vq/sIuN5nYfYzvyayXI4C2QkprfNaHUQ9ZX+3xLD8nL3rWyzpxOm1+K7RtMbhd+66QcaISViK7amjnheQ/4WZw=="
     },
-    "@prefresh/vite@2.4.12_preact@11.0.2__preact-render-to-string@6.8.1_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_@types+node@26.1.2_esbuild@0.28.2_preact-render-to-string@6.8.1__preact@11.0.2": {
+    "@prefresh/vite@2.4.12_preact@11.1.0__preact-render-to-string@6.8.2_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_preact-render-to-string@6.8.2__preact@11.1.0": {
       "integrity": "sha512-FY1fzXpUjiuosznMV0YM7XAOPZjB5FIdWS0W24+XnlxYkt9hNAwwsiKYn+cuTEoMtD/ZVazS5QVssBr9YhpCQA==",
       "dependencies": [
         "@babel/core",
@@ -666,7 +666,7 @@
         "@prefresh/core",
         "@prefresh/utils",
         "@rollup/pluginutils@4.2.1",
-        "preact@11.0.2_preact-render-to-string@6.8.1",
+        "preact",
         "vite"
       ]
     },
@@ -768,7 +768,8 @@
       "dependencies": [
         "@smithy/types",
         "tslib"
-      ]
+      ],
+      "deprecated": true
     },
     "@smithy/eventstream-codec@4.5.2": {
       "integrity": "sha512-u4EAkaviMcQYlorFSnxFUgF/Dnbgiu2TzGmqOU4h3CL4MbvrYyNCXpFkcBwvAEU11EvspKX2zzS2uX7q+43VdQ==",
@@ -793,15 +794,15 @@
     "@standard-schema/spec@1.1.0": {
       "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="
     },
-    "@tabler/icons-preact@3.49.0_preact@11.0.1__preact-render-to-string@6.8.1_preact-render-to-string@6.8.1__preact@11.0.1": {
-      "integrity": "sha512-AQJKL5UoWOBjEH+lbNxwcvp5DGhECbZ+8WZ3wdWXbW8rHItQxATnsEO7FJrnjFOBUn+yLu6FbtF3p0cjLYt6RA==",
+    "@tabler/icons-preact@3.50.0_preact@11.1.0__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.0": {
+      "integrity": "sha512-O70QkWinmvTH5bnbG3iySlRYnqX25ZjuPfJ+5MLy+OSex1ZYQJLhj5RDfqkf2abdtnHs36ZjKjO6VB8BksOVQA==",
       "dependencies": [
         "@tabler/icons",
-        "preact@11.0.1_preact-render-to-string@6.8.1"
+        "preact"
       ]
     },
-    "@tabler/icons@3.49.0": {
-      "integrity": "sha512-l+GnSkFETx0U26icxv1VUFnxxiTqXfCcVRiRAnyMwibupM2S2L/hSaZ9gmSgz01rkrsH/93NvLsxykqdanc6lw=="
+    "@tabler/icons@3.50.0": {
+      "integrity": "sha512-HflLxyrH1cqC7s7jzQGSjpsTAVIoaf7+/yHjbdM59rJQBMjliibp+LYhDPFxOMcwa1M8DNpOk6ENzQiWn9a1Dg=="
     },
     "@types/estree@1.0.9": {
       "integrity": "sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg=="
@@ -1394,8 +1395,8 @@
       "integrity": "sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==",
       "bin": true
     },
-    "hono@4.13.13": {
-      "integrity": "sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA=="
+    "hono@4.13.14": {
+      "integrity": "sha512-yhRLQ21U6qa9Hsu2N7Qcbh8tE+WKEcoErjIo56LeSGiGXGp9sA7UpE86Ui9uexb61KakiGwuHMn2QdV7w6i6kQ=="
     },
     "http-errors@2.0.1": {
       "integrity": "sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ==",
@@ -1561,8 +1562,8 @@
         "@jridgewell/sourcemap-codec"
       ]
     },
-    "marked@18.1.1": {
-      "integrity": "sha512-zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg==",
+    "marked@18.1.2": {
+      "integrity": "sha512-DfOnvLAQ6WYeWxWO1u4RyFOeqyHup6dks5PPqnoFiooU7ipRvidO/2j8plhAHIiZg574E9ZlzSjUiPMLAzFkgg==",
       "bin": true
     },
     "math-intrinsics@1.1.0": {
@@ -1692,31 +1693,19 @@
         "source-map-js"
       ]
     },
-    "preact-render-to-string@6.8.1_preact@11.0.1": {
-      "integrity": "sha512-EIaLVlarET55f737gG/g1bK1UfjAgT3Z7Ch1Z7UX4/TwHh1O7EI5sCtwhVP+cs0n37SyV2HjZCSRtrpMm4Bujw=="
-    },
-    "preact-render-to-string@6.8.1_preact@11.0.2": {
-      "integrity": "sha512-EIaLVlarET55f737gG/g1bK1UfjAgT3Z7Ch1Z7UX4/TwHh1O7EI5sCtwhVP+cs0n37SyV2HjZCSRtrpMm4Bujw==",
+    "preact-render-to-string@6.8.2_preact@11.1.0": {
+      "integrity": "sha512-Hdx7cKD3AMYgt795TdddBpUbuGEFoL/VeA6s7VrBt9Gjt0r6rCy5wMp5xkDjQ9cbKj62frHsEx1x8yV6EjoOpg==",
       "dependencies": [
-        "preact@11.0.2_preact-render-to-string@6.8.1"
+        "preact"
       ]
     },
-    "preact@11.0.1_preact-render-to-string@6.8.1": {
-      "integrity": "sha512-TNNwEq++jYNHy747LziCjPRVgEwnLSOIOAw/oYcjI3Tdnubx2EXtt76I0an8PATvUWtx/DX1kFIg1eFN+O/fkw==",
+    "preact@11.1.0_preact-render-to-string@6.8.2": {
+      "integrity": "sha512-hz1VsjWx5pSYPDVEzb9w+XyOmQpP1qW/ZEaMiYm+C8ykJr8KP+TKGZIbCW0QmZ/Yr/jg3XkZoziEWn9iWHZ9Mw==",
       "dependencies": [
-        "preact-render-to-string@6.8.1_preact@11.0.1"
+        "preact-render-to-string"
       ],
       "optionalPeers": [
-        "preact-render-to-string@6.8.1_preact@11.0.1"
-      ]
-    },
-    "preact@11.0.2_preact-render-to-string@6.8.1": {
-      "integrity": "sha512-ofG+Lqznbt13JKDjdWPLTo5ONBqcNgidqnLRzJBG6PZjzGXOLRd5y9r448+HUofTyDbgKWVrPhHP0IgcxEZslQ==",
-      "dependencies": [
-        "preact-render-to-string@6.8.1_preact@11.0.2"
-      ],
-      "optionalPeers": [
-        "preact-render-to-string@6.8.1_preact@11.0.2"
+        "preact-render-to-string"
       ]
     },
     "proxy-addr@2.0.8": {
@@ -2146,13 +2135,13 @@
       "npm:@napi-rs/canvas@1.0.13",
       "npm:@novnc/novnc@1.7.0",
       "npm:@opencode-ai/models@0.0.112",
-      "npm:@tabler/icons-preact@3.49.0",
+      "npm:@tabler/icons-preact@3.50.0",
       "npm:ai@7.0.153",
       "npm:esbuild@0.28.2",
-      "npm:hono@4.13.13",
-      "npm:marked@18.1.1",
-      "npm:preact-render-to-string@6.8.1",
-      "npm:preact@11.0.2",
+      "npm:hono@4.13.14",
+      "npm:marked@18.1.2",
+      "npm:preact-render-to-string@6.8.2",
+      "npm:preact@11.1.0",
       "npm:sucrase@3.35.1",
       "npm:unpdf@1.9.1"
     ],
