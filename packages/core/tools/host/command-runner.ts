@@ -7,6 +7,7 @@ import {
 } from "../command-backend.ts";
 import { shellCommand } from "./shell.ts";
 import { killProcessTree } from "./process-tree.ts";
+import { MAX_UTF8_BYTES_PER_CHAR, OutputTail } from "./output-tail.ts";
 
 /** How long the pipes get to flush the last output after the process exits
  * before the call reports what it has (a descendant that keeps a pipe open
@@ -47,14 +48,16 @@ export class HostCommandRunner implements CommandRunner {
     // The pipes are read here rather than through child.output(): that call
     // waits for their EOF, and the wait below must not (see the class
     // comment). The readers are held, not the streams, because the call
-    // cancels them once it stops waiting.
-    const outChunks: Uint8Array[] = [];
-    const errChunks: Uint8Array[] = [];
+    // cancels them once it stops waiting. Each pipe keeps its tail only
+    // (see OutputTail): a command that prints without bound must not be able
+    // to fill this process's memory before the cap below is applied.
+    const outTail = new OutputTail(outputBudget(options.maxOutputChars));
+    const errTail = new OutputTail(outputBudget(options.maxOutputChars));
     const outReader = process.stdout.getReader();
     const errReader = process.stderr.getReader();
     const readers = [
-      drain(outReader, outChunks),
-      drain(errReader, errChunks),
+      drain(outReader, outTail),
+      drain(errReader, errTail),
     ];
 
     // Fire-and-forget: the timeout/abort path must not await the kill (the
@@ -105,8 +108,8 @@ export class HostCommandRunner implements CommandRunner {
       // the agent waited for (shell startup included), not just the child's
       // own runtime.
       const durationMs = Math.round(performance.now() - startedAt);
-      const out = cap(joinChunks(outChunks), options.maxOutputChars);
-      const err = cap(joinChunks(errChunks), options.maxOutputChars);
+      const out = cap(outTail, options.maxOutputChars);
+      const err = cap(errTail, options.maxOutputChars);
       return {
         exitCode: status?.code,
         stdout: out.text,
@@ -132,17 +135,27 @@ export class HostCommandRunner implements CommandRunner {
   }
 }
 
-/** Drain one of the child's pipes into `chunks`; resolves at EOF, or when
+/** Bytes retained per pipe for a character cap: one UTF-8 character is at
+ * most four bytes, so this budget always holds the tail the caller asked
+ * for (the cap is defined in characters — see command-backend.ts). */
+function outputBudget(maxChars: number): number {
+  return Math.max(
+    1,
+    Math.min(maxChars, MAX_RAW_COMMAND_OUTPUT) * MAX_UTF8_BYTES_PER_CHAR,
+  );
+}
+
+/** Drain one of the child's pipes into `tail`; resolves at EOF, or when
  * the reader is cancelled — which is how the call stops waiting. */
 async function drain(
   reader: ReadableStreamDefaultReader<Uint8Array>,
-  chunks: Uint8Array[],
+  tail: OutputTail,
 ): Promise<void> {
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) return;
-      chunks.push(value);
+      tail.push(value);
     }
   } catch {
     // The pipe was closed under us (a kill, or the cancel above): what was
@@ -150,28 +163,16 @@ async function drain(
   }
 }
 
-/** Join the collected chunks into one buffer. */
-function joinChunks(chunks: Uint8Array[]): Uint8Array {
-  if (chunks.length === 1) return chunks[0]!;
-  let total = 0;
-  for (const chunk of chunks) total += chunk.length;
-  const joined = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    joined.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return joined;
-}
-
-/** Decode and keep the tail: the end of a build log is what the model
- * needs, and the caller announces the cut itself. */
+/** Keep the tail: the end of a build log is what the model needs, and the
+ * caller announces the cut itself. */
 function cap(
-  bytes: Uint8Array,
+  tail: OutputTail,
   maxChars: number,
 ): { text: string; truncated: boolean } {
-  const text = new TextDecoder().decode(bytes);
+  const text = tail.finish();
   const limit = Math.min(maxChars, MAX_RAW_COMMAND_OUTPUT);
-  if (text.length <= limit) return { text, truncated: false };
+  if (text.length <= limit) {
+    return { text, truncated: tail.truncated };
+  }
   return { text: text.slice(-limit), truncated: true };
 }

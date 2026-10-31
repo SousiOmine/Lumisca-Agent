@@ -40,11 +40,12 @@ export interface RunOptions {
   /**
    * Hard cap on the retained output per stream (characters). Implementations
    * keep the TAIL — the end of a build log is what the model needs — and
-   * report the cut through the `truncated` flags. A backend that cannot keep
-   * everything (the container call must bound the bytes it transfers) and a
-   * backend that can (the host streams into memory) both honour this cap the
-   * same way, so the tool's own truncation and spill logic behaves
-   * identically on top of them.
+   * report the cut through the `truncated` flags. Both backends bound what
+   * they retain while the stream runs — the container call because it must
+   * not transfer more than it keeps, the host because a command that prints
+   * without bound must not take the server's memory with it — and both
+   * honour this cap the same way, so the tool's own truncation and spill
+   * logic behaves identically on top of them.
    */
   maxOutputChars: number;
 }
