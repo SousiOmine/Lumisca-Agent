@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertNotEquals } from "@std/assert";
 import type { StellaEvent } from "./types.ts";
 import {
   applyStellaEvent,
@@ -79,7 +79,7 @@ Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
     entry: entry("user", "A", 1),
   })!;
   assertEquals(current.entries.map((e) => e.text), ["A", "B"]);
-  assertEquals(entryKey(current.entries[0]!), "user:1:");
+  assertEquals(entryKey(current.entries[0]!), "user:1::0:A");
 });
 
 Deno.test("applyStellaEvent: deltas accumulate and are dropped at the end", () => {
@@ -217,4 +217,33 @@ Deno.test("prependOlderEntries: a page goes in front; an empty one ends the walk
   const repeated = prependOlderEntries(current, current.entries, "cursor-b");
   assertEquals(repeated.entries, current.entries);
   assertEquals(repeated.older, null);
+});
+
+Deno.test("applyStellaEvent: two sends in one millisecond stay two entries", () => {
+  // Regression: the dedup key was role + timestamp (+ the first attachment's
+  // name). The clock is a millisecond, so a burst of sends — or a server that
+  // stamps a batch with one tick — produced one key for two DIFFERENT
+  // messages, and the second overwrote the first: the conversation silently
+  // lost a line the user had just typed.
+  const first = entry("user", "連続 1", 1000);
+  const second = entry("user", "連続 2", 1000);
+  assertNotEquals(entryKey(first), entryKey(second));
+
+  let current = state();
+  current = applyStellaEvent(current, { type: "entry", entry: first })!;
+  current = applyStellaEvent(current, { type: "entry", entry: second })!;
+  assertEquals(current.entries.map((e) => e.text), ["連続 1", "連続 2"]);
+});
+
+Deno.test("applyStellaEvent: the same message announced twice is one entry", () => {
+  // The other half of the same rule: the synthetic start/end pair (and the
+  // snapshot that repeats an event) must still collapse.
+  const message = entry("user", "同じ", 1000);
+  let current = state();
+  current = applyStellaEvent(current, { type: "entry", entry: message })!;
+  current = applyStellaEvent(current, {
+    type: "entry",
+    entry: { ...message },
+  })!;
+  assertEquals(current.entries.length, 1);
 });

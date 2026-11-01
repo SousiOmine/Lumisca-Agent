@@ -139,16 +139,25 @@ export function prependOlderEntries(
   return { ...state, entries: [...added, ...state.entries], older: nextOlder };
 }
 
-/** Identity of an entry for dedup: an entry arrives twice (the synthetic
- * start/end pair of an injected message, and the streaming placeholder
- * followed by the final copy), and a re-read snapshot can overlap the live
- * events. Role + timestamp is the same pair the server persists — plus the
- * first attachment's name, because an agent that sends a file and then says
- * something in the same millisecond would otherwise have the two entries
- * collapse into one. */
+/** Identity of an entry for dedup.
+ *
+ * An entry arrives more than once — the synthetic start/end pair an injected
+ * message emits, and the streaming placeholder followed by the final copy of
+ * the same message — so the client has to recognise "the same entry". Role,
+ * timestamp and the attachments' names are NOT enough: the clock is a
+ * millisecond, and two sends inside one millisecond (a burst of Enter, or a
+ * server that stamps a batch with one tick) are two different messages that
+ * must not collapse into one. The text is what tells them apart, so it is the
+ * last component of the key.
+ *
+ * The one case that must still collide is the pair above: the same message
+ * announced twice carries the same text. A message that is republished after
+ * an edit would arrive as a new entry, which is the honest reading — the
+ * transcript has no edit concept. */
 export function entryKey(entry: StellaEntry): string {
-  const first = entry.attachments[0]?.name ?? "";
-  return `${entry.role}:${entry.timestamp}:${first}`;
+  const files = entry.attachments.map((file) => file.name).join(",");
+  const images = entry.images.length;
+  return `${entry.role}:${entry.timestamp}:${files}:${images}:${entry.text}`;
 }
 
 /** Insert or replace an entry at its existing position (dedup by key), or
