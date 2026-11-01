@@ -96,6 +96,12 @@ function freePort(): number {
  * operator has and the command legitimately reads (the rendered unit carries
  * their paths), and nothing else — a LUMISCA_* value in the caller's
  * environment must not leak into the check.
+ *
+ * The account name is filled in from the uid when USER/USERNAME are unset.
+ * A container session (CI runners, a shell started without a real login) has
+ * no such variable, and `service config` then refuses for a reason that has
+ * nothing to do with the binary under test — the check would fail on the
+ * machine rather than on the code.
  */
 function serviceEnv(): Record<string, string> {
   const env: Record<string, string> = {};
@@ -105,7 +111,31 @@ function serviceEnv(): Record<string, string> {
     const value = Deno.env.get(key);
     if (value !== undefined) env[key] = value;
   }
+  if (env.USER === undefined && env.USERNAME === undefined) {
+    const account = currentAccount();
+    if (account !== undefined) env.USER = account;
+  }
   return env;
+}
+
+/** The account this process runs as, on POSIX (`id -un`); undefined when the
+ * question cannot be answered, in which case the check still reports what the
+ * binary says. On Windows USER/USERNAME are set by the system, so the fallback
+ * is not needed. */
+function currentAccount(): string | undefined {
+  if (Deno.build.os === "windows") return undefined;
+  try {
+    const { success, stdout } = new Deno.Command("id", {
+      args: ["-un"],
+      stdout: "piped",
+      stderr: "null",
+    }).outputSync();
+    if (!success) return undefined;
+    const name = new TextDecoder().decode(stdout).trim();
+    return name.length > 0 ? name : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Stop the server and wait for it: SIGTERM on POSIX (the server shuts
