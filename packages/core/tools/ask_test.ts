@@ -262,6 +262,45 @@ Deno.test("ask rejects duplicate question ids", async () => {
   );
 });
 
+Deno.test("ask rejects a non-string id or option label", async () => {
+  // The schema tells the provider `id` is a string; models still send
+  // numbers. Such a question used to reach the panel and travel back on the
+  // answer, where the route's own type check rejected the whole answer with
+  // "each answer must have an `id` (string)…" — a message about the wire
+  // shape shown to someone who only clicked a checkbox. The mismatch is
+  // caught at the tool instead, while it can name the field.
+  const { hub } = makeHub();
+  const tool = createAskTool(hub);
+  const numericId = {
+    questions: [{
+      id: 1,
+      question: "Pick",
+      multi: true,
+      options: [{ label: "A" }, { label: "B" }],
+    }],
+  } as never;
+  await assertRejects(
+    () => tool.execute(TOOL_CALL_ID, numericId, undefined),
+    Error,
+    "questions[0].id must be a string (got number)",
+  );
+  const numericLabel = {
+    questions: [{
+      id: "q1",
+      question: "Pick",
+      options: [{ label: 1 }, { label: 2 }],
+    }],
+  } as never;
+  await assertRejects(
+    () => tool.execute(TOOL_CALL_ID, numericLabel, undefined),
+    Error,
+    "questions[0].options[0].label must be a string (got number)",
+  );
+  // Nothing reached the UI, so no panel is left showing a question that
+  // cannot be answered.
+  assertEquals(hub.pendingQuestions(), []);
+});
+
 Deno.test("ask rejects empty options and out-of-range recommended", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);

@@ -82,3 +82,45 @@ export function formatDate(timestamp: number, locale: Locale): string {
     day: "numeric",
   });
 }
+
+/** A timestamp as a time of day in the app language ("14:05" / "2:05 PM").
+ * A conversation shows it under each message, so it is the clock alone —
+ * the date is the separator's job (see {@link formatDaySeparator}). */
+export function formatClockTime(timestamp: number, locale: Locale): string {
+  return new Date(timestamp).toLocaleTimeString(localeTag(locale), {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Midnight of the day a timestamp falls on, in local time. Two messages
+ * belong to the same day exactly when these numbers are equal: comparing
+ * the calendar fields (rather than a fixed 24-hour span) keeps a
+ * conversation that spans a daylight-saving change from splitting mid-day. */
+export function startOfDay(timestamp: number): number {
+  const date = new Date(timestamp);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+/** The label of a day's separator in a conversation: "今日" / "Yesterday"
+ * for the two days the reader thinks in, a date for anything older. The
+ * thresholds are the calendar's, so an evening message and the next
+ * morning's are always told apart. */
+export function formatDaySeparator(
+  timestamp: number,
+  locale: Locale,
+  now: number = Date.now(),
+): string {
+  const day = startOfDay(timestamp);
+  const today = startOfDay(now);
+  if (day === today) return translate(locale, "common.daySeparator.today");
+  // The previous calendar day, compared by date rather than by subtracting
+  // 24 hours (which a daylight-saving change makes wrong).
+  const previous = new Date(today);
+  previous.setDate(previous.getDate() - 1);
+  if (day === previous.getTime()) {
+    return translate(locale, "common.daySeparator.yesterday");
+  }
+  return formatDate(timestamp, locale);
+}

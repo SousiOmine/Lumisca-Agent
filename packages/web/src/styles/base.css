@@ -72,6 +72,22 @@ select:focus {
   font-family: var(--mono);
 }
 
+/* Text that exists for assistive technology only: a status line whose visible
+ * form is a shape (the typing dots), or a label the surrounding layout
+ * already shows. Clipped rather than removed from the flow so it is still
+ * announced, and it never takes up space. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Buttons are capsules: the shape carries the affordance, so the fill and
  * the border stay as quiet as the rest of the ramp. */
 .btn {

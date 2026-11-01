@@ -143,10 +143,10 @@
   padding: var(--app-inset);
 }
 
-/* The agents. Deliberately a plain list, not a card: one row per
- * person to talk to, so the eye lands on names and nothing else. */
+/* The agents. Deliberately a plain list, not a card: one row per person to
+ * talk to, so the eye lands on faces and names and nothing else. */
 .stella-sidebar {
-  width: 176px;
+  width: 216px;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -190,7 +190,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 
 .stella-agent:hover {
@@ -206,8 +206,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 4px 6px 8px;
+  gap: 10px;
+  padding: 7px 4px 7px 8px;
   border: none;
   background: none;
   color: var(--text);
@@ -216,6 +216,18 @@
   text-align: left;
   overflow: hidden;
   cursor: pointer;
+}
+
+/* The row is two lines: the name, then when this conversation was last
+ * used. That is what makes a list of people scannable — without the second
+ * line every row is a name and the reader has to open one to know which is
+ * current. */
+.stella-agent-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 /* The name is what truncates: the avatar keeps its circle and the row keeps
@@ -228,9 +240,35 @@
   white-space: nowrap;
 }
 
+.stella-agent-meta {
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stella-agent.active .stella-agent-name {
   font-weight: 600;
   color: var(--text);
+}
+
+/* The active agent that is working now: the row says so in words where the
+ * time would be, and marks it with the one dot the eye catches while
+ * scanning the list. */
+.stella-agent-activity {
+  color: var(--text-dim);
+}
+
+.stella-agent-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
 }
 
 /* The delete control appears on hover (and always on touch, see
@@ -334,6 +372,31 @@
 .stella-header-avatar:focus-visible {
   outline: 2px solid var(--border-strong);
   outline-offset: 2px;
+}
+
+/* The way back to the list, on a phone only (it is not rendered at wide
+ * widths — the list is already beside the conversation there). A fingertip
+ * target that sits left of the agent's face without competing with it. */
+.stella-back {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: -6px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease),
+    color var(--lum-dur-fast) var(--lum-ease);
+}
+
+.stella-back:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 /* --- agents: the avatar -------------------------------------------------- */
@@ -440,6 +503,110 @@
   font-size: 12px;
   color: var(--text-faint);
   animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+}
+
+/* --- stella: messages ----------------------------------------------------- */
+
+/* The reading order is the layout: the agent speaks from the left (its face
+ * in the margin, the words on the sheet), the reader speaks from the right
+ * (a capsule). Only one of the two is a box — giving both a bubble would
+ * turn a conversation into two facing columns of tiles and lose the
+ * "them / me" asymmetry that makes a message list readable at a glance.
+ *
+ * The avatar column is a fixed width so a continuation (no face) keeps its
+ * text on the same line as the message above it. */
+.stella-column {
+  gap: 10px;
+}
+
+.stella-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+/* A continuation belongs to the message above it: the gap closes and only
+ * the text stays, so a run of replies reads as one answer rather than as
+ * several separate ones. */
+.stella-msg.continued {
+  margin-top: -8px;
+}
+
+.stella-msg-avatar {
+  flex: none;
+  width: 26px;
+  padding-top: 2px;
+  line-height: 0;
+}
+
+.stella-msg-main {
+  min-width: 0;
+  max-width: min(100%, 640px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stella-msg .stella-msg-body {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  /* A long identifier (a path, a URL) breaks instead of widening the column
+   * past the viewport on a phone. */
+  overflow-wrap: anywhere;
+}
+
+/* The day a conversation resumes on: a quiet rule with the date in it. It
+ * divides without becoming a heading — the eye passes it and lands on the
+ * message under it. */
+.stella-day {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.stella-day::before,
+.stella-day::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.stella-day span {
+  flex: none;
+  padding: 0 2px;
+}
+
+/* The wait before the reply's first word: three dots that breathe in
+ * sequence, where the text will go. It sits in the message's own column so
+ * the reply replaces it in place rather than shifting the conversation. */
+.stella-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+}
+
+.stella-typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: lum-typing 1.2s var(--lum-ease) infinite;
+}
+
+.stella-typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.stella-typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
 }
 
 /* --- stella: the machine's screen ---------------------------------------- */
@@ -584,19 +751,19 @@
 
 /* ---- narrow windows ------------------------------------------------------- */
 
-/* Phone: the panes are the screen. The floating margins, borders and radii
- * (which exist to lift a sheet off the canvas) only cost width here — the
- * same reason the chat pane drops them at this width. */
+/* Phone: the list and the conversation are two screens, not two columns.
+ * Both cannot fit side by side, and stacking them (what this used to do)
+ * left the list a strip at the top and the conversation under it — neither
+ * of the two usable. `data-screen` says which one is showing (App decides
+ * from the selection), so the same two elements serve both screens. */
 @media (max-width: 600px) {
   .stella-shell {
     padding: 0;
     gap: 0;
   }
 
-  .stella {
-    gap: 0;
-  }
-
+  /* The margin, border, radius and shadow exist to lift a sheet off the
+   * canvas; at this width they only cost the width the transcript needs. */
   .stella-main,
   .stella-pane {
     border: none;
@@ -604,8 +771,54 @@
     box-shadow: none;
   }
 
+  .stella {
+    gap: 0;
+  }
+
   .stella-pane {
     border-top: 1px solid var(--border);
+  }
+
+  /* The list takes the whole screen and is the screen's own scroll. */
+  .stella-shell[data-screen="list"] .stella {
+    display: none;
+  }
+
+  .stella-shell[data-screen="list"] .stella-sidebar {
+    width: 100%;
+    max-height: none;
+    padding: 0;
+    gap: 0;
+  }
+
+  /* The conversation takes the whole screen, and the list is gone. */
+  .stella-shell[data-screen="conversation"] .stella-sidebar {
+    display: none;
+  }
+
+  /* Rows are a fingertip tall and carry their two lines comfortably. */
+  .stella-agent-name {
+    padding: 10px 8px;
+    font-size: 14px;
+  }
+
+  .stella-agent-meta {
+    font-size: 11.5px;
+  }
+
+  .stella-sidebar-header {
+    padding: 10px 8px 8px;
+    font-size: 12px;
+  }
+
+  /* The face is what identifies a row at this size. */
+  .stella-column {
+    padding: 0 14px;
+    gap: 12px;
+  }
+
+  .stella-msg-main {
+    max-width: 100%;
   }
 
   .mode-select {
@@ -615,11 +828,22 @@
 
 /* ---- touch devices -------------------------------------------------------- */
 
-/* The screen toggle is the only way back to a closed pane, so it is a
- * fingertip-sized target. */
+/* The back button and the screen toggle are the only ways in and out of the
+ * conversation on a phone, so both are fingertip-sized targets. */
 @media (hover: none), (pointer: coarse) {
   .stella-screen-toggle {
     width: 34px;
     height: 34px;
+  }
+
+  .stella-back {
+    width: 40px;
+    height: 40px;
+    margin-left: -8px;
+  }
+
+  .stella-agent-delete {
+    width: 32px;
+    height: 32px;
   }
 }

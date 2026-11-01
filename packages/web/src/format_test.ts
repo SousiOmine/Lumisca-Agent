@@ -1,8 +1,11 @@
 import { assertEquals } from "@std/assert";
 import { createTranslator } from "@lumisca/core/shared";
 import {
+  formatClockTime,
   formatDate,
+  formatDaySeparator,
   formatRelativeTime,
+  startOfDay,
   thinkingLevelLabel,
 } from "./format.ts";
 
@@ -65,6 +68,40 @@ Deno.test("formatDate: numeric per language", () => {
   assertEquals(/(^|\D)9(\D|$)/.test(en), true, en);
   assertEquals(en.indexOf("9") < en.indexOf("2026"), true, `en: ${en}`);
   assertEquals(ja.indexOf("2026") < ja.indexOf("9"), true, `ja: ${ja}`);
+});
+
+Deno.test("formatClockTime: the time of day, in the language's shape", () => {
+  // The separator carries the date; a message carries the clock. What the
+  // app relies on is that the hour and the minute both survive Intl's
+  // shape for the language, not the exact separators (see formatDate).
+  const stamp = new Date(2026, 8, 15, 14, 5, 0).getTime();
+  for (const locale of ["en", "ja"] as const) {
+    const text = formatClockTime(stamp, locale);
+    assertEquals(text.includes("14") || text.includes("2"), true, text);
+    assertEquals(text.includes("05") || text.includes("5"), true, text);
+  }
+});
+
+Deno.test("formatDaySeparator: the two days a reader names, then a date", () => {
+  assertEquals(formatDaySeparator(NOW, "ja", NOW), "今日");
+  assertEquals(formatDaySeparator(NOW, "en", NOW), "Today");
+  const yesterday = NOW - 86_400_000;
+  assertEquals(formatDaySeparator(yesterday, "ja", NOW), "昨日");
+  assertEquals(formatDaySeparator(yesterday, "en", NOW), "Yesterday");
+  // Older than that is the date itself.
+  const older = NOW - 3 * 86_400_000;
+  assertEquals(formatDaySeparator(older, "en", NOW), formatDate(older, "en"));
+});
+
+Deno.test("formatDaySeparator: a day boundary is the calendar's, not 24 hours", () => {
+  // Two messages an hour apart across midnight belong to different days,
+  // and two on the same day belong to the same one however long the day is.
+  const lateEvening = new Date(2026, 8, 15, 23, 30).getTime();
+  const nextMorning = new Date(2026, 8, 16, 0, 30).getTime();
+  assertEquals(startOfDay(lateEvening) === startOfDay(nextMorning), false);
+  assertEquals(formatDaySeparator(lateEvening, "en", nextMorning), "Yesterday");
+  const earlySameDay = new Date(2026, 8, 15, 0, 30).getTime();
+  assertEquals(startOfDay(lateEvening) === startOfDay(earlySameDay), true);
 });
 
 Deno.test("thinkingLevelLabel: the display names live in the catalogue", () => {

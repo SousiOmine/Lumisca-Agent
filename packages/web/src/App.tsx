@@ -17,6 +17,7 @@ import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useServerHealth } from "./hooks/useServerHealth.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { usePanelInset } from "./hooks/usePanelInset.ts";
+import { useNarrowViewport } from "./hooks/useMediaQuery.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
 import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
@@ -298,6 +299,10 @@ export function App({ initialData }: AppProps): ReactElement {
   // so it never enters the tab views above.
   const stellaActive = mode === "stella";
   const stella = useStella(stellaActive);
+  // stella's two surfaces are two columns on a desktop and two screens on a
+  // phone (see the shell below). The query is the same 600px the stylesheet
+  // switches at, so the layout and the navigation cannot disagree.
+  const narrow = useNarrowViewport();
   const stellaAgent = stella.agents.find((a) => a.id === stella.activeAgentId);
   // The settings dialog's routine list: the active agent's routines
   // (code mode has no agent, so the list stays empty and says so).
@@ -419,12 +424,24 @@ export function App({ initialData }: AppProps): ReactElement {
             // the middle, the machine's screen beside it. Rendered instead of
             // the tab branch (not beside it): a tab strip is exactly the
             // session-list surface this mode exists to remove.
-            <div className="stella-shell">
+            //
+            // A phone cannot show two columns of this, so the same two
+            // surfaces become two screens: the list until one is picked, the
+            // conversation afterwards (with a back button). Which one shows
+            // is the selection itself — no extra state — so going back and
+            // opening the same agent lands where the reader left off.
+            <div
+              className="stella-shell"
+              data-screen={narrow && stella.activeAgentId !== null
+                ? "conversation"
+                : "list"}
+            >
               <StellaSidebar
                 agents={stella.agents}
                 activeId={stella.activeAgentId}
                 onSelect={stella.select}
                 onChanged={stella.reloadAgents}
+                running={stella.conversation?.running === true}
               />
               <StellaView
                 agent={stellaAgent ?? null}
@@ -443,6 +460,7 @@ export function App({ initialData }: AppProps): ReactElement {
                 onFinishHandover={(note, toolCallId) =>
                   stella.finishHandover(note, toolCallId)}
                 onOpenSettings={() => setSettingsCategory("providers")}
+                onBack={narrow ? stella.clearSelection : undefined}
               />
             </div>
           )

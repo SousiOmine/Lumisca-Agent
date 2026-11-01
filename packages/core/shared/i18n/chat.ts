@@ -204,6 +204,12 @@ export const chat = {
     en: "Preparing the machine for the first time (this takes a few minutes)…",
   },
   "chat.stella.agents.title": { ja: "エージェント", en: "Agents" },
+  /** The conversation header's back button on a phone, where the list and
+   * the conversation are two screens rather than two columns. */
+  "chat.stella.backToList": {
+    ja: "エージェント一覧に戻る",
+    en: "Back to the agents",
+  },
   "chat.stella.agents.new": { ja: "新しいエージェント", en: "New agent" },
   "chat.stella.agents.name": { ja: "名前", en: "Name" },
   "chat.stella.agents.role": { ja: "役割", en: "Role" },

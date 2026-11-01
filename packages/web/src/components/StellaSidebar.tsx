@@ -2,7 +2,8 @@ import { IconPlus, IconX } from "@tabler/icons-preact";
 import { useState } from "preact/compat";
 import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
-import { useT } from "../i18n.ts";
+import { useLocale, useT } from "../i18n.ts";
+import { formatRelativeTime } from "../format.ts";
 import type { StellaAgent } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 import { Field } from "./Field.tsx";
@@ -15,6 +16,11 @@ interface StellaSidebarProps {
   onSelect: (id: string) => void;
   /** Called after a create / delete so the App re-reads the list. */
   onChanged: () => void;
+  /** Whether the active agent's conversation is running, so its row can say
+   * so (a message app's "typing" in a list). Only the active one is known:
+   * the others have no open stream, and asking each would be a request per
+   * row. */
+  running: boolean;
 }
 
 /**
@@ -31,9 +37,10 @@ interface StellaSidebarProps {
  * appears here without this dialog ever opening.
  */
 export function StellaSidebar(
-  { agents, activeId, onSelect, onChanged }: StellaSidebarProps,
+  { agents, activeId, onSelect, onChanged, running }: StellaSidebarProps,
 ) {
   const t = useT();
+  const locale = useLocale();
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<StellaAgent | null>(null);
   const [name, setName] = useState("");
@@ -114,9 +121,40 @@ export function StellaSidebar(
                 agentId={agent.id}
                 name={agent.name}
                 icon={agent.icon}
-                size={20}
+                size={32}
               />
-              <span className="stella-agent-label">{agent.name}</span>
+              <span className="stella-agent-text">
+                <span className="stella-agent-label">{agent.name}</span>
+                {
+                  /* The same two facts a message app puts under a name: what
+                   * was said last (here: that this conversation is where the
+                   * work happens) and when. Which is the second line's
+                   * business — the name stays the only thing that is large. */
+                }
+                <span className="stella-agent-meta">
+                  {agent.id === activeId && running
+                    ? (
+                      <span className="stella-agent-activity">
+                        {t("chat.stella.working")}
+                      </span>
+                    )
+                    : (
+                      <span className="stella-agent-time">
+                        {formatRelativeTime(agent.updatedAt, locale)}
+                      </span>
+                    )}
+                </span>
+              </span>
+              {
+                /* A dot on the agent that is working right now, so the list
+                 * answers "is anything happening?" without opening each
+                 * conversation. It repeats what the second line says
+                 * because the line is text and the dot is what the eye
+                 * catches while scanning. */
+              }
+              {agent.id === activeId && running && (
+                <span className="stella-agent-dot" aria-hidden="true" />
+              )}
             </button>
             <button
               type="button"

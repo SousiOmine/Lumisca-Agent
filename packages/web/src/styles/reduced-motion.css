@@ -5,7 +5,8 @@
 @media (prefers-reduced-motion: reduce) {
   .live-dot,
   .cursor,
-  .spin {
+  .spin,
+  .stella-typing-dot {
     animation: none;
   }
 
@@ -38,6 +39,8 @@
   .notification-detail,
   .agent-work-log,
   .chat-running,
+  .stella-msg,
+  .stella-running,
   .todo-panel,
   .task-panel,
   .background-panel,

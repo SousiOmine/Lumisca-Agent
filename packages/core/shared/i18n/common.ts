@@ -38,6 +38,10 @@ export const common = {
   "common.expandPanel": { ja: "パネルを展開", en: "Expand panel" },
   "common.settings": { ja: "設定", en: "Settings" },
   "common.justNow": { ja: "たった今", en: "just now" },
+  /** Separators between the days of a conversation: the two days a reader
+   * thinks in by name, and a date for anything older. */
+  "common.daySeparator.today": { ja: "今日", en: "Today" },
+  "common.daySeparator.yesterday": { ja: "昨日", en: "Yesterday" },
   /** Status word on a failed tool call or notification line. */
   "common.error": { ja: "エラー", en: "Error" },
   /** The page could not reach its own server (App's top-level error). */

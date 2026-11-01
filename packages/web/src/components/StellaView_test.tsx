@@ -36,6 +36,8 @@ function render(
   overrides: {
     status?: StellaStatus;
     conversation?: Partial<StellaConversationState>;
+    /** The phone-only back button (see StellaViewProps.onBack). */
+    onBack?: () => void;
   } = {},
 ): string {
   initLocale("ja");
@@ -59,6 +61,7 @@ function render(
       loadingOlder: false,
       onFinishHandover: () => Promise.resolve(),
       onOpenSettings: () => {},
+      ...(overrides.onBack === undefined ? {} : { onBack: overrides.onBack }),
     }),
   );
 }
@@ -111,4 +114,15 @@ Deno.test("StellaView: no toggle while the machine cannot show a screen", () => 
   const html = render({ status: status({ state: "stopped", vncPort: null }) });
   assertEquals(html.includes("stella-pane"), false);
   assertEquals(toggleTag(html), "");
+});
+
+Deno.test("StellaView: the back button appears only when the caller gives one", () => {
+  // A phone has one screen at a time, so the way back to the list is a
+  // control on the conversation. A wide window has the list beside it, and
+  // a back button there would point at something already visible — which is
+  // why its absence is decided by the caller, not by CSS.
+  assertEquals(render().includes("stella-back"), false);
+  const narrow = render({ onBack: () => {} });
+  assertStringIncludes(narrow, "stella-back");
+  assertStringIncludes(narrow, "エージェント一覧に戻る");
 });

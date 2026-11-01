@@ -39,6 +39,9 @@ export function useStella(enabled: boolean): {
   agents: StellaAgent[];
   activeAgentId: string | null;
   select: (id: string) => void;
+  /** Return to the list of agents (a phone's back button); the conversation
+   * stays on the server and is re-read on the next selection. */
+  clearSelection: () => void;
   /** The active agent's conversation, or null before it is open. */
   conversation: StellaConversationState | null;
   /** The conversation's session id (the key its published images are stored
@@ -294,6 +297,18 @@ export function useStella(enabled: boolean): {
     });
   }, []);
 
+  /** Go back to the list of agents (a phone's conversation screen's back
+   * button). The conversation is not deleted — it lives on the server — so
+   * the next selection re-reads it. A `null` agent is exactly the state this
+   * hook starts in ("nobody chosen yet"), which is why no separate flag is
+   * needed: on a wide screen the list is always visible anyway, and on a
+   * narrow one this is what returns to it. */
+  const clearSelection = useCallback(() => {
+    setConversation(null);
+    setSessionId(null);
+    setActiveAgentId(null);
+  }, []);
+
   // Leaving stella mode drops the conversation's state.
   useEffect(() => {
     if (enabled) return;
@@ -396,6 +411,7 @@ export function useStella(enabled: boolean): {
     agents,
     activeAgentId,
     select,
+    clearSelection,
     conversation,
     loadOlder,
     loadingOlder,

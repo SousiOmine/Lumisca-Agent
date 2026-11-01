@@ -1,4 +1,5 @@
 import {
+  IconArrowLeft,
   IconDeviceDesktop,
   IconDeviceDesktopOff,
   IconSend,
@@ -52,6 +53,12 @@ interface StellaViewProps {
   /** The user finished at the screen (the `vm_ask_user` hand-over). */
   onFinishHandover: (note: string, toolCallId: string) => Promise<void>;
   onOpenSettings: () => void;
+  /** Return to the list of agents. Present only at phone widths, where the
+   * list and the conversation are two screens instead of two columns; the
+   * header then draws a back button. Omitted on a wide screen, where the
+   * list is already beside the conversation and a back button would point
+   * at something the reader can see. */
+  onBack?: () => void;
 }
 
 /**
@@ -88,6 +95,7 @@ export function StellaView(
     loadingOlder,
     onFinishHandover,
     onOpenSettings,
+    onBack,
   }: StellaViewProps,
 ) {
   const t = useT();
@@ -140,6 +148,23 @@ export function StellaView(
       <div className="stella-main">
         {agent !== null && (
           <header className="stella-header">
+            {
+              /* A phone shows one screen at a time (the list, then the
+             * conversation), so the way back has to be a control on the
+             * conversation rather than a column that is simply not there.
+             * Hidden at wide widths, where the list is beside it. */
+            }
+            {onBack !== undefined && (
+              <button
+                type="button"
+                className="stella-back"
+                onClick={onBack}
+                title={t("chat.stella.backToList")}
+                aria-label={t("chat.stella.backToList")}
+              >
+                <IconArrowLeft size={18} />
+              </button>
+            )}
             <button
               type="button"
               className="stella-header-avatar"
@@ -229,6 +254,9 @@ export function StellaView(
           : (
             <StellaTranscript
               conversation={conversation}
+              author={agent === null
+                ? { id: "", name: "", icon: "" }
+                : { id: agent.id, name: agent.name, icon: agent.icon }}
               visualBase={visualBase}
               attachBase={attachBase}
               onRewind={handleRewind}

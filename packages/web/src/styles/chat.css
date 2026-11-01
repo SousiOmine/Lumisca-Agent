@@ -67,6 +67,12 @@
   gap: 18px;
 }
 
+/* ---- messages: the shared bubble language --------------------------------
+ *
+ * One conversation shape serves both modes: the reader's own words sit in a
+ * capsule at the right edge, the agent's answer sits on the sheet at the
+ * left. The direction is the reading order, not a decoration. */
+
 .msg {
   display: flex;
   flex-direction: column;
@@ -94,6 +100,25 @@
   border-radius: var(--radius-xl);
   padding: 11px 16px;
   animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+/* The line under a bubble: when it was said, then the actions. A message app
+ * puts the time where the eye already is (under the last line of one's own
+ * message); the actions join it on hover so the row never changes height. */
+.msg-meta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding-right: 6px;
+}
+
+.msg-time {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .msg-user-actions {

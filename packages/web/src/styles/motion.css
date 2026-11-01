@@ -71,3 +71,17 @@
     transform: scale(1);
   }
 }
+
+/* The typing dots of a reply that has not produced text yet: only opacity
+ * moves, so the row keeps its height and the text that follows does not
+ * shift the conversation. */
+@keyframes lum-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}

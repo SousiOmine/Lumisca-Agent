@@ -11,6 +11,7 @@ import {
   type Tool,
   type ToolResult,
 } from "./schema.ts";
+import { requireStringValue } from "./validate.ts";
 
 /** A pending ask: the questions shown to the user, with the resolvers that
  * the answer (or the session teardown) settles. */
@@ -193,7 +194,20 @@ export function createAskTool(hub: AskHub): Tool<typeof askSchema> {
         throw new CoreError("ask requires at least one question", "invalid");
       }
       const ids = new Set<string>();
-      for (const q of questions) {
+      for (const [index, q] of questions.entries()) {
+        // A model routinely sends a number where the schema says string
+        // (`"id": 1`). The value is echoed back by the answer route's own
+        // type check, where the whole answer would be rejected — so the
+        // mismatch is caught here, while it can still name the field.
+        const where = `questions[${index}]`;
+        requireStringValue(q.id, `${where}.id`);
+        requireStringValue(q.question, `${where}.question`);
+        for (const [optionIndex, option] of q.options.entries()) {
+          requireStringValue(
+            option.label,
+            `${where}.options[${optionIndex}].label`,
+          );
+        }
         if (ids.has(q.id)) {
           throw new CoreError(
             `Duplicate question id: ${q.id}`,

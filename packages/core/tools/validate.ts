@@ -95,3 +95,24 @@ export function assertSchemaBounds(
     }
   }
 }
+
+/** Require a value the schema declares as a string to actually be one.
+ *
+ * The schema is what the provider was TOLD, not what it sends: a model
+ * routinely emits `"id": 1` for a field documented as a string, and JSON
+ * Schema `type` is advisory at the wire. Without this check the value travels
+ * through the transcript and comes back to the server on the next request —
+ * where a boundary that does check types (the answer route's) rejects it, or
+ * a map keyed by the value silently misses. A `null` is not an absent
+ * optional field either: it was sent, so it is wrong.
+ *
+ * `where` names the value in the error ("questions[0].id"), so the model can
+ * fix the call instead of guessing.
+ */
+export function requireStringValue(value: unknown, where: string): string {
+  if (typeof value !== "string") {
+    const shown = value === null ? "null" : typeof value;
+    throw new CoreError(`${where} must be a string (got ${shown})`, "invalid");
+  }
+  return value;
+}
