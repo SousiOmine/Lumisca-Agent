@@ -147,6 +147,12 @@ import { CommandSafety } from "./safety/command-safety.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
 
+/** How long a stella skill catalog stays usable for opening a conversation.
+ * Long enough that scrolling between agents does not pay for a `podman exec`
+ * each time, short enough that a skill the agent just wrote shows up on the
+ * next visit. */
+const STELLA_SKILLS_TTL_MS = 30_000;
+
 export interface CreateSessionInput {
   /** The session's workspace; omitted → a chat session in the folder-less
    * chat workspace ("simple chat" without a workspace picker). */
@@ -236,6 +242,16 @@ export class LumiscaCore {
   /** Hand-over hubs per session (see handoverFor). Dropped with the
    * session. */
   private readonly handoverHubs = new Map<string, HandoverHub>();
+  /** The stella skill catalog already read, with the machine that read it
+   * and when. Opening a conversation re-reads the catalog only when this is
+   * cold or older than STELLA_SKILLS_TTL_MS: the read crosses into the
+   * machine (`podman exec`), and a conversation opened from a phone over a
+   * slow link must not wait for a list that has not changed. */
+  private stellaSkills: {
+    machine: VmManager | undefined;
+    at: number;
+    pending: Promise<void> | undefined;
+  } = { machine: undefined, at: 0, pending: undefined };
 
   private constructor(
     db: LumiscaDb,
@@ -1182,7 +1198,7 @@ export class LumiscaCore {
     await this.ensureStellaReady();
     // The skill catalog is read from the machine, which the factory cannot
     // await (it builds synchronously): prime it here, before any open.
-    await this.refreshStellaSkills();
+    await this.primeStellaSkills();
     // The agent's working folder: bash cannot start in a folder that does
     // not exist (`podman exec --workdir` fails), and a fresh agent has no
     // files yet.
@@ -1365,6 +1381,49 @@ export class LumiscaCore {
    * opens, so the agent's skill tool starts with a current list. */
   async refreshStellaSkills(): Promise<void> {
     await this.stella.refreshSkills();
+    this.stellaSkills = {
+      machine: this.stella.get(),
+      at: Date.now(),
+      pending: undefined,
+    };
+  }
+
+  /**
+   * Make the stella skill catalog current enough to open a conversation.
+   *
+   * The catalog lives inside the machine, so reading it costs a `podman
+   * exec` (and, on a self-hosted server reached over a phone, whatever the
+   * link costs on top). A catalog read moments ago — or one this call
+   * started — is reused: a skill the agent wrote during a conversation is
+   * picked up by the next open after the window, not by the open that is
+   * already five calls deep into a cold start.
+   *
+   * Concurrent opens share one read, so two clients cannot queue two
+   * `podman exec`s for the same list.
+   */
+  private async primeStellaSkills(): Promise<void> {
+    const machine = this.stella.get();
+    if (this.stellaSkills.machine !== machine) {
+      // A replaced machine means a replaced catalog; nothing to reuse.
+      this.stellaSkills = {
+        machine,
+        at: 0,
+        pending: undefined,
+      };
+    }
+    if (this.stellaSkills.pending !== undefined) {
+      await this.stellaSkills.pending;
+      return;
+    }
+    if (
+      this.stellaSkills.at !== 0 &&
+      Date.now() - this.stellaSkills.at < STELLA_SKILLS_TTL_MS
+    ) {
+      return;
+    }
+    const pending = this.refreshStellaSkills();
+    this.stellaSkills.pending = pending;
+    await pending;
   }
 
   // --- workspaces (delegated to WorkspaceService) -------------------------

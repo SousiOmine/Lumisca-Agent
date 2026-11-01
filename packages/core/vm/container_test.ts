@@ -644,3 +644,52 @@ Deno.test("status: the VNC port is null when the machine is not running", async 
     await Deno.remove(dir, { recursive: true });
   }
 });
+
+Deno.test("status: a second fresh read does not ask about the image again", async () => {
+  // The status endpoint polls, and every `podman` call is a round trip the
+  // user waits on when the server is reached over a phone. Once an image has
+  // been seen, `image exists` is not asked again; the container inspect still
+  // runs, so a machine that disappeared is still reported.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  try {
+    const script = runningMachine(digest);
+    const { run, calls } = makeRunner(script);
+    const manager = createVmManager({ containerDir: dir, run });
+    assertEquals((await manager.status({ fresh: true })).state, "running");
+    const afterFirst = calls.filter((call) =>
+      call.join(" ").startsWith("podman image exists")
+    ).length;
+    assertEquals(afterFirst, 1);
+    assertEquals((await manager.status({ fresh: true })).state, "running");
+    const afterSecond = calls.filter((call) =>
+      call.join(" ").startsWith("podman image exists")
+    ).length;
+    assertEquals(afterSecond, 1);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: concurrent reads share one round of podman calls", async () => {
+  // The status poll, an open and the screen's port lookup can overlap. Each
+  // used to run its own podman calls; now they wait for the same read.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  try {
+    const { run, calls } = makeRunner(runningMachine(digest));
+    const manager = createVmManager({ containerDir: dir, run });
+    const [a, b] = await Promise.all([
+      manager.status({ fresh: true }),
+      manager.status({ fresh: true }),
+    ]);
+    assertEquals(a.state, "running");
+    assertEquals(b.state, "running");
+    const versionCalls = calls.filter((call) =>
+      call.join(" ") === "podman --version"
+    ).length;
+    assertEquals(versionCalls, 1);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});

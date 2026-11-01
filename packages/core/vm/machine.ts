@@ -86,7 +86,13 @@ export class StellaMachine {
     onProgress?: (progress: VmProgress) => void,
   ): Promise<void> {
     const vm = this.require();
-    const availability = stellaAvailability(await vm.status());
+    // One read answers both questions. The availability check and the
+    // running check used to be two `vm.status` calls, and the second one
+    // (`fresh`) is never cached — on a host where the server is reached over
+    // a phone, every redundant `podman` call is a second the user waits
+    // before the conversation appears.
+    const status = await vm.status({ fresh: true });
+    const availability = stellaAvailability(status);
     if (!availability.available) {
       throw new Error(availability.reason);
     }
@@ -94,7 +100,6 @@ export class StellaMachine {
       await this.#starting;
       return;
     }
-    const status = await vm.status({ fresh: true });
     if (status.state === "running") {
       this.#verdict = { available: true };
       return;

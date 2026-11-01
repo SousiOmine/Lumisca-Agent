@@ -158,6 +158,15 @@ export function createVmManager(options: VmManagerOptions): VmManager {
   );
 
   let cached: { at: number; status: VmStatus } | null = null;
+  /** Whether a usable image was seen by the last status read, so the next one
+   * can skip asking podman again. Undefined until a read has answered: a
+   * known-absent image is not retried, but a fresh manager always asks. */
+  let imagePresent: boolean | undefined = undefined;
+  /** The in-flight status read. Concurrent callers (the status poll, an open,
+   * the screen's port lookup) wait for the same podman calls instead of
+   * queueing their own: on a slow link each redundant call is a second the
+   * user waits. */
+  let inFlight: Promise<VmStatus> | undefined = undefined;
 
   const report = (progress: VmProgress) => options.onProgress?.(progress);
 
@@ -198,9 +207,18 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     if (!readFresh && cached !== null && now - cached.at < VM_STATUS_CACHE_MS) {
       return cached.status;
     }
-    const result = await readStatus();
-    cached = { at: now, status: result };
-    return result;
+    if (inFlight !== undefined) return await inFlight;
+    const read = (async () => {
+      try {
+        const result = await readStatus();
+        cached = { at: Date.now(), status: result };
+        return result;
+      } finally {
+        inFlight = undefined;
+      }
+    })();
+    inFlight = read;
+    return await read;
   }
 
   async function readStatus(): Promise<VmStatus> {
@@ -217,11 +235,20 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         reason: `podman is not available: ${firstLine(version.stderr)}`,
       };
     }
-    const image = await run(podman(["image", "exists", VM_IMAGE_NAME]), {
-      timeoutMs: 30_000,
-    });
-    if (image.exitCode !== 0) {
-      return { state: "image_missing", vncPort: null, reason: "" };
+    // `image exists` is the expensive half of a cold check and the answer
+    // only changes when the image is built (which the caller does itself) or
+    // removed by hand. Once an image has been seen it is not asked about
+    // again; a container created from it cannot outlive its removal without
+    // the inspect below reporting it.
+    if (imagePresent !== true) {
+      const image = await run(podman(["image", "exists", VM_IMAGE_NAME]), {
+        timeoutMs: 30_000,
+      });
+      if (image.exitCode !== 0) {
+        imagePresent = false;
+        return { state: "image_missing", vncPort: null, reason: "" };
+      }
+      imagePresent = true;
     }
     // `container inspect` answers with JSON even for a stopped container;
     // a non-zero exit means there is none.
