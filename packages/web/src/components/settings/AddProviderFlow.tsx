@@ -2,7 +2,7 @@ import { useMemo, useState } from "preact/compat";
 import { IconPlugConnected } from "@tabler/icons-preact";
 import { filterByQuery, useProviderModels } from "../../providers.ts";
 import { useT } from "../../i18n.ts";
-import { BackHeader } from "../BackHeader.tsx";
+import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 
 /** Settings → add provider: searchable list of every known provider, plus
  * an entry to add an arbitrary OpenAI-compatible provider by hand. */
@@ -26,7 +26,7 @@ export function AddProviderFlow({
 
   return (
     <>
-      <BackHeader
+      <SettingsSubHeader
         onBack={onBack}
         title={t("settings.provider.addProvider")}
       />

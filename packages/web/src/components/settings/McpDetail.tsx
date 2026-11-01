@@ -14,7 +14,7 @@ import { useT } from "../../i18n.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { Field } from "../Field.tsx";
 import { mcpDraftKey } from "./mcpDraft.ts";
-import { BackHeader } from "../BackHeader.tsx";
+import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 
 /** Parse textarea lines into a string list (blanks removed). */
 function parseLines(text: string): string[] {
@@ -186,7 +186,7 @@ export function McpDetail({
 
   return (
     <>
-      <BackHeader
+      <SettingsSubHeader
         onBack={onCancel}
         title={initial
           ? t("settings.mcp.editTitle", { name: initial.name })
@@ -195,7 +195,7 @@ export function McpDetail({
         <button type="button" className="btn push" onClick={onCancel}>
           {t("common.close")}
         </button>
-      </BackHeader>
+      </SettingsSubHeader>
 
       <div
         style={{

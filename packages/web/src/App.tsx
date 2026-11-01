@@ -33,7 +33,7 @@ import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
 import { RecentSessionsModal } from "./components/RecentSessionsModal.tsx";
 import {
-  type SettingsCategory,
+  type CommonSettingsCategory,
   SettingsModal,
 } from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
@@ -157,8 +157,12 @@ export function App({ initialData }: AppProps): ReactElement {
   // switch (keyed below), so the draft lives here and is fed back into
   // the view when its tab is shown again. Closing a tab discards it.
   const { drafts, updateDraft, clearDraft } = useDrafts(tabs);
+  // Which page the settings dialog opens on. Every caller opens a category
+  // both modes have (the model picker opens プロバイダー, the app menu 一般,
+  // the connection picker 接続先サーバー), so the type keeps a mode-only page
+  // out of a prop the dialog could not honour.
   const [settingsCategory, setSettingsCategory] = useState<
-    SettingsCategory | null
+    CommonSettingsCategory | null
   >(null);
   // Bumped when the settings dialog closes: the draft re-reads the default
   // model there, since registering (or removing) a provider changes what a

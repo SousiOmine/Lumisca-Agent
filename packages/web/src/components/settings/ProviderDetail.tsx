@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "preact/compat";
 // targeted event types live in the module root.
 import type { TargetedEvent, TargetedKeyboardEvent } from "preact";
 import {
-  IconArrowLeft,
   IconCheck,
   IconCircleDashed,
   IconCopy,
@@ -18,6 +17,7 @@ import {
 } from "@tabler/icons-preact";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
+import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 import { useT } from "../../i18n.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSavedNotice } from "../../hooks/useSave.ts";
@@ -385,11 +385,10 @@ export function ProviderDetail({
 
   return (
     <>
-      <div className="modal-header">
-        <button type="button" className="btn" onClick={onBack}>
-          <IconArrowLeft size={14} /> {t("common.back")}
-        </button>
-        <h2>{provider?.name ?? providerId}</h2>
+      <SettingsSubHeader
+        onBack={onBack}
+        title={provider?.name ?? providerId}
+      >
         {auth.configured
           ? (
             <span className="provider-state configured">
@@ -404,7 +403,7 @@ export function ProviderDetail({
               {t("settings.provider.notConfigured")}
             </span>
           )}
-      </div>
+      </SettingsSubHeader>
 
       <div className="stack-8">
         {isOAuth

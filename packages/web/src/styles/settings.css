@@ -164,12 +164,8 @@
   gap: 10px;
 }
 
-/* Compaction tuning (settings → モデル): the group's heading and its two
-   numeric fields sit next to the model preference rows. */
-.compaction-settings > .update-label {
-  margin-top: 4px;
-}
-
+/* Compaction tuning (settings → モデル): its two numeric fields are also
+   rows of the model page, so only the field's width is its own. */
 .compaction-token-input {
   width: 96px;
   flex: none;
@@ -199,6 +195,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* A form's own buttons, at its trailing edge (Save / Cancel). */
+.settings-actions-end {
+  justify-content: flex-end;
 }
 
 .settings-saved {
@@ -275,6 +276,13 @@
   margin-bottom: 8px;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+/* The ID and the display name side by side: both are short, and one under the
+ * other made the form twice as tall as its content. */
+.saved-prompt-form-row {
+  display: flex;
   gap: 8px;
 }
 
@@ -370,36 +378,74 @@
   border-radius: var(--radius-lg);
 }
 
-/* two-pane settings modal: left category sidebar, right content */
+/* Two-pane settings modal: the category navigation on the left, one page on
+ * the right. The dialog itself does not scroll: the page's body does
+ * (.settings-page-body), so a category's title and the way out stay put. */
 .modal-settings {
-  height: min(720px, calc(100dvh - 48px));
+  height: min(760px, calc(100dvh - 48px));
   overflow: hidden;
+}
+
+/* The dialog's own bar: the title, a chip naming the mode whose settings
+ * these are, and the close button. */
+.settings-header {
+  flex: none;
+}
+
+.settings-mode {
+  flex: none;
+  padding: 1px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 19px;
 }
 
 .settings-body {
   display: flex;
-  gap: 16px;
+  gap: 18px;
   flex: 1;
   min-height: 0;
 }
 
+/* The navigation. Its groups are the answer to "why is this preference not
+ * in the other mode": the shared entries, then the current mode's own under
+ * a heading that names it. */
 .settings-nav {
-  width: 210px;
+  width: 216px;
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 14px;
   overflow-y: auto;
-  padding-right: 8px;
+  padding-right: 10px;
   border-right: 1px solid var(--border);
+}
+
+.settings-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav-heading {
+  margin: 0 0 4px;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  /* A heading names a group; it is read once, not scanned. */
+  text-transform: none;
 }
 
 .settings-nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
-  border-radius: var(--radius-pill);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
   text-align: left;
   font-size: 13px;
   color: var(--text-dim);
@@ -417,18 +463,174 @@
   font-weight: 600;
 }
 
+.settings-nav-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.settings-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The one-line description under a label. Hidden by default: the two-column
+ * layout prints it once, under the page's title. The stepped layout shows it
+ * here instead (see the compact block at the end of this sheet), where the
+ * page is not on screen while the list is. */
+.settings-nav-desc {
+  display: none;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-content {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.settings-content input[type="checkbox"] {
+  accent-color: var(--text-dim);
+}
+
+/* ---- one settings page --------------------------------------------------- */
+
+/* A category is a page: the header (title + explanation + the way back) does
+ * not scroll, the body does. The panels used to own the whole column, so a
+ * long one scrolled its title away and, on a phone, its way back too. */
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.settings-page-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 2px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.settings-page-back {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-top: -2px;
+  border-radius: var(--radius-pill);
+  color: var(--text-dim);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.settings-page-back:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.settings-page-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-page-titles h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.settings-page-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.settings-page-body {
+  flex: 1;
+  min-height: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  /* Room for a row's focus ring and the last row's hairline, which an
+   * exactly-fitting body would clip. */
+  padding-bottom: 4px;
 }
 
-.settings-content input[type="checkbox"] {
-  accent-color: var(--text-dim);
+/* A screen pushed from inside a category (a provider, an MCP server, a form):
+ * a smaller row that starts the page body — back to the list it came from,
+ * the entry's name, and the screen's own state badge.
+ *
+ * It carries the back button rather than the page header, so a detail screen
+ * does not show two of them: the header's back (leave the category) is hidden
+ * while this bar is on the page, and the drill-down reads list → entry →
+ * category the way the reader arrived. `:has` degrades to both buttons being
+ * drawn, which still works, hence no script for it. */
+.settings-subhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-page:has(.settings-subhead) .settings-page-back {
+  display: none;
+}
+
+.settings-subhead-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.settings-subhead-back:hover {
+  color: var(--text);
+}
+
+.settings-subhead-title {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-subhead-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A page whose body is one control that fills it (the AGENTS.md editor). */
+.settings-pane.settings-fill {
+  flex: 1;
+  min-height: 0;
 }
 
 /* ---- provider sections (AI / web search) --------------------------------- */
@@ -452,7 +654,7 @@
   min-height: 30px;
 }
 
-.settings-section-head h2 {
+.settings-section-head h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
@@ -781,36 +983,63 @@ button.provider-row-body:hover .provider-row-chevron {
 
 /* ---- narrow windows ------------------------------------------------------- */
 
-/* Phone: the dialog is full screen (modals.css) and the category sidebar
- * becomes a horizontal strip above the content — a 210px column would leave a
- * phone-width sliver for the panels it navigates. Rows that put a control
+/* Compact (a narrow window, or a phone): one screen at a time — the category
+ * list, then the picked page with a back button in its header. A navigation
+ * column beside the page leaves a sliver of the page on a phone, and the
+ * horizontal strip of labels this replaces clipped every label and had no room
+ * for the line saying what a category decides.
+ *
+ * `data-view` is set on `.settings-body` by SettingsModal: "list" (the
+ * navigation is the screen) or "page" (the page is). */
+@media (max-width: 900px) {
+  .settings-body {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .settings-nav {
+    width: 100%;
+    border-right: none;
+    padding-right: 0;
+    /* The list is a full-height screen of its own. */
+    flex: 1;
+    min-height: 0;
+    gap: 16px;
+  }
+
+  .settings-nav-item {
+    padding: 10px 12px;
+  }
+
+  /* The list is the only screen: the description under each label is what
+   * tells the reader what the category decides, since the page is not open.
+   * It wraps here — a clipped sentence answers nothing. */
+  .settings-nav-desc {
+    display: block;
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.45;
+  }
+
+  .settings-body[data-view="list"] .settings-content {
+    display: none;
+  }
+
+  .settings-body[data-view="page"] .settings-nav {
+    display: none;
+  }
+
+  .settings-page-head {
+    padding-top: 2px;
+  }
+}
+
+/* Phone: the dialog is full screen (modals.css). Rows that put a control
  * beside a label wrap instead of squeezing it (a 260px key field does not fit
  * beside anything here). */
 @media (max-width: 600px) {
   .modal-settings {
     height: 100dvh;
-  }
-
-  .settings-body {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .settings-nav {
-    flex-direction: row;
-    width: 100%;
-    gap: 4px;
-    padding: 0 0 8px;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .settings-nav-item {
-    flex: none;
-    padding: 8px 10px;
-    white-space: nowrap;
   }
 
   .provider-row,
@@ -831,8 +1060,7 @@ button.provider-row-body:hover .provider-row-chevron {
     margin-left: auto;
   }
 
-  .settings-content {
-    gap: 10px;
+  .settings-page-body {
     /* The stable gutter reserves a scrollbar's width; the phone's overlay
      * scrollbar needs no reservation. */
     scrollbar-gutter: auto;
@@ -841,7 +1069,7 @@ button.provider-row-body:hover .provider-row-chevron {
 
 /* ---- touch devices -------------------------------------------------------- */
 
-/* The category strip and the saved-prompt textarea (16px: iOS Safari zooms
+/* The navigation rows and the saved-prompt textarea (16px: iOS Safari zooms
  * the page for a smaller field, see base.css). */
 @media (hover: none), (pointer: coarse) {
   .settings-nav-item {

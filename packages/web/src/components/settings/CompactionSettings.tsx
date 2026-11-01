@@ -12,6 +12,7 @@ import { useSettings } from "../../settingsStore.ts";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
+import { SettingsSection } from "./SettingsSection.tsx";
 
 /** What one pending token-field commit needs (see typedCommit). */
 interface TypedCommit {
@@ -166,8 +167,7 @@ export function CompactionSettings() {
   );
 
   return (
-    <div className="settings-pane compaction-settings">
-      <span className="update-label">{t("settings.compaction.title")}</span>
+    <SettingsSection title={t("settings.compaction.title")}>
       <SettingRow
         label={t("settings.compaction.enabled")}
         description={t("settings.compaction.enabledDesc")}
@@ -205,6 +205,6 @@ export function CompactionSettings() {
         </span>
       )}
       {error && <div className="error-text">{error}</div>}
-    </div>
+    </SettingsSection>
   );
 }

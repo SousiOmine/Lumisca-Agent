@@ -23,6 +23,7 @@ import {
   useProviderModels,
 } from "../../providers.ts";
 import { ModelPicker } from "../ModelPicker.tsx";
+import { SettingsSection } from "./SettingsSection.tsx";
 
 interface ModelPrefRow {
   key: string;
@@ -207,7 +208,10 @@ export function ModelPreferencePanel(
   const openRowDef = localizedRows.find((r) => r.key === openRow);
 
   return (
-    <div className="settings-pane model-pref-panel">
+    <SettingsSection
+      title={t("settings.model.auxTitle")}
+      description={t("settings.model.auxDescription")}
+    >
       {localizedRows.map((row) => {
         const value = values[row.key];
         return (
@@ -249,7 +253,7 @@ export function ModelPreferencePanel(
                 disabled={saving === row.key}
                 onClick={(e) => openPicker(row.key, e.currentTarget)}
               >
-                {t("settings.personalize.update")}
+                {t("common.edit")}
               </button>
               {value && (
                 <button
@@ -315,6 +319,6 @@ export function ModelPreferencePanel(
           {t("settings.model.saveFailed", { error: saveError })}
         </div>
       )}
-    </div>
+    </SettingsSection>
   );
 }

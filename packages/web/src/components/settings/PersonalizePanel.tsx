@@ -1,49 +1,36 @@
 import { useEffect, useState } from "preact/compat";
-import {
-  IconCheck,
-  IconEdit,
-  IconPlus,
-  IconTrash,
-  IconX,
-} from "@tabler/icons-preact";
 import { api } from "../../api.ts";
-import { confirmAction } from "../../confirm.ts";
 import { errorText } from "../../providers.ts";
-import type { SavedPrompt } from "../../types.ts";
-import { useSavedPrompts } from "../../hooks/useSavedPrompts.ts";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
-import { Field } from "../Field.tsx";
 
-/** Settings → パーソナライズ. Edits the machine-level AGENTS.md that lives
- * next to the settings file, and manages saved prompts (user-defined prompt
- * snippets accessible via /prompt). */
+/**
+ * Settings → カスタマイズ: the machine-level AGENTS.md, which lives next to
+ * the settings file and is one of the instruction files a session reads (the
+ * workspace's own AGENTS.md chain comes first).
+ *
+ * The page is the editor: a textarea and a save state. It used to share the
+ * category with the saved prompts, which is a different audience — this file
+ * is obeyed in both modes, a saved prompt can only be recalled in code mode's
+ * composer — so the two now have a page each.
+ *
+ * The write is debounced while typing rather than waiting for a Save button:
+ * the text is a file, and a dialog closed with the caret still in the box
+ * must not drop what was typed.
+ */
 export function PersonalizePanel() {
   const t = useT();
-
-  // --- AGENTS.md editors -------------------------------------------------
-
   const [content, setContent] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { saved, flash: flashSaved } = useSavedNotice();
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const info = await api.getPersonalization();
-      setContent(info.content);
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    void load();
+    api.getPersonalization()
+      .then((info) => setContent(info.content))
+      .catch((failure) => setError(errorText(failure)))
+      .finally(() => setLoading(false));
   }, []);
 
   /** Persist the editor's text. The debounced writer supplies the value the
@@ -55,9 +42,9 @@ export function PersonalizePanel() {
       await api.putPersonalization(value);
       setSaving(false);
       flashSaved();
-    } catch (e) {
+    } catch (failure) {
       setSaving(false);
-      setError(errorText(e));
+      setError(errorText(failure));
     }
   };
   const pendingWrite = useDebouncedWrite((value: string) => persist(value));
@@ -69,299 +56,28 @@ export function PersonalizePanel() {
     pendingWrite.schedule(value);
   };
 
-  // --- Saved prompts -----------------------------------------------------
-
-  const { prompts, error: promptsLoadError, reload: reloadPrompts } =
-    useSavedPrompts();
-  const [editingPrompt, setEditingPrompt] = useState<SavedPrompt | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [promptsError, setPromptsError] = useState<string | null>(null);
-
-  const handleDeletePrompt = async (id: string) => {
-    if (
-      !confirmAction(
-        t("settings.personalize.promptDeleteConfirm", { name: id }),
-      )
-    ) {
-      return;
-    }
-    try {
-      await api.deleteSavedPrompt(id);
-      // The store re-reads after a mutation, so the composer's menu and this
-      // list change together (see hooks/useSavedPrompts.ts).
-      reloadPrompts();
-    } catch (e) {
-      setPromptsError(errorText(e));
-    }
-  };
-
-  const handleAddPrompt = async (input: {
-    id?: string;
-    label: string;
-    prompt: string;
-  }) => {
-    try {
-      await api.createSavedPrompt(
-        input as { id: string; label: string; prompt: string },
-      );
-      setShowAddForm(false);
-      reloadPrompts();
-    } catch (e) {
-      setPromptsError(errorText(e));
-    }
-  };
-
-  const handleUpdatePrompt = async (
-    id: string,
-    input: { label?: string; prompt?: string },
-  ) => {
-    try {
-      await api.updateSavedPrompt(id, input);
-      setEditingPrompt(null);
-      reloadPrompts();
-    } catch (e) {
-      setPromptsError(errorText(e));
-    }
-  };
-
   return (
-    <>
-      {/* --- AGENTS.md (custom instructions) --- */}
-      <div className="settings-pane" style={{ marginBottom: 24 }}>
-        <h3 style={{ margin: "0 0 8px" }}>
-          {t("settings.personalize.customInstructions")}
-        </h3>
-        <textarea
-          className="personalize-textarea mono"
-          value={content}
-          onChange={(e) => onChange(e.currentTarget.value)}
-          placeholder={t("settings.personalize.customInstructionsPlaceholder")}
-          spellcheck={false}
-          disabled={loading}
-        />
-        {error && <p className="error-text">{error}</p>}
-        <div className="settings-actions">
-          {saving && (
-            <span className="settings-note">
-              {t("common.saving")}
-            </span>
-          )}
-          {!saving && saved && (
-            <span className="settings-saved">
-              {t("common.saved")}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* --- Saved prompts --- */}
-      <div className="settings-pane">
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 8,
-          }}
-        >
-          <h3 style={{ margin: 0 }}>
-            {t("settings.personalize.savedPrompts")}
-          </h3>
-          <button
-            type="button"
-            className="btn small"
-            onClick={() => {
-              setShowAddForm(true);
-              setEditingPrompt(null);
-            }}
-          >
-            <IconPlus size={14} /> {t("settings.personalize.add")}
-          </button>
-        </div>
-        <p className="settings-note">
-          <code>/prompt</code> {t("settings.personalize.savedPromptsDesc")}
+    <div className="settings-pane settings-fill">
+      <textarea
+        className="personalize-textarea mono"
+        value={content}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        placeholder={t("settings.personalize.customInstructionsPlaceholder")}
+        aria-label={t("settings.personalize.customInstructions")}
+        spellcheck={false}
+        disabled={loading}
+      />
+      <p className="settings-note">{t("settings.personalize.appliesTo")}</p>
+      {error && (
+        <p className="error-text" role="alert">
+          {t("common.saveFailed", { error })}
         </p>
-        {(promptsError ?? promptsLoadError) && (
-          <p className="error-text" role="alert">
-            {promptsError ??
-              t("settings.personalize.promptsLoadFailed", {
-                error: promptsLoadError,
-              })}
-          </p>
+      )}
+      <div className="settings-actions">
+        {saving && <span className="settings-note">{t("common.saving")}</span>}
+        {!saving && saved && (
+          <span className="settings-saved">{t("common.saved")}</span>
         )}
-
-        {prompts.length === 0 && !showAddForm && (
-          <p className="settings-note" style={{ fontStyle: "italic" }}>
-            {t("settings.personalize.noPrompts")}
-          </p>
-        )}
-
-        {/* Add form */}
-        {showAddForm && (
-          <PromptEditForm
-            onSave={handleAddPrompt}
-            onCancel={() => setShowAddForm(false)}
-          />
-        )}
-
-        {/* Edit form */}
-        {editingPrompt && (
-          <PromptEditForm
-            initial={editingPrompt}
-            onSave={(input) => handleUpdatePrompt(editingPrompt.id, input)}
-            onCancel={() => setEditingPrompt(null)}
-          />
-        )}
-
-        {/* Prompt list */}
-        {prompts.map((p) => (
-          <div key={p.id} className="saved-prompt-card">
-            <div className="saved-prompt-header">
-              <strong className="saved-prompt-id">{p.id}</strong>
-              <span className="saved-prompt-label">{p.label}</span>
-              <div className="saved-prompt-actions">
-                <button
-                  type="button"
-                  className="btn small"
-                  onClick={() => {
-                    setEditingPrompt(p);
-                    setShowAddForm(false);
-                  }}
-                  title={t("settings.personalize.update")}
-                >
-                  <IconEdit size={13} />
-                </button>
-                <button
-                  type="button"
-                  className="btn small danger"
-                  onClick={() => handleDeletePrompt(p.id)}
-                  title={t("common.delete")}
-                >
-                  <IconTrash size={13} />
-                </button>
-              </div>
-            </div>
-            <pre className="saved-prompt-text">{p.prompt}</pre>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
-// --- Prompt edit/add form ---------------------------------------------------
-
-function PromptEditForm({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial?: SavedPrompt;
-  onSave: (
-    input: { id: string; label: string; prompt: string } | {
-      label: string;
-      prompt: string;
-    },
-  ) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const t = useT();
-  const [id, setId] = useState(initial?.id ?? "");
-  const [label, setLabel] = useState(initial?.label ?? "");
-  const [prompt, setPrompt] = useState(initial?.prompt ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const isEdit = initial !== undefined;
-
-  const handleSubmit = async () => {
-    setError(null);
-    const trimmedId = id.trim();
-    const trimmedLabel = label.trim();
-    const trimmedPrompt = prompt.trim();
-
-    if (!trimmedId) {
-      setError(t("settings.personalize.idEmpty"));
-      return;
-    }
-    if (!/^[a-zA-Z0-9._-]+$/.test(trimmedId)) {
-      setError(t("settings.personalize.idInvalidChars"));
-      return;
-    }
-    if (!trimmedLabel) {
-      setError(t("settings.personalize.displayEmpty"));
-      return;
-    }
-    if (!trimmedPrompt) {
-      setError(t("settings.personalize.promptEmpty"));
-      return;
-    }
-
-    setSaving(true);
-    try {
-      if (isEdit) {
-        await onSave({ label: trimmedLabel, prompt: trimmedPrompt });
-      } else {
-        await onSave({
-          id: trimmedId,
-          label: trimmedLabel,
-          prompt: trimmedPrompt,
-        });
-      }
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="saved-prompt-form">
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <Field label={t("settings.personalize.idLabel")} style={{ flex: 1 }}>
-          <input
-            placeholder={t("settings.personalize.idPlaceholder")}
-            value={id}
-            onChange={(e) => setId(e.currentTarget.value)}
-            disabled={isEdit}
-          />
-        </Field>
-        <Field
-          label={t("settings.personalize.displayLabel")}
-          style={{ flex: 1 }}
-        >
-          <input
-            placeholder={t("settings.personalize.displayPlaceholder")}
-            value={label}
-            onChange={(e) => setLabel(e.currentTarget.value)}
-          />
-        </Field>
-      </div>
-      <Field label={t("settings.personalize.promptLabel")}>
-        <textarea
-          className="mono"
-          placeholder={t("settings.personalize.promptPlaceholder")}
-          value={prompt}
-          onChange={(e) => setPrompt(e.currentTarget.value)}
-          rows={4}
-          spellcheck={false}
-        />
-      </Field>
-      {error && <p className="error-text">{error}</p>}
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button type="button" className="btn" onClick={onCancel}>
-          <IconX size={14} /> {t("common.cancel")}
-        </button>
-        <button
-          type="button"
-          className="btn primary"
-          onClick={handleSubmit}
-          disabled={saving}
-        >
-          <IconCheck size={14} /> {isEdit
-            ? t("settings.personalize.update")
-            : t("settings.personalize.add")}
-        </button>
       </div>
     </div>
   );

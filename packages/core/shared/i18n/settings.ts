@@ -11,6 +11,12 @@ import type { LocalizedText } from "./types.ts";
  */
 export const settings = {
   // --- dialog chrome (SettingsModal) ----------------------------------------
+  /** The navigation's first group: preferences that mean the same thing in
+   * both modes. */
+  "settings.nav.common": { ja: "共通", en: "Shared" },
+  /** Heading of the navigation group that holds the current mode's own
+   * preferences (`{mode}` is the mode's name: "code mode" / "stella mode"). */
+  "settings.nav.onlyInMode": { ja: "{mode} のみ", en: "{mode} only" },
   "settings.nav.general": { ja: "一般", en: "General" },
   "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
@@ -18,8 +24,74 @@ export const settings = {
   "settings.nav.providers": { ja: "プロバイダー", en: "Providers" },
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
-  "settings.nav.routines": { ja: "ルーチン", en: "Routines" },
+  "settings.nav.prompts": { ja: "保存済みプロンプト", en: "Saved prompts" },
+  "settings.nav.computerUse": { ja: "画面操作", en: "Screen control" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
+  /** Tooltip of the chip in the dialog header that names the mode this
+   * client shows. The mode is a per-client choice, so the dialog says which
+   * one it is describing. */
+  "settings.dialog.modeTitle": {
+    ja:
+      "この画面は {mode} の設定です。モードごとに効く設定は「{mode} のみ」に並びます。",
+    en:
+      'These are the {mode} settings. Preferences that only work in one mode sit under "{mode} only".',
+  },
+
+  // --- page descriptions (one line per category) -----------------------------
+  // Every category opens with its name and one sentence saying what it
+  // decides, so a reader never lands on a page of switches with no idea what
+  // they govern. The sections inside a category describe themselves.
+  "settings.category.general": {
+    ja: "表示言語、アプリの更新、通知の扱い。",
+    en: "Display language, app updates and notifications.",
+  },
+  "settings.category.appearance": {
+    ja: "配色（テーマ）。",
+    en: "The colour scheme.",
+  },
+  "settings.category.providers": {
+    ja: "エージェントが使う AI と Web 検索のサービス、およびそのキー。",
+    en: "The AI and web-search services the agent uses, and their keys.",
+  },
+  "settings.category.models": {
+    ja: "セッションが使うモデルと、文脈が長くなったときの扱い。",
+    en: "The models a session runs on, and what happens as the context grows.",
+  },
+  "settings.category.mcp": {
+    ja:
+      "エージェントに外部ツールを足す MCP サーバー。ワークスペースごとの定義は各フォルダーの .mcp.json にあります。",
+    en:
+      "MCP servers add external tools to the agent. A workspace's own definitions live in its .mcp.json.",
+  },
+  "settings.category.personalize": {
+    ja: "このマシンで動くすべてのエージェントが従う指示（AGENTS.md の 1 つ）。",
+    en:
+      "Instructions every agent on this machine follows (one of the AGENTS.md files).",
+  },
+  "settings.category.security": {
+    ja: "エージェントに何を実行させるか、その確認の仕方。",
+    en: "What the agent may run, and how that is checked.",
+  },
+  "settings.category.servers": {
+    ja:
+      "このサーバーが登録している接続先。表示中のサーバーはタイトルバーで切り替えます。",
+    en:
+      "The servers this one has registered. The server you are viewing is switched in the title bar.",
+  },
+  "settings.category.prompts": {
+    ja: "入力欄で /prompt と打つと呼び出せる定型文。",
+    en: "Snippets you can recall by typing /prompt in the composer.",
+  },
+  "settings.category.computerUse": {
+    ja:
+      "エージェントがこのマシンの画面を見て、マウスとキーボードを操作します。",
+    en:
+      "The agent looks at this machine's screen and drives its mouse and keyboard.",
+  },
+  "settings.category.routines": {
+    ja: "エージェントの会話が、決まった時刻に自分から動く依頼。",
+    en: "Requests an agent's conversation runs on a schedule of its own.",
+  },
 
   // --- appearance panel -----------------------------------------------------
   "settings.appearance.theme.label": { ja: "テーマ設定", en: "Theme" },
@@ -165,62 +237,65 @@ export const settings = {
     en:
       "Example:\n- Write your responses in English.\n- Always run tests after making changes.",
   },
-  "settings.personalize.savedPrompts": {
-    ja: "保存済みプロンプト",
-    en: "Saved prompts",
-  },
-  "settings.personalize.add": { ja: "追加", en: "Add" },
-  "settings.personalize.savedPromptsDesc": {
-    ja: "コマンドで素早く呼び出せる定型文（プロンプト）を登録します。",
+  /** The path the editor writes to, shown under it: the text is a file on
+   * this machine, not a value in a database. */
+  "settings.personalize.appliesTo": {
+    ja:
+      "このマシンで動くすべてのエージェントに適用されます。開始済みのセッションにも、次の発言から反映されます。",
     en:
-      "Register prompt snippets that can be quickly recalled with the /prompt command.",
+      "Applies to every agent on this machine, including sessions already running (from their next message).",
   },
-  "settings.personalize.promptsLoadFailed": {
+
+  // --- saved prompts (their own category) -----------------------------------
+  "settings.prompts.description": {
+    ja: "入力欄で /prompt と打つと一覧が出ます。選ぶと本文が入力欄に入ります。",
+    en:
+      "Type /prompt in the composer to list them; picking one inserts its text.",
+  },
+  "settings.prompts.loadFailed": {
     ja: "プロンプトを読み込めませんでした: {error}",
     en: "Could not load prompts: {error}",
   },
-  "settings.personalize.noPrompts": {
-    ja:
-      "登録されているプロンプトはありません。右上の「追加」ボタンから登録してください。",
-    en: 'No saved prompts. Use the "Add" button to register one.',
+  "settings.prompts.empty": {
+    ja: "まだ登録されていません。「追加」から、よく使う指示を登録できます。",
+    en: 'None yet. Use "Add" above to register a request you repeat.',
   },
-  "settings.personalize.promptDeleteConfirm": {
+  "settings.prompts.deleteConfirm": {
     ja: "プロンプト「{name}」を削除しますか？",
     en: 'Delete prompt "{name}"?',
   },
-  "settings.personalize.idLabel": { ja: "識別子", en: "ID" },
-  "settings.personalize.idPlaceholder": {
+  "settings.prompts.idLabel": { ja: "識別子", en: "ID" },
+  "settings.prompts.idPlaceholder": {
     ja: "例: translate",
     en: "e.g. translate",
   },
-  "settings.personalize.idEmpty": {
+  "settings.prompts.idEmpty": {
     ja: "識別子を入力してください",
     en: "Enter an ID",
   },
-  "settings.personalize.idInvalidChars": {
+  "settings.prompts.idInvalidChars": {
     ja: "識別子に使用できる文字は半角英数字および記号「.」「_」「-」のみです",
     en:
       'The ID may only contain ASCII letters, digits, and the symbols ".", "_", "-"',
   },
-  "settings.personalize.displayLabel": { ja: "表示名", en: "Display name" },
-  "settings.personalize.displayPlaceholder": {
+  "settings.prompts.displayLabel": { ja: "表示名", en: "Display name" },
+  "settings.prompts.displayPlaceholder": {
     ja: "例: 翻訳",
     en: "e.g. Translate",
   },
-  "settings.personalize.displayEmpty": {
+  "settings.prompts.displayEmpty": {
     ja: "表示名を入力してください",
     en: "Enter a display name",
   },
-  "settings.personalize.promptLabel": { ja: "プロンプト文", en: "Prompt text" },
-  "settings.personalize.promptPlaceholder": {
+  "settings.prompts.promptLabel": { ja: "プロンプト文", en: "Prompt text" },
+  "settings.prompts.promptPlaceholder": {
     ja: "例: 次のテキストを日本語に翻訳してください:\n\n{ここにテキスト}",
     en: "e.g. Translate the following text into English:\n\n{text here}",
   },
-  "settings.personalize.promptEmpty": {
+  "settings.prompts.promptEmpty": {
     ja: "プロンプト文を入力してください",
     en: "Enter prompt text",
   },
-  "settings.personalize.update": { ja: "更新", en: "Update" },
 
   // --- provider list --------------------------------------------------------
   "settings.provider.catalogStatus": {
@@ -453,6 +528,11 @@ export const settings = {
   "settings.userProvider.headerValuePlaceholder": { ja: "値", en: "Value" },
 
   // --- model list -----------------------------------------------------------
+  "settings.model.listTitle": { ja: "利用するモデル", en: "Available models" },
+  "settings.model.listDescription": {
+    ja: "ここで有効にしたモデルが、セッションの切り替え候補に出ます。",
+    en: "Models enabled here are the ones you can switch a session to.",
+  },
   "settings.model.searchPlaceholder": {
     ja: "モデルを検索…",
     en: "Search models…",
@@ -472,6 +552,14 @@ export const settings = {
   },
 
   // --- model preference panel -----------------------------------------------
+  "settings.model.auxTitle": {
+    ja: "補助モデル",
+    en: "Auxiliary models",
+  },
+  "settings.model.auxDescription": {
+    ja: "セッションの会話とは別に、裏方の処理を担当するモデルです。",
+    en: "Models that run the background work, apart from the session's own.",
+  },
   "settings.model.fastModel": { ja: "高速モデル", en: "Fast model" },
   "settings.model.fastModelDesc": {
     ja:
@@ -551,8 +639,8 @@ export const settings = {
   },
   "settings.mcp.noServers": {
     ja:
-      "MCPサーバーが登録されていません。下の「サーバーを追加」から設定してください。",
-    en: 'No MCP servers registered. Use "Add server" below to set one up.',
+      "MCPサーバーが登録されていません。「サーバーを追加」から設定してください。",
+    en: 'No MCP servers registered. Use "Add server" above to set one up.',
   },
   "settings.mcp.notStarted": { ja: "未起動", en: "Not started" },
   "settings.mcp.enabled": { ja: "有効", en: "Enabled" },
@@ -683,8 +771,6 @@ export const settings = {
   },
 
   // --- connection list -------------------------------------------------------
-  /** Panel heading (the settings nav reuses `settings.nav.servers`). */
-  "settings.connection.title": { ja: "接続先サーバー", en: "Servers" },
   "settings.connection.test": { ja: "テスト", en: "Test" },
   "settings.connection.currentDisplay": {
     ja: "表示中のサーバー:",
@@ -888,9 +974,11 @@ export const settings = {
   },
 
   // --- computer use panel ----------------------------------------------------
+  /** The switch's own label. The page above it already names the feature,
+   * so this says what the switch does rather than repeating the title. */
   "settings.computerUse.title": {
-    ja: "Computer Use（画面操作）",
-    en: "Computer use (screen control)",
+    ja: "このマシンの画面を操作させる",
+    en: "Let the agent use this machine's screen",
   },
   "settings.computerUse.description": {
     ja:

@@ -144,8 +144,11 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
 - **どのモードの画面かは、そのクライアントの保存値**  
   動作モードは `hooks/useAppMode.ts` が `localStorage` の `lumisca.appMode` で持ち、選択画面（`ModeSelectView`）で初回に決めます。サーバーは能力（`availability`）とマシンの状態だけを返し（`GET /api/stella/status`）、モードは返しません。2 つのクライアントが同じサーバーを表示していても、片方の切り替えがもう片方へ届かないのはこの分離によります。stella を選ぶときだけサーバーへ能力を問い合わせ、利用できなければ保存せずに理由を表示します。
 
-- **設定カテゴリはモードに属することがある（`components/SettingsModal.tsx`）**  
-  設定の項目は `mode` を持てます。`mode` の付いたカテゴリは、そのモードのときだけナビゲーションに現れます。ルーチンは stella のみ（スケジュールする会話が stella にしかない）、computer use は code mode のみ（このマシンの画面を操作する機能で、stella のセッションは VM の画面ツール `vm_screenshot` / `vm_act` を持つ）です。core 側でも `agent/factory.ts` が stella セッションに computer use を渡しません。
+- **設定カテゴリは「共通」か、一方のモードのもの（`components/settings/categories.ts`）**  
+  カテゴリは `scope`（`"common"` / `"code"` / `"stella"`）を持ち、ナビは「共通」と「<モード名> のみ」の 2 群に分けて描きます。モードに属するカテゴリを隠さず見出しの下に並べるのは、「このモードには自前の設定がこれだけある」こと自体が読み手の知りたいことだからです。1 つのカテゴリが両方を混ぜることはありません（以前の「セキュリティ」はコマンド安全チェックと computer use を同居させ、モードを切り替えると半分が黙って効かなくなっていました）。属するかどうかはサーバーがその値で何をするかで決めます: ルーチンは stella のみ（スケジュールする会話が stella にしかない）、computer use は code mode のみ（このマシンの画面を操作する機能で、stella のセッションは VM の画面ツール `vm_screenshot` / `vm_act` を持つ）、保存済みプロンプトは code mode のみ（`/prompt` は code mode のコンポーザのスラッシュメニューにしかない）。あわせて core 側でも `agent/factory.ts` が stella セッションに computer use を渡しません。ナビと本文の対応は 1 つの表（`SettingsModal` の `CATEGORIES`）が持ちます。
+
+- **設定カテゴリはページである（`components/settings/SettingsPage.tsx`）**  
+  見出し（カテゴリ名＋何を決めるかの 1 行）と本文を分け、本文だけをスクロールさせます。見出しが流れると、長い画面で「いま何の画面か」「どう抜けるか」が分からなくなります。カテゴリの中から開く画面（プロバイダー詳細、MCP エディタ、各フォーム）は 1 段低い `SettingsSubHeader` を持ち、ページ見出しの下に 2 つ目の見出しを作りません。900px 以下では一覧とページを 1 枚ずつ出し（`.settings-body[data-view]`）、ページ見出しが戻るボタンを持ちます。
 
 - **プロバイダーは 1 つのカテゴリに 2 種類、同じ形で並べる**  
   設定の「プロバイダー」は AI プロバイダー（`ProviderList`）と Web 検索プロバイダー（`WebSearchPanel`）を同じ画面に並べます。どちらも「このインストールがキーを持つサービス」という同じ問いに答えるためで、Web 検索を別カテゴリにしていた頃は見落としやすくなっていました。

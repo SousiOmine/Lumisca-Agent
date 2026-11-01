@@ -8,7 +8,7 @@ import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import { Field } from "../Field.tsx";
 import { errorText } from "../../providers.ts";
-import { BackHeader } from "../BackHeader.tsx";
+import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 
 /**
  * Add a search provider, or replace one's key.
@@ -87,7 +87,7 @@ export function WebSearchProviderDialog({
 
   return (
     <>
-      <BackHeader
+      <SettingsSubHeader
         onBack={onCancel}
         title={t(
           adding

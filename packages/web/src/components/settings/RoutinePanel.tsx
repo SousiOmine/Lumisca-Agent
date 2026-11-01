@@ -17,6 +17,7 @@ import type { RoutineView } from "../../types.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import { NEVER, useVisibleInterval } from "../../hooks/useVisibleInterval.ts";
 import type { MessageKey, MessageParams } from "@lumisca/core/shared";
+import { SettingsSection } from "./SettingsSection.tsx";
 
 /**
  * Routines: the requests this conversation runs on a schedule.
@@ -171,16 +172,11 @@ export function RoutinePanel({
   );
 
   return (
-    <section className="settings-section">
-      <header className="settings-section-header">
-        <div>
-          <h3>{t("panels.routine.title")}</h3>
-          <p className="settings-hint">
-            {agentName === null
-              ? t("panels.routine.noAgent")
-              : t("panels.routine.description", { agent: agentName })}
-          </p>
-        </div>
+    <SettingsSection
+      description={agentName === null
+        ? t("panels.routine.noAgent")
+        : t("panels.routine.description", { agent: agentName })}
+      action={
         <button
           type="button"
           className="btn"
@@ -190,16 +186,16 @@ export function RoutinePanel({
         >
           <IconRefresh size={14} />
         </button>
-      </header>
-
-      {loading && <p className="settings-hint">{t("common.loading")}</p>}
+      }
+    >
+      {loading && <p className="settings-note">{t("common.loading")}</p>}
       {error !== null && <p className="error-text" role="alert">{error}</p>}
       {actionError !== null && (
         <p className="error-text" role="alert">{actionError}</p>
       )}
 
       {!loading && error === null && routines.length === 0 && (
-        <p className="settings-hint">{t("panels.routine.empty")}</p>
+        <p className="settings-note">{t("panels.routine.empty")}</p>
       )}
 
       <ul className="routine-list">
@@ -334,6 +330,6 @@ export function RoutinePanel({
           );
         })}
       </ul>
-    </section>
+    </SettingsSection>
   );
 }

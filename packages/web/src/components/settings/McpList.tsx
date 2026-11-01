@@ -21,6 +21,7 @@ import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { McpDetail } from "./McpDetail.tsx";
 import { mcpConfigFields } from "./mcpDraft.ts";
 import { confirmAction } from "../../confirm.ts";
+import { SettingsSection } from "./SettingsSection.tsx";
 
 /** Config-relevant key of a whole server list; the live status fields are
  * ignored so the stale-edit comparison stays stable (see mcpConfigFields). */
@@ -130,11 +131,19 @@ export function McpList() {
   }
 
   return (
-    <>
-      <div className="modal-header">
-        <h2>{t("settings.nav.mcp")}</h2>
-      </div>
-
+    <SettingsSection
+      action={
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setEditing(null)}
+          disabled={!config}
+        >
+          <IconPlus size={14} />
+          {t("common.addServer")}
+        </button>
+      }
+    >
       <div className="stack-8">
         {error && <p className="error-text">{error}</p>}
         {signIn.error && <p className="error-text">{signIn.error}</p>}
@@ -246,18 +255,6 @@ export function McpList() {
             </div>
           ))}
       </div>
-
-      <div className="modal-actions">
-        <button
-          type="button"
-          className="btn primary"
-          onClick={() => setEditing(null)}
-          disabled={!config}
-        >
-          <IconPlus size={14} />
-          {t("common.addServer")}
-        </button>
-      </div>
-    </>
+    </SettingsSection>
   );
 }

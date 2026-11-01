@@ -190,10 +190,6 @@ export function ConnectionList() {
 
   return (
     <>
-      <div className="modal-header">
-        <h2>{t("settings.connection.title")}</h2>
-      </div>
-
       {desktop === null && (
         <p className="settings-note">{t("common.loading")}</p>
       )}

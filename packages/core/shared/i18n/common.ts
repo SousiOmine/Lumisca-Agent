@@ -26,8 +26,13 @@ export const common = {
   /** The heading/button that opens "add one more item" in a list whose items
    * are servers, providers or connections — the same act, so the same text. */
   "common.addServer": { ja: "サーバーを追加", en: "Add server" },
+  /** The button that adds one entry to a list of anything else (a saved
+   * prompt, a custom provider). */
+  "common.add": { ja: "追加", en: "Add" },
   "common.delete": { ja: "削除", en: "Delete" },
   "common.edit": { ja: "編集", en: "Edit" },
+  /** The button that opens an existing entry for editing. */
+  "common.update": { ja: "更新", en: "Update" },
   "common.reload": { ja: "更新", en: "Refresh" },
   "common.loading": { ja: "読み込み中…", en: "Loading…" },
   "common.expandPanel": { ja: "パネルを展開", en: "Expand panel" },

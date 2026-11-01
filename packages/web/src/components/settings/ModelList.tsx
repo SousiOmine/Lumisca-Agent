@@ -9,6 +9,7 @@ import {
 import type { ModelInfo } from "../../types.ts";
 import { useT } from "../../i18n.ts";
 import { Toggle } from "../SettingRow.tsx";
+import { SettingsSection } from "./SettingsSection.tsx";
 
 interface ProviderModels {
   providerId: string;
@@ -76,11 +77,10 @@ export function ModelList() {
   }, [providerModels, search]);
 
   return (
-    <>
-      <div className="modal-header">
-        <h2>{t("settings.nav.models")}</h2>
-      </div>
-
+    <SettingsSection
+      title={t("settings.model.listTitle")}
+      description={t("settings.model.listDescription")}
+    >
       <input
         placeholder={t("settings.model.searchPlaceholder")}
         value={search}
@@ -151,6 +151,6 @@ export function ModelList() {
           {t("settings.model.saveFailed", { error: saveError })}
         </div>
       )}
-    </>
+    </SettingsSection>
   );
 }

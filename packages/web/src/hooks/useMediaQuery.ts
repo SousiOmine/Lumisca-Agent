@@ -6,6 +6,13 @@ import { useSyncExternalStore } from "preact/compat";
  * styles_test.ts). */
 export const PHONE_QUERY = "(max-width: 600px)";
 
+/** The width at or below which a two-column layout becomes one screen at a
+ * time (the compact breakpoint of styles/tokens.css). Settings uses it: its
+ * navigation beside the page leaves too little of the page on a tablet, and a
+ * horizontal strip of category names left each label clipped. Must match the
+ * `@media (max-width: 900px)` blocks. */
+export const COMPACT_QUERY = "(max-width: 900px)";
+
 /** A pointer without hover (a finger). Must match the
  * `@media (hover: none), (pointer: coarse)` blocks in styles/, which carry
  * the ergonomics a hover-only interaction cannot be re-styled into — the

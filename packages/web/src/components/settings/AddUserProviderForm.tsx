@@ -8,7 +8,7 @@ import type { UserProviderSummary } from "../../types.ts";
 // The picker and the core's validation read one list (shared/providers.ts).
 import { ALLOWED_OPENAI_APIS } from "@lumisca/core/shared";
 import { Field } from "../Field.tsx";
-import { BackHeader } from "../BackHeader.tsx";
+import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 
 /** One model row in the form. Mirrors UserProviderModel; empty-string
  * numeric fields mean "use provider default". */
@@ -314,7 +314,7 @@ export function AddUserProviderForm({
 
   return (
     <>
-      <BackHeader
+      <SettingsSubHeader
         onBack={onBack}
         title={mode === "create"
           ? t("settings.userProvider.createTitle")
@@ -452,7 +452,7 @@ export function AddUserProviderForm({
           disabled={saving || deleting}
         >
           <IconCheck size={14} />
-          {mode === "create" ? t("settings.personalize.add") : t("common.save")}
+          {mode === "create" ? t("common.add") : t("common.save")}
         </button>
       </div>
     </>
