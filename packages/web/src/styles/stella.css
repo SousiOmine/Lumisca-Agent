@@ -673,11 +673,17 @@
   min-height: 200px;
 }
 
+/* The canvas is noVNC's, and it sizes it itself: `_rescale` writes
+ * `NNNpx` to its inline width/height, and every pointer coordinate is
+ * divided by that scale (`absX = x / _scale`). Overriding the size here
+ * therefore does not stretch the picture — it breaks the arithmetic: the
+ * CSS box became 450x579 while noVNC believed 450x281, so a click at the
+ * pane's centre arrived at the machine's bottom edge (y 799 for a 400px
+ * target) and the pane looked frozen. The canvas is left alone; the
+ * container clips it, and the client's own scaleViewport keeps the picture
+ * inside the box. */
 .stella-pane-screen canvas {
   display: block;
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain;
 }
 
 @media (max-width: 900px) {

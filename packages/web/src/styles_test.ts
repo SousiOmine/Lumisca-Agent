@@ -296,3 +296,26 @@ Deno.test("corners come from the radius ramp", async () => {
     "border-radius values outside the documented ramp",
   );
 });
+
+Deno.test("the machine's screen canvas is left to noVNC to size", () => {
+  // Regression: the pane stretched the canvas with `width/height: 100%
+  // !important`. noVNC divides every pointer coordinate by the scale it
+  // derived from its own `NNNpx` inline size, so the override made the
+  // picture look right and the input land elsewhere — a click at the pane's
+  // centre reached the machine's bottom edge, and the screen read as
+  // unresponsive. Sizing is the client's, not the stylesheet's.
+  const css = Deno.readTextFileSync(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const match of stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const [, selector = "", body = ""] = match;
+    if (!selector.includes("stella-pane-screen")) continue;
+    if (!selector.includes("canvas")) continue;
+    assertEquals(
+      /(width|height)\s*:/.test(body),
+      false,
+      `the canvas must keep its own size, but the rule sets one: ${body}`,
+    );
+  }
+});
