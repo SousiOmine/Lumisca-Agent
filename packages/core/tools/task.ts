@@ -51,7 +51,8 @@ export function createTaskTool(
       "immediately; it runs in the background and does not see this " +
       "conversation, so the prompt must carry every fact it needs. Its " +
       "outcome arrives later as a `[Task <id> ...]` notification, or on " +
-      "demand through `task_output`.",
+      "demand through `task_output`. For independent parts, call this once " +
+      "per part in the same turn: they run at the same time.",
     parameters: taskSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       const subagentType = requireOneOf(

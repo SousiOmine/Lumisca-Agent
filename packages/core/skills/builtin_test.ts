@@ -36,12 +36,12 @@ async function fixtureRoot(withUserBrowser: boolean): Promise<string> {
 
 /** The built-in skills a browser-enabled session sees (computer use off). */
 function browserBuiltins() {
-  return builtinSkills({ browser: true, computer: false });
+  return builtinSkills({ browser: true, computer: false, subagents: false });
 }
 
 /** The built-in skills a session that may drive this machine sees. */
 function computerBuiltins() {
-  return builtinSkills({ browser: false, computer: true });
+  return builtinSkills({ browser: false, computer: true, subagents: false });
 }
 
 // --- the built-in registry ---------------------------------------------------
@@ -51,6 +51,7 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
     browser: false,
     computer: false,
     stella: true,
+    subagents: false,
   });
   assertEquals(skills.map((s) => s.name), ["agent-create", "identity"]);
 
@@ -78,9 +79,9 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
 
   // A code-mode session has no agents to manage: neither skill is offered.
   assertEquals(
-    builtinSkills({ browser: false, computer: false }).some((s) =>
-      s.name === "agent-create" || s.name === "identity"
-    ),
+    builtinSkills({ browser: false, computer: false, subagents: false }).some((
+      s,
+    ) => s.name === "agent-create" || s.name === "identity"),
     false,
   );
 });
@@ -98,7 +99,10 @@ Deno.test("builtinSkills advertises web-browser when the browser is available", 
 });
 
 Deno.test("builtinSkills hides web-browser without a browser backend", () => {
-  assertEquals(builtinSkills({ browser: false, computer: false }), []);
+  assertEquals(
+    builtinSkills({ browser: false, computer: false, subagents: false }),
+    [],
+  );
 });
 
 Deno.test("builtinSkills advertises computer-use only when the machine can be driven", () => {
@@ -112,13 +116,18 @@ Deno.test("builtinSkills advertises computer-use only when the machine can be dr
   assertEquals(typeof skill.read, "function");
 
   // A session that must not drive the machine never sees the skill.
-  assertEquals(builtinSkills({ browser: false, computer: false }), []);
+  assertEquals(
+    builtinSkills({ browser: false, computer: false, subagents: false }),
+    [],
+  );
   assertEquals(browserBuiltins().some((s) => s.name === "computer-use"), false);
 });
 
 Deno.test("both built-in skills are advertised when both capabilities are present", () => {
   assertEquals(
-    builtinSkills({ browser: true, computer: true }).map((s) => s.name),
+    builtinSkills({ browser: true, computer: true, subagents: false }).map((
+      s,
+    ) => s.name),
     ["web-browser", "computer-use"],
   );
 });
@@ -248,4 +257,45 @@ Deno.test("formatAvailableSkills lists built-in skills like any other", () => {
   const text = formatAvailableSkills(browserBuiltins());
   assert(text.startsWith("- web-browser:"));
   assert(text.includes("built-in web browser"));
+});
+
+Deno.test("the coding-agents skill teaches the discovery flow it needs", async () => {
+  // A stella conversation has the task tool, but nothing told its agent when
+  // a job is big enough to split — so the skill is advertised there. It must
+  // teach the tool_search step, because the tool is not in every session's
+  // preloaded set (a sub-agent's own set has no hub of its own).
+  const skills = builtinSkills({
+    browser: false,
+    computer: false,
+    stella: true,
+    subagents: true,
+  });
+  const coding = skills.find((skill) => skill.name === "coding-agents");
+  assert(coding !== undefined, "the coding-agents skill must be advertised");
+  assert(
+    coding.description.includes("sub-agent"),
+    coding.description,
+  );
+
+  const read = coding.read;
+  assert(read !== undefined, "the skill must be readable");
+  const body = await read(undefined);
+  // The flow the request named: read the skill → find the tool → call it.
+  assert(body.includes("tool_search"), "teaches tool_search");
+  assert(body.includes("tool_call"), "teaches tool_call");
+  assert(body.includes(`"task"`), "names the task tool");
+  // Several at once is a rule, not an accident: the skill has to say so, or
+  // an agent splits a job and then runs the parts one after another.
+  assert(body.includes("8"), "states how many may run at once");
+  assert(body.includes("task_output"), "teaches collecting the reports");
+});
+
+Deno.test("a session without a sub-agent hub is not pointed at one", () => {
+  const skills = builtinSkills({
+    browser: false,
+    computer: false,
+    stella: false,
+    subagents: false,
+  });
+  assertEquals(skills.some((skill) => skill.name === "coding-agents"), false);
 });

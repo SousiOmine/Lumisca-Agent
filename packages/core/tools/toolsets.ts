@@ -50,6 +50,9 @@ export function sessionSkills(
   options: {
     browserAvailable?: boolean;
     computerAvailable?: boolean;
+    /** Whether this session can start coding sub-agents (see the
+     * coding-agents skill). */
+    subagents?: boolean;
     globalDirs?: string[];
   } = {},
 ): SkillDef[] {
@@ -59,6 +62,7 @@ export function sessionSkills(
     builtinSkills: builtinSkills({
       browser: options.browserAvailable === true,
       computer: options.computerAvailable === true,
+      subagents: options.subagents === true,
     }),
     globalDirs: options.globalDirs,
   });

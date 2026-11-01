@@ -590,7 +590,7 @@ export class AgentFactory {
     where: SessionWhere,
     registries: SessionToolRegistries,
   ): ContextProvider[] {
-    const { stella, browserAvailable, computerAvailable } = where;
+    const { stella, chat, browserAvailable, computerAvailable } = where;
     return [
       // What the catalog IS depends on where the session works: a workspace
       // session discovers `.agents/skills`, and a stella session discovers
@@ -604,6 +604,8 @@ export class AgentFactory {
             sessionSkills(workspace.folders, {
               browserAvailable,
               computerAvailable,
+              // A chat session has no tool hub, so it cannot start one.
+              subagents: !chat,
               globalDirs: this.deps.globalSkillDirs,
             }),
       }),

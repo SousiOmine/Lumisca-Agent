@@ -2,6 +2,7 @@ import type { SkillDef } from "../discover.ts";
 import { webBrowserSkill } from "./web-browser.ts";
 import { computerUseSkill } from "./computer-use.ts";
 import { agentCreateSkill } from "./agent-create.ts";
+import { codingAgentsSkill } from "./coding-agents.ts";
 import { identitySkill } from "./identity.ts";
 
 /**
@@ -37,6 +38,11 @@ export interface BuiltinContext {
    * skills teach them. Absent → neither skill is advertised (a code-mode
    * session has no agents to manage). */
   stella?: boolean;
+  /** Whether the session can start coding sub-agents (it has a tool hub).
+   * The coding-agents skill is included only when true: it teaches the
+   * `task` tool, and a session that cannot start one must not be pointed at
+   * it. */
+  subagents: boolean;
 }
 
 /** The app-embedded skill set for a session context. */
@@ -45,5 +51,6 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
     ...(context.browser ? [webBrowserSkill()] : []),
     ...(context.computer ? [computerUseSkill()] : []),
     ...(context.stella === true ? [agentCreateSkill(), identitySkill()] : []),
+    ...(context.subagents ? [codingAgentsSkill()] : []),
   ];
 }

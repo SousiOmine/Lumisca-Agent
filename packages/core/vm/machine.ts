@@ -222,6 +222,9 @@ export class StellaMachine {
         // This is a stella session's catalog: its agent owns an identity and
         // may create more agents, and both tools are discoverable.
         stella: true,
+        // A conversation can hand coding work to sub-agents (they run in
+        // the same machine through the same exec seam).
+        subagents: true,
       }),
       ...(this.globalSkillDirs !== undefined
         ? { globalDirs: this.globalSkillDirs }
