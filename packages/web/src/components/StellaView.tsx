@@ -7,7 +7,12 @@ import {
 import { useState } from "preact/compat";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useT } from "../i18n.ts";
-import type { PendingImage, StellaAgent, StellaStatus } from "../types.ts";
+import type {
+  PendingFile,
+  PendingImage,
+  StellaAgent,
+  StellaStatus,
+} from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
@@ -50,7 +55,14 @@ interface StellaViewProps {
    * the user picked. */
   images: PendingImage[];
   onImagesChange: (images: PendingImage[]) => void;
-  onPrompt: (text: string, images: PendingImage[]) => void;
+  /** Files to put in the machine (the conversation is the mode that has one). */
+  files: PendingFile[];
+  onFilesChange: (files: PendingFile[]) => void;
+  onPrompt: (
+    text: string,
+    images: PendingImage[],
+    files: PendingFile[],
+  ) => void;
   onAbort: () => void;
   /** Rewind from a message onward (the transcript's undo). */
   onRewind: (timestamp: number) => Promise<void>;
@@ -100,6 +112,8 @@ export function StellaView(
     onInputChange,
     images,
     onImagesChange,
+    files,
+    onFilesChange,
     onPrompt,
     onAbort,
     onRewind,
@@ -144,12 +158,16 @@ export function StellaView(
     const text = input.trim();
     // An image alone is a prompt (the model can look at it and answer), the
     // same rule the server applies to the body it receives.
-    if ((text.length === 0 && images.length === 0) || conversation === null) {
+    if (
+      (text.length === 0 && images.length === 0 && files.length === 0) ||
+      conversation === null
+    ) {
       return;
     }
-    onPrompt(text, images);
+    onPrompt(text, images, files);
     onInputChange("");
     onImagesChange([]);
+    onFilesChange([]);
     setPinToken((token) => token + 1);
   };
 
@@ -279,7 +297,7 @@ export function StellaView(
               visualBase={visualBase}
               attachBase={attachBase}
               onRewind={handleRewind}
-              onSend={(text) => onPrompt(text, [])}
+              onSend={(text) => onPrompt(text, [], [])}
               onLoadOlder={onLoadOlder}
               loadingOlder={loadingOlder}
               pinToken={pinToken}
@@ -305,13 +323,15 @@ export function StellaView(
             // Nothing can be sent before the conversation exists (it is
             // created once an agent is picked and the machine runs), so the
             // button says so instead of accepting a prompt that goes nowhere.
-            submitDisabled={(!input.trim() && images.length === 0) ||
-              conversation === null}
+            submitDisabled={(!input.trim() && images.length === 0 &&
+              files.length === 0) || conversation === null}
             onAbort={isRunning ? onAbort : undefined}
             onSubmit={submit}
             onOpenSettings={onOpenSettings}
             images={images}
             onImagesChange={onImagesChange}
+            files={files}
+            onFilesChange={onFilesChange}
           />
         </div>
       </div>

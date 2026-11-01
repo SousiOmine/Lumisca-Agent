@@ -18,7 +18,11 @@ import {
   IconPlayerStop,
   IconX,
 } from "@tabler/icons-preact";
-import { MAX_PROMPT_IMAGES } from "@lumisca/core/shared";
+import {
+  formatAttachmentSize,
+  MAX_PROMPT_IMAGES,
+  stripDataUrlHeader,
+} from "@lumisca/core/shared";
 import {
   ContextUsageCard,
   type ContextUsageData,
@@ -41,7 +45,12 @@ import {
   slashCompletion,
 } from "../slashCommands.ts";
 export type { SlashCommand, SlashCommandItem };
-import type { ModelInfo, PendingImage, ThinkingLevel } from "../types.ts";
+import type {
+  ModelInfo,
+  PendingFile,
+  PendingImage,
+  ThinkingLevel,
+} from "../types.ts";
 import { useT } from "../i18n.ts";
 import { thinkingLevelLabel } from "../format.ts";
 
@@ -114,6 +123,12 @@ interface ComposerProps {
    * are appended here; the parent clears them after a successful submit. */
   images?: PendingImage[];
   onImagesChange?: (images: PendingImage[]) => void;
+  /** Non-image files attached for the next send. Only a session with a
+   * machine to put them in sends them (stella); the composer offers the
+   * drop target regardless and the server refuses by name, so a mode that
+   * cannot take files says so instead of losing them. */
+  files?: PendingFile[];
+  onFilesChange?: (files: PendingFile[]) => void;
   /** Context usage for the meter + popover above the footer (undefined
    * hides it: the session has no assistant usage yet). */
   contextUsage?: ContextUsageData;
@@ -151,6 +166,8 @@ export function Composer({
   onSlashCommand,
   images = [],
   onImagesChange,
+  files = [],
+  onFilesChange,
   contextUsage,
   contextWarnRatio,
 }: ComposerProps) {
@@ -298,6 +315,32 @@ export function Composer({
     resetSlash();
   }, [mentionWorkspaceId, mentionPeerId, closeMention, resetSlash]);
 
+  // Same reason as imagesRef: a burst of drops must not append from a stale
+  // closure.
+  const filesRef = useRef(files);
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
+  /** Add a dropped file that is not an image: it goes to the machine, so the
+   * browser only has to read the bytes (no preview, no data URL header). */
+  const addFile = (file: File) => {
+    if (filesRef.current.length >= MAX_PROMPT_IMAGES) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      onFilesChange?.([
+        ...filesRef.current,
+        {
+          name: file.name,
+          size: file.size,
+          data: stripDataUrlHeader(reader.result),
+        },
+      ]);
+    };
+    reader.readAsDataURL(file);
+  };
+
   /** Add a pasted/dropped image file to the attachments. */
   const addImage = (file: File) => {
     if (imagesRef.current.length >= MAX_PROMPT_IMAGES) return;
@@ -345,7 +388,10 @@ export function Composer({
     e.preventDefault();
     setDragging(false);
     for (const file of Array.from(e.dataTransfer?.files ?? [])) {
+      // An image is also a file: it is shown inline by the chat, so it takes
+      // the image path. Everything else has no preview and is sent by name.
       if (file.type.startsWith("image/")) addImage(file);
+      else addFile(file);
     }
   };
 
@@ -395,6 +441,32 @@ export function Composer({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {files.length > 0 && (
+        <div className="input-files">
+          {files.map((file, index) => (
+            <span
+              key={`${file.name}-${index}`}
+              className="input-file"
+              title={`${file.name} (${formatAttachmentSize(file.size)})`}
+            >
+              <IconFile size={13} stroke={1.5} />
+              <span className="input-file-name">{file.name}</span>
+              <span className="input-file-size">
+                {formatAttachmentSize(file.size)}
+              </span>
+              <button
+                type="button"
+                className="input-file-remove"
+                title={t("chat.composer.image.remove")}
+                onClick={() =>
+                  onFilesChange?.(files.filter((_, i) => i !== index))}
+              >
+                <IconX size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       {images.length > 0 && (
         <div className="input-images">
           {images.map((image, index) => (

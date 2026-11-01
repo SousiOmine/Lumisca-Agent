@@ -4,6 +4,7 @@ import type {
   AskAnswer,
   ClientEvent,
   ImageContent,
+  PromptFileRef,
   SessionInfo,
   StellaAgent,
   StellaConversationSnapshot,
@@ -87,14 +88,22 @@ export interface StellaApi {
   getStellaAgent(id: string): StellaAgent | undefined;
   openSession(sessionId: string): SessionInfo;
   /** Send a prompt into the conversation (fire-and-forget; the events carry
-   * the progress). `images` are the attachments the user sent with it.
-   * Optional in the interface so a caller (a test double, a routine) that
-   * only has words does not have to spell out "no pictures". */
+   * the progress). `images` and `uploads` are the attachments the user sent
+   * with it. Optional in the interface so a caller (a test double, a routine)
+   * that only has words does not have to spell out "no attachments". */
   startPrompt(
     sessionId: string,
     text: string,
     images?: ImageContent[],
+    mode?: never,
+    files?: PromptFileRef[],
   ): void;
+  /** Write a prompt's attached files into the machine (stella is the only
+   * surface that accepts them) and return where they are. */
+  savePromptUploads(
+    sessionId: string,
+    uploads: readonly { name: string; bytes: Uint8Array }[],
+  ): Promise<PromptFileRef[]>;
   abort(sessionId: string): void;
   rewind(sessionId: string, timestamp: number): Promise<void>;
   answerQuestion(
@@ -346,9 +355,12 @@ export function stellaRoutes(
    * narrower parser here had become. */
   app.post("/stella/conversations/:agentId/prompt", async (c) => {
     const body = await parseBody<PromptBody>(c);
-    const { text, images } = parsePromptBody(body ?? {});
+    const { text, images, files } = parsePromptBody(body ?? {});
     const session = requireConversation(c.req.param("agentId"));
-    core.startPrompt(session.id, text, images);
+    const saved = files === undefined
+      ? undefined
+      : await core.savePromptUploads(session.id, files);
+    core.startPrompt(session.id, text, images, undefined, saved);
     return c.json({ ok: true });
   });
 

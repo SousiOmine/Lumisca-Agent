@@ -1,4 +1,4 @@
-import type { ModePrompt, PendingImage } from "./types.ts";
+import type { ModePrompt, PendingFile, PendingImage } from "./types.ts";
 import { stripDataUrlHeader } from "@lumisca/core/shared";
 
 /** The server serves both the UI and the API on the same origin. */
@@ -220,6 +220,7 @@ export function promptBody(
   text: string,
   images?: PendingImage[],
   mode?: ModePrompt,
+  files?: PendingFile[],
 ) {
   return {
     text,
@@ -228,6 +229,16 @@ export function promptBody(
         images: images.map((image) => ({
           data: stripDataUrlHeader(image.data),
           mimeType: image.mimeType,
+        })),
+      }
+      : {}),
+    // Files travel as bytes plus a name: the server writes them into the
+    // machine and tells the model where they are (see core's vm/uploads.ts).
+    ...(files && files.length > 0
+      ? {
+        files: files.map((file) => ({
+          name: file.name,
+          data: stripDataUrlHeader(file.data),
         })),
       }
       : {}),

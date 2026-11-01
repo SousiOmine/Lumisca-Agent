@@ -177,3 +177,46 @@ export function formatAttachmentSize(bytes: number): string {
   const shown = value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
   return `${shown} ${units[unit]}`;
 }
+
+/** One file the user attached to a prompt: what the client shows under the
+ * bubble, and what the model is told about where the file is. The bytes are
+ * in the machine (`/vm/uploads.ts`), not in the message — a message travels
+ * through the websocket, the transcript and the window endpoint, and 10 MiB
+ * of base64 on that path is what makes a conversation feel broken. */
+export interface PromptFileRef {
+  /** The name to show (the user's own, cleaned). */
+  name: string;
+  /** Absolute path inside the machine; the model is told this. */
+  path: string;
+  /** Size in bytes (the card shows it). */
+  size: number;
+}
+
+/** The notice appended to the model's copy of a prompt that carried files.
+ * English, like every other system-facing text. Kept beside the shape it
+ * describes so the sentence and the field cannot drift apart. */
+export function promptFileNotice(files: readonly PromptFileRef[]): string {
+  if (files.length === 0) return "";
+  return [
+    "[Attached files]",
+    "The user attached these files. They are inside the machine:",
+    ...files.map((file) =>
+      `- ${file.name}: ${file.path} (${formatAttachmentSize(file.size)})`
+    ),
+    "",
+    "Open them with the read or bash tools.",
+  ].join("\n");
+}
+
+/** The text the model receives for a prompt: what the user wrote, then the
+ * notice naming the attached files. The conversation shows the user's own
+ * words only (and the cards), so the notice lives here rather than in the
+ * message itself. */
+export function textWithFileNotice(
+  text: string,
+  files: readonly PromptFileRef[],
+): string {
+  const notice = promptFileNotice(files);
+  if (notice.length === 0) return text;
+  return text.length === 0 ? notice : `${text}\n\n${notice}`;
+}

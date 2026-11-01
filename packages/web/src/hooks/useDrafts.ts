@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
-import type { PendingImage } from "../types.ts";
+import type { PendingFile, PendingImage } from "../types.ts";
 
-/** Draft (unsent) composer content of a tab: text + attached images. */
+/** Draft (unsent) composer content of a tab: text, attached images, and the
+ * files that go into the machine (stella only). */
 export interface TabDraft {
   input: string;
   images: PendingImage[];
+  files: PendingFile[];
 }
 
 /** The draft of a tab that has not been typed in. Shared and never
  * mutated: every update in useDrafts creates a fresh draft object. */
-export const EMPTY_DRAFT: TabDraft = { input: "", images: [] };
+export const EMPTY_DRAFT: TabDraft = { input: "", images: [], files: [] };
 
 /** Per-tab composer drafts, kept across tab switches. The chat view
  * remounts on every switch (it is keyed by the active tab), so anything
@@ -52,7 +54,10 @@ export function useDrafts(tabs: readonly string[]) {
     setDrafts((prev) => {
       const current = prev.get(key) ?? EMPTY_DRAFT;
       const next = { ...current, ...patch };
-      if (next.input === current.input && next.images === current.images) {
+      if (
+        next.input === current.input && next.images === current.images &&
+        next.files === current.files
+      ) {
         return prev;
       }
       const updated = new Map(prev);

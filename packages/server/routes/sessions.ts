@@ -1,5 +1,10 @@
 import { Hono } from "hono";
-import { MAX_PROMPT_IMAGES, summarizeContextUsage } from "@lumisca/core";
+import {
+  base64ToBytes,
+  MAX_PROMPT_IMAGES,
+  summarizeContextUsage,
+} from "@lumisca/core";
+import { stripDataUrlHeader } from "@lumisca/core/shared";
 import type {
   AgentMessage,
   AskAnswer,
@@ -8,6 +13,7 @@ import type {
   ImageContent,
   ModePrompt,
   PendingQuestion,
+  PromptFileRef,
   SessionAgent,
   SessionInfo,
   TaskInfo,
@@ -24,6 +30,17 @@ import {
   requireNumber,
 } from "./util.ts";
 
+/** Decode a base64 payload that may still carry a data-URL header (a
+ * `FileReader` result). A malformed payload describes the request, so it is a
+ * 400 — never a store-level failure. */
+function decodeBase64Payload(data: string, what: string): Uint8Array {
+  try {
+    return base64ToBytes(stripDataUrlHeader(data));
+  } catch {
+    throw new AppError(`${what} data is not valid base64`, 400);
+  }
+}
+
 interface SessionBody {
   /** Omitted → a chat session ("simple chat" without a workspace). */
   workspaceId?: unknown;
@@ -38,9 +55,17 @@ interface SessionBody {
  * top of this. */
 const MAX_IMAGE_BASE64_LENGTH = 20 * 1024 * 1024;
 
+export /** One attached file as the browser sends it (the bytes base64-encoded, the
+ * name the user knows it by). */
+interface PromptFileBody {
+  name?: unknown;
+  data?: unknown;
+}
+
 export interface PromptBody {
   text?: unknown;
   images?: unknown;
+  files?: unknown;
   mode?: unknown;
 }
 
@@ -112,6 +137,7 @@ export function parseAnswerBody(body: AnswerBody): {
 export function parsePromptBody(body: PromptBody): {
   text: string;
   images?: ImageContent[];
+  files?: { name: string; bytes: Uint8Array }[];
   mode?: ModePrompt;
 } {
   // Parse optional mode metadata.
@@ -168,11 +194,47 @@ export function parsePromptBody(body: PromptBody): {
       images.push({ type: "image", data, mimeType });
     }
   }
+  // Files the user attached: written into the machine by the caller (this
+  // parser only owns the wire shape), so what is bounded here is what the
+  // transfer can carry — not what the machine will store.
+  const files: { name: string; bytes: Uint8Array }[] = [];
+  if (body.files !== undefined) {
+    if (!Array.isArray(body.files) || body.files.length > MAX_PROMPT_IMAGES) {
+      throw new AppError(
+        `files must be an array of at most ${MAX_PROMPT_IMAGES} items`,
+        400,
+      );
+    }
+    for (const item of body.files as PromptFileBody[]) {
+      const { name, data } = item;
+      if (typeof data !== "string" || typeof name !== "string") {
+        throw new AppError(
+          "each file must have a `name` and a base64 `data` string",
+          400,
+        );
+      }
+      if (data.length > MAX_IMAGE_BASE64_LENGTH) {
+        throw new AppError("file exceeds the size limit (15MB binary)", 400);
+      }
+      files.push({
+        name,
+        bytes: decodeBase64Payload(data, "file"),
+      });
+    }
+  }
   const text = body.text === undefined ? "" : body.text;
-  if (typeof text !== "string" || (text.length === 0 && images.length === 0)) {
+  if (
+    typeof text !== "string" ||
+    (text.length === 0 && images.length === 0 && files.length === 0)
+  ) {
     throw new AppError("text (string) is required", 400);
   }
-  return { text, images: images.length > 0 ? images : undefined, mode };
+  return {
+    text,
+    images: images.length > 0 ? images : undefined,
+    files: files.length > 0 ? files : undefined,
+    mode,
+  };
 }
 
 /** The slice of the core these routes need (interface segregation). */
@@ -210,7 +272,14 @@ export interface SessionApi {
     text: string,
     images?: ImageContent[],
     mode?: ModePrompt,
+    files?: PromptFileRef[],
   ): void;
+  /** Write a prompt's attached files into the machine and return where they
+   * are. Throws for a session that has nowhere to put them. */
+  savePromptUploads(
+    id: string,
+    uploads: readonly { name: string; bytes: Uint8Array }[],
+  ): Promise<PromptFileRef[]>;
   abort(id: string): void;
   rewind(id: string, timestamp: number): Promise<void>;
   /** Condense the session's older history into a checkpoint on demand (the
@@ -449,12 +518,17 @@ export function sessionRoutes(core: SessionApi): Hono {
 
   app.post("/sessions/:id/prompt", async (c) => {
     const body = await parseBody<PromptBody>(c);
-    const { text, images, mode } = parsePromptBody(body ?? {});
+    const { text, images, files, mode } = parsePromptBody(body ?? {});
     const id = c.req.param("id");
     requireSession(id);
-    // Fire-and-forget: the run progresses via the WebSocket event stream,
-    // so the request does not stay open for the whole agent execution.
-    core.startPrompt(id, text, images, mode);
+    // The uploads are written into the machine before the run starts, so a
+    // prompt whose file could not be stored never reaches the model; that is
+    // the one part of this call that is awaited. After it, the run is
+    // fire-and-forget: its progress arrives on the event stream.
+    const saved = files === undefined
+      ? undefined
+      : await core.savePromptUploads(id, files);
+    core.startPrompt(id, text, images, mode, saved);
     return c.json({ ok: true });
   });
 

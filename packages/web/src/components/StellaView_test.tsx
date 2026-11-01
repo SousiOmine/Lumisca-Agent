@@ -57,6 +57,8 @@ function render(
       loading: overrides.loading ?? false,
       images: [],
       onImagesChange: () => {},
+      files: [],
+      onFilesChange: () => {},
       onPrompt: () => {},
       onAbort: () => {},
       onRewind: () => Promise.resolve(),

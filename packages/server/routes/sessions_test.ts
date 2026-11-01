@@ -6,6 +6,7 @@ Deno.test("parsePromptBody passes text-only prompts through", () => {
   assertEquals(parsePromptBody({ text: "hello" }), {
     text: "hello",
     images: undefined,
+    files: undefined,
     mode: undefined,
   });
 });
@@ -105,5 +106,43 @@ Deno.test("parsePromptBody rejects invalid bodies", () => {
       images: [{ data: "x".repeat(21 * 1024 * 1024), mimeType: "image/png" }],
     },
     "size limit",
+  );
+});
+
+Deno.test("parsePromptBody decodes attached files", () => {
+  const { text, files } = parsePromptBody({
+    text: "このログを見て",
+    files: [{ name: "run.log", data: "aGVsbG8=" }],
+  });
+  assertEquals(text, "このログを見て");
+  assertEquals(files?.length, 1);
+  assertEquals(files?.[0]?.name, "run.log");
+  assertEquals(new TextDecoder().decode(files?.[0]?.bytes), "hello");
+});
+
+Deno.test("parsePromptBody: a file alone is a prompt", () => {
+  const { text, files } = parsePromptBody({
+    files: [{ name: "shot.png", data: "aGVsbG8=" }],
+  });
+  assertEquals(text, "");
+  assertEquals(files?.length, 1);
+});
+
+Deno.test("parsePromptBody: a data-URL header is accepted and stripped", () => {
+  const { files } = parsePromptBody({
+    text: "x",
+    files: [{ name: "a.txt", data: "data:text/plain;base64,aGVsbG8=" }],
+  });
+  assertEquals(new TextDecoder().decode(files?.[0]?.bytes), "hello");
+});
+
+Deno.test("parsePromptBody: a malformed file is a 400, not a crash", () => {
+  assertThrows(
+    () => parsePromptBody({ text: "x", files: [{ name: "a.txt" }] }),
+    AppError,
+  );
+  assertThrows(
+    () => parsePromptBody({ text: "x", files: [{ data: "aGVsbG8=" }] }),
+    AppError,
   );
 });

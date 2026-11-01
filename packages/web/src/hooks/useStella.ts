@@ -8,7 +8,7 @@ import {
   type StellaConversationState,
   stellaStateOf,
 } from "../stella-state.ts";
-import type { PendingImage, StellaAgent } from "../types.ts";
+import type { PendingFile, PendingImage, StellaAgent } from "../types.ts";
 
 /** Reconnect backoff of the conversation's event stream: 2s → 4s → … 30s. */
 const RECONNECT_BASE_MS = 2000;
@@ -47,9 +47,14 @@ export function useStella(enabled: boolean): {
   /** The conversation's session id (the key its published images are stored
    * under; the client addresses the conversation by agent). */
   sessionId: string | null;
-  /** Send the composer's text and the images attached to it. `images` are
-   * the composer's data URLs, turned into the same body code mode sends. */
-  prompt: (text: string, images?: PendingImage[]) => void;
+  /** Send the composer's text with the attachments: `images` are shown
+   * inline and passed to the model as content, `files` are written into the
+   * machine and named in the text the model receives. */
+  prompt: (
+    text: string,
+    images?: PendingImage[],
+    files?: PendingFile[],
+  ) => void;
   abort: () => void;
   answer: (
     toolCallId: string,
@@ -328,12 +333,12 @@ export function useStella(enabled: boolean): {
   }, [activeAgentId]);
 
   const prompt = useCallback(
-    (text: string, images?: PendingImage[]) => {
+    (text: string, images?: PendingImage[], files?: PendingFile[]) => {
       const agentId = requireAgent();
       // Fire-and-forget: the run's progress arrives on the event stream, so
       // the composer is cleared immediately and a failure surfaces as the
       // conversation's error.
-      void stellaApi.prompt(agentId, text, images).catch(
+      void stellaApi.prompt(agentId, text, images, files).catch(
         (failure: unknown) => {
           setError(errorText(failure));
         },

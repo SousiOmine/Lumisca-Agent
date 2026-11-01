@@ -6,6 +6,8 @@
  * provider SDK (see stream.ts).
  */
 
+import type { PromptFileRef } from "../shared/attachments.ts";
+
 // ---- transport / api -------------------------------------------------------
 
 /** The request APIs the app can drive; each maps to a Vercel AI SDK
@@ -118,6 +120,11 @@ export interface UserMessage {
    * routine's name. The UI shows it above the bubble, so the user can tell
    * a scheduled request from something they typed. Never provider-facing. */
   routine?: string;
+  /** Files the user attached to this prompt, already written into the
+   * machine (see vm/uploads.ts). The conversation draws them under the
+   * bubble; the model is told their paths through the text, so this stays
+   * in the transcript and out of the provider payload. */
+  files?: PromptFileRef[];
   timestamp: number;
 }
 

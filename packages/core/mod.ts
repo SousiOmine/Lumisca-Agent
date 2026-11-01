@@ -235,7 +235,12 @@ export type {
   WaitOptions,
   WaitResult,
 } from "./browser/types.ts";
-export type { AskAnswer, AskOption, AskQuestion } from "./shared/mod.ts";
+export type {
+  AskAnswer,
+  AskOption,
+  AskQuestion,
+  PromptFileRef,
+} from "./shared/mod.ts";
 export type {
   WebSearchAvailableProviderView,
   WebSearchProviderForm,

@@ -54,6 +54,60 @@
   padding: 0 2px 4px;
 }
 
+/* Files that are not pictures (a log, an archive): the row above the text is
+ * a line of chips, because there is nothing to preview — the name and size
+ * are all a reader can check before sending. */
+.input-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 2px 6px;
+}
+
+.input-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 6px 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.input-file-name {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.input-file-size {
+  flex: none;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.input-file-remove {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.input-file-remove:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
 .input-image {
   position: relative;
   width: 56px;

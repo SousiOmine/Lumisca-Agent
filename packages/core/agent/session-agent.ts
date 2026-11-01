@@ -19,7 +19,7 @@ import type { ClientEvent } from "../types/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
-import type { ThinkingLevel } from "../shared/mod.ts";
+import type { PromptFileRef, ThinkingLevel } from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { McpAttachmentHost } from "./mcp-host.ts";
 import { Rewinder } from "./rewinder.ts";
@@ -448,6 +448,8 @@ export class SessionAgent {
        * had to decide its `steered` stamp before waiting on a rewind). The
        * run then does not rebuild or re-announce it. */
       announced?: AgentMessage;
+      /** Files the user attached to this prompt (already in the machine). */
+      files?: PromptFileRef[];
     } = {},
   ): Promise<{ failure: string | null }> {
     if (!this.mcp.done) await this.mcp.waitReady();
@@ -481,6 +483,7 @@ export class SessionAgent {
           images,
           steered,
           options.routine?.name,
+          options.files,
         ));
     if (options.announced === undefined) this.announceMessage(message);
     if (options.mode !== undefined) this.startGoalIfNeeded(options.mode);
@@ -576,6 +579,7 @@ export class SessionAgent {
     images?: ImageContent[],
     mode?: ModePrompt,
     routine?: string,
+    files?: PromptFileRef[],
   ): void {
     // The first prompt of a session names it, whichever path delivered it.
     this.maybeGenerateTitle(mode ? mode.shortText : text);
@@ -592,7 +596,7 @@ export class SessionAgent {
         this.agent.nextTimestamp(),
         steered,
       )
-      : this.buildUserMessage(text, images, steered, routine);
+      : this.buildUserMessage(text, images, steered, routine, files);
     this.announceMessage(message);
     void this.deliverPrompt(message, mode);
   }
@@ -654,6 +658,7 @@ export class SessionAgent {
     images?: ImageContent[],
     steered?: boolean,
     routine?: string,
+    files?: PromptFileRef[],
   ): AgentMessage {
     const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
     if (images !== undefined && images.length > 0) content.push(...images);
@@ -662,6 +667,10 @@ export class SessionAgent {
       content,
       ...(steered === true ? { steered } : {}),
       ...(routine !== undefined && routine !== "" ? { routine } : {}),
+      // The files already sit in the machine; this record is what the
+      // conversation draws under the bubble (the model learns the paths
+      // from the text, see textWithFileNotice).
+      ...(files !== undefined && files.length > 0 ? { files } : {}),
       timestamp: this.agent.nextTimestamp(),
     };
   }

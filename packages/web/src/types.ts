@@ -103,6 +103,18 @@ export interface PendingImage {
   name?: string;
 }
 
+/** A file attached to a prompt that is not a picture (a log, an archive, a
+ * document). It is not sent to the model as bytes: the server writes it into
+ * the machine and tells the model its path (see core's vm/uploads.ts). */
+export interface PendingFile {
+  /** The name to show and the name the machine stores it under. */
+  name: string;
+  /** Size in bytes (the chip shows it, and the server enforces the cap). */
+  size: number;
+  /** The base64 payload, without the data-URL header. */
+  data: string;
+}
+
 /** Initial data served by the server's bootstrap script (/assets/initial-data.js).
  * Canonical definition lives in `@lumisca/core/shared` (so the server never
  * imports from `@lumisca/web`); re-exported here for web consumers. */

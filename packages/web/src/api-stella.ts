@@ -1,5 +1,6 @@
 import type {
   AskAnswer,
+  PendingFile,
   PendingImage,
   StellaConversationSnapshot,
   StellaEvent,
@@ -56,10 +57,15 @@ export const stellaApi = {
    * mode's session prompt takes (`promptBody`): text plus the images the
    * user attached, so a drag-and-drop or a paste means the same thing in
    * both modes. */
-  prompt: (agentId: string, text: string, images?: PendingImage[]) =>
+  prompt: (
+    agentId: string,
+    text: string,
+    images?: PendingImage[],
+    files?: PendingFile[],
+  ) =>
     request<{ ok: true }>(conversationPath(agentId, "/prompt"), {
       method: "POST",
-      body: JSON.stringify(promptBody(text, images)),
+      body: JSON.stringify(promptBody(text, images, undefined, files)),
     }),
 
   abort: (agentId: string) =>

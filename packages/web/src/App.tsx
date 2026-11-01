@@ -455,7 +455,10 @@ export function App({ initialData }: AppProps): ReactElement {
                 onInputChange={(input) => updateDraft(draftKey, { input })}
                 images={draft.images}
                 onImagesChange={(images) => updateDraft(draftKey, { images })}
-                onPrompt={(text, images) => stella.prompt(text, images)}
+                files={draft.files}
+                onFilesChange={(files) => updateDraft(draftKey, { files })}
+                onPrompt={(text, images, files) =>
+                  stella.prompt(text, images, files)}
                 onAbort={() => stella.abort()}
                 onRewind={(timestamp) => stella.rewind(timestamp)}
                 onLoadOlder={stella.loadOlder}
