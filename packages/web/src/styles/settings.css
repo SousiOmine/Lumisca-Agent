@@ -166,7 +166,7 @@
 
 /* Compaction tuning (settings → モデル): its two numeric fields are also
    rows of the model page, so only the field's width is its own. */
-.compaction-token-input {
+.compaction-percent-input {
   width: 96px;
   flex: none;
   text-align: right;

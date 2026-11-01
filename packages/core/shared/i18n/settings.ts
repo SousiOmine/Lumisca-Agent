@@ -594,30 +594,33 @@ export const settings = {
     en:
       "Automatically summarizes older conversation history when approaching the context limit to reduce usage. The conversation history itself is kept.",
   },
-  "settings.compaction.reserveTokens": {
-    ja: "予約トークン",
-    en: "Reserved tokens",
+  "settings.compaction.reservePercent": {
+    ja: "予約（ウィンドウ比 %）",
+    en: "Reserved (% of window)",
   },
-  "settings.compaction.reserveTokensDesc": {
+  "settings.compaction.reservePercentDesc": {
     ja:
-      "モデルのコンテキスト上限からこのトークン数分の余裕を残して圧縮を実行します。既定値は 16384 です。",
-    en: "Compact this far below the model's context window. Default 16384.",
+      "モデルのコンテキスト上限に対して、この割合の余裕を残した位置で圧縮を実行します。割合なので、32K のモデルでも 1M のモデルでも同じだけ手前で圧縮します。既定値は 8% です。",
+    en:
+      "Compact once this share of the model's context window is all that is left free. A share, not a token count, so a 32K model and a 1M model compact the same distance from their limits. Default 8%.",
   },
-  "settings.compaction.keepRecentTokens": {
-    ja: "保持トークン",
-    en: "Kept tokens",
+  "settings.compaction.keepRecentPercent": {
+    ja: "保持（ウィンドウ比 %）",
+    en: "Kept (% of window)",
   },
-  "settings.compaction.keepRecentTokensDesc": {
-    ja: "圧縮後も要約せずに保持する直近のトークン数です。既定値は 20000 です。",
-    en: "Newest tokens kept verbatim after a compaction. Default 20000.",
+  "settings.compaction.keepRecentPercentDesc": {
+    ja:
+      "圧縮後も要約せずに保持する直近の割合です。大きくするほど文脈は残りますが、圧縮の効果は小さくなります。既定値は 20% です。",
+    en:
+      "Share of the window kept verbatim after a compaction. Larger keeps more context but frees less. Default 20%.",
   },
   "settings.compaction.saveFailed": {
     ja: "圧縮の設定を保存できませんでした: {error}",
     en: "Failed to save the compaction settings: {error}",
   },
   "settings.compaction.invalidNumber": {
-    ja: "0 以上の整数を入力してください。",
-    en: "Enter a whole number of 0 or more.",
+    ja: "0 から 100 までの整数を入力してください。",
+    en: "Enter a whole number between 0 and 100.",
   },
 
   "settings.model.loadFailed": {

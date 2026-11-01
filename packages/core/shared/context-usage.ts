@@ -129,24 +129,28 @@ export function contextUsageRatio(
 }
 
 /** The usage ratio at which the next compaction check condenses the history:
- * `(contextWindow - reserveTokens) / contextWindow` (see
+ * `(contextWindow - reserveShare) / contextWindow` (see
  * ai/context-compaction.ts). The context meter warns from here on, so the
  * amber bar and the checkpoint that follows describe the same moment.
+ *
+ * Expressed as the reserve SHARE (0-100, the setting's own unit) rather than
+ * tokens: the meter has the window from the model catalog, so the share
+ * needs no conversion and cannot disagree with the compactor, which divides
+ * by the same window.
  * Undefined when the window is unknown or the reservation leaves no room —
  * compaction is then off, and the meter keeps its own default hint. */
 export function compactionUsageRatio(
   contextWindow: number | undefined,
-  reserveTokens: number,
+  reservePercent: number,
 ): number | undefined {
   if (
     contextWindow === undefined || !Number.isFinite(contextWindow) ||
-    contextWindow <= 0 || !Number.isFinite(reserveTokens) || reserveTokens <= 0
+    contextWindow <= 0 || !Number.isFinite(reservePercent) ||
+    reservePercent <= 0 || reservePercent >= 100
   ) {
     return undefined;
   }
-  const threshold = contextWindow - reserveTokens;
-  if (threshold <= 0) return undefined;
-  return Math.min(1, threshold / contextWindow);
+  return Math.min(1, 1 - reservePercent / 100);
 }
 
 /** Compact token count matching the reference card: 999 → "999",

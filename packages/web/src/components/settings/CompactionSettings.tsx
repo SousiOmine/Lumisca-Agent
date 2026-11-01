@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "preact/compat";
 import {
-  COMPACTION_DEFAULT_KEEP_RECENT_TOKENS,
-  COMPACTION_DEFAULT_RESERVE_TOKENS,
+  COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
+  COMPACTION_DEFAULT_RESERVE_PERCENT,
   COMPACTION_ENABLED_KEY,
-  COMPACTION_KEEP_RECENT_TOKENS_KEY,
-  COMPACTION_RESERVE_TOKENS_KEY,
-  parseNonNegativeIntSetting,
+  COMPACTION_KEEP_RECENT_PERCENT_KEY,
+  COMPACTION_RESERVE_PERCENT_KEY,
+  parsePercentSetting,
 } from "@lumisca/core/shared";
 import { errorText } from "../../providers.ts";
 import { useSettings } from "../../settingsStore.ts";
@@ -59,8 +59,8 @@ export function CompactionSettings() {
     seeded.current = true;
     const values = settings.values;
     setEnabled(values[COMPACTION_ENABLED_KEY] !== "0");
-    setReserve(values[COMPACTION_RESERVE_TOKENS_KEY] ?? "");
-    setKeepRecent(values[COMPACTION_KEEP_RECENT_TOKENS_KEY] ?? "");
+    setReserve(values[COMPACTION_RESERVE_PERCENT_KEY] ?? "");
+    setKeepRecent(values[COMPACTION_KEEP_RECENT_PERCENT_KEY] ?? "");
   }, [loaded, settings.values]);
 
   /** One pending piece of typing: which setting, the text, and how to put
@@ -100,8 +100,8 @@ export function CompactionSettings() {
     );
   };
 
-  /** Commit a token field: an empty value clears the setting (the default
-   * applies), anything else must be a whole number of 0 or more. */
+  /** Commit a percentage field: an empty value clears the setting (the
+   * default applies), anything else must be a whole number in 0-100. */
   const commitTokens = (
     key: string,
     raw: string,
@@ -110,9 +110,7 @@ export function CompactionSettings() {
   ) => {
     typedCommit.cancel();
     const trimmed = raw.trim();
-    const parsed = trimmed === ""
-      ? undefined
-      : parseNonNegativeIntSetting(trimmed);
+    const parsed = trimmed === "" ? undefined : parsePercentSetting(trimmed);
     if (trimmed !== "" && parsed === undefined) {
       apply(current); // snap back to the stored value
       setError(t("settings.compaction.invalidNumber"));
@@ -135,7 +133,7 @@ export function CompactionSettings() {
     typedCommit.schedule({ key, raw, current, apply });
   };
 
-  /** One token row (label, description, numeric field). */
+  /** One percentage row (label, description, numeric field). */
   const tokenRow = (
     key: string,
     value: string,
@@ -149,7 +147,7 @@ export function CompactionSettings() {
       <input
         type="text"
         inputMode="numeric"
-        className="compaction-token-input"
+        className="compaction-percent-input"
         value={value}
         placeholder={String(fallback)}
         disabled={saving || !loaded}
@@ -181,22 +179,22 @@ export function CompactionSettings() {
       </SettingRow>
 
       {tokenRow(
-        COMPACTION_RESERVE_TOKENS_KEY,
+        COMPACTION_RESERVE_PERCENT_KEY,
         reserve,
         reserve,
-        COMPACTION_DEFAULT_RESERVE_TOKENS,
+        COMPACTION_DEFAULT_RESERVE_PERCENT,
         setReserve,
-        t("settings.compaction.reserveTokens"),
-        t("settings.compaction.reserveTokensDesc"),
+        t("settings.compaction.reservePercent"),
+        t("settings.compaction.reservePercentDesc"),
       )}
       {tokenRow(
-        COMPACTION_KEEP_RECENT_TOKENS_KEY,
+        COMPACTION_KEEP_RECENT_PERCENT_KEY,
         keepRecent,
         keepRecent,
-        COMPACTION_DEFAULT_KEEP_RECENT_TOKENS,
+        COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
         setKeepRecent,
-        t("settings.compaction.keepRecentTokens"),
-        t("settings.compaction.keepRecentTokensDesc"),
+        t("settings.compaction.keepRecentPercent"),
+        t("settings.compaction.keepRecentPercentDesc"),
       )}
 
       {saved && !saving && (

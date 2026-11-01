@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "../ai/faux.ts";
 import type {
   AgentMessage,
@@ -164,10 +164,32 @@ function requestText(request: RecordedRequest): string {
 Deno.test("resolveCompactionBudgets: the threshold sits one reservation below the window", () => {
   const budgets = resolveCompactionBudgets(wideModel())!;
   assertEquals(budgets.contextWindow, 200_000);
-  assertEquals(budgets.thresholdTokens, 200_000 - 16_384);
-  assertEquals(budgets.keepRecentTokens, 20_000);
+  // The default 8% of a 200K window is the 16K pi used.
+  assertEquals(budgets.thresholdTokens, 200_000 - 16_000);
+  assertEquals(budgets.keepRecentTokens, 40_000);
   // pi: 80% of the reservation, capped by the model's own output limit.
-  assertEquals(budgets.summaryMaxTokens, Math.floor(16_384 * 0.8));
+  assertEquals(budgets.summaryMaxTokens, Math.floor(16_000 * 0.8));
+});
+
+Deno.test("resolveCompactionBudgets: a share behaves the same at every window size", () => {
+  // The point of the shares: a 32K model and a 1M model compact the same
+  // distance from their limits, and keep the same share of history. A fixed
+  // token reservation made the large window compact at 98% and the small one
+  // almost immediately.
+  const policy = resolveCompactionPolicy({
+    reservePercent: 8,
+    keepRecentPercent: 20,
+  });
+  for (const window of [32_000, 200_000, 1_000_000]) {
+    const budgets = resolveCompactionBudgets(modelWith(window, 8_000), policy)!;
+    assertEquals(budgets.thresholdTokens, window - Math.ceil(window * 0.08));
+    assertEquals(budgets.keepRecentTokens, Math.ceil(window * 0.20));
+    // The share of the window that stays usable, before compaction fires.
+    assert(
+      Math.abs(budgets.thresholdTokens / window - 0.92) < 0.001,
+      `${window}: ${budgets.thresholdTokens / window}`,
+    );
+  }
 });
 
 Deno.test("resolveCompactionBudgets: the threshold hangs off the documented input cap", () => {
@@ -179,7 +201,8 @@ Deno.test("resolveCompactionBudgets: the threshold hangs off the documented inpu
     maxInputTokens: 922_000,
   })!;
   assertEquals(budgets.contextWindow, 922_000);
-  assertEquals(budgets.thresholdTokens, 922_000 - 16_384);
+  // The share is taken from the budget, not from the raw window.
+  assertEquals(budgets.thresholdTokens, 922_000 - Math.ceil(922_000 * 0.08));
   // A cap wider than the window never widens the budget.
   const narrow = resolveCompactionBudgets({
     ...modelWith(200_000, 8_000),
@@ -196,8 +219,26 @@ Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables co
     provider: "p",
   };
   assertEquals(resolveCompactionBudgets(bare), undefined);
-  // A reservation as large as the window leaves nothing for a prompt.
-  assertEquals(resolveCompactionBudgets(modelWith(10_000, 1_000)), undefined);
+  // A reservation that leaves nothing for a prompt disables compaction. The
+  // share is what decides that now, so it is stated rather than assumed:
+  // 8% of a 10K window leaves 9.2K, which is a perfectly usable prompt.
+  assertEquals(
+    resolveCompactionBudgets(modelWith(10_000, 1_000)),
+    {
+      contextWindow: 10_000,
+      thresholdTokens: 10_000 - 800,
+      keepRecentTokens: 2_000,
+      summaryMaxTokens: 640,
+    },
+  );
+  assertEquals(
+    resolveCompactionBudgets(modelWith(10_000, 1_000), {
+      enabled: true,
+      reservePercent: 100,
+      keepRecentPercent: 10,
+    }),
+    undefined,
+  );
   assertEquals(
     resolveCompactionBudgets(modelWith(200_000, 1_000), {
       ...DEFAULT_COMPACTION_POLICY,
@@ -210,24 +251,39 @@ Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables co
 Deno.test("resolveCompactionBudgets: a zero reservation falls back to the model's cap", () => {
   const budgets = resolveCompactionBudgets(modelWith(200_000, 8_000), {
     enabled: true,
-    reserveTokens: 0,
-    keepRecentTokens: 0,
+    reservePercent: 0,
+    keepRecentPercent: 0,
   })!;
   assertEquals(budgets.thresholdTokens, 200_000);
   assertEquals(budgets.summaryMaxTokens, 8_000);
 });
 
+Deno.test("resolveCompactionBudgets: a reservation of 100% leaves no room", () => {
+  // Nothing would be left to send: compaction is off rather than useless.
+  const policy = resolveCompactionPolicy({ reservePercent: 100 });
+  assertEquals(
+    resolveCompactionBudgets(modelWith(200_000, 8_000), policy),
+    undefined,
+  );
+});
+
 Deno.test("resolveCompactionPolicy falls back to pi's defaults", () => {
   const policy = resolveCompactionPolicy();
   assertEquals(policy, DEFAULT_COMPACTION_POLICY);
-  // Invalid and unset values keep the defaults; explicit ones win.
+  // Invalid and unset values keep the defaults; explicit ones win. A share
+  // outside 0-100 is refused rather than clamped, so a typo cannot silently
+  // become a different policy.
   assertEquals(
-    resolveCompactionPolicy({ enabled: false, reserveTokens: -5 }),
-    { enabled: false, reserveTokens: 16_384, keepRecentTokens: 20_000 },
+    resolveCompactionPolicy({ enabled: false, reservePercent: -5 }),
+    { enabled: false, reservePercent: 8, keepRecentPercent: 20 },
   );
   assertEquals(
-    resolveCompactionPolicy({ reserveTokens: 1_000.7, keepRecentTokens: 0 }),
-    { enabled: true, reserveTokens: 1_000, keepRecentTokens: 0 },
+    resolveCompactionPolicy({ reservePercent: 150 }),
+    { enabled: true, reservePercent: 8, keepRecentPercent: 20 },
+  );
+  assertEquals(
+    resolveCompactionPolicy({ reservePercent: 12.7, keepRecentPercent: 0 }),
+    { enabled: true, reservePercent: 12, keepRecentPercent: 0 },
   );
 });
 
@@ -338,7 +394,7 @@ Deno.test("compactIfNeeded inserts a checkpoint at the cut and keeps every messa
   const before = [...messages];
   const { compactor, requests, inserts } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   const result = await compactor.compactIfNeeded(messages);
   assertEquals(result !== null, true);
@@ -361,7 +417,7 @@ Deno.test("the summarization request is a dedicated, tool-free call", async () =
   const messages = conversation(2, 4_000);
   const { compactor, requests } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   await compactor.compactNow(messages);
   assertEquals(requests.length, 1);
@@ -384,7 +440,7 @@ Deno.test("a second compaction merges the previous summary", async () => {
   const messages = conversation(2, 4_000);
   const { compactor, requests } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   await compactor.compactNow(messages);
   assertEquals(requests.length, 1);
@@ -406,7 +462,7 @@ Deno.test("custom instructions steer the summary", async () => {
   const messages = conversation(2, 4_000);
   const { compactor, requests } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   await compactor.compactNow(messages, "  keep the file paths  ");
   assertEquals(requests.length, 1);
@@ -430,7 +486,7 @@ Deno.test("compactIfNeeded leaves the transcript untouched when summarization fa
     tools: () => [],
     streamFn: failingStreamFn,
     sessionId: "s1",
-    policy: () => ({ reserveTokens: 2_000, keepRecentTokens: 100 }),
+    policy: () => ({ reservePercent: 20, keepRecentPercent: 1 }),
     insert: (index, message) => inserts.push({ index, message }),
   });
   assertEquals(await compactor.compactIfNeeded(messages), null);
@@ -444,7 +500,7 @@ Deno.test("compactIfNeeded refuses a summary that does not shrink its source", a
   const { compactor, inserts } = compactorFor(messages, {
     reply: "s".repeat(40_000),
     model: modelWith(10_000, 2_000),
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   assertEquals(await compactor.compactIfNeeded(messages), null);
   assertEquals(inserts.length, 0);
@@ -456,7 +512,7 @@ Deno.test("compactNow condenses below the threshold on demand", async () => {
   // The retention budget must be smaller than the conversation, otherwise
   // there is nothing left to summarize (the default 20k keeps it all).
   const { compactor, inserts } = compactorFor(messages, {
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   const result = await compactor.compactNow(messages);
   assertEquals(result !== null, true);
@@ -502,7 +558,7 @@ Deno.test("measure only counts the model's view, not the kept-but-hidden history
   const messages = conversation(2, 4_000);
   const { compactor } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   const before = compactor.measure(messages);
   await compactor.compactNow(messages);
@@ -517,7 +573,7 @@ Deno.test("an insertion invalidates the measurement anchor", async () => {
   const messages = conversation(3, 4_000);
   const { compactor } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   compactor.observeTurn(messages);
   await compactor.compactIfNeeded(messages);
@@ -532,7 +588,7 @@ Deno.test("compaction re-entrancy is refused while a summarization runs", async 
   const messages = conversation(3, 4_000);
   const { compactor } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
-    policy: { reserveTokens: 2_000, keepRecentTokens: 100 },
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
   const first = compactor.compactIfNeeded(messages);
   // A nested call (the summarization request's own step) must not start a

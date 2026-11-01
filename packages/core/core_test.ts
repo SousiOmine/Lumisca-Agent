@@ -24,7 +24,7 @@ import type {
 import { CoreError, LumiscaCore } from "./mod.ts";
 import { VISUALS_DIR_NAME } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
-import { COMPACTION_KEEP_RECENT_TOKENS_KEY } from "./shared/settings-keys.ts";
+import { COMPACTION_KEEP_RECENT_PERCENT_KEY } from "./shared/settings-keys.ts";
 import { SCHEMA_VERSION } from "./db/schema.ts";
 import {
   FAST_MODEL_KEY,
@@ -3397,7 +3397,10 @@ Deno.test("compaction persists the checkpoint and survives a reopen", async () =
   await promptSession(core, session.id, `turn 4 ${"x".repeat(20_000)}`);
 
   const agent = core.getAgent(session.id)!;
-  // The history was condensed before the request went out.
+  // The history was condensed before the request went out. (One check may
+  // make more than one pass when the retained tail is still over the
+  // threshold — see MAX_COMPACTION_ATTEMPTS — so what this asserts is that
+  // the transcript was condensed, not how many passes that took.)
   assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
   const roles = agent.messages.map((m) => m.role);
 
@@ -3437,10 +3440,10 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
   await fillHistory(core, faux, session.id, 3);
   const before = conversationMessages(core.getAgent(session.id)!);
   // The manual call summarizes whatever the retention budget leaves out:
-  // with the default 20K kept (against a 30K window) the retained tail
+  // with the default 10% kept (3K against a 30K window) the retained tail
   // would cover the whole history, so the session is tuned to keep only
-  // the newest 1K — the same settings a user can change in the dialog.
-  core.setSetting(COMPACTION_KEEP_RECENT_TOKENS_KEY, "1000");
+  // the newest 10% — the same setting a user can change in the dialog.
+  core.setSetting(COMPACTION_KEEP_RECENT_PERCENT_KEY, "10");
   // On demand: condense without waiting for the pressure threshold.
   faux.setResponses([
     fauxAssistantMessage([fauxText("## Summary\n- condensed")]),

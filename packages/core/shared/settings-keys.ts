@@ -80,29 +80,43 @@ export const SAVED_PROMPTS_KEY = "saved_prompts";
  * default), "0" = off. */
 export const COMPACTION_ENABLED_KEY = "compaction_enabled";
 
-/** Settings-table key for the room left below the model's window when
- * compaction triggers (pi's `reserveTokens`): the conversation is condensed
- * once it would come closer than this to the window. */
-export const COMPACTION_RESERVE_TOKENS_KEY = "compaction_reserve_tokens";
+/** Settings-table key for the SHARE of the model's window left free when
+ * compaction triggers, as a percentage. The conversation is condensed once
+ * it would come closer than this to the window.
+ *
+ * A share, not a token count: 16k of a 32k window is half of it, and 16k of
+ * a 1M window is a rounding error. A fixed reservation made every large
+ * window compact at 98% — one turn away from a rejected request — and made
+ * a small one compact almost immediately. */
+export const COMPACTION_RESERVE_PERCENT_KEY = "compaction_reserve_percent";
 
-/** Settings-table key for the newest tokens kept verbatim after a
- * compaction (pi's `keepRecentTokens`). */
-export const COMPACTION_KEEP_RECENT_TOKENS_KEY =
-  "compaction_keep_recent_tokens";
+/** Settings-table key for the SHARE of the window kept verbatim after a
+ * compaction, as a percentage. The cut lands on a unit boundary, so the
+ * retained tail is this share rounded up. */
+export const COMPACTION_KEEP_RECENT_PERCENT_KEY =
+  "compaction_keep_recent_percent";
 
-/** The compactor's default reservation (pi's `reserveTokens`): also the
- * placeholder the settings dialog shows for an unset value. */
-export const COMPACTION_DEFAULT_RESERVE_TOKENS = 16_384;
+/** The compactor's default reservation: 8% of the window (pi's 16k against
+ * a 200k window, which is where the old fixed default came from). */
+export const COMPACTION_DEFAULT_RESERVE_PERCENT = 8;
 
-/** The compactor's default retention (pi's `keepRecentTokens`). */
-export const COMPACTION_DEFAULT_KEEP_RECENT_TOKENS = 20_000;
+/** The compactor's default retention: 20% of the window.
+ *
+ * Larger than pi's 10% (20k against 200k): with a share, a small window
+ * reaches the threshold with very little history, and a 10% tail can still
+ * be over the threshold after one pass — the check then spends a second
+ * summarization call on it. A fifth of the window is enough history to keep
+ * the conversation readable and usually enough to fit the next request. */
+export const COMPACTION_DEFAULT_KEEP_RECENT_PERCENT = 20;
 
 /** Compaction tuning read from the settings table; omitted fields keep the
  * compactor's defaults (see ai/context-compaction.ts). */
 export interface CompactionPolicyInput {
   enabled?: boolean;
-  reserveTokens?: number;
-  keepRecentTokens?: number;
+  /** Percent of the window (0-100). */
+  reservePercent?: number;
+  /** Percent of the window (0-100). */
+  keepRecentPercent?: number;
 }
 
 /** Parse a non-negative integer setting; undefined when unset, blank, or
@@ -126,15 +140,27 @@ export function parseCompactionPolicyInput(
   if (enabled !== undefined && enabled.trim() !== "") {
     input.enabled = enabled !== "0";
   }
-  const reserveTokens = parseNonNegativeIntSetting(
-    read(COMPACTION_RESERVE_TOKENS_KEY),
+  const reservePercent = parsePercentSetting(
+    read(COMPACTION_RESERVE_PERCENT_KEY),
   );
-  if (reserveTokens !== undefined) input.reserveTokens = reserveTokens;
-  const keepRecentTokens = parseNonNegativeIntSetting(
-    read(COMPACTION_KEEP_RECENT_TOKENS_KEY),
+  if (reservePercent !== undefined) input.reservePercent = reservePercent;
+  const keepRecentPercent = parsePercentSetting(
+    read(COMPACTION_KEEP_RECENT_PERCENT_KEY),
   );
-  if (keepRecentTokens !== undefined) input.keepRecentTokens = keepRecentTokens;
+  if (keepRecentPercent !== undefined) {
+    input.keepRecentPercent = keepRecentPercent;
+  }
   return input;
+}
+
+/** Parse a percentage setting: a whole number in 0-100. Undefined when
+ * unset, blank, or out of range — an out-of-range value is refused rather
+ * than clamped, so a typo does not silently become a different policy. */
+export function parsePercentSetting(
+  raw: string | undefined,
+): number | undefined {
+  const value = parseNonNegativeIntSetting(raw);
+  return value !== undefined && value <= 100 ? value : undefined;
 }
 
 /** Settings-table key holding the app-level MCP server config (JSON). It may

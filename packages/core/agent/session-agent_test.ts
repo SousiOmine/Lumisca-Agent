@@ -746,9 +746,9 @@ Deno.test("a rewind names removed tool results by their call id", async () => {
 // ---- context compaction (see context-compaction.ts) ------------------------
 
 /** A model with a window small enough that a few tool results cross the
- * pressure threshold. pi's rule is `contextWindow - reserveTokens`, so the
- * tests reserve a small slice (see TEST_COMPACTION_POLICY) instead of the
- * model's completion cap. */
+ * pressure threshold. The threshold sits a reserve SHARE below the window
+ * (see TEST_COMPACTION_POLICY), which is what the compactor resolves against
+ * whatever window the model has. */
 function smallWindowModel(): Model<Api> {
   return {
     id: "small",
@@ -760,12 +760,13 @@ function smallWindowModel(): Model<Api> {
   } as Model<Api>;
 }
 
-/** The compaction tuning these tests run with: compact 1.5K below the 4K
- * window and keep only the newest unit, so a handful of 4,000-character
- * tool results exercise both the threshold and the retention. */
+/** The compaction tuning these tests run with, as shares of the 4K window:
+ * reserve 37% (1,500 tokens) and keep 2% (100 tokens), so a handful of
+ * 4,000-character tool results exercise both the threshold and the
+ * retention. */
 const TEST_COMPACTION_POLICY = {
-  reserveTokens: 1_500,
-  keepRecentTokens: 100,
+  reservePercent: 37,
+  keepRecentPercent: 2,
 };
 
 /** A tool whose result is big enough to cross the small window's pressure

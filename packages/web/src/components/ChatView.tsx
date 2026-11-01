@@ -8,11 +8,11 @@ import {
 } from "preact/compat";
 import { IconSend } from "@tabler/icons-preact";
 import {
-  COMPACTION_DEFAULT_RESERVE_TOKENS,
-  COMPACTION_RESERVE_TOKENS_KEY,
+  COMPACTION_DEFAULT_RESERVE_PERCENT,
+  COMPACTION_RESERVE_PERCENT_KEY,
   compactionUsageRatio,
   inputBudgetTokens,
-  parseNonNegativeIntSetting,
+  parsePercentSetting,
 } from "@lumisca/core/shared";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { isViewRunning, type SessionView } from "../types.ts";
@@ -298,17 +298,17 @@ export function ChatView(
     ? undefined
     : { summary, contextWindow };
   // Where the meter turns amber: the point the next compaction check
-  // condenses the history from (`window - reserveTokens`). The reservation
+  // condenses the history from (`window - reserveShare`). The reservation
   // comes from the shared settings store (read once for the page, so a tab
   // switch does not re-read the settings table); an unset or unreadable
   // value falls back to the compactor's default, so the meter is right out
   // of the box.
-  const compactionReserveTokens = parseNonNegativeIntSetting(
-    useSetting(COMPACTION_RESERVE_TOKENS_KEY),
+  const compactionReservePercent = parsePercentSetting(
+    useSetting(COMPACTION_RESERVE_PERCENT_KEY),
   );
   const contextWarnRatio = compactionUsageRatio(
     contextWindow,
-    compactionReserveTokens ?? COMPACTION_DEFAULT_RESERVE_TOKENS,
+    compactionReservePercent ?? COMPACTION_DEFAULT_RESERVE_PERCENT,
   );
 
   return (

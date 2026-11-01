@@ -54,8 +54,8 @@ import { contextTokensOf, inputBudgetTokens } from "../shared/context-usage.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import {
-  COMPACTION_DEFAULT_KEEP_RECENT_TOKENS,
-  COMPACTION_DEFAULT_RESERVE_TOKENS,
+  COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
+  COMPACTION_DEFAULT_RESERVE_PERCENT,
 } from "../shared/settings-keys.ts";
 import { toLlmMessages } from "../types/notification.ts";
 
@@ -65,23 +65,31 @@ const log = createLogger("compaction");
 
 /** The compaction tuning (pi's `CompactionSettings`): whether automatic
  * compaction runs, how much room below the window it leaves for the next
- * request, and how much of the newest history stays verbatim. */
+ * request, and how much of the newest history stays verbatim.
+ *
+ * Both sizes are SHARES of the model's window, not token counts: the same
+ * count means something different on every model. 16k of a 32k window is
+ * half of it; 16k of a 1M window is 98.4% used before anything happens —
+ * one turn from a rejected request — and it leaves 240k of history to
+ * collapse into 20k, so a compaction on a large window loses most of what
+ * it was told to keep. A share behaves the same at every size. */
 export interface CompactionPolicy {
   enabled: boolean;
-  /** Compact once the projected context passes `contextWindow` minus this
-   * (pi's `reserveTokens`). It is also the room the summarization request
-   * may use for its own output (see CompactionBudgets.summaryMaxTokens). */
-  reserveTokens: number;
-  /** Newest tokens kept verbatim (pi's `keepRecentTokens`). The cut lands
-   * on a unit boundary, so the retained tail is this value rounded up. */
-  keepRecentTokens: number;
+  /** Compact once the projected context passes this share of the window.
+   * It is also the room the summarization request may use for its own
+   * output (see CompactionBudgets.summaryMaxTokens). */
+  reservePercent: number;
+  /** Share of the window kept verbatim. The cut lands on a unit boundary,
+   * so the retained tail is this share rounded up. */
+  keepRecentPercent: number;
 }
 
-/** pi's defaults (DEFAULT_COMPACTION_SETTINGS). */
+/** pi's defaults, as shares: 16k and 20k against the 200k window they were
+ * chosen for. */
 export const DEFAULT_COMPACTION_POLICY: CompactionPolicy = {
   enabled: true,
-  reserveTokens: COMPACTION_DEFAULT_RESERVE_TOKENS,
-  keepRecentTokens: COMPACTION_DEFAULT_KEEP_RECENT_TOKENS,
+  reservePercent: COMPACTION_DEFAULT_RESERVE_PERCENT,
+  keepRecentPercent: COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
 };
 
 /** Extra compaction passes per check, each one a summarization call. The
@@ -239,11 +247,25 @@ export function resolveCompactionPolicy(
 ): CompactionPolicy {
   return {
     enabled: input?.enabled ?? DEFAULT_COMPACTION_POLICY.enabled,
-    reserveTokens: nonNegativeInt(input?.reserveTokens) ??
-      DEFAULT_COMPACTION_POLICY.reserveTokens,
-    keepRecentTokens: nonNegativeInt(input?.keepRecentTokens) ??
-      DEFAULT_COMPACTION_POLICY.keepRecentTokens,
+    reservePercent: percent(input?.reservePercent) ??
+      DEFAULT_COMPACTION_POLICY.reservePercent,
+    keepRecentPercent: percent(input?.keepRecentPercent) ??
+      DEFAULT_COMPACTION_POLICY.keepRecentPercent,
   };
+}
+
+/** A whole percentage in 0-100, or undefined (an out-of-range value is
+ * refused rather than clamped: a typo must not silently mean another
+ * policy). */
+function percent(value: number | undefined): number | undefined {
+  const parsed = nonNegativeInt(value);
+  return parsed !== undefined && parsed <= 100 ? parsed : undefined;
+}
+
+/** A share of `window` in tokens, rounded up so a non-zero share never
+ * becomes zero room. */
+export function shareOfWindow(window: number, percentValue: number): number {
+  return Math.ceil((window * percentValue) / 100);
 }
 
 function nonNegativeInt(value: number | undefined): number | undefined {
@@ -253,11 +275,16 @@ function nonNegativeInt(value: number | undefined): number | undefined {
 }
 
 /**
- * Resolve the token budgets of a model: the threshold sits `reserveTokens`
- * below the model's prompt budget — its window narrowed to the input cap
- * the catalog publishes (models.dev `limit.input`) — and the summarization
- * call may use at most 80% of that reservation for its own output (pi's
- * `maxTokens`).
+ * Resolve the token budgets of a model: the threshold sits the policy's
+ * reserve SHARE below the model's prompt budget — its window narrowed to
+ * the input cap the catalog publishes (models.dev `limit.input`) — and the
+ * summarization call may use at most 80% of that reservation for its own
+ * output (pi's `maxTokens`).
+ *
+ * The shares are turned into tokens here, against the window this model
+ * actually has, so the same policy describes the same behaviour at 32k and
+ * at 1M. A reservation of 100% (or a window so small it rounds to nothing)
+ * leaves no room for a prompt; compaction is then off rather than useless.
  */
 export function resolveCompactionBudgets(
   model: Model<Api>,
@@ -272,18 +299,19 @@ export function resolveCompactionBudgets(
   if (window === undefined) {
     return undefined;
   }
-  const threshold = window - policy.reserveTokens;
+  const reserveTokens = shareOfWindow(window, policy.reservePercent);
+  const threshold = window - reserveTokens;
   // A reservation as large as the window leaves no room for a prompt:
   // compacting would not make the request acceptable either.
   if (threshold <= 0) return undefined;
   const outputCap = model.maxTokens !== undefined && model.maxTokens > 0
     ? model.maxTokens
     : undefined;
-  const summaryMaxTokens = policy.reserveTokens > 0
+  const summaryMaxTokens = reserveTokens > 0
     ? Math.max(
       1,
       Math.min(
-        Math.floor(policy.reserveTokens * 0.8),
+        Math.floor(reserveTokens * 0.8),
         outputCap ?? Number.POSITIVE_INFINITY,
       ),
     )
@@ -291,7 +319,7 @@ export function resolveCompactionBudgets(
   return {
     contextWindow: window,
     thresholdTokens: threshold,
-    keepRecentTokens: policy.keepRecentTokens,
+    keepRecentTokens: shareOfWindow(window, policy.keepRecentPercent),
     summaryMaxTokens,
   };
 }

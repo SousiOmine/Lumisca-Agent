@@ -165,15 +165,20 @@ Deno.test("inputBudgetTokens narrows the window to the published input cap", () 
 });
 
 Deno.test("compactionUsageRatio is the point the next check condenses from", () => {
-  // pi's rule: compact at `window - reserveTokens`.
-  assertEquals(compactionUsageRatio(200_000, 16_384), 0.91808);
-  assertEquals(compactionUsageRatio(4_000, 1_500), 0.625);
-  // Unknown window, a reservation that leaves no room, or no reservation:
+  // The reserve is a SHARE of the window, so the ratio does not depend on
+  // the window at all: 8% reserved means the meter turns amber at 92%.
+  assertEquals(compactionUsageRatio(200_000, 8), 0.92);
+  assertEquals(compactionUsageRatio(4_000, 8), 0.92);
+  assertEquals(compactionUsageRatio(1_000_000, 8), 0.92);
+  assertEquals(compactionUsageRatio(200_000, 20), 0.8);
+  // Unknown window, no reservation, or a reservation that leaves no room:
   // compaction is off, so the meter keeps its own hint.
-  assertEquals(compactionUsageRatio(undefined, 16_384), undefined);
-  assertEquals(compactionUsageRatio(10_000, 16_384), undefined);
+  assertEquals(compactionUsageRatio(undefined, 8), undefined);
   assertEquals(compactionUsageRatio(10_000, 0), undefined);
   assertEquals(compactionUsageRatio(10_000, -1), undefined);
+  // A reservation of 100% (or more) leaves nothing to send.
+  assertEquals(compactionUsageRatio(10_000, 100), undefined);
+  assertEquals(compactionUsageRatio(10_000, 150), undefined);
 });
 
 Deno.test("token and percent formatters match the reference card", () => {
