@@ -138,6 +138,7 @@ import { VmFileBackend } from "./vm/fs.ts";
 import { sessionSkills } from "./tools/toolsets.ts";
 import type { SkillDef, SkillInfo } from "./skills/discover.ts";
 import { skillInfo } from "./skills/discover.ts";
+import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
 import type { McpTestResult } from "./mcp/service.ts";
@@ -1059,11 +1060,22 @@ export class LumiscaCore {
     return this.stellaAgents.get(id);
   }
 
-  /** Create an agent from a name and the role it works from. A name that is
-   * already taken is refused (compared case-insensitively: "Researcher" and
-   * "researcher" would be two indistinguishable rows in the sidebar). */
+  /** Create an agent from a name and the role it works from.
+   *
+   * A name that is already taken is refused (compared case-insensitively:
+   * "Researcher" and "researcher" would be two indistinguishable rows in the
+   * sidebar) — but a name the user did not choose does not join that
+   * comparison. Someone who leaves the field empty gets the default label
+   * with a number after it ("Agent 2"), never a "that name is taken" for a
+   * name they never wrote. */
   createStellaAgent(input: { name: string; role: string }): StellaAgent {
     const name = input.name.trim();
+    if (name.length === 0) {
+      return this.stellaAgents.create({
+        ...input,
+        name: this.unusedAgentName(DEFAULT_AGENT_NAME),
+      });
+    }
     if (
       this.stellaAgents.list().some(
         (agent) => agent.name.toLowerCase() === name.toLowerCase(),
@@ -1075,6 +1087,20 @@ export class LumiscaCore {
       );
     }
     return this.stellaAgents.create(input);
+  }
+
+  /** `base` ("Agent"), or the first free "Agent N" after it. Used only for a
+   * name the user did not supply. */
+  private unusedAgentName(base: string): string {
+    const taken = new Set(
+      this.stellaAgents.list().map((agent) => agent.name.toLowerCase()),
+    );
+    if (!taken.has(base.toLowerCase())) return base;
+    for (let index = 2; index < Number.MAX_SAFE_INTEGER; index++) {
+      const candidate = `${base} ${index}`;
+      if (!taken.has(candidate.toLowerCase())) return candidate;
+    }
+    return base;
   }
 
   renameStellaAgent(id: string, name: string): StellaAgent {

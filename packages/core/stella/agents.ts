@@ -52,6 +52,11 @@ export interface StellaAgent {
  * these are shown in a sidebar row and read on every turn. */
 export const MAX_AGENT_NAME_CHARS = 60;
 export const MAX_AGENT_ROLE_CHARS = 2_000;
+/** What an unnamed agent is called. The name is the sidebar's label and the
+ * opening of its prompt ("You are …"), so it cannot be empty — but choosing
+ * it is not a decision worth blocking the user on: an agent can be made first
+ * and named later, or never. */
+export const DEFAULT_AGENT_NAME = "Agent";
 /** The longest identity. It is republished whenever it changes and read on
  * every run after that, so it stays a short note rather than a document. */
 export const MAX_AGENT_IDENTITY_CHARS = 4_000;
@@ -106,8 +111,13 @@ export function normalizeAgentInput(input: {
   name: string;
   role: string;
 }): { name: string; role: string } {
-  const name = input.name.trim();
-  if (name.length === 0) throw new Error("The agent's name must not be empty.");
+  // Both fields are the user's to fill in or leave alone: creating an agent
+  // is how someone starts talking to one, and a form that refuses to submit
+  // until two free-text answers are written is a wall in front of that. An
+  // empty name becomes the default label (the row and the prompt need SOME
+  // name); an empty role just means this agent works from the app's own
+  // instructions instead of a persona (see buildStellaSystemPrompt).
+  const name = input.name.trim() || DEFAULT_AGENT_NAME;
   if (name.length > MAX_AGENT_NAME_CHARS) {
     throw new Error(
       `The agent's name must be at most ${MAX_AGENT_NAME_CHARS} characters ` +
@@ -115,11 +125,6 @@ export function normalizeAgentInput(input: {
     );
   }
   const role = input.role.trim();
-  if (role.length === 0) {
-    throw new Error(
-      "The agent's role must not be empty: say what this agent is for.",
-    );
-  }
   if (role.length > MAX_AGENT_ROLE_CHARS) {
     throw new Error(
       `The agent's role must be at most ${MAX_AGENT_ROLE_CHARS} characters ` +

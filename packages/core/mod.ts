@@ -24,6 +24,7 @@ export { base64ToBytes, bytesToBase64, textToBase64 } from "./base64.ts";
 export { createLogger } from "./log.ts";
 export {
   createAgentRepo,
+  DEFAULT_AGENT_NAME,
   MAX_AGENT_NAME_CHARS,
   MAX_AGENT_ROLE_CHARS,
   type StellaAgent,

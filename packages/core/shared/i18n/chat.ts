@@ -219,10 +219,16 @@ export const chat = {
   },
   "chat.stella.agents.new": { ja: "新しいエージェント", en: "New agent" },
   "chat.stella.agents.name": { ja: "名前", en: "Name" },
+  /** Both fields are optional, and the form has to say so: a field that looks
+   * required next to a disabled button is the wall this removed. */
+  "chat.stella.agents.nameHint": {
+    ja: "空のままにすると自動で付けます",
+    en: "Leave it empty and one is picked for you",
+  },
   "chat.stella.agents.role": { ja: "役割", en: "Role" },
   "chat.stella.agents.roleHint": {
-    ja: "このエージェントの役割や振る舞い",
-    en: "What this agent does and how it works",
+    ja: "このエージェントの役割や振る舞い（任意）",
+    en: "What this agent does and how it works (optional)",
   },
   "chat.stella.agents.create": { ja: "作成", en: "Create" },
   "chat.stella.agents.creating": { ja: "作成中…", en: "Creating…" },

@@ -21,6 +21,7 @@ import {
 } from "@lumisca/core/shared";
 import {
   AppError,
+  optionalString,
   parseBody,
   parseWindowQuery,
   requireNonEmptyString,
@@ -203,14 +204,23 @@ export function stellaRoutes(
     });
   });
 
+  /** Create an agent. `name` and `role` are both optional: creating one is
+   * how someone starts talking to an agent, so an empty form must not be a
+   * wall. An empty name becomes the default label and an empty role leaves
+   * the agent on the app's own instructions (see normalizeAgentInput); the
+   * value the server actually stored is what comes back. */
   app.post("/stella/agents", async (c) => {
     const body = await parseBody<{ name?: unknown; role?: unknown }>(c);
-    const name = requireNonEmptyString(body?.name, "name");
-    const role = requireNonEmptyString(body?.role, "role");
     // A duplicate name is a CoreError("conflict"), which app.ts's onError
     // maps to 409 — the client shows it as "that name is taken" rather than
     // as a typo. Re-mapping it here would only re-derive the same table.
-    return c.json(core.createStellaAgent({ name, role }), 201);
+    return c.json(
+      core.createStellaAgent({
+        name: optionalString(body?.name, "name"),
+        role: optionalString(body?.role, "role"),
+      }),
+      201,
+    );
   });
 
   app.patch("/stella/agents/:id", async (c) => {

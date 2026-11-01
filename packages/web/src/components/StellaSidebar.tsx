@@ -32,9 +32,12 @@ interface StellaSidebarProps {
  * browse, no titles to invent and no tabs to manage.
  *
  * Creating one is a two-field form (a name and what it is for) rather than a
- * chat with a wizard: the role is a sentence the user already knows. The agent
- * can also add agents itself with `agent_create`, in which case the row
- * appears here without this dialog ever opening.
+ * chat with a wizard: the role is a sentence the user already knows. Both
+ * fields are optional — an agent can be made first and described later, or
+ * never — so "Create" is enabled from the start; the server supplies the name
+ * and leaves the role empty (see normalizeAgentInput). The agent can also add
+ * agents itself with `agent_create`, in which case the row appears here
+ * without this dialog ever opening.
  */
 export function StellaSidebar(
   { agents, activeId, onSelect, onChanged, running }: StellaSidebarProps,
@@ -56,7 +59,9 @@ export function StellaSidebar(
   };
 
   const create = async () => {
-    if (name.trim() === "" || role.trim() === "" || busy) return;
+    // Both answers are optional: the server fills in a name and leaves the
+    // role empty (the agent then works from the app's own instructions).
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -178,6 +183,7 @@ export function StellaSidebar(
             <input
               type="text"
               value={name}
+              placeholder={t("chat.stella.agents.nameHint")}
               onInput={(event) => setName(event.currentTarget.value)}
               autoFocus
             />
@@ -198,7 +204,7 @@ export function StellaSidebar(
             <button
               type="button"
               className="btn primary"
-              disabled={busy || name.trim() === "" || role.trim() === ""}
+              disabled={busy}
               onClick={() => void create()}
             >
               {busy

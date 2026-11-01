@@ -85,6 +85,18 @@ export function requireNonEmptyString(value: unknown, what: string): string {
   return value;
 }
 
+/** A string field that may be absent or empty: missing and null both read as
+ * "" (the caller decides what an empty value means). A non-string is still
+ * rejected — a number or an object at a text field is a client bug, not an
+ * omission. */
+export function optionalString(value: unknown, what: string): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") {
+    throw new AppError(`${what} must be a string`, 400);
+  }
+  return value;
+}
+
 /** Require a boolean field; throws `"<what> is required"` otherwise. */
 export function requireBoolean(value: unknown, what: string): boolean {
   if (typeof value !== "boolean") {

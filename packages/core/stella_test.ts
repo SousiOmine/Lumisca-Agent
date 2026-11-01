@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
 import { LumiscaCore } from "./core.ts";
 import type { VmManager, VmStatus } from "./vm/container.ts";
@@ -14,6 +14,7 @@ import type { StreamFn } from "./ai/types.ts";
 import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
 import { MINI_PNG, promptSession } from "./test-utils.ts";
+import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
 
 /**
@@ -795,6 +796,34 @@ Deno.test("stella conversation: a skill in the machine reaches the published cat
         "vm-notes: How notes are kept inside the machine.",
       ),
       published.body,
+    );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: an unnamed agent gets a free default name", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    // The user did not fill the form in. Creating must still work, and the
+    // second unnamed agent must not be refused as "that name is taken" for a
+    // name the user never wrote.
+    const first = core.createStellaAgent({ name: "", role: "" });
+    assertEquals(first.name, DEFAULT_AGENT_NAME);
+    assertEquals(first.role, "");
+
+    const second = core.createStellaAgent({ name: "   ", role: "" });
+    assertEquals(second.name, `${DEFAULT_AGENT_NAME} 2`);
+
+    // A name the user DID write keeps the duplicate rule.
+    core.createStellaAgent({ name: "Notes", role: "" });
+    assertThrows(
+      () => core.createStellaAgent({ name: "Notes", role: "" }),
+      Error,
+    );
+    assertThrows(
+      () => core.createStellaAgent({ name: "notes", role: "" }),
+      Error,
     );
   } finally {
     await core.close();

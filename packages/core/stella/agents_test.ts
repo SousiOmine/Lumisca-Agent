@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   createAgentRepo,
+  DEFAULT_AGENT_NAME,
   MAX_AGENT_IDENTITY_CHARS,
   MAX_AGENT_NAME_CHARS,
   MAX_AGENT_ROLE_CHARS,
@@ -81,20 +82,35 @@ Deno.test("agents: the most recently used one is the default", () => {
   }
 });
 
-Deno.test("agents: a blank name or role is refused with a sentence", () => {
+Deno.test("agents: a blank name becomes the default, a blank role stays blank", () => {
+  // Creating an agent must not be blocked on two free-text answers: the
+  // sidebar row needs a name, so an empty one gets the default label, and an
+  // empty role simply means "no persona" (the app's own instructions).
+  const { db, repo } = setup();
+  try {
+    const unnamed = repo.create({ name: "   ", role: "r" });
+    assertEquals(unnamed.name, DEFAULT_AGENT_NAME);
+    assertEquals(unnamed.role, "r");
+
+    const roleless = repo.create({ name: "n", role: "  " });
+    assertEquals(roleless.name, "n");
+    assertEquals(roleless.role, "");
+
+    assertEquals(repo.list().length, 2);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("agents: only an over-long name or role is refused", () => {
   const { db, repo } = setup();
   try {
     assertThrows(
-      () => repo.create({ name: "   ", role: "r" }),
+      () =>
+        repo.create({ name: "  ", role: "x".repeat(MAX_AGENT_ROLE_CHARS + 1) }),
       Error,
-      "must not be empty",
+      "must be at most",
     );
-    assertThrows(
-      () => repo.create({ name: "n", role: "  " }),
-      Error,
-      "role must not be empty",
-    );
-    assertEquals(repo.list(), []);
   } finally {
     db.close();
   }
