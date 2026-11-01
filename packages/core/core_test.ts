@@ -2698,8 +2698,7 @@ Deno.test("computer use: enabling asks the machine again, so a late desktop is u
   // startup there is nothing to ask and the verdict is "no host". By the
   // time the user flips the toggle the desktop is up: the toggle must ask
   // again instead of repeating a verdict made minutes ago at boot.
-  const { core, providerId, modelId } = setup();
-  const { ws } = await makeWorkspace(core);
+  const { core } = setup();
   const host = new FakeComputerHost();
   core.setComputerHost({
     available: false,
