@@ -449,10 +449,13 @@ export function App({ initialData }: AppProps): ReactElement {
                 conversation={stella.conversation}
                 sessionId={stella.sessionId}
                 conversationError={stella.error}
+                loading={stella.loading}
                 status={machineStatus}
                 input={draft.input}
                 onInputChange={(input) => updateDraft(draftKey, { input })}
-                onPrompt={(text) => stella.prompt(text)}
+                images={draft.images}
+                onImagesChange={(images) => updateDraft(draftKey, { images })}
+                onPrompt={(text, images) => stella.prompt(text, images)}
                 onAbort={() => stella.abort()}
                 onRewind={(timestamp) => stella.rewind(timestamp)}
                 onLoadOlder={stella.loadOlder}

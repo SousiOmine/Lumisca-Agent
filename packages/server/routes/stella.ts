@@ -3,6 +3,7 @@ import { upgradeWebSocket } from "hono/deno";
 import type {
   AskAnswer,
   ClientEvent,
+  ImageContent,
   SessionInfo,
   StellaAgent,
   StellaConversationSnapshot,
@@ -25,7 +26,11 @@ import {
   requireNonEmptyString,
   requireNumber,
 } from "./util.ts";
-import { parseAnswerBody } from "./sessions.ts";
+import {
+  parseAnswerBody,
+  parsePromptBody,
+  type PromptBody,
+} from "./sessions.ts";
 import { assetHeaders } from "./asset-headers.ts";
 import { createEventStream } from "./ws-stream.ts";
 
@@ -81,8 +86,14 @@ export interface StellaApi {
   getStellaAgent(id: string): StellaAgent | undefined;
   openSession(sessionId: string): SessionInfo;
   /** Send a prompt into the conversation (fire-and-forget; the events carry
-   * the progress). */
-  startPrompt(sessionId: string, text: string): void;
+   * the progress). `images` are the attachments the user sent with it.
+   * Optional in the interface so a caller (a test double, a routine) that
+   * only has words does not have to spell out "no pictures". */
+  startPrompt(
+    sessionId: string,
+    text: string,
+    images?: ImageContent[],
+  ): void;
   abort(sessionId: string): void;
   rewind(sessionId: string, timestamp: number): Promise<void>;
   answerQuestion(
@@ -315,12 +326,19 @@ export function stellaRoutes(
   });
 
   /** Send a prompt. Fire-and-forget: the run's progress arrives on the
-   * conversation's event stream. */
+   * conversation's event stream.
+   *
+   * The body is parsed by code mode's own parser (`parsePromptBody`): a
+   * conversation takes the same text + images shape, with the same bounds and
+   * the same "text may be empty when an image is attached" rule. One parser
+   * for the two prompt surfaces means an attachment cannot be accepted on one
+   * and silently dropped on the other — which is exactly what a second,
+   * narrower parser here had become. */
   app.post("/stella/conversations/:agentId/prompt", async (c) => {
-    const body = await parseBody<{ text?: unknown }>(c);
-    const text = requireNonEmptyString(body?.text, "text");
+    const body = await parseBody<PromptBody>(c);
+    const { text, images } = parsePromptBody(body ?? {});
     const session = requireConversation(c.req.param("agentId"));
-    core.startPrompt(session.id, text);
+    core.startPrompt(session.id, text, images);
     return c.json({ ok: true });
   });
 

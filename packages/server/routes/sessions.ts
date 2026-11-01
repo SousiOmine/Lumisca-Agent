@@ -38,7 +38,7 @@ interface SessionBody {
  * top of this. */
 const MAX_IMAGE_BASE64_LENGTH = 20 * 1024 * 1024;
 
-interface PromptBody {
+export interface PromptBody {
   text?: unknown;
   images?: unknown;
   mode?: unknown;

@@ -13,6 +13,7 @@
  * log) from depending on a client remembering to hide rows. A client that
  * never receives a `Date: …` publication cannot show it.
  */
+import type { ImageContent } from "../ai/types.ts";
 import type { AskQuestion } from "../shared/interaction.ts";
 import type { AttachmentRef } from "../shared/attachments.ts";
 
@@ -37,6 +38,11 @@ export interface StellaEntry {
    * keep), so they travel with it while the tool call itself stays in the
    * model's history. Empty for a message that sent none. */
   attachments: AttachmentRef[];
+  /** Pictures the user attached to the prompt (a drop or a paste). They are
+   * the message's content, so they are drawn inside the bubble at the point
+   * the user sent them — a prompt that was an image alone has no text to
+   * show instead. Empty for the agent's entries. */
+  images: ImageContent[];
   /** Epoch ms, from the message itself: rewind names a message by it. */
   timestamp: number;
 }

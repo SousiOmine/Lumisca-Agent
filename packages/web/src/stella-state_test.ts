@@ -15,7 +15,7 @@ function entry(
   timestamp: number,
   cards: string[] = [],
 ) {
-  return { role, text, cards, attachments: [], timestamp };
+  return { role, text, cards, attachments: [], images: [], timestamp };
 }
 
 function state(

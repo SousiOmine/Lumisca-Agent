@@ -35,9 +35,10 @@ function status(overrides: Partial<StellaStatus> = {}): StellaStatus {
 function render(
   overrides: {
     status?: StellaStatus;
-    conversation?: Partial<StellaConversationState>;
+    conversation?: Partial<StellaConversationState> | null;
     /** The phone-only back button (see StellaViewProps.onBack). */
     onBack?: () => void;
+    loading?: boolean;
   } = {},
 ): string {
   initLocale("ja");
@@ -45,15 +46,17 @@ function render(
     createElement(StellaView, {
       agent,
       onAgentChanged: () => {},
-      conversation: {
-        ...emptyStellaState("Aide"),
-        ...overrides.conversation,
-      },
+      conversation: overrides.conversation === null
+        ? null
+        : { ...emptyStellaState("Aide"), ...overrides.conversation },
       sessionId: "s1",
       conversationError: null,
       status: overrides.status ?? status(),
       input: "",
       onInputChange: () => {},
+      loading: overrides.loading ?? false,
+      images: [],
+      onImagesChange: () => {},
       onPrompt: () => {},
       onAbort: () => {},
       onRewind: () => Promise.resolve(),
@@ -125,4 +128,15 @@ Deno.test("StellaView: the back button appears only when the caller gives one", 
   const narrow = render({ onBack: () => {} });
   assertStringIncludes(narrow, "stella-back");
   assertStringIncludes(narrow, "エージェント一覧に戻る");
+});
+
+Deno.test("StellaView: opening a conversation shows the wait, not an empty pane", () => {
+  // Opening means starting the machine, so the pane has a placeholder while
+  // it is in flight. An empty transcript reads as "the tap did nothing".
+  const waiting = render({ conversation: null, loading: true });
+  assertStringIncludes(waiting, "stella-loading");
+  assertStringIncludes(waiting, "読み込んでいます");
+  // Once nothing is in flight the same spot carries the empty state's hint.
+  const idle = render({ conversation: null, loading: false });
+  assertStringIncludes(idle, "依頼を入力してください");
 });

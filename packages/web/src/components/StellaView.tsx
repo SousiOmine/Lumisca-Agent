@@ -7,7 +7,7 @@ import {
 import { useState } from "preact/compat";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useT } from "../i18n.ts";
-import type { StellaAgent, StellaStatus } from "../types.ts";
+import type { PendingImage, StellaAgent, StellaStatus } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
@@ -34,6 +34,10 @@ interface StellaViewProps {
    * machine failing to start), or null. Shown in place of the transcript: a
    * disabled composer with no explanation reads as a bug. */
   conversationError: string | null;
+  /** The conversation is being opened. The transcript shows the wait instead
+   * of an empty pane: opening means starting the machine, which takes real
+   * time on a cold one and on a slow link. */
+  loading: boolean;
   /** The machine's state: `starting` covers the first-run image build (the
    * one wait the user sees); `state` decides whether the screen pane can
    * connect. null while the first read is in flight. */
@@ -41,7 +45,12 @@ interface StellaViewProps {
   /** Unsent composer text, owned by the App so it survives a remount. */
   input: string;
   onInputChange: (value: string) => void;
-  onPrompt: (text: string) => void;
+  /** Images attached to the next send (data URLs), owned by the App for the
+   * same reason as the text: a remount must not throw away an attachment
+   * the user picked. */
+  images: PendingImage[];
+  onImagesChange: (images: PendingImage[]) => void;
+  onPrompt: (text: string, images: PendingImage[]) => void;
   onAbort: () => void;
   /** Rewind from a message onward (the transcript's undo). */
   onRewind: (timestamp: number) => Promise<void>;
@@ -85,9 +94,12 @@ export function StellaView(
     conversation,
     sessionId,
     conversationError,
+    loading,
     status,
     input,
     onInputChange,
+    images,
+    onImagesChange,
     onPrompt,
     onAbort,
     onRewind,
@@ -130,9 +142,14 @@ export function StellaView(
 
   const submit = () => {
     const text = input.trim();
-    if (text.length === 0 || conversation === null) return;
-    onPrompt(text);
+    // An image alone is a prompt (the model can look at it and answer), the
+    // same rule the server applies to the body it receives.
+    if ((text.length === 0 && images.length === 0) || conversation === null) {
+      return;
+    }
+    onPrompt(text, images);
     onInputChange("");
+    onImagesChange([]);
     setPinToken((token) => token + 1);
   };
 
@@ -247,7 +264,9 @@ export function StellaView(
           ? (
             <div className="chat-scroll">
               <div className="chat-column">
-                <p>{t("chat.stella.empty")}</p>
+                <p className="stella-loading" role="status">
+                  {loading ? t("chat.stella.loading") : t("chat.stella.empty")}
+                </p>
               </div>
             </div>
           )
@@ -260,7 +279,7 @@ export function StellaView(
               visualBase={visualBase}
               attachBase={attachBase}
               onRewind={handleRewind}
-              onSend={(text) => onPrompt(text)}
+              onSend={(text) => onPrompt(text, [])}
               onLoadOlder={onLoadOlder}
               loadingOlder={loadingOlder}
               pinToken={pinToken}
@@ -286,12 +305,13 @@ export function StellaView(
             // Nothing can be sent before the conversation exists (it is
             // created once an agent is picked and the machine runs), so the
             // button says so instead of accepting a prompt that goes nowhere.
-            submitDisabled={!input.trim() || conversation === null}
+            submitDisabled={(!input.trim() && images.length === 0) ||
+              conversation === null}
             onAbort={isRunning ? onAbort : undefined}
             onSubmit={submit}
             onOpenSettings={onOpenSettings}
-            images={[]}
-            onImagesChange={() => {}}
+            images={images}
+            onImagesChange={onImagesChange}
           />
         </div>
       </div>

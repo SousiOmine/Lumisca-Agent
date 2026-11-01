@@ -211,7 +211,11 @@ export function tabCalls<T extends Record<string, SessionRoute>>(
  * the agent is the base64 data without the `data:<mime>;base64,` header.
  * `mode` (optional) attaches mode metadata so the server creates a
  * ModeMessage (short text + badge in the UI) instead of a plain user
- * message. */
+ * message.
+ *
+ * Both prompt surfaces send this body (code mode's session prompt and
+ * stella's conversation prompt), so an attachment cannot work on one and be
+ * silently dropped on the other. */
 export function promptBody(
   text: string,
   images?: PendingImage[],

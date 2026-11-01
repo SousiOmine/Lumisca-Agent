@@ -609,6 +609,15 @@
   animation-delay: 0.3s;
 }
 
+/* The wait before the conversation's first entry. It is the transcript's
+ * placeholder, so it sits where the messages will be rather than as a
+ * separate panel: opening a conversation starts the machine, and an empty
+ * pane would read as "the tap did nothing". */
+.stella-loading {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
 /* --- stella: the machine's screen ---------------------------------------- */
 
 .stella-pane {
@@ -823,6 +832,43 @@
 
   .mode-select {
     padding: 20px 14px;
+  }
+}
+
+/* ---- the machine's screen, full screen on a phone ----------------------- */
+
+/* A phone has no room for a conversation and a 1280x800 machine side by
+ * side: as a column under the messages the pane was a letterbox a few lines
+ * tall, and the one thing the user opened it for — the screen — was the
+ * smallest thing on it. Below the phone breakpoint the pane becomes what it
+ * is on a desktop: the whole surface, over the conversation, with its own
+ * header and close button. The square-ish phone (the one this cannot be a
+ * fixed aspect box on) is exactly why the height is the viewport, not a
+ * ratio. */
+@media (max-width: 600px) {
+  .stella-pane {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    width: 100%;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+
+  .stella-pane-header {
+    /* The close button is the way out; it is a fingertip target and it is
+     * not under a notch or a gesture bar. */
+    padding: max(6px, env(safe-area-inset-top)) 8px 6px 12px;
+  }
+
+  .stella-pane-header .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stella-pane-body {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 

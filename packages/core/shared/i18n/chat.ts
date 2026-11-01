@@ -199,6 +199,13 @@ export const chat = {
     ja: "左の一覧からエージェントを選んでください",
     en: "Pick an agent on the left",
   },
+  /** Shown while the conversation is being opened (the server is making sure
+   * the machine is up). Without it the pane is empty for as long as that
+   * takes, which on a phone over a slow link reads as "nothing happened". */
+  "chat.stella.loading": {
+    ja: "読み込んでいます…",
+    en: "Loading…",
+  },
   "chat.stella.machine.starting": {
     ja: "初回セットアップを行っています（数分かかります）…",
     en: "Preparing the machine for the first time (this takes a few minutes)…",

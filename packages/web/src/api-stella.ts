@@ -1,9 +1,10 @@
 import type {
   AskAnswer,
+  PendingImage,
   StellaConversationSnapshot,
   StellaEvent,
 } from "./types.ts";
-import { request } from "./api-client.ts";
+import { promptBody, request } from "./api-client.ts";
 import { openEventStream } from "./event-stream.ts";
 
 /**
@@ -51,10 +52,14 @@ export const stellaApi = {
       method: "GET",
     }),
 
-  prompt: (agentId: string, text: string) =>
+  /** Send a prompt into the conversation. The body is the same one code
+   * mode's session prompt takes (`promptBody`): text plus the images the
+   * user attached, so a drag-and-drop or a paste means the same thing in
+   * both modes. */
+  prompt: (agentId: string, text: string, images?: PendingImage[]) =>
     request<{ ok: true }>(conversationPath(agentId, "/prompt"), {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(promptBody(text, images)),
     }),
 
   abort: (agentId: string) =>

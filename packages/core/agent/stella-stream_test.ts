@@ -17,6 +17,7 @@ Deno.test("stellaEntryOf: the user's words are the user's entry", () => {
     text: "README を直して",
     cards: [],
     attachments: [],
+    images: [],
     timestamp: 5,
   });
   // An empty prompt is nothing to show (it cannot be sent, but the
@@ -33,6 +34,7 @@ Deno.test("stellaEntryOf: the agent's text is an assistant entry", () => {
     text: "直しました。",
     cards: [],
     attachments: [],
+    images: [],
     timestamp: 7,
   });
 });
@@ -57,6 +59,7 @@ Deno.test("stellaEntryOf: a chat_ui card travels with the words", () => {
     text: "確認します。",
     cards: [markup],
     attachments: [],
+    images: [],
     timestamp: 9,
   });
 
@@ -69,6 +72,7 @@ Deno.test("stellaEntryOf: a chat_ui card travels with the words", () => {
     text: "",
     cards: [markup],
     attachments: [],
+    images: [],
     timestamp: 10,
   });
 });
@@ -120,6 +124,7 @@ Deno.test("stellaEntryOf: the files an agent sent are an entry of their own", ()
         inline: false,
       },
     ],
+    images: [],
     timestamp: 15,
   });
 
@@ -218,6 +223,7 @@ Deno.test("stellaEventsOf: messages arrive as entries, without the session id", 
       text: "はい。",
       cards: [],
       attachments: [],
+      images: [],
       timestamp: 20,
     },
   }]);
@@ -350,4 +356,38 @@ Deno.test("stellaEventsOf: questions and the hand-over keep their shape", () => 
     }),
     [{ type: "handover", handover: null }],
   );
+});
+
+Deno.test("stellaEntryOf: an image-only prompt is still the user's message", () => {
+  // The user dropped a screenshot in and asked nothing. Dropping the entry
+  // would show an agent reply with no question above it, and the picture is
+  // content the conversation has to keep.
+  const image = {
+    type: "image" as const,
+    data: "aGVsbG8=",
+    mimeType: "image/png",
+  };
+  const message: AgentMessage = {
+    role: "user",
+    content: [image],
+    timestamp: 30,
+  };
+  assertEquals(stellaEntryOf(message), {
+    role: "user",
+    text: "",
+    cards: [],
+    attachments: [],
+    images: [image],
+    timestamp: 30,
+  });
+
+  // A prompt with words keeps the pictures in the order they carried them.
+  const both: AgentMessage = {
+    role: "user",
+    content: [image, { type: "text", text: "これを見て" }],
+    timestamp: 31,
+  };
+  const entry = stellaEntryOf(both);
+  assertEquals(entry?.text, "これを見て");
+  assertEquals(entry?.images, [image]);
 });
