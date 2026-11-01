@@ -1,5 +1,6 @@
 import {
   type ClipboardEvent,
+  createPortal,
   type DragEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -28,6 +29,7 @@ import { ModelPicker } from "./ModelPicker.tsx";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
 import { useMention } from "../hooks/useMention.ts";
+import { usePopoverPlacement } from "../hooks/usePopoverPlacement.ts";
 import {
   isSlashCommand,
   type SlashState,
@@ -167,13 +169,22 @@ export function Composer({
   }, [images]);
   // The pickers close on outside click and Escape, like every other
   // dropdown (the refs wrap the trigger button + popover, so toggling the
-  // trigger keeps working).
+  // trigger keeps working). The model popover is portaled to the body — the
+  // chat pane clips its overflowing descendants, and the composer it hangs
+  // over is the last thing inside that pane — so the portal is handed in as a
+  // second "inside": a click on the popover is not a click outside.
   const modelPickerRef = useRef<HTMLDivElement>(null);
+  const modelPopoverRef = useRef<HTMLDivElement>(null);
+  const modelPlacement = usePopoverPlacement(
+    modelPickerRef,
+    showModelPicker,
+  );
   const ctxRef = useRef<HTMLDivElement>(null);
   useClickOutside(
     modelPickerRef,
     () => setShowModelPicker(false),
     showModelPicker,
+    { within: modelPopoverRef },
   );
   useClickOutside(ctxRef, () => setShowCtx(false), showCtx);
 
@@ -580,11 +591,18 @@ export function Composer({
                   <IconChevronRight size={13} />
                 </span>
               </button>
-              {showModelPicker && (
-                <div className="model-popover">
+              {showModelPicker && modelPlacement !== null && createPortal(
+                <div
+                  className="mp-popover model-popover"
+                  ref={modelPopoverRef}
+                  style={modelPlacement.style}
+                >
                   <ModelPicker
                     value={model}
                     peerId={peerId}
+                    stacked={!modelPlacement.panes}
+                    roomHeight={modelPlacement.height}
+                    onClose={() => setShowModelPicker(false)}
                     onSelect={(provider, modelId, info) => {
                       // Stays open: the thinking pane follows the newly
                       // selected model, so strength can be tuned in the
@@ -599,7 +617,8 @@ export function Composer({
                     thinkingLevels={thinkingLevels}
                     onThinkingChange={onThinkingLevelChange}
                   />
-                </div>
+                </div>,
+                document.body,
               )}
             </div>
           )}

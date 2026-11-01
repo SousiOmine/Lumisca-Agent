@@ -105,6 +105,20 @@
   --caret-x: 0px;
   --caret-y: 0px;
   --modal-width: min(600px, calc(100vw - 48px));
+  /* The model picker's placement (hooks/usePopoverPlacement.ts), measured per
+   * opening from the trigger and the visual viewport. The panel is fixed, so
+   * the picker escapes the chat pane's clipping and the composer's card
+   * transform; every value is overridden per opening, and these defaults are
+   * only a guide for the stylesheet's own reading. */
+  --mp-left: calc(50vw - 320px);
+  --mp-top: auto;
+  --mp-bottom: calc(50dvh - 190px);
+  --mp-width: min(640px, calc(100vw - 16px));
+  --mp-space: 380px;
+  --mp-view-left: 8px;
+  --mp-view-right: 8px;
+  --mp-view-bottom: 8px;
+  --mp-sheet-space: min(620px, calc(100dvh - 64px));
   /* shared motion tokens: keep durations short and easing uniform so
    * animations feel calm and professional */
   --lum-ease: cubic-bezier(0.2, 0, 0, 1);

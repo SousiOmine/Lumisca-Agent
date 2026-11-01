@@ -141,26 +141,53 @@
   background: var(--error);
 }
 
-.model-popover {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  z-index: 40;
-  width: min(640px, calc(100vw - 40px));
+/* The picker panel. Placed by hooks/usePopoverPlacement.ts from the trigger's
+ * rectangle and the visible area, so both panels (the composer's and the
+ * settings list's) go through one rule: `position: fixed` escapes the chat
+ * pane's `overflow: hidden` (the composer sits at its bottom edge, and a taller
+ * panel used to be cut off there) and the cards' transform, which would
+ * otherwise become the containing block. One of top/bottom is always `auto` —
+ * a panel opened upward is anchored at its bottom, so content shorter than the
+ * room still hugs the trigger. */
+.mp-popover {
+  position: fixed;
+  top: var(--mp-top);
+  bottom: var(--mp-bottom);
+  left: var(--mp-left);
+  width: var(--mp-width);
+  max-height: var(--mp-space);
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
   box-shadow: 0 8px 24px var(--shadow);
   overflow: hidden;
   animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
 }
 
-/* ---- model picker: cascading two-panel layout ---------------------------- */
+.model-popover {
+  z-index: 40;
+  border-radius: var(--radius);
+}
 
+/* ---- model picker: cascading three-pane layout --------------------------- */
+
+/* The panel's height is the measured room (never more): the model list is the
+ * part that scrolls, and the panes keep their own headers in view. */
 .model-picker {
   display: flex;
-  min-height: 220px;
-  max-height: 380px;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* The two dead ends (no provider configured, the catalog fetch failed): a note
+ * in place of the panes, with the header's close button above it. */
+.mp-notice {
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+  overflow-y: auto;
 }
 
 /* left column: provider list */
@@ -256,6 +283,9 @@
 
 .mp-model-search {
   width: 100%;
+  /* The list scrolls, never the field: in a short panel a shrinking field
+   * would take the caret with it. */
+  flex: none;
   margin-bottom: 4px;
   font-size: 12.5px;
   padding: 5px 8px;
@@ -267,8 +297,12 @@
   color: var(--text-faint);
 }
 
+/* The model list is the one pane that scrolls; on a very short panel the
+ * search field is what makes the list usable, so it never shrinks away either
+ * (both keep their own height, the list takes the remainder). */
 .mp-model-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -489,114 +523,195 @@
   animation: lum-fade var(--lum-dur-fast) var(--lum-ease);
 }
 
+/* ---- stepped layout ------------------------------------------------------- */
+
+/* `.stacked` is set from the measured room (hooks/usePopoverPlacement.ts), not
+ * from a media query: what matters is the space the panel actually got, not
+ * the window's width. It is the phone, and any window too short or too narrow
+ * for three panes. The panes become screens: providers, then that provider's
+ * models with the thinking bar underneath. All three in one column (the old
+ * phone layout) left the provider strip 23px tall and the list short. */
+.model-picker.stacked {
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* One screen at a time. The panes keep their content height (`flex-basis:
+ * auto`) and only shrink when the panel reaches the room it was given: a
+ * `flex-basis: 0` here would make an auto-height sheet collapse the list to
+ * nothing, because the free space it distributes is measured from the items'
+ * hypothetical sizes — which would be zero. Whatever does not fit scrolls
+ * inside the pane that owns it (min-height: 0 is what lets a flex item shrink
+ * below its content). */
+.model-picker.stacked > .mp-providers,
+.model-picker.stacked > .mp-models {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.model-picker.stacked > .mp-providers {
+  width: auto;
+  border-right: none;
+}
+
+.model-picker.stacked > .mp-models {
+  overflow: hidden;
+}
+
+/* The thinking bar spans the panel under the list, as a horizontal rail: a
+ * fixed 96px column would be a stamp at the left edge, and a vertical bar
+ * under the list would take the list's room. */
+.model-picker.stacked > .mp-thinking {
+  width: auto;
+  padding: 8px 10px;
+  border-left: none;
+  border-top: 1px solid var(--border);
+}
+
+.model-picker.stacked > .mp-thinking.empty {
+  border-top: none;
+  padding: 0;
+}
+
+.model-picker.stacked .tls-body {
+  min-height: 0;
+}
+
+.model-picker.stacked .tls-track-wrap {
+  width: 100%;
+  height: 40px;
+}
+
+.model-picker.stacked .tls-track-wrap::before {
+  left: 12px;
+  right: 12px;
+  top: 50%;
+  bottom: auto;
+  width: auto;
+  height: 14px;
+  transform: translateY(-50%);
+}
+
+.model-picker.stacked .tls-fill {
+  left: 12px;
+  top: 50%;
+  bottom: auto;
+  width: calc((100% - 24px) * var(--tls-fill, 0));
+  min-width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+}
+
+.model-picker.stacked .tls-range {
+  writing-mode: horizontal-tb;
+  /* left = weakest (the vertical bar runs bottom-up with `direction: rtl`;
+   * a horizontal one reads left to right). */
+  direction: ltr;
+  width: 100%;
+  height: 40px;
+  min-height: 0;
+}
+
+.model-picker.stacked .tls-value {
+  margin-top: 4px;
+}
+
+/* The header carries the step: the provider's name and a way back, or the
+ * first screen's title, plus the close button (the sheet covers its trigger,
+ * so a tap outside is not the way out). */
+.mp-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 6px 6px 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mp-header-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-header-back {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px 4px 2px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-align: left;
+}
+
+/* The back control reads as the header's title, not as a button: its own
+ * arrow says the row goes back. */
+.mp-header-back:hover {
+  background: var(--surface-2);
+}
+
+.mp-header-back .mp-header-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.mp-header-btn {
+  flex: none;
+  color: var(--text-dim);
+}
+
+/* Touch: the header's two controls are the only way in and out of the steps,
+ * so they take the fingertip height. */
+@media (hover: none), (pointer: coarse) {
+  .mp-header {
+    padding: 4px 4px 4px 6px;
+  }
+
+  .mp-header-back,
+  .mp-header-btn {
+    min-height: 40px;
+  }
+}
+
 /* ---- narrow windows ------------------------------------------------------- */
 
-/* Phone: the popover becomes a bottom sheet (anchored above the composer it
- * would be taller than the space it has), and its three panes stack: the
- * provider column turns into a horizontal strip, the thinking bar moves
- * under the list and turns horizontal. */
+/* Phone: the panel becomes a sheet pinned to the visible bottom, spanning the
+ * screen. The three panes do not fit side by side on any phone, so the layout
+ * is always stepped there; a sheet is also what the thumb expects at the
+ * bottom of the screen. Its edges come from the measured visible area, so the
+ * software keyboard pushes the sheet up instead of covering it. */
 @media (max-width: 600px) {
-  .model-popover {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+  .mp-popover {
+    /* A phone gets a sheet on the visible bottom edge: the measured position
+     * (above or below the composer) means nothing when the panel covers the
+     * screen. The height is definite on purpose — with only a `max-height` the
+     * column's items keep their content sizes and the model list is the one
+     * that loses the shrink (it is by far the tallest), so the sheet collapsed
+     * to a header, a search field and half a row. A definite height lets the
+     * list take the remainder and scroll inside it. `--mp-sheet-space` already
+     * excludes the window's bar and the software keyboard. */
+    top: auto;
+    bottom: var(--mp-view-bottom);
+    left: var(--mp-view-left);
     width: auto;
-    max-height: 80dvh;
+    right: var(--mp-view-right);
+    height: var(--mp-sheet-space);
+    max-height: var(--mp-sheet-space);
     border-radius: var(--radius) var(--radius) 0 0;
     border-bottom: none;
   }
 
-  .model-picker {
-    flex-direction: column;
-    min-height: 0;
-    max-height: 80dvh;
-  }
-
-  /* The provider list runs along the top; a 180px column would take a third
-   * of the screen and leave the model list unreadable. */
-  .mp-providers {
-    flex-direction: row;
-    align-items: center;
-    width: 100%;
-    min-width: 0;
-    gap: 2px;
-    padding: 4px 6px;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  /* Sized by their content (the strip scrolls, names are not truncated). */
-  .mp-provider,
-  .mp-manage {
-    flex: none;
-    width: auto;
-    white-space: nowrap;
-  }
-
-  .mp-sep {
-    flex: none;
-    width: 1px;
-    height: 18px;
-    margin: 0 4px;
-  }
-
-  .mp-models {
-    min-height: 0;
-  }
-
+  /* The thinking rail joins the model screen under the list (the `.stacked`
+   * rules above already place it there; the sheet only narrows the padding). */
   .mp-thinking {
-    width: 100%;
-    padding: 8px 10px;
-    border-left: none;
-    border-top: 1px solid var(--border);
-  }
-
-  .mp-thinking.empty {
-    border-top: none;
-  }
-
-  /* The vertical bar (a tall pane by nature) becomes a horizontal one: the
-   * rail is the track wrap itself, the fill grows from the left. */
-  .tls-body {
-    min-height: 0;
-  }
-
-  .tls-track-wrap {
-    width: 100%;
-    height: 40px;
-  }
-
-  .tls-track-wrap::before {
-    left: 12px;
-    right: 12px;
-    top: 50%;
-    bottom: auto;
-    width: auto;
-    height: 14px;
-    transform: translateY(-50%);
-  }
-
-  .tls-fill {
-    left: 12px;
-    top: 50%;
-    bottom: auto;
-    width: calc((100% - 24px) * var(--tls-fill, 0));
-    min-width: 14px;
-    height: 14px;
-    transform: translateY(-50%);
-  }
-
-  .tls-range {
-    writing-mode: horizontal-tb;
-    /* left = weakest (the vertical bar runs bottom-up with `direction:
-     * rtl`; a horizontal one reads left to right). */
-    direction: ltr;
-    width: 100%;
-    height: 40px;
-    min-height: 0;
+    padding: 6px 10px 8px;
   }
 
   .tls-value {

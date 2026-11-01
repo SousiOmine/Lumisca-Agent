@@ -361,18 +361,13 @@
   flex: none;
 }
 
-/* model picker popover inside the settings dialog: fixed so it is not
-   clipped by the scrolling settings content */
+/* the model picker popover inside the settings dialog: fixed so it is not
+   clipped by the scrolling settings content. Position and size come from the
+   measured room (hooks/usePopoverPlacement.ts), shared with the composer's
+   picker through `.mp-popover`. */
 .model-pref-popover {
-  position: fixed;
   z-index: 60;
-  width: min(640px, calc(100vw - 40px));
-  background: var(--surface);
-  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 24px var(--shadow);
-  overflow: hidden;
-  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
 }
 
 /* two-pane settings modal: left category sidebar, right content */

@@ -6,17 +6,30 @@ import { type RefObject, useEffect } from "preact/compat";
  * page that scrolls independently), but a scroll that happens *inside*
  * the popover (e.g. a scrollable model list) is interaction with the
  * menu and must not close it. Shared by every dropdown so the listener
- * bookkeeping never varies. */
+ * bookkeeping never varies.
+ *
+ * `within` names a second element that also counts as inside. A popover
+ * portaled to the body (so it escapes an ancestor's `overflow: hidden`) is
+ * no longer a DOM descendant of its trigger, and a click on it would read as
+ * a click outside. */
 export function useClickOutside(
   ref: RefObject<HTMLElement | null>,
   onClose: () => void,
   active: boolean,
-  options: { onScroll?: boolean; onBlur?: boolean } = {},
+  options: {
+    onScroll?: boolean;
+    onBlur?: boolean;
+    within?: RefObject<HTMLElement | null>;
+  } = {},
 ): void {
+  const { within } = options;
   useEffect(() => {
     if (!active) return;
+    const contains = (target: Node) =>
+      ref.current?.contains(target) === true ||
+      within?.current?.contains(target) === true;
     const onPointerDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
+      if (!contains(e.target as Node)) onClose();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -25,7 +38,7 @@ export function useClickOutside(
       // The scroll target is the element that actually scrolled; scrolls
       // from a container inside the popover are the user browsing the
       // menu, not the page behind it.
-      if (!ref.current?.contains(e.target as Node)) onClose();
+      if (!contains(e.target as Node)) onClose();
     };
     const onBlur = () => onClose();
     document.addEventListener("pointerdown", onPointerDown);
@@ -40,5 +53,5 @@ export function useClickOutside(
       }
       if (options.onBlur) globalThis.removeEventListener("blur", onBlur);
     };
-  }, [active, onClose, ref, options.onScroll, options.onBlur]);
+  }, [active, onClose, ref, options.onScroll, options.onBlur, within]);
 }
