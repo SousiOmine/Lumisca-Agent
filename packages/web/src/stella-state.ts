@@ -124,8 +124,21 @@ function mergeEntries(
 
 /**
  * Put a page the reader asked for (the entries before `older`) in front of
- * what the client holds. A page that adds nothing ends the walk: the client
- * must not be sent round the same window twice.
+ * what the client holds.
+ *
+ * The page is asked for by cursor, but the cursor names a point in a
+ * conversation that keeps growing: by the time the answer arrives, a run may
+ * have appended entries AFTER the cursor. Those are not this page's to
+ * insert. Prepending everything the client lacks put a live reply at the TOP
+ * of the conversation — and because the next live event then appended the
+ * same entry again, the conversation showed the message twice (a duplicate
+ * that a reload removed, since the server holds it once).
+ *
+ * So only entries that belong before what the client holds are taken: the
+ * page stops at the first entry the client already has, and an entry newer
+ * than the client's newest is left to the live stream. A page that adds
+ * nothing ends the walk — the client must not be sent round the same window
+ * twice.
  */
 export function prependOlderEntries(
   state: StellaConversationState,
@@ -134,7 +147,17 @@ export function prependOlderEntries(
 ): StellaConversationState {
   if (fetched.length === 0) return { ...state, older: null };
   const known = new Set(state.entries.map(entryKey));
-  const added = fetched.filter((entry) => !known.has(entryKey(entry)));
+  const newest = state.entries.at(-1)?.timestamp ?? 0;
+  const added: StellaEntry[] = [];
+  for (const entry of fetched) {
+    // The page has run into what the client holds: everything after this is
+    // history the client already has, not the page before it.
+    if (known.has(entryKey(entry))) break;
+    // An entry the client does not hold but that is newer than its newest
+    // belongs to the live edge, not above it.
+    if (entry.timestamp > newest) break;
+    added.push(entry);
+  }
   if (added.length === 0) return { ...state, older: null };
   return { ...state, entries: [...added, ...state.entries], older: nextOlder };
 }

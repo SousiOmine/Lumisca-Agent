@@ -247,3 +247,31 @@ Deno.test("applyStellaEvent: the same message announced twice is one entry", () 
   })!;
   assertEquals(current.entries.length, 1);
 });
+
+Deno.test("prependOlderEntries: a page never inserts live entries above", () => {
+  // Regression: the page is asked for by cursor, but the conversation keeps
+  // growing while the answer is in flight. Prepending everything the client
+  // lacked put a reply that had just arrived at the TOP of the conversation;
+  // the live stream then appended the same entry again, so it showed twice —
+  // and a reload (the server holds it once) removed the duplicate.
+  let current = state({
+    entries: [entry("user", "今の依頼", 5000)],
+    older: "cursor-1",
+  });
+  current = prependOlderEntries(current, [
+    entry("user", "今の依頼", 5000), // already held: the page stops here
+    entry("assistant", "作業中の返事", 6000), // newer than the live edge
+  ], "cursor-0");
+  assertEquals(current.entries.map((e) => e.text), ["今の依頼"]);
+});
+
+Deno.test("prependOlderEntries: an entry newer than the edge is never added", () => {
+  // Even without an overlap to stop at, an entry newer than what the client
+  // holds belongs to the live stream.
+  const current = prependOlderEntries(
+    state({ entries: [entry("user", "今の依頼", 5000)] }),
+    [entry("assistant", "まだ届いていない返事", 9000)],
+    "cursor-0",
+  );
+  assertEquals(current.entries.map((e) => e.text), ["今の依頼"]);
+});
