@@ -33,6 +33,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
         text: "README を直して",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: 1,
       },
       {
@@ -40,6 +41,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
         text: "直しました。",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: 2,
       },
       {
@@ -47,6 +49,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
         text: "ありがとう",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: 3,
       },
     ],
@@ -68,6 +71,7 @@ Deno.test("StellaTranscript: a card renders with its markup", () => {
         text: "確認します。",
         cards: [markup],
         attachments: [],
+        images: [],
         timestamp: 1,
       },
     ],
@@ -114,6 +118,7 @@ Deno.test("StellaTranscript: nothing of the model's machinery can appear", () =>
       text: "答えです。",
       cards: [],
       attachments: [],
+      images: [],
       timestamp: 1,
     }],
   });
@@ -137,6 +142,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
         text: "直して",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: Date.now(),
       },
       {
@@ -144,6 +150,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
         text: "直しました。",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: Date.now() + 1,
       },
     ],
@@ -166,6 +173,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
         text: "一つ目",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: now,
       },
       {
@@ -173,6 +181,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
         text: "返事一",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: now + 1,
       },
       {
@@ -180,6 +189,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
         text: "返事二",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: now + 2,
       },
     ],
@@ -203,6 +213,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
         text: "昨日の話",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: yesterday,
       },
       {
@@ -210,6 +221,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
         text: "今日の話",
         cards: [],
         attachments: [],
+        images: [],
         timestamp: today,
       },
     ],
@@ -218,4 +230,51 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
   assertEquals(separators.length, 2, "one separator per day");
   assertStringIncludes(html, "昨日");
   assertStringIncludes(html, "今日");
+});
+
+Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => {
+  // The agent's message box is as wide as its content, so a right-aligned
+  // time moved with every message's length. The `start` modifier pins it to
+  // the left edge, where the words begin; the user's own time stays at the
+  // right, under their capsule.
+  const html = render({
+    entries: [
+      {
+        role: "user",
+        text: "短い",
+        cards: [],
+        attachments: [],
+        images: [],
+        timestamp: 1,
+      },
+      {
+        role: "assistant",
+        text: "長い返事。".repeat(40),
+        cards: [],
+        attachments: [],
+        images: [],
+        timestamp: 2,
+      },
+    ],
+  });
+  assertStringIncludes(html, 'class="msg-meta start"');
+  assertStringIncludes(html, 'class="msg-meta"');
+});
+
+Deno.test("StellaTranscript: a prompt's pictures are drawn in the bubble", () => {
+  const html = render({
+    entries: [
+      {
+        role: "user",
+        text: "",
+        cards: [],
+        attachments: [],
+        images: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
+        timestamp: 1,
+      },
+    ],
+  });
+  // An image-only prompt would otherwise render as an empty capsule.
+  assertStringIncludes(html, "msg-images");
+  assertStringIncludes(html, "data:image/png;base64,aGVsbG8=");
 });

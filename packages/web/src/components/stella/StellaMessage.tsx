@@ -10,6 +10,7 @@ import { useLocale } from "../../i18n.ts";
 import { formatClockTime } from "../../format.ts";
 import { useCopy } from "../../hooks/useSave.ts";
 import type { StellaEntry } from "../../types.ts";
+import { ContentImages } from "../ContentImages.tsx";
 import { AttachmentCard } from "../chat/AttachmentCard.tsx";
 import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { UiCard } from "../chat/UiCard.tsx";
@@ -112,6 +113,11 @@ function UserBubble({
       <div className="msg user">
         <div className="msg-body">
           {entry.text && <p className="msg-user-text">{entry.text}</p>}
+          {
+            /* The pictures the user attached are part of what they said, so
+              they sit inside the bubble, under its text. */
+          }
+          {entry.images.length > 0 && <ContentImages images={entry.images} />}
         </div>
       </div>
       <div className="msg-meta">
@@ -184,7 +190,7 @@ function AgentBubble({
           ))}
           <AttachmentCard attachments={entry.attachments} base={attachBase} />
         </div>
-        <div className="msg-meta">{time}</div>
+        <div className="msg-meta start">{time}</div>
       </div>
     </div>
   );

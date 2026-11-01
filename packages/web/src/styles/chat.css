@@ -114,6 +114,15 @@
   padding-right: 6px;
 }
 
+/* The other speaker's time starts where its words start. A message box is
+ * only as wide as what it holds (a short reply is narrow, a long one reaches
+ * the column's cap), so a right-aligned time would sit at a different x on
+ * every message and read as a stray number instead of a caption. */
+.msg-meta.start {
+  justify-content: flex-start;
+  padding-right: 0;
+}
+
 .msg-time {
   font-size: 11px;
   color: var(--text-faint);
