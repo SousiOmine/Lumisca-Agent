@@ -7,6 +7,7 @@ import {
   type VmStatus,
 } from "./container.ts";
 import type { VmCommandResult, VmCommandRunner } from "./command.ts";
+import { stellaAvailability } from "./availability.ts";
 import {
   VM_CONTAINER_NAME,
   VM_DISPLAY,
@@ -99,9 +100,14 @@ function runningMachine(
   digest: string,
   overrides: Script["answers"] = [],
 ): Script {
+  // Overrides go FIRST: the fake runner takes the first match, so a test that
+  // changes one answer must be asked before the healthy default.
   return {
     answers: [
+      ...overrides,
       { match: /^podman --version/, result: ok("podman version 4.9.3\n") },
+      // The run probe: a host able to run a container answers this one.
+      { match: /^podman run --rm --network=none/, result: ok() },
       { match: /^podman image exists/, result: ok() },
       {
         match: new RegExp(`^podman image inspect .*${VM_IMAGE_DIGEST_LABEL}`),
@@ -123,7 +129,6 @@ function runningMachine(
       },
       // The sudo probe the contract check runs.
       { match: /exec .* sudo -n true/, result: ok() },
-      ...overrides,
     ],
   };
 }
@@ -689,6 +694,43 @@ Deno.test("status: concurrent reads share one round of podman calls", async () =
       call.join(" ") === "podman --version"
     ).length;
     assertEquals(versionCalls, 1);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: podman that cannot start a container is not offered", async () => {
+  // Regression: `podman --version` succeeding was taken as "stella mode
+  // works here". Inside a sandboxed container podman answers and every start
+  // fails at the runtime — the mode was offered, an image build ran for
+  // minutes, and the failure named a kernel path. The host's answer is
+  // asked before the mode is offered.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  try {
+    const { run } = makeRunner(runningMachine(digest, [{
+      match: /^podman run --rm --network=none/,
+      result: fail(
+        "Error: OCI runtime error: crun: open " +
+          "/proc/sys/net/ipv4/ping_group_range: Read-only file system",
+      ),
+    }]));
+    const manager = createVmManager({ containerDir: dir, run });
+    const status = await manager.status({ fresh: true });
+    assertEquals(status.state, "podman_unusable");
+    assert(
+      status.reason.includes("ping_group_range"),
+      `reason: ${status.reason}`,
+    );
+    // Not a reason to hide the mode behind a build: the machine is refused,
+    // and the sentence says why without naming a kernel file.
+    const verdict = stellaAvailability(status);
+    assertEquals(verdict.available, false);
+    assert(verdict.available === false, "the mode must be refused");
+    assert(
+      verdict.reason.includes("cannot start one"),
+      `verdict: ${verdict.reason}`,
+    );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

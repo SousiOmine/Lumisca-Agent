@@ -22,6 +22,7 @@ import {
   VM_IMAGE_DIGEST_LABEL,
   VM_IMAGE_NAME,
   VM_MANAGED_LABEL,
+  VM_PROBE_IMAGE,
   VM_REMOVE_TIMEOUT_MS,
   VM_RUN_TIMEOUT_MS,
   VM_SCREEN_HEIGHT,
@@ -47,8 +48,13 @@ import { sleep } from "../shared/misc.ts";
 
 /** Where the machine is, as far as this application can tell. */
 export type VmState =
-  /** podman is not installed or not runnable here. */
+  /** podman is not installed here. */
   | "podman_missing"
+  /** podman answers, but no container can be created on this host: the
+   * sandbox it runs in denies what the runtime must do (a container in a
+   * container without the privileges to nest one). `podman --version`
+   * succeeds there, so the state is judged by actually asking the runtime. */
+  | "podman_unusable"
   /** podman works; the image has never been built. */
   | "image_missing"
   /** The image exists, but was built from container files that have since
@@ -162,6 +168,10 @@ export function createVmManager(options: VmManagerOptions): VmManager {
    * can skip asking podman again. Undefined until a read has answered: a
    * known-absent image is not retried, but a fresh manager always asks. */
   let imagePresent: boolean | undefined = undefined;
+  /** Whether this host has proven it can actually start a container (see
+   * readStatus). Undefined until asked; a host that cannot is not asked
+   * again on every poll. */
+  let runtimeUsable: boolean | undefined = undefined;
   /** The in-flight status read. Concurrent callers (the status poll, an open,
    * the screen's port lookup) wait for the same podman calls instead of
    * queueing their own: on a slow link each redundant call is a second the
@@ -234,6 +244,26 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         vncPort: null,
         reason: `podman is not available: ${firstLine(version.stderr)}`,
       };
+    }
+    // podman answering says nothing about whether a container can run here:
+    // inside a container that is itself sandboxed, `podman --version` is fine
+    // and every start fails at the runtime with a kernel path it may not
+    // write. The answer is asked once, cheaply, before the mode is offered —
+    // the alternative is what this replaced: the mode offered, an image
+    // build minutes long, and a failure whose message names /proc/sys.
+    if (!runtimeUsable) {
+      const probe = await run(
+        podman(["run", "--rm", "--network=none", VM_PROBE_IMAGE, "true"]),
+        { timeoutMs: 120_000, maxOutput: 8192 },
+      );
+      if (probe.exitCode !== 0) {
+        return {
+          state: "podman_unusable",
+          vncPort: null,
+          reason: firstLine(probe.stderr) || `exit code ${probe.exitCode}`,
+        };
+      }
+      runtimeUsable = true;
     }
     // `image exists` is the expensive half of a cold check and the answer
     // only changes when the image is built (which the caller does itself) or
@@ -581,6 +611,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       const before = await status(true);
       switch (before.state) {
         case "podman_missing":
+        case "podman_unusable":
           throw new Error(before.reason);
         case "running":
           return before;

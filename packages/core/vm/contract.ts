@@ -67,6 +67,15 @@ export const VM_SUDO_PROBE = ["sudo", "-n", "true"] as const;
 export const VM_CONTAINER_NAME = "lumisca-stella";
 export const VM_IMAGE_NAME = "lumisca-stella";
 
+/** The image the run probe starts.
+ *
+ * Not the machine's own image: the probe answers "can this host run a
+ * container at all", and asking it with a definition that is not built yet
+ * would make a first run look like a broken host. The bare Debian base comes
+ * down in seconds and runs nothing — the container only has to exist for the
+ * runtime's answer to be readable. */
+export const VM_PROBE_IMAGE = "docker.io/library/debian:bookworm-slim";
+
 /** Label marking containers this application created, so it can tell its own
  * machine from a same-named one a user made by hand. */
 export const VM_MANAGED_LABEL = "lumisca.stella=1";
