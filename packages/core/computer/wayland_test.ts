@@ -452,15 +452,46 @@ Deno.test("closing a host is idempotent and closes the session", async () => {
 
 // --- creation ---------------------------------------------------------------
 
-Deno.test("without a Wayland session the host reports why", async () => {
+Deno.test("no session bus means no host, and the reason says so", async () => {
+  // The verdict is the portal's, so an environment with no bus address at
+  // all is the one thing that must still report a reason (and it must name
+  // what is missing: the settings toggle shows this sentence).
   const result = await createWaylandComputerHost({
     env: { get: () => undefined },
   });
   assertEquals(result.available, false);
   if (result.available) return;
   assert(
-    result.reason.includes("WAYLAND_DISPLAY"),
-    `the reason must name the missing variable: ${result.reason}`,
+    result.reason.includes("session bus"),
+    `the reason must name the missing session bus: ${result.reason}`,
+  );
+});
+
+Deno.test("the display variables do not decide availability", async () => {
+  // A server started by systemd has the session bus but not the session's
+  // display variables (gnome-session publishes those to the bus's activation
+  // environment, which reaches a unit only when the desktop was already up).
+  // The portal is the only thing that knows whether the desktop can be
+  // driven, so an environment without WAYLAND_DISPLAY must not be turned
+  // into a reason on its own.
+  //
+  // This machine answers with whatever it is: the assertion is that the
+  // verdict does not change when the variable disappears, which is what a
+  // systemd-started server experiences.
+  const withDisplay = await createWaylandComputerHost({
+    env: {
+      get: (key: string) => key === "WAYLAND_DISPLAY" ? "wayland-0" : undefined,
+    },
+  });
+  const withoutDisplay = await createWaylandComputerHost({
+    env: { get: () => undefined },
+  });
+  if (withDisplay.available) withDisplay.host.close();
+  if (withoutDisplay.available) withoutDisplay.host.close();
+  assertEquals(
+    withoutDisplay.available,
+    withDisplay.available,
+    "the presence of WAYLAND_DISPLAY must not change the verdict",
   );
 });
 

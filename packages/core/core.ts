@@ -218,6 +218,9 @@ export class LumiscaCore {
    * display, ...). Reported when the user tries to enable the feature, so
    * the settings dialog can say what is wrong instead of failing silently. */
   private computerUnavailableReason: string | undefined;
+  /** How to ask this machine again whether it can be driven. Set by the
+   * server, which owns the platform probe; see recheckComputerHost. */
+  private computerHostProbe: (() => Promise<ComputerHostResult>) | undefined;
   /** Global skills directory override (see SessionPoolDeps): tests pass an
    * empty list so a fixture's skill catalog never depends on the machine
    * the tests run on. */
@@ -658,12 +661,66 @@ export class LumiscaCore {
    * The server does this once at startup; the seeded tools resolve the host
    * at execute time, so a later detach fails their next call with a clear
    * error. Whether sessions may use it at all is the settings toggle — see
-   * setComputerUseEnabled. */
+   * setComputerUseEnabled.
+   *
+   * A server started by systemd runs before the desktop session does (the
+   * unit is pulled in by `default.target`, the desktop arrives a few seconds
+   * later), so "there is no host" is a verdict about the machine AT THIS
+   * MOMENT and not a property of the machine. `recheckComputerHost` asks
+   * again when it matters; the reason below is kept only as the last known
+   * answer (what the settings toggle reports when the machine still has no
+   * host). */
   setComputerHost(result: ComputerHostResult): void {
     this.computerHost = result.available ? result.host : undefined;
     this.computerUnavailableReason = result.available
       ? undefined
       : result.reason;
+  }
+
+  /** Ask the machine again whether it can be driven, and adopt the answer.
+   * The server sets the probe at startup: it is the only layer that knows
+   * how to reach this machine's desktop (see `attachComputerHost` in
+   * server/mod.ts).
+   *
+   * Without a probe the startup verdict is final. That is the honest
+   * behaviour for a core built without a server (tests, an embedding), and
+   * it keeps a recheck from silently succeeding on a machine nobody looked
+   * at. */
+  setComputerHostProbe(probe: () => Promise<ComputerHostResult>): void {
+    this.computerHostProbe = probe;
+  }
+
+  /** Ask again whether this machine can be driven, replacing the startup
+   * verdict. The settings toggle runs this before refusing to enable: a
+   * server started by systemd runs before the desktop session does (the unit
+   * is pulled in by `default.target`, the desktop arrives a few seconds
+   * later), so the startup verdict can be stale on a machine that has a
+   * desktop right now. */
+  async recheckComputerHost(): Promise<ComputerHostResult> {
+    const probe = this.computerHostProbe;
+    if (probe === undefined) {
+      return this.computerHost === undefined
+        ? {
+          available: false,
+          reason: this.computerUnavailableReason ??
+            "computer use is not available on this machine",
+        }
+        : { available: true, host: this.computerHost };
+    }
+    const result = await probe();
+    if (result.available) {
+      // A host from the startup verdict is kept: it is the same machine, and
+      // replacing it would drop a screen-sharing session the agent may be
+      // using. A machine that only became drivable now gets the new host.
+      if (this.computerHost === undefined) {
+        this.setComputerHost(result);
+      } else if (result.host !== this.computerHost) {
+        result.host.close();
+      }
+      return { available: true, host: this.computerHost! };
+    }
+    this.computerUnavailableReason = result.reason;
+    return result;
   }
 
   /** The attached host, if this machine has one (regardless of the toggle). */
@@ -683,14 +740,19 @@ export class LumiscaCore {
    * same contract as every other capability change (refused with `conflict`
    * while a session is streaming). Enabling on a machine without a host
    * throws `unavailable` with that machine's reason: accepting the toggle
-   * there would advertise tools that cannot run. */
-  setComputerUseEnabled(enabled: boolean): void {
-    if (enabled && this.computerHost === undefined) {
-      throw new CoreError(
-        this.computerUnavailableReason ??
-          "computer use is not available on this machine",
-        "unavailable",
-      );
+   * there would advertise tools that cannot run.
+   *
+   * Enabling asks the machine again first (recheckComputerHost): the startup
+   * verdict was made before this process had a desktop to talk to when
+   * systemd started it at boot, and a user who turns the feature on now is
+   * looking at a desktop that is running. A machine that still cannot be
+   * driven answers with its own reason, so the dialog says what is wrong. */
+  async setComputerUseEnabled(enabled: boolean): Promise<void> {
+    if (enabled) {
+      const verdict = await this.recheckComputerHost();
+      if (!verdict.available) {
+        throw new CoreError(verdict.reason, "unavailable");
+      }
     }
     this.pool.applyChange(this.sessions.list(), () => {
       this.settings.set(COMPUTER_USE_ENABLED_KEY, enabled ? "1" : "");

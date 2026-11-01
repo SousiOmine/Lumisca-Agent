@@ -133,7 +133,9 @@ before continuing.
   machine's screen, which may have no display at all.
 - Windows, and Linux on a Wayland session (GNOME and others that provide the
   desktop portal). An X11 session on Linux has no host: log in with a Wayland
-  session instead.
+  session instead. The verdict comes from the desktop's own portal, so a
+  server started by systemd (before the desktop session exists) asks again
+  when the feature is turned on — no restart is needed after logging in.
 - Wayland hides windows and the pointer from other processes on purpose, so
   there computer_list_windows reports that it cannot list them, focus_window
   is refused, and no cursor position is reported. Switch windows with

@@ -2556,7 +2556,7 @@ Deno.test("computer use: the tools are seeded via tool_search only when enabled"
 
     // Enabling applies to the open session immediately (the pool rebuilds
     // it) and its registry now holds the family.
-    core.setComputerUseEnabled(true);
+    await core.setComputerUseEnabled(true);
     const enabled = core.getAgent(session.id)!;
     assert(enabled !== disabled, "enabling must rebuild the open agent");
     assertEquals(core.isComputerUseEnabled(), true);
@@ -2637,7 +2637,7 @@ Deno.test("computer use: the tools are seeded via tool_search only when enabled"
 
     // Disabling removes the family from the registry again (the rebuild),
     // while the PDF tool keeps the search/call pair attached.
-    core.setComputerUseEnabled(false);
+    await core.setComputerUseEnabled(false);
     const off = core.getAgent(session.id)!;
     assertEquals(core.isComputerUseEnabled(), false);
     assertEquals(
@@ -2668,7 +2668,7 @@ Deno.test("computer use: enabling without a host reports the machine's reason", 
     reason: "computer use is not supported on this platform yet (test)",
   });
   try {
-    assertThrows(
+    await assertRejects(
       () => core.setComputerUseEnabled(true),
       Error,
       "not supported on this platform yet",
@@ -2686,8 +2686,97 @@ Deno.test("computer use: enabling without a host reports the machine's reason", 
       "the refusal must not disturb the session",
     );
     // Disabling is always accepted: it is the safe direction.
-    core.setComputerUseEnabled(false);
+    await core.setComputerUseEnabled(false);
     assertEquals(core.isComputerUseEnabled(), false);
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("computer use: enabling asks the machine again, so a late desktop is usable", async () => {
+  // A server started by systemd runs before the desktop session does, so at
+  // startup there is nothing to ask and the verdict is "no host". By the
+  // time the user flips the toggle the desktop is up: the toggle must ask
+  // again instead of repeating a verdict made minutes ago at boot.
+  const { core, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  const host = new FakeComputerHost();
+  core.setComputerHost({
+    available: false,
+    reason: "the desktop was not up when the server started (test)",
+  });
+  let probes = 0;
+  core.setComputerHostProbe(() => {
+    probes++;
+    return Promise.resolve({ available: true, host });
+  });
+  try {
+    await core.setComputerUseEnabled(true);
+    assertEquals(probes, 1, "enabling must ask the machine");
+    assertEquals(core.isComputerUseEnabled(), true);
+    assertEquals(core.getComputerHost(), host, "the new host is attached");
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("computer use: a recheck that finds no host keeps the startup verdict", async () => {
+  const { core } = setup();
+  core.setComputerHost({
+    available: false,
+    reason: "no display when the server started (test)",
+  });
+  core.setComputerHostProbe(() =>
+    Promise.resolve({ available: false, reason: "still no display (test)" })
+  );
+  try {
+    await assertRejects(
+      () => core.setComputerUseEnabled(true),
+      Error,
+      "still no display",
+    );
+    assertEquals(core.isComputerUseEnabled(), false);
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("computer use: without a probe the startup verdict stands", async () => {
+  // A core built without the server (tests, an embedding) has no way to ask
+  // the machine: the startup verdict must not be silently overridden.
+  const { core } = setup();
+  core.setComputerHost({
+    available: false,
+    reason: "computer use is not available on this machine (test)",
+  });
+  try {
+    await assertRejects(
+      () => core.setComputerUseEnabled(true),
+      Error,
+      "not available on this machine",
+    );
+    assertEquals(core.isComputerUseEnabled(), false);
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("computer use: a recheck never replaces an attached host", async () => {
+  // The screen-sharing session (and its restore token) belongs to the host
+  // the server attached. A recheck that hands back a second host must keep
+  // the first one and release the spare, or the agent's session is dropped
+  // under it.
+  const { core } = setup();
+  const attached = new FakeComputerHost();
+  const spare = new FakeComputerHost();
+  core.setComputerHost({ available: true, host: attached });
+  core.setComputerHostProbe(() =>
+    Promise.resolve({ available: true, host: spare })
+  );
+  try {
+    const verdict = await core.recheckComputerHost();
+    assertEquals(verdict.available, true);
+    assertEquals(core.getComputerHost(), attached);
   } finally {
     core.close();
   }
@@ -2710,7 +2799,7 @@ Deno.test("computer use: toggling while a session streams is refused", async () 
       },
     ]);
     core.startPrompt(session.id, "go");
-    assertThrows(
+    await assertRejects(
       () => core.setComputerUseEnabled(true),
       Error,
       "already running",

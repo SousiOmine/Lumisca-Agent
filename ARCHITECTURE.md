@@ -317,6 +317,8 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
   画面キャプチャと操作（クリック・キー入力・ウィンドウ一覧）を提供する機能です。Windows と Linux（Wayland セッション）に対応し、設定で明示的に有効化されている場合のみ利用できます。座標はキャプチャ画像のピクセルを基点とし、画面のスケールや解像度に合わせて正しく変換されます。
   - **Windows（`computer/windows.ts`）**: GDI・SendInput・Win32 のウィンドウ列挙を Deno FFI 経由で使用します。座標は物理ピクセルです。
   - **Linux / Wayland（`computer/wayland.ts`, `computer/portal/`）**: xdg-desktop-portal（Screenshot / RemoteDesktop + ScreenCast）を D-Bus 経由で使用します。D-Bus クライアントは `portal/connection.ts` に閉じ込めています（`@jellybrick/dbus-next`）。撮影は全画面 1 枚をモニタの最大スケールで描画したものなので、モニタごとに切り出し、入力はモニタごとの物理ピクセルグリッドへ変換します。モニタ構成とスケールは `org.gnome.Mutter.DisplayConfig`（読み取り専用）から取得し、画面共有の同意（restore token）は設定テーブルに保存します。Wayland ではウィンドウ一覧とカーソル位置の取得はできず、能力差として扱います。
+  - **利用可否はポータルに尋ねる（環境変数では判定しない）**: `WAYLAND_DISPLAY` の有無で判定してはいけません。サーバーは systemd ユーザーユニットとしてデスクトップより先に起動し（`WantedBy=default.target`、デスクトップは数秒後）、その環境変数は gnome-session がバスの activation environment へ公開したものが届くかどうかにすぎないためです。同じマシンでも起動順で「利用可能」と「利用不可」が入れ替わります。判定は `probePortal` の結果だけを使い、撮影と入力は実際にポータル越しに行います。利用不可の理由もポータルが答えた内容（バスが無い／RemoteDesktop が古い／入力デバイスが無い／DisplayConfig が無い）にします。
+  - **起動時の判定を固定しない**: 設定画面のトグルは有効化の前に `LumiscaCore.recheckComputerHost` で問い直します（サーバーが `setComputerHostProbe` で渡した関数）。起動時にデスクトップが無かったマシンでも、ログイン後にトグルを入れれば再起動なしで使えます。すでにアタッチ済みのホストは置き換えません（画面共有セッションを落とさないため）。
 
 ---
 

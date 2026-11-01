@@ -69,19 +69,25 @@ import type {
 
 export type WaylandHostOptions = PortalProbeOptions;
 
-/** The Wayland host of this machine, or why there is none. */
+/** The Wayland host of this machine, or why there is none.
+ *
+ * The verdict comes from the portal alone, never from the environment. A
+ * process started by systemd (the packaged server is a user unit) inherits
+ * the session bus but NOT the session's display variables: gnome-session
+ * publishes `WAYLAND_DISPLAY` to the bus's activation environment, which
+ * also reaches units started later — so whether `WAYLAND_DISPLAY` is in
+ * `environ` depends on whether the desktop was already up when systemd
+ * started the process, and on whether the unit was started by the session
+ * target. A server started at boot therefore used to report the desktop as
+ * absent on a machine that was running GNOME the whole time.
+ *
+ * Nothing in this host reads the variable: screenshots and input go through
+ * the portal over D-Bus (see portal/), and the monitor layout comes from
+ * mutter. Asking `probePortal` is what the answer actually depends on, and
+ * it is the probe that names the real reason when the desktop is missing. */
 export async function createWaylandComputerHost(
   options: WaylandHostOptions = {},
 ): Promise<ComputerHostResult> {
-  const env = options.env ?? Deno.env;
-  const display = env.get("WAYLAND_DISPLAY");
-  if (display === undefined || display.length === 0) {
-    return {
-      available: false,
-      reason:
-        "the server is not running inside a Wayland session (WAYLAND_DISPLAY is not set), which computer use on Linux needs",
-    };
-  }
   const probe = await probePortal(options);
   if (!probe.available) return { available: false, reason: probe.reason };
   return {

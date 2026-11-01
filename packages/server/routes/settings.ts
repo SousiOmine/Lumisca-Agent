@@ -22,7 +22,7 @@ export interface SettingsApi {
    * decides which tools every session gets, so the core validates that this
    * machine has a host and rebuilds the open sessions (refused while one is
    * streaming). */
-  setComputerUseEnabled(enabled: boolean): void;
+  setComputerUseEnabled(enabled: boolean): Promise<void>;
   getPersonalization(): { path: string; content: string };
   setPersonalization(content: string): void;
   /** The recorded approvals of the fast-model safety check. Entries carry a
@@ -56,10 +56,11 @@ export function settingRoutes(core: SettingsApi): Hono {
     const value = requireString(body?.value, "value (string)");
     const key = c.req.param("key");
     if (key === COMPUTER_USE_ENABLED_KEY) {
-      // A capability toggle, not a plain value: the core checks that this
-      // machine has a host (503 with its reason otherwise) and rebuilds the
-      // open sessions, so the tools appear or disappear immediately.
-      core.setComputerUseEnabled(value === "1");
+      // A capability toggle, not a plain value: the core asks the machine
+      // again (503 with its reason when the desktop still cannot be driven)
+      // and rebuilds the open sessions, so the tools appear or disappear
+      // immediately.
+      await core.setComputerUseEnabled(value === "1");
       return c.json({ ok: true });
     }
     core.setUserSetting(key, value);

@@ -185,12 +185,19 @@ export async function main(): Promise<void> {
   }
 
   async function attachComputerHost(core: LumiscaCore): Promise<void> {
-    const result = await createComputerHost({
-      store: {
-        load: () => core.getSetting(COMPUTER_USE_SESSION_TOKEN_KEY),
-        save: (token) => core.setSetting(COMPUTER_USE_SESSION_TOKEN_KEY, token),
-      },
-    });
+    const probe = () =>
+      createComputerHost({
+        store: {
+          load: () => core.getSetting(COMPUTER_USE_SESSION_TOKEN_KEY),
+          save: (token) =>
+            core.setSetting(COMPUTER_USE_SESSION_TOKEN_KEY, token),
+        },
+      });
+    // The probe stays available to the core so the settings toggle can ask
+    // the machine again: this server may have started before the desktop
+    // session did (see recheckComputerHost in core.ts).
+    core.setComputerHostProbe(probe);
+    const result = await probe();
     core.setComputerHost(result);
     if (result.available) {
       console.log(
