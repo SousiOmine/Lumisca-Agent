@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { LumiscaDb } from "./mod.ts";
 import {
@@ -26,6 +26,26 @@ function makeDatabase(path: string, rows: number): void {
 function sizeOf(path: string): Promise<number> {
   return Deno.stat(path).then((stat) => stat.size);
 }
+
+Deno.test("vacuum: the marker sits beside the database on any platform's path", () => {
+  // A Windows path is separated by `\`, not `/`. Splitting on `/` alone put
+  // the drive and the whole directory list into the marker's name, which
+  // Windows cannot create — so a database that pruned enough to ask for a
+  // rewrite never got one there, and the freed space was never reclaimed.
+  // The path module answers per platform, so assert the shape (same
+  // directory, one more suffix on the file) rather than a literal string.
+  for (
+    const path of [
+      "C:\\Users\\me\\AppData\\l.db",
+      "/home/me/.lumisca/l.db",
+      "l.db",
+    ]
+  ) {
+    const marker = vacuumMarkerPath(path);
+    assertEquals(dirname(marker), dirname(path), path);
+    assertEquals(basename(marker), `${basename(path)}.vacuum`, path);
+  }
+});
 
 Deno.test("vacuum: no marker means nothing happens", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });

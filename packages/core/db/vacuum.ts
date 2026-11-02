@@ -23,7 +23,7 @@
  * bytes to be worth the wait (see requestVacuum).
  */
 import { DatabaseSync } from "node:sqlite";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { rename, rm, stat } from "node:fs/promises";
 import { createLogger } from "../log.ts";
 import { errorMessage } from "../errors.ts";
@@ -35,14 +35,17 @@ const log = createLogger("vacuum");
  * database this exists for. */
 export const MIN_VACUUM_BYTES = 64 * 1024 * 1024;
 
-/** The sidecar beside the database holding "a rewrite is due". */
+/** The sidecar beside the database holding "a rewrite is due".
+ *
+ * `basename` is the path module's, not a hunt for the last `/`: a Windows
+ * path is separated by `\`, and a hand-written split left the drive and the
+ * whole directory list in the name (`C:\...\l.db.vacuum`), which Windows
+ * refuses to create — the marker never existed there, and every test that
+ * wrote one failed with "The filename, directory name, or volume label
+ * syntax is incorrect".
+ */
 export function vacuumMarkerPath(dbPath: string): string {
-  return join(dirname(dbPath), `${basenameOf(dbPath)}.vacuum`);
-}
-
-function basenameOf(path: string): string {
-  const index = path.lastIndexOf("/");
-  return index === -1 ? path : path.slice(index + 1);
+  return join(dirname(dbPath), `${basename(dbPath)}.vacuum`);
 }
 
 /**
