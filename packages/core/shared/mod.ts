@@ -16,6 +16,8 @@
  * - `./attachments.ts` — files an agent sends to the user, and their limits,
  * - `./chat-message.ts` — one `send_chat` message (words, card, files) as the
  *   conversation draws it,
+ * - `./stella-preview.ts` — the second line of an agent's sidebar row (what
+ *   the conversation last said) and the order of those rows,
  * - `./agent-avatar.ts` — a stella agent's avatar: the initial and its
  *   colour, and the icon formats' limits,
  * - `./mcp-config.ts` — MCP server config serialization,
@@ -40,6 +42,7 @@ export * from "./content.ts";
 export * from "./visual.ts";
 export * from "./attachments.ts";
 export * from "./chat-message.ts";
+export * from "./stella-preview.ts";
 export * from "./agent-avatar.ts";
 export * from "./mime.ts";
 export * from "./diff-stat.ts";

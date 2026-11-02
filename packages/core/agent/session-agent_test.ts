@@ -105,6 +105,7 @@ function makeAgent(
       positionOf: () => undefined,
       count: () => 0,
       usageRows: () => [],
+      newestConversationRows: () => [],
       pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
     },
     onEvent,
@@ -939,6 +940,7 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
     positionOf: () => undefined,
     count: () => 0,
     usageRows: () => [],
+    newestConversationRows: () => [],
     pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
   };
   const agent = new SessionAgent({
@@ -1132,6 +1134,7 @@ Deno.test("compactNow condenses on demand and reports the outcome", async () => 
       positionOf: () => undefined,
       count: () => 0,
       usageRows: () => [],
+      newestConversationRows: () => [],
       pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
     },
     onEvent: (event) => events.push(event),
@@ -1261,6 +1264,7 @@ Deno.test("a compaction republishes the context its checkpoint left behind", asy
       positionOf: () => undefined,
       count: () => 0,
       usageRows: () => [],
+      newestConversationRows: () => [],
       pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
     },
     contextProviders: [provider],

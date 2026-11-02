@@ -304,6 +304,15 @@ export const chat = {
     en: "This file was deleted from the machine",
   },
   "chat.stella.working": { ja: "作業中…", en: "Working…" },
+  /** The second line of an agent's row: what the conversation last said.
+   * Words are shown as they are; a message that carried no words is
+   * described, because "3 files" is a caption rather than something the user
+   * wrote. */
+  "chat.stella.agents.preview.files": {
+    ja: "ファイル {count} 件",
+    en: "{count} files",
+  },
+  "chat.stella.agents.preview.card": { ja: "カード", en: "Card" },
   "chat.stella.machine.screen": { ja: "画面", en: "Screen" },
   /** The header's show/hide control of the screen pane: the pane is a panel
    * the user opens and closes, so the label says which way the next click

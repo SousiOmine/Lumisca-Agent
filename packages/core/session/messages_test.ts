@@ -561,3 +561,120 @@ Deno.test("messages: usageRows reads every assistant usage in the store", () => 
     db.close();
   }
 });
+
+Deno.test("messages: newestConversationRows reads only what a conversation shows", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    // Transcript order: prompt, the agent's turn, its tool traffic, the
+    // message it SENT, a failed send, what the user said next.
+    repo.append("s1", {
+      role: "user",
+      content: [{ type: "text", text: "直して" }],
+      timestamp: 100,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "assistant",
+      content: [{ type: "text", text: "作業メモ" }],
+      api: "openai-completions",
+      provider: "faux",
+      model: "faux-1",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      stopReason: "stop",
+      timestamp: 110,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "call-1",
+      toolName: "bash",
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+      timestamp: 120,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "call-2",
+      toolName: "send_chat",
+      content: [{ type: "text", text: "Sent the message." }],
+      isError: false,
+      timestamp: 130,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "call-3",
+      toolName: "send_chat",
+      content: [{ type: "text", text: "failed" }],
+      isError: true,
+      timestamp: 140,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "user",
+      content: [{ type: "text", text: "ありがとう" }],
+      timestamp: 150,
+    } as AgentMessage);
+
+    const rows = repo.newestConversationRows("s1", 10);
+    // Newest first, and only the two prompts plus the successful send: the
+    // agent's own text, a tool's output and a failed send are not things the
+    // conversation shows.
+    assertEquals(
+      rows.map((row) => [row.role, row.timestamp]),
+      [["user", 150], ["toolResult", 130], ["user", 100]],
+    );
+
+    // The limit bounds the read (it is a payload bound, not a scan).
+    assertEquals(repo.newestConversationRows("s1", 2).length, 2);
+
+    // Another session's rows never appear.
+    db.db.prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+       VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
+    ).run();
+    repo.append("s2", {
+      role: "user",
+      content: [{ type: "text", text: "other" }],
+      timestamp: 900,
+    } as AgentMessage);
+    assertEquals(repo.newestConversationRows("s1", 10).length, 3);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: newestConversationRows also reads pre-stamped rows", () => {
+  // The store holds two envelopes, and decodeStoredMessage reads both. A
+  // filter that understood only the current one would leave an older
+  // conversation's last message invisible in the sidebar while the
+  // conversation itself showed it.
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const legacy: AgentMessage = {
+      role: "toolResult",
+      toolCallId: "call-1",
+      toolName: "send_chat",
+      content: [{ type: "text", text: "Sent." }],
+      isError: false,
+      timestamp: 100,
+    };
+    db.db.prepare(
+      "INSERT INTO messages (id, session_id, role, content, timestamp) " +
+        "VALUES (?, ?, ?, ?, ?)",
+    ).run(
+      "legacy-1",
+      "s1",
+      "toolResult",
+      JSON.stringify(legacy),
+      legacy.timestamp,
+    );
+    const repo = createMessageRepo(db);
+    // It comes back from the query AND decodes to the same message, so the
+    // projection can read it.
+    const rows = repo.newestConversationRows("s1", 4);
+    assertEquals(rows.length, 1);
+    assertEquals(rows[0]!.message, legacy);
+  } finally {
+    db.close();
+  }
+});

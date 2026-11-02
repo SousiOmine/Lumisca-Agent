@@ -51,6 +51,7 @@ import type {
 } from "./models/user-providers.ts";
 import { isThinkingLevel } from "./models/thinking.ts";
 import type { ThinkingLevel } from "./shared/mod.ts";
+import type { StellaAgentSummary } from "./shared/mod.ts";
 import type { AskAnswer } from "./shared/mod.ts";
 import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
 import type { CommandApproval } from "./shared/mod.ts";
@@ -107,6 +108,7 @@ import {
   type StellaAgent,
 } from "./stella/agents.ts";
 import { createAgentCreateTool } from "./stella/tools.ts";
+import { latestPreview } from "./stella/previews.ts";
 import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
 import { createHistorySearchTool } from "./session/history.ts";
 import {
@@ -1096,6 +1098,31 @@ export class LumiscaCore {
   /** The agents in the sidebar, most recently used first. */
   listStellaAgents(): StellaAgent[] {
     return this.stellaAgents.list();
+  }
+
+  /**
+   * The sidebar's rows: the agents, each with what its conversation last
+   * said.
+   *
+   * The preview is read from the store per agent (see stella/previews.ts) and
+   * only for THIS list: a list of agents that says who they are but not what
+   * they said is the thing a message app does not have. The read is bounded
+   * (a handful of rows per agent regardless of how long the conversation is),
+   * so a refresh costs the same after a year of talking as on the first day.
+   *
+   * Order is the client's (`compareAgentRows`), not this method's: the agent
+   * repository answers in "most recently used" order, and the two differ the
+   * moment another client — or a routine — speaks in a conversation this one
+   * has not opened.
+   */
+  listStellaAgentSummaries(): StellaAgentSummary[] {
+    return this.stellaAgents.list().map((agent) => ({
+      ...agent,
+      preview: latestPreview(
+        this.messages,
+        this.sessions.getByAgent(agent.id)?.id,
+      ),
+    }));
   }
 
   /**

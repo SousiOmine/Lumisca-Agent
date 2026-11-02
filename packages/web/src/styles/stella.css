@@ -248,10 +248,10 @@
   cursor: pointer;
 }
 
-/* The row is two lines: the name, then when this conversation was last
- * used. That is what makes a list of people scannable — without the second
- * line every row is a name and the reader has to open one to know which is
- * current. */
+/* The row is a message app's row: the name with the time at its far edge,
+ * then what was said last. Two lines are what make a list of people
+ * scannable — with only the name, the reader has to open each conversation
+ * to know which is current. */
 .stella-agent-text {
   flex: 1;
   min-width: 0;
@@ -260,16 +260,36 @@
   gap: 1px;
 }
 
-/* The name is what truncates: the avatar keeps its circle and the row keeps
- * its shape, so a long name ends in an ellipsis instead of squeezing the
- * face next to it. */
+/* The name and the time share the first line. The time is what the eye runs
+ * down (the column of times says which conversation is current), so it takes
+ * the width it needs and the name keeps the rest. */
+.stella-agent-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The name is what truncates: the avatar keeps its circle, the time keeps its
+ * column, so a long name ends in an ellipsis instead of squeezing both. */
 .stella-agent-label {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.stella-agent-time {
+  flex: none;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+/* The message: one line, cut where the row ends. It is the faintest text of
+ * the row on purpose — the name and the time are what the reader scans, and
+ * the message is what they read once a row has their attention. */
 .stella-agent-meta {
   min-width: 0;
   font-size: 11px;
@@ -279,14 +299,16 @@
   white-space: nowrap;
 }
 
-.stella-agent.active .stella-agent-name {
+/* The current row is marked by the name's weight and the row's fill, not by
+ * bolding the message: the second line is prose, and bold prose reads as
+ * emphasis the agent did not write. */
+.stella-agent.active .stella-agent-label {
   font-weight: 600;
-  color: var(--text);
 }
 
-/* The active agent that is working now: the row says so in words where the
- * time would be, and marks it with the one dot the eye catches while
- * scanning the list. */
+/* The active agent that is working now: the second line says so in words
+ * where the message would be, and a dot marks it — the words are what the
+ * reader understands, the dot is what the eye catches while scanning. */
 .stella-agent-activity {
   color: var(--text-dim);
 }

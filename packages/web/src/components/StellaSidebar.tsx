@@ -10,7 +10,12 @@ import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
 import { useLocale, useT } from "../i18n.ts";
 import { formatRelativeTime } from "../format.ts";
-import type { StellaAgent } from "../types.ts";
+import type {
+  StellaAgent,
+  StellaAgentSummary,
+  StellaPreview,
+} from "../types.ts";
+import type { Translator } from "@lumisca/core/shared";
 import { Modal } from "./Modal.tsx";
 import { Field } from "./Field.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
@@ -18,7 +23,7 @@ import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
 import { useArrivals } from "../hooks/useArrivals.ts";
 
 interface StellaSidebarProps {
-  agents: StellaAgent[];
+  agents: StellaAgentSummary[];
   /** The agent whose conversation is showing; null before one exists. */
   activeId: string | null;
   onSelect: (id: string) => void;
@@ -42,6 +47,27 @@ interface MenuAnchor {
   /** Distance from the viewport's right and top edges. */
   right: number;
   top: number;
+}
+
+/** The line a row shows under the name: the words that were said, or — for a
+ * message that carried no words — what it carried. Kept beside the row that
+ * draws it rather than in the shared module, because the shared module
+ * decides WHAT the line is (see shared/stella-preview.ts) and this decides
+ * how it reads in one language. */
+function previewTextOf(
+  preview: StellaPreview,
+  t: Translator,
+): string {
+  switch (preview.kind) {
+    case "text":
+      return preview.text;
+    case "files":
+      return t("chat.stella.agents.preview.files", {
+        count: preview.count,
+      });
+    case "card":
+      return t("chat.stella.agents.preview.card");
+  }
 }
 
 /**
@@ -193,26 +219,44 @@ export function StellaSidebar(
                 size={32}
               />
               <span className="stella-agent-text">
-                <span className="stella-agent-label">{agent.name}</span>
                 {
-                  /* The same two facts a message app puts under a name: what
-                   * was said last (here: that this conversation is where the
-                   * work happens) and when. Which is the second line's
-                   * business — the name stays the only thing that is large. */
+                  /* The two facts a message app puts in a row: who, and when
+                   * that conversation last said something. The time sits at
+                   * the far edge of the name's line — scanned down the list,
+                   * the column of times is what tells the reader which
+                   * conversation is current, and it is the time of the
+                   * MESSAGE, not of the last visit (a list that says "3分前"
+                   * about something said last week is about the reader, not
+                   * the conversation). */
                 }
-                <span className="stella-agent-meta">
-                  {agent.id === activeId && running
-                    ? (
-                      <span className="stella-agent-activity">
-                        {t("chat.stella.working")}
-                      </span>
-                    )
-                    : (
-                      <span className="stella-agent-time">
-                        {formatRelativeTime(agent.updatedAt, locale)}
-                      </span>
-                    )}
+                <span className="stella-agent-head">
+                  <span className="stella-agent-label">{agent.name}</span>
+                  {agent.preview !== null && (
+                    <time
+                      className="stella-agent-time"
+                      dateTime={new Date(agent.preview.at).toISOString()}
+                    >
+                      {formatRelativeTime(agent.preview.at, locale)}
+                    </time>
+                  )}
                 </span>
+                {
+                  /* What was said last, or — while this agent is working —
+                   * that it is working. A fresh agent has said nothing, so
+                   * its row is one line, exactly like a message app's row for
+                   * someone you have not talked to yet. */
+                }
+                {agent.id === activeId && running
+                  ? (
+                    <span className="stella-agent-meta stella-agent-activity">
+                      {t("chat.stella.working")}
+                    </span>
+                  )
+                  : agent.preview !== null && (
+                    <span className="stella-agent-meta">
+                      {previewTextOf(agent.preview, t)}
+                    </span>
+                  )}
               </span>
               {
                 /* A dot on the agent that is working right now, so the list

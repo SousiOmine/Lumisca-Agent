@@ -48,6 +48,20 @@ export interface MessageRepo {
     sessionId: string,
     match: (row: StoredMessage) => boolean,
   ): number | undefined;
+  /** The newest rows that could be something the conversation SHOWS, newest
+   * first, at most `limit`.
+   *
+   * This is a candidate set, not an answer: whether a row is a conversation
+   * entry is the projection's decision (see agent/stella-stream.ts), and only
+   * a projected row may become what a sidebar row says. The filter is here
+   * because the alternative — decoding rows until one projects — would read
+   * a whole transcript of tool traffic to find one message, while every row
+   * a conversation can show is one of three kinds (see the SQL comment).
+   *
+   * `limit` bounds how many candidates a caller reads; a caller looking for
+   * the newest entry retries with a larger limit rather than scanning the
+   * session. */
+  newestConversationRows(sessionId: string, limit: number): StoredMessage[];
   /** How many rows the session holds (a page's end is the row count). */
   count(sessionId: string): number;
   /** The `usage` of every assistant row that reported one, in transcript
@@ -219,6 +233,40 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       ORDER BY rowid DESC LIMIT ?
     ) ORDER BY rid
   `);
+  // The newest rows that could be a conversation entry, newest first (see
+  // newestConversationRows). A conversation can show exactly three kinds of
+  // row — a prompt (`user`; `mode` is code-mode-only but projected the same
+  // way), and the result of a successful `send_chat` (see
+  // agent/stella-stream.ts) — so the filter names them and the scan stays
+  // inside the session's index range however long the transcript is.
+  //
+  // The tool name is read through `COALESCE` because the store holds two
+  // envelopes: rows this build wrote (`{ v, message }`) and rows from before
+  // the version stamp (a bare message). `decodeStoredMessage` reads both, so
+  // this query has to see both — a filter that only understood one would
+  // leave a conversation's last message invisible in the sidebar while the
+  // conversation itself showed it.
+  const newestEntryRowsStmt = db.db.prepare(`
+    SELECT * FROM messages
+    WHERE session_id = ?1
+      AND (
+        role IN ('user', 'mode')
+        OR (
+          role = 'toolResult'
+          AND COALESCE(
+            json_extract(content, '$.message.toolName'),
+            json_extract(content, '$.toolName')
+          ) = 'send_chat'
+          AND COALESCE(
+            json_extract(content, '$.message.isError'),
+            json_extract(content, '$.isError'),
+            0
+          ) = 0
+        )
+      )
+    ORDER BY rowid DESC
+    LIMIT ?2
+  `);
   // Positional truncation: rows are inserted in transcript order, so the
   // row at OFFSET `index` is the first message to remove (an OFFSET past
   // the last row matches nothing — nothing persisted to delete).
@@ -316,6 +364,13 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
             query.beforeIndex,
             query.limit,
           )) as Array<Parameters<typeof toStored>[0]>;
+      return rows.map(toStored);
+    },
+
+    newestConversationRows(sessionId, limit): StoredMessage[] {
+      const rows = newestEntryRowsStmt.all(sessionId, limit) as Array<
+        Parameters<typeof toStored>[0]
+      >;
       return rows.map(toStored);
     },
 

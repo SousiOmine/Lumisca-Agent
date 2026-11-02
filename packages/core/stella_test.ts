@@ -1092,3 +1092,69 @@ function assertStellaPrunes(
     expected,
   );
 }
+
+Deno.test("stella agents: a row says what its conversation last said", async () => {
+  const { faux, core, agent, session } = await stellaConversation("Aide");
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("send_chat", {
+          text: "3件の不具合を直しました。",
+        }, "call-1"),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("送りました。"),
+    ]);
+    await promptSession(core, session.id, "直して");
+
+    const rows = core.listStellaAgentSummaries();
+    const row = rows.find((item) => item.id === agent.id);
+    assert(row !== undefined, "the agent must be in the list");
+    // The newest thing the conversation shows: what the agent SENT, not the
+    // prompt before it and not its own working notes.
+    assertEquals(row.preview, {
+      kind: "text",
+      text: "3件の不具合を直しました。",
+      at: row.preview!.at,
+    });
+    // The time it carries is the message's, which is also what the list
+    // orders by.
+    assertEquals(row.preview!.at > 0, true);
+
+    // An agent whose conversation was never opened says nothing: nothing has
+    // been said in it, and a row must not invent a line.
+    const quiet = core.createStellaAgent({ name: "Quiet", role: "r" });
+    const quietRow = core.listStellaAgentSummaries().find((item) =>
+      item.id === quiet.id
+    );
+    assertEquals(quietRow?.preview, null);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: the preview is the newest entry, not the newest row", async () => {
+  // The row the store returns newest is a tool result the conversation never
+  // shows; the entry before it is what the sidebar must say.
+  const { faux, core, agent, session } = await stellaConversation("Aide");
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("send_chat", { text: "一行目" }, "call-1"),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage([
+        fauxToolCall("bash", { command: "echo hi" }, "call-2"),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("終わり。"),
+    ]);
+    await promptSession(core, session.id, "やって");
+
+    const row = core.listStellaAgentSummaries().find((item) =>
+      item.id === agent.id
+    );
+    assertEquals(row?.preview?.kind, "text");
+    if (row?.preview?.kind !== "text") throw new Error("unreachable");
+    assertEquals(row.preview.text, "一行目");
+  } finally {
+    await core.close();
+  }
+});

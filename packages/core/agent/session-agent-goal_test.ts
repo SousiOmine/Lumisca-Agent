@@ -124,6 +124,7 @@ function makeGoalAgent(
       positionOf: () => undefined,
       count: () => 0,
       usageRows: () => [],
+      newestConversationRows: () => [],
       pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
     },
     onEvent: (event) => {

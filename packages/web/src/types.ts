@@ -126,6 +126,13 @@ export type { InitialData } from "@lumisca/core/shared";
  * panel both name it). */
 export type { RoutineView } from "@lumisca/core/shared";
 
+/** One row of the sidebar: the agent plus what its conversation last said,
+ * and the preview itself (the text, or how many files, or that it was a
+ * card). Defined in `@lumisca/core/shared/stella-preview.ts`, because the
+ * server projects the preview with the same functions the client uses to
+ * update the row it has open. */
+export type { StellaAgentSummary, StellaPreview } from "@lumisca/core/shared";
+
 /** One pending ask (the `ask` tool): questions awaiting the user's answers,
  * tied to the tool call that asked them. */
 export interface PendingQuestion {

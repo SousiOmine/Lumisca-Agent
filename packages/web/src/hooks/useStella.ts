@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/compat";
 import { api } from "../api.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { errorText } from "../providers.ts";
@@ -8,7 +14,14 @@ import {
   type StellaConversationState,
   stellaStateOf,
 } from "../stella-state.ts";
-import type { PendingFile, PendingImage, StellaAgent } from "../types.ts";
+import { compareAgentRows, previewOf, samePreview } from "@lumisca/core/shared";
+import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
+import type {
+  PendingFile,
+  PendingImage,
+  StellaAgent,
+  StellaAgentSummary,
+} from "../types.ts";
 
 /** Reconnect backoff of the conversation's event stream: 2s → 4s → … 30s. */
 const RECONNECT_BASE_MS = 2000;
@@ -19,6 +32,16 @@ const RECONNECT_MAX_MS = 30_000;
  * (a socket that died without a close event) by re-reading the snapshot when
  * the conversation's counter moved. */
 const REVISION_PROBE_MS = 30_000;
+
+/** How often the agent list is re-read while the page is visible.
+ *
+ * The list says what each conversation last said, and only the conversation
+ * being looked at has an open stream: a routine that posts overnight, or a
+ * second window showing the same server, writes into conversations whose rows
+ * this client never hears about. Re-reading the list is the only way those
+ * rows change. Nothing runs while the page is hidden (see useVisibleInterval)
+ * — nobody is reading it. */
+const AGENT_LIST_REFRESH_MS = 30_000;
 
 /**
  * stella mode's state: the agents, which one is being talked to, and that
@@ -36,7 +59,8 @@ const REVISION_PROBE_MS = 30_000;
  * consequence the client shows is `starting` on the status it already polls.
  */
 export function useStella(enabled: boolean): {
-  agents: StellaAgent[];
+  /** The sidebar's rows, newest message first (see compareAgentRows). */
+  agents: StellaAgentSummary[];
   activeAgentId: string | null;
   select: (id: string) => void;
   /** Return to the list of agents (a phone's back button); the conversation
@@ -79,7 +103,7 @@ export function useStella(enabled: boolean): {
    * re-read of the list. */
   replaceAgent: (agent: StellaAgent) => void;
 } {
-  const [agents, setAgents] = useState<StellaAgent[]>([]);
+  const [agents, setAgents] = useState<StellaAgentSummary[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<
     StellaConversationState | null
@@ -100,19 +124,22 @@ export function useStella(enabled: boolean): {
     setAgentsVersion((version) => version + 1);
   }, []);
 
-  /** Swap one row in place. An icon change is the only caller: the list's
-   * ORDER is "most recently talked to" and a picture does not move it, so a
-   * full re-read (which could arrive out of order with a run's touch) would
-   * be more churn for the same result. */
+  /** Swap one row in place. An edit of the name or the picture is the only
+   * caller: neither is something that was SAID, so the row keeps its preview
+   * and its place, and a full re-read (which could arrive out of order with
+   * the conversation's own writes) would be churn for the same result. */
   const replaceAgent = useCallback((updated: StellaAgent) => {
     setAgents((current) =>
-      current.map((agent) => agent.id === updated.id ? updated : agent)
+      current.map((agent) =>
+        agent.id === updated.id ? { ...agent, ...updated } : agent
+      )
     );
   }, []);
 
   // The agent list. Read when stella becomes the mode and after a change;
-  // the last-used agent is the default, so reopening the app resumes the
-  // conversation the user actually had.
+  // The agent list. Read when stella becomes the mode, after a change, and on
+  // the refresh timer below; the last-used agent is the default, so reopening
+  // the app resumes the conversation the user actually had.
   useEffect(() => {
     if (!enabled) {
       setAgents([]);
@@ -124,7 +151,7 @@ export function useStella(enabled: boolean): {
       try {
         const { agents: list, defaultAgentId } = await api.getStellaAgents();
         if (disposed) return;
-        setAgents(list);
+        setAgents(list.slice().sort(compareAgentRows));
         setActiveAgentId((current) => {
           if (current !== null && list.some((a) => a.id === current)) {
             return current;
@@ -140,6 +167,41 @@ export function useStella(enabled: boolean): {
       disposed = true;
     };
   }, [enabled, agentsVersion]);
+
+  // The list's second line goes stale on its own: another window, or a
+  // routine, writes into conversations this client has no stream for. A
+  // re-read is the only thing that moves those rows, and it is cheap (a
+  // bounded read per agent, see stella/previews.ts).
+  useVisibleInterval(
+    reloadAgents,
+    enabled ? AGENT_LIST_REFRESH_MS : NEVER,
+    { immediate: false },
+  );
+
+  // The row of the conversation that is open, advanced from its own entries:
+  // the list re-reads every 30 seconds, but the message the user just
+  // received is on screen now, and a row that lags behind the conversation
+  // beside it is the kind of disagreement this line exists to avoid. The
+  // preview is built by the same function the server used, so the two can
+  // only say the same thing.
+  const rows = useMemo<StellaAgentSummary[]>(() => {
+    if (!enabled || activeAgentId === null) return agents;
+    const newest = conversation?.entries.at(-1);
+    if (newest === undefined) return agents;
+    const preview = previewOf(newest);
+    if (preview === null) return agents;
+    let changed = false;
+    const next = agents.map((agent) => {
+      if (agent.id !== activeAgentId || samePreview(agent.preview, preview)) {
+        return agent;
+      }
+      changed = true;
+      return { ...agent, preview };
+    });
+    // An unchanged list keeps its identity: the sidebar re-renders on every
+    // message, and reordering it for nothing would move rows under the eye.
+    return changed ? next.sort(compareAgentRows) : agents;
+  }, [enabled, activeAgentId, conversation?.entries, agents]);
 
   // Open the active agent's conversation. The server starts the machine on
   // this call, so a first run waits here (minutes) — `loading` is what the
@@ -393,7 +455,7 @@ export function useStella(enabled: boolean): {
   }, [activeAgentId, conversation?.older]);
 
   return {
-    agents,
+    agents: rows,
     activeAgentId,
     select,
     clearSelection,

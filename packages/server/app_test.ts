@@ -19,7 +19,11 @@ import {
   startServer,
 } from "./app.ts";
 import { validateHostConfig } from "./security.ts";
-import { MINI_PNG, removeDirRetry } from "@lumisca/core/test-utils";
+import {
+  MINI_PNG,
+  promptSession,
+  removeDirRetry,
+} from "@lumisca/core/test-utils";
 function setup(
   env?: () => Record<string, string>,
   options?: AppOptions,
@@ -3370,6 +3374,57 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
     const answers = entries.filter((entry) => entry.role === "assistant");
     assertEquals(answers.map((entry) => entry.text), ["はい、承知しました。"]);
     assertEquals(types.includes("delta"), false, "no streaming text");
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("stella API: a row carries what its conversation last said", async () => {
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(1),
+    });
+
+    // A conversation that has not been opened says nothing: the row is one
+    // line, and the client has no time to show.
+    const before = await json(base, "/api/stella/agents");
+    const initial = await before.json() as {
+      agents: Array<{ id: string; preview: unknown }>;
+    };
+    assertEquals(initial.agents[0]?.preview, null);
+
+    // Speak in it, then read the list: the second line is what the agent
+    // SENT (the conversation's projection, not the model's notes).
+    const agentId = initial.agents[0]!.id;
+    const session = await core.getOrCreateStellaSession(agentId);
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("send_chat", { text: "直しました。" }, "call-1"),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("送りました。"),
+    ]);
+    await promptSession(core, session.id, "直して");
+    const listed = await json(base, "/api/stella/agents");
+    const body = await listed.json() as {
+      agents: Array<{
+        id: string;
+        preview: { kind: string; text: string; at: number } | null;
+      }>;
+    };
+    const row = body.agents.find((item) => item.id === agentId);
+    assertEquals(row?.preview?.kind, "text");
+    assertEquals(row?.preview?.text, "直しました。");
+    // The time travels with the preview: it is the message's, which is what
+    // the list shows and orders by.
+    assertEquals(typeof row?.preview?.at, "number");
   } finally {
     server.shutdown();
     await core.close();

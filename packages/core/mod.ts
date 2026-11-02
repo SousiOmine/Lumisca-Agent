@@ -246,6 +246,10 @@ export type {
   AskQuestion,
   PromptFileRef,
 } from "./shared/mod.ts";
+/** The sidebar row (an agent plus what its conversation last said) and the
+ * preview itself: the route answers the shape and the web package draws it,
+ * so it is exported from the barrel like every other wire shape. */
+export type { StellaAgentSummary, StellaPreview } from "./shared/mod.ts";
 export type {
   WebSearchAvailableProviderView,
   WebSearchProviderForm,

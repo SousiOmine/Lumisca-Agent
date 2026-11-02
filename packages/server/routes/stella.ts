@@ -6,6 +6,7 @@ import type {
   PromptFileRef,
   SessionInfo,
   StellaAgent,
+  StellaAgentSummary,
   StellaConversationSnapshot,
   StellaEntry,
   StellaHandover,
@@ -38,7 +39,10 @@ import { createEventStream } from "./ws-stream.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface StellaApi {
-  listStellaAgents(): StellaAgent[];
+  /** The sidebar's rows: the agents with what their conversation last said
+   * (see shared/stella-preview.ts). The list exists for this route only, so
+   * it is the summary shape that is declared here. */
+  listStellaAgentSummaries(): StellaAgentSummary[];
   /** Create the starter agent a fresh installation talks to, unless one
    * already exists. Returns the agent a client opens. */
   ensureStellaAgent(): StellaAgent;
@@ -250,8 +254,19 @@ export function stellaRoutes(core: StellaApi): Hono {
 
   // --- agents (the agent of each conversation) -----------------------------
 
-  /** The sidebar's list, most recently used first, plus which one a fresh
-   * screen opens.
+  /** The sidebar's rows, plus which agent a fresh screen opens.
+   *
+   * A row carries what its conversation last said (see
+   * shared/stella-preview.ts): a list of agents that says who they are but
+   * not what they said is the one thing a message app's list has and this one
+   * did not, and only the store knows what was said in a conversation nobody
+   * has open.
+   *
+   * `defaultAgentId` answers a different question from the order the client
+   * draws: it is the agent last TALKED TO, which is where a reopened app
+   * lands, while the rows are ordered by when each conversation last spoke
+   * (see compareAgentRows) — a routine that posts overnight moves a row
+   * without deciding what the user opens.
    *
    * Reading the list is also what guarantees the installation has at least
    * one agent: a first run would otherwise open stella mode onto an empty
@@ -260,7 +275,7 @@ export function stellaRoutes(core: StellaApi): Hono {
   app.get("/stella/agents", (c) => {
     const starter = core.ensureStellaAgent();
     return c.json({
-      agents: core.listStellaAgents(),
+      agents: core.listStellaAgentSummaries(),
       defaultAgentId: starter.id,
     });
   });

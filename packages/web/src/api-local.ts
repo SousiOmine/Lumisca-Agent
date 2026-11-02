@@ -21,6 +21,7 @@ import type {
   SessionInfo,
   SkillInfo,
   StellaAgent,
+  StellaAgentSummary,
   StellaStatus,
   TaskInfo,
   ThinkingLevel,
@@ -289,12 +290,15 @@ export const api = {
    * The chosen mode is the client's own (hooks/useAppMode.ts), so it is not
    * read here. */
   getStellaStatus: () => request<StellaStatus>("/api/stella/status"),
-  /** The agents of stella mode, most recently used first, and which
-   * one a fresh screen opens. */
+  /** The sidebar's rows of stella mode — each agent with what its
+   * conversation last said — and which one a fresh screen opens. The server
+   * answers in its "most recently used" order; the client orders the rows by
+   * when each conversation last spoke (see compareAgentRows). */
   getStellaAgents: () =>
-    request<{ agents: StellaAgent[]; defaultAgentId: string | null }>(
-      "/api/stella/agents",
-    ),
+    request<{
+      agents: StellaAgentSummary[];
+      defaultAgentId: string | null;
+    }>("/api/stella/agents"),
   createStellaAgent: (name: string, role: string) =>
     request<StellaAgent>("/api/stella/agents", {
       method: "POST",
