@@ -137,7 +137,6 @@ import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
 import { createVmAskUserTool } from "./vm/ask-user.ts";
 import { createChatUiTool } from "./tools/chat-ui.ts";
 import type { PromptFileRef, Routine } from "./shared/mod.ts";
-import { textWithFileNotice } from "./shared/mod.ts";
 import {
   VmBackgroundSpawner,
   VmCommandRunner as VmCommandRunnerImpl,
@@ -2153,8 +2152,9 @@ export class LumiscaCore {
   }
 
   /** Send a prompt into a session (fire-and-forget). `files` are the paths
-   * `savePromptUploads` returned: the message carries them for the
-   * conversation, and the model is told them in the text. */
+   * `savePromptUploads` returned: the message carries them so the
+   * conversation can draw them, and the model is told those paths through
+   * the message's `modelContent` — never through the text the user sees. */
   startPrompt(
     id: string,
     text: string,
@@ -2164,13 +2164,7 @@ export class LumiscaCore {
   ): void {
     const agent = this.pool.require(id);
     this.sessions.touch(id);
-    agent.promptWhileRunning(
-      textWithFileNotice(text, files ?? []),
-      images,
-      mode,
-      undefined,
-      files,
-    );
+    agent.promptWhileRunning(text, images, mode, undefined, files);
   }
 
   abort(id: string): void {

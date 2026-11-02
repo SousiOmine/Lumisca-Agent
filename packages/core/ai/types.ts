@@ -132,6 +132,29 @@ export interface UserMessage {
    * machine is where the bytes live, and it is also where the agent works.
    * A picture the machine no longer has is gone — the same as a file. */
   files?: PromptFileRef[];
+  /**
+   * What the MODEL is sent, when that is not what the user said.
+   *
+   * A prompt can carry instructions that exist only for the model: the
+   * notice naming attached files ("they are inside the machine, open them
+   * with read"), a mode's framing, a hint the UI adds on the user's behalf.
+   * Those belong in the request and NOT on the screen — the user wrote a
+   * sentence and should see that sentence, not a paragraph addressed to
+   * something else.
+   *
+   * `content` stays the user's own message: it is what the conversation
+   * draws, what `history_search` returns, and what a rewind shows. When
+   * this field is present the transport sends it instead, so the two can
+   * differ in either direction — the model can be told more than the user
+   * wrote, and (a prompt with no words at all, only files) the model can be
+   * sent a message whose visible text is empty. That emptiness is a display
+   * fact, never a reason to drop the message: it still starts a run.
+   *
+   * Never provider-facing on its own terms: `content` remains the message's
+   * identity, so a client that does not know this field still shows the
+   * right text.
+   */
+  modelContent?: string;
   timestamp: number;
 }
 

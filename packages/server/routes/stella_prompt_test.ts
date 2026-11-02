@@ -151,3 +151,23 @@ Deno.test("stella prompt: text alone needs no upload", async () => {
   assertEquals(received.images, [undefined]);
   assertEquals(received.uploads, []);
 });
+
+Deno.test("stella prompt: the file notice is for the model, not the screen", async () => {
+  // The route hands the core the user's own words: the notice naming the
+  // files is added to the message's modelContent (see session-agent's
+  // buildUserMessage), so the conversation draws the sentence the user wrote
+  // instead of a paragraph addressed to the model.
+  const { app, received } = setup();
+  const response = await app.request("/stella/conversations/a1/prompt", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      text: "このログを見て",
+      files: [{ name: "run.log", data: "aGVsbG8=" }],
+    }),
+  });
+  assertEquals(response.status, 200);
+  assertEquals(received.texts, ["このログを見て"]);
+  assertEquals(received.saved.length, 1);
+  assertEquals(received.saved[0]!.name, "run.log");
+});

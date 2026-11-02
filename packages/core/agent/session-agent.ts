@@ -30,7 +30,13 @@ import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
 import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
 import type { AskAnswer } from "../shared/mod.ts";
-import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
+import {
+  DEFAULT_LOCALE,
+  type Locale,
+  promptFileNotice,
+  textWithFileNotice,
+  translate,
+} from "../shared/mod.ts";
 import type {
   BackgroundCommandDone,
   BackgroundProcessManager,
@@ -759,14 +765,19 @@ export class SessionAgent {
   ): AgentMessage {
     const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
     if (images !== undefined && images.length > 0) content.push(...images);
+    // The files already sit in the machine; this record is what the
+    // conversation draws under the bubble. Their paths are addressed to the
+    // MODEL, so they travel as `modelContent` and never reach the screen: the
+    // user wrote a sentence, and the sentence is what they should see.
+    const notice = promptFileNotice(files ?? []);
     return {
       role: "user",
       content,
+      ...(notice.length > 0
+        ? { modelContent: textWithFileNotice(text, files!) }
+        : {}),
       ...(steered === true ? { steered } : {}),
       ...(routine !== undefined && routine !== "" ? { routine } : {}),
-      // The files already sit in the machine; this record is what the
-      // conversation draws under the bubble (the model learns the paths
-      // from the text, see textWithFileNotice).
       ...(files !== undefined && files.length > 0 ? { files } : {}),
       timestamp: this.agent.nextTimestamp(),
     };

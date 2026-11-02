@@ -145,3 +145,48 @@ Deno.test("notificationMessage stamps the payload", () => {
   assertEquals(message.kind, "task");
   assertEquals(message.timestamp >= before, true);
 });
+
+Deno.test("toLlmMessages sends modelContent when the prompt has one", () => {
+  // A prompt can carry text addressed to the model that the user never wrote
+  // (the notice naming attached files). The request gets that text; the
+  // conversation keeps drawing `content`, which stays the user's own words.
+  const messages: AgentMessage[] = [
+    {
+      role: "user",
+      content: [{ type: "text", text: "このログを見て" }],
+      modelContent:
+        "このログを見て\n\n[Attached files]\n- run.log: /vm/run.log",
+      timestamp: 1,
+    },
+  ];
+  const out = toLlmMessages(messages);
+  assertEquals(out.length, 1);
+  assertEquals(
+    out[0]!.content,
+    "このログを見て\n\n[Attached files]\n- run.log: /vm/run.log",
+  );
+});
+
+Deno.test("toLlmMessages sends a prompt whose visible text is empty", () => {
+  // A prompt that is only files shows nothing on screen but is a real turn:
+  // its emptiness is a display fact, not a reason to drop the run.
+  const messages: AgentMessage[] = [
+    {
+      role: "user",
+      content: [{ type: "text", text: "" }],
+      modelContent: "[Attached files]\n- run.log: /vm/run.log",
+      timestamp: 1,
+    },
+  ];
+  const out = toLlmMessages(messages);
+  assertEquals(out.length, 1);
+  assertEquals(out[0]!.content, "[Attached files]\n- run.log: /vm/run.log");
+});
+
+Deno.test("toLlmMessages: a prompt without modelContent is sent unchanged", () => {
+  const messages: AgentMessage[] = [
+    { role: "user", content: [{ type: "text", text: "hi" }], timestamp: 1 },
+  ];
+  const out = toLlmMessages(messages);
+  assertEquals(out[0], messages[0]);
+});

@@ -87,11 +87,20 @@ export function toLlmMessages(messages: AgentMessage[]): Message[] {
       });
       continue;
     }
-    if (
-      message.role === "user" ||
-      message.role === "assistant" ||
-      message.role === "toolResult"
-    ) {
+    if (message.role === "user") {
+      // The model is sent what it was meant to read (see
+      // UserMessage.modelContent): the visible text and the request can
+      // differ — a file notice that the user never wrote, or a prompt whose
+      // visible text is empty because it is only files.
+      const modelContent = message.modelContent;
+      if (modelContent === undefined) {
+        out.push(message);
+      } else {
+        out.push({ ...message, content: modelContent });
+      }
+      continue;
+    }
+    if (message.role === "assistant" || message.role === "toolResult") {
       out.push(message as Message);
     }
   }

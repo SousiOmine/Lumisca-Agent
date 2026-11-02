@@ -1625,3 +1625,75 @@ Deno.test("the idle compaction leaves a conversation with nothing to condense al
     false,
   );
 });
+
+Deno.test("a prompt's file notice reaches the model, not the transcript", async () => {
+  // The notice that names the attached files is addressed to the model. It
+  // travels in `modelContent`, so the conversation keeps drawing the words
+  // the user wrote while the request carries the paths.
+  const requests: Array<{ messages: Array<{ content?: unknown }> }> = [];
+  const base = streamSequence([fauxAssistantMessage("ok")]);
+  const streamFn: StreamFn = (model, context, options) => {
+    requests.push(context as never);
+    return base(model, context, options);
+  };
+  const agent = makeAgent(streamFn);
+  const files = [{
+    name: "run.log",
+    path: "/home/agent/agents/a1/uploads/1-ab/01-run.log",
+    size: 12,
+    ref: "uploads/1-ab/01-run.log",
+    image: false,
+  }];
+  agent.promptWhileRunning(
+    "このログを見て",
+    undefined,
+    undefined,
+    undefined,
+    files,
+  );
+  await agent.waitForIdle();
+
+  // What the user sees (and what a rewind shows): their own words.
+  const shown = agent.messages.find((m) => m.role === "user") as {
+    content: Array<{ text: string }>;
+    modelContent?: string;
+  };
+  assertEquals(shown.content[0]!.text, "このログを見て");
+
+  // What the model received: the same words, then the notice.
+  const sent = requests[0]!.messages.at(-1) as { content: unknown };
+  const text = typeof sent.content === "string"
+    ? sent.content
+    : (sent.content as Array<{ text?: string }>).map((b) => b.text ?? "").join(
+      "",
+    );
+  assert(text.includes("このログを見て"));
+  assert(text.includes("[Attached files]"));
+  assert(text.includes("/home/agent/agents/a1/uploads/1-ab/01-run.log"));
+});
+
+Deno.test("a prompt that is only files still reaches the model", async () => {
+  // Its visible text is empty, which is a display fact: the turn is real.
+  const requests: Array<{ messages: Array<{ content?: unknown }> }> = [];
+  const base = streamSequence([fauxAssistantMessage("ok")]);
+  const streamFn: StreamFn = (model, context, options) => {
+    requests.push(context as never);
+    return base(model, context, options);
+  };
+  const agent = makeAgent(streamFn);
+  agent.promptWhileRunning("", undefined, undefined, undefined, [{
+    name: "run.log",
+    path: "/vm/run.log",
+    size: 3,
+    ref: "uploads/1-ab/01-run.log",
+    image: false,
+  }]);
+  await agent.waitForIdle();
+
+  assertEquals(requests.length, 1);
+  const user = agent.messages.find((m) => m.role === "user") as {
+    content: Array<{ text: string }>;
+  };
+  // Nothing to show, and the run happened anyway.
+  assertEquals(user.content[0]!.text, "");
+});

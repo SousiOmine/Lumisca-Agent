@@ -93,8 +93,19 @@ function argumentsText(args: unknown): string {
  */
 export function estimateMessageTokens(message: AgentMessage): number {
   switch (message.role) {
-    case "user":
-      return estimateContentTokens(message.content) + MESSAGE_OVERHEAD_TOKENS;
+    case "user": {
+      // Priced as the model receives it: when the prompt carries text meant
+      // only for the model (see UserMessage.modelContent), that is what the
+      // request costs — not the shorter words the user sees on screen.
+      const modelContent = message.modelContent;
+      const content = modelContent === undefined ? message.content : [
+        { type: "text" as const, text: modelContent },
+        ...(Array.isArray(message.content)
+          ? message.content.filter((block) => block.type === "image")
+          : []),
+      ];
+      return estimateContentTokens(content) + MESSAGE_OVERHEAD_TOKENS;
+    }
     case "assistant": {
       let tokens = MESSAGE_OVERHEAD_TOKENS;
       for (const block of message.content) {
