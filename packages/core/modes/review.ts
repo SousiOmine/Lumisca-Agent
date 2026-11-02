@@ -59,7 +59,7 @@ ${targetLabel}
 ${steps}
 - If the diff is empty, or this is not a git repository, report that and stop.
 - If the diff is large (bash output gets truncated), split it per file, e.g. \`git diff -- <path>\`.
-2. Read the changed files and their surroundings with the read / grep / glob tools to understand exactly what changed and what it affects.
+2. Read the changed files and their surroundings with the read and bash tools (grep, find) to understand exactly what changed and what it affects.
 
 ${REVIEW_RULES}`;
 }

@@ -13,7 +13,6 @@ import {
 import { createBashTool } from "./bash.ts";
 import { createAsyncBashTools } from "./background.ts";
 import type { BackgroundProcessManager } from "./background.ts";
-import { createGlobTool, createGrepTool } from "./search.ts";
 import { createEvalTool } from "./eval.ts";
 import { type ChatAttachTarget, createChatAttachTool } from "./attach.ts";
 import { createSendChatTool, type SendChatTarget } from "./send-chat.ts";
@@ -69,28 +68,33 @@ export function sessionSkills(
   });
 }
 
-/** The sandboxed file+search tool set: read, write, edit, list_dir, grep,
- * glob. The core of every coding tool set (main agent and general
- * sub-agents share it, so new tools cannot drift between the two). */
+/** The sandboxed file tool set: read, write, edit, list_dir. The core of
+ * every coding tool set (main agent and general sub-agents share it, so new
+ * tools cannot drift between the two). Searching is the shell's job: bash
+ * already has grep and find, and a second surface for the same directory
+ * tree only makes the agent choose on every look. */
 export function fileTools(files: FileBackend): Tool[] {
   return [
     createReadFileTool({ files }),
     createWriteFileTool({ files }),
     createEditFileTool({ files }),
     createListDirTool({ files }),
-    createGrepTool({ files }),
-    createGlobTool({ files }),
   ];
 }
 
-/** The read-only investigation tool set: read, list_dir, grep, glob.
- * Backs the `explore` sub-agent (which must never modify files). */
-export function readOnlyInvestigationTools(files: FileBackend): Tool[] {
+/** The read-only investigation tool set: read, list_dir, and a shell that
+ * can search but not change anything (the prompt states the restriction;
+ * the `explore` sub-agent is read-only by instruction, and bash is how it
+ * greps and finds). */
+export function readOnlyInvestigationTools(
+  files: FileBackend,
+  runner: CommandRunner,
+  safety: CommandSafety | undefined,
+): Tool[] {
   return [
     createReadFileTool({ files }),
     createListDirTool({ files }),
-    createGrepTool({ files }),
-    createGlobTool({ files }),
+    createBashTool({ files, runner, safety }),
   ];
 }
 
@@ -247,6 +251,8 @@ export function createCodingTools(
  *   and are reached through tool_search (TC-7). A sub-agent must not rewrite
  *   the identity of the agent that started it, nor create siblings the user
  *   never asked for.
+ * - searching the machine is the shell's job (grep, find), exactly as it is
+ *   in code mode: there is one way to look through a directory tree.
  * - skills come from the machine and from the user's global set (see
  *   vm/skills.ts), not from a workspace folder chain.
  *
@@ -285,18 +291,9 @@ export function createStellaTools(options: {
 }): Tool[] {
   const { files, runner } = options.backends;
   const rows: Array<Tool | Tool[] | undefined> = [
-    // read/write/edit/list_dir only: the machine has `bash`, which brings
-    // grep, find and everything else the shell already does well. Two
-    // search surfaces for one directory tree made the agent pick between
-    // them on every look, and the shell one is the one that can also filter,
-    // pipe and count. `grep`/`glob` stay in code mode, where they are the
-    // only way to search a host workspace.
-    [
-      createReadFileTool({ files }),
-      createWriteFileTool({ files }),
-      createEditFileTool({ files }),
-      createListDirTool({ files }),
-    ],
+    // The machine has `bash`, which brings grep, find and everything else
+    // the shell already does well.
+    fileTools(files),
     createBashTool({
       files,
       runner,

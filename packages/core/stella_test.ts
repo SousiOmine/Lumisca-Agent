@@ -359,14 +359,13 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
       `missing ${expected}: ${names.join(", ")}`,
     );
   }
-  // The dedicated search tools are NOT: the machine has a shell, and `grep`
-  // and `find` there search the same tree without a second set of tool
-  // arguments to learn (see createStellaTools).
+  // Searching is the shell's job (the same rule code mode follows), so
+  // there are no dedicated search tools to learn.
   for (const gone of ["grep", "glob"]) {
     assertEquals(
       names.includes(gone),
       false,
-      `${gone} must not be preloaded in stella`,
+      `${gone} must not exist at all`,
     );
   }
   // ...and eval is not: it would run JavaScript in the SERVER process, which

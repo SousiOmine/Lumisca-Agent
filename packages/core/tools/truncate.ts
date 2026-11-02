@@ -16,8 +16,8 @@ export function truncatedNote(kind: string, max = MAX_TOOL_OUTPUT): string {
 /** Note for a cut stream whose complete text was saved to `path`: the
  * standard wording above, plus where the full output is and how to read it
  * back. `recovery` is the how-to clause — only the caller knows what can
- * reach the file (the `read`/`grep` tools resolve paths through the file
- * backend, bash does not). */
+ * reach the file (the `read` tool resolves paths through the file backend,
+ * bash does not). */
 export function spilledNote(
   kind: string,
   path: string,
@@ -41,7 +41,7 @@ export function spilledNote(
  * session that closes its tools deletes its own spills (see `clear()`).
  * Without this, every truncated build log of a long session stayed on disk
  * forever — and, since the directory sits at the workspace root, showed up in
- * later `glob` results. */
+ * later directory listings. */
 export class OutputSpiller {
   /** Sequence of this spiller, paired with a process-wide random tag so two
    * spillers (a second session, a sub-agent, another Lumisca process) that

@@ -27,11 +27,11 @@ stella mode は「どこで作業するか」だけが code mode と違います
 
 | ポート | ホスト実装 | VM 実装 |
 |---|---|---|
-| `FileBackend`（tools/file-backend.ts） | `HostFileBackend`（tools/host/files.ts） | `VmFileBackend`（vm/fs.ts: podman exec、base64 転送、grep/find を VM 内で実行） |
+| `FileBackend`（tools/file-backend.ts） | `HostFileBackend`（tools/host/files.ts） | `VmFileBackend`（vm/fs.ts: podman exec、base64 転送） |
 | `CommandRunner`（tools/command-backend.ts） | `HostCommandRunner`（tools/host/command-runner.ts: `/bin/sh` または PowerShell） | `VmCommandRunner`（vm/shell.ts: `bash -lc`） |
 | `BackgroundSpawner`（tools/background-backend.ts） | `HostBackgroundSpawner`（tools/host/background.ts: 子プロセス） | `VmBackgroundSpawner`（vm/shell.ts: setsid + ログファイル追跡） |
 
-`read` / `write` / `edit` / `list_dir` / `grep` / `glob` / `bash` / `pdf_read_pages` は、この 2 つのポート越しに同じ実装で動きます。`eval` だけは stella に渡しません（サーバープロセス内で JavaScript を実行するため、VM 隔離の前提を破る）。同じ理由で、stella のサブエージェントにも渡しません（`SubagentRuntime.eval` が `false`。`tools/task-hub.ts` の `generalTools`）。
+`read` / `write` / `edit` / `list_dir` / `bash` / `pdf_read_pages` は、この 2 つのポート越しに同じ実装で動きます。`eval` だけは stella に渡しません（サーバープロセス内で JavaScript を実行するため、VM 隔離の前提を破る）。同じ理由で、stella のサブエージェントにも渡しません（`SubagentRuntime.eval` が `false`。`tools/task-hub.ts` の `generalTools`）。
 
 ### ツールレジストリの分離（main / subagent）
 
@@ -126,7 +126,7 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
 
 ファイル・コマンド・バックグラウンド実行は、ポート（`tools/*-backend.ts`）と 2 つの実装に分かれます。ホスト側の実装は `tools/host/`（`files.ts` / `command-runner.ts` / `background.ts` / `shell.ts` / `process-tree.ts`）、VM 側は `vm/`（`fs.ts` / `shell.ts`）にあり、どちらが本物のマシンでどちらがコンテナかは名前で分かります。
 
-`tools/truncate.ts` の切り詰め出力（spill）も同じ規則に従います。`OutputSpiller` は `FileBackend` を通して書くので、stella ではマシンの中、code mode ではワークスペースの根の下に置かれ、どちらも `read` / `grep` で読めます。
+`tools/truncate.ts` の切り詰め出力（spill）も同じ規則に従います。`OutputSpiller` は `FileBackend` を通して書くので、stella ではマシンの中、code mode ではワークスペースの根の下に置かれ、どちらも `read`（または `bash` の `grep` / `sed`）で読めます。
 
 ### 依存関係の原則
 - `core` は他の内部パッケージに依存しません。

@@ -68,17 +68,17 @@ export interface BashToolOptions {
   spillDir?: string;
 }
 
-/** How to read a spilled file back. The `read`/`grep` tools resolve paths
- * through the file backend, so only a spill inside its roots is reachable
- * that way; anything else is only reachable through the shell that ran. */
+/** How to read a spilled file back. The `read` tool resolves paths through
+ * the file backend, so only a spill inside its roots is reachable that way;
+ * anything else is only reachable through the shell that ran. */
 async function spillRecovery(
   files: FileBackend,
   path: string,
 ): Promise<string> {
   if ((await files.resolve(path)).ok) {
-    return "use read with offset/limit, or grep this path";
+    return "use read with offset/limit, or grep this path in bash";
   }
-  return "outside the workspace: read it with bash (sed -n '1,200p') or grep";
+  return "outside the workspace: read it with bash (sed -n '1,200p')";
 }
 
 /**

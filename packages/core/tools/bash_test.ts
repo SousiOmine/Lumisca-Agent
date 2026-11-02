@@ -390,9 +390,9 @@ Deno.test("bash tool spills the complete stdout when it is truncated", async () 
       spilled.length > MAX_TOOL_OUTPUT,
       `spill too small: ${spilled.length}`,
     );
-    // Spilled inside the workspace: the sandboxed read/grep tools reach it.
+    // Spilled inside the workspace: the sandboxed read tool reaches it.
     assert(
-      text.includes("use read with offset/limit, or grep this path"),
+      text.includes("use read with offset/limit, or grep this path in bash"),
       `read hint missing: ${text.slice(-200)}`,
     );
   } finally {

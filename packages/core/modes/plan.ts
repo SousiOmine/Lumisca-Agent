@@ -24,7 +24,7 @@ const PLAN_RULES = `# Internal rules
 
 # How to proceed
 1. Understand the request precisely. If anything is ambiguous, ask the user with the ask tool.
-2. Investigate the existing code and structure with the read / grep / glob / list_dir tools and read-only bash commands, and settle the implementation approach.
+2. Investigate the existing code and structure with the read / list_dir tools and the bash tool (grep and find search the tree), and settle the implementation approach.
 3. Draft the implementation plan. The plan must include:
    - the goal and the implementation approach
    - the files / modules to change and what changes in each

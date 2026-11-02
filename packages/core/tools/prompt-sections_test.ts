@@ -27,8 +27,6 @@ import {
   TOOL_CHAT_ATTACH,
   TOOL_EDIT,
   TOOL_EVAL,
-  TOOL_GLOB,
-  TOOL_GREP,
   TOOL_LIST_DIR,
   TOOL_READ,
   TOOL_SEND_CHAT,
@@ -129,8 +127,6 @@ const GENERAL_TOOLS = [
   TOOL_READ,
   TOOL_WRITE,
   TOOL_EDIT,
-  TOOL_GREP,
-  TOOL_GLOB,
   TOOL_LIST_DIR,
   TOOL_BASH,
   TOOL_EVAL,
@@ -140,12 +136,12 @@ const GENERAL_TOOLS = [
   TOOL_TASK_OUTPUT,
 ];
 
-/** The tools of an `explore` sub-agent (read-only, never delegates). */
+/** The tools of an `explore` sub-agent (read-only, never delegates: it
+ * searches through bash, which is why it has one). */
 const EXPLORE_TOOLS = [
   TOOL_READ,
-  TOOL_GREP,
-  TOOL_GLOB,
   TOOL_LIST_DIR,
+  TOOL_BASH,
   TOOL_SKILL,
   TOOL_SEND_MESSAGE,
 ];

@@ -53,8 +53,6 @@ import {
   TOOL_COMPUTER_SCREENSHOT,
   TOOL_EDIT,
   TOOL_EVAL,
-  TOOL_GLOB,
-  TOOL_GREP,
   TOOL_HISTORY_SEARCH,
   TOOL_IDENTITY,
   TOOL_LIST_DIR,
@@ -110,7 +108,6 @@ function truncate(s: string, max: number): string {
 const pathTail = (args: Args) => shortPath(arg(args, "path"));
 const command = (args: Args) => truncate(arg(args, "command"), 60);
 const query = (args: Args) => truncate(arg(args, "query"), 50);
-const pattern = (args: Args) => arg(args, "pattern");
 const url = (args: Args) => truncate(arg(args, "url"), 50);
 const id = (args: Args) => arg(args, "id");
 const act = (args: Args) =>
@@ -162,8 +159,6 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   [TOOL_WRITE]: { icon: IconEdit, summary: pathTail },
   [TOOL_EDIT]: { icon: IconEdit, summary: pathTail },
   [TOOL_LIST_DIR]: { icon: IconFolder, summary: pathTail },
-  [TOOL_GREP]: { icon: IconSearch, summary: pattern },
-  [TOOL_GLOB]: { icon: IconSearch, summary: pattern },
   [TOOL_CHAT_ATTACH]: {
     icon: IconPaperclip,
     summary: (args) => {

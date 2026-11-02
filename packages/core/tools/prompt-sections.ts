@@ -5,8 +5,6 @@ import {
   TOOL_CHAT_ATTACH,
   TOOL_EDIT,
   TOOL_EVAL,
-  TOOL_GLOB,
-  TOOL_GREP,
   TOOL_HISTORY_SEARCH,
   TOOL_LIST_DIR,
   TOOL_READ,
@@ -130,40 +128,19 @@ const EDIT_SECTION: PromptSection = {
     "and re-read\n  the file when the match fails.",
 };
 
-const GLOB_SECTION: PromptSection = {
-  name: "tool:glob",
-  order: ORDER.tool + 30,
-  requires: [TOOL_GLOB],
-  text: "- Use glob to discover files by path pattern instead of shell `find`.",
-};
-
-const GREP_SECTION: PromptSection = {
-  name: "tool:grep",
-  order: ORDER.tool + 40,
-  requires: [TOOL_GREP],
-  text: "- Use grep to search file contents instead of shell `grep`/`rg`.",
-};
-
-const SEARCH_CAPS_SECTION: PromptSection = {
-  name: "tool:search-caps",
-  order: ORDER.tool + 50,
-  requires: [TOOL_GLOB, TOOL_GREP],
-  text: "- A capped search result is not a complete result: narrow the " +
-    "pattern or raise\n  `max_results`.",
-};
-
 const BASH_SECTION: PromptSection = {
   name: "tool:bash",
-  order: ORDER.tool + 60,
+  order: ORDER.tool + 30,
   requires: [TOOL_BASH],
   text:
-    "- Investigate a non-zero exit code before moving on; an empty result " +
-    "is never\n  proof of success.",
+    "- Search with the shell: grep for contents, find for paths (both beat " +
+    "reading\n  files one by one). Investigate a non-zero exit code before " +
+    "moving on; an\n  empty result is never proof of success.",
 };
 
 const ASYNC_BASH_SECTION: PromptSection = {
   name: "tool:async_bash",
-  order: ORDER.tool + 70,
+  order: ORDER.tool + 40,
   requires: [TOOL_ASYNC_BASH],
   text: "- Use async_bash for long-running work; check it with " +
     "async_bash_status and stop\n  it with async_bash_kill when done.",
@@ -171,7 +148,7 @@ const ASYNC_BASH_SECTION: PromptSection = {
 
 const EVAL_SECTION: PromptSection = {
   name: "tool:eval",
-  order: ORDER.tool + 80,
+  order: ORDER.tool + 50,
   requires: [TOOL_EVAL],
   text: "- Use eval for quick calculations and data processing instead of " +
     "spawning\n  python or node from bash.",
@@ -403,10 +380,11 @@ const SUBAGENT_MESSAGE_SECTION: PromptSection = {
 const SUBAGENT_READ_ONLY_SECTION: PromptSection = {
   name: "subagent:read-only",
   order: ORDER.tool,
-  requires: [TOOL_READ, TOOL_GREP, TOOL_GLOB, TOOL_LIST_DIR],
-  text: "- You are read-only: investigate with read/grep/glob/list_dir/skill " +
-    "and report\n  findings with file references (path:line). Never modify " +
-    "files or run commands.",
+  requires: [TOOL_READ, TOOL_BASH, TOOL_LIST_DIR],
+  text: "- You are read-only: investigate with read/list_dir, the shell " +
+    "(grep, find,\n  git log, ...) and skill, and report findings with file " +
+    "references (path:line).\n  Never modify files: no write / edit, and no " +
+    "shell command with side effects.",
 };
 
 const SUBAGENT_THOROUGH_SECTION: PromptSection = {
@@ -439,9 +417,6 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   READ_SECTION,
   WRITE_SECTION,
   EDIT_SECTION,
-  GLOB_SECTION,
-  GREP_SECTION,
-  SEARCH_CAPS_SECTION,
   BASH_SECTION,
   ASYNC_BASH_SECTION,
   EVAL_SECTION,
@@ -478,10 +453,6 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   READ_SECTION,
   WRITE_SECTION,
   EDIT_SECTION,
-  // No GLOB/GREP/SEARCH_CAPS: stella has no such tools (see
-  // createStellaTools) — its shell searches the machine. Their `requires`
-  // would prune them anyway; leaving them out of the list keeps the sheet
-  // honest about what this session is.
   BASH_SECTION,
   ASYNC_BASH_SECTION,
   SKILL_SECTION,

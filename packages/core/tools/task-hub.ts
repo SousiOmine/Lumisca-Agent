@@ -79,11 +79,12 @@ const log = createLogger("task");
 function exploreTools(
   workspace: Workspace,
   backends: ToolBackends,
+  safety: CommandSafety | undefined,
   browserAvailable: boolean,
   computerAvailable: boolean,
 ): Tool[] {
   return [
-    ...readOnlyInvestigationTools(backends.files),
+    ...readOnlyInvestigationTools(backends.files, backends.runner, safety),
     createSkillTool({
       skills: sessionSkills(workspace.folders, {
         browserAvailable,
@@ -427,6 +428,7 @@ export class TaskHub {
         : exploreTools(
           runtime.workspace,
           runtime.backends,
+          this.safety,
           this.browserAvailable,
           this.computerAvailable,
         )),

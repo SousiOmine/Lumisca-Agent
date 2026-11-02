@@ -38,7 +38,8 @@ export class Sandbox {
   /**
    * Resolved, absolute workspace roots, sorted by normalized path so that
    * every behavior (folder-name matching, containment checks, the order in
-   * which grep/glob walk the folders) is independent of registration order.
+   * which the directory listing walks the folders) is independent of
+   * registration order.
    */
   readonly roots: string[];
 

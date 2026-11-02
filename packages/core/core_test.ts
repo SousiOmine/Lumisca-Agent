@@ -1116,8 +1116,6 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
       "write",
       "edit",
       "list_dir",
-      "grep",
-      "glob",
       "bash",
       "async_bash",
       "eval",

@@ -10,33 +10,18 @@
  * one agent's folder — like Terasuma, an agent may read and write the other
  * agents' folders when the user asks it to, and the working folder is a
  * default, not a wall.
- *
- * The cost of one container call per operation is why the two searches
- * matter most. `find` does the walking inside the machine (one call, with
- * the same pruning rules the host walk applies), while the MATCHING runs
- * here against the returned paths — the same `globToRegExp` and
- * `GitignoreMatcher` the host uses. Sharing the matcher rather than
- * re-implementing glob and gitignore semantics in shell is what keeps the two
- * backends answering the same question the same way; only the walk crosses
- * the boundary.
  */
-import { posix, relative } from "node:path";
+import { posix } from "node:path";
 import { base64ToBytes, textToBase64 } from "../base64.ts";
 import { firstLine, mergeRanges, stripTrailingCR } from "../lines.ts";
 import type { ResolvedPath } from "../workspace/sandbox.ts";
-import {
-  type BackendDirEntry,
-  type BackendGrepResult,
-  type BackendStat,
-  type FileBackend,
-  type GlobRequest,
-  type GrepRequest,
-  type LineRange,
-  previewLine,
-  type RangeReadResult,
+import type {
+  BackendDirEntry,
+  BackendStat,
+  FileBackend,
+  LineRange,
+  RangeReadResult,
 } from "../tools/file-backend.ts";
-import { BUILD_ARTIFACT_DIRS } from "../workspace/walk.ts";
-import { GitignoreMatcher, globToRegExp } from "../tools/gitignore.ts";
 import { VM_WORKDIR } from "./contract.ts";
 import type { VmExec } from "./container.ts";
 import { shellQuote } from "./quote.ts";
@@ -44,87 +29,11 @@ import { shellQuote } from "./quote.ts";
 /** Bound for one file operation (a local call; this only guards against a
  * wedged machine). */
 const FILE_TIMEOUT_MS = 60_000;
-/** Bound for one search call. */
-const SEARCH_TIMEOUT_MS = 120_000;
 /** Largest file a single read transfers (bytes). */
 const MAX_READ_BYTES = 32 * 1024 * 1024;
-/** Character budget for a search call's output. The tool truncates further;
- * this only bounds what crosses the boundary. */
-const SEARCH_OUTPUT_LIMIT = 4 * 1024 * 1024;
-/** How many files one grep call inspects at a time inside the machine. */
-const GREP_BATCH = 200;
-
-/**
- * The shell script that greps a set of roots inside the machine.
- *
- * The output is `path:line: text`, the shape the host backend produces and
- * the model reads, and the skip rules are the host's too:
- *
- * - artifact directories pruned (the same set the workspace walk skips),
- * - symlinks never followed,
- * - binary files skipped (`-I`),
- * - hidden files ARE searched (grep has no hidden flag; the host's grep
- *   searches them as well),
- * - files larger than `request.maxFileSize` skipped.
- *
- * The size rule is why this is `find | xargs grep` instead of `grep -r`:
- * grep has no size test, so a recursive grep would read a multi-gigabyte log
- * that the host skips. `-size -<cap+1>c` is find's spelling of "at most
- * `cap` bytes". `-H` keeps the `path:` prefix that a one-file xargs batch
- * would otherwise drop, and an unreadable file is skipped by grep itself so
- * a search never fails on one.
- */
-export function grepCommand(
-  roots: readonly string[],
-  request: GrepRequest,
-): string {
-  const prune = [...BUILD_ARTIFACT_DIRS]
-    .map((dir) => `-name ${shellQuote(dir)}`)
-    .join(" -o ");
-  const flags = [
-    "-n",
-    "-H",
-    "-I",
-    request.caseSensitive ? "" : "-i",
-    `--regexp=${shellQuote(request.pattern)}`,
-    "--",
-  ].filter((part) => part !== "").join(" ");
-  const sizeTest = `-size -${request.maxFileSize + 1}c`;
-  // One `find` per root, grouped so a pipe feeds from all of them: a newline
-  // alone would end the pipeline.
-  const candidates = roots
-    .map((root) =>
-      `find ${shellQuote(root)} -type d \\( ${prune} \\) -prune -o ` +
-      `-type f ! -type l ${sizeTest} -print0 2>/dev/null`
-    )
-    .join("; ");
-  // `|| true`: grep exits 1 when nothing matched (and 123 when `head` closed
-  // the pipe early), neither of which is a failure of the search.
-  return `{ ${candidates}; } | xargs -0 -r grep ${flags} 2>/dev/null | ` +
-    `head -n ${request.maxResults} || true`;
-}
-
-/**
- * The shell script that lists every file under the roots with the walk
- * policy both backends share: artifact directories pruned, symlinks never
- * followed, hidden entries skipped only when asked. Matching happens on this
- * side (see the module comment).
- */
-export function walkCommand(
-  roots: readonly string[],
-  hidden: boolean,
-): string {
-  const prune = [...BUILD_ARTIFACT_DIRS]
-    .map((dir) => `-name ${shellQuote(dir)}`)
-    .join(" -o ");
-  const hiddenTest = hidden ? "" : " ! -name '.*'";
-  return roots
-    .map((root) =>
-      `find ${shellQuote(root)} -type d \\( ${prune} \\) -prune -o ` +
-      `-type f${hiddenTest} ! -type l -print 2>/dev/null || true`
-    )
-    .join("\n");
-}
+/** Character budget for one ranged read's output. The tool truncates
+ * further; this only bounds what crosses the boundary. */
+const READ_OUTPUT_LIMIT = 4 * 1024 * 1024;
 
 /**
  * The VM file backend.
@@ -141,9 +50,6 @@ export class VmFileBackend implements FileBackend {
   /** The folder relative paths resolve against (the session's working folder;
    * the machine's home when a caller has none). */
   readonly #cwd: string;
-  /** `.gitignore` matchers per walk root, read through the exec seam and
-   * cached for this backend's lifetime (a search runs on every turn). */
-  readonly #gitignore = new Map<string, GitignoreMatcher | null>();
 
   constructor(exec: VmExec, options: { cwd?: string } = {}) {
     this.#exec = exec;
@@ -229,7 +135,7 @@ export class VmFileBackend implements FileBackend {
     ].join("\n");
     const result = await this.#exec(["sh", "-c", script], {
       timeoutMs: FILE_TIMEOUT_MS,
-      maxOutput: SEARCH_OUTPUT_LIMIT,
+      maxOutput: READ_OUTPUT_LIMIT,
       keep: "head",
     });
     if (result.exitCode !== 0) {
@@ -310,7 +216,7 @@ export class VmFileBackend implements FileBackend {
         "sh",
         path,
       ],
-      { timeoutMs: FILE_TIMEOUT_MS, maxOutput: SEARCH_OUTPUT_LIMIT },
+      { timeoutMs: FILE_TIMEOUT_MS, maxOutput: READ_OUTPUT_LIMIT },
     );
     if (result.exitCode === 3) {
       throw new Error(`Path does not exist: ${path}`);
@@ -340,137 +246,6 @@ export class VmFileBackend implements FileBackend {
       );
     }
   }
-
-  async grep(request: GrepRequest): Promise<BackendGrepResult> {
-    const roots = await this.searchRoots(request.path);
-    if (roots.length === 0) return { lines: [], files: 0 };
-    const result = await this.#exec(["sh", "-c", grepCommand(roots, request)], {
-      timeoutMs: SEARCH_TIMEOUT_MS,
-      maxOutput: SEARCH_OUTPUT_LIMIT,
-      keep: "head",
-    });
-    // Exit 1 is "no match", not a failure.
-    if (result.exitCode !== 0 && result.exitCode !== 1) {
-      throw new Error(`Search failed: ${firstLine(result.stderr)}`);
-    }
-    const ignored = await this.gitignoreFor(roots, request.gitignore);
-    const lines: string[] = [];
-    for (const line of result.stdout.split("\n")) {
-      if (line.length === 0) continue;
-      if (lines.length >= request.maxResults) break;
-      const parsed = parseGrepLine(line);
-      if (parsed === undefined) continue;
-      if (ignored?.(parsed.path) === true) continue;
-      lines.push(
-        `${parsed.path}:${parsed.line}: ${previewLine(parsed.text)}`,
-      );
-    }
-    const files = new Set(lines.map((line) => line.slice(0, line.indexOf(":"))))
-      .size;
-    return { lines, files };
-  }
-
-  async glob(request: GlobRequest): Promise<string[]> {
-    const roots = await this.searchRoots(request.path);
-    if (roots.length === 0) return [];
-    const re = globToRegExp(request.pattern.replace(/\\/g, "/"));
-    const found: string[] = [];
-    const ignored = await this.gitignoreFor(roots, request.gitignore);
-    const walked = await this.#exec(
-      ["sh", "-c", walkCommand(roots, request.hidden)],
-      {
-        timeoutMs: SEARCH_TIMEOUT_MS,
-        maxOutput: SEARCH_OUTPUT_LIMIT,
-        keep: "head",
-      },
-    );
-    if (walked.exitCode !== 0) {
-      throw new Error(`Search failed: ${firstLine(walked.stderr)}`);
-    }
-    const rootOf = (path: string) =>
-      roots.find((root) => isInside(root, path)) ?? roots[0]!;
-    for (const file of walked.stdout.split("\n")) {
-      if (file.length === 0) continue;
-      if (found.length >= request.maxResults) break;
-      // A single named file matches against its own path; a walked file
-      // against its path relative to the root it came from.
-      const relativeTo = relative(rootOf(file), file).replace(/\\/g, "/");
-      const subject = file === rootOf(file) ? file : relativeTo;
-      if (!re.test(subject)) continue;
-      if (ignored?.(file) === true) continue;
-      found.push(file);
-    }
-    return found;
-  }
-
-  /** The roots a search visits: the resolved `path`, or the session's
-   * working folder. A path that does not exist fails with the host's
-   * wording. */
-  private async searchRoots(requested: string | undefined): Promise<string[]> {
-    if (requested === undefined) return [this.#cwd];
-    const resolved = await this.resolve(requested);
-    if (!resolved.ok) throw new Error(resolved.reason);
-    const stat = await this.stat(resolved.path);
-    if (stat === undefined) {
-      throw new Error(`Path does not exist: ${requested}`);
-    }
-    // A directly named file is searched on its own (see grep/glob).
-    return [resolved.path];
-  }
-
-  /** The `.gitignore` filter for these roots, or undefined when the request
-   * did not ask for one. Read through the exec seam once per root and cached:
-   * a root is the machine's home or a subdirectory of it, and the matcher
-   * resolves a path to its owning root by containment. */
-  private async gitignoreFor(
-    roots: readonly string[],
-    enabled: boolean,
-  ): Promise<((path: string) => boolean) | undefined> {
-    if (!enabled) return undefined;
-    const root = roots[0] ?? VM_WORKDIR;
-    if (!this.#gitignore.has(root)) {
-      const result = await this.#exec(
-        [
-          "sh",
-          "-c",
-          'cat "$1" 2>/dev/null || true',
-          "sh",
-          `${root}/.gitignore`,
-        ],
-        { timeoutMs: FILE_TIMEOUT_MS, maxOutput: 1024 * 1024 },
-      );
-      const text = result.stdout;
-      this.#gitignore.set(
-        root,
-        text.trim() === "" ? null : GitignoreMatcher.fromText(root, text),
-      );
-    }
-    const matcher = this.#gitignore.get(root);
-    if (matcher === null || matcher === undefined) return undefined;
-    return (path) => {
-      const owner = root;
-      const rel = relative(owner, path).replace(/\\/g, "/");
-      return matcher.ignores(owner, rel, false);
-    };
-  }
-}
-
-/** One parsed grep result line, or undefined when it does not have the
- * `path:line:` shape (kept nowhere: grep's own output is the contract). */
-function parseGrepLine(
-  line: string,
-): { path: string; line: string; text: string } | undefined {
-  const first = line.indexOf(":");
-  if (first === -1) return undefined;
-  const second = line.indexOf(":", first + 1);
-  if (second === -1) return undefined;
-  const lineNo = line.slice(first + 1, second);
-  if (!/^\d+$/.test(lineNo)) return undefined;
-  return {
-    path: line.slice(0, first),
-    line: lineNo,
-    text: line.slice(second + 1).replace(/^\s/, ""),
-  };
 }
 
 /** Resolve a model-supplied path inside the machine: `~` is expanded as a
@@ -507,5 +282,3 @@ function isInside(root: string, path: string): boolean {
   const prefix = root.endsWith("/") ? root : `${root}/`;
   return path.startsWith(prefix);
 }
-
-export { GREP_BATCH };
