@@ -1,6 +1,11 @@
 export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
 export {
+  MIN_VACUUM_BYTES,
+  vacuumMarkerPath,
+  vacuumOnStartup,
+} from "./db/vacuum.ts";
+export {
   createVmManager,
   type VmManager,
   type VmProgress,

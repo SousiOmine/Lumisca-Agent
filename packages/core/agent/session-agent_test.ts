@@ -100,6 +100,12 @@ function makeAgent(
         };
       },
       deleteBySession: () => {},
+      listModelView: () => [],
+      listWindow: () => [],
+      positionOf: () => undefined,
+      count: () => 0,
+      usageRows: () => [],
+      pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
     },
     onEvent,
     askHub: new AskHub("s1", () => {}),
@@ -928,6 +934,12 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
       };
     },
     deleteBySession: () => {},
+    listModelView: () => [],
+    listWindow: () => [],
+    positionOf: () => undefined,
+    count: () => 0,
+    usageRows: () => [],
+    pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
   };
   const agent = new SessionAgent({
     sessionId: "s1",
@@ -1115,6 +1127,12 @@ Deno.test("compactNow condenses on demand and reports the outcome", async () => 
         };
       },
       deleteBySession: () => {},
+      listModelView: () => [],
+      listWindow: () => [],
+      positionOf: () => undefined,
+      count: () => 0,
+      usageRows: () => [],
+      pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
     },
     onEvent: (event) => events.push(event),
     askHub: new AskHub("s1", () => {}),
@@ -1238,6 +1256,12 @@ Deno.test("a compaction republishes the context its checkpoint left behind", asy
         };
       },
       deleteBySession: () => {},
+      listModelView: () => [],
+      listWindow: () => [],
+      positionOf: () => undefined,
+      count: () => 0,
+      usageRows: () => [],
+      pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
     },
     contextProviders: [provider],
     compactionPolicy: () => TEST_COMPACTION_POLICY,

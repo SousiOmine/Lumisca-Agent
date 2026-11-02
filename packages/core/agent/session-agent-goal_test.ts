@@ -119,6 +119,12 @@ function makeGoalAgent(
         };
       },
       deleteBySession: () => {},
+      listModelView: () => [],
+      listWindow: () => [],
+      positionOf: () => undefined,
+      count: () => 0,
+      usageRows: () => [],
+      pruneCondensed: () => ({ changed: 0, freedBytes: 0 }),
     },
     onEvent: (event) => {
       events.push(event);

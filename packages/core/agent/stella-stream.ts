@@ -17,7 +17,7 @@
  * out of the conversation. A `chat_ui` card is the one tool call that is
  * also a reply, so it travels with the text that carried it.
  */
-import type { AgentMessage, ImageContent } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/types.ts";
 import { TOOL_CHAT_ATTACH, TOOL_CHAT_UI } from "../shared/tool-names.ts";
 import { attachmentsOfDetails } from "../shared/attachments.ts";
 import type { ClientEvent } from "../types/event.ts";
@@ -44,16 +44,6 @@ function textOf(message: ContentMessage): string {
     )
     .map((block) => block.text)
     .join("");
-}
-
-/** The images a message carried, in order. A prompt can be an image alone,
- * so "did this message say anything" has to count them. */
-function imagesOf(message: ContentMessage): ImageContent[] {
-  const content = message.content;
-  if (typeof content === "string") return [];
-  return content.filter((block): block is ImageContent =>
-    block.type === "image"
-  );
 }
 
 /** The `chat_ui` markups a message carried, in order. A call without a
@@ -97,18 +87,17 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       const text = message.role === "mode"
         ? message.shortText
         : textOf(message);
-      // A message is worth showing when it says something OR shows something:
-      // an image-only prompt (a screenshot the user dropped in and asked
-      // nothing about) is a real message, and dropping it would leave a reply
-      // with nothing it answered.
-      const images = message.role === "mode" ? [] : imagesOf(message);
-      if (text.length === 0 && images.length === 0) return null;
+      // A message is worth showing when it says something OR brings
+      // something: a prompt that was a screenshot alone is a real message,
+      // and dropping it would leave a reply with nothing it answered.
+      const files = message.role === "mode" ? [] : message.files ?? [];
+      if (text.length === 0 && files.length === 0) return null;
       return {
         role: "user",
         text,
         cards: [],
         attachments: [],
-        images,
+        files,
         timestamp: message.timestamp,
       };
     }
@@ -121,7 +110,7 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
         text,
         cards,
         attachments: [],
-        images: [],
+        files: [],
         timestamp: message.timestamp,
       };
     }
@@ -135,7 +124,7 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
         text: "",
         cards: [],
         attachments,
-        images: [],
+        files: [],
         timestamp: message.timestamp,
       };
     }
@@ -158,6 +147,10 @@ export function stellaEntryCursorOf(entry: StellaEntry): string {
     entry.role,
     entry.timestamp,
     entry.attachments[0]?.name ?? "",
+    // A prompt that carried files and a reply in the same millisecond would
+    // otherwise collapse into one cursor; the first file's reference names
+    // which prompt it was.
+    entry.files[0]?.ref ?? "",
   ]);
 }
 /** The conversation's view of a pending-question list. The shapes are the

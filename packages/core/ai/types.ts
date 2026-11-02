@@ -120,10 +120,17 @@ export interface UserMessage {
    * routine's name. The UI shows it above the bubble, so the user can tell
    * a scheduled request from something they typed. Never provider-facing. */
   routine?: string;
-  /** Files the user attached to this prompt, already written into the
-   * machine (see vm/uploads.ts). The conversation draws them under the
-   * bubble; the model is told their paths through the text, so this stays
-   * in the transcript and out of the provider payload. */
+  /** Files and pictures the user attached to this prompt, already written
+   * into the machine (see vm/uploads.ts). The conversation draws them under
+   * the bubble by reading them back from the machine; the model is told
+   * their paths through the text, so this stays in the transcript and out of
+   * the provider payload.
+   *
+   * A picture is an entry here rather than an `image` block in `content`.
+   * Both would put the bytes in the database, and a conversation that lives
+   * for years must not carry every screenshot ever pasted into it: the
+   * machine is where the bytes live, and it is also where the agent works.
+   * A picture the machine no longer has is gone — the same as a file. */
   files?: PromptFileRef[];
   timestamp: number;
 }

@@ -40,6 +40,23 @@ export const RASTER_IMAGE_EXTENSIONS: readonly string[] = Object.keys(
   RASTER_IMAGE_MIME_BY_EXTENSION,
 );
 
+/** The extension a raster image of this content type is stored with, or
+ * undefined when the type is not one of the raster formats. The inverse of
+ * {@link RASTER_IMAGE_MIME_BY_EXTENSION}, kept beside it so the two cannot
+ * drift: a picture pasted into a prompt is stored under the extension its
+ * own type names, which is what makes it displayable later. */
+export function rasterExtensionOfMimeType(
+  mimeType: string,
+): string | undefined {
+  const wanted = mimeType.trim().toLowerCase();
+  for (
+    const [extension, type] of Object.entries(RASTER_IMAGE_MIME_BY_EXTENSION)
+  ) {
+    if (type === wanted) return extension;
+  }
+  return undefined;
+}
+
 /** Content type of SVG — accepted by the visual store only (see the module
  * comment). */
 export const SVG_MIME_TYPE = "image/svg+xml";

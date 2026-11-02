@@ -205,6 +205,62 @@
   object-fit: contain;
 }
 
+/* ---- files a prompt brought into the machine ------------------------------ */
+
+/* One row per document a prompt attached: the name and its size, which is
+ * what a reader needs to know what was sent. The bytes stay in the machine,
+ * so there is nothing here to open — the row is a record, not a download. */
+.msg-files {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.msg-files:last-child {
+  margin-bottom: 0;
+}
+
+.msg-file {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 0.9em;
+  min-width: 0;
+}
+
+.msg-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-file-size {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A picture the machine no longer has (the agent moved or deleted it). It
+ * keeps the size of the image slot so the bubble does not reflow when the
+ * answer arrives. */
+.msg-file-gone {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  font-size: 0.9em;
+}
+
 /* ---- agent-authored visuals (diagrams and published images) --------------- */
 
 /* Every image an assistant message embeds, whether a diagram it wrote in an

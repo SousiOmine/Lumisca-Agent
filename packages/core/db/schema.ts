@@ -261,6 +261,20 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
       "TEXT NOT NULL DEFAULT ''",
     );
   },
+  // Opening a session loads what the MODEL is shown — the newest compaction
+  // checkpoint and everything after it — rather than the whole transcript
+  // (a conversation that runs for years holds more than any request can
+  // carry, and none of it needs to be in memory to draw the screen: pages are
+  // read from the store). Finding that checkpoint is one descending scan, and
+  // this PARTIAL index is what keeps it cheap however long the conversation
+  // grows: only checkpoint rows are indexed, and they sit in rowid order
+  // within a session (rowid is the index's implicit last key), so the newest
+  // one is the last entry of the session's range.
+  (db) =>
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_messages_checkpoint
+        ON messages(session_id) WHERE role = 'checkpoint';
+    `),
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

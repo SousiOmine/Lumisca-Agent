@@ -17,13 +17,16 @@
  */
 import {
   attachmentDisplayName,
+  isInlineImageExtension,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_CALL,
   MAX_ATTACHMENTS_TOTAL_BYTES,
+  type PromptFileRef,
 } from "../shared/mod.ts";
+import { extname } from "node:path";
 import { CoreError } from "../errors.ts";
 import { VM_WORKDIR, vmAgentDir } from "./contract.ts";
-import type { VmExec } from "./container.ts";
+import type { VmExec, VmExecBytes } from "./container.ts";
 
 /** Where a prompt's uploads go, inside the agent's own folder: they are the
  * agent's files from the moment it reads them (it may move, edit or keep
@@ -36,16 +39,10 @@ export interface UploadFile {
   bytes: Uint8Array;
 }
 
-/** One file as it now sits in the machine. */
-export interface SavedUpload {
-  /** The name to show (the user's own, cleaned): the card's label and what
-   * the model's notice calls the file. */
-  name: string;
-  /** Absolute path inside the machine. What the model is told. Never shown
-   * in the conversation: it is how to reach the file, not who it is. */
-  path: string;
-  size: number;
-}
+/** One file as it now sits in the machine: exactly what the transcript
+ * records (see PromptFileRef), so the store and the conversation agree on
+ * what an upload is. */
+export type SavedUpload = PromptFileRef;
 
 export interface SaveUploadsOptions {
   /** The session's exec seam (the stella machine). */
@@ -89,7 +86,13 @@ export async function saveUploads(
     const stored = `${String(index + 1).padStart(2, "0")}-${name}`;
     const path = `${directory}/${stored}`;
     await writeFile(exec, directory, path, file.bytes, options.signal);
-    saved.push({ name, path, size: file.bytes.length });
+    saved.push({
+      name,
+      path,
+      size: file.bytes.length,
+      ref: `${VM_UPLOADS_DIR}/${folder}/${stored}`,
+      image: isInlineImageExtension(extname(name)),
+    });
   }
   return saved;
 }
@@ -155,6 +158,86 @@ function assertUploadLimits(files: readonly UploadFile[]): void {
   }
 }
 
+/** The largest upload the conversation will draw back: an image, not an
+ * archive. A file over this is still readable inside the machine; the
+ * conversation just cannot show it. */
+export const MAX_PROMPT_IMAGE_BYTES = 20 * 1024 * 1024;
+
 function randomId(): string {
   return crypto.randomUUID().slice(0, 8);
+}
+
+/**
+ * The shape of a stored upload reference, relative to the agent's folder:
+ * `uploads/<batch>/<index>-<name>`. Validated before it becomes a path, so a
+ * caller cannot address anything outside the uploads folder (the same
+ * property the asset stores keep: only names this module generated are
+ * reachable).
+ */
+const UPLOAD_REF = /^uploads\/[0-9]+-[0-9a-f]{8}\/[0-9]{2}-[^/\\]+$/;
+
+/** Whether `ref` is a reference this module can have generated. */
+export function isUploadRef(ref: string): boolean {
+  return UPLOAD_REF.test(ref);
+}
+
+/**
+ * Read one upload back out of the machine, or undefined when the file is no
+ * longer there.
+ *
+ * The machine is the truth: a file the agent (or the user, through it)
+ * deleted is gone, and the conversation says so rather than showing an image
+ * that no longer exists anywhere (see the prompt-upload route). An
+ * unreadable machine (podman failing) throws — that is a different sentence
+ * from "the file is gone".
+ */
+export async function readUpload(
+  exec: VmExec,
+  execBytes: VmExecBytes,
+  options: {
+    agentId: string;
+    ref: string;
+    /** Refuse anything larger (a conversation shows images; a 100 MB file
+     * is not one). */
+    maxBytes: number;
+    signal?: AbortSignal;
+  },
+): Promise<{ bytes: Uint8Array; name: string } | undefined> {
+  if (!isUploadRef(options.ref)) return undefined;
+  const path = `${vmAgentDir(options.agentId)}/${options.ref}`;
+  // `test -f` first: it separates "gone" (an answer) from "read failed" (an
+  // error), and a missing file is the ordinary case once the machine's
+  // contents changed.
+  const exists = await exec(["sh", "-c", 'test -f "$1"', "sh", path], {
+    timeoutMs: 30_000,
+    workdir: VM_WORKDIR,
+    ...(options.signal !== undefined ? { signal: options.signal } : {}),
+  });
+  if (exists.exitCode !== 0) return undefined;
+  // The byte seam: an image must not be decoded as text on its way out.
+  const result = await execBytes(["cat", "--", path], {
+    timeoutMs: 60_000,
+    workdir: VM_WORKDIR,
+    maxOutput: options.maxBytes,
+    ...(options.signal !== undefined ? { signal: options.signal } : {}),
+  });
+  if (result.exitCode !== 0) {
+    throw new CoreError(
+      `Could not read the file from the machine: ${
+        result.stderr.trim() || `exit code ${result.exitCode}`
+      }`,
+      "unavailable",
+    );
+  }
+  if (result.truncated) {
+    // Not an error and not "gone": the file is there but is not something a
+    // conversation draws. Said plainly so a caller does not report it as
+    // deleted.
+    throw new CoreError(
+      `The file is larger than ${options.maxBytes} bytes and was not read`,
+      "invalid",
+    );
+  }
+  const name = options.ref.split("/").pop() ?? options.ref;
+  return { bytes: result.stdout, name };
 }

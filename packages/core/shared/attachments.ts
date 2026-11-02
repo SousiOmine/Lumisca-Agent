@@ -190,13 +190,27 @@ export interface PromptFileRef {
   path: string;
   /** Size in bytes (the card shows it). */
   size: number;
+  /** Where the file sits relative to the agent's folder (`uploads/<batch>/
+   * <index>-<name>`). This is what the conversation addresses: the absolute
+   * path embeds the machine's own layout, which the session resolves. */
+  ref: string;
+  /** True when the file is a raster image, so the conversation draws it
+   * inline instead of listing it as an attachment. Decided once, when the
+   * file was stored, from its extension. */
+  image: boolean;
 }
 
 /** The notice appended to the model's copy of a prompt that carried files.
  * English, like every other system-facing text. Kept beside the shape it
- * describes so the sentence and the field cannot drift apart. */
+ * describes so the sentence and the field cannot drift apart.
+ *
+ * A picture is listed the same way as any other file: its bytes are in the
+ * machine, so the model reaches it with `read` (which returns the picture as
+ * an image block for a model that can see). Sending the picture as a block
+ * directly would mean the message carried it forever. */
 export function promptFileNotice(files: readonly PromptFileRef[]): string {
   if (files.length === 0) return "";
+  const images = files.filter((file) => file.image).length;
   return [
     "[Attached files]",
     "The user attached these files. They are inside the machine:",
@@ -204,7 +218,10 @@ export function promptFileNotice(files: readonly PromptFileRef[]): string {
       `- ${file.name}: ${file.path} (${formatAttachmentSize(file.size)})`
     ),
     "",
-    "Open them with the read or bash tools.",
+    images > 0
+      ? "Open a picture with read — it comes back as an image you can look " +
+        "at. Other files are text unless read says otherwise."
+      : "Open them with the read or bash tools.",
   ].join("\n");
 }
 

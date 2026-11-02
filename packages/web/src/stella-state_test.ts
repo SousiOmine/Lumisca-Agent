@@ -15,7 +15,7 @@ function entry(
   timestamp: number,
   cards: string[] = [],
 ) {
-  return { role, text, cards, attachments: [], images: [], timestamp };
+  return { role, text, cards, attachments: [], files: [], timestamp };
 }
 
 function state(
@@ -34,6 +34,7 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     error: "last failure",
     agentName: "Aide",
     sessionId: "s1",
+    model: { provider: "faux", modelId: "model" },
     rev: 3,
   };
   assertEquals(stellaStateOf(snapshot), {
@@ -47,6 +48,7 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     handover: null,
     error: "last failure",
     agentName: "Aide",
+    model: { provider: "faux", modelId: "model" },
   });
 });
 
@@ -79,7 +81,7 @@ Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
     entry: entry("user", "A", 1),
   })!;
   assertEquals(current.entries.map((e) => e.text), ["A", "B"]);
-  assertEquals(entryKey(current.entries[0]!), "user:1::0:A");
+  assertEquals(entryKey(current.entries[0]!), "user:1:::A");
 });
 
 Deno.test("applyStellaEvent: deltas accumulate and are dropped at the end", () => {
@@ -164,6 +166,7 @@ Deno.test("stellaStateOf: a re-read snapshot merges into paged history", () => {
     handover: null,
     agentName: "Aide",
     sessionId: "s1",
+    model: { provider: "faux", modelId: "model" },
     rev: 9,
   }, current);
 
@@ -191,6 +194,7 @@ Deno.test("stellaStateOf: a window that shares nothing replaces the state", () =
     handover: null,
     agentName: "Aide",
     sessionId: "s1",
+    model: { provider: "faux", modelId: "model" },
     rev: 9,
   }, current);
   assertEquals(merged.entries.map((e) => e.text), ["新しい"]);

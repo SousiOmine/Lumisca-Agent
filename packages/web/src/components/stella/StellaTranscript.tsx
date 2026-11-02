@@ -27,6 +27,7 @@ export function StellaTranscript({
   author,
   visualBase,
   attachBase,
+  uploadBase,
   onRewind,
   onSend,
   onLoadOlder,
@@ -40,6 +41,10 @@ export function StellaTranscript({
   visualBase: string;
   /** Attachment base of the conversation (the files chat_attach sent). */
   attachBase: string;
+  /** Where a prompt's own files are read back from: the machine, through the
+   * conversation's upload route (their bytes live there, not in the
+   * transcript). */
+  uploadBase: string;
   /** Rewind from an entry onward (the entry's timestamp names it). */
   onRewind: (timestamp: number, text: string) => void;
   /** Send a card's answer as the user's next message. */
@@ -103,6 +108,7 @@ export function StellaTranscript({
                 showAvatar={showAvatar}
                 visualBase={visualBase}
                 attachBase={attachBase}
+                uploadBase={uploadBase}
                 onRewind={onRewind}
                 onSend={onSend}
               />

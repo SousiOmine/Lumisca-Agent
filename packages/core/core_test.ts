@@ -3404,24 +3404,29 @@ Deno.test("compaction persists the checkpoint and survives a reopen", async () =
   assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
   const roles = agent.messages.map((m) => m.role);
 
-  // Reopening restores exactly the condensed transcript from the database:
-  // the checkpoint row is where the insert put it, every message around it
-  // survived, and nothing is duplicated or resurrected.
+  // Reopening restores the MODEL's view from the database: the newest
+  // checkpoint and everything after it. The conversation before the
+  // checkpoint is still there (a reader pages it out of the store) but it is
+  // not loaded into memory — a conversation that runs for years holds far
+  // more than any request can carry.
   await core.closeSession(session.id);
   await core.openSession(session.id);
   const restored = core.getAgent(session.id)!.messages;
-  assertEquals(restored.map((m) => m.role), roles);
-  const checkpointIndex = roles.findIndex((role) => role === "checkpoint");
-  assertEquals(checkpointIndex > 0, true);
-  // The conversation still starts with the user's first message; the head
-  // of the transcript is the run's dynamic context (date, on-demand
-  // tools), which belongs to no turn.
-  assertEquals(conversationMessages({ messages: restored })[0]!.role, "user");
+  const checkpointAt = roles.findIndex((role) => role === "checkpoint");
   assertEquals(
-    restored[0]!.role,
-    "context",
-    "the transcript head is a context publication",
+    restored.map((m) => m.role),
+    roles.slice(checkpointAt),
+    "a reopen restores from the newest checkpoint, in order",
   );
+  // The view starts at the checkpoint, so what the model sends begins with
+  // the summary rather than the conversation's head.
+  assertEquals(restored[0]!.role, "checkpoint");
+  // Nothing was deleted: the terminal's earlier turns are still rows, and
+  // the screen reads them from there.
+  const whole = core.readTranscript(session.id, { limit: 200 })!
+    .items.map((m) => m.role);
+  assertEquals(whole.length > restored.length, true);
+  assertEquals(whole.includes("user"), true);
 
   await core.close();
 });

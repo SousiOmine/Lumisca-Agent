@@ -61,6 +61,8 @@ export function useStella(enabled: boolean): {
     answers: { id: string; values: string[] }[],
   ) => Promise<void>;
   rewind: (timestamp: number) => Promise<void>;
+  /** Switch the conversation's model (refused while a run is active). */
+  setModel: (provider: string, modelId: string) => Promise<void>;
   finishHandover: (note: string, toolCallId: string) => Promise<void>;
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
@@ -378,6 +380,17 @@ export function useStella(enabled: boolean): {
     [requireAgent],
   );
 
+  /** Switch the conversation's model. The conversation's own prompt does not
+   * change (the model travels to the agent as a context message), so this is
+   * safe to do at any time except during a run — which the server refuses
+   * with 409. */
+  const setModel = useCallback(
+    async (provider: string, modelId: string) => {
+      await stellaApi.setModel(requireAgent(), provider, modelId);
+    },
+    [requireAgent],
+  );
+
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
   const loadOlder = useCallback((): boolean => {
@@ -429,6 +442,7 @@ export function useStella(enabled: boolean): {
     abort,
     answer,
     rewind,
+    setModel,
     finishHandover,
     error,
     loading,

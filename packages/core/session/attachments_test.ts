@@ -1,10 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
 import { MAX_ATTACHMENT_BYTES } from "../shared/mod.ts";
-import {
-  MAX_ATTACHMENTS_PER_SESSION,
-  SessionAttachmentStore,
-} from "./attachments.ts";
+import { SessionAttachmentStore } from "./attachments.ts";
 
 /** Run `fn` against a store on a temp directory, and remove it afterwards. */
 async function withStore(
@@ -94,16 +91,15 @@ Deno.test("resolve reports the name the user knows and the content type", async 
   });
 });
 
-Deno.test("the session's cap refuses one more attachment", async () => {
+Deno.test("a session holds an unbounded number of attachments", async () => {
   await withStore(async (store) => {
-    for (let i = 0; i < MAX_ATTACHMENTS_PER_SESSION; i++) {
+    // A conversation that lives for years hands over files the whole time;
+    // a cap would end it with a refusal the user cannot act on.
+    for (let i = 0; i < 250; i++) {
       await store.put("s1", new Uint8Array([i % 256]), `f${i}.txt`);
     }
-    await assertRejects(
-      () => store.put("s1", new Uint8Array([0]), "one-more.txt"),
-      Error,
-      "already holds",
-    );
+    const first = await store.put("s1", new Uint8Array([0]), "last.txt");
+    assert((await store.resolve("s1", first.name)) !== undefined);
   });
 });
 

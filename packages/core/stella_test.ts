@@ -344,7 +344,7 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
     backends: hostBackends(workspace),
     skills: [],
     screen: createVmTools({ screen }),
-    history: createHistorySearchTool({ messages: () => [] }),
+    history: createHistorySearchTool({ entries: () => [] }),
     attach: {
       store: new SessionAttachmentStore(
         Deno.makeTempDirSync({ prefix: "lumisca-stella-attach-" }),
@@ -422,7 +422,7 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     }),
     skills: [],
     screen: createVmTools({ screen }),
-    history: createHistorySearchTool({ messages: () => [] }),
+    history: createHistorySearchTool({ entries: () => [] }),
     chatUi: createChatUiTool(),
     attach: {
       store: new SessionAttachmentStore(
@@ -850,3 +850,39 @@ Deno.test("stella conversation: only stella sessions condense an idle history", 
     await core.close();
   }
 });
+
+Deno.test("stella conversation: only stella sessions drop what a checkpoint covered", async () => {
+  // The transcript of a conversation that lives for years holds the work as
+  // well as the talk. stella's clients never receive the work rows and its
+  // history_search searches the conversation's entries, so the rows behind a
+  // checkpoint are reduced to markers. Code mode's work log IS a surface, so
+  // its rows are left as they are.
+  const { core, session } = await stellaConversation("Prune");
+  try {
+    assertStellaPrunes(core, session.id, true);
+    await withTempDir("lumisca-prune-", async (root) => {
+      const workspace = await core.createWorkspace("ws", [root]);
+      const plain = await core.createSession({ workspaceId: workspace.id });
+      assertStellaPrunes(core, plain.id, false);
+    });
+  } finally {
+    await core.close();
+  }
+});
+
+/** Assert whether the agent of `sessionId` reduces condensed rows, by
+ * checking the option it was built with through a compaction. */
+function assertStellaPrunes(
+  core: LumiscaCore,
+  sessionId: string,
+  expected: boolean,
+): void {
+  const agent = core.getAgent(sessionId)!;
+  // The option is what the compaction hook consults; reading it through the
+  // public surface would need a run, and a run here would test the
+  // compaction rather than the wiring.
+  assertEquals(
+    (agent as unknown as { pruneCondensed: boolean }).pruneCondensed,
+    expected,
+  );
+}

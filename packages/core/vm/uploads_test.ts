@@ -1,126 +1,192 @@
-/**
- * Files the user attaches to a prompt, written into the machine.
- *
- * The property that matters: the agent is told a path it can open, and the
- * bytes that arrive there are the bytes the user sent (an upload that
- * silently differs is worse than one that fails).
- */
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { CoreError } from "../errors.ts";
-import type { VmExec } from "./container.ts";
-import { saveUploads, VM_UPLOADS_DIR } from "./uploads.ts";
-import { MAX_ATTACHMENT_BYTES } from "../shared/mod.ts";
+import type { VmExec, VmExecBytes } from "./container.ts";
+import {
+  isUploadRef,
+  MAX_PROMPT_IMAGE_BYTES,
+  readUpload,
+  saveUploads,
+} from "./uploads.ts";
 
-/** A fake machine that keeps the files it was told to write. */
-function machine(): {
-  exec: VmExec;
-  writes: { path: string; bytes: Uint8Array }[];
-  commands: string[][];
-} {
-  const writes: { path: string; bytes: Uint8Array }[] = [];
-  const commands: string[][] = [];
-  const exec: VmExec = (command: readonly string[], options) => {
-    commands.push([...command]);
-    if (command[0] === "mkdir") {
-      return Promise.resolve({
-        exitCode: 0,
-        stdout: "",
-        stderr: "",
-        truncated: false,
-        timedOut: false,
-      });
+/** A machine that records what it was asked and answers from a map of
+ * absolute paths. Only the two calls uploads.ts makes are modelled: writing
+ * a file with `cat > path` on stdin, and `test -f`. */
+function fakeMachine(files = new Map<string, Uint8Array>()) {
+  const exec: VmExec = (command, options) => {
+    if (command[0] === "mkdir") return Promise.resolve(ok());
+    if (command[0] === "sh" && command[2] === 'cat > "$1"') {
+      const path = String(command[4]);
+      files.set(path, options.stdin ?? new Uint8Array());
+      return Promise.resolve(ok());
     }
-    // `sh -c 'cat > "$1"' sh <path>`, fed the bytes on stdin: the path is
-    // the last argument (the `$0` slot is "sh").
-    writes.push({
-      path: command[command.length - 1]!,
-      bytes: options.stdin ?? new Uint8Array(),
-    });
-    return Promise.resolve({
-      exitCode: 0,
-      stdout: "",
-      stderr: "",
-      truncated: false,
-      timedOut: false,
-    });
+    if (command[0] === "sh" && command[2] === 'test -f "$1"') {
+      const path = String(command[4]);
+      return Promise.resolve(
+        files.has(path) ? ok() : { ...ok(), exitCode: 1 },
+      );
+    }
+    throw new Error(`unexpected command: ${command.join(" ")}`);
   };
-  return { exec, writes, commands };
+  const execBytes: VmExecBytes = (command, options) => {
+    if (command[0] === "cat") {
+      const path = command[2] ?? "";
+      const bytes = files.get(path);
+      if (bytes === undefined) {
+        return Promise.resolve({ ...okBytes(), exitCode: 1 });
+      }
+      if (bytes.length > (options.maxOutput ?? Number.POSITIVE_INFINITY)) {
+        return Promise.resolve({
+          ...okBytes(bytes.slice(0, options.maxOutput)),
+          truncated: true,
+        });
+      }
+      return Promise.resolve(okBytes(bytes));
+    }
+    throw new Error(`unexpected command: ${command.join(" ")}`);
+  };
+  return { exec, execBytes, files };
 }
 
-const bytes = (text: string) => new TextEncoder().encode(text);
-
-Deno.test("uploads: the files land in the agent's own folder", async () => {
-  const { exec, writes } = machine();
-  const saved = await saveUploads(
-    [
-      { name: "run.log", bytes: bytes("hello") },
-      { name: "notes.txt", bytes: bytes("two") },
-    ],
-    { exec, agentId: "a1", now: () => 1000, randomId: () => "abcd1234" },
-  );
-  assertEquals(saved.map((file) => file.name), ["run.log", "notes.txt"]);
-  const folder = `/home/agent/agents/a1/${VM_UPLOADS_DIR}/1000-abcd1234`;
-  assertEquals(saved.map((file) => file.path), [
-    `${folder}/01-run.log`,
-    `${folder}/02-notes.txt`,
-  ]);
-  assertEquals(saved.map((file) => file.size), [5, 3]);
-  // The bytes arrive as they were sent: the path is useless if the file at
-  // the end of it is not the one the user attached.
-  assertEquals(new TextDecoder().decode(writes[0]!.bytes), "hello");
-  assertEquals(writes.map((write) => write.path), saved.map((f) => f.path));
-});
-
-Deno.test("uploads: a name cannot address another directory", async () => {
-  const { exec, writes } = machine();
-  const saved = await saveUploads(
-    [{ name: "../../etc/passwd", bytes: bytes("x") }],
-    { exec, agentId: "a1", now: () => 1, randomId: () => "r" },
-  );
-  assertEquals(saved[0]!.name, "passwd");
-  assert(
-    saved[0]!.path.startsWith(`/home/agent/agents/a1/${VM_UPLOADS_DIR}/`),
-    saved[0]!.path,
-  );
-  assertEquals(writes.length, 1);
-});
-
-Deno.test("uploads: an oversized file is refused before it is written", async () => {
-  const { exec, writes } = machine();
-  const failure = await saveUploads(
-    [{ name: "big.bin", bytes: new Uint8Array(MAX_ATTACHMENT_BYTES + 1) }],
-    { exec, agentId: "a1" },
-  ).catch((error) => error);
-  assert(failure instanceof CoreError, String(failure));
-  assertEquals(writes.length, 0);
-});
-
-Deno.test("uploads: a machine that cannot write says so", async () => {
-  const exec: VmExec = (command: readonly string[]) => {
-    if (command[0] === "mkdir") {
-      return Promise.resolve({
-        exitCode: 0,
-        stdout: "",
-        stderr: "",
-        truncated: false,
-        timedOut: false,
-      });
-    }
-    return Promise.resolve({
-      exitCode: 1,
-      stdout: "",
-      stderr: "no space left on device\n",
-      truncated: false,
-      timedOut: false,
-    });
+function ok() {
+  return {
+    exitCode: 0,
+    stdout: "",
+    stderr: "",
+    timedOut: false,
+    truncated: false,
   };
+}
+
+/** The same shape with byte output (the byte seam keeps `stderr` as text). */
+function okBytes(stdout: Uint8Array = new Uint8Array()): {
+  exitCode: number;
+  stdout: Uint8Array;
+  stderr: string;
+  timedOut: boolean;
+  truncated: boolean;
+} {
+  return {
+    exitCode: 0,
+    stdout,
+    stderr: "",
+    timedOut: false,
+    truncated: false,
+  };
+}
+
+Deno.test("uploads: a file is written under the agent's folder and usable as a ref", async () => {
+  const machine = fakeMachine();
+  const saved = await saveUploads([{
+    name: "shot.png",
+    bytes: new Uint8Array([1]),
+  }], {
+    exec: machine.exec,
+    agentId: "a1",
+    now: () => 1000,
+    randomId: () => "abcd1234",
+  });
+  assertEquals(saved.length, 1);
+  assertEquals(saved[0]!.ref, "uploads/1000-abcd1234/01-shot.png");
+  assertEquals(
+    saved[0]!.path,
+    "/home/agent/agents/a1/uploads/1000-abcd1234/01-shot.png",
+  );
+  assertEquals(saved[0]!.image, true);
+  assertEquals(machine.files.has(saved[0]!.path), true);
+});
+
+Deno.test("uploads: a document is not marked as a picture", async () => {
+  const machine = fakeMachine();
+  const saved = await saveUploads([{
+    name: "notes.txt",
+    bytes: new Uint8Array([1]),
+  }], {
+    exec: machine.exec,
+    agentId: "a1",
+    now: () => 1,
+    randomId: () => "aaaaaaaa",
+  });
+  assertEquals(saved[0]!.image, false);
+});
+
+Deno.test("uploads: only names this module generates are refs", () => {
+  assertEquals(isUploadRef("uploads/1000-abcd1234/01-shot.png"), true);
+  // Escapes are refused before an answer becomes a path.
+  assertEquals(isUploadRef("uploads/../../etc/passwd"), false);
+  assertEquals(isUploadRef("../secrets.png"), false);
+  assertEquals(isUploadRef("/etc/passwd"), false);
+  assertEquals(isUploadRef("uploads/1000-abcd1234/01-a/b.png"), false);
+});
+
+Deno.test("uploads: a file that exists is read back as bytes", async () => {
+  const machine = fakeMachine();
+  const saved = await saveUploads([{
+    name: "p.png",
+    bytes: new Uint8Array([7, 8]),
+  }], {
+    exec: machine.exec,
+    agentId: "a1",
+    now: () => 1,
+    randomId: () => "aaaaaaaa",
+  });
+  const read = await readUpload(machine.exec, machine.execBytes, {
+    agentId: "a1",
+    ref: saved[0]!.ref,
+    maxBytes: MAX_PROMPT_IMAGE_BYTES,
+  });
+  assertEquals(read?.bytes, new Uint8Array([7, 8]));
+  assertEquals(read?.name, "01-p.png");
+});
+
+Deno.test("uploads: a file the machine no longer has answers undefined", async () => {
+  const machine = fakeMachine();
+  // The agent deleted it: that is an answer, not an error (see the route).
+  assertEquals(
+    await readUpload(machine.exec, machine.execBytes, {
+      agentId: "a1",
+      ref: "uploads/1-aaaaaaaa/01-gone.png",
+      maxBytes: MAX_PROMPT_IMAGE_BYTES,
+    }),
+    undefined,
+  );
+});
+
+Deno.test("uploads: a malformed ref never reaches the machine", async () => {
+  const machine = fakeMachine();
+  let touched = false;
+  const exec: VmExec = (command, options) => {
+    touched = true;
+    return machine.exec(command, options);
+  };
+  assertEquals(
+    await readUpload(exec, machine.execBytes, {
+      agentId: "a1",
+      ref: "../../etc/passwd",
+      maxBytes: MAX_PROMPT_IMAGE_BYTES,
+    }),
+    undefined,
+  );
+  assertEquals(touched, false);
+});
+
+Deno.test("uploads: a file over the limit is an error, not 'gone'", async () => {
+  const machine = fakeMachine();
+  const saved = await saveUploads([{
+    name: "big.png",
+    bytes: new Uint8Array(64),
+  }], {
+    exec: machine.exec,
+    agentId: "a1",
+    now: () => 1,
+    randomId: () => "aaaaaaaa",
+  });
   await assertRejects(
     () =>
-      saveUploads([{ name: "a.txt", bytes: bytes("x") }], {
-        exec,
+      readUpload(machine.exec, machine.execBytes, {
         agentId: "a1",
+        ref: saved[0]!.ref,
+        maxBytes: 8,
       }),
     CoreError,
-    "no space left on device",
   );
 });

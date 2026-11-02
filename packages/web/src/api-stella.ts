@@ -92,6 +92,15 @@ export const stellaApi = {
       method: "POST",
       body: JSON.stringify({ timestamp }),
     }),
+
+  /** Switch the model this conversation runs on. Refused (409) while a run
+   * is active. The conversation's prompt does not change: the model is
+   * published to the agent as a context message. */
+  setModel: (agentId: string, provider: string, modelId: string) =>
+    request<{ ok: true }>(conversationPath(agentId, "/model"), {
+      method: "POST",
+      body: JSON.stringify({ provider, modelId }),
+    }),
 };
 
 /** Connect to one conversation's event stream. Returns a close function.

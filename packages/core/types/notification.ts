@@ -5,6 +5,7 @@ import type {
   NotificationMessage,
 } from "../ai/types.ts";
 import { modeFullPromptText } from "./mode-message.ts";
+import { isPruned } from "../session/prune.ts";
 
 /** What the generators (background / task) produce; the session agent
  * stamps role, timestamp and `steered` when injecting — only the delivery
@@ -52,6 +53,12 @@ export function notificationText(
 export function toLlmMessages(messages: AgentMessage[]): Message[] {
   const out: Message[] = [];
   for (const message of messages) {
+    // A reduced row (see session/prune.ts) is a marker, not a turn: it is
+    // skipped whole so a dropped tool call never leaves its result behind
+    // (providers reject an unanswered call, and the reverse). An assistant
+    // turn that lost every block to the reduction has nothing to send
+    // either, which is the same rule this check applies.
+    if (isPruned(message)) continue;
     if (message.role === "notification") {
       out.push({
         role: "user",

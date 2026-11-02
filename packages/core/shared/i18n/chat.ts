@@ -291,6 +291,13 @@ export const chat = {
     ja: "依頼を入力してください…",
     en: "Enter a request…",
   },
+  /** A file a prompt brought into the machine that the machine no longer
+   * has (the agent moved or deleted it): the conversation says so rather
+   * than showing a copy that exists nowhere else. */
+  "chat.stella.fileGone": {
+    ja: "このファイルはマシンから削除されました",
+    en: "This file was deleted from the machine",
+  },
   "chat.stella.working": { ja: "作業中…", en: "Working…" },
   "chat.stella.machine.screen": { ja: "画面", en: "Screen" },
   /** The header's show/hide control of the screen pane: the pane is a panel

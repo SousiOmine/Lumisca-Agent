@@ -10,7 +10,7 @@ import { useLocale } from "../../i18n.ts";
 import { formatClockTime } from "../../format.ts";
 import { useCopy } from "../../hooks/useSave.ts";
 import type { StellaEntry } from "../../types.ts";
-import { ContentImages } from "../ContentImages.tsx";
+import { PromptFiles } from "./PromptFiles.tsx";
 import { AttachmentCard } from "../chat/AttachmentCard.tsx";
 import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { UiCard } from "../chat/UiCard.tsx";
@@ -49,6 +49,7 @@ export function StellaMessage({
   showAvatar,
   visualBase,
   attachBase,
+  uploadBase,
   onRewind,
   onSend,
 }: {
@@ -62,6 +63,9 @@ export function StellaMessage({
   visualBase: string;
   /** Attachment base of the conversation (the files chat_attach sent). */
   attachBase: string;
+  /** Where the files a prompt brought in are read back from (the machine,
+   * through the conversation's upload route). */
+  uploadBase: string;
   /** Rewind from this entry onward (its timestamp names it). */
   onRewind: (timestamp: number, text: string) => void;
   /** Send a card's answer as the user's next message. */
@@ -80,7 +84,14 @@ export function StellaMessage({
   );
 
   if (entry.role === "user") {
-    return <UserBubble entry={entry} onRewind={onRewind} time={time} />;
+    return (
+      <UserBubble
+        entry={entry}
+        onRewind={onRewind}
+        time={time}
+        uploadBase={uploadBase}
+      />
+    );
   }
   return (
     <AgentBubble
@@ -102,10 +113,12 @@ function UserBubble({
   entry,
   onRewind,
   time,
+  uploadBase,
 }: {
   entry: StellaEntry;
   onRewind: (timestamp: number, text: string) => void;
   time: ComponentChildren;
+  uploadBase: string;
 }) {
   const { copied, copy } = useCopy(entry.text);
   return (
@@ -114,10 +127,13 @@ function UserBubble({
         <div className="msg-body">
           {entry.text && <p className="msg-user-text">{entry.text}</p>}
           {
-            /* The pictures the user attached are part of what they said, so
-              they sit inside the bubble, under its text. */
+            /* The pictures and files the user attached are part of what they
+              said, so they sit inside the bubble, under its text. Their bytes
+              are read back from the machine, which is where they live. */
           }
-          {entry.images.length > 0 && <ContentImages images={entry.images} />}
+          {entry.files.length > 0 && (
+            <PromptFiles files={entry.files} base={uploadBase} />
+          )}
         </div>
       </div>
       <div className="msg-meta">

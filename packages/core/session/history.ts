@@ -1,8 +1,7 @@
-import type { AgentMessage } from "../ai/types.ts";
 import { CoreError } from "../errors.ts";
-import type { MessageWindow, StoredMessage } from "../session/messages.ts";
+import type { MessageWindow } from "../session/messages.ts";
+import type { StellaEntry } from "../types/stella-conversation.ts";
 import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
-import { contentText } from "../shared/content.ts";
 import { formatLocalDateTime } from "../shared/misc.ts";
 import {
   integer,
@@ -26,19 +25,35 @@ import { requireIntegerInRange } from "../tools/validate.ts";
  * window is condensed into checkpoints (ai/context-compaction.ts). The
  * summary keeps the thread, but the exact wording of the older turns — a path
  * the user gave, a decision, an error message — is no longer sent to the
- * model. Every message is still a row in the database, so this tool reads
- * those rows back. It is Terasuma's history_search over the same store.
+ * model. This tool reads the conversation back.
+ *
+ * **What it searches is what the conversation shows**, and that is the whole
+ * rule. The entries are the ones a client draws (see agent/stella-stream.ts's
+ * `stellaEntryOf`): the user's words and the agent's words, with the pictures
+ * the user attached and the files the agent sent. Tool calls, tool results,
+ * context publications, notifications and checkpoints are the model's
+ * machinery — the conversation does not show them — so they are neither
+ * searched nor returned. A tool result's exact output is exactly what the
+ * model already read once; keeping it searchable would turn the transcript
+ * into a log of work rather than a record of the conversation, and it is the
+ * part that grows without bound.
+ *
+ * Two consequences follow, both deliberate:
+ *
+ * - The tool's own earlier results are not history: they are tool results,
+ *   which this search does not read at all. A second search therefore finds
+ *   what the user said instead of the first search's answer.
+ * - A reply that was only a card or only files still appears (with a marker
+ *   for what it carried), because the conversation shows it; the card's
+ *   markup is presentation, not text, so it is not searched.
  *
  * The search is over the ONE conversation that is asking: each stella agent
  * has its own transcript, and answering from another agent's would mix two
  * agents into one reply.
  *
- * Two deliberate differences from a file search. The query is literal word
- * matching, not a regular expression: a term here is something the user said,
- * so there is nothing to compile, nothing to escape, and no backtracking to
- * bound. And what is searched is what is shown (see {@link messageText}): a
- * message whose text the model can match but never read would return hits it
- * cannot use.
+ * The query is literal word matching, not a regular expression: a term here
+ * is something the user said, so there is nothing to compile, nothing to
+ * escape, and no backtracking to bound.
  */
 
 /** Messages returned when the caller names no count. */
@@ -49,10 +64,6 @@ export const MAX_HISTORY_LIMIT = 100;
 
 /** Characters kept of one message's body. */
 const MAX_MESSAGE_CHARS = 1_000;
-
-/** Characters kept of one tool result. Its head is what says which command
- * ran; the rest is output nobody searches a conversation for. */
-const MAX_TOOL_RESULT_CHARS = 500;
 
 /** Total characters of all rendered messages. A count limit alone cannot
  * bound the result: 100 messages of 1,000 characters each would be a request
@@ -99,10 +110,10 @@ const historySchema: SchemaObject<{
 });
 
 export interface HistorySearchTarget {
-  /** The messages of the conversation that is asking, in transcript order,
-   * read from the database rather than from the model's view — the turns a
-   * checkpoint replaced are exactly what this tool is for. */
-  messages(window: MessageWindow): StoredMessage[];
+  /** The entries the conversation shows whose timestamp lies in `window`,
+   * oldest first. Read from the store rather than from the model's view —
+   * the turns a checkpoint replaced are exactly what this tool is for. */
+  entries(window: MessageWindow): StellaEntry[];
 }
 
 /** Build the tool that searches this conversation's saved history. */
@@ -114,7 +125,9 @@ export function createHistorySearchTool(
     label: "History Search",
     description:
       "Search your earlier conversation with the user, including turns that " +
-      "were condensed away and are no longer in your context. Each " +
+      "were condensed away and are no longer in your context. What is " +
+      "searched is what the conversation shows: the user's messages and " +
+      "yours. Tool calls and their output are not part of it. Each " +
       "space-separated word is matched literally and case-insensitively, and " +
       "a message is returned only when every word appears in it. `from` and " +
       "`to` bound the period by date (YYYY-MM-DD, local time, both " +
@@ -132,10 +145,10 @@ export function createHistorySearchTool(
       );
       const window = dayWindow(params.from, params.to);
       const terms = termsOf(params.query ?? "");
-      const stored = target.messages(window).filter(isNotOwnResult);
+      const entries = target.entries(window);
       const matches = terms.length === 0
-        ? stored
-        : stored.filter((row) => matchesEvery(row.message, terms));
+        ? entries
+        : entries.filter((entry) => matchesEvery(entry, terms));
       return Promise.resolve({
         content: [{
           type: "text",
@@ -156,21 +169,10 @@ export function createHistorySearchTool(
   };
 }
 
-/** A message the tool itself produced is not history to search: its result
- * is a rendering of earlier messages, so returning it would echo the words
- * the caller just asked for — and a second search would find the first one's
- * answer instead of what was said. */
-function isNotOwnResult(row: StoredMessage): boolean {
-  return !(
-    row.message.role === "toolResult" &&
-    row.message.toolName === TOOL_HISTORY_SEARCH
-  );
-}
-
 /** Build the body the model reads: the head line, the reason when nothing
  * matched, and the messages themselves in transcript order. */
 function render(input: {
-  matches: readonly StoredMessage[];
+  matches: readonly StellaEntry[];
   terms: readonly string[];
   limit: number;
   from: string | undefined;
@@ -187,7 +189,7 @@ function render(input: {
   let used = 0;
   for (let index = matches.length - 1; index >= 0; index -= 1) {
     if (blocks.length >= limit) break;
-    const block = formatMessage(matches[index]!);
+    const block = formatEntry(matches[index]!);
     if (blocks.length > 0 && used + block.length > MAX_RESULT_CHARS) break;
     blocks.unshift(block);
     used += block.length;
@@ -218,77 +220,47 @@ function noMatchText(scope: string, period: string): string {
   ].join(" ");
 }
 
-/** A message as the tool reads it: who spoke, and the text that is both
- * searched and shown. */
-interface MessageText {
-  /** The speaker, as the head line names it ("user", "assistant",
-   * "tool result: bash", ...). */
-  speaker: string;
-  body: string;
-}
-
-/** The text of one message, or undefined for a role that carries none (a
- * user message with an image and no words, for example). */
-function messageText(message: AgentMessage): MessageText | undefined {
-  switch (message.role) {
-    case "user": {
-      const body = contentText(message.content).trim();
-      // A prompt can be images only: the words are empty but the turn is
-      // still part of what happened, and "nothing" would read as a hole.
-      if (body.length === 0) {
-        return { speaker: "user", body: "(attached image, no text)" };
-      }
-      return { speaker: "user", body };
-    }
-    case "mode":
-      return { speaker: "user", body: message.fullPrompt };
-    case "assistant": {
-      const parts: string[] = [];
-      const text = contentText(message.content).trim();
-      if (text.length > 0) parts.push(text);
-      // The calls name what the turn did; their arguments and results are
-      // what a search is not after.
-      const calls = message.content
-        .filter((block) => block.type === "toolCall")
-        .map((block) => block.name);
-      if (calls.length > 0) parts.push(`(tool calls: ${calls.join(", ")})`);
-      return parts.length === 0
-        ? undefined
-        : { speaker: "assistant", body: parts.join("\n") };
-    }
-    case "toolResult": {
-      const text = contentText(message.content).trim();
-      return {
-        speaker: `tool result: ${message.toolName}`,
-        body: text.length === 0 ? "(no text)" : text,
-      };
-    }
-    case "notification":
-      return {
-        speaker: "system notification",
-        body: message.body.length === 0
-          ? message.title
-          : `${message.title}\n${message.body}`,
-      };
-    case "context":
-    case "checkpoint":
-      return { speaker: message.role, body: message.body };
-    default:
-      return undefined;
+/**
+ * The text of one entry, for both searching and showing, or undefined for an
+ * entry that carries no words at all (a prompt that was an image alone is
+ * still a turn, and is described rather than dropped).
+ *
+ * A reply that carried only a card or only files has no text to search; it
+ * is described by what it carried so the conversation's shape stays visible
+ * in a listing.
+ */
+function entryText(entry: StellaEntry): string {
+  if (entry.text.trim().length > 0) return entry.text;
+  const images = entry.files.filter((file) => file.image).length;
+  if (images > 0) return `(${images} attached image(s), no text)`;
+  if (entry.files.length > 0) {
+    return `(${entry.files.length} attached file(s), no text)`;
   }
+  if (entry.attachments.length > 0) {
+    return `(sent ${entry.attachments.length} file(s), no text)`;
+  }
+  if (entry.cards.length > 0) return "(card, no text)";
+  return "(no text)";
 }
 
-/** One rendered message: the head line (local time and who) and the body,
- * cut to the length its kind allows and marked when it was cut. */
-function formatMessage(row: StoredMessage): string {
-  const text = messageText(row.message);
-  if (text === undefined) return "";
+/** The searchable text of an entry: the words the conversation shows.
+ * Cards are presentation, not words, so they are not part of it. */
+function searchableText(entry: StellaEntry): string {
+  return entry.text.length === 0 ? "" : truncateHead(
+    entry.text,
+    MAX_SEARCH_CHARS,
+  ).text;
+}
 
-  const isToolResult = text.speaker.startsWith("tool result:");
-  const max = isToolResult ? MAX_TOOL_RESULT_CHARS : MAX_MESSAGE_CHARS;
-  const { text: body, truncated } = truncateHead(text.body, max);
-  return `[${formatTime(row.timestamp)}] ${text.speaker}\n${body}${
-    truncated ? truncatedHeadNote("message", max) : ""
+/** One rendered entry: the head line (local time and who) and the body, cut
+ * to the length allowed and marked when it was cut. */
+function formatEntry(entry: StellaEntry): string {
+  const { text: body, truncated } = truncateHead(
+    entryText(entry),
+    MAX_MESSAGE_CHARS,
+  );
+  return `[${formatTime(entry.timestamp)}] ${entry.role}\n${body}${
+    truncated ? truncatedHeadNote("message", MAX_MESSAGE_CHARS) : ""
   }`;
 }
 
@@ -308,16 +280,13 @@ function termsOf(query: string): string[] {
     .map((term) => term.toLowerCase());
 }
 
-/** True when every term appears in the message (case-insensitive, literal:
- * no regular expression to explain and no backtracking to bound). */
+/** True when every term appears in the entry (case-insensitive, literal: no
+ * regular expression to explain and no backtracking to bound). */
 function matchesEvery(
-  message: AgentMessage,
+  entry: StellaEntry,
   terms: readonly string[],
 ): boolean {
-  const text = messageText(message);
-  if (text === undefined) return false;
-  const haystack = truncateHead(text.body, MAX_SEARCH_CHARS).text
-    .toLowerCase();
+  const haystack = searchableText(entry).toLowerCase();
   return terms.every((term) => haystack.includes(term));
 }
 

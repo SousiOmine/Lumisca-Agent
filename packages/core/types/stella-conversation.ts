@@ -13,9 +13,8 @@
  * log) from depending on a client remembering to hide rows. A client that
  * never receives a `Date: …` publication cannot show it.
  */
-import type { ImageContent } from "../ai/types.ts";
 import type { AskQuestion } from "../shared/interaction.ts";
-import type { AttachmentRef } from "../shared/attachments.ts";
+import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
 
 /** One thing the user or the agent said, as the conversation shows it.
  * `text` and `cards` are one entry rather than two because they are one
@@ -38,11 +37,13 @@ export interface StellaEntry {
    * keep), so they travel with it while the tool call itself stays in the
    * model's history. Empty for a message that sent none. */
   attachments: AttachmentRef[];
-  /** Pictures the user attached to the prompt (a drop or a paste). They are
-   * the message's content, so they are drawn inside the bubble at the point
-   * the user sent them — a prompt that was an image alone has no text to
-   * show instead. Empty for the agent's entries. */
-  images: ImageContent[];
+  /** Files and pictures the user attached to the prompt (a drop or a
+   * paste). They are the message's content, so they are drawn inside the
+   * bubble at the point the user sent them. The bytes live in the machine,
+   * not here: a client asks for one by `ref` (see the prompt-upload route)
+   * and draws what comes back, or says the file is gone when the machine no
+   * longer has it. Empty for the agent's entries. */
+  files: PromptFileRef[];
   /** Epoch ms, from the message itself: rewind names a message by it. */
   timestamp: number;
 }
@@ -85,6 +86,11 @@ export interface StellaConversationSnapshot {
    * The client addresses the conversation by agent, so this id is the one
    * thing it learns about the session — objects, not addressing. */
   sessionId: string;
+  /** The model this conversation runs on, so the composer's model line shows
+   * it and can switch it (POST `…/model`). The session row is the source of
+   * truth; reading it here keeps a reopened conversation honest even when the
+   * app default has changed since. */
+  model: { provider: string; modelId: string };
   /** The conversation's revision at the moment of this snapshot, so a
    * later `GET …/revision` can tell whether anything was missed. */
   rev: number;

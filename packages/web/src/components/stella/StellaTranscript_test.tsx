@@ -18,6 +18,7 @@ function render(state: Partial<StellaConversationState>): string {
     author: { id: "a1", name: "Aide", icon: "" },
     visualBase: "/api/sessions/s/visual/",
     attachBase: "/api/sessions/s/attachment/",
+    uploadBase: "/api/stella/conversations/a1/upload",
     onRewind: () => {},
     onSend: () => {},
     onLoadOlder: () => false,
@@ -33,7 +34,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
         text: "README を直して",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: 1,
       },
       {
@@ -41,7 +42,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
         text: "直しました。",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: 2,
       },
       {
@@ -49,7 +50,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
         text: "ありがとう",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: 3,
       },
     ],
@@ -71,7 +72,7 @@ Deno.test("StellaTranscript: a card renders with its markup", () => {
         text: "確認します。",
         cards: [markup],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: 1,
       },
     ],
@@ -118,7 +119,7 @@ Deno.test("StellaTranscript: nothing of the model's machinery can appear", () =>
       text: "答えです。",
       cards: [],
       attachments: [],
-      images: [],
+      files: [],
       timestamp: 1,
     }],
   });
@@ -142,7 +143,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
         text: "直して",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: Date.now(),
       },
       {
@@ -150,7 +151,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
         text: "直しました。",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: Date.now() + 1,
       },
     ],
@@ -173,7 +174,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
         text: "一つ目",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: now,
       },
       {
@@ -181,7 +182,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
         text: "返事一",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: now + 1,
       },
       {
@@ -189,7 +190,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
         text: "返事二",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: now + 2,
       },
     ],
@@ -213,7 +214,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
         text: "昨日の話",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: yesterday,
       },
       {
@@ -221,7 +222,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
         text: "今日の話",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: today,
       },
     ],
@@ -244,7 +245,7 @@ Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => 
         text: "短い",
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: 1,
       },
       {
@@ -252,7 +253,7 @@ Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => 
         text: "長い返事。".repeat(40),
         cards: [],
         attachments: [],
-        images: [],
+        files: [],
         timestamp: 2,
       },
     ],
@@ -269,12 +270,19 @@ Deno.test("StellaTranscript: a prompt's pictures are drawn in the bubble", () =>
         text: "",
         cards: [],
         attachments: [],
-        images: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
+        files: [{
+          name: "image-1.png",
+          path: "/home/agent/agents/a1/uploads/1-ab/01-image-1.png",
+          size: 5,
+          ref: "uploads/1-ab/01-image-1.png",
+          image: true,
+        }],
         timestamp: 1,
       },
     ],
   });
-  // An image-only prompt would otherwise render as an empty capsule.
+  // An image-only prompt would otherwise render as an empty capsule, and the
+  // picture is read back from the machine rather than carried in the entry.
   assertStringIncludes(html, "msg-images");
-  assertStringIncludes(html, "data:image/png;base64,aGVsbG8=");
+  assertStringIncludes(html, "/upload?ref=uploads%2F1-ab%2F01-image-1.png");
 });

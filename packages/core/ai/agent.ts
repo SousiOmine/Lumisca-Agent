@@ -458,6 +458,16 @@ export class Agent {
     this.state.messages.push(message);
   }
 
+  /** Replace the whole transcript. Used when the view it holds is no longer
+   * the right one: a rewind that reached behind the model's view re-reads it
+   * from the store. The agent is idle when this happens (the rewinder aborts
+   * the run first), so nothing is mid-loop over the old array. */
+  replaceMessages(messages: AgentMessage[]): void {
+    this.state.messages = messages;
+    this.repeatSignature = undefined;
+    this.repeatCount = 0;
+  }
+
   /** The timestamp of the next message this agent appends. Strictly
    * increasing, so the transcript's order is also its timestamp order: the
    * clients keep a window of the transcript, identify messages by role +

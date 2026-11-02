@@ -32,18 +32,22 @@ export class AssetDir {
   }
 
   /** Store `bytes` under a fresh name with `extension` and return that name.
-   * Throws when the owner already holds `maxFiles` assets; the name is never
+   *
+   * `maxFiles` is the owner's cap, or undefined for an owner that keeps
+   * everything. A capped owner counts its files on every write (that is what
+   * the cap costs); an uncapped one does not read the directory at all, so
+   * its writes stay the same speed however much it holds. The name is never
    * overwritten (a fresh one is drawn for each write), so a message that
    * references an asset keeps showing the asset it showed. */
   async write(
     owner: string,
     bytes: Uint8Array,
     extension: string,
-    maxFiles: number,
+    maxFiles?: number,
   ): Promise<string> {
     const dir = this.dirOf(owner);
     await Deno.mkdir(dir, { recursive: true });
-    if (await this.count(dir) >= maxFiles) {
+    if (maxFiles !== undefined && await this.count(dir) >= maxFiles) {
       throw new Error(
         `This owner already holds ${maxFiles} assets; reuse one of them ` +
           "instead of writing another",

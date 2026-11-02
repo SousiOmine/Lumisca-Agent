@@ -117,6 +117,13 @@ export function stellaAgentIconUrl(agentId: string, name: string): string {
   }`;
 }
 
+/** Where a prompt's own files are read back from: the conversation's upload
+ * route, which reads them out of the machine. `ref` is appended by the
+ * caller as a query parameter (see PromptFiles). */
+export function stellaUploadBase(agentId: string): string {
+  return `/api/stella/conversations/${encodeURIComponent(agentId)}/upload`;
+}
+
 /** Bind one API call to a peer or this server: `local` runs against this
  * server (peerId === ""), `remote` against the peer. Used by the per-session
  * / workspace / model dispatchers so each method is a one-liner instead of

@@ -37,10 +37,17 @@ export class SessionAttachmentStore {
 
   /** Store `bytes` as a new attachment of `sessionId`, under `sourceName`
    * (the file's own name, used for the download and the card's label).
-   * Throws when the file is over MAX_ATTACHMENT_BYTES or the session is at
-   * MAX_ATTACHMENTS_PER_SESSION. Never truncates or renames the bytes: a
-   * file too large is an error the agent has to solve (by sending a smaller
-   * one), not a silently different file. */
+   * Throws when the file is over MAX_ATTACHMENT_BYTES. Never truncates or
+   * renames the bytes: a file too large is an error the agent has to solve
+   * (by sending a smaller one), not a silently different file.
+   *
+   * A session holds an UNBOUNDED number of attachments. A conversation that
+   * lives for years hands over files the whole time, and a cap turns that
+   * into "the agent can no longer send anything", which the user cannot fix:
+   * the reply that would name a file to delete is the one the tool refuses.
+   * The limits that remain are per call (MAX_ATTACHMENTS_PER_CALL and
+   * MAX_ATTACHMENTS_TOTAL_BYTES), because those bound one reply rather than
+   * a conversation. */
   async put(
     sessionId: string,
     bytes: Uint8Array,
@@ -56,26 +63,11 @@ export class SessionAttachmentStore {
     // A name without a dot still gets served (as a download); the stored
     // name needs an extension to carry the content type, and "" is not one.
     const extension = extname(displayName).toLowerCase();
-    let name: string;
-    try {
-      name = await this.#dir.write(
-        sessionId,
-        bytes,
-        extension === "" ? ".bin" : extension,
-        MAX_ATTACHMENTS_PER_SESSION,
-      );
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes(`holds ${MAX_ATTACHMENTS_PER_SESSION} assets`)
-      ) {
-        throw new Error(
-          `This session already holds ${MAX_ATTACHMENTS_PER_SESSION} ` +
-            "attachments; reuse one of them instead of sending another",
-        );
-      }
-      throw error;
-    }
+    const name = await this.#dir.write(
+      sessionId,
+      bytes,
+      extension === "" ? ".bin" : extension,
+    );
     // The sidecar is what makes the download arrive under the name the user
     // knows. Written after the bytes, so an interrupted write leaves an
     // asset the route still serves (with its stored name) rather than a
@@ -149,10 +141,6 @@ function readDisplayName(sidecar: string | undefined): string | undefined {
     return undefined;
   }
 }
-
-/** Most attachments one session may hold. A conversation sends a handful in
- * normal use; the cap only stops a loop from filling the disk. */
-export const MAX_ATTACHMENTS_PER_SESSION = 200;
 
 /** Directory (beside the database) that holds the sessions' attachments. */
 export const ATTACHMENTS_DIR_NAME = ".lumisca-attachments";

@@ -1,5 +1,7 @@
 import type { AgentMessage } from "../ai/types.ts";
+import type { ContextUsageMessageLike } from "../shared/context-usage.ts";
 import type { LumiscaDb } from "../db/mod.ts";
+import { reduceMessage } from "./prune.ts";
 
 export interface StoredMessage {
   id: string;
@@ -24,6 +26,43 @@ export interface MessageRepo {
    * order. Backed by the `(session_id, timestamp)` index, so a search reads
    * only the rows of the period it asks about. */
   listBetween(sessionId: string, window: MessageWindow): StoredMessage[];
+  /** The part of the transcript the model is shown: the newest compaction
+   * checkpoint and everything after it, in transcript order. A conversation
+   * that was never compacted is returned whole. This is what a session agent
+   * loads when a conversation is opened — the model's view, not the
+   * conversation's whole history (see session/transcript-window.ts). */
+  listModelView(sessionId: string): StoredMessage[];
+  /** One window of the conversation as a client draws it: up to `limit`
+   * rows ending just before `beforeIndex` (a 0-based transcript position),
+   * or the newest window when it is `null`. Rows come back oldest first.
+   * The window's start is pulled back to `startsWindow` — a page must begin
+   * at a turn, not in the middle of one (see session/transcript-pager.ts). */
+  listWindow(
+    sessionId: string,
+    query: { beforeIndex: number | null; limit: number },
+  ): StoredMessage[];
+  /** The 0-based transcript position of the first row matching `match`, or
+   * undefined when none does. Backs the cursor (see transcript-pager): the
+   * cursor names a message, and the store answers where it is. */
+  positionOf(
+    sessionId: string,
+    match: (row: StoredMessage) => boolean,
+  ): number | undefined;
+  /** How many rows the session holds (a page's end is the row count). */
+  count(sessionId: string): number;
+  /** The `usage` of every assistant row that reported one, in transcript
+   * order — the input of the context meter. Read from the store rather than
+   * from memory because the agent holds only the model's view, while the
+   * meter describes the whole conversation. */
+  usageRows(sessionId: string): ContextUsageMessageLike[];
+  /** Replace the payload of every row before the newest checkpoint, keeping
+   * its identity and position (see session/prune.ts). Returns how many rows
+   * changed and the bytes their payloads held, which is what a caller needs
+   * to decide whether the file is worth rewriting (db/vacuum.ts). Idempotent:
+   * a row already reduced is left alone. */
+  pruneCondensed(
+    sessionId: string,
+  ): { changed: number; freedBytes: number };
   /** Delete every row at or after `index` (a 0-based transcript position;
    * rows are inserted in transcript order, so rowid == position). Used by
    * the rewind feature: positional (not timestamp-based) so messages that
@@ -125,6 +164,61 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
   const deleteStmt = db.db.prepare(
     "DELETE FROM messages WHERE session_id = ?",
   );
+  // The stored payload length of one row: what the row held before a prune
+  // replaced it (see pruneCondensed).
+  const contentLengthStmt = db.db.prepare(
+    "SELECT length(content) AS n FROM messages WHERE id = ?",
+  );
+  // Rewriting a row's payload in place (context compaction's prune): the id,
+  // position and timestamp stay, so every cursor over the transcript still
+  // names the same row.
+  const updateContentStmt = db.db.prepare(
+    "UPDATE messages SET content = ? WHERE id = ?",
+  );
+  // The model's view: the newest compaction checkpoint and everything after
+  // it. The partial index (schema.ts) makes finding that checkpoint cheap
+  // however long the conversation is; without it every open scanned the
+  // session's rows to the end.
+  const modelViewStmt = db.db.prepare(`
+    SELECT * FROM messages
+    WHERE session_id = ?1
+      AND rowid >= COALESCE(
+        (SELECT rowid FROM messages
+         WHERE session_id = ?1 AND role = 'checkpoint'
+         ORDER BY rowid DESC LIMIT 1),
+        -1
+      )
+    ORDER BY rowid
+  `);
+  // One page ending at a position: the newest `limit` rows strictly before
+  // the 0-based transcript position `beforeIndex`, oldest first. The bound
+  // is resolved to a rowid with the same OFFSET rule deleteFrom uses, so a
+  // caller counts rows the way the rest of the store does and never has to
+  // know a rowid (which insertAt rewrites). The subquery projects rowid
+  // explicitly: a bare `SELECT *` does not carry it out, and the outer ORDER
+  // BY is what restores transcript order after the inner DESC limit. A null
+  // bound (no older page requested) reads the newest rows instead, which is
+  // its own statement.
+  const windowFromStmt = db.db.prepare(`
+    SELECT * FROM (
+      SELECT rowid AS rid, * FROM messages
+      WHERE session_id = ?
+        AND rowid < (
+          SELECT rowid FROM messages
+          WHERE session_id = ?
+          ORDER BY rowid
+          LIMIT 1 OFFSET ?
+        )
+      ORDER BY rowid DESC LIMIT ?
+    ) ORDER BY rid
+  `);
+  const windowNewestStmt = db.db.prepare(`
+    SELECT * FROM (
+      SELECT rowid AS rid, * FROM messages
+      WHERE session_id = ?
+      ORDER BY rowid DESC LIMIT ?
+    ) ORDER BY rid
+  `);
   // Positional truncation: rows are inserted in transcript order, so the
   // row at OFFSET `index` is the first message to remove (an OFFSET past
   // the last row matches nothing — nothing persisted to delete).
@@ -205,6 +299,74 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       return rows.map(toStored);
     },
 
+    listModelView(sessionId: string): StoredMessage[] {
+      const rows = modelViewStmt.all(sessionId) as Array<
+        Parameters<typeof toStored>[0]
+      >;
+      return rows.map(toStored);
+    },
+
+    listWindow(sessionId, query): StoredMessage[] {
+      const rows =
+        (query.beforeIndex === null
+          ? windowNewestStmt.all(sessionId, query.limit)
+          : windowFromStmt.all(
+            sessionId,
+            sessionId,
+            query.beforeIndex,
+            query.limit,
+          )) as Array<Parameters<typeof toStored>[0]>;
+      return rows.map(toStored);
+    },
+
+    positionOf(sessionId, match): number | undefined {
+      // The rows are decoded because the cursor is an identity, not a
+      // column: it names role + timestamp (+ tool call id), which only the
+      // message itself carries. Called once per page (a client that reaches
+      // the top), so the decode of the session's rows is acceptable; the
+      // alternative would be a cursor column the store does not have.
+      const rows = list(sessionId);
+      for (let index = 0; index < rows.length; index++) {
+        if (match(rows[index]!)) return index;
+      }
+      return undefined;
+    },
+
+    count(sessionId): number {
+      const row = db.db.prepare(
+        "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?",
+      ).get(sessionId) as { n: number };
+      return Number(row.n);
+    },
+
+    usageRows(sessionId): ContextUsageMessageLike[] {
+      // The usage object is pulled out of the stored JSON by SQLite, so a
+      // long conversation does not pay for decoding every row's content just
+      // to read four numbers (and its images, on a session with screenshots,
+      // would otherwise be materialized on every snapshot).
+      const rows = db.db.prepare(`
+        SELECT
+          json_extract(content, '$.message.usage.input') AS input,
+          json_extract(content, '$.message.usage.cacheRead') AS cacheRead,
+          json_extract(content, '$.message.usage.cacheWrite') AS cacheWrite
+        FROM messages
+        WHERE session_id = ? AND role = 'assistant'
+        ORDER BY rowid
+      `).all(sessionId) as Array<{
+        input: number | null;
+        cacheRead: number | null;
+        cacheWrite: number | null;
+      }>;
+      return rows.map((row) => ({
+        role: "assistant",
+        usage: {
+          input: row.input,
+          cacheRead: row.cacheRead,
+          cacheWrite: row.cacheWrite,
+        },
+      }));
+    },
+
     deleteFrom(sessionId: string, index: number): void {
       deleteFromStmt.run(sessionId, sessionId, index);
     },
@@ -225,6 +387,47 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       // the "rowid order == transcript order" invariant the positional
       // operations rely on. An index past the last row appends.
       return insertAtInTransaction(sessionId, index, suffix, message);
+    },
+
+    /** Reduce every row before the newest checkpoint that has not been
+     * reduced yet, and return how many were changed and how many bytes the
+     * replaced payloads held.
+     *
+     * Called when a checkpoint is inserted and when a conversation is opened:
+     * the first keeps the store from growing with work nothing reads again,
+     * the second repairs a process that died between the two. A row is
+     * rewritten in place (same id, same position), so the transcript's order
+     * and every cursor over it are untouched.
+     *
+     * The byte count is what lets the caller notice that the FILE is now
+     * mostly free pages and worth rewriting (see db/vacuum.ts): SQLite
+     * reuses freed pages but never shrinks on its own. */
+    pruneCondensed(sessionId): { changed: number; freedBytes: number } {
+      const contentLength = (id: string): number => {
+        const row = contentLengthStmt.get(id) as { n: number } | undefined;
+        return Number(row?.n ?? 0);
+      };
+      const rows = list(sessionId);
+      let cut = 0;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (rows[i]!.role === "checkpoint") {
+          cut = i;
+          break;
+        }
+      }
+      if (cut === 0) return { changed: 0, freedBytes: 0 };
+      let changed = 0;
+      let freedBytes = 0;
+      for (let i = 0; i < cut; i++) {
+        const row = rows[i]!;
+        const reduced = reduceMessage(row.message);
+        if (!reduced.changed) continue;
+        const next = encodeStoredMessage(reduced.message);
+        freedBytes += contentLength(row.id) - next.length;
+        updateContentStmt.run(next, row.id);
+        changed++;
+      }
+      return { changed, freedBytes: Math.max(0, freedBytes) };
     },
 
     deleteBySession(sessionId: string): void {

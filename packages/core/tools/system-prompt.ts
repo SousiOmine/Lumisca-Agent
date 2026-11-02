@@ -1,10 +1,7 @@
 import type { Workspace } from "../types/workspace.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import { VM_AGENTS_DIR, VM_USER, VM_WORKDIR } from "../vm/contract.ts";
-import {
-  buildEnvironmentSection,
-  type EnvironmentModel,
-} from "../environment.ts";
+import { buildEnvironmentSection } from "../environment.ts";
 import { outputLanguageSection } from "./language.ts";
 import {
   CHAT_PROMPT_SECTIONS,
@@ -20,8 +17,6 @@ export interface SystemPromptOptions {
   /** The session's preloaded tool names: the guidelines render only the
    * sections whose tools the session actually has (see prompt-sections). */
   tools?: readonly string[];
-  /** The session's model, shown in the environment section. */
-  model?: EnvironmentModel;
   /** The language selected when the session started: the agent answers in
    * it for the session's whole life (see tools/language.ts). Omitted →
    * the default language (tests and callers without a setting). */
@@ -60,7 +55,7 @@ export function buildSystemPrompt(
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
-${folders}${buildEnvironmentSection(options.model)}${
+${folders}${buildEnvironmentSection()}${
     guidelines(
       CODING_PROMPT_SECTIONS,
       options.tools ?? [],
@@ -128,7 +123,7 @@ change another agent's files only when the user asks. Run
 
 You talk with the user in a single, ongoing chat. There is no session list
 and no workspace to pick: this one conversation is the whole context, and it
-grows over time.${buildEnvironmentSection(options.model)}${
+grows over time.${buildEnvironmentSection()}${
     guidelines(
       STELLA_PROMPT_SECTIONS,
       options.tools ?? [],
@@ -152,7 +147,7 @@ export function buildChatSystemPrompt(
 You are running without a file workspace: the file, shell and sub-agent tools
 are unavailable, so you cannot read, write or execute anything on this
 machine. Answer questions, explain things, and help with text-based tasks.
-Images can be attached to prompts.${buildEnvironmentSection(options.model)}${
+Images can be attached to prompts.${buildEnvironmentSection()}${
     guidelines(
       CHAT_PROMPT_SECTIONS,
       options.tools ?? [],

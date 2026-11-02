@@ -293,7 +293,10 @@ const HISTORY_SEARCH_SECTION: PromptSection = {
     "turns are\n  condensed into a checkpoint, their exact words leave your " +
     "context but stay in the\n  history. Use history_search to look them up " +
     "(by word or by date) before\n  saying that you do not remember, or " +
-    "before asking the user to repeat something.",
+    "before asking the user to repeat something.\n" +
+    "- It searches what the conversation shows — the user's messages and " +
+    "yours. A tool\n  call or its output is not in it, so re-run a command " +
+    "when you need its result\n  again instead of looking for it.",
 };
 
 /** Handing the screen to the user. Keyed on the tool: an agent that cannot

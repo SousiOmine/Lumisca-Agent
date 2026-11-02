@@ -6,6 +6,7 @@ import {
   LumiscaCore,
   refreshCatalogInBackground,
   resolveSettingsPath,
+  vacuumOnStartup,
 } from "@lumisca/core";
 import {
   COMPUTER_USE_SESSION_TOKEN_KEY,
@@ -249,6 +250,11 @@ export async function main(): Promise<void> {
     defaultAssetsFile(Deno.execPath());
 
   let core: LumiscaCore;
+  // A previous run may have left a request to rewrite the database file (see
+  // core/db/vacuum.ts). It runs HERE, before any request is served: the copy
+  // is synchronous and takes minutes on a large file, which a running server
+  // cannot afford. A failure is never fatal — start on what we have.
+  await vacuumOnStartup(dbPath);
   try {
     core = LumiscaCore.open(dbPath, settingsPath);
   } catch (error) {

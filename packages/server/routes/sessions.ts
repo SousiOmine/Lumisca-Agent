@@ -1,10 +1,7 @@
 import { Hono } from "hono";
-import {
-  base64ToBytes,
-  MAX_PROMPT_IMAGES,
-  summarizeContextUsage,
-} from "@lumisca/core";
+import { base64ToBytes, MAX_PROMPT_IMAGES } from "@lumisca/core";
 import { stripDataUrlHeader } from "@lumisca/core/shared";
+import type { ContextUsageSummary } from "@lumisca/core/shared";
 import type {
   AgentMessage,
   AskAnswer,
@@ -305,6 +302,10 @@ export interface SessionApi {
   /** The session's revision: how many events this server has emitted for
    * it (see LumiscaCore.getSessionRevision). */
   getSessionRevision(id: string): number;
+  /** Context usage over the WHOLE transcript (see
+   * LumiscaCore.getSessionUsage): the agent holds only the model's view, so
+   * a client cannot count the older turns itself. */
+  getSessionUsage(id: string): ContextUsageSummary;
   /** The session's active goal, if any (the `/goal` mode). */
   getGoal(id: string): import("@lumisca/core").GoalInfo | undefined;
   /** Cancel the session's active goal (no-op when none runs). */
@@ -391,9 +392,11 @@ export function sessionRoutes(core: SessionApi): Hono {
       questions,
       error,
       name: session.name,
-      // Context usage over the whole transcript, not the window: the client's
-      // older turns are not loaded, so it cannot count them itself.
-      usage: summarizeContextUsage(agent.messages),
+      // Context usage over the WHOLE transcript, not the page or the model's
+      // view: the client has not loaded the older turns, so it cannot count
+      // them itself, and the meter must not shrink because the reader
+      // scrolled away.
+      usage: core.getSessionUsage(id),
       rev,
     });
   });

@@ -1,20 +1,28 @@
 /**
  * The conversation's prompt takes the same attachments code mode's prompt
- * does. This is a regression test for a real gap: the route used to read
- * `text` alone, so a picture dropped into a stella conversation reached the
- * server and was dropped there — the UI showed the thumbnail, the model never
- * saw it.
+ * does, and puts them where the agent can reach them.
+ *
+ * The shape this pins: a prompt's pictures and files travel ONE way — written
+ * into the machine and recorded as references on the message — rather than as
+ * byte blocks in the message. A picture kept as a block would sit in the
+ * database for the life of the conversation, and a conversation lives for
+ * years (see ai/types.ts UserMessage.files).
  */
 import { assertEquals } from "@std/assert";
-import type { ImageContent } from "@lumisca/core";
+import type { PromptFileRef } from "@lumisca/core";
 import { stellaRoutes } from "./stella.ts";
+import { jsonError } from "./util.ts";
 import type { StellaApi } from "./stella.ts";
 
-/** The slice of the core the prompt route touches, recording what it gets. */
-function fakeCore(received: {
+interface Received {
   texts: string[];
-  images: (ImageContent[] | undefined)[];
-}): StellaApi {
+  images: unknown[];
+  uploads: { name: string; bytes: Uint8Array }[][];
+  saved: PromptFileRef[];
+}
+
+/** The slice of the core the prompt route touches, recording what it gets. */
+function fakeCore(received: Received): StellaApi {
   return {
     getStellaAgent: () => ({
       id: "a1",
@@ -37,23 +45,52 @@ function fakeCore(received: {
       createdAt: 0,
       updatedAt: 0,
     }),
+    savePromptUploads: (
+      _sessionId: string,
+      uploads: readonly { name: string; bytes: Uint8Array }[],
+    ) => {
+      received.uploads.push(uploads.map((file) => ({
+        name: file.name,
+        bytes: file.bytes,
+      })));
+      received.saved = uploads.map((file, index) => ({
+        name: file.name,
+        path: `/home/agent/agents/a1/uploads/1-ab/0${index}-${file.name}`,
+        size: file.bytes.length,
+        ref: `uploads/1-ab/0${index}-${file.name}`,
+        image: true,
+      }));
+      return Promise.resolve(received.saved);
+    },
     startPrompt: (
       _sessionId: string,
       text: string,
-      images?: ImageContent[],
+      images?: unknown,
+      _mode?: unknown,
+      files?: PromptFileRef[],
     ) => {
       received.texts.push(text);
       received.images.push(images);
+      if (files !== undefined) received.saved = files;
     },
   } as unknown as StellaApi;
 }
 
-Deno.test("stella prompt: the images travel to the session as content blocks", async () => {
-  const received = {
-    texts: [] as string[],
-    images: [] as (ImageContent[] | undefined)[],
+function setup(): { app: ReturnType<typeof stellaRoutes>; received: Received } {
+  const received: Received = {
+    texts: [],
+    images: [],
+    uploads: [],
+    saved: [],
   };
   const app = stellaRoutes(fakeCore(received));
+  // The same error table the app mounts (app.ts's onError): a route mounted
+  // on its own would answer Hono's default 500 for an AppError.
+  app.onError((error, c) => jsonError(c, error));
+  return { app, received };
+}
+Deno.test("stella prompt: a picture is written into the machine, not the message", async () => {
+  const { app, received } = setup();
   const response = await app.request("/stella/conversations/a1/prompt", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -64,17 +101,15 @@ Deno.test("stella prompt: the images travel to the session as content blocks", a
   });
   assertEquals(response.status, 200);
   assertEquals(received.texts, ["これを見て"]);
-  assertEquals(received.images, [
-    [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
-  ]);
+  // No content blocks on the message: the prompt carries references.
+  assertEquals(received.images, [undefined]);
+  assertEquals(received.uploads.length, 1);
+  assertEquals(received.uploads[0]![0]!.name, "image-1.png");
+  assertEquals(received.saved[0]!.ref, "uploads/1-ab/00-image-1.png");
 });
 
 Deno.test("stella prompt: an image with no text is a prompt", async () => {
-  const received = {
-    texts: [] as string[],
-    images: [] as (ImageContent[] | undefined)[],
-  };
-  const app = stellaRoutes(fakeCore(received));
+  const { app, received } = setup();
   const response = await app.request("/stella/conversations/a1/prompt", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -85,15 +120,27 @@ Deno.test("stella prompt: an image with no text is a prompt", async () => {
   });
   assertEquals(response.status, 200);
   assertEquals(received.texts, [""]);
-  assertEquals(received.images.length, 1);
+  assertEquals(received.uploads.length, 1);
 });
 
-Deno.test("stella prompt: text alone still arrives as before", async () => {
-  const received = {
-    texts: [] as string[],
-    images: [] as (ImageContent[] | undefined)[],
-  };
-  const app = stellaRoutes(fakeCore(received));
+Deno.test("stella prompt: an unsupported picture type is refused by name", async () => {
+  const { app } = setup();
+  // A prompt's pictures are drawn back by their extension, so the type has to
+  // be one the conversation can show. Refusing here says which one it was
+  // instead of storing a file the UI cannot draw.
+  const response = await app.request("/stella/conversations/a1/prompt", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      text: "これを見て",
+      images: [{ data: "aGVsbG8=", mimeType: "image/tiff" }],
+    }),
+  });
+  assertEquals(response.status, 400);
+});
+
+Deno.test("stella prompt: text alone needs no upload", async () => {
+  const { app, received } = setup();
   const response = await app.request("/stella/conversations/a1/prompt", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -102,4 +149,5 @@ Deno.test("stella prompt: text alone still arrives as before", async () => {
   assertEquals(response.status, 200);
   assertEquals(received.texts, ["こんにちは"]);
   assertEquals(received.images, [undefined]);
+  assertEquals(received.uploads, []);
 });

@@ -37,6 +37,9 @@ export interface StellaConversationState {
   error?: string;
   /** The agent's name: the conversation's title. */
   agentName: string;
+  /** The model the conversation runs on (the session row's choice), shown in
+   * the composer's model line. Null before the first snapshot arrives. */
+  model: { provider: string; modelId: string } | null;
 }
 
 /**
@@ -70,6 +73,7 @@ export function stellaStateOf(
     handover: snapshot.handover,
     ...(snapshot.error !== undefined ? { error: snapshot.error } : {}),
     agentName: snapshot.agentName,
+    model: snapshot.model,
   };
 }
 
@@ -178,9 +182,11 @@ export function prependOlderEntries(
  * an edit would arrive as a new entry, which is the honest reading — the
  * transcript has no edit concept. */
 export function entryKey(entry: StellaEntry): string {
-  const files = entry.attachments.map((file) => file.name).join(",");
-  const images = entry.images.length;
-  return `${entry.role}:${entry.timestamp}:${files}:${images}:${entry.text}`;
+  const attachments = entry.attachments.map((file) => file.name).join(",");
+  // A prompt's own files are part of its identity: an image-only prompt and
+  // an empty prompt of the same millisecond would otherwise be one entry.
+  const files = entry.files.map((file) => file.ref).join(",");
+  return `${entry.role}:${entry.timestamp}:${attachments}:${files}:${entry.text}`;
 }
 
 /** Insert or replace an entry at its existing position (dedup by key), or
@@ -272,7 +278,9 @@ function sameHandover(
     a.instructions === b.instructions;
 }
 
-/** An empty conversation (the sidebar can be shown before one is open). */
+/** An empty conversation (the sidebar can be shown before one is open). The
+ * model is unknown until a snapshot arrives; the picker stays hidden while it
+ * is `null`. */
 export function emptyStellaState(agentName: string): StellaConversationState {
   return {
     entries: [],
@@ -282,5 +290,6 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     questions: [],
     handover: null,
     agentName,
+    model: null,
   };
 }

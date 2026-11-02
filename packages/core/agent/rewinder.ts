@@ -92,11 +92,35 @@ export class Rewinder {
       // from here on.
       await deps.agent.waitForIdle().catch(() => {});
     }
+    // The target may be OUTSIDE the in-memory view: the agent holds the
+    // model's view (the newest checkpoint onward), while the reader can rewind
+    // a turn from years back. The store answers where it is, and a target
+    // before the view is handled by re-reading the view afterwards.
     const index = messages.findIndex(
       (m) =>
         (m.role === "user" || m.role === "mode") &&
         m.timestamp === timestamp,
     );
+    if (index === -1) {
+      const stored = deps.transcript.positionOf((message) =>
+        (message.role === "user" || message.role === "mode") &&
+        message.timestamp === timestamp
+      );
+      if (stored !== undefined) {
+        // Everything from `stored` on goes, and the view is rebuilt from what
+        // survives: the checkpoint it was anchored on may itself be inside the
+        // removed span. The window the reader was looking at is unchanged —
+        // the rows below `stored` still have their positions — so the client
+        // is told exactly what went away.
+        const removed = deps.transcript.truncateFrom(stored);
+        deps.agent.replaceMessages(deps.transcript.reload());
+        deps.rebaseContexts(deps.agent.state.messages);
+        deps.retry.reset();
+        deps.agent.clearAllQueues();
+        deps.emit({ type: "messages_truncated", removed });
+        return;
+      }
+    }
     // Goal declarations (modeId "goal") that would disappear with the
     // truncation: rewinding them away cancels the goal. Captured before the
     // splice mutates the array.

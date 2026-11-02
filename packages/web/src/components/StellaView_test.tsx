@@ -62,6 +62,7 @@ function render(
       onPrompt: () => {},
       onAbort: () => {},
       onRewind: () => Promise.resolve(),
+      onModelChange: () => Promise.resolve(),
       onLoadOlder: () => false,
       loadingOlder: false,
       onFinishHandover: () => Promise.resolve(),

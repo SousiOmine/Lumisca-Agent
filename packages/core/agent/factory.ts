@@ -1,4 +1,5 @@
 import type { AgentMessage } from "../ai/types.ts";
+import type { Api, Model } from "../ai/types.ts";
 import type { Tool } from "../tools/schema.ts";
 import type { StellaRuntime } from "../vm/runtime.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
@@ -21,6 +22,7 @@ import { SessionToolRegistries } from "../tools/registries.ts";
 import { createSkillCatalogProvider } from "../skills/catalog.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
 import { createDateProvider } from "./date-context.ts";
+import { createModelProvider } from "./model-context.ts";
 import { createMcpToolsProvider } from "../mcp/context.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { SessionAgent } from "./session-agent.ts";
@@ -139,6 +141,9 @@ export class AgentFactory {
     messages: AgentMessage[],
     resources: SessionResources,
     isCurrentAttachment: (attachment: McpAttachment) => boolean,
+    /** The whole-transcript position `messages[0]` sits at (see
+     * TranscriptStore). */
+    baseIndex = 0,
   ): SessionAgent {
     // The wiring, phase by phase. Each phase owns one question and is
     // called in the order the next one depends on: where the session works
@@ -170,6 +175,7 @@ export class AgentFactory {
       workspace,
       where,
       registries,
+      model,
     );
     const agent = new SessionAgentImpl({
       sessionId: session.id,
@@ -177,6 +183,7 @@ export class AgentFactory {
       model,
       tools,
       messages,
+      baseIndex,
       thinkingLevel: this.deps.getThinkingLevel(
         session.modelProvider,
         session.modelId,
@@ -218,7 +225,16 @@ export class AgentFactory {
       language: this.deps.getLanguage(),
       compactionPolicy: () => this.deps.getCompactionPolicy(),
       ...(where.stella !== undefined
-        ? { idleCompactionMs: STELLA_IDLE_COMPACTION_MS }
+        ? {
+          idleCompactionMs: STELLA_IDLE_COMPACTION_MS,
+          // A stella conversation is the only one whose transcript outlives
+          // every window it crosses: what its checkpoints summarized is work
+          // nothing reads again (see session/prune.ts).
+          pruneCondensed: true,
+          ...(this.deps.recordFreedBytes === undefined
+            ? {}
+            : { onFreedBytes: this.deps.recordFreedBytes }),
+        }
         : {}),
       renameSession: (name) => this.deps.renameSession(session.id, name),
       goalStore: {
@@ -610,6 +626,7 @@ export class AgentFactory {
     workspace: Workspace,
     where: SessionWhere,
     registries: SessionToolRegistries,
+    model: Model<Api>,
   ): ContextProvider[] {
     const { stella, chat, browserAvailable, computerAvailable } = where;
     return [
@@ -638,6 +655,18 @@ export class AgentFactory {
       // without one (every other session) has nothing to publish.
       ...(stella !== undefined ? [stella.identityProvider] : []),
       createDateProvider(),
+      // The model the session runs on. Published rather than put in the
+      // prompt for the same reason as the date: a session can be switched to
+      // another model, and the prompt is a snapshot that never changes. The
+      // agent is rebuilt on a switch (see SessionPool.applyChange), so the
+      // model captured here is the one this agent runs on.
+      createModelProvider({
+        model: () => ({
+          provider: model.provider,
+          modelId: model.id,
+          name: model.name,
+        }),
+      }),
       // The tool_search / tool_call pair exists exactly while the session's
       // registry holds something to discover; the note follows the same
       // condition, so a late MCP discovery publishes it instead of

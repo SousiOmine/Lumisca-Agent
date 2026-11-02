@@ -1,5 +1,7 @@
 import { LumiscaDb } from "./db/mod.ts";
-import { dirname, join } from "node:path";
+import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
+import { createLogger } from "./log.ts";
+import { dirname, extname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ClientEvent } from "./types/event.ts";
 import type { AgentMessage } from "./ai/types.ts";
@@ -28,6 +30,7 @@ import {
 } from "./websearch/mod.ts";
 import { WebSearchService } from "./websearch/service.ts";
 import type { WebSearchSettingsView, WebSearchTestView } from "./shared/mod.ts";
+import { RASTER_IMAGE_MIME_BY_EXTENSION } from "./shared/mod.ts";
 import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
 import type { CredentialStore, Provider } from "./ai/types.ts";
 import type {
@@ -108,11 +111,15 @@ import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
 import { createHistorySearchTool } from "./session/history.ts";
 import {
   messageCursorOf,
-  readWindow,
   startsTranscriptTurn,
   type WindowPage,
   type WindowQuery,
 } from "./session/transcript-window.ts";
+import { readTranscriptPage } from "./session/transcript-pager.ts";
+import {
+  type ContextUsageSummary,
+  summarizeContextUsage,
+} from "./shared/context-usage.ts";
 import {
   createIdentityProvider,
   createIdentityTool,
@@ -140,7 +147,12 @@ import { sessionSkills } from "./tools/toolsets.ts";
 import type { SkillDef, SkillInfo } from "./skills/discover.ts";
 import { skillInfo } from "./skills/discover.ts";
 import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
-import { saveUploads, type UploadFile } from "./vm/uploads.ts";
+import {
+  MAX_PROMPT_IMAGE_BYTES,
+  readUpload,
+  saveUploads,
+  type UploadFile,
+} from "./vm/uploads.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
 import type { McpTestResult } from "./mcp/service.ts";
@@ -155,6 +167,27 @@ import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
  * each time, short enough that a skill the agent just wrote shows up on the
  * next visit. */
 const STELLA_SKILLS_TTL_MS = 30_000;
+
+/** Module logger (debug-gated). */
+const log = createLogger("core");
+
+/**
+ * The conversation entries a set of stored rows projects to, oldest first.
+ *
+ * One projection, used by both surfaces that answer "what did the
+ * conversation say": the conversation endpoints (a window of entries) and
+ * `history_search` (the same entries, filtered by words and dates). Two
+ * implementations would let the searchable history drift from the visible
+ * one, and the whole rule of the search is that they are the same thing.
+ */
+function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
+  const entries: StellaEntry[] = [];
+  for (const message of messages) {
+    const entry = stellaEntryOf(message);
+    if (entry !== null) entries.push(entry);
+  }
+  return entries;
+}
 
 export interface CreateSessionInput {
   /** The session's workspace; omitted → a chat session in the folder-less
@@ -209,6 +242,8 @@ export class LumiscaCore {
    * like the two stores above; written when a user uploads a picture and read
    * by the icon route. */
   private readonly agentIcons: AgentIconStore;
+  /** The database file, when this core has one (see requestVacuumIfWorthwhile). */
+  private readonly dbPath: string | undefined;
   /** MCP OAuth grants (see mcp/oauth.ts), shared with the session pool. */
   private readonly mcpOAuth: McpOAuthStore;
   private readonly commandSafety: CommandSafety;
@@ -280,6 +315,10 @@ export class LumiscaCore {
       visuals?: SessionVisualStore;
       attachments?: SessionAttachmentStore;
       agentIcons?: AgentIconStore;
+      /** The database file, when this core has one: a prune that frees
+       * enough bytes marks it for a rewrite at the next start (see
+       * db/vacuum.ts). Omitted by an in-memory core. */
+      dbPath?: string;
       globalSkillDirs?: string[];
       /** Environment the model layer reads (custom providers, ambient API
        * keys). Defaults to the real process environment; tests pass their
@@ -378,6 +417,7 @@ export class LumiscaCore {
       new AgentIconStore(
         join(tmpdir(), `lumisca-agent-icons-${crypto.randomUUID()}`),
       );
+    this.dbPath = overrides.dbPath;
     this.pool = overrides.pool ?? new SessionPool({
       mcpOAuth: this.mcpOAuth,
       requireModel: (provider, modelId) => this.requireModel(provider, modelId),
@@ -389,6 +429,9 @@ export class LumiscaCore {
         this.models.getThinkingLevel(provider, modelId),
       getLanguage: () => this.getLanguage(),
       getCompactionPolicy: () => this.getCompactionPolicy(),
+      recordFreedBytes: (bytes) => {
+        this.freedBytes += bytes;
+      },
       buildGeneratedPrompt: (workspace, model, tools, stella) =>
         this.buildGeneratedPrompt(
           workspace,
@@ -497,6 +540,7 @@ export class LumiscaCore {
         agentIcons: new AgentIconStore(
           join(dirname(dbPath), AGENT_ICONS_DIR_NAME),
         ),
+        dbPath,
       },
     );
   }
@@ -571,6 +615,37 @@ export class LumiscaCore {
     // shutdown path, not swallowed here.
     await this.stella.stop();
     this.db.close();
+    // Ran out of rows to keep: the file is now mostly free pages, which
+    // SQLite reuses but never hands back. The rewrite itself waits for the
+    // next start, before any request (see db/vacuum.ts) — a synchronous
+    // VACUUM of a multi-gigabyte database would stall every request.
+    await this.requestVacuumIfWorthwhile();
+  }
+
+  /** Bytes a prune freed in the store since this core started. */
+  private freedBytes = 0;
+
+  /** Note that the database file should be rewritten at the next start.
+   *
+   * A marker rather than a rewrite here: the copy of a large database takes
+   * minutes and `node:sqlite` is synchronous, so it only runs before the
+   * first request is served. Below the threshold nothing is written — a
+   * conversation that only grew a little is not worth a restart's delay. */
+  private async requestVacuumIfWorthwhile(): Promise<void> {
+    if (this.freedBytes < MIN_VACUUM_BYTES || this.dbPath === undefined) {
+      return;
+    }
+    try {
+      await Deno.writeTextFile(
+        vacuumMarkerPath(this.dbPath),
+        String(this.freedBytes),
+        { mode: 0o600 },
+      );
+    } catch (error) {
+      log.warn(
+        `could not request a database rewrite: ${errorMessage(error)}`,
+      );
+    }
   }
 
   // --- routines (scheduled requests) ---------------------------------------
@@ -1235,10 +1310,12 @@ export class LumiscaCore {
     const existing = this.sessions.getByAgent(agent.id);
     if (existing !== undefined) {
       if (this.pool.get(existing.id) === undefined) {
+        const view = this.modelViewOf(existing.id);
         this.pool.open(
           existing,
           this.requireWorkspace(existing.workspaceId),
-          this.messages.listMessages(existing.id),
+          view.messages,
+          view.baseIndex,
         );
       }
       return this.decorateSession(this.sessions.get(existing.id) ?? existing);
@@ -1394,8 +1471,16 @@ export class LumiscaCore {
       }),
       // The history of THIS conversation: each stella agent has its own
       // transcript, so the tool is built per open around the session's rows.
+      // It searches the conversation's ENTRIES, not the transcript: what the
+      // user sees is what the agent can search (see session/history.ts), and
+      // the projection is the same one the conversation endpoints serve.
       historyTool: createHistorySearchTool({
-        messages: (window) => this.messages.listBetween(session.id, window),
+        entries: (window) =>
+          entriesOf(
+            this.messages.listBetween(session.id, window).map((row) =>
+              row.message
+            ),
+          ),
       }),
       // The identity belongs to this agent: the tool writes it, and the
       // provider publishes what was written as a context message, so the
@@ -1723,7 +1808,18 @@ export class LumiscaCore {
     return this.attachments.resolve(sessionId, name);
   }
 
-  /** Load a persisted session into memory (restores message history). */
+  /**
+   * Load a persisted session into memory: the MODEL's view, not the whole
+   * transcript.
+   *
+   * A conversation that runs for years holds far more than any request can
+   * carry, and the agent loop only ever sends what follows the newest
+   * checkpoint. Loading the rest cost a JSON decode of every row on every
+   * open and kept it in memory for the life of the session. The screen is
+   * unaffected: a client pages back through the conversation from the STORE
+   * (readTranscript / readStellaConversation), which reads the rows it draws
+   * and no others.
+   */
   openSession(id: string): SessionInfo {
     const session = this.sessions.get(id);
     if (!session) {
@@ -1731,10 +1827,25 @@ export class LumiscaCore {
     }
     if (!this.pool.get(id)) {
       const workspace = this.requireWorkspace(session.workspaceId);
-      const messages = this.messages.listMessages(id);
-      this.pool.open(session, workspace, messages);
+      const view = this.modelViewOf(id);
+      this.pool.open(session, workspace, view.messages, view.baseIndex);
     }
     return this.decorateSession(session);
+  }
+
+  /** The messages the model is shown: from the newest compaction checkpoint
+   * on (see MessageRepo.listModelView), with the whole-transcript position
+   * they start at. That position is what lets the agent keep the store's
+   * coordinates while holding only the tail. */
+  private modelViewOf(id: string): {
+    messages: AgentMessage[];
+    baseIndex: number;
+  } {
+    const rows = this.messages.listModelView(id);
+    return {
+      messages: rows.map((row) => row.message),
+      baseIndex: this.messages.count(id) - rows.length,
+    };
   }
 
   async closeSession(id: string): Promise<void> {
@@ -1845,27 +1956,55 @@ export class LumiscaCore {
   /**
    * One window of a session's transcript, for the clients that draw it.
    *
-   * The transcript is the model's whole history; a client needs the recent
-   * part, and asks for older windows only when the reader scrolls up (see
-   * session/transcript-window.ts for why a window begins at a turn and why
-   * the cursor is an identity). Returns undefined when the session is not
-   * open: the caller opens it first (the snapshot endpoint does), so a client
-   * is never served a page of a transcript nobody is running.
+   * The page is read from the STORE, not from the agent's memory: the agent
+   * holds the model's view (the newest checkpoint onward), while the
+   * conversation a reader scrolls back through can be far longer. Paging it
+   * out of memory meant loading the whole transcript to draw a screen. See
+   * session/transcript-pager.ts for why a page begins at a turn and why the
+   * cursor is an identity.
+   *
+   * Returns undefined when the session is not open: the caller opens it
+   * first (the snapshot endpoint does), so a client is never served a page
+   * of a transcript nobody is running.
    */
   readTranscript(
     id: string,
     query: WindowQuery,
   ): WindowPage<AgentMessage> | undefined {
-    const agent = this.pool.get(id);
-    if (agent === undefined) return undefined;
-    const messages = agent.messages;
-    return readWindow(messages, query, {
-      cursor: messageCursorOf,
-      startsWindow: (index) => {
-        const message = messages[index];
-        return message !== undefined && startsTranscriptTurn(message.role);
-      },
+    if (this.pool.get(id) === undefined) return undefined;
+    const page = readTranscriptPage(this.messages, id, query, {
+      startsWindow: (message) => startsTranscriptTurn(message.role),
+      project: (row) => ({
+        item: row.message,
+        cursor: messageCursorOf(row.message),
+      }),
     });
+    return (query.older ?? null) === null ? this.withLiveTail(id, page) : page;
+  }
+
+  /** Append the rows a run has appended but not yet written, so a snapshot
+   * taken mid-run shows the prompt the reply is answering (see
+   * unpersistedTail). Only the newest page carries them: an older page is
+   * asking about history, which is all persisted. */
+  private withLiveTail(
+    id: string,
+    page: WindowPage<AgentMessage>,
+  ): WindowPage<AgentMessage> {
+    const tail = this.unpersistedTail(id);
+    return tail.length === 0
+      ? page
+      : { items: page.items.concat(tail), older: page.older };
+  }
+
+  /** The session's context usage over the WHOLE transcript.
+   *
+   * The agent holds only the model's view (the newest checkpoint onward), so
+   * the summary comes from the store: every assistant row that reported
+   * usage contributes, wherever it sits. The meter must not shrink because a
+   * reader scrolled away, and it must not grow back when a compaction drops
+   * the older rows from memory. */
+  getSessionUsage(id: string): ContextUsageSummary {
+    return summarizeContextUsage(this.messages.usageRows(id));
   }
 
   /** The conversation a stella agent already has, or undefined before its
@@ -1874,6 +2013,24 @@ export class LumiscaCore {
   findStellaSession(agentId: string): SessionInfo | undefined {
     const session = this.sessions.getByAgent(agentId);
     return session === undefined ? undefined : this.decorateSession(session);
+  }
+
+  /**
+   * The rows of one session the store does NOT hold yet: the tail of the
+   * agent's view past its persisted prefix.
+   *
+   * A run appends its prompt (and its context publications) to the
+   * transcript before those rows are written, so a client that reads the
+   * snapshot while the agent is working would otherwise see the reply with
+   * no question in front of it — the one moment the transcript must be
+   * honest about.
+   */
+  private unpersistedTail(id: string): AgentMessage[] {
+    const agent = this.pool.get(id);
+    if (agent === undefined) return [];
+    const view = agent.messages;
+    const count = agent.persistedCount;
+    return count >= view.length ? [] : view.slice(count);
   }
 
   /**
@@ -1887,20 +2044,26 @@ export class LumiscaCore {
     id: string,
     query: WindowQuery,
   ): WindowPage<StellaEntry> | undefined {
-    const agent = this.pool.get(id);
-    if (agent === undefined) return undefined;
+    if (this.pool.get(id) === undefined) return undefined;
     // Project first, page over the projection: a page must count what the
     // conversation shows, not what the model's history holds (most of a
     // stella transcript is tool traffic nobody sees).
-    const entries: StellaEntry[] = [];
-    for (const message of agent.messages) {
-      const entry = stellaEntryOf(message);
-      if (entry !== null) entries.push(entry);
-    }
-    return readWindow(entries, query, {
-      cursor: stellaEntryCursorOf,
+    const page = readTranscriptPage(this.messages, id, query, {
       startsWindow: () => true,
+      project: (row) => {
+        const entry = stellaEntryOf(row.message);
+        return entry === null
+          ? undefined
+          : { item: entry, cursor: stellaEntryCursorOf(entry) };
+      },
     });
+    if ((query.older ?? null) !== null) return page;
+    // The prompt of a run in flight is not written yet; a conversation read
+    // mid-run must still show it (see unpersistedTail).
+    const tail = entriesOf(this.unpersistedTail(id));
+    return tail.length === 0
+      ? page
+      : { items: page.items.concat(tail), older: page.older };
   }
 
   /** Fire-and-forget prompt: completion and failures arrive as events
@@ -1951,6 +2114,42 @@ export class LumiscaCore {
       );
     }
     return await saveUploads(uploads, { exec, agentId: session.agentId });
+  }
+
+  /**
+   * Read one file a prompt brought back out of the machine, or undefined
+   * when the machine no longer has it.
+   *
+   * The machine is the record: a file the agent moved, edited or deleted is
+   * gone from the conversation too (the same rule as a picture), and a
+   * client is told so instead of being served bytes from somewhere else. An
+   * unreadable machine is a different sentence and throws.
+   */
+  async resolvePromptUpload(
+    agentId: string,
+    ref: string,
+  ): Promise<{ bytes: Uint8Array; mimeType: string } | undefined> {
+    const exec = this.stella.exec();
+    const execBytes = this.stella.execBytes();
+    if (exec === undefined || execBytes === undefined) {
+      throw new CoreError(
+        "The machine is not available, so the file cannot be read",
+        "unavailable",
+      );
+    }
+    const read = await readUpload(exec, execBytes, {
+      agentId,
+      ref,
+      maxBytes: MAX_PROMPT_IMAGE_BYTES,
+    });
+    if (read === undefined) return undefined;
+    // The type comes from the extension the store chose, not from the bytes:
+    // the name is what the store generated, and a prompt picture was stored
+    // under its own type's extension (see the prompt route).
+    const extension = extname(read.name).toLowerCase();
+    const mimeType = RASTER_IMAGE_MIME_BY_EXTENSION[extension] ??
+      "application/octet-stream";
+    return { bytes: read.bytes, mimeType };
   }
 
   /** Send a prompt into a session (fire-and-forget). `files` are the paths
@@ -2246,27 +2445,25 @@ export class LumiscaCore {
    * reaches a session that is already open. */
   private buildGeneratedPrompt(
     workspace: Workspace,
-    model?: { provider: string; modelId: string },
+    _model?: { provider: string; modelId: string },
     tools: readonly string[] = [],
     stella: boolean | { name: string; role: string; id: string } = false,
   ): string {
-    const resolved = model
-      ? {
-        ...model,
-        name: this.models.getModel(model.provider, model.modelId)?.name,
-      }
-      : undefined;
     // The language is resolved once, here: the prompt is snapshotted with
     // the session, so the session keeps the language it started in even
     // after the setting changes (see tools/language.ts).
     const language = this.getLanguage();
+    // `model` is accepted (and ignored) so the call sites stay about the
+    // session, not about what the prompt happens to contain: which model the
+    // session runs on is published as a context message instead (see
+    // agent/model-context.ts), because a session can be switched to another
+    // model while this snapshot never changes.
     // stella's conversation row shares the folder-less chat workspace, but
     // its prompt is the machine's: a chat prompt would tell it it cannot
     // run anything, which is the opposite of what it can do.
     if (stella !== false) {
       return buildStellaSystemPrompt({
         tools,
-        model: resolved,
         language,
         ...(stella === true ? {} : {
           agent: { name: stella.name, role: stella.role },
@@ -2275,8 +2472,8 @@ export class LumiscaCore {
       });
     }
     return workspace.chat
-      ? buildChatSystemPrompt({ tools, model: resolved, language })
-      : buildSystemPrompt(workspace, { tools, model: resolved, language });
+      ? buildChatSystemPrompt({ tools, language })
+      : buildSystemPrompt(workspace, { tools, language });
   }
 
   /** Resolve the model for a new session: explicit choice, else the

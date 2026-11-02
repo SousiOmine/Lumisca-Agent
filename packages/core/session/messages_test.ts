@@ -354,3 +354,210 @@ Deno.test("messages: listBetween bounds the window and keeps transcript order", 
     db.close();
   }
 });
+
+Deno.test("messages: listModelView starts at the newest checkpoint", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    const at = (role: string, text: string, timestamp: number) =>
+      repo.append("s1", {
+        role,
+        ...(role === "checkpoint"
+          ? { title: "t", body: text }
+          : { content: text }),
+        timestamp,
+      } as AgentMessage);
+
+    at("user", "before", 1);
+    at("checkpoint", "first summary", 2);
+    at("user", "middle", 3);
+    at("checkpoint", "second summary", 4);
+    at("user", "after", 5);
+
+    // The model sees the NEWEST checkpoint and what follows it; the rest is
+    // the conversation's history, kept but not loaded.
+    assertEquals(
+      repo.listModelView("s1").map((row) => row.timestamp),
+      [4, 5],
+    );
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: listModelView returns the whole transcript when never compacted", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    for (let i = 1; i <= 3; i++) {
+      repo.append("s1", {
+        role: "user",
+        content: `m${i}`,
+        timestamp: i,
+      } as AgentMessage);
+    }
+    assertEquals(
+      repo.listModelView("s1").map((row) => row.timestamp),
+      [1, 2, 3],
+    );
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: listWindow pages backwards, oldest first", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    for (let i = 1; i <= 5; i++) {
+      repo.append("s1", {
+        role: "user",
+        content: `m${i}`,
+        timestamp: i,
+      } as AgentMessage);
+    }
+
+    const newest = repo.listWindow("s1", { beforeIndex: null, limit: 2 });
+    assertEquals(newest.map((row) => row.timestamp), [4, 5]);
+
+    // The page before it, ending where the previous one started (row 4's
+    // position is 3 — rows are 0-based positions in transcript order).
+    const older = repo.listWindow("s1", { beforeIndex: 3, limit: 2 });
+    assertEquals(older.map((row) => row.timestamp), [2, 3]);
+
+    const oldest = repo.listWindow("s1", { beforeIndex: 1, limit: 2 });
+    assertEquals(oldest.map((row) => row.timestamp), [1]);
+
+    // Before the first row there is nothing, not an error.
+    assertEquals(repo.listWindow("s1", { beforeIndex: 0, limit: 2 }), []);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: listWindow never reads another session's rows", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    db.db.prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+       VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
+    ).run();
+    const repo = createMessageRepo(db);
+    repo.append("s1", {
+      role: "user",
+      content: "mine",
+      timestamp: 1,
+    } as AgentMessage);
+    repo.append("s2", {
+      role: "user",
+      content: "theirs",
+      timestamp: 2,
+    } as AgentMessage);
+
+    const page = repo.listWindow("s1", { beforeIndex: null, limit: 10 });
+    assertEquals(page.map((row) => row.timestamp), [1]);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: pruneCondensed reduces only what a checkpoint covers", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    repo.append("s1", {
+      role: "user",
+      content: "first question",
+      timestamp: 1,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "c1",
+      toolName: "bash",
+      content: [{ type: "text", text: "a lot of output" }],
+      isError: false,
+      timestamp: 2,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "checkpoint",
+      title: "t",
+      body: "summary",
+      timestamp: 3,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "c2",
+      toolName: "bash",
+      content: [{ type: "text", text: "recent output" }],
+      isError: false,
+      timestamp: 4,
+    } as AgentMessage);
+
+    const reducedOnce = repo.pruneCondensed("s1");
+    assertEquals(reducedOnce.changed, 1);
+    // The bytes it freed are what a caller uses to notice the file is worth
+    // rewriting (see db/vacuum.ts). A marker can be longer than the payload
+    // it replaces for a very short output, and that is reported honestly as
+    // zero rather than as a negative saving.
+    assertEquals(reducedOnce.freedBytes >= 0, true);
+    const rows = repo.list("s1");
+    // The user's words are untouched, and so is anything after the
+    // checkpoint (the model still reads that part).
+    assertEquals(
+      (rows[0]!.message as { content: string }).content,
+      "first question",
+    );
+    assertEquals(
+      (rows[3]!.message as { content: Array<{ text: string }> }).content[0]!
+        .text,
+      "recent output",
+    );
+    // The covered tool result is a marker now, and it kept its identity.
+    const reduced = rows[1]!.message;
+    assertEquals(reduced.role, "toolResult");
+    if (reduced.role === "toolResult") {
+      assertEquals(reduced.toolCallId, "c1");
+      assertEquals(reduced.content[0]!.type === "text", true);
+    }
+    // Reducing again is a no-op: the marker is already what it would write.
+    const again = repo.pruneCondensed("s1");
+    assertEquals(again.changed, 0);
+    assertEquals(again.freedBytes, 0);
+    // The row count never changes: positions are transcript order, and a
+    // hole would move every row after it.
+    assertEquals(repo.count("s1"), 4);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: usageRows reads every assistant usage in the store", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    for (const at of [1, 2]) {
+      repo.append("s1", {
+        role: "assistant",
+        content: [{ type: "text", text: "hi" }],
+        api: "openai-completions",
+        provider: "faux",
+        model: "model",
+        usage: { input: at, output: 1, cacheRead: 10 * at, cacheWrite: 0 },
+        stopReason: "stop",
+        timestamp: at,
+      } as AgentMessage);
+    }
+    const rows = repo.usageRows("s1");
+    assertEquals(rows.length, 2);
+    assertEquals(rows[1]!.usage?.input, 2);
+    assertEquals(rows[1]!.usage?.cacheRead, 20);
+  } finally {
+    db.close();
+  }
+});

@@ -65,6 +65,12 @@ export interface SessionAgentOptions {
   model: Model<Api>;
   tools: Tool[];
   messages?: AgentMessage[];
+  /** The whole-transcript position `messages[0]` sits at: the agent holds the
+   * MODEL's view (the newest compaction checkpoint onward), not the whole
+   * conversation. Operations expressed in whole-transcript positions — a
+   * compaction's cut, a rewind's target — are translated by TranscriptStore.
+   * Omitted → 0 (a conversation that was never compacted). */
+  baseIndex?: number;
   /** Reasoning level for every run of this session ("off" = no thinking). */
   thinkingLevel?: ThinkingLevel;
   streamFn: StreamFn;
@@ -130,6 +136,22 @@ export interface SessionAgentOptions {
    * request would approach the window. stella's conversations are the ones
    * that live for weeks, so they are the ones that set it. */
   idleCompactionMs?: number;
+  /** Whether rows behind a compaction checkpoint lose their payload once the
+   * checkpoint covers them (see session/prune.ts).
+   *
+   * On for a stella conversation, whose transcript is the record of a
+   * conversation that lives for years: tool calls, their output and the
+   * context publications steering it are never shown to the user and never
+   * searched, so keeping them costs the store and buys nothing. Off for
+   * code mode, whose work log IS a surface: its tool rows are what the
+   * reader studies after the fact.
+   *
+   * Omitted → off. */
+  pruneCondensed?: boolean;
+  /** Called with the number of bytes a prune freed in the store. The pool
+   * accumulates them and records that the database file is worth rewriting
+   * at the next start (see db/vacuum.ts). Omitted → the figure is dropped. */
+  onFreedBytes?: (bytes: number) => void;
   /** Called for every request the agent loop sends, with the shape the
    * provider sees (see RequestShape). The pool records the shapes that cost
    * the prompt cache; omitted → nothing is observed. */
@@ -218,6 +240,11 @@ export class SessionAgent {
    * whether a timer exists at all, so it is readable rather than inferred
    * from the timer. */
   readonly idleCompactionMs: number;
+  /** Whether rows behind a checkpoint lose their payload (see
+   * SessionAgentOptions.pruneCondensed and session/prune.ts). */
+  private readonly pruneCondensed: boolean;
+  /** What a prune freed in the store (see SessionAgentOptions.onFreedBytes). */
+  private readonly onFreedBytes: ((bytes: number) => void) | undefined;
   /** The pending idle compaction (see armIdleCompaction); null when none is
    * armed. */
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -228,6 +255,7 @@ export class SessionAgent {
       options.sessionId,
       options.messageRepo,
       options.messages?.length ?? 0,
+      options.baseIndex ?? 0,
     );
     this.toolRegistry = options.toolRegistry ?? null;
     this.onEvent = options.onEvent;
@@ -341,16 +369,51 @@ export class SessionAgent {
           before: messageIdentityOf(before),
           message,
         });
+        // The span the checkpoint just summarized is no longer read by
+        // anyone (the model starts at the checkpoint, and a client never
+        // receives tool traffic at all), so its payload is dropped now —
+        // while the conversation is being condensed anyway.
+        this.pruneCondensedRows();
       },
     });
     this.contextProviders = options.contextProviders ?? [];
     this.idleCompactionMs = options.idleCompactionMs ?? 0;
+    this.pruneCondensed = options.pruneCondensed === true;
+    this.onFreedBytes = options.onFreedBytes;
+    // Reopening a conversation is the repair point for a process that died
+    // between a checkpoint's insertion and its prune: the store is asked to
+    // reduce what is behind the checkpoint, and a row already reduced is
+    // left alone.
+    this.pruneCondensedRows();
     this.rebaseContexts(this.agent.state.messages);
     this.agent.subscribe((event) => this.handleEvent(event));
     // A conversation reopened after a long silence is condensed right away
     // (the gap started before this process opened it); otherwise the timer
     // is armed for the first run's end.
     this.armIdleCompaction();
+  }
+
+  /** Drop the payload of every row behind the newest checkpoint (see
+   * session/prune.ts), when this session keeps only what its conversation
+   * shows. Best effort: a failed write leaves the rows as they were, and the
+   * next compaction or open tries again.
+   *
+   * The bytes it freed are reported, so the pool can note that the database
+   * FILE is now mostly free pages: SQLite reuses them but never shrinks, and
+   * the rewrite happens at the next start, before any request (see
+   * db/vacuum.ts). */
+  private pruneCondensedRows(): void {
+    if (!this.pruneCondensed || this.closed) return;
+    try {
+      const result = this.transcript.pruneCondensed();
+      if (result.freedBytes > 0) this.onFreedBytes?.(result.freedBytes);
+    } catch (error) {
+      log.warn(
+        `session ${this.sessionId}: pruning condensed rows failed: ${
+          errorMessage(error)
+        }`,
+      );
+    }
   }
 
   /** Re-anchor every context provider to the part of the transcript the
@@ -400,6 +463,20 @@ export class SessionAgent {
 
   get messages(): AgentMessage[] {
     return this.agent.state.messages;
+  }
+
+  /** The whole-transcript position this agent's first in-memory message sits
+   * at (0 for a conversation that was never compacted). The conversation a
+   * reader pages through is longer than this view; see session/messages.ts. */
+  get baseIndex(): number {
+    return this.transcript.baseIndex;
+  }
+
+  /** How many of the view's messages have a row. A run appends its prompt
+   * before writing it, so the difference is what a snapshot during a run
+   * must add from memory (see LumiscaCore.readTranscript). */
+  get persistedCount(): number {
+    return this.transcript.persistedCount;
   }
 
   /** Update the reasoning level used from the next run onward. The

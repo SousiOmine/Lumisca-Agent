@@ -137,19 +137,15 @@ export function today(now: Date = new Date()): string {
   return formatLocalDay(now, "en-US");
 }
 
-function modelLabel(model: EnvironmentModel | undefined): string | undefined {
-  if (!model) return undefined;
-  return model.name ?? `${model.provider}/${model.modelId}`;
-}
-
-/** The environment section of the system prompt: the machine facts and the
- * model, so the agent knows what it runs on. Bullets whose facts could not
- * be detected are omitted. Everything here is stable for the session's life
- * (the prompt is snapshotted at creation), which is exactly what the
- * provider's prompt cache needs; the date is NOT part of it — it changes
- * daily and is published as a context message instead (see
- * agent/date-context.ts). */
-export function buildEnvironmentSection(model?: EnvironmentModel): string {
+/** The environment section of the system prompt: the machine facts, so the
+ * agent knows what it runs on. Bullets whose facts could not be detected are
+ * omitted. Everything here is stable for the session's life (the prompt is
+ * snapshotted at creation), which is exactly what the provider's prompt
+ * cache needs. Two facts that DO change while a session lives are therefore
+ * not part of it: the date (published as a context message, see
+ * agent/date-context.ts) and the model (published the same way, see
+ * agent/model-context.ts — a session can be switched to another model). */
+export function buildEnvironmentSection(): string {
   const bullets = [`- OS: ${detectOs()}`];
   const cpu = detectCpu();
   if (cpu) bullets.push(`- CPU: ${cpu}`);
@@ -157,7 +153,6 @@ export function buildEnvironmentSection(model?: EnvironmentModel): string {
   if (gpu) bullets.push(`- GPU: ${gpu}`);
   const terminal = detectTerminal();
   if (terminal) bullets.push(`- Terminal: ${terminal}`);
-  const label = modelLabel(model);
-  if (label) bullets.push(`- Model: ${label}`);
+  // The model is deliberately absent: see the note above.
   return `\n\nEnvironment:\n${bullets.join("\n")}`;
 }

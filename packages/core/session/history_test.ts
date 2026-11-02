@@ -3,9 +3,22 @@ import { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
 import { createMessageRepo } from "../session/messages.ts";
 import type { AgentMessage } from "../ai/types.ts";
+import { stellaEntryOf } from "../agent/stella-stream.ts";
+import type { StellaEntry } from "../types/stella-conversation.ts";
 import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import { toolText } from "../test-utils.ts";
 import { createHistorySearchTool, MAX_HISTORY_LIMIT } from "./history.ts";
+
+/** The entries a set of stored rows projects to, exactly as the core wires
+ * it (the tool's only input). */
+function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
+  const entries: StellaEntry[] = [];
+  for (const message of messages) {
+    const entry = stellaEntryOf(message);
+    if (entry !== null) entries.push(entry);
+  }
+  return entries;
+}
 
 /** A tool bound to one in-memory conversation, plus the repo that fills it. */
 function setup() {
@@ -19,7 +32,10 @@ function setup() {
   ).run("s1");
   const repo = createMessageRepo(db);
   const tool = createHistorySearchTool({
-    messages: (window) => repo.listBetween("s1", window),
+    entries: (window) =>
+      entriesOf(
+        repo.listBetween("s1", window).map((row) => row.message),
+      ),
   });
   return { db, repo, tool };
 }
@@ -190,7 +206,7 @@ Deno.test("history_search: the same day at both ends is allowed", async () => {
   }
 });
 
-Deno.test("history_search: tool results are named and kept to their head", async () => {
+Deno.test("history_search: tool calls and their output are not history", async () => {
   const { db, repo, tool } = setup();
   try {
     repo.append("s1", {
@@ -201,7 +217,7 @@ Deno.test("history_search: tool results are named and kept to their head", async
           type: "toolCall",
           id: "call-1",
           name: "bash",
-          arguments: { command: "deno test" },
+          arguments: { command: "deno test --filter secret-token" },
         },
       ],
       api: "openai-completions",
@@ -215,22 +231,26 @@ Deno.test("history_search: tool results are named and kept to their head", async
       role: "toolResult",
       toolCallId: "call-1",
       toolName: "bash",
-      content: [{ type: "text", text: `BEGIN ${"x".repeat(2000)} END` }],
+      content: [{ type: "text", text: "BEGIN secret-token output END" }],
       isError: false,
       timestamp: localDay("2026-10-01", 11),
     } as AgentMessage);
 
-    // The assistant turn: its text and the names of the tools it called.
+    // The assistant turn keeps its text and loses the call log: a call is
+    // how the work was done, not something the conversation shows.
     const calls = await run(tool, { query: "tests" });
-    assert(calls.includes("(tool calls: bash)"), calls);
     assert(calls.includes("Running the tests now."), calls);
+    assert(!calls.includes("tool calls"), calls);
 
-    // The tool result: named after the tool, and cut to its head.
-    const output = await run(tool, { query: "begin" });
-    assert(output.includes("tool result: bash"), output);
-    assert(output.includes("BEGIN"), output);
-    assert(!output.includes("END"), output);
-    assert(output.includes("truncated to the first"), output);
+    // The arguments and the output are not searchable at all.
+    const args = await run(tool, { query: "secret-token" });
+    assert(args.includes("No message"), args);
+    const output = await run(tool, { query: "BEGIN" });
+    assert(output.includes("No message"), output);
+    // Nor does the listing show a tool result row.
+    const all = await run(tool);
+    assert(all.includes("Found 1 message(s)"), all);
+    assert(!all.includes("tool result"), all);
   } finally {
     db.close();
   }
@@ -254,8 +274,8 @@ Deno.test("history_search: its own earlier results are not history", async () =>
   const { db, repo, tool } = setup();
   try {
     say(repo, "The code word is pelican", localDay("2026-10-01"));
-    // A previous search would otherwise echo the word it looked for, so a
-    // second search would find the first search instead of the conversation.
+    // A previous search result is a tool result, which this search does not
+    // read — so a second search finds the conversation, not the first answer.
     repo.append("s1", {
       role: "toolResult",
       toolCallId: "call-0",
@@ -271,23 +291,65 @@ Deno.test("history_search: its own earlier results are not history", async () =>
 
     const result = await run(tool, { query: "pelican" });
     assert(result.includes("Found 1 message(s)"), result);
-    assert(!result.includes("tool result: history_search"), result);
+    assert(!result.includes("tool result"), result);
+    // One match, not two: the earlier answer's own text is not a message.
+    assertEquals(result.split("[20").length - 1, 1, result);
   } finally {
     db.close();
   }
 });
 
-Deno.test("history_search: an image-only prompt is a turn, not a hole", async () => {
+Deno.test("history_search: a picture-only prompt is a turn, not a hole", async () => {
   const { db, repo, tool } = setup();
   try {
+    // A picture is a file the prompt brought into the machine, not a block in
+    // the message; the entry says what came with it.
     repo.append("s1", {
       role: "user",
-      content: [{ type: "image", data: "AAAA", mimeType: "image/png" }],
+      content: [{ type: "text", text: "" }],
+      files: [{
+        name: "image-1.png",
+        path: "/home/agent/agents/a1/uploads/1-ab/01-image-1.png",
+        size: 4,
+        ref: "uploads/1-ab/01-image-1.png",
+        image: true,
+      }],
       timestamp: localDay("2026-10-01"),
     } as AgentMessage);
 
     const result = await run(tool);
-    assert(result.includes("(attached image, no text)"), result);
+    assert(result.includes("(1 attached image(s), no text)"), result);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("history_search: a file the agent sent is part of the conversation", async () => {
+  const { db, repo, tool } = setup();
+  try {
+    say(repo, "send me the report", localDay("2026-10-01", 10));
+    // The reply was a file: it has no words, but the conversation shows a
+    // card, so a listing names what it carried instead of hiding the turn.
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "call-2",
+      toolName: "chat_attach",
+      content: [{ type: "text", text: "Sent 1 file." }],
+      details: {
+        attachments: [{
+          name: "0123456789ab.pdf",
+          displayName: "report.pdf",
+          size: 1234,
+          inline: false,
+        }],
+      },
+      isError: false,
+      timestamp: localDay("2026-10-01", 11),
+    } as AgentMessage);
+
+    const all = await run(tool);
+    assert(all.includes("send me the report"), all);
+    assert(all.includes("(sent 1 file(s), no text)"), all);
   } finally {
     db.close();
   }

@@ -461,6 +461,8 @@ export function App({ initialData }: AppProps): ReactElement {
                   stella.prompt(text, images, files)}
                 onAbort={() => stella.abort()}
                 onRewind={(timestamp) => stella.rewind(timestamp)}
+                onModelChange={(provider, modelId) =>
+                  stella.setModel(provider, modelId)}
                 onLoadOlder={stella.loadOlder}
                 loadingOlder={stella.loadingOlder}
                 onFinishHandover={(note, toolCallId) =>

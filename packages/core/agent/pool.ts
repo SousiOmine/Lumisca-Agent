@@ -59,6 +59,10 @@ export interface ModelResolver {
    * shared/settings-keys.ts). The agents read it on every compaction check,
    * so a settings change applies without rebuilding them. */
   getCompactionPolicy(): CompactionPolicyInput;
+  /** Record that a prune freed bytes in the store, so the next start rewrites
+   * the database file (see db/vacuum.ts). Omitted → the figure is dropped
+   * (tests, an in-memory core). */
+  recordFreedBytes?(bytes: number): void;
 }
 
 /** Session persistence the agent factory needs (repos + prompt snapshot). */
@@ -282,6 +286,10 @@ export class SessionPool {
     session: SessionInfo,
     workspace: Workspace,
     messages: AgentMessage[],
+    /** The whole-transcript position `messages[0]` sits at: the agent holds
+     * the model's view, not the conversation's whole history. 0 for a
+     * conversation that was never compacted. */
+    baseIndex = 0,
   ): SessionAgent {
     const resources: SessionResources = this.sessions.get(session.id) ?? {};
     const agent = this.factory.open(
@@ -290,6 +298,7 @@ export class SessionPool {
       messages,
       resources,
       (attachment) => this.sessions.get(session.id)?.mcp === attachment,
+      baseIndex,
     );
     this.sessions.set(session.id, resources);
     return agent;
@@ -360,8 +369,9 @@ export class SessionPool {
     const current = resources.agent;
     const workspace = this.deps.requireWorkspace(session.workspaceId);
     const messages = current.messages;
+    const baseIndex = current.baseIndex;
     current.close(); // also releases the old agent's MCP servers
-    this.open(session, workspace, messages);
+    this.open(session, workspace, messages, baseIndex);
   }
 
   /** Refuse configuration changes while any listed session is streaming,

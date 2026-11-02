@@ -3,7 +3,6 @@ import { upgradeWebSocket } from "hono/deno";
 import type {
   AskAnswer,
   ClientEvent,
-  ImageContent,
   PromptFileRef,
   SessionInfo,
   StellaAgent,
@@ -19,6 +18,7 @@ import {
   AGENT_ICON_FORMATS,
   agentIconExtensionOfMimeType,
   MAX_AGENT_ICON_BYTES,
+  rasterExtensionOfMimeType,
 } from "@lumisca/core/shared";
 import {
   AppError,
@@ -87,14 +87,21 @@ export interface StellaApi {
   getAgent(sessionId: string): { isStreaming: boolean } | undefined;
   getStellaAgent(id: string): StellaAgent | undefined;
   openSession(sessionId: string): SessionInfo;
+  /** Read one file a prompt brought into the machine, for the conversation
+   * to draw. Undefined when the machine no longer has it. */
+  resolvePromptUpload(
+    agentId: string,
+    ref: string,
+  ): Promise<{ bytes: Uint8Array; mimeType: string } | undefined>;
   /** Send a prompt into the conversation (fire-and-forget; the events carry
-   * the progress). `images` and `uploads` are the attachments the user sent
-   * with it. Optional in the interface so a caller (a test double, a routine)
-   * that only has words does not have to spell out "no attachments". */
+   * the progress). `uploads` are the files and pictures the user sent: they
+   * are already inside the machine, and the message records where. Optional
+   * so a caller (a test double, a routine) that only has words does not have
+   * to spell out "no attachments". */
   startPrompt(
     sessionId: string,
     text: string,
-    images?: ImageContent[],
+    images?: never,
     mode?: never,
     files?: PromptFileRef[],
   ): void;
@@ -106,6 +113,13 @@ export interface StellaApi {
   ): Promise<PromptFileRef[]>;
   abort(sessionId: string): void;
   rewind(sessionId: string, timestamp: number): Promise<void>;
+  /** Switch the conversation's model (persisted). Refused while the
+   * conversation is streaming. */
+  setSessionModel(
+    sessionId: string,
+    provider: string,
+    modelId: string,
+  ): void;
   answerQuestion(
     sessionId: string,
     toolCallId: string,
@@ -174,6 +188,22 @@ function decodeBase64(data: string): Uint8Array {
  * host answers with its reason instead of a 404, so the mode-selection screen
  * can explain itself.
  */
+/** The file name a pasted picture is stored under: `image-1.png`,
+ * `image-2.jpg`. Its extension comes from the type the browser reported, so
+ * the conversation can draw it back without sniffing the bytes (a raster
+ * format is what a prompt accepts, and anything else is refused when the
+ * upload is saved). */
+function imageName(index: number, mimeType: string): string {
+  const extension = rasterExtensionOfMimeType(mimeType);
+  if (extension === undefined) {
+    throw new AppError(
+      `Unsupported image type: ${mimeType}`,
+      400,
+    );
+  }
+  return `image-${index + 1}${extension}`;
+}
+
 export function stellaRoutes(
   core: StellaApi,
   /** How long a streamed delta waits for company before it is sent as one
@@ -305,6 +335,37 @@ export function stellaRoutes(
     });
   });
 
+  /**
+   * One file a prompt brought into the machine, read back for the
+   * conversation to draw.
+   *
+   * The machine is the truth. A file the agent moved, edited or deleted is
+   * gone from the conversation too, and the answer is a 404 the client draws
+   * as "this file is no longer in the machine" — the ordinary end of a
+   * message-app attachment, and the same for a picture and a document. The
+   * bytes are never copied into the store, so nothing can show a stale copy
+   * of something the machine no longer has.
+   *
+   * `ref` is the address the transcript carries (`uploads/<batch>/<name>`),
+   * validated before it becomes a path, so a caller cannot reach anything
+   * outside the agent's uploads folder.
+   */
+  app.get("/stella/conversations/:agentId/upload", async (c) => {
+    const agentId = c.req.param("agentId");
+    const ref = c.req.query("ref") ?? "";
+    const agent = core.getStellaAgent(agentId);
+    if (agent === undefined) {
+      throw new AppError(`Agent not found: ${agentId}`, 404);
+    }
+    const file = await core.resolvePromptUpload(agentId, ref);
+    if (file === undefined) {
+      throw new AppError("That file is no longer in the machine", 404);
+    }
+    return new Response(new Uint8Array(file.bytes), {
+      headers: assetHeaders({ mimeType: file.mimeType }),
+    });
+  });
+
   /** The stella conversation, created on first use, plus the snapshot the
    * client draws it from.
    *
@@ -357,10 +418,24 @@ export function stellaRoutes(
     const body = await parseBody<PromptBody>(c);
     const { text, images, files } = parsePromptBody(body ?? {});
     const session = requireConversation(c.req.param("agentId"));
-    const saved = files === undefined
+    // Pictures and files take one path: both are written into the machine and
+    // the model is told their paths. A picture kept as a byte block in the
+    // message would put it in the database for the life of the conversation,
+    // and a conversation lives for years (see ai/types.ts UserMessage.files).
+    const attachments = [
+      ...(files ?? []).map((file) => ({
+        name: file.name,
+        bytes: file.bytes,
+      })),
+      ...(images ?? []).map((image, index) => ({
+        name: imageName(index, image.mimeType),
+        bytes: base64ToBytes(image.data),
+      })),
+    ];
+    const saved = attachments.length === 0
       ? undefined
-      : await core.savePromptUploads(session.id, files);
-    core.startPrompt(session.id, text, images, undefined, saved);
+      : await core.savePromptUploads(session.id, attachments);
+    core.startPrompt(session.id, text, undefined, undefined, saved);
     return c.json({ ok: true });
   });
 
@@ -418,6 +493,33 @@ export function stellaRoutes(
     const session = requireConversation(c.req.param("agentId"));
     await core.openSession(session.id);
     await core.rewind(session.id, timestamp);
+    return c.json({ ok: true });
+  });
+
+  /** Switch the model the conversation runs on.
+   *
+   * A conversation lives for years; the model it started on can be retired
+   * from the catalog, its provider can go away, or a better model can simply
+   * appear. Without this the only way out of a dead model was to delete the
+   * agent — and with it the whole conversation. The switch is refused while a
+   * run is active (see LumiscaCore.setSessionModel): rebuilding a streaming
+   * agent would orphan the running loop.
+   *
+   * The system prompt does not change: the model is published as a context
+   * message (see agent/model-context.ts), so the next run tells the agent
+   * which model it is on without touching the request's cached prefix. */
+  app.post("/stella/conversations/:agentId/model", async (c) => {
+    const body = await parseBody<{ provider?: unknown; modelId?: unknown }>(c);
+    const provider = requireNonEmptyString(body?.provider, "provider").trim();
+    const modelId = requireNonEmptyString(body?.modelId, "modelId").trim();
+    // Blank values describe the request, so they are refused here rather
+    // than reaching the core as an id no catalog has (which would answer a
+    // confusing 404 for a request that was never about a real model).
+    if (provider === "" || modelId === "") {
+      throw new AppError("provider and modelId must not be blank", 400);
+    }
+    const session = requireConversation(c.req.param("agentId"));
+    core.setSessionModel(session.id, provider, modelId);
     return c.json({ ok: true });
   });
 
@@ -521,6 +623,11 @@ export function stellaRoutes(
         : {}),
       agentName: core.getStellaAgent(agentId)?.name ?? session.name,
       sessionId: session.id,
+      // The model the conversation runs on. The client shows it in the
+      // composer's model line, and switches from there; the conversation's
+      // session row is the source of truth, so it travels with the snapshot
+      // rather than being guessed from the app default.
+      model: { provider: session.modelProvider, modelId: session.modelId },
       rev: core.getSessionRevision(session.id),
     };
   }

@@ -5,7 +5,11 @@ import {
   IconSend,
 } from "@tabler/icons-preact";
 import { useState } from "preact/compat";
-import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
+import {
+  sessionAttachmentBase,
+  sessionVisualBase,
+  stellaUploadBase,
+} from "../api-client.ts";
 import { useT } from "../i18n.ts";
 import type {
   PendingFile,
@@ -66,6 +70,8 @@ interface StellaViewProps {
   onAbort: () => void;
   /** Rewind from a message onward (the transcript's undo). */
   onRewind: (timestamp: number) => Promise<void>;
+  /** Switch the conversation's model (refused while a run is active). */
+  onModelChange: (provider: string, modelId: string) => Promise<void>;
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
   onLoadOlder: () => boolean;
@@ -87,10 +93,16 @@ interface StellaViewProps {
  * machine behind it.
  *
  * What is NOT here is the point. There is no workspace picker, no tab strip,
- * no session history, no model switcher and — since the machine starts itself
- * when a message needs it — no start / stop / reset controls. The machine's
- * state appears only as the one wait that cannot be hidden (a first-run image
- * build) and as errors.
+ * no session history and — since the machine starts itself when a message
+ * needs it — no start / stop / reset controls. The machine's state appears
+ * only as the one wait that cannot be hidden (a first-run image build) and as
+ * errors.
+ *
+ * The model line IS here, unlike the other configuration: a conversation
+ * lives for years, and its model can be retired from the catalog or lose its
+ * provider. Without a way to switch, the only escape would be deleting the
+ * agent and the whole conversation with it. It stays one line in the
+ * composer's footer, exactly as in code mode.
  *
  * Neither are the progress panels (todo / tasks / background commands), and
  * the transcript is not code mode's: a conversation receives the user's words
@@ -117,6 +129,7 @@ export function StellaView(
     onPrompt,
     onAbort,
     onRewind,
+    onModelChange,
     onLoadOlder,
     loadingOlder,
     onFinishHandover,
@@ -134,6 +147,7 @@ export function StellaView(
   const [editingIcon, setEditingIcon] = useState(false);
   const visualBase = sessionVisualBase("", sessionId ?? "");
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
+  const uploadBase = stellaUploadBase(agent?.id ?? "");
   const isRunning = conversation?.running === true;
   // The screen is the user's while the agent waits for them: the pane turns
   // interactive and a bar above it says what to do and offers "done".
@@ -296,6 +310,7 @@ export function StellaView(
                 : { id: agent.id, name: agent.name, icon: agent.icon }}
               visualBase={visualBase}
               attachBase={attachBase}
+              uploadBase={uploadBase}
               onRewind={handleRewind}
               onSend={(text) => onPrompt(text, [], [])}
               onLoadOlder={onLoadOlder}
@@ -310,13 +325,17 @@ export function StellaView(
             placeholder={agent === null
               ? t("chat.stella.noAgent")
               : t("chat.stella.placeholder")}
-            model={null}
-            onModelSelect={() => {}}
-            // No model line at all: switching models is a decision that
-            // belongs to configuration, not to a conversation whose point is
-            // to stay simple, and a line explaining that is one more thing to
-            // read. The model follows the app's default (set in settings).
-            modelBar="none"
+            model={conversation?.model ?? null}
+            onModelSelect={(provider, modelId) =>
+              void onModelChange(
+                provider,
+                modelId,
+              )}
+            // The model line is the way out of a conversation stuck on a
+            // model that was retired or whose provider went away: without
+            // it, deleting the agent (and the whole conversation with it)
+            // is the only escape. It stays a single line, like code mode's.
+            modelBar="picker"
             submitLabel={t("chat.composer.submit")}
             submitIcon={IconSend}
             submitIconOnly
