@@ -13,6 +13,19 @@ body,
   margin: 0;
 }
 
+/* The page itself never scrolls: every scrolling surface in this app is an
+ * inner element (the transcript, a settings list, a menu). Without this, an
+ * app root that ends up a hair taller than the window — a rounding of the
+ * visual viewport, a 1px border, a window resized faster than the variable
+ * that tracks it — makes the WHOLE UI scroll: the sidebar and the title bar
+ * slide away from a conversation pane that is already scrolling on its own.
+ * The document is the window here, not a document. */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background: var(--bg);
   color: var(--text);

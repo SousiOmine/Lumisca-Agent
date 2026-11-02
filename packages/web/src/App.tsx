@@ -359,6 +359,7 @@ export function App({ initialData }: AppProps): ReactElement {
         onQuit={quit}
         onSwitchMode={() => setShowModeSelect(true)}
         onManageConnections={() => setSettingsCategory("servers")}
+        tabs={!stellaActive}
       >
         {stellaActive
           // stella mode has no tab strip: one conversation is the whole
@@ -385,6 +386,7 @@ export function App({ initialData }: AppProps): ReactElement {
                     onQuit={quit}
                     onSwitchMode={() => setShowModeSelect(true)}
                     isDesktop={false}
+                    tabs={false}
                   />
                 </div>
               )}

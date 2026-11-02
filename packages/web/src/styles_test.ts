@@ -260,6 +260,24 @@ Deno.test("the app height follows the visual viewport", async () => {
   );
 });
 
+Deno.test("the page itself never scrolls", async () => {
+  // Regression: html/body had no overflow, so an app root a hair taller than
+  // the window scrolled the WHOLE UI — the sidebar and title bar slid away
+  // from a conversation pane that was already scrolling on its own. Every
+  // scrolling surface here is an inner element; the document is the window.
+  const base = await Deno.readTextFile(
+    new URL("./styles/base.css", import.meta.url),
+  );
+  const rule = /html,\s*body\s*\{([^}]*)\}/.exec(base);
+  assertEquals(rule !== null, true, "styles/base.css must style html and body");
+  const body = rule![1]!;
+  assertEquals(
+    /overflow:\s*hidden/.test(body),
+    true,
+    "html/body must clip: nothing outside the app root may scroll the page",
+  );
+});
+
 Deno.test("corners come from the radius ramp", async () => {
   // The shape of the UI is the radius steps, so a sheet that writes its own
   // pixel value quietly reintroduces the small, square-cornered look the

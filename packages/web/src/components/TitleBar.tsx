@@ -26,6 +26,9 @@ interface TitleBarProps {
   onSwitchMode: () => void;
   /** Open settings → 接続先サーバー (the picker's "manage" entry). */
   onManageConnections: () => void;
+  /** Whether the menu offers tab actions (code mode). stella mode has one
+   * conversation per agent and no tab strip (see AppMenu). */
+  tabs?: boolean;
 }
 
 /** Window chrome for the desktop window: a single strip holding the tab
@@ -55,6 +58,7 @@ export function TitleBar({
   onQuit,
   onSwitchMode,
   onManageConnections,
+  tabs,
 }: TitleBarProps) {
   const t = useT();
   const [state, setState] = useState<ShellState | null>(null);
@@ -124,6 +128,7 @@ export function TitleBar({
           onQuit={onQuit}
           onSwitchMode={onSwitchMode}
           isDesktop
+          tabs={tabs}
           buttonClass="titlebar-btn"
         />
         {!nativeControls && (
