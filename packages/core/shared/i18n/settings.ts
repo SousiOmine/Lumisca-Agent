@@ -590,9 +590,9 @@ export const settings = {
   },
   "settings.compaction.enabledDesc": {
     ja:
-      "コンテキストの上限に近づいたとき、過去の会話履歴を自動で要約して消費量を抑えます。会話履歴自体は保持されます。",
+      "コンテキストの上限に近づいたとき、過去の会話履歴を自動で要約して消費量を抑えます。stella mode の会話は、最後のやり取りから 3 時間たったときにも要約します。会話履歴自体は保持されます。",
     en:
-      "Automatically summarizes older conversation history when approaching the context limit to reduce usage. The conversation history itself is kept.",
+      "Automatically summarizes older conversation history when approaching the context limit to reduce usage. stella mode's conversations are also summarized once three hours have passed since the last exchange. The conversation history itself is kept.",
   },
   "settings.compaction.reservePercent": {
     ja: "予約（ウィンドウ比 %）",

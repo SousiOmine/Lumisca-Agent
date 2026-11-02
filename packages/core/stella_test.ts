@@ -13,7 +13,7 @@ import { TaskHub } from "./tools/task-hub.ts";
 import type { StreamFn } from "./ai/types.ts";
 import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
-import { MINI_PNG, promptSession } from "./test-utils.ts";
+import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
 import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
 
@@ -825,6 +825,27 @@ Deno.test("stella agents: an unnamed agent gets a free default name", async () =
       () => core.createStellaAgent({ name: "notes", role: "" }),
       Error,
     );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: only stella sessions condense an idle history", async () => {
+  // stella's conversation is the one that lives for weeks: it is reopened
+  // after hours or days of silence, so the period is set there and nowhere
+  // else (a working session the user closed is reopened on purpose, and the
+  // pressure check covers it).
+  const { core, session } = await stellaConversation("Idle");
+  try {
+    const agent = core.getAgent(session.id)!;
+    assertEquals(agent.idleCompactionMs, 3 * 60 * 60 * 1000);
+
+    // Every other session keeps the pressure check alone.
+    await withTempDir("lumisca-idle-", async (root) => {
+      const workspace = await core.createWorkspace("ws", [root]);
+      const plain = await core.createSession({ workspaceId: workspace.id });
+      assertEquals(core.getAgent(plain.id)!.idleCompactionMs, 0);
+    });
   } finally {
     await core.close();
   }

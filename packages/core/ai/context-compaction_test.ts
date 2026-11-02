@@ -464,7 +464,9 @@ Deno.test("custom instructions steer the summary", async () => {
     model: modelWith(10_000, 2_000),
     policy: { reservePercent: 20, keepRecentPercent: 1 },
   });
-  await compactor.compactNow(messages, "  keep the file paths  ");
+  await compactor.compactNow(messages, {
+    instructions: "  keep the file paths  ",
+  });
   assertEquals(requests.length, 1);
   const text = requestText(requests[0]!);
   assertEquals(text.includes("Additional focus: keep the file paths"), true);
@@ -595,4 +597,40 @@ Deno.test("compaction re-entrancy is refused while a summarization runs", async 
   // second transaction.
   assertEquals(await compactor.compactIfNeeded(messages), null);
   await first;
+});
+
+Deno.test("compactNow abandons the checkpoint when the caller saw the transcript move", async () => {
+  // The summary takes a whole LLM call; a prompt that lands during it moves
+  // the transcript past the span that was selected. Committing then would
+  // splice a checkpoint that does not describe what follows it.
+  const messages = conversation(3, 4_000);
+  const { compactor, inserts } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
+  });
+  const result = await compactor.compactNow(messages, {
+    canCommit: () => false,
+  });
+  assertEquals(result, null);
+  assertEquals(inserts.length, 0);
+  // Nothing was touched: the transcript is exactly what the test built.
+  assertEquals(messages.length, 7);
+});
+
+Deno.test("compactNow commits when the caller's check passes", async () => {
+  const messages = conversation(3, 4_000);
+  const { compactor, inserts } = compactorFor(messages, {
+    model: modelWith(10_000, 2_000),
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
+  });
+  let checks = 0;
+  const result = await compactor.compactNow(messages, {
+    canCommit: () => {
+      checks++;
+      return true;
+    },
+  });
+  assertEquals(checks, 1);
+  assertEquals(result !== null, true);
+  assertEquals(inserts.length, 1);
 });

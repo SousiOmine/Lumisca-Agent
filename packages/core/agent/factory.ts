@@ -66,6 +66,24 @@ const ROUTINE_TOOL_NAMES = [
  * stella's, added to that session's main registry when it is. */
 const STELLA_AGENT_TOOL_NAMES = [TOOL_IDENTITY, TOOL_AGENT_CREATE];
 
+/** How long a stella conversation may sit with no LLM call before its
+ * history is condensed below the pressure threshold (see
+ * SessionAgentOptions.idleCompactionMs).
+ *
+ * Every other session is a working session the user opens and closes; a
+ * stella conversation is one that lives for weeks, so it is reopened after
+ * hours or days of silence. Its first request of the day would otherwise
+ * pay for the whole history as input, and once the history is near the
+ * window the pressure check has to splice a checkpoint in while the user
+ * waits for the answer. Condensing during the silence avoids both: the
+ * next run starts from a summary the same way a compacted session does.
+ *
+ * Three hours, like Terasuma's: long enough that a user who steps away
+ * mid-conversation keeps their verbatim history (a checkpoint is never
+ * comfortable to read after), short enough that "tomorrow morning" is
+ * always condensed before the first prompt. */
+const STELLA_IDLE_COMPACTION_MS = 3 * 60 * 60 * 1000;
+
 /** Module logger (debug-gated): attachment rebuilds are the first thing
  * to check when MCP tools misbehave. */
 const log = createLogger("pool");
@@ -199,6 +217,9 @@ export class AgentFactory {
       fastModel: this.deps.getFastModel(),
       language: this.deps.getLanguage(),
       compactionPolicy: () => this.deps.getCompactionPolicy(),
+      ...(where.stella !== undefined
+        ? { idleCompactionMs: STELLA_IDLE_COMPACTION_MS }
+        : {}),
       renameSession: (name) => this.deps.renameSession(session.id, name),
       goalStore: {
         loadGoal: () => this.deps.loadGoal(session.id),

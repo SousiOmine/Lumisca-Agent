@@ -124,6 +124,12 @@ export interface SessionAgentOptions {
    * applies without rebuilding the agent; omitted → the compactor's
    * defaults. */
   compactionPolicy?: () => CompactionPolicyInput;
+  /** How long this session's conversation may sit idle (no LLM call) before
+   * its history is condensed even below the pressure threshold (see
+   * compactAfterIdle). Omitted → the history is condensed only when a
+   * request would approach the window. stella's conversations are the ones
+   * that live for weeks, so they are the ones that set it. */
+  idleCompactionMs?: number;
   /** Called for every request the agent loop sends, with the shape the
    * provider sees (see RequestShape). The pool records the shapes that cost
    * the prompt cache; omitted → nothing is observed. */
@@ -206,6 +212,15 @@ export class SessionAgent {
   private titleGenerated = false;
   /** The routine whose run is in flight (see runningRoutineId). */
   private activeRoutineId: string | null = null;
+  /** The effective idle-compaction period of this conversation (see
+   * SessionAgentOptions.idleCompactionMs); 0 → the idle path is off. The
+   * constructor's option is the only input, and the value is what decides
+   * whether a timer exists at all, so it is readable rather than inferred
+   * from the timer. */
+  readonly idleCompactionMs: number;
+  /** The pending idle compaction (see armIdleCompaction); null when none is
+   * armed. */
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
@@ -329,8 +344,13 @@ export class SessionAgent {
       },
     });
     this.contextProviders = options.contextProviders ?? [];
+    this.idleCompactionMs = options.idleCompactionMs ?? 0;
     this.rebaseContexts(this.agent.state.messages);
     this.agent.subscribe((event) => this.handleEvent(event));
+    // A conversation reopened after a long silence is condensed right away
+    // (the gap started before this process opened it); otherwise the timer
+    // is armed for the first run's end.
+    this.armIdleCompaction();
   }
 
   /** Re-anchor every context provider to the part of the transcript the
@@ -911,6 +931,7 @@ export class SessionAgent {
    * with the pool (its server processes serve the sub-agents too). */
   close(): void {
     this.closed = true;
+    this.disarmIdleCompaction();
     // Stop the goal loop without clearing the persisted goal: reopening
     // the session shows the goal again via the resync endpoint, but does
     // not auto-resume the loop.
@@ -961,6 +982,9 @@ export class SessionAgent {
         // outside (prompt / promptWhileRunning / injectNotification), not
         // here: a silent-error restart is a new run but the SAME
         // exchange, and its retries must keep counting toward the limit.
+        // The conversation is in use: an idle compaction must not splice a
+        // checkpoint into the transcript a run is working on.
+        this.disarmIdleCompaction();
         this.emit({ type: "agent_start", sessionId: this.sessionId });
         break;
       case "message_start":
@@ -1017,6 +1041,9 @@ export class SessionAgent {
         this.rejectPendingAsks();
         this.cancelHandover();
         this.emit({ type: "agent_end", sessionId: this.sessionId });
+        // The gap since the newest LLM call starts here: a conversation
+        // left alone is condensed when it fills (see armIdleCompaction).
+        this.armIdleCompaction();
         break;
       default:
         break;
@@ -1171,10 +1198,96 @@ export class SessionAgent {
     if (this.closed) return undefined;
     const result = await this.compactor.compactNow(
       this.agent.state.messages,
-      instructions,
+      { instructions },
     );
     if (result !== null) this.republishContextsAfter(result);
     return result ?? undefined;
+  }
+
+  /** (Re)arm the idle compaction (see SessionAgentOptions.idleCompactionMs).
+   * Called when the agent is built and whenever a run ends, so the timer
+   * always measures the gap since the newest LLM call — a conversation in
+   * use is never condensed behind the user's back, and one that was left
+   * alone is condensed while nobody is waiting for an answer.
+   *
+   * The gap is measured from the transcript's newest message, not from the
+   * moment this is called: a conversation reopened in a new process (or
+   * after a restart) may already have been silent for longer than the
+   * period, and its history is just as expensive to send. The timer is armed
+   * per silence (built + end of each run) and is never re-armed by its own
+   * check, so a history that needs no condensing is not asked about again
+   * until the conversation is used.
+   *
+   * The timer does not hold the process open: a server that shuts down (or
+   * a test that finishes) must not wait three hours for it. */
+  private armIdleCompaction(): void {
+    this.disarmIdleCompaction();
+    if (this.closed || this.idleCompactionMs <= 0) return;
+    const newest = this.agent.state.messages.at(-1)?.timestamp;
+    if (newest === undefined) return;
+    const timer = setTimeout(
+      () => {
+        this.idleTimer = null;
+        void this.compactAfterIdle();
+      },
+      Math.max(0, newest + this.idleCompactionMs - Date.now()),
+    );
+    Deno.unrefTimer(timer);
+    this.idleTimer = timer;
+  }
+
+  private disarmIdleCompaction(): void {
+    if (this.idleTimer === null) return;
+    clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  /** The idle timer fired: condense the history even below the pressure
+   * threshold.
+   *
+   * This is the counterpart of the pressure check: a conversation picked up
+   * again after hours pays for its whole history as input on the next
+   * request, and a history near the window would have its checkpoint spliced
+   * in while the user waits. Condensing during the silence avoids both.
+   *
+   * The check runs below the threshold (the manual `/compact` path), not as
+   * the forced one: nothing was rejected, so the newest work stays verbatim
+   * (selectCompactionSpan keeps the retained tail). A history that needs no
+   * condensing (a short conversation, or one already condensed) costs no
+   * request — the span selector refuses a head that holds nothing but an
+   * earlier checkpoint — and the timer is not re-armed, so it is asked once
+   * per silence.
+   *
+   * A run that started meanwhile owns the transcript: it cancelled this
+   * timer at its start, and this path re-checks. Its own end arms a new one.
+   */
+  private async compactAfterIdle(): Promise<void> {
+    if (this.closed || this.isStreaming) return;
+    // The summarization call takes a while, and the conversation can be
+    // picked up in the middle of it: the checkpoint may only land on the
+    // transcript this check selected.
+    const length = this.agent.state.messages.length;
+    const newest = this.agent.state.messages.at(-1)?.timestamp;
+    try {
+      const result = await this.compactor.compactNow(
+        this.agent.state.messages,
+        {
+          canCommit: () =>
+            !this.closed && !this.isStreaming &&
+            this.agent.state.messages.length === length &&
+            this.agent.state.messages.at(-1)?.timestamp === newest,
+        },
+      );
+      if (result !== null) this.republishContextsAfter(result);
+    } catch (error) {
+      // A failed idle compaction leaves the transcript as it was; the
+      // conversation simply keeps the history it had.
+      log.warn(
+        `session ${this.sessionId}: idle compaction failed: ${
+          errorMessage(error)
+        }`,
+      );
+    }
   }
 
   /** After a compaction: publish the context updates that the re-anchoring

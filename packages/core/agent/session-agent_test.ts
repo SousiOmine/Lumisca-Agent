@@ -63,6 +63,12 @@ function makeAgent(
     /** A background-process manager double whose exit listener the test
      * fires (see fakeBackgroundManager). */
     backgroundManager?: SessionAgentOptions["backgroundManager"];
+    /** Idle-compaction period (see SessionAgentOptions.idleCompactionMs);
+     * tests shorten it so the timer fires without waiting three hours. */
+    idleCompactionMs?: number;
+    /** History to open the agent with (a conversation that already has one:
+     * the idle timer measures the gap since its newest message). */
+    messages?: AgentMessage[];
   } = {},
 ): SessionAgent {
   return new SessionAgent({
@@ -1485,4 +1491,113 @@ Deno.test("a prompt delivered while idle starts its own run unstamped", async ()
   assertEquals(users.length, 2);
   assertEquals(users[1]!.steered, undefined);
   assertEquals(events.filter((e) => e.type === "agent_start").length, 2);
+});
+
+// ---- idle compaction (see SessionAgentOptions.idleCompactionMs) ------------
+
+/** Two large tool turns and no run: a history the pressure threshold would
+ * leave alone, so only the idle timer can condense it. */
+function idleHistory(): AgentMessage[] {
+  return [
+    { role: "user", content: [{ type: "text", text: "go" }], timestamp: 1 },
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
+    {
+      role: "toolResult",
+      toolCallId: "t1",
+      toolName: "mock_tool",
+      content: [{ type: "text", text: "x".repeat(4000) }],
+      isError: false,
+      timestamp: 2,
+    },
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t2")]),
+    {
+      role: "toolResult",
+      toolCallId: "t2",
+      toolName: "mock_tool",
+      content: [{ type: "text", text: "y".repeat(4000) }],
+      isError: false,
+      timestamp: 3,
+    },
+  ];
+}
+
+Deno.test("a silent conversation is condensed without waiting for pressure", async () => {
+  const { streamFn, calls } = deltaStreamSequence([
+    summaryResponse("## Summary\n- condensed"),
+  ]);
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(streamFn, [bigTool], (event) => events.push(event), {
+    model: smallWindowModel(),
+    messages: idleHistory(),
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
+    // The history is stamped in the past (timestamps 1-3), so the gap has
+    // already elapsed the moment the agent is built.
+    idleCompactionMs: 60_000,
+  });
+  await waitFor(
+    () => agent.messages.some((m) => m.role === "checkpoint"),
+    "the idle compaction to insert its checkpoint",
+  );
+  agent.close();
+  assertEquals(calls(), 1);
+  assertEquals(
+    events.filter((e) => e.type === "messages_checkpoint").length,
+    1,
+  );
+  // Nothing was deleted: the summarized turns are still in the transcript,
+  // and the model's view starts at the checkpoint.
+  assertEquals(agent.messages[0]!.role, "user");
+  assertEquals(agent.messages.at(-1)!.role, "toolResult");
+});
+
+Deno.test("a run cancels the pending idle compaction", async () => {
+  // The history is stamped in the past, so the timer is already due when the
+  // agent is built. A run that starts before it fires cancels it: a
+  // checkpoint may not be spliced into a transcript a run is working on.
+  const { streamFn } = deltaStreamSequence([
+    fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
+    fauxAssistantMessage([fauxText("done")]),
+  ]);
+  const agent = makeAgent(streamFn, [mockTool], () => {}, {
+    model: smallWindowModel(),
+    messages: idleHistory(),
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
+    // Re-armed from the run's own messages, so it stays in the future while
+    // the assertions run.
+    idleCompactionMs: 60_000,
+  });
+  await agent.prompt("go");
+  await agent.waitForIdle();
+  // Give the cancelled timer's macrotask a chance to run, had it survived.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assertEquals(
+    agent.messages.some((m) => m.role === "checkpoint"),
+    false,
+    "the run cancelled the timer and re-armed it a full period later",
+  );
+  agent.close();
+});
+
+Deno.test("the idle compaction leaves a conversation with nothing to condense alone", async () => {
+  // Two short messages: the span selector refuses a head too small to free
+  // anything, so no request is spent — and the timer is not re-armed by its
+  // own check, so it is not asked again either.
+  const { streamFn, calls } = deltaStreamSequence([]);
+  const agent = makeAgent(streamFn, [], () => {}, {
+    model: smallWindowModel(),
+    messages: [
+      { role: "user", content: [{ type: "text", text: "hi" }], timestamp: 1 },
+      fauxAssistantMessage([fauxText("hello")]),
+    ],
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
+    idleCompactionMs: 60_000,
+  });
+  // Give the (already elapsed) timer a chance to fire.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  agent.close();
+  assertEquals(calls(), 0);
+  assertEquals(
+    agent.messages.some((m) => m.role === "checkpoint"),
+    false,
+  );
 });

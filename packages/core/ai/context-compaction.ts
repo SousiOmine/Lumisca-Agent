@@ -535,11 +535,25 @@ export class ContextCompactor {
    * `/compact` path). Returns null when no safe span exists. */
   async compactNow(
     messages: AgentMessage[],
-    instructions?: string,
+    options: {
+      /** The user's extra focus for the summary (`/compact <focus>`). */
+      instructions?: string;
+      /** Checked right before the checkpoint is committed. Returning false
+       * abandons the compaction with the transcript untouched — the caller
+       * saw the transcript move while the summary was being written (a run
+       * started, a rewind truncated it), and the span selected here no
+       * longer describes it. Omitted → the checkpoint is always committed. */
+      canCommit?: () => boolean;
+    } = {},
   ): Promise<CompactionResult | null> {
     if (this.running) return null;
     this.observeTurn(messages);
-    return await this.runOnce(messages, false, instructions);
+    return await this.runOnce(
+      messages,
+      false,
+      options.instructions,
+      options.canCommit,
+    );
   }
 
   /** One compaction transaction: select the head, summarize it, and commit
@@ -548,6 +562,7 @@ export class ContextCompactor {
     messages: AgentMessage[],
     force: boolean,
     instructions?: string,
+    canCommit?: () => boolean,
   ): Promise<CompactionResult | null> {
     const budgets = this.budgets();
     if (budgets === undefined) return null;
@@ -585,6 +600,18 @@ export class ContextCompactor {
     if (trimmed.length === 0) {
       log.warn(
         `session ${this.options.sessionId}: compaction produced no summary`,
+      );
+      return null;
+    }
+    // The summary took a whole LLM call to write; the transcript may have
+    // moved on meanwhile (a run appended a prompt, a rewind truncated the
+    // span that was summarized). Inserting then would splice a checkpoint
+    // that no longer describes what follows it, so the caller's check runs
+    // here — after the call, before the write.
+    if (canCommit !== undefined && !canCommit()) {
+      log.debug(
+        `session ${this.options.sessionId}: compaction abandoned, the ` +
+          `transcript changed while its summary was written`,
       );
       return null;
     }
