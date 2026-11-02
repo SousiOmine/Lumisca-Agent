@@ -32,15 +32,15 @@ Deno.test("vacuum: the marker sits beside the database on any platform's path", 
   // the drive and the whole directory list into the marker's name, which
   // Windows cannot create — so a database that pruned enough to ask for a
   // rewrite never got one there, and the freed space was never reclaimed.
-  // The path module answers per platform, so assert the shape (same
-  // directory, one more suffix on the file) rather than a literal string.
-  for (
-    const path of [
-      "C:\\Users\\me\\AppData\\l.db",
-      "/home/me/.lumisca/l.db",
-      "l.db",
-    ]
-  ) {
+  //
+  // The path module answers for the CURRENT platform: a POSIX path handed to
+  // `dirname` on Windows is one long file name (`/home/me/...`), so only the
+  // shapes this OS uses can be asserted. The other separator is covered by
+  // `basename` itself, and by this test running on every OS in CI.
+  const paths = Deno.build.os === "windows"
+    ? ["C:\\Users\\me\\AppData\\l.db", "l.db"]
+    : ["/home/me/.lumisca/l.db", "l.db"];
+  for (const path of paths) {
     const marker = vacuumMarkerPath(path);
     assertEquals(dirname(marker), dirname(path), path);
     assertEquals(basename(marker), `${basename(path)}.vacuum`, path);
