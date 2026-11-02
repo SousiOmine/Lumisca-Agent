@@ -282,7 +282,18 @@ export function createStellaTools(options: {
 }): Tool[] {
   const { files, runner } = options.backends;
   const rows: Array<Tool | Tool[] | undefined> = [
-    fileTools(files),
+    // read/write/edit/list_dir only: the machine has `bash`, which brings
+    // grep, find and everything else the shell already does well. Two
+    // search surfaces for one directory tree made the agent pick between
+    // them on every look, and the shell one is the one that can also filter,
+    // pipe and count. `grep`/`glob` stay in code mode, where they are the
+    // only way to search a host workspace.
+    [
+      createReadFileTool({ files }),
+      createWriteFileTool({ files }),
+      createEditFileTool({ files }),
+      createListDirTool({ files }),
+    ],
     createBashTool({
       files,
       runner,

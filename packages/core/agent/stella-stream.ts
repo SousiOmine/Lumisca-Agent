@@ -90,6 +90,15 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       // A message is worth showing when it says something OR brings
       // something: a prompt that was a screenshot alone is a real message,
       // and dropping it would leave a reply with nothing it answered.
+      //
+      // A prompt with neither is NOT shown, and that is a decision rather
+      // than an oversight: a message whose visible text is empty and that
+      // attached no file has nothing to draw, and an empty bubble is worse
+      // than no bubble. The model may still have been sent one — that is
+      // what UserMessage.modelContent is for — and the run it started is
+      // real. What such a prompt must never become is a way to put words in
+      // the transcript: anything worth the user's attention is a file, a
+      // picture, or text they can see.
       const files = message.role === "mode" ? [] : message.files ?? [];
       if (text.length === 0 && files.length === 0) return null;
       return {

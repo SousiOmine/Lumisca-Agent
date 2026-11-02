@@ -400,3 +400,39 @@ Deno.test("stellaEntryOf: a prompt's files are its own content", () => {
   assertEquals(entry?.text, "これを見て");
   assertEquals(entry?.files[0]?.ref, "uploads/1-ab/01-image-1.png");
 });
+
+Deno.test("stellaEntryOf: a prompt with only model instruction stays hidden", () => {
+  // UserMessage.modelContent lets a prompt carry text for the model that the
+  // user never sees. When that is ALL the prompt is, the conversation draws
+  // nothing — the decision this pins: a message with no visible text and no
+  // file has nothing to draw, and the run it started still happens. The
+  // model's copy must not leak into the transcript instead.
+  const message: AgentMessage = {
+    role: "user",
+    content: [{ type: "text", text: "" }],
+    modelContent: "[Attached files]\n- notes.txt: /vm/notes.txt",
+    timestamp: 9,
+  };
+  assertEquals(stellaEntryOf(message), null);
+});
+
+Deno.test("stellaEntryOf: a prompt that is only files IS shown", () => {
+  // The other half of the rule above: files are something to draw, so the
+  // prompt is a real entry even with no words.
+  const message: AgentMessage = {
+    role: "user",
+    content: [{ type: "text", text: "" }],
+    modelContent: "[Attached files]\n- notes.txt: /vm/notes.txt",
+    files: [{
+      name: "notes.txt",
+      path: "/vm/notes.txt",
+      size: 5,
+      ref: "uploads/1-ab/01-notes.txt",
+      image: false,
+    }],
+    timestamp: 10,
+  };
+  const entry = stellaEntryOf(message);
+  assertEquals(entry?.text, "");
+  assertEquals(entry?.files.map((file) => file.name), ["notes.txt"]);
+});

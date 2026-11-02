@@ -487,9 +487,10 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   READ_SECTION,
   WRITE_SECTION,
   EDIT_SECTION,
-  GLOB_SECTION,
-  GREP_SECTION,
-  SEARCH_CAPS_SECTION,
+  // No GLOB/GREP/SEARCH_CAPS: stella has no such tools (see
+  // createStellaTools) — its shell searches the machine. Their `requires`
+  // would prune them anyway; leaving them out of the list keeps the sheet
+  // honest about what this session is.
   BASH_SECTION,
   ASYNC_BASH_SECTION,
   SKILL_SECTION,

@@ -353,21 +353,21 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
     },
   });
   const names = tools.map((tool) => tool.name);
-  // The coding tools are there...
-  for (
-    const expected of [
-      "read",
-      "write",
-      "edit",
-      "list_dir",
-      "grep",
-      "glob",
-      "bash",
-    ]
-  ) {
+  // The coding tools are there: the file surface and the shell.
+  for (const expected of ["read", "write", "edit", "list_dir", "bash"]) {
     assert(
       names.includes(expected),
       `missing ${expected}: ${names.join(", ")}`,
+    );
+  }
+  // The dedicated search tools are NOT: the machine has a shell, and `grep`
+  // and `find` there search the same tree without a second set of tool
+  // arguments to learn (see createStellaTools).
+  for (const gone of ["grep", "glob"]) {
+    assertEquals(
+      names.includes(gone),
+      false,
+      `${gone} must not be preloaded in stella`,
     );
   }
   // ...and eval is not: it would run JavaScript in the SERVER process, which
@@ -506,8 +506,6 @@ Deno.test("stella tool set: the prompt teaches the machine, not a workspace", as
       "read",
       "write",
       "edit",
-      "grep",
-      "glob",
       "bash",
       "vm_screenshot",
       "vm_act",
