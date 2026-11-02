@@ -443,6 +443,7 @@ export function App({ initialData }: AppProps): ReactElement {
                 activeId={stella.activeAgentId}
                 onSelect={stella.select}
                 onChanged={stella.reloadAgents}
+                onAgentChanged={stella.replaceAgent}
                 running={stella.conversation?.running === true}
               />
               <StellaView

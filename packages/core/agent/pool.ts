@@ -84,10 +84,11 @@ export interface SessionPersistence {
     workspace: Workspace,
     model?: { provider: string; modelId: string },
     tools?: readonly string[],
-    /** A stella agent's persona (its prompt is the machine's, plus who it
-     * is), or undefined for every other session. `agentId` is what names the
-     * session's working folder. */
-    stella?: { name: string; role: string; agentId?: string },
+    /** A stella agent's persona (its prompt is the machine's, plus the role
+     * it works from), or undefined for every other session. `id` is what
+     * names the session's working folder. The name is deliberately absent: it
+     * is the label the user can change, and the model does not need it. */
+    stella?: { role: string; id: string },
   ): string;
   /** Persist a rebuilt system prompt (legacy-session migration). */
   updateSystemPrompt(id: string, systemPrompt: string): void;
@@ -162,11 +163,13 @@ export interface AgentRuntime {
    * open, so a machine attached after the pool was built still reaches new
    * agents. Omitted → no stella session can be built. */
   stellaRuntime?: (session: SessionInfo) => StellaRuntime | undefined;
-  /** The persona of a stella session: the agent's name and role, which make
-   * one conversation different from another (see stella/agents.ts). */
+  /** The persona of a stella session: the role its agent works from, which
+   * is what makes one conversation different from another (see
+   * stella/agents.ts). The agent's NAME is not part of it: it is a label the
+   * user can change at any time, and the prompt is a snapshot. */
   stellaAgentPersona?: (
     session: SessionInfo,
-  ) => { name: string; role: string; id: string } | undefined;
+  ) => { role: string; id: string } | undefined;
   /** Global skills directory override (default ~/.agents/skills).
    * LumiscaCore.forTesting passes an empty list, so a test's skill catalog
    * is built from its own fixture only. */

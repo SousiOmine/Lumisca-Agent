@@ -77,10 +77,19 @@ ${folders}${
  */
 export function buildStellaSystemPrompt(
   options: SystemPromptOptions & {
-    /** Who this session is talking as: the agent's name and the role it was
-     * created with. This is what makes one stella conversation different from
-     * another, so it belongs in the prompt rather than in a first message. */
-    agent?: { name: string; role: string };
+    /** The role this agent was created with (in the user's words), or absent
+     * for an agent without one. This is what makes one stella conversation
+     * different from another, so it belongs in the prompt rather than in a
+     * first message.
+     *
+     * The agent's NAME is deliberately not here: it labels a sidebar row and
+     * a header, and the user can change it at any time. A prompt snapshot is
+     * written once per session, so a name in it would either freeze the old
+     * one (the agent introducing itself under a name the user already
+     * replaced) or force a rewrite — which costs the provider's cached prefix
+     * on every rename. The model is a helpful assistant; who it is to the
+     * USER is the label on the row, not something it needs to know. */
+    agent?: { role: string };
     /** The session's working folder inside the machine (relative paths and
      * bash start there). Omitted → the machine's home, which is what a
      * conversation without an agent's folder gets. */
@@ -89,13 +98,11 @@ export function buildStellaSystemPrompt(
 ): string {
   // The persona, when the session has one. Written first because it is the
   // most specific fact about this session: a reader (and the model) should
-  // know who this is before being told what the machine is.
+  // know what it is for before being told what the machine is. An agent
+  // without a role gets the opening line alone.
   const workdir = options.workdir ?? VM_WORKDIR;
-  const persona = options.agent === undefined
-    ? ""
-    : `You are "${options.agent.name}".${
-      options.agent.role === "" ? "" : ` ${options.agent.role}`
-    }
+  const role = options.agent?.role ?? "";
+  const persona = `You are a helpful assistant.${role === "" ? "" : ` ${role}`}
 
 `;
   return `${persona}You are Lumisca, a general-purpose assistant working inside a virtual

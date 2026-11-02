@@ -21,19 +21,19 @@ import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
-import { AgentIconDialog } from "./stella/AgentIconDialog.tsx";
+import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
 import { usePresence } from "../hooks/usePresence.ts";
 import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 import type { StellaConversationState } from "../stella-state.ts";
 
 interface StellaViewProps {
   /** The agent whose conversation this is (the sidebar picks it). Its name is
-   * the conversation's title and its avatar opens the icon dialog; its
+   * the conversation's title and its avatar opens the edit dialog; its
    * absence (first run, before an agent exists) is why the composer is
    * disabled. */
   agent: StellaAgent | null;
-  /** The agent row the server answered after an icon change, so the App can
-   * replace it without re-reading the list. */
+  /** The agent row the server answered after an edit, so the App can replace
+   * it without re-reading the list. */
   onAgentChanged: (agent: StellaAgent) => void;
   /** The conversation, or null while there is nothing to show yet. */
   conversation: StellaConversationState | null;
@@ -143,10 +143,11 @@ export function StellaView(
   // The transcript owns the scroll element (see TranscriptScrollOptions.
   // pinToken): this view only records that a submit happened.
   const [pinToken, setPinToken] = useState(0);
-  // Picking a picture is a decision about the agent, so the control sits on
-  // the agent's own face in the header rather than in a settings dialog:
-  // it is where the user looks when they want that agent to look different.
-  const [editingIcon, setEditingIcon] = useState(false);
+  // Picking a picture or renaming the agent is a decision about the agent, so
+  // the control sits on the agent's own face in the header rather than only
+  // in a menu: it is where the user looks when they want that agent to look
+  // or be called something else.
+  const [editingAgent, setEditingAgent] = useState(false);
   const visualBase = sessionVisualBase("", sessionId ?? "");
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const uploadBase = stellaUploadBase(agent?.id ?? "");
@@ -224,9 +225,9 @@ export function StellaView(
             <button
               type="button"
               className="stella-header-avatar"
-              onClick={() => setEditingIcon(true)}
-              title={t("chat.stella.agents.icon.edit")}
-              aria-label={t("chat.stella.agents.icon.edit")}
+              onClick={() => setEditingAgent(true)}
+              title={t("chat.stella.agents.edit")}
+              aria-label={t("chat.stella.agents.edit")}
             >
               <AgentAvatar
                 agentId={agent.id}
@@ -379,11 +380,14 @@ export function StellaView(
           onExitDone={pane.done}
         />
       )}
-      {agent !== null && editingIcon && (
-        <AgentIconDialog
+      {agent !== null && editingAgent && (
+        <AgentEditDialog
           agent={agent}
-          onChanged={onAgentChanged}
-          onClose={() => setEditingIcon(false)}
+          onChanged={(updated) => {
+            onAgentChanged(updated);
+            setEditingAgent(false);
+          }}
+          onClose={() => setEditingAgent(false)}
         />
       )}
     </div>

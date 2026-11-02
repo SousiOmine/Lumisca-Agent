@@ -9,6 +9,14 @@ export interface AgentAvatarProps {
   name: string;
   /** The stored picture's name, or "" for the initial. */
   icon: string;
+  /** A picture that has not been saved yet (the edit dialog's preview, a data
+   * URL the browser read from the file the user picked). It wins over
+   * `icon`: what the dialog shows is what saving it will store.
+   *
+   * A seam rather than a second component: the size, the circle and the
+   * colour derivation are the same, and a preview that was drawn slightly
+   * differently would promise a shape the sidebar does not use. */
+  preview?: string;
   /** Diameter in pixels. The two surfaces that draw an avatar are the
    * sidebar row and the conversation's header, so the size is a number
    * rather than a class: one component, one shape. */
@@ -33,7 +41,7 @@ export interface AgentAvatarProps {
  * initial's uppercase rule, the image's fit).
  */
 export function AgentAvatar(
-  { agentId, name, icon, size, className }: AgentAvatarProps,
+  { agentId, name, icon, preview, size, className }: AgentAvatarProps,
 ) {
   // A var rather than an inline colour: tokens.css declares the default, so
   // the rule that reads it stays in the stylesheet (and a theme can adjust
@@ -49,12 +57,20 @@ export function AgentAvatar(
   const classes = `agent-avatar${
     className === undefined ? "" : ` ${className}`
   }`;
-  if (icon !== "") {
+  // A picture to draw: the one about to be saved (a preview), else the stored
+  // one. Both are painted the same way, so the dialog never promises a
+  // different shape than the row will have.
+  const src = preview !== undefined && preview !== ""
+    ? preview
+    : icon === ""
+    ? ""
+    : stellaAgentIconUrl(agentId, icon);
+  if (src !== "") {
     return (
       <img
         className={classes}
         style={style}
-        src={stellaAgentIconUrl(agentId, icon)}
+        src={src}
         alt=""
         width={size}
         height={size}

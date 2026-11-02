@@ -604,11 +604,13 @@ export class AgentFactory {
         modelId: session.modelId,
       },
       tools.map((tool) => tool.name),
-      // A stella session's prompt is the machine's plus WHO this agent is;
-      // the persona comes from the agent registry, through the pool.
+      // A stella session's prompt is the machine's plus the role this agent
+      // works from; the persona comes from the agent registry, through the
+      // pool. A session without an agent id still says the machine's part —
+      // stella is the mode, not a property of the row.
       session.stella === true
         ? (this.deps.stellaAgentPersona?.(session) ??
-          { name: "Lumisca", role: "", agentId: session.agentId })
+          { role: "", id: session.agentId ?? "" })
         : undefined,
     );
     this.deps.updateSystemPrompt(session.id, generated);

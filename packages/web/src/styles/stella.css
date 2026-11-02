@@ -301,10 +301,13 @@
   animation: pulse 1.2s ease-in-out infinite;
 }
 
-/* The delete control appears on hover (and always on touch, see
- * reduced-motion/touch rules below): a visible × on every row reads as
- * "something to delete here", which is not what the list is for. */
-.stella-agent-delete {
+/* The row's menu. It appears on hover (and always on touch, see the media
+ * query below): a ⋮ on every row would compete with the name for attention,
+ * and what it holds — edit, delete — is not what the list is for. The one
+ * exception is the open menu's own row, which keeps its button drawn while
+ * the menu it anchors is on screen (`.app-menu` floats apart from the row, so
+ * a vanished button would look like the menu belongs to nothing). */
+.stella-agent-menu {
   flex: none;
   display: flex;
   align-items: center;
@@ -321,21 +324,19 @@
   transition: opacity var(--lum-dur-fast) var(--lum-ease-out);
 }
 
-.stella-agent:hover .stella-agent-delete,
-.stella-agent-delete:focus-visible {
+.stella-agent:hover .stella-agent-menu,
+.stella-agent-menu:focus-visible,
+.stella-agent-menu[aria-expanded="true"] {
   opacity: 1;
 }
 
-/* The active row keeps its button hidden until hovered too: an always-visible
- * × on the row the user is reading reads as an action to take. */
-
-.stella-agent-delete:hover {
-  background: var(--error-soft);
-  color: var(--error);
+.stella-agent-menu:hover {
+  background: var(--surface-3);
+  color: var(--text);
 }
 
 @media (hover: none) {
-  .stella-agent-delete {
+  .stella-agent-menu {
     opacity: 1;
   }
 }
@@ -456,15 +457,42 @@
   background: hsl(var(--agent-avatar-hue) 46% 42%);
 }
 
-/* The dialog's large preview, above the hint. */
-.agent-icon-preview {
+/* The edit dialog's icon field: the preview beside the hint and the two
+ * controls, because the picture and what can be done with it are one thing to
+ * look at. The label above follows the field rows' caption
+ * (settings.css's `.field`). */
+.agent-icon-field {
   display: flex;
-  justify-content: center;
-  padding: 8px 0 12px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.agent-icon-caption {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.agent-icon-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.agent-icon-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-icon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .agent-icon-hint {
-  margin: 0 0 14px;
+  margin: 0;
   font-size: 12px;
   color: var(--text-dim);
   line-height: 1.5;
@@ -931,7 +959,7 @@
     margin-left: -8px;
   }
 
-  .stella-agent-delete {
+  .stella-agent-menu {
     width: 32px;
     height: 32px;
   }

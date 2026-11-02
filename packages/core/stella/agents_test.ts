@@ -147,9 +147,13 @@ Deno.test("agents: rename and delete", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Old", role: "r" });
-    repo.rename(agent.id, "New");
+    repo.update(agent.id, { name: "New" });
     assertEquals(repo.get(agent.id)?.name, "New");
-    assertThrows(() => repo.rename(agent.id, "  "), Error, "must not be empty");
+    assertThrows(
+      () => repo.update(agent.id, { name: "  " }),
+      Error,
+      "must not be empty",
+    );
     repo.delete(agent.id);
     assertEquals(repo.get(agent.id), undefined);
     assertEquals(repo.list(), []);
@@ -218,38 +222,81 @@ Deno.test("agents: the icon starts empty and records a store-generated name", ()
     assertEquals(agent.icon, "");
     assertEquals(repo.get(agent.id)?.icon, "");
 
-    repo.setIcon(agent.id, "9f3c2a1b4d5e.png");
+    repo.update(agent.id, { icon: "9f3c2a1b4d5e.png" });
     assertEquals(repo.get(agent.id)?.icon, "9f3c2a1b4d5e.png");
     // Back to the initial.
-    repo.setIcon(agent.id, "");
+    repo.update(agent.id, { icon: "" });
     assertEquals(repo.get(agent.id)?.icon, "");
   } finally {
     db.close();
   }
 });
 
-Deno.test("agents: setting an icon does not reorder the sidebar", () => {
+Deno.test("agents: a display change does not reorder the sidebar", () => {
   const { db, repo } = setup();
   try {
     const first = repo.create({ name: "First", role: "r" });
     repo.create({ name: "Second", role: "r" });
     // The most recently created is the default.
     assertEquals(repo.latest()?.name, "Second");
-    // `updated_at` orders "who was talked to last"; picking a picture is not
-    // talking to the agent.
-    repo.setIcon(first.id, "9f3c2a1b4d5e.png");
+    // `updated_at` orders "who was talked to last"; picking a picture or
+    // renaming an agent is not talking to it. If either moved the row, the
+    // agent a fresh screen opens would follow the last cosmetic edit.
+    repo.update(first.id, { icon: "9f3c2a1b4d5e.png" });
     assertEquals(repo.latest()?.name, "Second");
+    repo.update(first.id, { name: "Renamed" });
+    assertEquals(repo.latest()?.name, "Second");
+    assertEquals(repo.get(first.id)?.name, "Renamed");
     assertEquals(repo.get(first.id)?.icon, "9f3c2a1b4d5e.png");
   } finally {
     db.close();
   }
 });
 
-Deno.test("agents: an icon for a missing agent fails instead of being lost", () => {
+Deno.test("agents: name and icon travel in one write", () => {
+  const { db, repo } = setup();
+  try {
+    const agent = repo.create({ name: "Old", role: "r" });
+    repo.update(agent.id, { name: "New", icon: "9f3c2a1b4d5e.png" });
+    const updated = repo.get(agent.id);
+    assertEquals(updated?.name, "New");
+    assertEquals(updated?.icon, "9f3c2a1b4d5e.png");
+    // A patch that names one field leaves the other alone.
+    repo.update(agent.id, { name: "Newer" });
+    assertEquals(repo.get(agent.id)?.icon, "9f3c2a1b4d5e.png");
+    repo.update(agent.id, { icon: "" });
+    assertEquals(repo.get(agent.id)?.name, "Newer");
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("agents: a renamed agent is trimmed and length-checked", () => {
+  const { db, repo } = setup();
+  try {
+    const agent = repo.create({ name: "Old", role: "r" });
+    // Trimmed like creation, so a stray newline never reaches the sidebar.
+    repo.update(agent.id, { name: "  Padded  " });
+    assertEquals(repo.get(agent.id)?.name, "Padded");
+    // Over-long is refused rather than truncated, and the row keeps the name
+    // it had.
+    assertThrows(
+      () =>
+        repo.update(agent.id, { name: "x".repeat(MAX_AGENT_NAME_CHARS + 1) }),
+      Error,
+      "at most",
+    );
+    assertEquals(repo.get(agent.id)?.name, "Padded");
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("agents: a patch for a missing agent fails instead of being lost", () => {
   const { db, repo } = setup();
   try {
     const error = assertThrows(
-      () => repo.setIcon("gone", "9f3c2a1b4d5e.png"),
+      () => repo.update("gone", { icon: "9f3c2a1b4d5e.png" }),
       CoreError,
     );
     assertEquals(error.kind, "not_found");

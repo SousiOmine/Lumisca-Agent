@@ -3448,7 +3448,7 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
   }
 });
 
-Deno.test("stella API: an agent's icon is uploaded, served and replaced", async () => {
+Deno.test("stella API: an agent's name and icon are saved together and served", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -3469,24 +3469,33 @@ Deno.test("stella API: an agent's icon is uploaded, served and replaced", async 
     // No picture yet: the client draws the initial instead.
     assertEquals(agent.icon, "");
 
-    const upload = await json(base, `/api/stella/agents/${agent.id}/icon`, {
-      method: "PUT",
+    // One request saves what the edit dialog shows: the label and the
+    // picture. The answer is the updated row, so the client draws both
+    // without a second read.
+    const saved = await json(base, `/api/stella/agents/${agent.id}`, {
+      method: "PATCH",
       body: JSON.stringify({
-        data: pngBase64(),
-        mimeType: "image/png",
+        name: "Analyst",
+        icon: { data: pngBase64(), mimeType: "image/png" },
       }),
     });
-    assertEquals(upload.status, 200);
-    const withIcon = await upload.json() as { id: string; icon: string };
+    assertEquals(saved.status, 200);
+    const withIcon = await saved.json() as {
+      id: string;
+      name: string;
+      icon: string;
+    };
     assertEquals(withIcon.id, agent.id);
+    assertEquals(withIcon.name, "Analyst");
     assert(/^[0-9a-f]{12}\.png$/.test(withIcon.icon), withIcon.icon);
 
     // The row the list serves carries the same name, so the sidebar can draw
     // it without a second read.
     const listed = await json(base, "/api/stella/agents");
     const agents = (await listed.json() as {
-      agents: Array<{ id: string; icon: string }>;
+      agents: Array<{ id: string; name: string; icon: string }>;
     }).agents;
+    assertEquals(agents[0]?.name, "Analyst");
     assertEquals(agents[0]?.icon, withIcon.icon);
 
     // The bytes are served with the stored content type and are cacheable:
@@ -3506,15 +3515,16 @@ Deno.test("stella API: an agent's icon is uploaded, served and replaced", async 
     );
 
     // A replacement gets a NEW name: a cached URL must keep showing the
-    // picture it showed.
-    const replaced = await json(base, `/api/stella/agents/${agent.id}/icon`, {
-      method: "PUT",
+    // picture it showed. A patch that names only the picture leaves the name
+    // alone.
+    const replaced = await json(base, `/api/stella/agents/${agent.id}`, {
+      method: "PATCH",
       body: JSON.stringify({
-        data: pngBase64(),
-        mimeType: "image/png",
+        icon: { data: pngBase64(), mimeType: "image/png" },
       }),
     });
-    const next = await replaced.json() as { icon: string };
+    const next = await replaced.json() as { name: string; icon: string };
+    assertEquals(next.name, "Analyst");
     assert(next.icon !== withIcon.icon);
     assertEquals(
       (await fetch(
@@ -3530,25 +3540,39 @@ Deno.test("stella API: an agent's icon is uploaded, served and replaced", async 
       404,
     );
 
-    // Clearing returns the agent to its initial and removes the file.
-    const cleared = await json(base, `/api/stella/agents/${agent.id}/icon`, {
-      method: "DELETE",
+    // Clearing returns the agent to its initial and removes the file; the
+    // name is untouched.
+    const cleared = await json(base, `/api/stella/agents/${agent.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ icon: null }),
     });
     assertEquals(cleared.status, 200);
-    assertEquals((await cleared.json() as { icon: string }).icon, "");
+    const clearedAgent = await cleared.json() as {
+      name: string;
+      icon: string;
+    };
+    assertEquals(clearedAgent.name, "Analyst");
+    assertEquals(clearedAgent.icon, "");
     assertEquals(
       (await fetch(
         `${base}/api/stella/agents/${agent.id}/icon/${next.icon}`,
       )).status,
       404,
     );
+
+    // Renaming alone is the same route with one field.
+    const renamed = await json(base, `/api/stella/agents/${agent.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: "Notes" }),
+    });
+    assertEquals((await renamed.json() as { name: string }).name, "Notes");
   } finally {
     server.shutdown();
     await core.close();
   }
 });
 
-Deno.test("stella API: an icon upload is refused with the reason it failed", async () => {
+Deno.test("stella API: a refused name or picture changes nothing", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -3565,13 +3589,90 @@ Deno.test("stella API: an icon upload is refused with the reason it failed", asy
       body: JSON.stringify({ name: "Aide", role: "Help." }),
     });
     const agent = await created.json() as { id: string };
-    const path = `/api/stella/agents/${agent.id}/icon`;
+    await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Taken", role: "" }),
+    });
+    const path = `/api/stella/agents/${agent.id}`;
 
-    /** The error message of a refused upload. */
+    /** The status and message of a refused patch. */
     const refusal = async (body: unknown): Promise<[number, string]> => {
       const response = await json(base, path, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify(body),
+      });
+      const parsed = await response.json() as { error: string };
+      return [response.status, parsed.error];
+    };
+
+    // A name another agent has (compared case-insensitively): the sidebar
+    // would show two rows the user cannot tell apart.
+    const [takenStatus, takenError] = await refusal({ name: "taken" });
+    assertEquals(takenStatus, 409);
+    assert(takenError.includes("already exists"), takenError);
+
+    // An empty name: the core refuses it rather than inventing the default.
+    const [emptyStatus, emptyError] = await refusal({ name: "   " });
+    assertEquals(emptyStatus, 400);
+    assert(emptyError.includes("must not be empty"), emptyError);
+
+    // A picture that is not an image: refused on the bytes, and the name it
+    // travelled with is not stored either — the save is one act.
+    const [fakeStatus, fakeError] = await refusal({
+      name: "Fine",
+      icon: { data: btoa("this is not a png"), mimeType: "image/png" },
+    });
+    assertEquals(fakeStatus, 400);
+    assert(fakeError.includes("not a PNG image"), fakeError);
+
+    // An `icon` that is neither null nor an object is a client bug, not a
+    // silent "leave it alone".
+    assertEquals((await refusal({ icon: "yes" }))[0], 400);
+
+    // An unknown agent.
+    const missing = await json(base, "/api/stella/agents/nope", {
+      method: "PATCH",
+      body: JSON.stringify({ name: "Whoever" }),
+    });
+    assertEquals(missing.status, 404);
+
+    // Nothing above changed the row.
+    const listed = await json(base, "/api/stella/agents");
+    const agents = (await listed.json() as {
+      agents: Array<{ id: string; name: string; icon: string }>;
+    }).agents;
+    assertEquals(agents.find((entry) => entry.id === agent.id)?.name, "Aide");
+    assertEquals(agents.find((entry) => entry.id === agent.id)?.icon, "");
+  } finally {
+    server.shutdown();
+    await core.close();
+  }
+});
+
+Deno.test("stella API: an icon patch is refused with the reason it failed", async () => {
+  const { core, faux, server, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(1),
+    });
+    const created = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Aide", role: "Help." }),
+    });
+    const agent = await created.json() as { id: string };
+    const path = `/api/stella/agents/${agent.id}`;
+
+    /** The error message of a refused patch. */
+    const refusal = async (icon: unknown): Promise<[number, string]> => {
+      const response = await json(base, path, {
+        method: "PATCH",
+        body: JSON.stringify({ icon }),
       });
       const parsed = await response.json() as { error: string };
       return [response.status, parsed.error];
@@ -3607,9 +3708,11 @@ Deno.test("stella API: an icon upload is refused with the reason it failed", asy
     assert(bigError.includes("too large"), bigError);
 
     // An unknown agent: the picture has nobody to belong to.
-    const missing = await json(base, "/api/stella/agents/nope/icon", {
-      method: "PUT",
-      body: JSON.stringify({ data: pngBase64(), mimeType: "image/png" }),
+    const missing = await json(base, "/api/stella/agents/nope", {
+      method: "PATCH",
+      body: JSON.stringify({
+        icon: { data: pngBase64(), mimeType: "image/png" },
+      }),
     });
     assertEquals(missing.status, 404);
 
@@ -3647,10 +3750,12 @@ Deno.test("stella API: an icon URL answers only for a name that agent has", asyn
     })).json() as { id: string };
     const withIcon = await (await json(
       base,
-      `/api/stella/agents/${first.id}/icon`,
+      `/api/stella/agents/${first.id}`,
       {
-        method: "PUT",
-        body: JSON.stringify({ data: pngBase64(), mimeType: "image/png" }),
+        method: "PATCH",
+        body: JSON.stringify({
+          icon: { data: pngBase64(), mimeType: "image/png" },
+        }),
       },
     )).json() as { icon: string };
 

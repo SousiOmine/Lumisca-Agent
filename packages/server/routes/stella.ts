@@ -43,14 +43,18 @@ export interface StellaApi {
    * already exists. Returns the agent a client opens. */
   ensureStellaAgent(): StellaAgent;
   createStellaAgent(input: { name: string; role: string }): StellaAgent;
-  renameStellaAgent(id: string, name: string): StellaAgent;
-  /** Store the picture the user picked and point the agent at it. */
-  setStellaAgentIcon(
+  /** Change an agent's name and/or its picture, in one call: the sidebar's
+   * edit dialog saves both together, and a request that stored one but
+   * refused the other would leave the user with half of what they asked
+   * for. `icon` undefined → unchanged, null → back to the initial,
+   * `{ bytes, extension }` → a new picture. */
+  updateStellaAgent(
     id: string,
-    input: { bytes: Uint8Array; extension: string },
+    patch: {
+      name?: string;
+      icon?: { bytes: Uint8Array; extension: string } | null;
+    },
   ): Promise<StellaAgent>;
-  /** Return the agent to its initial on a generated colour. */
-  clearStellaAgentIcon(id: string): Promise<StellaAgent>;
   /** The icon file one of an agent's names refers to (the route serves it).
    * Undefined for an unknown name or a file that is gone. */
   resolveStellaAgentIcon(
@@ -175,6 +179,31 @@ function decodeBase64(data: string): Uint8Array {
   }
 }
 
+/** One patch's picture: the new bytes to store, `null` for "back to the
+ * initial", or undefined for "leave it alone" (the field was not sent).
+ *
+ * A malformed value is a 400 rather than a silent no-op: a client that sent
+ * something shaped like a picture but could not be read has a bug, and
+ * treating it as "unchanged" would report success for a picture that was
+ * never stored. */
+function parseIconPatch(
+  value: unknown,
+): { bytes: Uint8Array; extension: string } | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const { data, mimeType } = parseIconBody(
+    value as { data?: unknown; mimeType?: unknown },
+  );
+  const extension = agentIconExtensionOfMimeType(mimeType);
+  if (extension === undefined) {
+    throw new AppError(
+      `Icons must be ${AGENT_ICON_FORMATS} (got "${mimeType}")`,
+      400,
+    );
+  }
+  return { bytes: decodeBase64(data), extension };
+}
+
 /**
  * The stella machine's API.
  *
@@ -255,10 +284,35 @@ export function stellaRoutes(core: StellaApi): Hono {
     );
   });
 
+  /** Change what an agent is called and what it looks like.
+   *
+   * One route for both because they are one act: the sidebar's edit dialog
+   * saves a name and a picture together. The body names only what changed —
+   * an absent `name` or `icon` leaves that field alone, and `"icon": null`
+   * returns the agent to its initial. The picture is the same shape a
+   * prompt's images take (`base64` + `mimeType`), and its content type
+   * decides the stored format; the store then checks the bytes really are
+   * that format, because a browser reports a type from the file's name.
+   *
+   * What comes back is the updated agent: the client draws the new name and
+   * icon and needs no second read. Validation is the core's (an empty or
+   * taken name is a 400/409, an unknown agent a 404), so the route and the
+   * agent's own tools cannot disagree about what a valid name is. */
   app.patch("/stella/agents/:id", async (c) => {
-    const body = await parseBody<{ name?: unknown }>(c);
-    const name = requireNonEmptyString(body?.name, "name");
-    return c.json(core.renameStellaAgent(c.req.param("id"), name));
+    const body = await parseBody<{
+      name?: unknown;
+      icon?: unknown;
+    }>(c);
+    const name = body?.name === undefined
+      ? undefined
+      : requireNonEmptyString(body.name, "name");
+    const icon = parseIconPatch(body?.icon);
+    return c.json(
+      await core.updateStellaAgent(c.req.param("id"), {
+        ...(name === undefined ? {} : { name }),
+        icon,
+      }),
+    );
   });
 
   /** Delete an agent and its conversation. The client confirms first: the
@@ -269,38 +323,6 @@ export function stellaRoutes(core: StellaApi): Hono {
   });
 
   // --- agents' icons (the picture each is drawn with) ----------------------
-
-  /** Set the agent's picture. The body is the same shape a prompt's images
-   * take (`base64` + `mimeType`): the browser already has the bytes, and the
-   * image endpoints across the app speak that one shape.
-   *
-   * The content type decides the stored format, and the store then checks the
-   * bytes really are that format — a browser reports a type from the file's
-   * name, so it is a claim, not a fact. What comes back is the updated agent:
-   * the client draws `icon` and needs no second read. */
-  app.put("/stella/agents/:id/icon", async (c) => {
-    const body = await parseBody<{ data?: unknown; mimeType?: unknown }>(c);
-    const { data, mimeType } = parseIconBody(body);
-    const extension = agentIconExtensionOfMimeType(mimeType);
-    if (extension === undefined) {
-      throw new AppError(
-        `Icons must be ${AGENT_ICON_FORMATS} (got "${mimeType}")`,
-        400,
-      );
-    }
-    return c.json(
-      await core.setStellaAgentIcon(c.req.param("id"), {
-        bytes: decodeBase64(data),
-        extension,
-      }),
-    );
-  });
-
-  /** Back to the initial on a generated colour: the row's reference and the
-   * file both go. Answers the updated agent, like the upload above. */
-  app.delete("/stella/agents/:id/icon", async (c) => {
-    return c.json(await core.clearStellaAgentIcon(c.req.param("id")));
-  });
 
   /** The picture itself.
    *

@@ -232,9 +232,36 @@ export const chat = {
   },
   "chat.stella.agents.create": { ja: "作成", en: "Create" },
   "chat.stella.agents.creating": { ja: "作成中…", en: "Creating…" },
-  "chat.stella.agents.delete": {
-    ja: "このエージェントを削除",
-    en: "Delete this agent",
+  /** The row's menu (the ⋮ on an agent), and the dialog it opens. What can be
+   * changed is what the user chose: the label and the picture. The role is
+   * fixed at creation (it is the agent's working instruction), so this
+   * dialog deliberately has no field for it. */
+  "chat.stella.agents.menu": {
+    ja: "{name} のメニュー",
+    en: "Menu for {name}",
+  },
+  "chat.stella.agents.edit": {
+    ja: "名前とアイコンを編集",
+    en: "Edit name and icon",
+  },
+  "chat.stella.agents.editTitle": {
+    ja: "「{name}」を編集",
+    en: 'Edit "{name}"',
+  },
+  "chat.stella.agents.icon": { ja: "アイコン", en: "Icon" },
+  "chat.stella.agents.iconHint": {
+    ja:
+      "画像を選ぶと、このエージェントのアイコンとして保存されます。{formats} に対応しています（{size} まで）。設定しない場合は名前の頭文字が表示されます。",
+    en:
+      "Pick a picture to save as this agent's icon. {formats} are supported (up to {size}). Without one, the first character of the name is shown.",
+  },
+  "chat.stella.agents.iconChoose": {
+    ja: "画像を選択",
+    en: "Choose a picture",
+  },
+  "chat.stella.agents.iconReset": {
+    ja: "デフォルトに戻す",
+    en: "Back to the initial",
   },
   "chat.stella.agents.deleteTitle": {
     ja: "「{name}」を削除しますか？",
@@ -260,28 +287,6 @@ export const chat = {
       "仮想マシンの中で作業する開発アシスタント。依頼に応じて調査、実装、検証を行い、結果を短く報告します。",
     en:
       "A development assistant that works inside the machine: investigate, implement and verify what it is asked to do, and report the result briefly.",
-  },
-  "chat.stella.agents.icon.edit": {
-    ja: "アイコンを変更",
-    en: "Change the icon",
-  },
-  "chat.stella.agents.icon.title": {
-    ja: "「{name}」のアイコン",
-    en: 'Icon of "{name}"',
-  },
-  "chat.stella.agents.icon.hint": {
-    ja:
-      "画像を選択すると、このエージェントのアイコンとして設定されます。{formats} に対応しています（{size} まで）。設定しない場合は名前の頭文字が表示されます。",
-    en:
-      "Pick a picture to use as this agent's icon. {formats} are supported (up to {size}). Without one, the first character of the name is shown.",
-  },
-  "chat.stella.agents.icon.choose": {
-    ja: "画像を選択",
-    en: "Choose a picture",
-  },
-  "chat.stella.agents.icon.reset": {
-    ja: "デフォルトに戻す",
-    en: "Back to the initial",
   },
   "chat.stella.conversationError": {
     ja: "会話を開けませんでした: {error}",

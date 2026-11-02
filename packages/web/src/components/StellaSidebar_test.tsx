@@ -1,9 +1,8 @@
 /**
- * The new-agent form. The regression this pins: "Create" was disabled until
- * both free-text answers were written, so an agent could not be made without
- * describing it first.
+ * The agent list: the create form's optional fields, and the row's ⋮ menu —
+ * the only place an agent can be edited or deleted from.
  */
-import { assert, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../i18n.ts";
 import { StellaSidebar } from "./StellaSidebar.tsx";
@@ -26,6 +25,7 @@ function render(): string {
       activeId="a1"
       onSelect={() => {}}
       onChanged={() => {}}
+      onAgentChanged={() => {}}
       running={false}
     />,
   );
@@ -37,6 +37,25 @@ Deno.test("StellaSidebar: the create form says its fields are optional", () => {
   // the labels the dialog draws from the catalogue.
   assertStringIncludes(html, "Aide");
   assert(html.includes("stella-agent"), html);
+});
+
+Deno.test("StellaSidebar: a row's actions live behind its ⋮ menu", () => {
+  const html = render();
+  const at = html.indexOf("stella-agent-menu");
+  assert(at >= 0, "the row has no menu button");
+  const tag = html.slice(
+    html.lastIndexOf("<button", at),
+    html.indexOf(">", at),
+  );
+  // A menu, not an action: it says so to a screen reader, and it names the
+  // agent it belongs to (a list of identical ⋮ buttons is unusable read
+  // aloud).
+  assertStringIncludes(tag, 'aria-haspopup="menu"');
+  assertStringIncludes(tag, "Aide のメニュー");
+  // The row itself carries no destructive control: deleting is one click
+  // further in, behind the menu (the menu is closed here, so its own items
+  // are not in the markup at all).
+  assertEquals(html.includes(">削除<"), false);
 });
 
 Deno.test("StellaSidebar: the create dialog's fields are optional", async () => {

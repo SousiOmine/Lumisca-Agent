@@ -144,7 +144,7 @@ import { VmFileBackend } from "./vm/fs.ts";
 import { sessionSkills } from "./tools/toolsets.ts";
 import type { SkillDef, SkillInfo } from "./skills/discover.ts";
 import { skillInfo } from "./skills/discover.ts";
-import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
+import { DEFAULT_AGENT_NAME, normalizeAgentName } from "./stella/agents.ts";
 import {
   MAX_PROMPT_IMAGE_BYTES,
   readUpload,
@@ -435,11 +435,7 @@ export class LumiscaCore {
           workspace,
           model,
           tools,
-          stella === undefined ? false : {
-            name: stella.name,
-            role: stella.role,
-            id: stella.agentId ?? "",
-          },
+          stella === undefined ? false : { role: stella.role, id: stella.id },
         ),
       personalInstructions: () => {
         const personal = this.personalization.get();
@@ -485,7 +481,7 @@ export class LumiscaCore {
         const agent = this.stellaAgents.get(agentId);
         return agent === undefined
           ? undefined
-          : { name: agent.name, role: agent.role, id: agentId };
+          : { role: agent.role, id: agentId };
       },
       globalSkillDirs: this.globalSkillDirs,
     });
@@ -1151,17 +1147,27 @@ export class LumiscaCore {
         name: this.unusedAgentName(DEFAULT_AGENT_NAME),
       });
     }
-    if (
-      this.stellaAgents.list().some(
-        (agent) => agent.name.toLowerCase() === name.toLowerCase(),
-      )
-    ) {
+    this.requireUnusedAgentName(name);
+    return this.stellaAgents.create(input);
+  }
+
+  /** Refuse a name another agent already has. `exceptId` is the agent being
+   * renamed: keeping one's own name (however it is capitalized) is not a
+   * conflict with itself.
+   *
+   * One rule for creating and renaming, because the sidebar's reason for it
+   * is the same in both: two rows the user cannot tell apart. */
+  private requireUnusedAgentName(name: string, exceptId?: string): void {
+    const taken = this.stellaAgents.list().some((agent) =>
+      agent.id !== exceptId &&
+      agent.name.toLowerCase() === name.toLowerCase()
+    );
+    if (taken) {
       throw new CoreError(
         `An agent named "${name}" already exists. Choose another name.`,
         "conflict",
       );
     }
-    return this.stellaAgents.create(input);
   }
 
   /** `base` ("Agent"), or the first free "Agent N" after it. Used only for a
@@ -1178,67 +1184,86 @@ export class LumiscaCore {
     return base;
   }
 
-  renameStellaAgent(id: string, name: string): StellaAgent {
-    this.stellaAgents.rename(id, name);
-    const agent = this.stellaAgents.get(id);
-    if (agent === undefined) {
-      throw new CoreError(`Agent not found: ${id}`, "not_found");
-    }
-    return agent;
-  }
-
   /**
-   * Give an agent the picture the user picked, and return the updated row.
+   * Change what an agent is CALLED and what it LOOKS like, and return the
+   * updated row.
    *
-   * The order matters: the new file is stored first, then the row points at
-   * it, then the old file is removed. A crash between the steps leaves an
-   * unreferenced file (the store's per-agent cap bounds how many), never a
-   * row pointing at bytes that are not there — an icon that fails to load
-   * would be a blank circle the user cannot explain.
+   * One entry point for both because they are one act: the sidebar's edit
+   * dialog saves a name and a picture together, and a request that stored one
+   * but refused the other would leave the user with half of what they asked
+   * for (and with a dialog that has to explain which half).
    *
-   * `extension` is the stored format (`.png`, `.jpg`, …); the caller derived
-   * it from what the browser reported, and the store verifies the bytes
-   * actually are that format rather than trusting the name.
+   * The name is validated FIRST — before a single byte is written — so a
+   * taken or empty name costs nothing. Neither change touches `updated_at`:
+   * it orders the sidebar by "who was talked to last", and renaming an agent
+   * is not talking to it (see AgentRepo.update).
+   *
+   * `icon` is:
+   * - `undefined` → leave the picture alone;
+   * - `null` → back to the initial (the file is removed);
+   * - `{ bytes, extension }` → a new picture. The new file is stored first,
+   *   then the row, then the old file is removed: a crash between the steps
+   *   leaves an unreferenced file (the store's per-agent cap bounds how many),
+   *   never a row pointing at bytes that are not there — an icon that fails
+   *   to load would be a blank circle the user cannot explain.
+   *
+   * `extension` is the stored format (`.png`, `.jpg`, …); the route derives it
+   * from what the browser reported, and the store verifies the bytes actually
+   * are that format rather than trusting the name.
    */
-  async setStellaAgentIcon(
+  async updateStellaAgent(
     id: string,
-    input: { bytes: Uint8Array; extension: string },
+    patch: {
+      name?: string;
+      icon?: { bytes: Uint8Array; extension: string } | null;
+    },
   ): Promise<StellaAgent> {
     const agent = this.stellaAgents.get(id);
     if (agent === undefined) {
       throw new CoreError(`Agent not found: ${id}`, "not_found");
     }
-    const name = await this.agentIcons.put(id, input.bytes, input.extension);
-    try {
-      this.stellaAgents.setIcon(id, name);
-    } catch (error) {
-      // The row refused the name (the agent was deleted while the bytes were
-      // written): the file has no owner now, so it goes with the failure.
-      await this.agentIcons.remove(id, name);
-      throw error;
-    }
-    if (agent.icon !== "" && agent.icon !== name) {
+    const name = patch.name === undefined
+      ? undefined
+      : normalizeAgentName(patch.name);
+    if (name !== undefined) this.requireUnusedAgentName(name, id);
+
+    // Back to the initial: the row stops naming the file, then the file goes.
+    // Nothing else in this patch can fail after that.
+    if (patch.icon === null) {
+      if (agent.icon !== "") this.stellaAgents.update(id, { icon: "" });
       await this.agentIcons.remove(id, agent.icon);
+    } else if (patch.icon !== undefined) {
+      const stored = await this.agentIcons.put(
+        id,
+        patch.icon.bytes,
+        patch.icon.extension,
+      );
+      try {
+        // Name and picture in one row write: the dialog sent one request, so
+        // the row changes once.
+        this.stellaAgents.update(id, {
+          ...(name === undefined ? {} : { name }),
+          icon: stored,
+        });
+      } catch (error) {
+        // The row refused the name (the agent was deleted while the bytes
+        // were written): the file has no owner now, so it goes with the
+        // failure.
+        await this.agentIcons.remove(id, stored);
+        throw error;
+      }
+      if (agent.icon !== "" && agent.icon !== stored) {
+        await this.agentIcons.remove(id, agent.icon);
+      }
+    } else if (name !== undefined) {
+      this.stellaAgents.update(id, { name });
     }
+
     const updated = this.stellaAgents.get(id);
     if (updated === undefined) {
       throw new CoreError(`Agent not found: ${id}`, "not_found");
     }
     return updated;
-  }
-
-  /** Return an agent to its initial on a generated colour: drop the picture
-   * (both the row's reference and the file). No-op when it had none. */
-  async clearStellaAgentIcon(id: string): Promise<StellaAgent> {
-    const agent = this.stellaAgents.get(id);
-    if (agent === undefined) {
-      throw new CoreError(`Agent not found: ${id}`, "not_found");
-    }
-    if (agent.icon === "") return agent;
-    const previous = agent.icon;
-    this.stellaAgents.setIcon(id, "");
-    await this.agentIcons.remove(id, previous);
-    return this.stellaAgents.get(id) ?? { ...agent, icon: "" };
   }
 
   /** The icon file an agent's picture names, with the content type to serve
@@ -2439,7 +2464,7 @@ export class LumiscaCore {
     workspace: Workspace,
     _model?: { provider: string; modelId: string },
     tools: readonly string[] = [],
-    stella: boolean | { name: string; role: string; id: string } = false,
+    stella: boolean | { role: string; id: string } = false,
   ): string {
     // The language is resolved once, here: the prompt is snapshotted with
     // the session, so the session keeps the language it started in even
@@ -2458,7 +2483,7 @@ export class LumiscaCore {
         tools,
         language,
         ...(stella === true ? {} : {
-          agent: { name: stella.name, role: stella.role },
+          agent: { role: stella.role },
           workdir: vmAgentDir(stella.id),
         }),
       });

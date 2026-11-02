@@ -184,9 +184,8 @@ Deno.test("stella agents: an icon is stored, replaced and cleared as one file", 
     const agent = core.createStellaAgent({ name: "Aide", role: "r" });
     assertEquals(agent.icon, "");
 
-    const first = await core.setStellaAgentIcon(agent.id, {
-      bytes: MINI_PNG,
-      extension: ".png",
+    const first = await core.updateStellaAgent(agent.id, {
+      icon: { bytes: MINI_PNG, extension: ".png" },
     });
     assertEquals(first.icon, core.getStellaAgent(agent.id)?.icon);
     const firstFile = await core.resolveStellaAgentIcon(agent.id, first.icon);
@@ -194,9 +193,8 @@ Deno.test("stella agents: an icon is stored, replaced and cleared as one file", 
 
     // Replacing writes a new file and drops the one it replaced: an icon URL
     // is cacheable forever, so the name has to change with the picture.
-    const second = await core.setStellaAgentIcon(agent.id, {
-      bytes: MINI_PNG,
-      extension: ".png",
+    const second = await core.updateStellaAgent(agent.id, {
+      icon: { bytes: MINI_PNG, extension: ".png" },
     });
     assert(second.icon !== first.icon);
     assert(
@@ -208,14 +206,17 @@ Deno.test("stella agents: an icon is stored, replaced and cleared as one file", 
     );
 
     // Clearing returns the row to its initial and removes the file.
-    const cleared = await core.clearStellaAgentIcon(agent.id);
+    const cleared = await core.updateStellaAgent(agent.id, { icon: null });
     assertEquals(cleared.icon, "");
     assertEquals(
       await core.resolveStellaAgentIcon(agent.id, second.icon),
       undefined,
     );
     // Clearing twice is a no-op, not a failure.
-    assertEquals((await core.clearStellaAgentIcon(agent.id)).icon, "");
+    assertEquals(
+      (await core.updateStellaAgent(agent.id, { icon: null })).icon,
+      "",
+    );
   } finally {
     await core.close();
   }
@@ -225,9 +226,8 @@ Deno.test("stella agents: deleting an agent drops its icon files", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = core.createStellaAgent({ name: "Gone", role: "r" });
-    const withIcon = await core.setStellaAgentIcon(agent.id, {
-      bytes: MINI_PNG,
-      extension: ".png",
+    const withIcon = await core.updateStellaAgent(agent.id, {
+      icon: { bytes: MINI_PNG, extension: ".png" },
     });
     await core.deleteStellaAgent(agent.id);
     // The picture belonged to the agent; nothing can name it now.
@@ -240,21 +240,25 @@ Deno.test("stella agents: deleting an agent drops its icon files", async () => {
   }
 });
 
-Deno.test("stella agents: an icon for a missing agent is refused", async () => {
+Deno.test("stella agents: a patch for a missing agent is refused", async () => {
   const core = await stellaCore(RUNNING);
   try {
     // The user deleted the agent while the picture was being saved.
     await assertRejects(
       () =>
-        core.setStellaAgentIcon("gone", {
-          bytes: MINI_PNG,
-          extension: ".png",
+        core.updateStellaAgent("gone", {
+          icon: { bytes: MINI_PNG, extension: ".png" },
         }),
       CoreError,
       "Agent not found",
     );
     await assertRejects(
-      () => core.clearStellaAgentIcon("gone"),
+      () => core.updateStellaAgent("gone", { icon: null }),
+      CoreError,
+      "Agent not found",
+    );
+    await assertRejects(
+      () => core.updateStellaAgent("gone", { name: "New" }),
       CoreError,
       "Agent not found",
     );
@@ -269,9 +273,11 @@ Deno.test("stella agents: an icon that is not an image is refused by the core", 
     const agent = core.createStellaAgent({ name: "Aide", role: "r" });
     const error = await assertRejects(
       () =>
-        core.setStellaAgentIcon(agent.id, {
-          bytes: new TextEncoder().encode("<html></html>"),
-          extension: ".png",
+        core.updateStellaAgent(agent.id, {
+          icon: {
+            bytes: new TextEncoder().encode("<html></html>"),
+            extension: ".png",
+          },
         }),
       CoreError,
     );
@@ -283,7 +289,73 @@ Deno.test("stella agents: an icon that is not an image is refused by the core", 
   }
 });
 
-Deno.test("stella conversation: its system prompt is the machine's", async () => {
+Deno.test("stella agents: a rename is checked like a creation", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const first = core.createStellaAgent({ name: "First", role: "r" });
+    core.createStellaAgent({ name: "Second", role: "r" });
+
+    // The sidebar's rule is the same in both directions: two rows the user
+    // cannot tell apart (compared case-insensitively).
+    const taken = await assertRejects(
+      () => core.updateStellaAgent(first.id, { name: "second" }),
+      CoreError,
+    );
+    assertEquals(taken.kind, "conflict");
+    assertEquals(core.getStellaAgent(first.id)?.name, "First");
+
+    // Keeping one's own name is not a conflict with itself, however it is
+    // capitalized: the dialog saves a name on every submit, and a user who
+    // only changed the picture must not be refused.
+    assertEquals(
+      (await core.updateStellaAgent(first.id, { name: "FIRST" })).name,
+      "FIRST",
+    );
+
+    // An empty name is refused rather than replaced by the default: clearing
+    // the field is not a request to be called "Agent".
+    const empty = await assertRejects(
+      () => core.updateStellaAgent(first.id, { name: "   " }),
+      Error,
+    );
+    assert(empty.message.includes("must not be empty"), empty.message);
+    assertEquals(core.getStellaAgent(first.id)?.name, "FIRST");
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: a name and a picture land together", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const agent = core.createStellaAgent({ name: "Old", role: "r" });
+    const updated = await core.updateStellaAgent(agent.id, {
+      name: "New",
+      icon: { bytes: MINI_PNG, extension: ".png" },
+    });
+    assertEquals(updated.name, "New");
+    assert(updated.icon !== "", "the picture was not recorded");
+    assertEquals(core.getStellaAgent(agent.id)?.name, "New");
+
+    // A refused name costs nothing: the picture must not be written for a
+    // patch that does not happen (the dialog saves both, so half of it would
+    // look like the save worked).
+    const refused = await assertRejects(
+      () =>
+        core.updateStellaAgent(agent.id, {
+          name: " ",
+          icon: { bytes: MINI_PNG, extension: ".png" },
+        }),
+      Error,
+    );
+    assert(refused.message.includes("must not be empty"), refused.message);
+    assertEquals(core.getStellaAgent(agent.id)?.icon, updated.icon);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: its system prompt is the machine's, not the name", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = core.createStellaAgent({
@@ -292,8 +364,17 @@ Deno.test("stella conversation: its system prompt is the machine's", async () =>
     });
     const session = await core.getOrCreateStellaSession(agent.id);
     const prompt = session.systemPrompt ?? "";
-    // The persona is the agent's: its name and the role it was made for.
-    assert(prompt.includes('"Aide"'), prompt.slice(0, 120));
+    // The name is a LABEL the user can change at any time, so it is not in
+    // the prompt: a snapshot would either freeze the old one (the agent
+    // introducing itself under a name the user already replaced) or cost the
+    // provider's cached prefix on every rename.
+    assertEquals(prompt.includes("Aide"), false, prompt.slice(0, 200));
+    // What it IS told: the opening line every stella conversation shares,
+    // and the role the user wrote for this agent.
+    assert(
+      prompt.startsWith("You are a helpful assistant."),
+      prompt.slice(0, 120),
+    );
     assert(
       prompt.includes("You keep notes and check facts."),
       prompt.slice(0, 300),
@@ -315,6 +396,25 @@ Deno.test("stella conversation: its system prompt is the machine's", async () =>
       prompt.includes("without a password"),
       `the prompt must say sudo needs no password: ${prompt.slice(0, 800)}`,
     );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: an agent without a role still gets the opening line", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    // The create form's role is optional, so this is a normal agent: it gets
+    // the shared opening line and nothing after it on that line (no dangling
+    // space, no empty quotation marks).
+    const agent = core.createStellaAgent({ name: "Quiet", role: "" });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    const prompt = session.systemPrompt ?? "";
+    assert(
+      prompt.startsWith("You are a helpful assistant.\n"),
+      JSON.stringify(prompt.slice(0, 60)),
+    );
+    assertEquals(prompt.includes("Quiet"), false, prompt.slice(0, 120));
   } finally {
     await core.close();
   }

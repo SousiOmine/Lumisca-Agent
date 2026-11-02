@@ -1,5 +1,11 @@
-import { IconPlus, IconX } from "@tabler/icons-preact";
-import { useState } from "preact/compat";
+import { useClickOutside } from "../hooks/useClickOutside.ts";
+import {
+  IconDotsVertical,
+  IconPencil,
+  IconPlus,
+  IconTrash,
+} from "@tabler/icons-preact";
+import { useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
 import { useLocale, useT } from "../i18n.ts";
@@ -8,6 +14,7 @@ import type { StellaAgent } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 import { Field } from "./Field.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
+import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
 import { useArrivals } from "../hooks/useArrivals.ts";
 
 interface StellaSidebarProps {
@@ -17,11 +24,24 @@ interface StellaSidebarProps {
   onSelect: (id: string) => void;
   /** Called after a create / delete so the App re-reads the list. */
   onChanged: () => void;
+  /** Called with the row the server answered after an edit, so the list
+   * (and the conversation's header) redraw without a full re-read. */
+  onAgentChanged: (agent: StellaAgent) => void;
   /** Whether the active agent's conversation is running, so its row can say
    * so (a message app's "typing" in a list). Only the active one is known:
    * the others have no open stream, and asking each would be a request per
    * row. */
   running: boolean;
+}
+
+/** Where a row's menu is drawn: under its ⋮ button, right-aligned to the
+ * list. Fixed-position, because the list scrolls and an absolutely placed
+ * menu would be clipped by it (the app menu is placed the same way). */
+interface MenuAnchor {
+  agent: StellaAgent;
+  /** Distance from the viewport's right and top edges. */
+  right: number;
+  top: number;
 }
 
 /**
@@ -39,22 +59,40 @@ interface StellaSidebarProps {
  * and leaves the role empty (see normalizeAgentInput). The agent can also add
  * agents itself with `agent_create`, in which case the row appears here
  * without this dialog ever opening.
+ *
+ * A row's ⋮ menu holds what can be done TO an agent — edit its name and
+ * picture, delete it — apart from what the row itself does, which is open the
+ * conversation. Deleting is not on the row: an always-visible × on every row
+ * reads as "something to delete here", and it put a destructive control one
+ * stray click from the thing the list exists for.
  */
 export function StellaSidebar(
-  { agents, activeId, onSelect, onChanged, running }: StellaSidebarProps,
+  { agents, activeId, onSelect, onChanged, onAgentChanged, running }:
+    StellaSidebarProps,
 ) {
   const t = useT();
   const locale = useLocale();
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<StellaAgent | null>(null);
+  /** The row whose menu is open, with where to draw it. */
+  const [menu, setMenu] = useState<MenuAnchor | null>(null);
+  /** The agent being edited (its name and picture), or null. */
+  const [editing, setEditing] = useState<StellaAgent | null>(null);
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   // Which rows just appeared (a new agent, or one the agent created itself).
   // Only those animate: the first paint of the list must not stage itself
   // (see hooks/useArrivals).
   const entering = useArrivals(agents.map((agent) => agent.id));
+
+  // The menu belongs to the row, so it closes whenever the row is gone
+  // (deleted, or replaced by the edited one).
+  useClickOutside(menuRef, () => setMenu(null), menu !== null, {
+    onScroll: true,
+  });
 
   const resetForm = () => {
     setCreating(false);
@@ -91,6 +129,26 @@ export function StellaSidebar(
     }
   };
 
+  /** Open a row's menu under its own ⋮ button. The position is read from the
+   * button at click time: the list scrolls, so where the row is now is the
+   * only useful answer (and a menu placed in CSS would be clipped by the
+   * scrolling list it lives in). */
+  const openMenu = (
+    agent: StellaAgent,
+    button: HTMLButtonElement,
+  ) => {
+    if (menu?.agent.id === agent.id) {
+      setMenu(null);
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    setMenu({
+      agent,
+      right: globalThis.innerWidth - rect.right,
+      top: rect.bottom + 4,
+    });
+  };
+
   return (
     <aside className="stella-sidebar">
       <div className="stella-sidebar-header">
@@ -120,8 +178,8 @@ export function StellaSidebar(
             {
               /* The picture is part of the row's name button, not a control of
                 its own: the row's one action is "open this conversation", and
-                changing the picture belongs to the conversation (its header),
-                not to a list the eye scans. */
+                what the agent is called or looks like belongs to the ⋮ menu
+                beside it — not to a list the eye scans. */
             }
             <button
               type="button"
@@ -169,16 +227,55 @@ export function StellaSidebar(
             </button>
             <button
               type="button"
-              className="stella-agent-delete"
-              onClick={() => setDeleting(agent)}
-              title={t("chat.stella.agents.delete")}
-              aria-label={t("chat.stella.agents.delete")}
+              className="stella-agent-menu"
+              onClick={(event) => openMenu(agent, event.currentTarget)}
+              title={t("chat.stella.agents.menu", { name: agent.name })}
+              aria-label={t("chat.stella.agents.menu", { name: agent.name })}
+              aria-haspopup="menu"
+              aria-expanded={menu?.agent.id === agent.id}
             >
-              <IconX size={12} />
+              <IconDotsVertical size={14} />
             </button>
           </div>
         ))}
       </nav>
+      {menu !== null && (
+        <div
+          className="app-menu"
+          role="menu"
+          ref={menuRef}
+          style={{
+            position: "fixed",
+            top: menu.top,
+            right: menu.right,
+          }}
+        >
+          <button
+            type="button"
+            className="app-menu-item"
+            role="menuitem"
+            onClick={() => {
+              setEditing(menu.agent);
+              setMenu(null);
+            }}
+          >
+            <IconPencil size={14} />
+            <span>{t("common.edit")}</span>
+          </button>
+          <button
+            type="button"
+            className="app-menu-item"
+            role="menuitem"
+            onClick={() => {
+              setDeleting(menu.agent);
+              setMenu(null);
+            }}
+          >
+            <IconTrash size={14} />
+            <span>{t("common.delete")}</span>
+          </button>
+        </div>
+      )}
       {error !== null && (
         <p className="error-text stella-sidebar-error" role="alert">{error}</p>
       )}
@@ -243,6 +340,16 @@ export function StellaSidebar(
             </button>
           </div>
         </Modal>
+      )}
+      {editing !== null && (
+        <AgentEditDialog
+          agent={editing}
+          onChanged={(agent) => {
+            onAgentChanged(agent);
+            setEditing(null);
+          }}
+          onClose={() => setEditing(null)}
+        />
       )}
     </aside>
   );
