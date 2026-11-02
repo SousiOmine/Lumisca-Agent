@@ -16,6 +16,7 @@ import type { BackgroundProcessManager } from "./background.ts";
 import { createGlobTool, createGrepTool } from "./search.ts";
 import { createEvalTool } from "./eval.ts";
 import { type ChatAttachTarget, createChatAttachTool } from "./attach.ts";
+import { createSendChatTool, type SendChatTarget } from "./send-chat.ts";
 import { createVisualTool, type VisualTarget } from "./visual.ts";
 import { createWebSearchTools } from "./web.ts";
 import type { SearchProvider } from "../websearch/types.ts";
@@ -139,7 +140,8 @@ export interface ToolFactoryOptions {
   computerAvailable?: boolean;
   /** Where `chat_attach` keeps the bytes it sends (the session's store and
    * id). Omitted → the tool is not built: without a store there is nowhere
-   * for a file to go, and the card would link nothing. */
+   * for a file to go, and the card would link nothing. Code mode only: a
+   * stella session speaks with `send_chat`, which sends files itself. */
   attach?: ChatAttachTarget;
   /** Where the `visual` tool publishes (the session's asset store and id).
    * Code mode has it in addition to `chat_attach`: the `visual:` reference
@@ -229,16 +231,17 @@ export function createCodingTools(
  *   context window, and the turns a checkpoint condensed away are still in
  *   the message store — but the agent has to know it can ask for them.
  * - `todo` is absent. Its plan is shown in a progress panel, and stella's
- *   conversation has no panels (the agent says what it is doing in its own
- *   words), so the tool would collect a plan nobody reads — one more schema
+ *   conversation has no panels (the agent says what it is doing by sending a
+ *   message), so the tool would collect a plan nobody reads — one more schema
  *   on every request and one more round trip per plan change.
  * - `ask` is absent too. A conversation whose person is watching the machine
  *   answers in words or with a card; a blocking question the server shows in
  *   a panel would be a surface this mode does not have, and it would leave
  *   the run waiting for an answer nothing draws.
- * - `visual` is replaced by `chat_attach`: the visual tool publishes an image
- *   the reply has to link with markdown, while a conversation wants the file
- *   itself — an image inline, anything else as a download.
+ * - `chat_attach` and `chat_ui` are replaced by `send_chat`: the conversation
+ *   shows only what the agent SENDS, so "say something", "show a card" and
+ *   "hand over a file" are one act. There is no `visual` either — an image
+ *   goes through the same call, as a file.
  * - `identity` and `agent_create` are NOT here: they belong to the
  *   conversation's own agent, so they live in the session's main registry
  *   and are reached through tool_search (TC-7). A sub-agent must not rewrite
@@ -265,15 +268,15 @@ export function createStellaTools(options: {
    * the built-ins the session is entitled to. */
   skills: SkillDef[];
   screen: Tool[];
-  /** `chat_ui`: show a card in the chat. */
-  chatUi?: Tool;
+  /** `send_chat`: the ONE way this conversation's agent says anything — the
+   * words, a card, and files, in one call. Without it the agent cannot
+   * speak at all (its own text is not shown), so a caller that omits it
+   * builds a session that can work but never answer. */
+  sendChat?: SendChatTarget;
   /** `history_search`: the conversation's own saved history. Omitted → the
    * tool is not built (a caller without a message store has nothing to
    * search). */
   history?: Tool;
-  /** `chat_attach`: hand files to the user. Omitted → the tool is not built
-   * (a caller with no attachment store has nowhere to keep the bytes). */
-  attach?: ChatAttachTarget;
   /** The user's web-search provider (see ToolFactoryOptions.webSearch). */
   webSearch?: SearchProvider;
   background?: BackgroundProcessManager;
@@ -309,9 +312,8 @@ export function createStellaTools(options: {
       })
       : undefined,
     options.screen,
-    options.chatUi,
-    options.attach !== undefined
-      ? createChatAttachTool({ files, ...options.attach })
+    options.sendChat !== undefined
+      ? createSendChatTool({ files, ...options.sendChat })
       : undefined,
     options.history,
     options.webSearch !== undefined

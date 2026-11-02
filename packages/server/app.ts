@@ -173,14 +173,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // generic /settings surface filters it out).
   app.route("/api", webSearchRoutes(core));
   app.route("/api", sessionRoutes(core));
-  app.route(
-    "/api",
-    stellaRoutes(core, {
-      ...(options.deltaFlushMs === undefined
-        ? {}
-        : { deltaFlushMs: options.deltaFlushMs }),
-    }),
-  );
+  // stella mode's own surface. It takes no delta-flush option: a
+  // conversation has no streaming text (its agent's own words never reach
+  // the screen), so there is no batch to time.
+  app.route("/api", stellaRoutes(core));
   // Routines: the scheduled requests of a stella conversation. Addressed by
   // agent, because a routine belongs to one conversation.
   app.route(
@@ -198,8 +194,9 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // The images a session published for its replies. Mounted after the
   // session routes (its path is its own `/sessions/:id/visual/:name`).
   app.route("/api", visualRoutes(core));
-  // The files an agent attached to its reply (`chat_attach`). Their own
-  // path shape, like the visuals above.
+  // The files an agent handed to the user (`chat_attach` in code mode,
+  // `send_chat`'s attachments in stella). Their own path shape, like the
+  // visuals above.
   app.route("/api", attachmentRoutes(core));
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
@@ -230,15 +227,17 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         "sessionId" in event
           ? core.getSessionRevision(event.sessionId)
           : undefined,
-      deltaKey: (event) => ("sessionId" in event ? event.sessionId : ""),
-      deltaFrame: ({ key, delta, rev, events }) => ({
-        peerId: "",
-        sessionId: key,
-        rev,
-        events,
-        type: "message_delta",
-        delta,
-      }),
+      delta: {
+        key: (event) => ("sessionId" in event ? event.sessionId : ""),
+        frame: ({ key, delta, rev, events }) => ({
+          peerId: "",
+          sessionId: key,
+          rev,
+          events,
+          type: "message_delta",
+          delta,
+        }),
+      },
       project: (event, rev) => {
         // Every event carries the peer id ("" = this server) so the UI
         // routes it to the right session tab, and — for session events —

@@ -143,11 +143,13 @@ Deno.test("prune: a tool result becomes a marker, its details dropped", () => {
   assertEquals(result.isError, false);
 });
 
-Deno.test("prune: files the agent sent are part of the reply", () => {
+Deno.test("prune: what the agent sent is part of the conversation", () => {
   const message = toolResult({
-    toolName: "chat_attach",
-    content: [{ type: "text", text: "Sent 1 file." }],
+    toolName: "send_chat",
+    content: [{ type: "text", text: "Sent the message to the user." }],
     details: {
+      text: "report.pdf を添付しました。",
+      card: null,
       attachments: [{
         name: "0123456789ab.pdf",
         displayName: "report.pdf",
@@ -156,6 +158,9 @@ Deno.test("prune: files the agent sent are part of the reply", () => {
       }],
     },
   });
+  // The words, the card and the files ARE the conversation: a reload redraws
+  // the message from this row, and `history_search` reads it back once the
+  // checkpoint has replaced the call that carried the same text.
   assertEquals(reduceMessage(message).changed, false);
   assertEquals(reduceMessage(message).message, message);
 });

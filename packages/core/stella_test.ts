@@ -6,7 +6,6 @@ import { createStellaTools } from "./tools/toolsets.ts";
 import { hostBackends } from "./tools/toolsets.ts";
 import { createVmTools } from "./vm/tools.ts";
 import { createHistorySearchTool } from "./session/history.ts";
-import { createChatUiTool } from "./tools/chat-ui.ts";
 import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
 import { TaskHub } from "./tools/task-hub.ts";
@@ -345,7 +344,7 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
     skills: [],
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ entries: () => [] }),
-    attach: {
+    sendChat: {
       store: new SessionAttachmentStore(
         Deno.makeTempDirSync({ prefix: "lumisca-stella-attach-" }),
       ),
@@ -391,10 +390,13 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   // panel that could show the question, and a blocked run has no way back.
   assertEquals(names.includes("ask"), false);
   assertEquals(names.includes("todo"), false);
-  // The visual tool is gone; a file the agent hands over goes through
-  // chat_attach instead (an image inline, anything else as a download).
+  // visual and chat_attach are gone: the conversation's only channel is
+  // send_chat, which carries the words, a card and files in one call. An
+  // image goes with the message rather than being published and linked.
   assertEquals(names.includes("visual"), false);
-  assert(names.includes("chat_attach"), names.join(", "));
+  assertEquals(names.includes("chat_attach"), false);
+  assertEquals(names.includes("chat_ui"), false);
+  assert(names.includes("send_chat"), names.join(", "));
   void faux;
 });
 
@@ -423,8 +425,7 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     skills: [],
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ entries: () => [] }),
-    chatUi: createChatUiTool(),
-    attach: {
+    sendChat: {
       store: new SessionAttachmentStore(
         Deno.makeTempDirSync({ prefix: "lumisca-stella-sections-" }),
       ),
@@ -468,8 +469,7 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     const expected of [
       "history_search",
       "vm_screenshot",
-      "chat_attach",
-      "chat_ui",
+      "send_chat",
     ]
   ) {
     assertEquals(
@@ -581,6 +581,115 @@ Deno.test("stella conversation: history_search is preloaded and reads its own ro
     const text = lastHistoryResult(core, session.id);
     assert(text.includes("Found 1 message(s)"), text);
     assert(text.includes("The code word is pelican."), text);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: a run that sends nothing leaves nothing on screen", async () => {
+  // The reason `send_chat` exists. A model asked anything writes something —
+  // it is how it thinks — and a routine that checks a log and finds nothing
+  // has nothing to report. Before, that turn pushed a paragraph at the user;
+  // now the conversation gains only the user's prompt, and the run's own text
+  // stays in the model's history.
+  const { faux, core, session } = await stellaConversation("Quiet");
+  try {
+    faux.setResponses([
+      fauxAssistantMessage(
+        "確認しました。問題はありません。とくに報告することはないので、" +
+          "このまま終わります。",
+      ),
+    ]);
+    await promptSession(core, session.id, "定期チェックを実行して");
+
+    const page = core.readStellaConversation(session.id, {})!;
+    // The prompt is there; the agent's own text is not.
+    assertEquals(page.items.map((entry) => entry.role), ["user"]);
+    assertEquals(page.items[0]?.text, "定期チェックを実行して");
+
+    // It IS in the model's history: the notes are what the model reasons
+    // with, and dropping them would make the next turn amnesiac.
+    assert(
+      core.getAgent(session.id)!.messages.some((message) =>
+        message.role === "assistant"
+      ),
+      "the agent's own turn stays in its history",
+    );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: what send_chat sends is the conversation", async () => {
+  const { faux, core, session } = await stellaConversation("Aide");
+  try {
+    const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
+    faux.setResponses([
+      fauxAssistantMessage([
+        // The working notes: never shown.
+        { type: "text", text: "まず報告を送ろう。" },
+        fauxToolCall("send_chat", {
+          text: "3件の不具合を直しました。",
+          card: markup,
+        }, "call-1"),
+      ], { stopReason: "toolUse" }),
+      // A second turn that has nothing to add.
+      fauxAssistantMessage("これで終わり。"),
+    ]);
+    await promptSession(core, session.id, "直して");
+
+    const page = core.readStellaConversation(session.id, {})!;
+    const entries = page.items;
+    assertEquals(entries.map((entry) => entry.role), ["user", "assistant"]);
+    const sent = entries[1]!;
+    assertEquals(sent.text, "3件の不具合を直しました。");
+    assertEquals(sent.card, markup);
+    assertEquals(sent.attachments, []);
+
+    // The words also went nowhere near the tool's model-facing result: a
+    // message is in the transcript once (as the call's arguments), and the
+    // receipt is all the model reads back.
+    const result = core.getAgent(session.id)!.messages.find((message) =>
+      message.role === "toolResult" && message.toolName === "send_chat"
+    );
+    assert(result !== undefined, "send_chat must have run");
+    if (result.role !== "toolResult") throw new Error("unreachable");
+    const receipt = result.content
+      .map((block) => block.type === "text" ? block.text : "")
+      .join("");
+    assertEquals(receipt.includes("3件の不具合を直しました。"), false, receipt);
+    assert(receipt.includes("Sent"), receipt);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: history_search reads the message after a prune", async () => {
+  // A checkpoint replaces the span that held the call (whose arguments carry
+  // the words), so the send_chat ROW is what keeps the message readable —
+  // that is why prune keeps it.
+  const { faux, core, session } = await stellaConversation("Scribe");
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("send_chat", {
+          text: "見積もりは 42 万円です。",
+        }, "call-1"),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("送りました。"),
+    ]);
+    await promptSession(core, session.id, "見積もりを出して");
+
+    // A later search finds it (the same conversation, read back by words).
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("history_search", { query: "見積もり" }),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("思い出しました。"),
+    ]);
+    await promptSession(core, session.id, "さっきの見積もりは？");
+    const text = lastHistoryResult(core, session.id);
+    assert(text.includes("見積もりは 42 万円です。"), text);
   } finally {
     await core.close();
   }

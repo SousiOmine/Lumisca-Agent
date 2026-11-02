@@ -35,9 +35,6 @@ export interface StellaRuntime {
   /** The screen tools (`vm_screenshot` / `vm_act` / `vm_ask_user`),
    * preloaded. */
   screenTools: Tool[];
-  /** `chat_ui`: show a card (text, table, flow, a question with choices) in
-   * the chat. */
-  chatUiTool: Tool;
   /** The routine tools (`routine_create` / `list` / `update` / `delete` /
    * `run`), bound to this session's agent. Discoverable through
    * tool_search, not preloaded. */

@@ -3,7 +3,6 @@ import {
   TOOL_ASYNC_BASH,
   TOOL_BASH,
   TOOL_CHAT_ATTACH,
-  TOOL_CHAT_UI,
   TOOL_EDIT,
   TOOL_EVAL,
   TOOL_GLOB,
@@ -11,6 +10,7 @@ import {
   TOOL_HISTORY_SEARCH,
   TOOL_LIST_DIR,
   TOOL_READ,
+  TOOL_SEND_CHAT,
   TOOL_SEND_MESSAGE,
   TOOL_SKILL,
   TOOL_TASK,
@@ -126,8 +126,8 @@ const EDIT_SECTION: PromptSection = {
   name: "tool:edit",
   order: ORDER.tool + 20,
   requires: [TOOL_EDIT],
-  text: "- Use edit for targeted changes: one literal replacement per call. " +
-    "Re-read the\n  file when the match fails or it changed.",
+  text: "- Use edit for targeted changes: one literal replacement per call, " +
+    "and re-read\n  the file when the match fails.",
 };
 
 const GLOB_SECTION: PromptSection = {
@@ -141,9 +141,7 @@ const GREP_SECTION: PromptSection = {
   name: "tool:grep",
   order: ORDER.tool + 40,
   requires: [TOOL_GREP],
-  text:
-    "- Use grep to search file contents instead of shell `grep`/`rg`, and " +
-    "read a\n  matched file for context instead of widening the pattern.",
+  text: "- Use grep to search file contents instead of shell `grep`/`rg`.",
 };
 
 const SEARCH_CAPS_SECTION: PromptSection = {
@@ -167,9 +165,8 @@ const ASYNC_BASH_SECTION: PromptSection = {
   name: "tool:async_bash",
   order: ORDER.tool + 70,
   requires: [TOOL_ASYNC_BASH],
-  text: "- Use async_bash for long-running work (dev servers, watchers, " +
-    "downloads);\n  check it with async_bash_status and stop it with " +
-    "async_bash_kill when done.",
+  text: "- Use async_bash for long-running work; check it with " +
+    "async_bash_status and stop\n  it with async_bash_kill when done.",
 };
 
 const EVAL_SECTION: PromptSection = {
@@ -231,8 +228,8 @@ const VISUAL_DIAGRAM_SECTION: PromptSection = {
 
 /** Code mode's way of putting an image INSIDE the reply: the visual tool
  * publishes the file and returns the markdown to paste. A conversation
- * (stella) does not use it — there the file is sent with chat_attach and
- * appears as a card (see CHAT_ATTACH_SECTION). */
+ * (stella) does not use it — there a file is sent with `send_chat` and
+ * appears with the message (see SEND_CHAT_SECTION). */
 const VISUAL_IMAGE_SECTION: PromptSection = {
   name: "visual:image",
   order: ORDER.tool + 128,
@@ -242,8 +239,8 @@ const VISUAL_IMAGE_SECTION: PromptSection = {
     "image belongs.",
 };
 
-/** Showing a file the agent produced: the chat_attach tool hands it to the
- * user, as a card under the reply (an image inline, anything else as a
+/** Showing a file the agent produced, in code mode: `chat_attach` hands it
+ * to the user as a card under the reply (an image inline, anything else as a
  * download). Keyed on the tool: a session without one must not be told to
  * send files, and an agent that does not know it can will paste the path
  * instead and leave the user to go find it. */
@@ -251,24 +248,40 @@ const CHAT_ATTACH_SECTION: PromptSection = {
   name: "tool:chat_attach",
   order: ORDER.tool + 125,
   requires: [TOOL_CHAT_ATTACH],
-  text: "- To give the user a file (an image, a report, a log), send it with " +
-    "chat_attach:\n  it appears as a card under the reply. Do not write its " +
-    "path and expect the user to\n  open it, and do not paste its content " +
-    "into the reply as well.",
+  text: "- To give the user a file, send it with chat_attach rather than " +
+    "writing its path\n  for them to open.",
+};
+
+/** Speaking in a stella conversation, where `send_chat` is the only channel.
+ *
+ * One bullet, and it carries the half of the contract the tool's description
+ * cannot state: what to do when there is nothing to say. Everything else
+ * (the arguments, the card language, the receipt the call returns) is the
+ * tool's own description, and repeating it here only costs every request. */
+const SEND_CHAT_SECTION: PromptSection = {
+  name: "tool:send_chat",
+  order: ORDER.tool + 126,
+  requires: [TOOL_SEND_CHAT],
+  text:
+    "- A turn with nothing to report (a routine that found nothing, a check " +
+    "that passed)\n  ends without a message — that is the expected outcome, " +
+    "not a failure.",
 };
 
 /** The machine's screen, in a stella session. Both halves are keyed on the
  * tools: an agent that cannot look must not be told to check what it sees,
- * and one that cannot act must not be told to click. */
+ * and one that cannot act must not be told to click.
+ *
+ * The bullets say WHEN to look and what to prefer, not what the tools do:
+ * `vm_screenshot` and `vm_act` describe their own coordinates, their actions
+ * and the fact that an image pixel is a screen pixel. */
 const VM_SCREENSHOT_SECTION: PromptSection = {
   name: "vm:screenshot",
   order: ORDER.tool + 140,
   requires: [TOOL_VM_SCREENSHOT],
   text:
-    "- This machine's screen is yours to look at: use vm_screenshot before " +
-    "acting on a GUI\n  and after an action to see what it did. The image is " +
-    "1:1 with the screen, so a\n  position read off it is a coordinate " +
-    "vm_act takes as-is.",
+    "- Use vm_screenshot before acting on a GUI and again after, to see what " +
+    "the\n  action did.",
 };
 
 const VM_ACT_SECTION: PromptSection = {
@@ -276,64 +289,48 @@ const VM_ACT_SECTION: PromptSection = {
   order: ORDER.tool + 150,
   requires: [TOOL_VM_ACT],
   text:
-    "- Use vm_act for the GUI (a browser, a dialog): click, type, scroll, " +
-    "press keys.\n  Prefer the shell and the file tools for everything they " +
-    "can do — a command is\n  faster and leaves a record, a click does not.",
+    "- Use vm_act for the GUI: a browser, a dialog. Prefer the shell and the " +
+    "file\n  tools for everything they can do — a command is faster and " +
+    "leaves a record.",
 };
 
 /** The conversation's own history, in a stella session. Keyed on the tool:
  * a session whose history was condensed must be told the earlier turns are
- * still reachable, and one without the tool would be sent looking for it. */
+ * still reachable, and one without the tool would be sent looking for it.
+ *
+ * What the search covers (the conversation's entries, not tool output) is in
+ * the tool's description; this says when to reach for it. */
 const HISTORY_SEARCH_SECTION: PromptSection = {
   name: "tool:history_search",
   order: ORDER.tool + 135,
   requires: [TOOL_HISTORY_SEARCH],
   text:
-    "- This one conversation outlives any single context window: when older " +
-    "turns are\n  condensed into a checkpoint, their exact words leave your " +
-    "context but stay in the\n  history. Use history_search to look them up " +
-    "(by word or by date) before\n  saying that you do not remember, or " +
-    "before asking the user to repeat something.\n" +
-    "- It searches what the conversation shows — the user's messages and " +
-    "yours. A tool\n  call or its output is not in it, so re-run a command " +
-    "when you need its result\n  again instead of looking for it.",
+    "- Use history_search when you cannot recall something said earlier (a " +
+    "path, a\n  decision, an error) — before saying you do not remember or " +
+    "asking the user to\n  repeat.",
 };
 
 /** Handing the screen to the user. Keyed on the tool: an agent that cannot
- * ask has no way to get past a password, and would try to type it. */
+ * ask has no way to get past a password, and would try to type it.
+ *
+ * The one rule the tool's description does not carry: a secret typed into
+ * the chat is written into a transcript that outlives the moment. */
 const VM_ASK_USER_SECTION: PromptSection = {
   name: "vm:ask_user",
   order: ORDER.tool + 155,
   requires: [TOOL_VM_ASK_USER],
   text:
-    "- Some steps need a person at the screen: a password, a verification " +
-    "code, a CAPTCHA,\n  a consent dialog you cannot read. Call vm_ask_user " +
-    "instead of typing it yourself;\n  the run stops while the user drives " +
-    "the machine, and you take a screenshot when\n  it returns. Never ask " +
-    "the user to send a secret as a chat message — it would be\n  written " +
-    "into the transcript.",
-};
-
-/** Cards in the chat. Keyed on the tool. */
-const CHAT_UI_SECTION: PromptSection = {
-  name: "tool:chat_ui",
-  order: ORDER.tool + 158,
-  requires: [TOOL_CHAT_UI],
-  text:
-    "- Use chat_ui when structure helps: a table of numbers, a flow of steps, " +
-    "a choice\n  the user picks from. A Choice or Form click comes back as " +
-    "the user's next message,\n  so end your turn after showing one; do not " +
-    "repeat the question in your text.",
+    "- Never ask the user to send a secret as a chat message — it would be " +
+    "written\n  into the transcript.",
 };
 
 const TASK_SECTION: PromptSection = {
   name: "tool:task",
   order: ORDER.tool + 130,
   requires: [TOOL_TASK],
-  text: "- Delegate independent work to sub-agents with the task tool and " +
-    "keep working\n  while they run: wait for one with task_output (wait: " +
-    "true) when your next step\n  depends on its result, and reach a running " +
-    "agent with send_message.",
+  text: "- Delegate independent work to sub-agents with task and keep " +
+    "working while they\n  run; wait for one with task_output when your " +
+    "next step depends on it.",
 };
 
 // --- system notifications ----------------------------------------------------
@@ -351,40 +348,33 @@ const NOTIFICATION_SECTION: PromptSection = {
   requires: [TOOL_ASYNC_BASH, TOOL_TASK],
   text: '- A user message starting with "[Background command ...]", "[Task ' +
     '...]"\n  or "[Message from ...]" is a system notification, not from the ' +
-    "user: acknowledge\n  it and carry on — never treat it as user input. Do " +
-    "not poll a running background\n  command: its notification arrives on " +
-    "its own.",
+    "user: acknowledge\n  it and carry on. Do not poll a running background " +
+    "command.",
 };
 
 // --- quality and workflow ----------------------------------------------------
 
+/** The rules that hold for every session, whatever its tools.
+ *
+ * Deliberately short. A long list of good advice is read once and then
+ * skipped — the rules that change behaviour are the ones a model would
+ * otherwise get wrong (inventing results, quietly shrinking the task,
+ * reporting work it did not verify). Everything else is the tool
+ * descriptions' job. */
 const QUALITY_SECTION: PromptSection = {
   name: "quality",
   order: ORDER.quality,
-  text: "- Prioritize correctness above all else.\n" +
-    "- Never fabricate tool or test results.\n" +
-    "- Do not silently narrow the requested scope.\n" +
-    "- Do not ask the user for information you can obtain from your tools.\n" +
-    "- After making changes, verify them (run tests, builds) when " +
-    "appropriate.\n" +
-    "- Write code with future maintainers in mind.\n" +
-    "- Avoid unnecessary allocations and computation.\n" +
-    "- Never discard changes the user has already made.",
+  text: "- Prioritize correctness. Never fabricate tool or test results, " +
+    "never narrow the\n  requested scope silently, and verify your changes " +
+    "before reporting them.",
 };
 
 const WORKFLOW_SECTION: PromptSection = {
   name: "workflow",
   order: ORDER.workflow,
-  text: "- For multi-file changes, plan before editing, investigate existing " +
-    "patterns\n  before implementing, and fix root causes rather than " +
-    "symptoms. Do a clean\n  cutover: leave no old callers or compatibility " +
-    "shims behind.\n" +
-    "- Do not stop halfway: carry the work through until the deliverable is\n" +
-    "  complete.\n" +
-    "- Do not hand in TODOs or placeholder implementations as finished work.\n" +
-    "- Finish by saying what you did and how you verified it, and report " +
-    "only\n  what this session's tool results establish — say so when " +
-    "something could\n  not be checked.",
+  text: "- For multi-file changes, plan before editing and fix root causes " +
+    "rather than\n  symptoms. Do not hand in TODOs or placeholders. Say so " +
+    "when something could not\n  be checked.",
 };
 
 // --- chat-only ---------------------------------------------------------------
@@ -482,7 +472,8 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
  * in words or with a card; there is no panel to block on), no `todo` (no
  * progress panel), no identity or agent_create bullets (those tools are
  * discoverable through tool_search — their built-in skills teach them), and
- * no visual bullet (chat_attach replaced it). */
+ * neither a visual nor a chat_attach bullet: `send_chat` is this
+ * conversation's only channel, and it carries files itself. */
 export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   READ_SECTION,
   WRITE_SECTION,
@@ -497,8 +488,7 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
   VM_ASK_USER_SECTION,
-  CHAT_UI_SECTION,
-  CHAT_ATTACH_SECTION,
+  SEND_CHAT_SECTION,
   HISTORY_SEARCH_SECTION,
   WEB_SEARCH_SECTION,
   TASK_SECTION,

@@ -5,7 +5,7 @@ import type {
   NotificationMessage,
   ToolResultMessage,
 } from "../ai/types.ts";
-import { TOOL_CHAT_ATTACH } from "../shared/tool-names.ts";
+import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 
 /**
  * Dropping what a condensed conversation no longer needs.
@@ -28,9 +28,11 @@ import { TOOL_CHAT_ATTACH } from "../shared/tool-names.ts";
  *
  * - `user` and `mode` messages, whole. They are the person's words, and the
  *   pictures attached to them.
- * - `assistant` text, whole. It is the agent's words.
- * - the `chat_attach` result: the files were part of the reply, and a client
- *   redraws a card from the row after a reload.
+ * - the `send_chat` result: it carries what the conversation shows of the
+ *   agent (the words it sent, the card, the files), and a client redraws a
+ *   message from the row after a reload. It is ALSO the agent's record of
+ *   what it said once the checkpoint has replaced the call itself (whose
+ *   arguments hold the same text): `history_search` reads this row.
  * - `checkpoint`: the summary IS the memory of everything before it.
  * - the `thinking` block, EMPTY. A model whose metadata says it needs
  *   `reasoning_content` replayed refuses a history that omits it, and an
@@ -140,6 +142,15 @@ function reduceAssistant(message: AssistantMessage): PruneResult {
       }
       continue;
     }
+    if (block.type === "text") {
+      // The agent's own text is its working notes: the conversation never
+      // shows it (see agent/stella-stream.ts). It is kept because the model
+      // may need the thread back after a rewind puts this span in view
+      // again, and because it is what the agent said about its own work —
+      // the part a reader of a conversation never sees anyway.
+      kept.push(block);
+      continue;
+    }
     kept.push(block);
   }
   if (!changed) return { message, changed: false };
@@ -155,9 +166,11 @@ function reduceAssistant(message: AssistantMessage): PruneResult {
 }
 
 function reduceToolResult(message: ToolResultMessage): PruneResult {
-  if (message.toolName === TOOL_CHAT_ATTACH && !message.isError) {
-    // The files an agent handed over are part of what it said: a client
-    // redraws the card from this row after a reload.
+  if (message.toolName === TOOL_SEND_CHAT && !message.isError) {
+    // What the agent said to the user: a client redraws the message from
+    // this row after a reload, `history_search` reads it back once the
+    // checkpoint has replaced the call that carried the same words, and the
+    // attachments are the files the user was handed.
     return { message, changed: false };
   }
   if (isPruned(message)) return { message, changed: false };

@@ -10,7 +10,7 @@
  *     --allow-run --allow-sys --allow-ffi scripts/demo-server.ts [port]
  *
  * Then open the printed URL, pick the "E2E Demo" workspace, and open the
- * "e2e-session" session. Prompts mentioning "bash", "read" or "chat_ui"
+ * "e2e-session" session. Prompts mentioning "bash", "read" or "send_chat"
  * exercise the matching tool; anything else answers with markdown.
  */
 import { basename } from "node:path";
@@ -27,8 +27,8 @@ import {
 import {
   TOOL_BASH,
   TOOL_CALL,
-  TOOL_CHAT_UI,
   TOOL_READ,
+  TOOL_SEND_CHAT,
   TOOL_VM_ASK_USER,
 } from "../packages/core/shared/mod.ts";
 import { createVmManager } from "../packages/core/vm/container.ts";
@@ -100,11 +100,12 @@ function respond(context: StreamRequest): AssistantMessage {
       }),
     ]);
   }
-  if (text.includes(TOOL_CHAT_UI)) {
+  if (text.includes(TOOL_SEND_CHAT)) {
     return fauxAssistantMessage([
       fauxText("カードで確認します。"),
-      fauxToolCall(TOOL_CHAT_UI, {
-        markup:
+      fauxToolCall(TOOL_SEND_CHAT, {
+        text: "この内容で進めますか。",
+        card:
           '<Card title="リリース確認">\n  <Text>この内容で進めますか。</Text>\n  <Table>\n    <Row><Cell>項目</Cell><Cell>値</Cell></Row>\n    <Row><Cell>版</Cell><Cell>0.9.4</Cell></Row>\n  </Table>\n  <Flow>\n    <Node id="a" shape="round">開始</Node>\n    <Node id="b">確認</Node>\n    <Edge from="a" to="b" label="はい" />\n  </Flow>\n  <Choice>\n    <Option description="そのまま公開します">進める</Option>\n    <Option>止める</Option>\n  </Choice>\n</Card>',
       }),
     ]);

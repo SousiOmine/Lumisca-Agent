@@ -204,15 +204,8 @@ function imageName(index: number, mimeType: string): string {
   return `image-${index + 1}${extension}`;
 }
 
-export function stellaRoutes(
-  core: StellaApi,
-  /** How long a streamed delta waits for company before it is sent as one
-   * frame (defaults to `WS_DELTA_FLUSH_MS`). Tests shorten it; production
-   * never sets it. */
-  options: { deltaFlushMs?: number } = {},
-): Hono {
+export function stellaRoutes(core: StellaApi): Hono {
   const app = new Hono();
-  const { deltaFlushMs } = options;
 
   /** What this host can do, and how the machine is doing: the mode-selection
    * screen needs both to decide whether stella can be picked, and stella's
@@ -554,22 +547,16 @@ export function stellaRoutes(
       }
       const id = session.id;
       return createEventStream({
-        ...(deltaFlushMs === undefined ? {} : { flushMs: deltaFlushMs }),
         subscribe: (listener) => core.subscribe(listener),
         // Only this conversation's events: the shared stream carries every
         // session (code mode's tabs run at the same time).
         accept: (event) => "sessionId" in event && event.sessionId === id,
         revOf: () => core.getSessionRevision(id),
-        deltaKey: () => id,
-        // The conversation's text streams one delta per token, like the
-        // session stream, but the frame is `delta` alone: the entry it
-        // belongs to is the one the client is already drawing.
-        deltaFrame: ({ delta, rev, events }) => ({
-          type: "delta",
-          delta,
-          rev,
-          events,
-        }),
+        // No delta channel: this conversation has no streaming text. The
+        // agent's own words are its working notes and never reach the
+        // screen — a message appears whole when it is sent (`send_chat`) —
+        // so a `message_delta` has nothing to add and the projection drops
+        // it with every other model-only event.
         project: (event, rev) =>
           stellaEventsOf(event).map((projected) => ({ ...projected, rev })),
       });

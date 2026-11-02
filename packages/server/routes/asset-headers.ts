@@ -1,6 +1,6 @@
 /**
  * The response headers of one published asset (a session's visuals and the
- * files `chat_attach` sent).
+ * files an agent sent to the user).
  *
  * Both routes identify an asset by a name the store generated and never
  * reuses, so the bytes behind a name never change and the response can be

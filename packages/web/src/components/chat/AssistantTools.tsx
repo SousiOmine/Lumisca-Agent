@@ -11,13 +11,10 @@ export function AssistantTools({
   assistant,
   toolResults,
   runningTools,
-  onSend,
 }: {
   assistant: AssistantMessage;
   toolResults: Map<string, ToolResultMessage>;
   runningTools: Map<string, string>;
-  /** Send a chat_ui card's answer as the user's next message. */
-  onSend?: (text: string) => void;
 }) {
   const toolCalls = assistant.content.filter(
     (block): block is ToolCallBlock => block.type === "toolCall",
@@ -31,7 +28,6 @@ export function AssistantTools({
             toolCall={toolCall}
             result={toolResults.get(toolCall.id)}
             running={runningTools.has(toolCall.id)}
-            onSend={onSend}
           />
         ))}
       </div>

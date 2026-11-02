@@ -236,21 +236,20 @@ Deno.test("history_search: tool calls and their output are not history", async (
       timestamp: localDay("2026-10-01", 11),
     } as AgentMessage);
 
-    // The assistant turn keeps its text and loses the call log: a call is
-    // how the work was done, not something the conversation shows.
+    // The model's own text is its working notes: the conversation does not
+    // show it, so it is not history either. What the agent SENT is.
     const calls = await run(tool, { query: "tests" });
-    assert(calls.includes("Running the tests now."), calls);
-    assert(!calls.includes("tool calls"), calls);
+    assert(calls.includes("No message"), calls);
 
     // The arguments and the output are not searchable at all.
     const args = await run(tool, { query: "secret-token" });
     assert(args.includes("No message"), args);
     const output = await run(tool, { query: "BEGIN" });
     assert(output.includes("No message"), output);
-    // Nor does the listing show a tool result row.
+    // Nor does the listing show a tool result row: nothing of this exchange
+    // was ever sent to the user.
     const all = await run(tool);
-    assert(all.includes("Found 1 message(s)"), all);
-    assert(!all.includes("tool result"), all);
+    assert(all.includes("No messages have been saved"), all);
   } finally {
     db.close();
   }
@@ -324,18 +323,18 @@ Deno.test("history_search: a picture-only prompt is a turn, not a hole", async (
   }
 });
 
-Deno.test("history_search: a file the agent sent is part of the conversation", async () => {
+Deno.test("history_search: what the agent sent is part of the conversation", async () => {
   const { db, repo, tool } = setup();
   try {
     say(repo, "send me the report", localDay("2026-10-01", 10));
-    // The reply was a file: it has no words, but the conversation shows a
-    // card, so a listing names what it carried instead of hiding the turn.
     repo.append("s1", {
       role: "toolResult",
       toolCallId: "call-2",
-      toolName: "chat_attach",
-      content: [{ type: "text", text: "Sent 1 file." }],
+      toolName: "send_chat",
+      content: [{ type: "text", text: "Sent the message and a file." }],
       details: {
+        text: "",
+        card: null,
         attachments: [{
           name: "0123456789ab.pdf",
           displayName: "report.pdf",
@@ -347,9 +346,30 @@ Deno.test("history_search: a file the agent sent is part of the conversation", a
       timestamp: localDay("2026-10-01", 11),
     } as AgentMessage);
 
+    // The message was a file alone: it has no words, but the conversation
+    // shows it, so a listing names what it carried instead of hiding the
+    // turn.
     const all = await run(tool);
     assert(all.includes("send me the report"), all);
     assert(all.includes("(sent 1 file(s), no text)"), all);
+
+    // A message WITH words is searchable by them — that is how the agent
+    // recovers what it said after a checkpoint replaced the call.
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "call-3",
+      toolName: "send_chat",
+      content: [{ type: "text", text: "Sent the message to the user." }],
+      details: {
+        text: "見積もりは 42 万円です。",
+        card: null,
+        attachments: [],
+      },
+      isError: false,
+      timestamp: localDay("2026-10-01", 12),
+    } as AgentMessage);
+    const found = await run(tool, { query: "見積もり" });
+    assert(found.includes("見積もりは 42 万円です。"), found);
   } finally {
     db.close();
   }

@@ -33,7 +33,7 @@ history and its own way of working.
 
 ## Ask before creating
 
-Ask for two things with chat_ui, in one card with one <Form>:
+Ask for two things with send_chat, in one call whose card is one <Form>:
 
 <Card title="...">
 <Text>...</Text>
@@ -44,7 +44,7 @@ Ask for two things with chat_ui, in one card with one <Form>:
 </Card>
 
 - Write the card, its text, the labels and the submit label in the reply
-  language.
+  language, and put the card in send_chat's card argument.
 - Name: the label in the sidebar, up to 60 characters.
 - Role: what the agent is responsible for and how it works, in one or two
   sentences — it becomes the new agent's system prompt, so it is the whole

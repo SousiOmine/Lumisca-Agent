@@ -3153,11 +3153,14 @@ Deno.test("stella API: the conversation is opened by agent and never listed as a
   }
 });
 
-Deno.test("stella API: the conversation carries the words, never the model's context", async () => {
-  // The reported symptom: `Date: …` and `On-demand tools` rows in stella's
-  // chat. They are `context` publications — the model's history — and the
-  // conversation endpoint must not serve them, while the session endpoint
-  // (code mode) keeps serving them for its own transcript.
+Deno.test("stella API: the conversation carries what the agent sent, never the model's context", async () => {
+  // Two rules in one endpoint. The reported symptom was `Date: …` and
+  // `On-demand tools` rows in stella's chat: they are `context`
+  // publications — the model's history — and the conversation must not serve
+  // them, while the session endpoint (code mode) keeps serving them for its
+  // own transcript. The second rule is what the mode is for now: the agent's
+  // OWN text is its working notes, so only what it SENT with `send_chat`
+  // reaches the screen.
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -3185,9 +3188,15 @@ Deno.test("stella API: the conversation carries the words, never the model's con
     const openedBody = await opened.json() as { sessionId: string };
     const sessionId = openedBody.sessionId;
 
-    // The reply the model gives; the run also publishes the session's
-    // context (date, on-demand tools) ahead of it.
-    faux.setResponses([fauxAssistantMessage("一覧を出しました。")]);
+    // The model's own text, plus a message it SENT. The run also publishes
+    // the session's context (date, on-demand tools) ahead of it.
+    faux.setResponses([
+      fauxAssistantMessage([
+        { type: "text", text: "作業メモ: 一覧を出すために bash を使った。" },
+        fauxToolCall("send_chat", { text: "一覧を出しました。" }, "call-1"),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("まだ書くことはある。"),
+    ]);
     const prompt = await json(
       base,
       `/api/stella/conversations/${agent.id}/prompt`,
@@ -3213,22 +3222,30 @@ Deno.test("stella API: the conversation carries the words, never the model's con
       `/api/stella/conversations/${agent.id}/messages`,
     );
     const snapshot = await snapshotRes.json() as {
-      entries: Array<{ role: string; text: string; cards: string[] }>;
+      entries: Array<{ role: string; text: string; card: string | null }>;
       running: boolean;
     };
-    // The user's prompt and the agent's words, in order, and nothing else.
+    // The user's prompt and the one message the agent sent, in order, and
+    // nothing else — the model's own prose is not on the screen.
     assertEquals(snapshot.entries[0]?.role, "user");
     assertEquals(snapshot.entries[0]?.text, "bash で一覧を出して");
-    assertEquals(
-      snapshot.entries.some((entry) => entry.role === "assistant"),
-      true,
+    const answers = snapshot.entries.filter((entry) =>
+      entry.role === "assistant"
     );
+    assertEquals(answers.map((entry) => entry.text), ["一覧を出しました。"]);
     for (const entry of snapshot.entries) {
       assertEquals(entry.role === "user" || entry.role === "assistant", true);
       // The model's context publications (date, on-demand tools) are not
       // entries; nor are tool results or notifications.
       assertEquals(entry.text.startsWith("Date:"), false, entry.text);
       assertEquals(entry.text.startsWith("On-demand tools"), false, entry.text);
+      // Nor is the model's own working notes: only what it sent.
+      assertEquals(entry.text.includes("作業メモ"), false, entry.text);
+      assertEquals(
+        entry.text.includes("まだ書くことはある"),
+        false,
+        entry.text,
+      );
     }
 
     // The code-mode session endpoint still serves the whole transcript
@@ -3242,12 +3259,18 @@ Deno.test("stella API: the conversation carries the words, never the model's con
       true,
       "the model's context stays in the session transcript",
     );
-    // The reply itself is part of both: the split is about the model's
-    // machinery, not about hiding the answer.
+    // The agent's own text is still in the transcript too: it is the model's
+    // working notes, kept for the model, never sent to a conversation.
+    const assistant = await (await json(
+      base,
+      `/api/sessions/${sessionId}/messages`,
+    )).json() as {
+      messages: Array<{ role: string; content?: unknown }>;
+    };
     assertEquals(
-      snapshot.entries.at(-1)?.text,
-      "一覧を出しました。",
-      "the answer is the conversation's last entry",
+      assistant.messages.some((m) => m.role === "assistant"),
+      true,
+      "the model's own turn stays in its history",
     );
   } finally {
     server.shutdown();
@@ -3279,7 +3302,13 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
     const opened = await json(base, `/api/stella/conversations/${agent.id}`);
     assertEquals(opened.status, 200);
 
-    faux.setResponses([fauxAssistantMessage("はい、承知しました。")]);
+    faux.setResponses([
+      fauxAssistantMessage([
+        { type: "text", text: "作業メモを書いてから送る。" },
+        fauxToolCall("send_chat", { text: "はい、承知しました。" }, "call-1"),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("送り終えた。"),
+    ]);
     const socket = new WebSocket(
       `ws://127.0.0.1:${server.addr.port}/api/stella/conversations/${agent.id}/events`,
     );
@@ -3330,14 +3359,17 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
     for (const event of events) {
       assertEquals("sessionId" in event, false, String(event.type));
     }
-    // The entries are the words: the prompt and the answer.
+    // The entries are what was said: the prompt and what the agent sent.
+    // The model's own prose has no frame of its own — not even a delta,
+    // because the conversation has no streaming text.
     const entries = events.filter((e) => e.type === "entry").map((e) =>
       e.entry as { role: string; text: string }
     );
     assertEquals(entries[0]?.role, "user");
     assertEquals(entries[0]?.text, "こんにちは");
-    const answer = entries.find((entry) => entry.role === "assistant");
-    assertEquals(answer?.text, "はい、承知しました。");
+    const answers = entries.filter((entry) => entry.role === "assistant");
+    assertEquals(answers.map((entry) => entry.text), ["はい、承知しました。"]);
+    assertEquals(types.includes("delta"), false, "no streaming text");
   } finally {
     server.shutdown();
     await core.close();

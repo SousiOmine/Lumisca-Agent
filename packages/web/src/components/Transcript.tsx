@@ -39,7 +39,6 @@ interface TranscriptProps {
     text: string,
     images: UserMessageImage[],
   ) => Promise<void>;
-  onSend?: (text: string) => void;
   /** Shown in the middle while the transcript is empty. */
   empty?: ComponentChildren;
 }
@@ -82,7 +81,6 @@ export function Transcript(
     visualBase,
     attachBase,
     onRewind,
-    onSend,
     empty,
     pinToken,
   }: TranscriptProps,
@@ -152,7 +150,6 @@ export function Transcript(
             running={running && index === turns.length - 1}
             endedAt={index === turns.length - 1 ? agentEndedAt : undefined}
             onRewind={onRewind}
-            onSend={onSend ?? (() => {})}
           />
         ))}
         {streamingText.length > 0 && (

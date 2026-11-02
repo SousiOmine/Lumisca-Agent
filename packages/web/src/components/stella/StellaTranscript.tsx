@@ -1,27 +1,24 @@
-import { Fragment, useRef } from "preact/compat";
-import { useArrivals, withoutHandoff } from "../../hooks/useArrivals.ts";
+import { Fragment } from "preact/compat";
+import { useArrivals } from "../../hooks/useArrivals.ts";
 import { useTranscriptScroll } from "../../hooks/useTranscriptScroll.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import { formatDaySeparator, startOfDay } from "../../format.ts";
 import { RunningIndicator } from "../chat/RunningIndicator.tsx";
-import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { entryKey, type StellaConversationState } from "../../stella-state.ts";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 import { type MessageAuthor, StellaMessage } from "./StellaMessage.tsx";
 
 /**
- * A stella conversation: the user's words and the agent's words, one after
- * another, with the day they were said under a separator — the shape a
- * message app has.
+ * A stella conversation: the user's words and the messages the agent sent,
+ * one after another, with the day they were said under a separator — the
+ * shape a message app has.
  *
- * There is no turn header, no work log and no tool row, because none of them
- * is ever sent (see the server's stella-stream projection) — this component
- * cannot accidentally draw what the agent did to arrive at its answer.
- *
- * A `chat_attach` result is the exception on the server side, and only
- * because it IS part of the reply: the files an agent sends are something to
- * look at or keep, so they arrive as an entry of their own and are drawn as
- * the same card code mode uses.
+ * There is no turn header, no work log, no tool row and no streaming reply,
+ * because none of them is ever sent (see the server's stella-stream
+ * projection): the agent's own text is its working notes, and a message
+ * appears whole when the agent sends one. A run with nothing to report
+ * therefore shows only the typing dots, then nothing — this component cannot
+ * accidentally draw a paragraph the agent did not address to the user.
  */
 export function StellaTranscript({
   conversation,
@@ -40,7 +37,7 @@ export function StellaTranscript({
   author: MessageAuthor;
   /** Asset base of the conversation (see MarkdownBlock). */
   visualBase: string;
-  /** Attachment base of the conversation (the files chat_attach sent). */
+  /** Attachment base of the conversation (the files send_chat sent). */
   attachBase: string;
   /** Where a prompt's own files are read back from: the machine, through the
    * conversation's upload route (their bytes live there, not in the
@@ -66,8 +63,6 @@ export function StellaTranscript({
   const t = useT();
   const locale = useLocale();
   const first = conversation.entries[0];
-  /** The streamed text as of the previous commit (see the handoff below). */
-  const streamed = useRef(conversation.streamingText);
   const { scrollRef } = useTranscriptScroll({
     onReachTop: () => conversation.older !== null && onLoadOlder(),
     loadingOlder,
@@ -79,23 +74,9 @@ export function StellaTranscript({
   // edge of the conversation. The first paint draws the whole loaded window,
   // and paging back inserts history above the reader (see hooks/useArrivals) —
   // neither is an arrival.
-  const arrivals = useArrivals(
+  const entering = useArrivals(
     conversation.entries.map((entry) => entryKey(entry)),
   );
-  // ...and the settled copy of the text that was streaming is not one either:
-  // those are the same words, and replaying them would make every reply jump
-  // back to its first line the moment it finishes.
-  const entering = withoutHandoff(
-    arrivals,
-    conversation.entries.map((entry) => ({
-      key: entryKey(entry),
-      text: entry.text,
-    })),
-    streamed.current,
-  );
-  // The stream's text, one render behind: the commit that settles it needs to
-  // know what was on screen a moment ago.
-  streamed.current = conversation.streamingText;
 
   // The separators are derived, not stored: the day an entry belongs to is
   // a fact about its timestamp, so a re-render (a language switch, a new
@@ -142,28 +123,7 @@ export function StellaTranscript({
             </Fragment>
           );
         })}
-        {conversation.streamingText.length > 0 && (
-          <div className="stella-msg">
-            <div className="stella-msg-avatar" aria-hidden="true">
-              <AgentAvatar
-                agentId={author.id}
-                name={author.name}
-                icon={author.icon}
-                size={26}
-              />
-            </div>
-            <div className="stella-msg-main">
-              <div className="stella-msg-body markdown">
-                <MarkdownBlock
-                  text={conversation.streamingText}
-                  visualBase={visualBase}
-                />
-                <span className="cursor" />
-              </div>
-            </div>
-          </div>
-        )}
-        {conversation.running && conversation.streamingText.length === 0 && (
+        {conversation.running && (
           <RunningIndicator
             avatar={
               <AgentAvatar

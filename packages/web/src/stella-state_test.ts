@@ -13,9 +13,9 @@ function entry(
   role: "user" | "assistant",
   text: string,
   timestamp: number,
-  cards: string[] = [],
+  card: string | null = null,
 ) {
-  return { role, text, cards, attachments: [], files: [], timestamp };
+  return { role, text, card, attachments: [], files: [], timestamp };
 }
 
 function state(
@@ -42,7 +42,6 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     // The cursor travels with the window: the conversation keeps its way
     // back through the history before it.
     older: "cursor-1",
-    streamingText: "",
     running: true,
     questions: [],
     handover: null,
@@ -52,14 +51,21 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
   });
 });
 
-Deno.test("applyStellaEvent: an entry is appended and the stream cleared", () => {
-  const before = state({ streamingText: "こん" });
-  const next = applyStellaEvent(before, {
+Deno.test("applyStellaEvent: an entry is appended", () => {
+  const next = applyStellaEvent(state(), {
     type: "entry",
     entry: entry("assistant", "こんにちは", 2),
   })!;
   assertEquals(next.entries, [entry("assistant", "こんにちは", 2)]);
-  assertEquals(next.streamingText, "");
+});
+
+Deno.test("applyStellaEvent: the same message twice is one entry", () => {
+  // The server announces an injected message twice (a synthetic start/end
+  // pair) and a client that reconnects reads the same window again: the same
+  // message must never appear twice, and a second copy changes nothing.
+  const message = entry("assistant", "こんにちは", 2);
+  const once = applyStellaEvent(state(), { type: "entry", entry: message })!;
+  assertEquals(applyStellaEvent(once, { type: "entry", entry: message }), null);
 });
 
 Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
@@ -81,16 +87,12 @@ Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
     entry: entry("user", "A", 1),
   })!;
   assertEquals(current.entries.map((e) => e.text), ["A", "B"]);
-  assertEquals(entryKey(current.entries[0]!), "user:1:::A");
+  assertEquals(entryKey(current.entries[0]!), "user:1::::A");
 });
 
-Deno.test("applyStellaEvent: deltas accumulate and are dropped at the end", () => {
+Deno.test("applyStellaEvent: the run ends", () => {
   let current = state({ running: true });
-  current = applyStellaEvent(current, { type: "delta", delta: "あ" })!;
-  current = applyStellaEvent(current, { type: "delta", delta: "い" })!;
-  assertEquals(current.streamingText, "あい");
   current = applyStellaEvent(current, { type: "agent_end" })!;
-  assertEquals(current.streamingText, "");
   assertEquals(current.running, false);
 });
 

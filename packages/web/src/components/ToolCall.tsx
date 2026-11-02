@@ -48,7 +48,6 @@ import {
   TOOL_BROWSER_WAIT,
   TOOL_CALL,
   TOOL_CHAT_ATTACH,
-  TOOL_CHAT_UI,
   TOOL_COMPUTER_ACT,
   TOOL_COMPUTER_LIST_WINDOWS,
   TOOL_COMPUTER_SCREENSHOT,
@@ -67,6 +66,7 @@ import {
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
   TOOL_SEARCH,
+  TOOL_SEND_CHAT,
   TOOL_SEND_MESSAGE,
   TOOL_SKILL,
   TOOL_TASK,
@@ -81,8 +81,6 @@ import {
   TOOL_WRITE,
 } from "@lumisca/core/shared";
 import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
-import { chatUiView } from "./chat/chat-ui.ts";
-import { UiCard } from "./chat/UiCard.tsx";
 import { ContentImages } from "./ContentImages.tsx";
 import { useExpandableRow } from "../hooks/useExpandableRow.ts";
 import { useT } from "../i18n.ts";
@@ -117,6 +115,15 @@ const url = (args: Args) => truncate(arg(args, "url"), 50);
 const id = (args: Args) => arg(args, "id");
 const act = (args: Args) =>
   [arg(args, "action"), arg(args, "ref")].filter(Boolean).join(" ");
+
+/** The title of the card a `send_chat` call carries, or "" — the summary a
+ * code-mode tool line shows when the message had no text. Reading the markup
+ * here only to label a row is fine: it is a tool line, not the card. */
+function cardTitle(args: Args): string {
+  const markup = arg(args, "card");
+  const match = /<Card[^>]*\btitle="([^"]*)"/.exec(markup);
+  return match?.[1] ?? "";
+}
 
 function todoProgress(args: Args): string {
   const phases = Array.isArray(args.phases)
@@ -203,7 +210,10 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   },
   [TOOL_ASK]: { icon: IconMessageQuestion, summary: askSummary },
   [TOOL_TODO]: { icon: IconListCheck, summary: todoProgress },
-  [TOOL_CHAT_UI]: { icon: IconMessageCircle },
+  [TOOL_SEND_CHAT]: {
+    icon: IconMessageCircle,
+    summary: (a) => truncate(arg(a, "text") || cardTitle(a) || "", 50),
+  },
   [TOOL_SKILL]: { icon: IconSparkles, summary: (a) => arg(a, "name") },
   [TOOL_HISTORY_SEARCH]: { icon: IconHistory, summary: query },
   [TOOL_IDENTITY]: { icon: IconUser, summary: (a) => arg(a, "action") },
@@ -272,17 +282,9 @@ interface ToolCallProps {
   toolCall: ToolCallBlock;
   result?: ToolResultMessage;
   running: boolean;
-  onSend?: (text: string) => void;
 }
 
-export function ToolCall(
-  { toolCall, result, running, onSend }: ToolCallProps,
-) {
-  // The card is the whole rendering of a chat_ui call.
-  const card = chatUiView(toolCall);
-  if (card !== undefined) {
-    return <UiCard view={card} onSend={onSend ?? (() => {})} />;
-  }
+export function ToolCall({ toolCall, result, running }: ToolCallProps) {
   const { open, triggerProps } = useExpandableRow();
   const t = useT();
 

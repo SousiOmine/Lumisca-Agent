@@ -61,10 +61,6 @@ interface ChatViewProps {
   images: PendingImage[];
   onImagesChange: (images: PendingImage[]) => void;
   onPrompt: (text: string, images: PendingImage[], mode?: ModePrompt) => void;
-  /** Send a `chat_ui` card's answer (the user clicked an option or submitted
-   * a form). The answer is an ordinary user message, so it goes through the
-   * same prompt path. */
-  onCardAnswer?: (text: string) => void;
   onAbort: () => void;
   /** Rewind the transcript from a user message onward (the message and
    * everything after it are deleted; an active run is aborted first).
@@ -103,7 +99,6 @@ export function ChatView(
     images,
     onImagesChange,
     onPrompt,
-    onCardAnswer,
     onAbort,
     onRewind,
     onAnswer,
@@ -333,7 +328,6 @@ export function ChatView(
         visualBase={visualBase}
         attachBase={attachBase}
         onRewind={handleRewind}
-        onSend={onCardAnswer}
         empty={view.info.chat
           ? <p>{t("chat.empty.chat")}</p>
           : <p>{t("chat.empty.workspace")}</p>}

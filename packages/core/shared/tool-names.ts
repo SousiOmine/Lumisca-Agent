@@ -67,18 +67,19 @@ export const TOOL_VM_ACT = "vm_act";
  * person is an option, or it will try to type the password itself. */
 export const TOOL_VM_ASK_USER = "vm_ask_user";
 
-/** Show a card in the chat (text, list, table, flow, choice, form). The card
- * carries its own blocks; a Choice or Form click comes back as the user's
- * next message, not as a tool result. Preloaded: the model must know it can
- * ask with a card instead of a wall of prose. */
-export const TOOL_CHAT_UI = "chat_ui";
-
 /** Send files to the user (images inline, everything else as a download).
- * The agent's text is already the answer; this tool attaches what the user
- * should look at or keep. Preloaded wherever the session has a file backend
- * to read from, because an agent that cannot see the tool rats out paths in
- * prose instead of handing the file over. */
+ * Code mode only: there the reply's own text is what the user reads, so this
+ * tool attaches what they should look at or keep. Preloaded wherever the
+ * session has a file backend to read from, because an agent that cannot see
+ * the tool rats out paths in prose instead of handing the file over. */
 export const TOOL_CHAT_ATTACH = "chat_attach";
+
+/** The one way a stella conversation's agent says anything to the user: a
+ * message (text), a card, and files, in one call. stella's own text is not
+ * shown — it is the model's working notes, so a turn with nothing to report
+ * can end silently, and nothing reaches the conversation unless it was sent
+ * here. Preloaded: an agent that does not know it can speak never does. */
+export const TOOL_SEND_CHAT = "send_chat";
 
 /** Create another stella agent (a separate agent with its own name, role and
  * conversation). Terasuma's `tera_create`. */

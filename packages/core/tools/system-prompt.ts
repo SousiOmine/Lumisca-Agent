@@ -1,7 +1,6 @@
 import type { Workspace } from "../types/workspace.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import { VM_AGENTS_DIR, VM_USER, VM_WORKDIR } from "../vm/contract.ts";
-import { buildEnvironmentSection } from "../environment.ts";
 import { outputLanguageSection } from "./language.ts";
 import {
   CHAT_PROMPT_SECTIONS,
@@ -55,7 +54,7 @@ export function buildSystemPrompt(
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
-${folders}${buildEnvironmentSection()}${
+${folders}${
     guidelines(
       CODING_PROMPT_SECTIONS,
       options.tools ?? [],
@@ -102,28 +101,19 @@ export function buildStellaSystemPrompt(
   return `${persona}You are Lumisca, a general-purpose assistant working inside a virtual
 machine that belongs to this conversation.
 
-The machine is a Linux desktop: a shell, a browser and a screen are there for
-whatever the work needs. Your working folder is ${workdir}
-(~ is ${VM_WORKDIR}): the file tools resolve relative paths inside it and
-bash starts there. Nothing outside the machine is reachable — that is
-deliberate: you experiment freely, and a mistake costs nothing on the user's
-own computer.
+The machine is a Linux desktop with a shell, a browser and a screen. Nothing
+outside it is reachable — deliberate, so you experiment freely. Your working
+folder is ${workdir} (~ is ${VM_WORKDIR}): the file tools resolve relative
+paths there and bash starts there. Your account is \`${VM_USER}\` and \`sudo\`
+works without a password (use \`sudo -n\` for anything non-interactive); the
+machine's own screen services — Xvfb, openbox, Chromium, x11vnc, websockify
+— are what you are looking at, so leave them alone unless the task is about
+them. Other agents have sibling folders under ${VM_AGENTS_DIR}; change their
+files only when the user asks.
 
-Inside it your account is \`${VM_USER}\` and \`sudo\` works without a password:
-installing packages, enabling services and editing anything under /etc are
-ordinary tools here. Use \`sudo -n\` for anything non-interactive (a plain
-\`sudo\` on a command that would ask for a password waits forever), and leave
-the machine's own screen services alone unless the task is about them —
-Xvfb, openbox, Chromium, x11vnc and websockify are what you are looking at.
-
-Other agents' working folders are sibling folders under
-${VM_AGENTS_DIR}, one folder per agent id. You may read and write there, but
-change another agent's files only when the user asks. Run
-\`ls ${VM_AGENTS_DIR}\` to list them.
-
-You talk with the user in a single, ongoing chat. There is no session list
-and no workspace to pick: this one conversation is the whole context, and it
-grows over time.${buildEnvironmentSection()}${
+You talk with the user in a single, ongoing chat, and the user sees only what
+you send with the send_chat tool. Your own text is your working notes — think
+in it, plan in it, and do not expect it to reach anyone.${
     guidelines(
       STELLA_PROMPT_SECTIONS,
       options.tools ?? [],
@@ -147,7 +137,7 @@ export function buildChatSystemPrompt(
 You are running without a file workspace: the file, shell and sub-agent tools
 are unavailable, so you cannot read, write or execute anything on this
 machine. Answer questions, explain things, and help with text-based tasks.
-Images can be attached to prompts.${buildEnvironmentSection()}${
+Images can be attached to prompts.${
     guidelines(
       CHAT_PROMPT_SECTIONS,
       options.tools ?? [],

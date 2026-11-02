@@ -32,7 +32,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
       {
         role: "user",
         text: "README を直して",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: 1,
@@ -40,7 +40,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
       {
         role: "assistant",
         text: "直しました。",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: 2,
@@ -48,7 +48,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
       {
         role: "user",
         text: "ありがとう",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: 3,
@@ -70,7 +70,7 @@ Deno.test("StellaTranscript: a card renders with its markup", () => {
       {
         role: "assistant",
         text: "確認します。",
-        cards: [markup],
+        card: markup,
         attachments: [],
         files: [],
         timestamp: 1,
@@ -83,13 +83,13 @@ Deno.test("StellaTranscript: a card renders with its markup", () => {
   assertStringIncludes(html, "進めますか。");
 });
 
-Deno.test("StellaTranscript: the streaming reply carries its own cursor", () => {
-  const html = render({ streamingText: "書いています", running: true });
-  assertStringIncludes(html, "書いています");
-  assertStringIncludes(html, "cursor");
-  // The dot is for the wait before the first token; once text arrives the
-  // cursor says the same thing without a second mark.
-  assertEquals(html.includes("stella-running"), false, html);
+Deno.test("StellaTranscript: a message never streams", () => {
+  // The agent's own text is its working notes and never arrives here, so a
+  // run shows the typing dots alone until it SENDS something. There is no
+  // cursor and no half-written bubble to draw.
+  const html = render({ running: true });
+  assertStringIncludes(html, "stella-running");
+  assertEquals(html.includes("cursor"), false, html);
 });
 
 Deno.test("StellaTranscript: a run with nothing to show yet is typing dots", () => {
@@ -117,7 +117,7 @@ Deno.test("StellaTranscript: nothing of the model's machinery can appear", () =>
     entries: [{
       role: "assistant",
       text: "答えです。",
-      cards: [],
+      card: null,
       attachments: [],
       files: [],
       timestamp: 1,
@@ -141,7 +141,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
       {
         role: "user",
         text: "直して",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: Date.now(),
@@ -149,7 +149,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
       {
         role: "assistant",
         text: "直しました。",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: Date.now() + 1,
@@ -172,7 +172,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
       {
         role: "user",
         text: "一つ目",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: now,
@@ -180,7 +180,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
       {
         role: "assistant",
         text: "返事一",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: now + 1,
@@ -188,7 +188,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
       {
         role: "assistant",
         text: "返事二",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: now + 2,
@@ -212,7 +212,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
       {
         role: "user",
         text: "昨日の話",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: yesterday,
@@ -220,7 +220,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
       {
         role: "user",
         text: "今日の話",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: today,
@@ -243,7 +243,7 @@ Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => 
       {
         role: "user",
         text: "短い",
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: 1,
@@ -251,7 +251,7 @@ Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => 
       {
         role: "assistant",
         text: "長い返事。".repeat(40),
-        cards: [],
+        card: null,
         attachments: [],
         files: [],
         timestamp: 2,
@@ -268,7 +268,7 @@ Deno.test("StellaTranscript: a prompt's pictures are drawn in the bubble", () =>
       {
         role: "user",
         text: "",
-        cards: [],
+        card: null,
         attachments: [],
         files: [{
           name: "image-1.png",

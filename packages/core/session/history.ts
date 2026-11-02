@@ -28,22 +28,27 @@ import { requireIntegerInRange } from "../tools/validate.ts";
  * model. This tool reads the conversation back.
  *
  * **What it searches is what the conversation shows**, and that is the whole
- * rule. The entries are the ones a client draws (see agent/stella-stream.ts's
- * `stellaEntryOf`): the user's words and the agent's words, with the pictures
- * the user attached and the files the agent sent. Tool calls, tool results,
- * context publications, notifications and checkpoints are the model's
- * machinery — the conversation does not show them — so they are neither
- * searched nor returned. A tool result's exact output is exactly what the
- * model already read once; keeping it searchable would turn the transcript
- * into a log of work rather than a record of the conversation, and it is the
- * part that grows without bound.
+ * rule: the user's words, and what the agent SENT with `send_chat` (its text,
+ * cards and files). The entries are exactly the ones a client draws (see
+ * agent/stella-stream.ts's `stellaEntryOf`). The agent's OWN text is not
+ * among them — it is the model's working notes and the conversation never
+ * shows it — but the model does not lose it: it is in the call the agent made
+ * (until a checkpoint replaces that span), and the `send_chat` row itself
+ * keeps the words it sent.
+ *
+ * Tool calls, tool results, context publications, notifications and
+ * checkpoints are the model's machinery — the conversation does not show
+ * them — so they are neither searched nor returned. A tool result's exact
+ * output is exactly what the model already read once; keeping it searchable
+ * would turn the transcript into a log of work rather than a record of the
+ * conversation, and it is the part that grows without bound.
  *
  * Two consequences follow, both deliberate:
  *
  * - The tool's own earlier results are not history: they are tool results,
  *   which this search does not read at all. A second search therefore finds
  *   what the user said instead of the first search's answer.
- * - A reply that was only a card or only files still appears (with a marker
+ * - A message that was only a card or only files still appears (with a marker
  *   for what it carried), because the conversation shows it; the card's
  *   markup is presentation, not text, so it is not searched.
  *
@@ -225,7 +230,7 @@ function noMatchText(scope: string, period: string): string {
  * entry that carries no words at all (a prompt that was an image alone is
  * still a turn, and is described rather than dropped).
  *
- * A reply that carried only a card or only files has no text to search; it
+ * A message that carried only a card or only files has no text to search; it
  * is described by what it carried so the conversation's shape stays visible
  * in a listing.
  */
@@ -239,7 +244,7 @@ function entryText(entry: StellaEntry): string {
   if (entry.attachments.length > 0) {
     return `(sent ${entry.attachments.length} file(s), no text)`;
   }
-  if (entry.cards.length > 0) return "(card, no text)";
+  if (entry.card !== null) return "(card, no text)";
   return "(no text)";
 }
 

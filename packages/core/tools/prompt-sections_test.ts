@@ -16,6 +16,7 @@ import {
   EXPLORE_SUBAGENT_SECTIONS,
   GENERAL_SUBAGENT_SECTIONS,
   renderPromptSections,
+  STELLA_PROMPT_SECTIONS,
 } from "./prompt-sections.ts";
 import { subagentSystemPrompt } from "./subagent-format.ts";
 import {
@@ -30,6 +31,7 @@ import {
   TOOL_GREP,
   TOOL_LIST_DIR,
   TOOL_READ,
+  TOOL_SEND_CHAT,
   TOOL_SEND_MESSAGE,
   TOOL_SKILL,
   TOOL_TASK,
@@ -221,6 +223,36 @@ Deno.test("the file bullet follows the tool it needs", () => {
     ).includes("publish it with the visual"),
     false,
     "the image bullet requires the visual tool",
+  );
+});
+
+Deno.test("the send_chat bullet follows the tool it needs", () => {
+  // The one thing the tool's own description cannot state: that sending
+  // nothing is a legitimate outcome (a routine that finds nothing stays
+  // silent). Everything else about speaking is the description's job, so
+  // the bullet rides on the tool and stays short.
+  const withTool = renderPromptSections(STELLA_PROMPT_SECTIONS, [
+    TOOL_SEND_CHAT,
+  ]);
+  assert(withTool.includes("nothing to report"), withTool);
+  assert(withTool.includes("not a failure"), withTool);
+  // The bullet does not restate the arguments: those are the tool's
+  // description, and repeating them costs every request.
+  assertEquals(withTool.includes("card (card)"), false, withTool);
+  assertEquals(withTool.includes("paths) together"), false, withTool);
+
+  assertEquals(
+    renderPromptSections(STELLA_PROMPT_SECTIONS, [TOOL_READ])
+      .includes("send_chat"),
+    false,
+    "without the tool there is no bullet about it",
+  );
+  // Code mode is not told about it: there the reply's own text is what the
+  // user reads, and chat_attach hands files over.
+  assertEquals(
+    renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS)
+      .includes("send_chat"),
+    false,
   );
 });
 

@@ -14,6 +14,8 @@
  * - `./content.ts` — message content helpers,
  * - `./visual.ts` — published visuals (the `visual:` image references),
  * - `./attachments.ts` — files an agent sends to the user, and their limits,
+ * - `./chat-message.ts` — one `send_chat` message (words, card, files) as the
+ *   conversation draws it,
  * - `./agent-avatar.ts` — a stella agent's avatar: the initial and its
  *   colour, and the icon formats' limits,
  * - `./mcp-config.ts` — MCP server config serialization,
@@ -25,7 +27,7 @@
  * - `./loopback.ts` — loopback host detection and URL host spellings,
  * - `./web-search.ts` — the web-search setting's wire shape,
  * - `./routine.ts` — routine schedules, their limits and the next-run rule,
- * - `./ui-markup/` — the card markup a `chat_ui` call carries,
+ * - `./ui-markup/` — the card markup a `send_chat` call carries,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
 export * from "./settings-keys.ts";
@@ -37,6 +39,7 @@ export * from "./providers.ts";
 export * from "./content.ts";
 export * from "./visual.ts";
 export * from "./attachments.ts";
+export * from "./chat-message.ts";
 export * from "./agent-avatar.ts";
 export * from "./mime.ts";
 export * from "./diff-stat.ts";

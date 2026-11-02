@@ -18,9 +18,10 @@
 
 import { RASTER_IMAGE_MIME_BY_EXTENSION } from "./mime.ts";
 
-/** Most files one `chat_attach` call may attach. A turn that produced a
- * dozen images is better served by two calls than by a wall of thumbnails,
- * and the cap keeps one call's result small enough to stay readable. */
+/** Most files one call may send (`chat_attach`, or `send_chat`'s `paths`). A
+ * turn that produced a dozen images is better served by two calls than by a
+ * wall of thumbnails, and the cap keeps one call's result small enough to
+ * stay readable. */
 export const MAX_ATTACHMENTS_PER_CALL = 10;
 
 /** Largest single attachment (bytes). The same cap the visual store uses:
@@ -131,12 +132,12 @@ export function attachmentDisplayName(from: string): string {
     : name;
 }
 
-/** The attachment list a `chat_attach` result carries in `details`, or none
- * when the details are not the shape this build wrote (a stored result from
- * an older build, a hand-edited row): a card shows nothing rather than a
- * broken row. One parser, used by the code-mode transcript and by the
- * server's conversation projection, so the two cannot draw different files
- * from the same result. */
+/** The attachment list a result carries in `details` (both tools that send
+ * files write it), or none when the details are not the shape this build
+ * wrote (a stored result from an older build, a hand-edited row): a card
+ * shows nothing rather than a broken row. One parser, used by the code-mode
+ * transcript and by the server's conversation projection, so the two cannot
+ * draw different files from the same result. */
 export function attachmentsOfDetails(details: unknown): AttachmentRef[] {
   if (typeof details !== "object" || details === null) return [];
   const list = (details as { attachments?: unknown }).attachments;

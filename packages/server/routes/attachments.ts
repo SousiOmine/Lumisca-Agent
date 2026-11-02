@@ -18,8 +18,9 @@ export interface AttachmentApi {
 }
 
 /**
- * Serves the files an agent attached to its reply (the `chat_attach` tool,
- * see core/session/attachments.ts). The route is guarded like the rest of
+ * Serves the files an agent handed to the user (the `chat_attach` tool in
+ * code mode, `send_chat`'s attachments in stella; see
+ * core/session/attachments.ts). The route is guarded like the rest of
  * `/api`; a browser reaches it through the token cookie, because an `<img>`
  * cannot send the header the API client uses.
  *

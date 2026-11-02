@@ -11,11 +11,28 @@ function user(text: string, timestamp = 1): AgentMessage {
   };
 }
 
+/** A `send_chat` result carrying the given `details` (the tool's own
+ * shape; see tools/send-chat.ts). */
+function sent(
+  details: Record<string, unknown>,
+  timestamp = 10,
+): AgentMessage {
+  return {
+    role: "toolResult",
+    toolCallId: "t1",
+    toolName: "send_chat",
+    content: [{ type: "text", text: "Sent the message to the user." }],
+    details,
+    isError: false,
+    timestamp,
+  } as AgentMessage;
+}
+
 Deno.test("stellaEntryOf: the user's words are the user's entry", () => {
   assertEquals(stellaEntryOf(user("README を直して", 5)), {
     role: "user",
     text: "README を直して",
-    cards: [],
+    card: null,
     attachments: [],
     files: [],
     timestamp: 5,
@@ -25,125 +42,170 @@ Deno.test("stellaEntryOf: the user's words are the user's entry", () => {
   assertEquals(stellaEntryOf(user("", 6)), null);
 });
 
-Deno.test("stellaEntryOf: the agent's text is an assistant entry", () => {
-  const message = fauxAssistantMessage("直しました。", {
+Deno.test("stellaEntryOf: the agent's own text is never a conversation entry", () => {
+  // This is the whole point of the projection: a model asked anything writes
+  // something, and that text is its working notes. Showing it made every
+  // turn a paragraph whether or not there was anything to report.
+  const prose = fauxAssistantMessage("直しました。", {
     timestamp: 7,
   }) as AgentMessage;
-  assertEquals(stellaEntryOf(message), {
-    role: "assistant",
-    text: "直しました。",
-    cards: [],
-    attachments: [],
-    files: [],
-    timestamp: 7,
-  });
-});
-
-Deno.test("stellaEntryOf: a message that only carries a tool call is hidden", () => {
-  // The work the model did (a bash call) is its history, not the
-  // conversation: the entry would render as an empty row.
-  const message = fauxAssistantMessage([
+  assertEquals(stellaEntryOf(prose), null);
+  // ...and so is a turn that only ran a tool.
+  const toolOnly = fauxAssistantMessage([
     fauxToolCall("bash", { command: "ls" }),
   ], { timestamp: 8 }) as AgentMessage;
-  assertEquals(stellaEntryOf(message), null);
+  assertEquals(stellaEntryOf(toolOnly), null);
+  // Even one that wrote a long answer: the words the user reads came from
+  // send_chat, not from here.
+  const long = fauxAssistantMessage(
+    "これは長い説明です。".repeat(50),
+    { timestamp: 9 },
+  ) as AgentMessage;
+  assertEquals(stellaEntryOf(long), null);
 });
 
-Deno.test("stellaEntryOf: a chat_ui card travels with the words", () => {
-  const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
-  const message = fauxAssistantMessage([
-    { type: "text", text: "確認します。" },
-    fauxToolCall("chat_ui", { markup }),
-  ], { timestamp: 9 }) as AgentMessage;
-  assertEquals(stellaEntryOf(message), {
-    role: "assistant",
-    text: "確認します。",
-    cards: [markup],
-    attachments: [],
-    files: [],
-    timestamp: 9,
-  });
+Deno.test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
+  const card = '<Card title="確認"><Text>進めますか。</Text></Card>';
+  assertEquals(
+    stellaEntryOf(sent({ text: "確認します。", card: null, attachments: [] })),
+    {
+      role: "assistant",
+      text: "確認します。",
+      card: null,
+      attachments: [],
+      files: [],
+      timestamp: 10,
+    },
+  );
 
-  // A reply that is only a card is still a reply.
-  const onlyCard = fauxAssistantMessage([
-    fauxToolCall("chat_ui", { markup }),
-  ], { timestamp: 10 }) as AgentMessage;
-  assertEquals(stellaEntryOf(onlyCard), {
-    role: "assistant",
-    text: "",
-    cards: [markup],
-    attachments: [],
-    files: [],
-    timestamp: 10,
-  });
+  // A card travels with the words it was sent with: they are one message.
+  assertEquals(
+    stellaEntryOf(sent({ text: "確認します。", card, attachments: [] })),
+    {
+      role: "assistant",
+      text: "確認します。",
+      card,
+      attachments: [],
+      files: [],
+      timestamp: 10,
+    },
+  );
+
+  // A message that is only a card is still a message.
+  assertEquals(
+    stellaEntryOf(sent({ text: "", card, attachments: [] }, 11)),
+    {
+      role: "assistant",
+      text: "",
+      card,
+      attachments: [],
+      files: [],
+      timestamp: 11,
+    },
+  );
 });
 
-Deno.test("stellaEntryOf: the files an agent sent are an entry of their own", () => {
-  const result = {
-    role: "toolResult",
-    toolCallId: "t2",
-    toolName: "chat_attach",
-    content: [{ type: "text", text: "Sent 2 files to the user." }],
-    details: {
-      attachments: [
-        {
+Deno.test("stellaEntryOf: the files an agent sent travel with its message", () => {
+  const attachments = [
+    {
+      name: "9f3c2a1b4d5e.png",
+      displayName: "chart.png",
+      size: 4096,
+      inline: true,
+    },
+    {
+      name: "0f1e2d3c4b5a.txt",
+      displayName: "run.log",
+      size: 12,
+      inline: false,
+    },
+  ];
+  assertEquals(
+    stellaEntryOf(sent({ text: "2枚送ります。", card: null, attachments }, 15)),
+    {
+      role: "assistant",
+      text: "2枚送ります。",
+      card: null,
+      attachments,
+      files: [],
+      timestamp: 15,
+    },
+  );
+
+  // The files alone are a message too (a picture needs no caption).
+  assertEquals(
+    stellaEntryOf(sent({ text: "", card: null, attachments }, 16)),
+    {
+      role: "assistant",
+      text: "",
+      card: null,
+      attachments,
+      files: [],
+      timestamp: 16,
+    },
+  );
+});
+
+Deno.test("stellaEntryOf: a failed or empty send_chat shows nothing", () => {
+  const details = {
+    text: "送れませんでした",
+    card: null,
+    attachments: [{
+      name: "9f3c2a1b4d5e.png",
+      displayName: "chart.png",
+      size: 4096,
+      inline: true,
+    }],
+  };
+  // A failed call sent nothing: it is the model's record of a failure, not
+  // something the user received.
+  assertEquals(
+    stellaEntryOf({ ...sent(details), isError: true } as AgentMessage),
+    null,
+  );
+  // Details this build did not write (a hand-edited row, another tool's
+  // shape) draw nothing rather than an empty bubble.
+  assertEquals(
+    stellaEntryOf(sent({ attachments: [{ name: "x.png" }] })),
+    null,
+  );
+  assertEquals(
+    stellaEntryOf(sent({ text: "", card: null, attachments: [] })),
+    null,
+  );
+  assertEquals(stellaEntryOf(sent({ text: null, card: null })), null);
+});
+
+Deno.test("stellaEntryOf: the tools send_chat replaced show nothing", () => {
+  // A conversation that predates send_chat keeps only its user's side: the
+  // old rows are the record of a rule that no longer exists.
+  const old: AgentMessage[] = [
+    {
+      role: "toolResult",
+      toolCallId: "t2",
+      toolName: "chat_attach",
+      content: [{ type: "text", text: "Sent 1 file to the user." }],
+      details: {
+        attachments: [{
           name: "9f3c2a1b4d5e.png",
           displayName: "chart.png",
           size: 4096,
           inline: true,
-        },
-        {
-          name: "0f1e2d3c4b5a.txt",
-          displayName: "run.log",
-          size: 12,
-          inline: false,
-        },
-      ],
-    },
-    isError: false,
-    timestamp: 15,
-  } as AgentMessage;
-
-  // A file the agent hands over is part of the reply, so it becomes an
-  // entry — but it stays its own entry, because that is what it is in the
-  // transcript (see the projection's comment on ordering).
-  assertEquals(stellaEntryOf(result), {
-    role: "assistant",
-    text: "",
-    cards: [],
-    attachments: [
-      {
-        name: "9f3c2a1b4d5e.png",
-        displayName: "chart.png",
-        size: 4096,
-        inline: true,
+        }],
       },
-      {
-        name: "0f1e2d3c4b5a.txt",
-        displayName: "run.log",
-        size: 12,
-        inline: false,
-      },
-    ],
-    files: [],
-    timestamp: 15,
-  });
-
-  // A failed attach sent nothing: it is the model's record of a failure, not
-  // a file the user received.
-  assertEquals(
-    stellaEntryOf({ ...result, isError: true } as AgentMessage),
-    null,
-  );
-
-  // Details an older build wrote (or a hand-edited row) show nothing rather
-  // than a broken card.
-  assertEquals(
-    stellaEntryOf({
-      ...result,
-      details: { attachments: [{ name: "x.png" }] },
-    } as AgentMessage),
-    null,
-  );
+      isError: false,
+      timestamp: 20,
+    } as AgentMessage,
+    fauxAssistantMessage([
+      { type: "text", text: "確認します。" },
+      fauxToolCall("chat_ui", {
+        markup: '<Card title="確認"><Text>進めますか。</Text></Card>',
+      }),
+    ], { timestamp: 21 }) as AgentMessage,
+  ];
+  for (const message of old) {
+    assertEquals(stellaEntryOf(message), null, message.role);
+  }
 });
 
 Deno.test("stellaEntryOf: the model's own rows are never conversation entries", () => {
@@ -193,156 +255,96 @@ Deno.test("stellaEventsOf: the run's own events pass through", () => {
     stellaEventsOf({ type: "agent_end", sessionId: "s" }),
     [{ type: "agent_end" }],
   );
+  // The agent's text is not the conversation's, so a delta has nothing to
+  // add to it (see the projection's comment).
   assertEquals(
     stellaEventsOf({ type: "message_delta", sessionId: "s", delta: "あ" }),
-    [{ type: "delta", delta: "あ" }],
+    [],
   );
+});
+
+Deno.test("stellaEventsOf: a message becomes an entry, twice over", () => {
+  // Both events carry the same message (a synthetic start/end pair for an
+  // injected prompt): sending the entry twice is harmless, and a client that
+  // missed the start still gets the message.
+  const message = user("hello", 5);
+  const expected = [{ type: "entry" as const, entry: stellaEntryOf(message)! }];
+  assertEquals(
+    stellaEventsOf({ type: "message_start", sessionId: "s", message }),
+    expected,
+  );
+  assertEquals(
+    stellaEventsOf({ type: "message_end", sessionId: "s", message }),
+    expected,
+  );
+});
+
+Deno.test("stellaEventsOf: the model's tool traffic stays out of the stream", () => {
+  const toolStart = stellaEventsOf({
+    type: "tool_start",
+    sessionId: "s",
+    toolCallId: "t1",
+    toolName: "bash",
+    args: { command: "ls" },
+  });
+  assertEquals(toolStart, []);
+  const toolEnd = stellaEventsOf({
+    type: "tool_end",
+    sessionId: "s",
+    toolCallId: "t1",
+    toolName: "bash",
+  });
+  assertEquals(toolEnd, []);
+});
+
+Deno.test("stellaEventsOf: a failure reaches the conversation", () => {
   assertEquals(
     stellaEventsOf({
       type: "session_error",
       sessionId: "s",
-      message: "boom",
+      message: "provider not configured",
     }),
-    [{ type: "error", message: "boom" }],
+    [{ type: "error", message: "provider not configured" }],
   );
 });
 
-Deno.test("stellaEventsOf: messages arrive as entries, without the session id", () => {
-  const message = fauxAssistantMessage("はい。", {
-    timestamp: 20,
-  }) as AgentMessage;
-  const events = stellaEventsOf({
-    type: "message_end",
-    sessionId: "s",
-    message,
-  });
-  assertEquals(events, [{
-    type: "entry",
-    entry: {
-      role: "assistant",
-      text: "はい。",
-      cards: [],
-      attachments: [],
-      files: [],
-      timestamp: 20,
-    },
-  }]);
-});
-
-Deno.test("stellaEventsOf: the model's own events produce nothing", () => {
-  // Every event the conversation has no surface for: tool progress, the
-  // panels, compaction, federation.
-  const modelOnly: Parameters<typeof stellaEventsOf>[0][] = [
-    {
-      type: "tool_start",
-      sessionId: "s",
-      toolCallId: "t1",
-      toolName: "bash",
-      args: {},
-    },
-    { type: "tool_end", sessionId: "s", toolCallId: "t1", toolName: "bash" },
-    { type: "todo", sessionId: "s", todos: [] },
-    {
-      type: "task_start",
-      sessionId: "s",
-      agentId: "a",
-      parentAgentId: "p",
-      subagentType: "general",
-      description: "x",
-    },
-    { type: "task_delta", sessionId: "s", agentId: "a", delta: "x" },
-    {
-      type: "task_end",
-      sessionId: "s",
-      agentId: "a",
-      status: "finished",
-    },
-    {
-      type: "background_start",
-      sessionId: "s",
-      commandId: "c",
-      pid: 1,
-      command: "sleep",
-      cwd: "/",
-      startedAt: 1,
-    },
-    { type: "background_delta", sessionId: "s", commandId: "c", delta: "x" },
-    {
-      type: "background_end",
-      sessionId: "s",
-      commandId: "c",
-      state: "finished",
-      finishedAt: 2,
-      tail: "",
-    },
-    {
-      type: "messages_checkpoint",
-      sessionId: "s",
-      before: { role: "assistant", timestamp: 4 },
-      message: {
-        role: "checkpoint",
-        title: "Summary",
-        body: "…",
-        timestamp: 3,
-      },
-    },
-    { type: "messages_truncated", sessionId: "s", removed: [] },
-    { type: "session_renamed", sessionId: "s", name: "n" },
-    { type: "peer_stream", peerId: "p", connected: true },
-  ];
-  for (const event of modelOnly) {
-    assertEquals(stellaEventsOf(event), [], event.type);
-  }
-});
-
-Deno.test("stellaEventsOf: a context publication never reaches the conversation", () => {
-  // The reported symptom: `Date: …` and `On-demand tools` rows in stella's
-  // chat. They are context messages — the model's, not the conversation's.
-  const date: AgentMessage = {
-    role: "context",
-    provider: "date",
-    title: "Date: 2026-10-30 (Friday)",
-    body: "The current date is 2026-10-30 (Friday).",
-    timestamp: 30,
-  };
-  assertEquals(
-    stellaEventsOf({ type: "message_end", sessionId: "s", message: date }),
-    [],
-  );
-  assertEquals(
-    stellaEventsOf({ type: "message_start", sessionId: "s", message: date }),
-    [],
-  );
-});
-
-Deno.test("stellaEventsOf: questions and the hand-over keep their shape", () => {
-  const questions = [{
-    id: "q1",
-    question: "どれにしますか",
-    options: [{ label: "A" }],
-  }];
+Deno.test("stellaEventsOf: an ask and a hand-over are the run's own state", () => {
   assertEquals(
     stellaEventsOf({
       type: "question",
       sessionId: "s",
-      toolCallId: "t1",
-      questions,
+      toolCallId: "ask_1",
+      questions: [{
+        id: "q1",
+        question: "どれにしますか。",
+        options: [{ label: "A" }, { label: "B" }],
+      }],
     }),
-    [{ type: "questions", questions: [{ toolCallId: "t1", questions }] }],
+    [{
+      type: "questions",
+      questions: [{
+        toolCallId: "ask_1",
+        questions: [{
+          id: "q1",
+          question: "どれにしますか。",
+          options: [{ label: "A" }, { label: "B" }],
+        }],
+      }],
+    }],
   );
   assertEquals(
     stellaEventsOf({
       type: "handover",
       sessionId: "s",
-      toolCallId: "t2",
-      reason: "ログインしてください",
+      toolCallId: "vm_1",
+      reason: "password",
       instructions: null,
     }),
     [{
       type: "handover",
       handover: {
-        toolCallId: "t2",
-        reason: "ログインしてください",
+        toolCallId: "vm_1",
+        reason: "password",
         instructions: null,
       },
     }],
@@ -351,8 +353,8 @@ Deno.test("stellaEventsOf: questions and the hand-over keep their shape", () => 
     stellaEventsOf({
       type: "handover_end",
       sessionId: "s",
-      toolCallId: "t2",
-      note: "done",
+      toolCallId: "vm_1",
+      note: "",
     }),
     [{ type: "handover", handover: null }],
   );

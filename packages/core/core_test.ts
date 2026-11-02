@@ -1095,9 +1095,11 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
     prompt.includes("helpful AI assistant"),
     "chat prompt must use the chat identity",
   );
+  // The machine's specs are not part of any prompt: a probe from a command
+  // answers them, and the prompt is paid for on every request.
   assert(
-    prompt.includes("Environment:"),
-    "chat prompt keeps the environment section",
+    !prompt.includes("Environment:"),
+    "no prompt carries the environment section",
   );
   assert(
     !prompt.includes("[Background command ...]") &&

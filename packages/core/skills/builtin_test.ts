@@ -65,7 +65,7 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
   const agentGuide = await loadSkillContent(agentCreate);
   assert(agentGuide.includes("agent_create"));
   assert(agentGuide.includes("tool_search"));
-  assert(agentGuide.includes("chat_ui"));
+  assert(agentGuide.includes("send_chat"));
 
   const identityGuide = await loadSkillContent(identity);
   assert(identityGuide.includes("identity"));

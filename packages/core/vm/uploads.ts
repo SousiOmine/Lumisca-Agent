@@ -127,8 +127,9 @@ async function writeFile(
   }
 }
 
-/** The same bounds the agent's own `chat_attach` obeys (one set of numbers
- * for both directions). Throws a sentence the composer can show. */
+/** The same bounds the agent's own `chat_attach` / `send_chat` obeys (one
+ * set of numbers for both directions). Throws a sentence the composer can
+ * show. */
 function assertUploadLimits(files: readonly UploadFile[]): void {
   if (files.length > MAX_ATTACHMENTS_PER_CALL) {
     throw new CoreError(

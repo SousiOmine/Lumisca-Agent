@@ -11,14 +11,17 @@
  * - text deltas are batched per channel into one frame per display interval
  *   (`core/shared/ws-batch.ts`); every other frame is written after the
  *   batch is flushed, because the order is what tells the client which
- *   message a tool result belongs to,
+ *   message a tool result belongs to. A stream that has no streaming text
+ *   supplies no channel and builds no batcher at all (a stella conversation:
+ *   its agent's own text is not what it says),
  * - a heartbeat proves an idle socket is alive (silence cannot be told apart
  *   from a socket a NAT or a sleeping page dropped),
  * - `onClose` settles all three (the interval, the batch, the subscription)
  *   in that order, and a send after the socket closed is swallowed.
  *
  * A route supplies only the differences: which events it accepts, how they
- * project into frames, and how a flushed batch is shaped.
+ * project into frames, and — when it has any — how a flushed batch is
+ * shaped.
  */
 import type { ClientEvent } from "@lumisca/core";
 import {
@@ -52,19 +55,29 @@ export interface EventStreamOptions {
    * undefined for an event that belongs to no session. */
   revOf: (event: ClientEvent) => number | undefined;
   /** Frames to write for one event, after the batch was flushed. An event
-   * that carries streaming text never reaches this (it is batched). */
+   * that carries streaming text never reaches this on a stream with a
+   * `delta` channel (it is batched); a stream without one projects every
+   * event. */
   project: (
     event: ClientEvent,
     rev: number | undefined,
   ) => Record<string, unknown>[];
-  /** The batch channel of a streaming delta. */
-  deltaKey: (event: ClientEvent) => string;
-  /** How one flushed batch reaches the wire. */
-  deltaFrame: (batch: DeltaFrame<string, number>) => unknown;
+  /** The batch channel of a streaming delta. Omitted → this stream has no
+   * streaming text at all (a stella conversation: its agent's text is not
+   * what it says), so no batcher is built and every event goes through
+   * `project` — where the delta is dropped like any other model-only
+   * event. */
+  delta?: {
+    /** The batch channel: which transcript the text belongs to. */
+    key: (event: ClientEvent) => string;
+    /** How one flushed batch reaches the wire. */
+    frame: (batch: DeltaFrame<string, number>) => unknown;
+  };
   /** Extra subscriptions written through the same writer (the federation
    * relay on `/ws`); returns a detach. */
   relay?: (writer: SocketWriter) => () => void;
-  /** Batch interval; omitted → the batcher's default (one display frame). */
+  /** Batch interval; omitted → the batcher's default (one display frame).
+   * Meaningless without `delta`. */
   flushMs?: number;
   /** Heartbeat cadence; omitted → the shared constant. */
   heartbeatMs?: number;
@@ -107,16 +120,24 @@ export function createEventStream(
   return {
     onOpen(_event, ws) {
       socket = ws;
-      batcher = createFrameBatcher<string, number>({
-        ...(options.flushMs === undefined ? {} : { flushMs: options.flushMs }),
-        flush: (batch) => write(options.deltaFrame(batch)),
-      });
+      const delta = options.delta;
+      batcher = delta === undefined
+        ? undefined
+        : createFrameBatcher<string, number>({
+          ...(options.flushMs === undefined
+            ? {}
+            : { flushMs: options.flushMs }),
+          flush: (batch) => write(delta.frame(batch)),
+        });
       detach = options.subscribe((event) => {
         if (!options.accept(event)) return;
         const rev = options.revOf(event);
-        if (event.type === "message_delta") {
+        if (event.type === "message_delta" && batcher !== undefined && delta) {
+          // Only a stream with a channel batches text; `project` decides
+          // what a delta is worth to the others (stella's projection drops
+          // it — its agent's text is not the conversation).
           if (rev === undefined) return;
-          batcher?.delta(options.deltaKey(event), event.delta, rev);
+          batcher.delta(delta.key(event), event.delta, rev);
           return;
         }
         for (const frame of options.project(event, rev)) {

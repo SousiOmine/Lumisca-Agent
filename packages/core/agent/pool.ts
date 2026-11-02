@@ -134,9 +134,10 @@ export interface AgentRuntime {
    * in a core (the store is a directory beside the database); a hand-built
    * pool without one simply gets no visual tool. */
   visuals: SessionVisualStore;
-  /** Where the files an agent attaches to the chat are kept (see
-   * tools/attach.ts). Always present in a core; a hand-built pool without
-   * one simply gets no `chat_attach` tool. */
+  /** Where the files an agent hands to the user are kept (see
+   * tools/attach.ts and tools/send-chat.ts). Always present in a core; a
+   * hand-built pool without one simply gets neither `chat_attach` nor
+   * `send_chat`. */
   attachments: SessionAttachmentStore;
   /** Forward an agent event to every frontend listener. */
   emit(event: ClientEvent): void;

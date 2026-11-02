@@ -2,38 +2,47 @@
  * What a client of a stella conversation receives.
  *
  * A stella conversation is a chat with a counterpart: the user's words and
- * the agent's words, nothing about how the work was done. The model's
- * history is a different thing — it carries context publications, tool
- * calls and results, notifications and compaction checkpoints, and no
- * client reads it — so the two are separate types on separate endpoints
- * (`/api/stella/conversations/:agentId`), instead of one transcript that
- * every viewer filters for itself.
+ * what the agent SENT it, nothing about how the work was done. The model's
+ * history is a different thing — it carries the agent's own text (its working
+ * notes), context publications, tool calls and results, notifications and
+ * compaction checkpoints, and no client reads it — so the two are separate
+ * types on separate endpoints (`/api/stella/conversations/:agentId`), instead
+ * of one transcript that every viewer filters for itself.
  *
  * The split is what keeps the mode's promise (a conversation, not a work
  * log) from depending on a client remembering to hide rows. A client that
- * never receives a `Date: …` publication cannot show it.
+ * never receives a `Date: …` publication cannot show it — and one that never
+ * receives the agent's prose cannot leak it into a conversation the agent
+ * was not addressing.
  */
 import type { AskQuestion } from "../shared/interaction.ts";
 import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
 
 /** One thing the user or the agent said, as the conversation shows it.
- * `text` and `cards` are one entry rather than two because they are one
- * message: the agent's reply and the card it showed belong to the same
- * turn, and splitting them would let a client order them wrongly. */
+ *
+ * **An agent's entry is a message it SENT (`send_chat`), never its own
+ * words.** A model asked anything has to produce text; that text is its
+ * working notes, and showing it meant a run with nothing to report — a
+ * routine that found nothing, a turn that only ran a command — still pushed
+ * a paragraph at the user. So the projection drops the agent's text and keeps
+ * what the tool handed over: the words it chose to send, the card and the
+ * files. A turn that sends nothing leaves nothing on screen, which is the
+ * point. */
 export interface StellaEntry {
   /** `user` is the person talking; `assistant` is the agent. There is no
    * other role in a conversation (stella has no modes, no notifications). */
   role: "user" | "assistant";
-  /** The message's text ("" for an assistant message that only shows a
-   * card or a set of files). */
+  /** The message's text ("" for a message that only sent a card or a set of
+   * files). */
   text: string;
-  /** `chat_ui` markup the message showed, in order. A card is the reply's
-   * presentation — a table, a flow chart, a question — so it travels with
-   * the words rather than being dropped with the tool call that carried
-   * it. */
-  cards: string[];
-  /** Files the agent sent with `chat_attach`, in the order it sent them.
-   * Like a card, the files ARE part of the reply (something to look at or
+  /** The card the message showed (the `card` argument of `send_chat`), or
+   * null. A card is the message's presentation — a table, a flow chart, a
+   * question — so it travels with the words rather than being dropped with
+   * the tool call that carried it. One call carries one card; a client that
+   * received two would be drawing a message the agent never sent. */
+  card: string | null;
+  /** Files the agent sent with `send_chat`, in the order it named them.
+   * Like a card, the files ARE part of the message (something to look at or
    * keep), so they travel with it while the tool call itself stays in the
    * model's history. Empty for a message that sent none. */
   attachments: AttachmentRef[];
@@ -99,14 +108,17 @@ export interface StellaConversationSnapshot {
 /** The event stream of one conversation. Deliberately small: there is no
  * tool, todo, task, background or goal event, because the conversation has
  * none of those surfaces. A `null` result from the projection means the
- * model-only event ends here. */
+ * model-only event ends here.
+ *
+ * There is no streaming event either. A message arrives whole, when the
+ * agent sends it (`send_chat`): the agent's own text is not shown, so there
+ * is no reply to watch being written — the run shows itself with the typing
+ * indicator until something is sent. */
 export type StellaEvent =
   | { type: "agent_start" }
   | { type: "agent_end" }
-  /** One finished message (a prompt, a reply, a card). */
+  /** One finished message (a prompt, or what the agent sent). */
   | { type: "entry"; entry: StellaEntry }
-  /** A piece of the reply that is still streaming. */
-  | { type: "delta"; delta: string }
   /** The pending questions changed (asked, answered, or dropped). */
   | { type: "questions"; questions: StellaQuestion[] }
   /** The screen hand-over began or ended (`null`). */

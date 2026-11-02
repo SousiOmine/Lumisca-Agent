@@ -10,7 +10,8 @@ import {
 import { AssetDir } from "./asset-dir.ts";
 
 /**
- * The files one session has handed to the user (the `chat_attach` tool).
+ * The files one session has handed to the user (`chat_attach` in code mode,
+ * `send_chat`'s attachments in stella).
  *
  * Deliberately not the visual store, and not a second implementation of it:
  * both write into {@link AssetDir}, which is where the property that matters

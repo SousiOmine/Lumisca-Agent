@@ -39,9 +39,10 @@ export interface MessageAuthor {
  * make one answer look like several.
  *
  * What a stella bubble can hold is what the server sends (see the core's
- * stella-stream projection): text, the cards a `chat_ui` result carried,
- * and the files a `chat_attach` result sent. There is no work log and no
- * tool row to draw, because none ever arrives.
+ * stella-stream projection): the text the agent sent, the card it sent with
+ * it, and the files. There is no work log and no tool row to draw, because
+ * none ever arrives — and the agent's own words are not sent either, so a
+ * bubble is always something the agent chose to say.
  */
 export function StellaMessage({
   entry,
@@ -68,7 +69,7 @@ export function StellaMessage({
   entering: boolean;
   /** Asset base of the conversation (see MarkdownBlock). */
   visualBase: string;
-  /** Attachment base of the conversation (the files chat_attach sent). */
+  /** Attachment base of the conversation (the files send_chat sent). */
   attachBase: string;
   /** Where the files a prompt brought in are read back from (the machine,
    * through the conversation's upload route). */
@@ -215,9 +216,9 @@ function AgentBubble({
           {entry.text && (
             <MarkdownBlock text={entry.text} visualBase={visualBase} />
           )}
-          {entry.cards.map((markup, index) => (
-            <CardView key={index} markup={markup} onSend={onSend} />
-          ))}
+          {entry.card !== null && (
+            <CardView markup={entry.card} onSend={onSend} />
+          )}
           <AttachmentCard attachments={entry.attachments} base={attachBase} />
         </div>
         <div className="msg-meta start">{time}</div>

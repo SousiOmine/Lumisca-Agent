@@ -107,11 +107,14 @@ Deno.test("coding prompt carries the workspace and the tool guidance it has", ()
   const prompt = buildSystemPrompt(workspace, { tools: CODING_TOOLS });
   assert(prompt.includes("You are Lumisca, a coding agent"));
   assert(prompt.includes("The workspace contains these folders"));
-  assert(prompt.includes("Environment:"));
   assert(
     prompt.includes(TOOL_TASK),
     "task guidance expected with the task tool",
   );
+  // The machine's specs are not in the prompt: they are stable, cheap to
+  // probe from a command, and every line of the prompt is paid for on every
+  // request (see environment.ts).
+  assertEquals(prompt.includes("Environment:"), false);
   // The skill catalog and the instruction files are dynamic context, not
   // prompt text: they are published as transcript messages.
   assertEquals(prompt.includes("<available_skills>"), false);

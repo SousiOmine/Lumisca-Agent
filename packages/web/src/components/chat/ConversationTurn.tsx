@@ -116,7 +116,6 @@ export const ConversationTurn = memo(function ConversationTurn({
   running,
   endedAt,
   onRewind,
-  onSend,
 }: {
   turn: ConversationTurnData;
   /** True when this turn just arrived at the live edge of the transcript, so
@@ -137,8 +136,6 @@ export const ConversationTurn = memo(function ConversationTurn({
     text: string,
     images: UserMessageImage[],
   ) => void;
-  /** Send a chat_ui card's answer as the user's next message. */
-  onSend?: (text: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   // A checkpoint turn is one compact row: no activity header, no work log
@@ -200,7 +197,6 @@ export const ConversationTurn = memo(function ConversationTurn({
         runningTools={runningTools}
         visualBase={visualBase}
         onRewind={onRewind}
-        onSend={onSend}
       />
       {(running || turn.responses.length > 0) && (
         <AgentActivity
@@ -224,7 +220,6 @@ export const ConversationTurn = memo(function ConversationTurn({
               runningTools={runningTools}
               visualBase={visualBase}
               onRewind={onRewind}
-              onSend={onSend}
             />
           ))}
           {finalAssistant && finalToolCalls.length > 0 && (

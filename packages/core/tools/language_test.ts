@@ -47,7 +47,7 @@ Deno.test("outputLanguageSection: leads the guidelines of a coding prompt", () =
   assertEquals(firstBullet, outputLanguageBullet("en"));
   // The sections after it are untouched.
   assertEquals(
-    prompt.includes("- Prioritize correctness above all else."),
+    prompt.includes("- Prioritize correctness."),
     true,
   );
 });

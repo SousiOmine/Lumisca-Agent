@@ -44,13 +44,72 @@ export interface ChatAttachOptions {
 export type ChatAttachTarget = Omit<ChatAttachOptions, "files">;
 
 /**
- * `chat_attach`: hand files to the user.
+ * Read the files a call names into the session's store, with the limits one
+ * call obeys.
  *
- * The reply's text is already the answer; this tool exists for what cannot
- * be said in words — the chart the agent produced, the report it wrote, the
- * log the user should keep. Left to prose, the agent writes the path and the
- * user has to go find the file; the file is right there, so it is handed
- * over instead.
+ * Shared by the two tools that hand files over (`chat_attach` in code mode,
+ * `send_chat` in stella), so the bounds — one file's size, how many, how much
+ * in total — are written once. Each of them is refused BEFORE the bytes are
+ * transferred (the backend reports a size without reading), because a tool
+ * that silently cut a file would hand the user a broken copy.
+ */
+export async function attachFiles(
+  options: ChatAttachTarget & {
+    files: FileBackend;
+    /** The paths the model named (already validated as an array by the
+     * tool's schema). */
+    paths: readonly string[];
+    signal?: AbortSignal;
+  },
+): Promise<AttachmentRef[]> {
+  const { files, store, sessionId, paths, signal } = options;
+  if (paths.length === 0) {
+    throw new Error("Attach at least one file.");
+  }
+  if (paths.length > MAX_ATTACHMENTS_PER_CALL) {
+    throw new Error(
+      `You can attach up to ${MAX_ATTACHMENTS_PER_CALL} files in one call.`,
+    );
+  }
+
+  const attachments: AttachmentRef[] = [];
+  let total = 0;
+
+  for (const requested of paths) {
+    signal?.throwIfAborted();
+    const path = await requireExistingFile(files, requested);
+    const stat = await files.stat(path);
+    if ((stat?.size ?? 0) > MAX_ATTACHMENT_BYTES) {
+      throw new Error(
+        `${requested} is larger than ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} ` +
+          "MiB; send it in a form that fits",
+      );
+    }
+    const { bytes } = await files.readHead(path, MAX_ATTACHMENT_BYTES);
+    total += bytes.byteLength;
+    if (total > MAX_ATTACHMENTS_TOTAL_BYTES) {
+      throw new Error(
+        `The files total more than ${
+          MAX_ATTACHMENTS_TOTAL_BYTES / (1024 * 1024)
+        } MiB; send fewer of them`,
+      );
+    }
+    attachments.push(await store.put(sessionId, bytes, requested));
+  }
+  return attachments;
+}
+
+/**
+ * `chat_attach`: hand files to the user, without saying anything.
+ *
+ * Code mode only, and it is there because the reply's own text is what the
+ * user reads: this tool attaches what cannot be said in words — the chart
+ * the agent produced, the report it wrote, the log the user should keep. Left
+ * to prose, the agent writes the path and the user has to go find the file;
+ * the file is right there, so it is handed over instead.
+ *
+ * A stella conversation has `send_chat` instead: there the text is not shown
+ * either, so "attach a file" and "say something" are one act.
  *
  * The result carries the attachment list in `details`, which is what the
  * client draws and what a reload re-draws (the transcript keeps the call).
@@ -75,46 +134,13 @@ export function createChatAttachTool(
       "well; say what the file is.",
     parameters: attachSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
-      const paths = params.paths ?? [];
-      if (paths.length === 0) {
-        throw new Error("Attach at least one file.");
-      }
-      if (paths.length > MAX_ATTACHMENTS_PER_CALL) {
-        throw new Error(
-          `You can attach up to ${MAX_ATTACHMENTS_PER_CALL} files in one ` +
-            "call.",
-        );
-      }
-
-      const attachments: AttachmentRef[] = [];
-      let total = 0;
-
-      for (const requested of paths) {
-        signal?.throwIfAborted();
-        const path = await requireExistingFile(files, requested);
-        const stat = await files.stat(path);
-        // The backend reports the size without reading, so an oversized
-        // file is refused before it is transferred — a tool that silently
-        // cut a file would hand the user a broken copy.
-        if ((stat?.size ?? 0) > MAX_ATTACHMENT_BYTES) {
-          throw new Error(
-            `${requested} is larger than ${
-              MAX_ATTACHMENT_BYTES / (1024 * 1024)
-            } MiB; send it in a form that fits`,
-          );
-        }
-        const { bytes } = await files.readHead(path, MAX_ATTACHMENT_BYTES);
-        total += bytes.byteLength;
-        if (total > MAX_ATTACHMENTS_TOTAL_BYTES) {
-          throw new Error(
-            `The files total more than ${
-              MAX_ATTACHMENTS_TOTAL_BYTES / (1024 * 1024)
-            } MiB; send fewer of them`,
-          );
-        }
-        attachments.push(await store.put(sessionId, bytes, requested));
-      }
-
+      const attachments = await attachFiles({
+        files,
+        store,
+        sessionId,
+        paths: params.paths ?? [],
+        ...(signal !== undefined ? { signal } : {}),
+      });
       return {
         content: [{
           type: "text",

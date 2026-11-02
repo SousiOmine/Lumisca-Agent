@@ -118,7 +118,7 @@ export const panels = {
   "panels.routine.enable": { ja: "有効にする", en: "Enable" },
   "panels.routine.disable": { ja: "無効にする", en: "Disable" },
 
-  // --- UI cards (the chat_ui tool) ------------------------------------------
+  // --- UI cards (the send_chat tool's card argument) -------------------------
   "panels.ui.invalid": {
     ja: "このカードを表示できませんでした",
     en: "This card could not be displayed",

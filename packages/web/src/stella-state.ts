@@ -11,9 +11,14 @@ import type {
  *
  * Deliberately not `SessionView`: that type carries what a code-mode tab
  * needs (tool timers, todo/task/background panels, rewind tombstones for a
- * session list that stella does not have). A conversation is entries, a
- * stream of text, and what is blocking the run — so this store holds exactly
- * that, and its reducer can be read in one sitting.
+ * session list that stella does not have). A conversation is entries and what
+ * is blocking the run — so this store holds exactly that, and its reducer can
+ * be read in one sitting.
+ *
+ * There is no streaming text. The agent's own words are its working notes and
+ * never reach this store; a message arrives whole, when the agent sends one.
+ * The run's presence is `running` alone (the transcript draws its typing
+ * dots from it).
  *
  * The reducer is pure so the event handling can be tested without a socket,
  * a browser or a server: the hook that owns the connection only calls
@@ -28,9 +33,6 @@ export interface StellaConversationState {
   /** The cursor for the entries before `entries[0]`, or null at the
    * conversation's beginning. */
   older: string | null;
-  /** The reply that is still arriving. Appended to the last entry when the
-   * run ends (see the `entry` case), never kept alongside a finished one. */
-  streamingText: string;
   running: boolean;
   questions: StellaQuestion[];
   handover: StellaHandover | null;
@@ -67,7 +69,6 @@ export function stellaStateOf(
     // whole window replaced it: a window that starts inside what it holds
     // must not lose the reader's way back.
     older: merged.replaced ? snapshot.older : current!.older,
-    streamingText: "",
     running: snapshot.running,
     questions: snapshot.questions,
     handover: snapshot.handover,
@@ -169,13 +170,13 @@ export function prependOlderEntries(
 /** Identity of an entry for dedup.
  *
  * An entry arrives more than once — the synthetic start/end pair an injected
- * message emits, and the streaming placeholder followed by the final copy of
- * the same message — so the client has to recognise "the same entry". Role,
- * timestamp and the attachments' names are NOT enough: the clock is a
- * millisecond, and two sends inside one millisecond (a burst of Enter, or a
- * server that stamps a batch with one tick) are two different messages that
- * must not collapse into one. The text is what tells them apart, so it is the
- * last component of the key.
+ * message emits, and the prompt's placeholder followed by the finished copy —
+ * so the client has to recognise "the same entry". Role, timestamp and the
+ * attachments' names are NOT enough: the clock is a millisecond, and two
+ * sends inside one millisecond (a burst of Enter, an agent that called
+ * send_chat twice in one turn) are two different messages that must not
+ * collapse into one. The text is what tells them apart, so it is the last
+ * component of the key.
  *
  * The one case that must still collide is the pair above: the same message
  * announced twice carries the same text. A message that is republished after
@@ -186,7 +187,9 @@ export function entryKey(entry: StellaEntry): string {
   // A prompt's own files are part of its identity: an image-only prompt and
   // an empty prompt of the same millisecond would otherwise be one entry.
   const files = entry.files.map((file) => file.ref).join(",");
-  return `${entry.role}:${entry.timestamp}:${attachments}:${files}:${entry.text}`;
+  return `${entry.role}:${entry.timestamp}:${attachments}:${files}:${
+    entry.card ?? ""
+  }:${entry.text}`;
 }
 
 /** Insert or replace an entry at its existing position (dedup by key), or
@@ -220,19 +223,14 @@ export function applyStellaEvent(
         error: undefined,
       };
     case "agent_end":
-      return state.running
-        ? { ...state, running: false, streamingText: "" }
-        : null;
+      return state.running ? { ...state, running: false } : null;
     case "entry": {
       const entries = upsertEntry(state.entries, event.entry);
-      // A finished entry replaces whatever was streaming: the server sends
-      // the complete message, so the text that accumulated from deltas is
-      // now redundant (and might be a prefix of it).
-      const changed = entries !== state.entries || state.streamingText !== "";
-      return changed ? { ...state, entries, streamingText: "" } : null;
+      // A message arrives whole (the agent's own text is not shown, so there
+      // is nothing being streamed), so an unchanged list means nothing to
+      // re-render.
+      return entries === state.entries ? null : { ...state, entries };
     }
-    case "delta":
-      return { ...state, streamingText: state.streamingText + event.delta };
     case "questions":
       return sameQuestions(event.questions, state.questions) ? null : {
         ...state,
@@ -285,7 +283,6 @@ export function emptyStellaState(agentName: string): StellaConversationState {
   return {
     entries: [],
     older: null,
-    streamingText: "",
     running: false,
     questions: [],
     handover: null,

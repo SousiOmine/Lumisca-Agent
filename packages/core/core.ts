@@ -135,7 +135,6 @@ import { createRoutineTools } from "./routine/tools.ts";
 import { HandoverHub, type PendingHandover } from "./vm/handover.ts";
 import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
 import { createVmAskUserTool } from "./vm/ask-user.ts";
-import { createChatUiTool } from "./tools/chat-ui.ts";
 import type { PromptFileRef, Routine } from "./shared/mod.ts";
 import {
   VmBackgroundSpawner,
@@ -232,10 +231,10 @@ export class LumiscaCore {
    * inside its reply — see session/visuals.ts). Shared with the session pool
    * (the visual tool publishes here) and read by the server's asset route. */
   private readonly visuals: SessionVisualStore;
-  /** Where the files an agent attaches to the chat live (see
+  /** Where the files an agent hands to the user live (see
    * session/attachments.ts). Beside the database like the visuals, shared
-   * with the session pool (the `chat_attach` tool writes here) and read by
-   * the server's attachment route. */
+   * with the session pool (both `chat_attach` in code mode and `send_chat`
+   * in stella write here) and read by the server's attachment route. */
   private readonly attachments: SessionAttachmentStore;
   /** Where the agents' icons live (see stella/icons.ts). Beside the database
    * like the two stores above; written when a user uploads a picture and read
@@ -1456,7 +1455,6 @@ export class LumiscaCore {
           handover: this.handoverFor(session.id),
         }),
       ],
-      chatUiTool: createChatUiTool(),
       handoverHub: this.handoverFor(session.id),
       routineTools: createRoutineTools({
         repo: this.routines,

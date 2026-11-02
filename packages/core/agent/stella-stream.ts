@@ -9,17 +9,37 @@
  * - {@link stellaEventsOf} turns one `ClientEvent` into the conversation
  *   events it implies (or none).
  *
- * The rule they share: a conversation is the user's words and the agent's
- * words. Everything that exists to steer the model — the date, the skill
- * catalog, the identity, the on-demand-tools note (all `context` messages) —
- * and everything that records HOW the work went — tool calls, tool results,
- * notifications, compaction checkpoints — stays in the model's history and
- * out of the conversation. A `chat_ui` card is the one tool call that is
- * also a reply, so it travels with the text that carried it.
+ * The rule they share: **the conversation is the user's words and what the
+ * agent SENT with `send_chat`.** Everything else stays in the model's history
+ * and out of the conversation:
+ *
+ * - the agent's own text. A model asked anything has to write something; that
+ *   text is its working notes — how it thinks out loud, what it just ran,
+ *   what it is about to do. Showing it made every turn a paragraph whether or
+ *   not there was anything to say, and a routine that found nothing still
+ *   reported that it had found nothing. So the text is not part of the
+ *   conversation, and a turn that sends nothing leaves the screen as it was.
+ * - everything that exists to steer the model — the date, the skill catalog,
+ *   the identity, the on-demand-tools note (all `context` messages);
+ * - everything that records HOW the work went — tool calls, tool results,
+ *   notifications, compaction checkpoints.
+ *
+ * A `send_chat` RESULT is therefore the one tool result that becomes an
+ * entry: it carries the words, the card and the files the agent chose to
+ * send (in its `details`; see shared/chat-message.ts). Nothing else does —
+ * `chat_attach` and `chat_ui` used to, and a conversation that predates
+ * `send_chat` therefore keeps only its user's side. That is deliberate: the
+ * old rows are the record of a rule that no longer exists, and a projection
+ * that still honoured them would keep two ways of deciding what a
+ * conversation shows.
+ *
+ * There is no streaming either. The agent's text is not shown, so there is
+ * nothing to watch being written; a message arrives whole, when the tool
+ * returns.
  */
 import type { AgentMessage } from "../ai/types.ts";
-import { TOOL_CHAT_ATTACH, TOOL_CHAT_UI } from "../shared/tool-names.ts";
-import { attachmentsOfDetails } from "../shared/attachments.ts";
+import { chatMessageOfDetails } from "../shared/chat-message.ts";
+import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type {
   StellaEntry,
@@ -46,39 +66,23 @@ function textOf(message: ContentMessage): string {
     .join("");
 }
 
-/** The `chat_ui` markups a message carried, in order. A call without a
- * string `markup` is not a card (the tool would have rejected it); it is
- * skipped rather than rendered as a broken card. */
-function cardsOf(message: ContentMessage): string[] {
-  const content = message.content;
-  if (typeof content === "string") return [];
-  const cards: string[] = [];
-  for (const block of content) {
-    if (block.type !== "toolCall" || block.name !== TOOL_CHAT_UI) continue;
-    const args = block.arguments as { markup?: unknown } | undefined;
-    if (typeof args?.markup === "string") cards.push(args.markup);
-  }
-  return cards;
-}
-
 /**
  * The conversation entry for one transcript message, or `null` when the
  * message is part of the model's history only.
  *
  * `user` and `mode` are the person talking (stella has no slash commands, so
  * `mode` never occurs; it is accepted because the projection is written
- * against the transcript's actual type). An assistant message appears when it
- * says something: text, a card, or the files it sent. A message that exists
- * only to carry a tool call would be an empty row, so it is left out.
+ * against the transcript's actual type).
  *
- * A `chat_attach` result is the one tool result that becomes an entry of its
- * own: the files an agent hands over are part of the reply (something to
- * look at or keep), not a record of how it worked. It is kept as a separate
- * entry rather than merged into the preceding message because the two are
- * separate messages in the transcript — merging would make the projection
- * depend on what came before it, and an event replayed out of order (or a
- * reload that starts mid-conversation) would put the files in the wrong
- * place.
+ * An assistant message is ALWAYS model-only: its text is the agent's working
+ * notes, and what the user reads is the `send_chat` call it made, which
+ * arrives as that call's result (below).
+ *
+ * A `send_chat` result is kept as its own entry rather than merged into the
+ * assistant message that called it, because the two are separate messages in
+ * the transcript — merging would make the projection depend on what came
+ * before it, and an event replayed out of order (or a reload that starts
+ * mid-conversation) would put the message in the wrong place.
  */
 export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
   switch (message.role) {
@@ -104,35 +108,35 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       return {
         role: "user",
         text,
-        cards: [],
+        card: null,
         attachments: [],
         files,
         timestamp: message.timestamp,
       };
     }
-    case "assistant": {
-      const text = textOf(message);
-      const cards = cardsOf(message);
-      if (text.length === 0 && cards.length === 0) return null;
+    case "assistant":
+      // Its text is the model's working notes, not the conversation's (see
+      // the module comment). What it sent arrives as the tool result below.
+      return null;
+    case "toolResult": {
+      // Only what the agent SENT is the conversation's; every other tool
+      // result is the model's record of its work.
+      if (message.toolName !== TOOL_SEND_CHAT || message.isError) return null;
+      const sent = chatMessageOfDetails(message.details);
+      if (sent === undefined) return null;
+      if (
+        sent.text.length === 0 && sent.card === null &&
+        sent.attachments.length === 0
+      ) {
+        // The tool refuses an empty message, so this is a row this build did
+        // not write: an empty bubble would claim the agent said something.
+        return null;
+      }
       return {
         role: "assistant",
-        text,
-        cards,
-        attachments: [],
-        files: [],
-        timestamp: message.timestamp,
-      };
-    }
-    case "toolResult": {
-      // Only the files an agent sent are the conversation's; every other
-      // tool result is the model's record of its work.
-      if (message.toolName !== TOOL_CHAT_ATTACH || message.isError) return null;
-      const attachments = attachmentsOfDetails(message.details);
-      return attachments.length === 0 ? null : {
-        role: "assistant",
-        text: "",
-        cards: [],
-        attachments,
+        text: sent.text,
+        card: sent.card,
+        attachments: sent.attachments,
         files: [],
         timestamp: message.timestamp,
       };
@@ -144,24 +148,29 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
   }
 }
 
-/** The attachment list a `chat_attach` result carries, or none when the
- * details are not the shape this build wrote (see shared/attachments.ts). */
 /** The cursor naming one conversation entry (see readWindow): the fields a
  * client tells two entries apart by — the role and the timestamp the message
- * carries, plus the first attachment's name, because an agent that sends a
- * file and then says something in the same millisecond would otherwise have
- * the two collapse into one. Opaque to clients, which only echo it. */
+ * carries, plus what the message carried, because an agent that sends two
+ * messages in the same millisecond (two `send_chat` calls in one turn) would
+ * otherwise have them collapse into one. Opaque to clients, which only echo
+ * it. */
 export function stellaEntryCursorOf(entry: StellaEntry): string {
   return JSON.stringify([
     entry.role,
     entry.timestamp,
     entry.attachments[0]?.name ?? "",
-    // A prompt that carried files and a reply in the same millisecond would
-    // otherwise collapse into one cursor; the first file's reference names
-    // which prompt it was.
+    // A prompt that carried files and a message that sent some in the same
+    // millisecond would otherwise collapse into one cursor; the first file's
+    // reference names which prompt it was.
     entry.files[0]?.ref ?? "",
+    // Two messages of one millisecond that carried neither files nor
+    // attachments differ only in what they said: the card (whole, it is
+    // short) and the start of the text name which is which.
+    entry.card ?? "",
+    entry.text.slice(0, 64),
   ]);
 }
+
 /** The conversation's view of a pending-question list. The shapes are the
  * same today; the named type keeps the conversation's contract from drifting
  * with the ask hub's. */
@@ -185,8 +194,14 @@ function handoverOf(handover: StellaHandover | null): StellaHandover | null {
 
 /**
  * The conversation events one `ClientEvent` implies; empty when the event is
- * model-only (tools, todo, tasks, background commands, goals, checkpoints,
- * federation) or belongs to the transcript the conversation does not show.
+ * model-only (text deltas, tools, todo, tasks, background commands, goals,
+ * checkpoints, federation) or belongs to the transcript the conversation does
+ * not show.
+ *
+ * `message_delta` is model-only by design, not by oversight: the agent's text
+ * never reaches the conversation, so a delta has nothing to add to it. The
+ * transport keeps forwarding deltas for code mode; this projection drops
+ * them.
  *
  * The event's `sessionId` is dropped: a conversation stream is bound to one
  * conversation, so carrying the id would only invite clients to route it.
@@ -201,14 +216,12 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
     case "message_end": {
       const entry = stellaEntryOf(event.message);
       // Both events carry the same message (a synthetic start/end pair for
-      // an injected message, or the placeholder and the final copy of a
-      // reply). Sending the entry twice is harmless — clients upsert by
+      // an injected message, or the prompt and the finished copy of what an
+      // agent sent). Sending the entry twice is harmless — clients upsert by
       // role + timestamp — and keeping both means a client that missed the
       // start still gets the message.
       return entry === null ? [] : [{ type: "entry", entry }];
     }
-    case "message_delta":
-      return [{ type: "delta", delta: event.delta }];
     case "question":
       return [{
         type: "questions",
