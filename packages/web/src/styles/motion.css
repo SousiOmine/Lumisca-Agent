@@ -1,12 +1,39 @@
-/* motion.css — shared entrance keyframes.
+/* motion.css — shared keyframes and the entrance convention.
  * Cascade position 3/15: order is defined by ../styles.css (@import order).
  * See ./README.md before adding new files. */
 
-/* ---- motion (shared entrance animations) -----------------------------------
- * CSS-only, entrance-only: elements using these are conditionally mounted,
- * so `animation` runs once on mount. Exit animations are intentionally out
- * of scope (unmount is immediate). Only opacity/transform are animated to
- * keep 60fps and avoid disturbing scroll-follow logic. */
+/* ---- the entrance convention ---------------------------------------------
+ *
+ * Entrances are CSS-only and run once, on mount. Exit animations are NOT
+ * general: an element that has to animate out keeps itself mounted through
+ * `hooks/usePresence.ts` (a dialog, the machine's screen), and everything
+ * else leaves immediately. Hiding itself is honest; fading out would make a
+ * closed thing linger.
+ *
+ * An element must NOT animate in because it appeared in a re-render. The
+ * transcript is the reason: its first render draws the whole loaded window
+ * (a hundred messages), and scrolling back inserts older ones above the
+ * reader. If `.stella-msg` / `.conversation-turn` carried an in animation
+ * unconditionally, opening a conversation would stage it message by message
+ * and paging back would flash history under the reader's eyes.
+ *
+ * So a list row animates only when it is genuinely NEW, and the component
+ * says so: `hooks/useArrivals.ts` returns the keys appended at the live edge,
+ * and the row carries `data-enter`. A sheet, a dialog or a card that is
+ * conditionally mounted (one instance, once) may animate on mount directly —
+ * it has no list to be a re-render of.
+ *
+ * Only `opacity` and `transform` are animated: they skip layout and paint, so
+ * they stay smooth while the transcript streams and the scroll follow
+ * (hooks/useTranscriptScroll.ts) re-measures. Animating height would also
+ * fight the noVNC canvas, which re-derives its scale from its box on every
+ * resize.
+ *
+ * Every animation added here needs its override in reduced-motion.css
+ * (styles_test.ts checks the coverage).
+ * ------------------------------------------------------------------------- */
+
+/* ---- entrances ----------------------------------------------------------- */
 
 @keyframes lum-fade {
   from {
@@ -28,6 +55,8 @@
   }
 }
 
+/* A row arriving at the end of a list (a message, a card): a short lift, so
+ * the eye catches that this one is new without the list moving. */
 @keyframes lum-rise-small {
   from {
     opacity: 0;
@@ -72,9 +101,11 @@
   }
 }
 
+/* ---- waiting and working ------------------------------------------------- */
+
 /* The typing dots of a reply that has not produced text yet: only opacity
  * moves, so the row keeps its height and the text that follows does not
- * shift the conversation. */
+ * shift the conversation. Constant motion, so the curve is linear. */
 @keyframes lum-typing {
   0%,
   60%,
@@ -83,5 +114,38 @@
   }
   30% {
     opacity: 1;
+  }
+}
+
+/* An agent (or a session) that is working: a dot breathing in place. The
+ * same keyframes serve the sidebar row and the live indicator, so "something
+ * is running" looks the same wherever it is said. */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* The streaming reply's cursor: a solid block that is drawn and cleared.
+ * `step-end` is what makes it a cursor — a linear fade would read as a light
+ * pulsing, which is the `pulse` above. */
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* A loader turning on the spot. Constant motion, so linear. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }

@@ -44,6 +44,19 @@
   gap: 14px;
 }
 
+/* The first screen of the app, seen once. This is the one place a little
+ * delight is affordable (a rare, first-time moment), so the cards rise in
+ * one after the other — 60ms apart, enough to read as a sequence and not as
+ * a queue. `backwards` and not `both`: the card's own hover transition must
+ * win once it has landed. */
+.mode-select-cards > .mode-card {
+  animation: lum-rise var(--lum-dur-slow) var(--lum-ease-out) backwards;
+}
+
+.mode-select-cards > .mode-card:nth-child(2) {
+  animation-delay: 60ms;
+}
+
 .mode-card {
   display: flex;
   flex-direction: column;
@@ -56,13 +69,18 @@
   box-shadow: var(--shadow-panel);
   color: var(--text);
   cursor: pointer;
-  transition: border-color 140ms var(--lum-ease), transform 140ms
-    var(--lum-ease);
+  transition: border-color var(--lum-dur-mid) var(--lum-ease-out),
+    transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
-.mode-card:hover:not(:disabled) {
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
+/* Gated to a real pointer: on a touch screen `:hover` sticks after a tap, so
+ * the card would stay lifted while its dialog opens. The border still marks
+ * the current mode (`.current`), which is the state that matters. */
+@media (hover: hover) and (pointer: fine) {
+  .mode-card:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
 }
 
 .mode-card.current {
@@ -191,6 +209,18 @@
   align-items: center;
   gap: 2px;
   border-radius: var(--radius);
+  /* The row the reader is on answers as they move down the list instead of
+   * blinking on and off under the pointer. Colour only: a row that moved
+   * would push the names under the eye. */
+  transition: background-color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+/* A row that just appeared (an agent created here, or one the agent itself
+ * made with agent_create). Like every entrance, only on the row that
+ * arrived: the first paint of a long list must not stage itself
+ * (styles/motion.css). */
+.stella-agent[data-enter] {
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .stella-agent:hover {
@@ -288,7 +318,7 @@
   color: var(--text-dim);
   opacity: 0;
   cursor: pointer;
-  transition: opacity 120ms var(--lum-ease);
+  transition: opacity var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .stella-agent:hover .stella-agent-delete,
@@ -390,8 +420,8 @@
   color: var(--text-dim);
   cursor: pointer;
   transition:
-    background var(--lum-dur-fast) var(--lum-ease),
-    color var(--lum-dur-fast) var(--lum-ease);
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .stella-back:hover {
@@ -472,9 +502,9 @@
   color: var(--text-dim);
   cursor: pointer;
   transition:
-    background 120ms var(--lum-ease),
-    color 120ms var(--lum-ease),
-    border-color 120ms var(--lum-ease);
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out),
+    border-color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .stella-screen-toggle:hover {
@@ -490,19 +520,6 @@
 .stella-screen-toggle:focus-visible {
   outline: 2px solid var(--border-strong);
   outline-offset: 1px;
-}
-
-/* The run itself, where code mode's turn timer sits: a dot and one word. It
- * borrows the conversation's left edge (the avatar column of the message it
- * belongs to) so it reads as the agent being busy rather than as chrome. */
-.chat-running {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-left: 2px;
-  font-size: 12px;
-  color: var(--text-faint);
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
 }
 
 /* --- stella: messages ----------------------------------------------------- */
@@ -523,7 +540,15 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+/* A message that just ARRIVED, not one that merely rendered (see
+ * styles/motion.css and hooks/useArrivals.ts): opening a conversation paints
+ * its whole window and paging back inserts history above the reader, and
+ * neither may stage the transcript. The flag is dropped by the hook once the
+ * animation is over, so a later re-render cannot replay it. */
+.stella-msg[data-enter] {
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 /* A continuation belongs to the message above it: the gap closes and only
@@ -598,7 +623,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--text-faint);
-  animation: lum-typing 1.2s var(--lum-ease) infinite;
+  animation: lum-typing 1.2s var(--lum-ease-out) infinite;
 }
 
 .stella-typing-dot:nth-child(2) {
@@ -630,6 +655,10 @@
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-panel);
   overflow: hidden;
+  /* No `animation` here: the pane's entrance and exit are played by
+   * motion.ts, because the pane has to stay mounted through the exit (see
+   * StellaView and hooks/usePresence) and only opacity/transform may move —
+   * a size change would make noVNC re-derive its scale on every frame. */
 }
 
 .stella-pane-header {
@@ -715,6 +744,10 @@
 .stella-pane.handover {
   border-color: var(--accent-dim);
   box-shadow: 0 0 0 1px var(--accent-soft);
+  /* The change of ownership: the border and the ring fade in rather than
+   * switching, so the pane reads as "yours now" instead of as a repaint. */
+  transition: border-color var(--lum-dur-mid) var(--lum-ease-out),
+    box-shadow var(--lum-dur-mid) var(--lum-ease-out);
 }
 
 .stella-pane.handover .stella-pane-body {
@@ -729,6 +762,10 @@
   padding: 10px 12px;
   background: var(--accent-soft);
   border-bottom: 1px solid var(--border);
+  /* The agent stopped and asked for help: the bar arrives with the pane it
+   * belongs to, dropping in from the pane's own top edge. One shot, on
+   * mount (a hand-over is a state the run cannot leave and re-enter). */
+  animation: lum-slide-down var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .stella-handover-reason {

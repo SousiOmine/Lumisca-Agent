@@ -1,36 +1,48 @@
-/* reduced-motion.css — prefers-reduced-motion overrides.
+/* reduced-motion.css — the prefers-reduced-motion contract.
  * Cascade position 15/15: order is defined by ../styles.css (@import order).
  * See ./README.md before adding new files. */
 
+/* Reduced motion means FEWER and GENTLER animations, not zero: the fades
+ * stay, because opacity does not move anything and it is what explains that
+ * content changed. What goes is movement — translations, scales, rotations —
+ * and anything that loops on its own (a spinner, the typing dots, a breathing
+ * dot), since those cannot be dismissed and keep drawing the eye.
+ *
+ * The rule is mechanical per keyframe group:
+ *
+ *   - a pure fade (lum-fade)             → keep as is
+ *   - a fade plus a transform            → the fade only (the keyframe below)
+ *   - a loop, a spin, a cursor blink     → animation: none
+ *   - a transform-only transition        → transition: none
+ *
+ * Anything added to motion.css needs its entry here; styles_test.ts fails
+ * when a sheet animates a selector this file does not account for. */
+
+/* The entrance every transformed `lum-*` keyframe collapses to. A no-op
+ * `transform` is not enough: the animation would still be declared (and would
+ * still hold `animation-fill-mode: both`), so the rule names the fade
+ * outright. */
+@keyframes lum-fade-only {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  /* Self-running loops: nothing to comprehend, so they stop. */
   .live-dot,
   .cursor,
   .spin,
-  .stella-typing-dot {
+  .stella-typing-dot,
+  .stella-agent-dot {
     animation: none;
   }
 
-  .agent-activity-chevron {
-    transition: none;
-  }
-
-  .modal-backdrop,
-  .modal,
-  .app-menu,
-  .tab-context-menu,
-  .mention-popover,
-  .slash-popover,
-  .workspace-popover,
-  .ctx-popover,
-  .model-popover,
-  .model-pref-popover {
-    animation: none;
-  }
-
-  .tls-value {
-    animation: none;
-  }
-
+  /* Entrances: keep the arrival, drop the travel. Listed one selector per
+   * rule (not a group) because each carries its own duration. */
   .conversation-turn,
   .msg.user,
   .chat-empty-inner,
@@ -38,7 +50,6 @@
   .tool-detail,
   .notification-detail,
   .agent-work-log,
-  .chat-running,
   .stella-msg,
   .stella-running,
   .todo-panel,
@@ -47,21 +58,74 @@
   .goal-panel,
   .question-card,
   .update-banner,
+  .server-down-banner,
   .new-session-card,
-  .input-image {
+  .input-image,
+  .stella-agent,
+  .mode-card,
+  .stella-handover,
+  /* The gated entrances (styles/motion.css): the gate changes which rows
+   * animate, not what "reduced" means for them. The one exception is the
+   * user's capsule, whose flag sits on the row above it. */ [data-enter] .msg.user {
+    animation-name: lum-fade-only;
+  }
+
+  /* Popovers and dialogs are anchored to something; the scale is what says
+   * "this came from here", and it is also what makes a reduced-motion reader
+   * dizzy. They open with the fade alone. */
+  .modal,
+  .app-menu,
+  .tab-context-menu,
+  .mention-popover,
+  .slash-popover,
+  .workspace-popover,
+  .ctx-popover,
+  .mp-popover,
+  .model-popover,
+  .model-pref-popover,
+  .select-popover,
+  .connection-picker-popover {
+    animation-name: lum-fade-only;
+  }
+
+  /* The backdrop's dim is what separates the dialog from the page, not
+   * motion: it keeps its look and only loses the fade. */
+  .modal-backdrop {
     animation: none;
   }
 
+  .tls-value {
+    animation: none;
+  }
+
+  /* Transform-only transitions (a chevron turning, a toggle's knob, a button
+   * pressing in) have no opacity to fall back on: they stop moving. */
   .btn,
   .icon-btn,
   .input-composer,
   .ctx-bar-fill,
-  .tls-fill {
+  .tls-fill,
+  .tool-line-chevron,
+  .notification-line-chevron,
+  .agent-activity-chevron,
+  .model-switch .chevron,
+  .workspace-picker-chevron,
+  .model-group-chevron,
+  .toggle-slider::before,
+  .mode-card,
+  .stella-agent,
+  .stella-header-avatar,
+  .stella-screen-toggle,
+  .msg-action-btn {
     transition: none;
   }
 
   .btn:active:not(:disabled),
   .icon-btn:active {
+    transform: none;
+  }
+
+  .mode-card:hover:not(:disabled) {
     transform: none;
   }
 }

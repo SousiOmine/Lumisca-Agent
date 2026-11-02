@@ -23,29 +23,34 @@ export function RecentSessionsModal({
   const { items, loading, error, reload } = useRecentSessions();
   return (
     <Modal onClose={onClose}>
-      <div className="modal-header">
-        <h2>{t("panels.sessions.title")}</h2>
-        <button
-          type="button"
-          className="icon-btn push"
-          onClick={onClose}
-          title={t("common.close")}
-          aria-label={t("common.close")}
-        >
-          <IconX size={15} />
-        </button>
-      </div>
-      <RecentSessionsList
-        items={items}
-        loading={loading}
-        error={error}
-        openKeys={openKeys}
-        onSelect={(key) => {
-          onOpen(key);
-          onClose();
-        }}
-        onReload={reload}
-      />
+      {(close) => (
+        <>
+          <div className="modal-header">
+            <h2>{t("panels.sessions.title")}</h2>
+            <button
+              type="button"
+              className="icon-btn push"
+              onClick={() => close()}
+              title={t("common.close")}
+              aria-label={t("common.close")}
+            >
+              <IconX size={15} />
+            </button>
+          </div>
+          <RecentSessionsList
+            items={items}
+            loading={loading}
+            error={error}
+            openKeys={openKeys}
+            onSelect={(key) => {
+              // The tab opens while the sheet is still leaving: the dialog is the
+              // App's to remove, so the choice is queued behind the exit.
+              close(() => onOpen(key));
+            }}
+            onReload={reload}
+          />
+        </>
+      )}
     </Modal>
   );
 }

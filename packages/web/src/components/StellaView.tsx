@@ -22,6 +22,8 @@ import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
 import { AgentIconDialog } from "./stella/AgentIconDialog.tsx";
+import { usePresence } from "../hooks/usePresence.ts";
+import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 import type { StellaConversationState } from "../stella-state.ts";
 
 interface StellaViewProps {
@@ -167,6 +169,11 @@ export function StellaView(
   const handedOver = handover !== null;
   const machineRunning = status?.state === "running";
   const showScreen = machineRunning && (screenOpen || handedOver);
+  // The pane leaves the way it arrived: motion.ts plays its exit, so it has to
+  // stay mounted for that. Without this the column vanished in one frame and
+  // tore the conversation's width back out from under the eye.
+  const reduceMotion = useReducedMotion();
+  const pane = usePresence(showScreen, { instant: reduceMotion });
 
   const submit = () => {
     const text = input.trim();
@@ -354,7 +361,7 @@ export function StellaView(
           />
         </div>
       </div>
-      {showScreen && (
+      {pane.mounted && (
         <StellaPane
           running={machineRunning}
           vncPort={status?.vncPort ?? null}
@@ -368,6 +375,8 @@ export function StellaView(
           // hand-over is the one state where leaving is not the user's call
           // (the run is blocked on this pane), so there is no × at all.
           onClose={handedOver ? undefined : () => setScreenOpen(false)}
+          exiting={pane.exiting}
+          onExitDone={pane.done}
         />
       )}
       {agent !== null && editingIcon && (

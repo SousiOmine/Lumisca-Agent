@@ -101,10 +101,10 @@ select:focus {
   color: var(--text);
   font-size: 13px;
   transition:
-    background var(--lum-dur-fast) var(--lum-ease),
-    border-color var(--lum-dur-fast) var(--lum-ease),
-    transform var(--lum-dur-fast) var(--lum-ease),
-    filter var(--lum-dur-fast) var(--lum-ease);
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    border-color var(--lum-dur-fast) var(--lum-ease-out),
+    transform var(--lum-dur-fast) var(--lum-ease-out),
+    filter var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .btn:hover {
@@ -148,9 +148,9 @@ select:focus {
   border-radius: var(--radius-pill);
   color: var(--text-dim);
   transition:
-    background var(--lum-dur-fast) var(--lum-ease),
-    color var(--lum-dur-fast) var(--lum-ease),
-    transform var(--lum-dur-fast) var(--lum-ease);
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out),
+    transform var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .icon-btn:hover {

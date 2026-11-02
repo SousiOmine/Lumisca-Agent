@@ -1,8 +1,10 @@
 import { IconX } from "@tabler/icons-preact";
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/compat";
 import { errorMessage } from "@lumisca/core/shared";
 import { token } from "../api-client.ts";
 import { useT } from "../i18n.ts";
+import { EASE_OUT, EXIT_SECONDS, play } from "../motion.ts";
+import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
 import type { StellaHandover } from "../types.ts";
 
 /**
@@ -37,9 +39,20 @@ type RfbConstructor = new (
   options?: { credentials?: { password?: string }; wsProtocols?: string[] },
 ) => RfbClient;
 
+/** How long the pane takes to arrive. Long enough to read as a column being
+ * laid down beside the conversation, short enough not to delay the picture
+ * the user asked for. Leaving is faster (see motion.ts): the decision is made,
+ * so the reply should not dawdle. */
+const ENTER_SECONDS = 0.2;
+
 interface StellaPaneProps {
   running: boolean;
   vncPort: number | null;
+  /** The pane is on its way out (see StellaView and hooks/usePresence). It
+   * plays its exit and then calls `onExitDone`. */
+  exiting?: boolean;
+  /** The exit is over: the caller may unmount the pane. */
+  onExitDone?: () => void;
   /** The hand-over the run is waiting on, or null. While set, the pane is
    * interactive and the "done" bar is shown. */
   handover: StellaHandover | null;
@@ -82,9 +95,101 @@ export function StellaPane({
   handover,
   onFinishHandover,
   onClose,
+  exiting = false,
+  onExitDone,
 }: StellaPaneProps) {
   const t = useT();
   const hostRef = useRef<HTMLDivElement>(null);
+  const paneRef = useRef<HTMLElement>(null);
+  const reduceMotion = useReducedMotion();
+  // On a phone the pane is the whole screen (stella.css), so it arrives from
+  // the bottom edge like a sheet; a desktop column slides in from the right.
+  const narrow = useNarrowViewport();
+
+  // Arrive. Only opacity and transform move: the pane's BOX never changes
+  // size, because the noVNC client re-derives its scale from that box on every
+  // resize and animating the width would re-scale the picture on every frame.
+  // The conversation's own width therefore snaps when the column appears —
+  // reflowing a transcript for 200ms would be worse than the snap, and the
+  // incoming sheet is where the eye is.
+  useLayoutEffect(() => {
+    const element = paneRef.current;
+    if (element === null || reduceMotion) return;
+    const start = narrow ? "translateY(100%)" : "translateX(16px)";
+    // Hide it before the first paint: `play` reaches the library through an
+    // import, so the animation cannot start in this tick, and without this the
+    // pane would paint at its final place and then jump back to the start.
+    element.style.opacity = "0";
+    element.style.transform = start;
+    let cancelled = false;
+    void play(
+      element,
+      {
+        opacity: [0, 1],
+        transform: narrow
+          ? ["translateY(100%)", "translateY(0%)"]
+          : ["translateX(16px)", "translateX(0px)"],
+      },
+      {
+        duration: ENTER_SECONDS,
+        easing: EASE_OUT,
+        prefersReducedMotion: reduceMotion,
+      },
+    ).then((playing) => {
+      // Nothing to play (the library could not be loaded): show the pane as
+      // it is instead of leaving it invisible.
+      if (cancelled || playing !== null) return;
+      element.style.opacity = "";
+      element.style.transform = "";
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Once, on mount: a resize of the window must not replay the entrance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Leave. The element stays mounted until the exit is over (the caller keeps
+  // it up through usePresence), so the pane does not vanish from under the
+  // pointer it was following.
+  useEffect(() => {
+    if (!exiting) return;
+    const element = paneRef.current;
+    const finish = onExitDone ?? (() => {});
+    if (element === null || reduceMotion) {
+      finish();
+      return;
+    }
+    let cancelled = false;
+    void play(
+      element,
+      {
+        opacity: [1, 0],
+        transform: narrow
+          ? ["translateY(0%)", "translateY(100%)"]
+          : ["translateX(0px)", "translateX(16px)"],
+      },
+      {
+        duration: EXIT_SECONDS,
+        easing: EASE_OUT,
+        prefersReducedMotion: reduceMotion,
+      },
+    ).then((playing) => {
+      // Nothing to play (the library is still loading, or it failed): the
+      // pane goes without its exit rather than waiting forever.
+      if (cancelled) return;
+      if (playing === null) {
+        finish();
+        return;
+      }
+      void playing.finished.then(() => {
+        if (!cancelled) finish();
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [exiting, reduceMotion, narrow, onExitDone]);
   const clientRef = useRef<RfbClient | null>(null);
   const [state, setState] = useState<ConnectionState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -193,7 +298,12 @@ export function StellaPane({
   }, [interactive, state]);
 
   return (
-    <aside className={`stella-pane${interactive ? " handover" : ""}`}>
+    <aside
+      ref={paneRef}
+      className={`stella-pane${interactive ? " handover" : ""}${
+        exiting ? " exiting" : ""
+      }`}
+    >
       <header className="stella-pane-header">
         <span>{t("chat.stella.machine.screen")}</span>
         {onClose !== undefined && (

@@ -119,11 +119,28 @@
   --mp-view-right: 8px;
   --mp-view-bottom: 8px;
   --mp-sheet-space: min(620px, calc(100dvh - 64px));
-  /* shared motion tokens: keep durations short and easing uniform so
-   * animations feel calm and professional */
-  --lum-ease: cubic-bezier(0.2, 0, 0, 1);
+  /* ---- motion -----------------------------------------------------------
+   *
+   * Three curves, each with one job, and a duration scale. A rule picks the
+   * curve by what the motion is FOR, never by taste (styles/README.md):
+   *
+   *   --lum-ease-out     something arriving or leaving. Starts fast, so the
+   *                      first frames — the ones the eye is watching — move
+   *                      immediately. Never ease-in for UI: its slow start
+   *                      delays exactly the moment the user is looking at.
+   *   --lum-ease-in-out  something moving or changing shape on screen, start
+   *                      to end (an indicator sliding, a fill growing).
+   *   --lum-ease-drawer  a pane travelling in from an edge (iOS-like).
+   *
+   * Built-in `ease-out` is too weak to read as intentional; these are the
+   * strong curves. Durations stay under 300ms because a UI animation is a
+   * reply to something the user did, not a performance. */
+  --lum-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --lum-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --lum-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --lum-dur-fast: 120ms;
   --lum-dur-mid: 180ms;
+  --lum-dur-slow: 240ms;
 }
 
 /* Phone: the pane is the screen. A floating sheet with a margin around it

@@ -18,7 +18,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   font-size: 13px;
-  animation: lum-slide-down var(--lum-dur-mid) var(--lum-ease) both;
+  animation: lum-slide-down var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .update-banner-text {
@@ -45,7 +45,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   font-size: 13px;
-  animation: lum-slide-down var(--lum-dur-mid) var(--lum-ease) both;
+  animation: lum-slide-down var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .server-down-icon {

@@ -28,6 +28,7 @@
     "@std/tar": "jsr:@std/tar@0.1.10",
     "@noble/hashes/blake2.js": "jsr:@noble/hashes@2.4.0/blake2.js",
     "ai": "npm:ai@7.0.153",
+    "motion": "npm:motion@14.9.0",
     "preact": "npm:preact@11.1.0",
     "preact/compat": "npm:preact@11.1.0/compat",
     "preact/compat/client": "npm:preact@11.1.0/compat/client",

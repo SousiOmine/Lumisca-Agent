@@ -319,3 +319,115 @@ Deno.test("the machine's screen canvas is left to noVNC to size", () => {
     );
   }
 });
+
+/** The elements a rule animates, as the last compound of each selector: the
+ * part that names the ELEMENT (`[data-enter] .msg.user` animates `.msg.user`,
+ * the thing that moves; the gate in front of it is not an element of its
+ * own). Used to match an animated rule against its reduced-motion override,
+ * which names the element without the gate. */
+function animatedTargets(selector: string): string[] {
+  return selector.split(",").map((part) => {
+    const compounds = part.trim().split(/\s+/);
+    return (compounds[compounds.length - 1] ?? "").replace(
+      /\[data-[a-z-]+(\]|=[^\]]*\])$/,
+      "",
+    );
+  }).filter((target) => target !== "");
+}
+
+Deno.test("every animation has a reduced-motion override", () => {
+  // Reduced motion is a promise about the whole app, and it was being kept
+  // one sheet at a time: five selectors (the model popover, the settings
+  // select, the connection picker, the server-down banner, the agent's
+  // working dot) animated at full strength while everything around them
+  // stopped. A sheet cannot enforce that on another one, so the check lives
+  // here, over all of them.
+  const overrides = new Set<string>();
+  const collect = (css: string) => {
+    const source = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const [, selector = ""] = match;
+      for (const target of animatedTargets(selector)) overrides.add(target);
+    }
+  };
+  // Only the reduce block counts, and only its animation/transition rules —
+  // a selector merely mentioned elsewhere (a comment, another property) is
+  // not an override.
+  const reduced = Deno.readTextFileSync(
+    new URL("./styles/reduced-motion.css", import.meta.url),
+  );
+  const start = reduced.indexOf("@media (prefers-reduced-motion: reduce)");
+  collect(start === -1 ? "" : reduced.slice(start));
+  overrides.delete("from");
+  overrides.delete("to");
+
+  const missing: string[] = [];
+  for (const [name, css] of styleSheetsSync()) {
+    if (name === "reduced-motion.css") continue;
+    const source = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const [, selector = "", body = ""] = match;
+      if (!/(^|[;\s])animation(-name)?\s*:/.test(body)) continue;
+      for (const target of animatedTargets(selector)) {
+        if (!overrides.has(target)) missing.push(`${name}: ${target}`);
+      }
+    }
+  }
+  assertEquals(
+    [...new Set(missing)].sort(),
+    [],
+    "animated but not covered by reduced-motion.css",
+  );
+});
+
+Deno.test("transitions name their properties and use the motion tokens", async () => {
+  // Two rules of the motion contract (styles/README.md): `transition: all`
+  // tracks properties nobody chose, and a literal duration or easing forks
+  // the scale the tokens define — the app had 30 of them, all slightly
+  // different (`120ms ease`, `140ms ease`, `0.15s`).
+  const offenders: string[] = [];
+  for await (const [name, css] of styleSheets()) {
+    const source = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const [, selector = "", body = ""] = match;
+      const transition = body.match(/(^|[;\s])(transition)\s*:\s*([^;]+);/);
+      if (transition === null) continue;
+      const value = transition[3] ?? "";
+      if (/\ball\b/.test(value)) {
+        offenders.push(
+          `${name}: ${selector.trim()} uses ` +
+            `transition: all`,
+        );
+        continue;
+      }
+      // A duration or an easing written out instead of read from the tokens.
+      // The token NAMES contain "ease", so they are removed before looking
+      // for a literal one.
+      const literal = value.replace(/var\(\s*--[a-z0-9-]+\s*\)/g, "");
+      if (
+        /\b\d+(\.\d+)?m?s\b/.test(literal) ||
+        /\b(ease|linear)\b/.test(literal)
+      ) {
+        offenders.push(
+          `${name}: ${selector.trim()} { transition: ${value.trim()} }`,
+        );
+      }
+    }
+  }
+  assertEquals(offenders.sort(), [], "transitions outside the motion tokens");
+});
+
+/** The part sheets read synchronously (styles_test's helpers above are
+ * async generators, and a Deno.test may not await inside a sync helper). */
+function styleSheetsSync(): [string, string][] {
+  const dir = new URL("./styles/", import.meta.url);
+  const sheets: [string, string][] = [];
+  for (const entry of Deno.readDirSync(dir)) {
+    if (!entry.isFile || !entry.name.endsWith(".css")) continue;
+    sheets.push([
+      entry.name,
+      Deno.readTextFileSync(new URL(entry.name, dir)),
+    ]);
+  }
+  return sheets;
+}

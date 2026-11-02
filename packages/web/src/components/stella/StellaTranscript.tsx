@@ -1,4 +1,5 @@
-import { Fragment } from "preact/compat";
+import { Fragment, useRef } from "preact/compat";
+import { useArrivals, withoutHandoff } from "../../hooks/useArrivals.ts";
 import { useTranscriptScroll } from "../../hooks/useTranscriptScroll.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import { formatDaySeparator, startOfDay } from "../../format.ts";
@@ -65,12 +66,36 @@ export function StellaTranscript({
   const t = useT();
   const locale = useLocale();
   const first = conversation.entries[0];
+  /** The streamed text as of the previous commit (see the handoff below). */
+  const streamed = useRef(conversation.streamingText);
   const { scrollRef } = useTranscriptScroll({
     onReachTop: () => conversation.older !== null && onLoadOlder(),
     loadingOlder,
     firstMessageKey: first === undefined ? undefined : entryKey(first),
     pinToken,
   });
+
+  // Which messages may animate in: only the ones that arrived at the live
+  // edge of the conversation. The first paint draws the whole loaded window,
+  // and paging back inserts history above the reader (see hooks/useArrivals) —
+  // neither is an arrival.
+  const arrivals = useArrivals(
+    conversation.entries.map((entry) => entryKey(entry)),
+  );
+  // ...and the settled copy of the text that was streaming is not one either:
+  // those are the same words, and replaying them would make every reply jump
+  // back to its first line the moment it finishes.
+  const entering = withoutHandoff(
+    arrivals,
+    conversation.entries.map((entry) => ({
+      key: entryKey(entry),
+      text: entry.text,
+    })),
+    streamed.current,
+  );
+  // The stream's text, one render behind: the commit that settles it needs to
+  // know what was on screen a moment ago.
+  streamed.current = conversation.streamingText;
 
   // The separators are derived, not stored: the day an entry belongs to is
   // a fact about its timestamp, so a re-render (a language switch, a new
@@ -95,6 +120,7 @@ export function StellaTranscript({
           // the gap belong to the first of the run only.
           const showAvatar = entry.role !== "user" &&
             (newDay || previous === undefined || previous.role === "user");
+          const key = entryKey(entry);
           return (
             <Fragment key={`${entry.role}-${entry.timestamp}-${index}`}>
               {newDay && (
@@ -106,6 +132,7 @@ export function StellaTranscript({
                 entry={entry}
                 author={author}
                 showAvatar={showAvatar}
+                entering={entering.has(key)}
                 visualBase={visualBase}
                 attachBase={attachBase}
                 uploadBase={uploadBase}

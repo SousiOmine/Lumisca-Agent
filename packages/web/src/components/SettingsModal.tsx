@@ -459,78 +459,84 @@ export function SettingsModal({
       className="modal-settings"
       onClose={onClose}
     >
-      <div className="modal-header settings-header">
-        <h2>{t("common.settings")}</h2>
-        <span
-          className="settings-mode"
-          title={t("settings.dialog.modeTitle", { mode: modeName })}
-        >
-          {modeName}
-        </span>
-        <button
-          type="button"
-          className="btn push"
-          onClick={onClose}
-          title={t("common.close")}
-          aria-label={t("common.close")}
-        >
-          <IconX size={16} />
-        </button>
-      </div>
+      {(close) => (
+        <>
+          <div className="modal-header settings-header">
+            <h2>{t("common.settings")}</h2>
+            <span
+              className="settings-mode"
+              title={t("settings.dialog.modeTitle", { mode: modeName })}
+            >
+              {modeName}
+            </span>
+            <button
+              type="button"
+              className="btn push"
+              onClick={() => close()}
+              title={t("common.close")}
+              aria-label={t("common.close")}
+            >
+              <IconX size={16} />
+            </button>
+          </div>
 
-      <div className="settings-body" data-view={view}>
-        <nav className="settings-nav" aria-label={t("common.settings")}>
-          {groups.map((group) => (
-            <div key={group.scope} className="settings-nav-group">
-              <h3 className="settings-nav-heading">
-                {group.scope === "common"
-                  ? t("settings.nav.common")
-                  : t("settings.nav.onlyInMode", { mode: modeName })}
-              </h3>
-              {group.entries.map((navEntry) => {
-                const item = navEntry as SettingsCategoryEntry;
-                const active = category === navEntry.id;
-                return (
-                  <button
-                    type="button"
-                    key={navEntry.id}
-                    className={`settings-nav-item${active ? " active" : ""}`}
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => openCategory(navEntry.id)}
-                  >
-                    {item.icon}
-                    <span className="settings-nav-text">
-                      <span className="settings-nav-label">
-                        {t(navEntry.labelKey)}
-                      </span>
-                      {
-                        /* Drawn by the compact layout only (settings.css): the
+          <div className="settings-body" data-view={view}>
+            <nav className="settings-nav" aria-label={t("common.settings")}>
+              {groups.map((group) => (
+                <div key={group.scope} className="settings-nav-group">
+                  <h3 className="settings-nav-heading">
+                    {group.scope === "common"
+                      ? t("settings.nav.common")
+                      : t("settings.nav.onlyInMode", { mode: modeName })}
+                  </h3>
+                  {group.entries.map((navEntry) => {
+                    const item = navEntry as SettingsCategoryEntry;
+                    const active = category === navEntry.id;
+                    return (
+                      <button
+                        type="button"
+                        key={navEntry.id}
+                        className={`settings-nav-item${
+                          active ? " active" : ""
+                        }`}
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => openCategory(navEntry.id)}
+                      >
+                        {item.icon}
+                        <span className="settings-nav-text">
+                          <span className="settings-nav-label">
+                            {t(navEntry.labelKey)}
+                          </span>
+                          {
+                            /* Drawn by the compact layout only (settings.css): the
                           page header prints the same line where both are on
                           screen at once. */
-                      }
-                      <span className="settings-nav-desc">
-                        {t(navEntry.descriptionKey)}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
+                          }
+                          <span className="settings-nav-desc">
+                            {t(navEntry.descriptionKey)}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </nav>
 
-        <div className="settings-content">
-          <SettingsPage
-            title={t(entry?.labelKey ?? "common.settings")}
-            description={entry === undefined
-              ? undefined
-              : t(entry.descriptionKey)}
-            onBack={stepped ? () => setShowPage(false) : undefined}
-          >
-            {entry?.render(panels)}
-          </SettingsPage>
-        </div>
-      </div>
+            <div className="settings-content">
+              <SettingsPage
+                title={t(entry?.labelKey ?? "common.settings")}
+                description={entry === undefined
+                  ? undefined
+                  : t(entry.descriptionKey)}
+                onBack={stepped ? () => setShowPage(false) : undefined}
+              >
+                {entry?.render(panels)}
+              </SettingsPage>
+            </div>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

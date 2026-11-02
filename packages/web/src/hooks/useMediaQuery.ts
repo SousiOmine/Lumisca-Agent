@@ -96,3 +96,19 @@ export function useNarrowViewport(): boolean {
 export function useTouchInput(): boolean {
   return useMediaQuery(TOUCH_QUERY);
 }
+
+/** The query of the OS-level "reduce motion" setting. */
+export const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+/**
+ * Whether the reader asked for less motion.
+ *
+ * Reduced motion does not mean "no animation": the fades stay, because they
+ * explain that content changed without moving anything, while translations,
+ * scales and loops go (styles/reduced-motion.css). What this hook is for is
+ * the other half — motion that JavaScript would start (an exit, a spring, a
+ * slide), which a stylesheet cannot cancel after the fact.
+ */
+export function useReducedMotion(): boolean {
+  return useMediaQuery(REDUCED_MOTION_QUERY);
+}

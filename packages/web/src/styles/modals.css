@@ -15,7 +15,13 @@
   display: grid;
   place-items: center;
   z-index: 50;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+  /* No `both`: the keyframe's end state is the element's own (opacity 1), and
+   * a filled animation would keep winning over the exit transition below. */
+  animation: lum-fade var(--lum-dur-mid) var(--lum-ease-out);
+  /* The exit: the scrim fades faster than the sheet leaves, so the page is
+   * already readable behind it (see `.closing`). */
+  transition: background-color var(--lum-dur-fast) var(--lum-ease-out),
+    backdrop-filter var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 /* A dialog is a sheet of the same family as the chat pane: surface, hairline
@@ -34,7 +40,28 @@
   flex-direction: column;
   gap: 14px;
   box-shadow: var(--shadow-panel);
-  animation: lum-rise var(--lum-dur-mid) var(--lum-ease) both;
+  /* No fill mode, for the reason above: the entrance must not hold the
+   * properties the exit transitions. */
+  animation: lum-rise var(--lum-dur-mid) var(--lum-ease-out);
+  /* The exit (see `.modal.closing`). A transition rather than a keyframe: it
+   * can be interrupted, and it needs a `transitionend` for Modal.tsx to
+   * unmount after. */
+  transition: opacity var(--lum-dur-fast) var(--lum-ease-out),
+    transform var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+/* Leaving: back down and out in the same direction it arrived from, only
+ * faster — the decision is made, so the reply should not dawdle. The sheet
+ * does NOT scale to 0: it goes to the same 0.96 it entered from, because
+ * nothing in the real world shrinks to a point. */
+.modal-backdrop.closing {
+  background-color: transparent;
+  backdrop-filter: none;
+}
+
+.modal.closing {
+  opacity: 0;
+  transform: scale(0.96) translateY(4px);
 }
 
 .modal h2 {
@@ -71,7 +98,7 @@
   gap: 8px;
   cursor: pointer;
   user-select: text;
-  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .error-banner .msg-body {

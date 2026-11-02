@@ -44,6 +44,9 @@ export function AgentIconDialog(
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The dialog's own exit (see Modal): a successful upload or a reset leaves
+  // through it, so the sheet is not removed mid-write.
+  const closeRef = useRef<(after?: () => void) => void>(() => {});
 
   const upload = async (file: File) => {
     setBusy(true);
@@ -59,7 +62,7 @@ export function AgentIconDialog(
         mimeType: file.type,
       });
       onChanged(updated);
-      onClose();
+      closeRef.current();
     } catch (failure) {
       setError(errorText(failure));
     } finally {
@@ -72,7 +75,7 @@ export function AgentIconDialog(
     setError(null);
     try {
       onChanged(await api.clearStellaAgentIcon(agent.id));
-      onClose();
+      closeRef.current();
     } catch (failure) {
       setError(errorText(failure));
     } finally {
@@ -82,60 +85,76 @@ export function AgentIconDialog(
 
   return (
     <Modal onClose={busy ? () => {} : onClose}>
-      <h2>{t("chat.stella.agents.icon.title", { name: agent.name })}</h2>
-      <div className="agent-icon-preview">
-        <AgentAvatar
-          agentId={agent.id}
-          name={agent.name}
-          icon={agent.icon}
-          size={72}
-        />
-      </div>
-      <p className="agent-icon-hint">
-        {t("chat.stella.agents.icon.hint", {
-          formats: AGENT_ICON_FORMATS,
-          size: megabytes(MAX_AGENT_ICON_BYTES),
-        })}
-      </p>
-      {
-        /* Hidden and triggered by the button below: a bare file input is a
+      {(close) => {
+        closeRef.current = close;
+        return (
+          <>
+            <h2>{t("chat.stella.agents.icon.title", { name: agent.name })}</h2>
+            <div className="agent-icon-preview">
+              <AgentAvatar
+                agentId={agent.id}
+                name={agent.name}
+                icon={agent.icon}
+                size={72}
+              />
+            </div>
+            <p className="agent-icon-hint">
+              {t("chat.stella.agents.icon.hint", {
+                formats: AGENT_ICON_FORMATS,
+                size: megabytes(MAX_AGENT_ICON_BYTES),
+              })}
+            </p>
+            {
+              /* Hidden and triggered by the button below: a bare file input is a
           browser control with its own wording, and it cannot be styled to
           sit in this dialog. */
-      }
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp,image/bmp"
-        className="agent-icon-input"
-        onChange={(event) => {
-          const file = event.currentTarget.files?.[0];
-          if (file !== undefined) void upload(file);
-        }}
-      />
-      {error !== null && <p className="error-text" role="alert">{error}</p>}
-      <div className="modal-actions">
-        {agent.icon !== "" && (
-          <button
-            type="button"
-            className="btn danger"
-            disabled={busy}
-            onClick={() => void clear()}
-          >
-            {t("chat.stella.agents.icon.reset")}
-          </button>
-        )}
-        <button type="button" className="btn" disabled={busy} onClick={onClose}>
-          {t("common.close")}
-        </button>
-        <button
-          type="button"
-          className="btn primary"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-        >
-          {busy ? t("common.saving") : t("chat.stella.agents.icon.choose")}
-        </button>
-      </div>
+            }
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp,image/bmp"
+              className="agent-icon-input"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (file !== undefined) void upload(file);
+              }}
+            />
+            {error !== null && (
+              <p className="error-text" role="alert">{error}</p>
+            )}
+            <div className="modal-actions">
+              {agent.icon !== "" && (
+                <button
+                  type="button"
+                  className="btn danger"
+                  disabled={busy}
+                  onClick={() => void clear()}
+                >
+                  {t("chat.stella.agents.icon.reset")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => close()}
+              >
+                {t("common.close")}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy}
+                onClick={() => inputRef.current?.click()}
+              >
+                {busy
+                  ? t("common.saving")
+                  : t("chat.stella.agents.icon.choose")}
+              </button>
+            </div>
+          </>
+        );
+      }}
     </Modal>
   );
 }

@@ -46,7 +46,7 @@
   box-shadow: var(--shadow-panel);
   overflow: hidden;
   font-size: 12px;
-  animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease) both;
+  animation: lum-slide-right var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .todo-panel-header,
@@ -337,7 +337,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .question-card-header {
@@ -389,7 +389,9 @@
   font-size: 13px;
   color: var(--text-dim);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background var(--lum-dur-fast) var(--lum-ease-out),
+    border-color var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .question-option:hover {

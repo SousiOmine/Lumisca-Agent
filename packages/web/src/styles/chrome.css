@@ -137,7 +137,7 @@
   display: grid;
   place-items: center;
   flex: none;
-  transition: transform 120ms var(--lum-ease);
+  transition: transform var(--lum-dur-fast) var(--lum-ease-in-out);
 }
 
 .connection-picker-chevron.open {
@@ -159,7 +159,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: 0 8px 24px var(--shadow);
-  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .connection-option {
@@ -172,7 +172,7 @@
   color: var(--text);
   font-size: 12.5px;
   text-align: left;
-  transition: background 100ms ease;
+  transition: background var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .connection-option:hover:not(:disabled) {
@@ -254,10 +254,10 @@
   font-size: 12.5px;
   position: relative;
   transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    box-shadow 120ms ease;
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    border-color var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out),
+    box-shadow var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .tab:hover {
@@ -348,7 +348,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 12px 32px var(--shadow);
-  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .app-menu-item {
@@ -391,7 +391,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 12px 32px var(--shadow);
-  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .tab-context-item {
@@ -472,17 +472,8 @@
   border-radius: 50%;
   background: var(--accent);
   flex: none;
+  /* The looping keyframes live in motion.css with the other shared ones. */
   animation: pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.25;
-  }
 }
 
 .tab-badge {

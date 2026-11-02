@@ -27,33 +27,51 @@ export function CloseTabsDialog({
 }: CloseTabsDialogProps) {
   const t = useT();
   const single = names.length === 1;
+  // Every answer leaves the dialog. The two "close the tabs" answers also
+  // hand the decision to the App, which is what removes this dialog — so the
+  // decision is queued behind the exit (`close(after)`) instead of happening
+  // while the sheet is still on screen (the dialog would vanish mid-click).
   return (
     <Modal onClose={onCancel}>
-      <h2>{t("chrome.tabClose.title")}</h2>
-      <p className="confirm-body">
-        {single
-          ? t("chrome.tabClose.body", { name: names[0]! })
-          : t("chrome.tabClose.bodyMany", { count: names.length })}
-      </p>
-      {!single && (
-        // One tab per row: the names are session titles (free text), so no
-        // sentence tries to carry them inline.
-        <ul className="confirm-list">
-          {names.map((name, index) => <li key={index}>{name}</li>)}
-        </ul>
+      {(close) => (
+        <>
+          <h2>{t("chrome.tabClose.title")}</h2>
+          <p className="confirm-body">
+            {single
+              ? t("chrome.tabClose.body", { name: names[0]! })
+              : t("chrome.tabClose.bodyMany", { count: names.length })}
+          </p>
+          {!single && (
+            // One tab per row: the names are session titles (free text), so no
+            // sentence tries to carry them inline.
+            <ul className="confirm-list">
+              {names.map((name, index) => <li key={index}>{name}</li>)}
+            </ul>
+          )}
+          <p className="settings-note">
+            {t("chrome.tabClose.keepRunningNote")}
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn" onClick={() => close()}>
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => close(onKeepRunning)}
+            >
+              {t("chrome.tabClose.keepRunning")}
+            </button>
+            <button
+              type="button"
+              className="btn danger"
+              onClick={() => close(onStopAndClose)}
+            >
+              {t("chrome.tabClose.stop")}
+            </button>
+          </div>
+        </>
       )}
-      <p className="settings-note">{t("chrome.tabClose.keepRunningNote")}</p>
-      <div className="modal-actions">
-        <button type="button" className="btn" onClick={onCancel}>
-          {t("common.cancel")}
-        </button>
-        <button type="button" className="btn" onClick={onKeepRunning}>
-          {t("chrome.tabClose.keepRunning")}
-        </button>
-        <button type="button" className="btn danger" onClick={onStopAndClose}>
-          {t("chrome.tabClose.stop")}
-        </button>
-      </div>
     </Modal>
   );
 }

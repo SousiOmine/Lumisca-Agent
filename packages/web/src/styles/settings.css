@@ -59,7 +59,7 @@
   place-items: center;
   flex: none;
   color: var(--text-faint);
-  transition: transform 120ms var(--lum-ease);
+  transition: transform var(--lum-dur-fast) var(--lum-ease-in-out);
 }
 
 .setting-card-chevron.open {
@@ -449,7 +449,8 @@
   text-align: left;
   font-size: 13px;
   color: var(--text-dim);
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .settings-nav-item:hover {
@@ -534,7 +535,8 @@
   margin-top: -2px;
   border-radius: var(--radius-pill);
   color: var(--text-dim);
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--lum-dur-fast) var(--lum-ease-out),
+    color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .settings-page-back:hover {
@@ -739,7 +741,7 @@ button.provider-row-body:hover .provider-row-chevron {
   place-items: center;
   flex: none;
   color: var(--text-faint);
-  transition: color var(--lum-dur-fast) var(--lum-ease);
+  transition: color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .provider-row-actions {
@@ -803,7 +805,7 @@ button.provider-row-body:hover .provider-row-chevron {
   font-size: 13px;
   font-weight: 500;
   text-align: left;
-  transition: background 120ms ease;
+  transition: background var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .model-group-header:hover {
@@ -813,7 +815,7 @@ button.provider-row-body:hover .provider-row-chevron {
 .model-group-chevron {
   flex: none;
   color: var(--text-dim);
-  transition: transform 150ms ease;
+  transition: transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .model-group-chevron.expanded {
@@ -879,7 +881,7 @@ button.provider-row-body:hover .provider-row-chevron {
   inset: 0;
   background: var(--surface-3);
   border-radius: var(--radius-pill);
-  transition: background 200ms ease;
+  transition: background var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .toggle-slider::before {
@@ -891,7 +893,7 @@ button.provider-row-body:hover .provider-row-chevron {
   top: 2px;
   background: var(--toggle-knob);
   border-radius: 50%;
-  transition: transform 200ms ease;
+  transition: transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .toggle-switch input:checked + .toggle-slider {
@@ -972,7 +974,7 @@ button.provider-row-body:hover .provider-row-chevron {
   height: 100%;
   border-radius: var(--radius-xs);
   background: var(--accent);
-  transition: width 200ms ease;
+  transition: width var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .update-percent {
@@ -1242,7 +1244,7 @@ button.provider-row-body:hover .provider-row-chevron {
   place-items: center;
   flex: none;
   color: var(--text-faint);
-  transition: transform var(--lum-dur-fast) var(--lum-ease);
+  transition: transform var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .select-chevron.open {
@@ -1263,7 +1265,7 @@ button.provider-row-body:hover .provider-row-chevron {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: 0 8px 24px var(--shadow);
-  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .select-option {

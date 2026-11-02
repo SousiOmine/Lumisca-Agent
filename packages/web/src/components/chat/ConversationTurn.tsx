@@ -108,6 +108,7 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
  * there is no flag here to hide them. */
 export const ConversationTurn = memo(function ConversationTurn({
   turn,
+  entering,
   toolResults,
   runningTools,
   visualBase,
@@ -118,6 +119,11 @@ export const ConversationTurn = memo(function ConversationTurn({
   onSend,
 }: {
   turn: ConversationTurnData;
+  /** True when this turn just arrived at the live edge of the transcript, so
+   * it may animate in (see hooks/useArrivals). A turn drawn by the first
+   * paint or by a page read back must not: the transcript would stage
+   * itself, or flash history under the reader. */
+  entering: boolean;
   toolResults: Map<string, ToolResultMessage>;
   runningTools: Map<string, string>;
   /** Asset base of the session this turn belongs to (see MarkdownBlock). */
@@ -139,7 +145,10 @@ export const ConversationTurn = memo(function ConversationTurn({
   // (nothing ran for it), no timing.
   if (turn.standalone) {
     return (
-      <section className="conversation-turn">
+      <section
+        className="conversation-turn"
+        data-enter={entering || undefined}
+      >
         <MessageRow
           message={turn.user}
           toolResults={toolResults}
@@ -181,7 +190,10 @@ export const ConversationTurn = memo(function ConversationTurn({
   const completionTime = endedAt ?? lastTimestamp;
 
   return (
-    <section className="conversation-turn">
+    <section
+      className="conversation-turn"
+      data-enter={entering || undefined}
+    >
       <MessageRow
         message={turn.user}
         toolResults={toolResults}

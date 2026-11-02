@@ -47,6 +47,7 @@ export function StellaMessage({
   entry,
   author,
   showAvatar,
+  entering,
   visualBase,
   attachBase,
   uploadBase,
@@ -59,6 +60,12 @@ export function StellaMessage({
   /** False when the previous entry was the same speaker: a continuation
    * drops the repeated face and the gap above it. */
   showAvatar: boolean;
+  /** True when this message just arrived at the live edge of the
+   * conversation, so it may animate in (see hooks/useArrivals). A message
+   * drawn by the first paint — the loaded window, a page of history read
+   * back — must not: staging a hundred rows, or flashing history under the
+   * reader, is not an arrival. */
+  entering: boolean;
   /** Asset base of the conversation (see MarkdownBlock). */
   visualBase: string;
   /** Attachment base of the conversation (the files chat_attach sent). */
@@ -98,6 +105,7 @@ export function StellaMessage({
       entry={entry}
       author={author}
       showAvatar={showAvatar}
+      entering={entering}
       visualBase={visualBase}
       attachBase={attachBase}
       onSend={onSend}
@@ -166,6 +174,7 @@ function AgentBubble({
   entry,
   author,
   showAvatar,
+  entering,
   visualBase,
   attachBase,
   onSend,
@@ -174,13 +183,18 @@ function AgentBubble({
   entry: StellaEntry;
   author: MessageAuthor;
   showAvatar: boolean;
+  /** See StellaMessage's `entering`. */
+  entering: boolean;
   visualBase: string;
   attachBase: string;
   onSend: (text: string) => void;
   time: ComponentChildren;
 }) {
   return (
-    <div className={`stella-msg${showAvatar ? "" : " continued"}`}>
+    <div
+      className={`stella-msg${showAvatar ? "" : " continued"}`}
+      data-enter={entering || undefined}
+    >
       {
         /* The face is decorative: the header names the agent the whole
           conversation is with, so a label on every message would be noise.

@@ -8,6 +8,7 @@ import type { StellaAgent } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 import { Field } from "./Field.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
+import { useArrivals } from "../hooks/useArrivals.ts";
 
 interface StellaSidebarProps {
   agents: StellaAgent[];
@@ -50,6 +51,10 @@ export function StellaSidebar(
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Which rows just appeared (a new agent, or one the agent created itself).
+  // Only those animate: the first paint of the list must not stage itself
+  // (see hooks/useArrivals).
+  const entering = useArrivals(agents.map((agent) => agent.id));
 
   const resetForm = () => {
     setCreating(false);
@@ -110,6 +115,7 @@ export function StellaSidebar(
           <div
             key={agent.id}
             className={`stella-agent${agent.id === activeId ? " active" : ""}`}
+            data-enter={entering.has(agent.id) || undefined}
           >
             {
               /* The picture is part of the row's name button, not a control of

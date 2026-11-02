@@ -38,7 +38,7 @@
 .model-switch .chevron {
   display: grid;
   place-items: center;
-  transition: transform 120ms ease;
+  transition: transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .model-switch .chevron.open {
@@ -101,7 +101,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .ctx-row {
@@ -132,9 +132,11 @@
   height: 100%;
   border-radius: var(--radius-pill);
   background: var(--text);
+  /* A bar that grows to its value: the movement is what tells the reader the
+   * number changed, so it takes the symmetric curve (see tokens.css). */
   transition:
-    width 200ms var(--lum-ease),
-    background-color var(--lum-dur-fast) var(--lum-ease);
+    width var(--lum-dur-mid) var(--lum-ease-in-out),
+    background-color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .ctx-bar-fill.warn {
@@ -162,7 +164,7 @@
   border: 1px solid var(--border);
   box-shadow: 0 8px 24px var(--shadow);
   overflow: hidden;
-  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .model-popover {
@@ -241,7 +243,7 @@
   color: var(--text-faint);
   flex: none;
   opacity: 0;
-  transition: opacity 100ms ease;
+  transition: opacity var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .mp-provider:hover .mp-chevron,
@@ -439,7 +441,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
   pointer-events: none;
-  transition: height var(--lum-dur-mid) var(--lum-ease);
+  transition: height var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .tls-range {
@@ -520,7 +522,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   min-height: 1.5em;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease);
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 /* ---- stepped layout ------------------------------------------------------- */

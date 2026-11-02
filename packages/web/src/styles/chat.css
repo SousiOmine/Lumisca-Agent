@@ -55,7 +55,7 @@
 .chat-empty-inner {
   text-align: center;
   max-width: 420px;
-  animation: lum-fade var(--lum-dur-mid) var(--lum-ease) both;
+  animation: lum-fade var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .chat-column {
@@ -99,7 +99,14 @@
   background: var(--user-msg-bg);
   border-radius: var(--radius-xl);
   padding: 11px 16px;
-  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+/* A user message that just arrived, in either mode. The flag is on the row
+ * (`[data-enter]`), not the capsule: the row is what a transcript decides is
+ * new (see hooks/useArrivals.ts), and the capsule is only its shape. Without
+ * the gate, opening a conversation replays every message it holds. */
+[data-enter] .msg.user {
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 /* The line under a bubble: when it was said, then the actions. A message app
@@ -149,7 +156,8 @@
   color: var(--text-dim);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
+  transition: opacity var(--lum-dur-fast) var(--lum-ease-out),
+    background var(--lum-dur-fast) var(--lum-ease-out);
   font-size: 11px;
 }
 
@@ -481,17 +489,9 @@
   background: var(--accent);
   border-radius: var(--radius-xs);
   vertical-align: text-bottom;
+  /* The box is a solid one, drawn and cleared: a step curve reads as a
+   * cursor and a linear fade reads as a light pulsing. */
   animation: blink 1s step-end infinite;
-}
-
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
 }
 
 /* ---- completed-turn activity --------------------------------------------- */
@@ -500,7 +500,13 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
-  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease) both;
+}
+
+/* A turn that arrived while the reader was at the bottom of the transcript.
+ * A loaded turn — the window's first paint, a page read back — must not
+ * animate: the transcript would stage itself (see styles/motion.css). */
+.conversation-turn[data-enter] {
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
 .agent-activity {
@@ -541,7 +547,7 @@
 }
 
 .agent-activity-chevron {
-  transition: transform 140ms ease;
+  transition: transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .agent-activity.expanded .agent-activity-chevron {
@@ -552,7 +558,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 /* ---- tool calls (timeline) ---------------------------------------------- */
@@ -583,7 +589,7 @@
   place-items: center;
   color: var(--text-faint);
   flex: none;
-  transition: transform 120ms ease;
+  transition: transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .tool-line.open .tool-line-chevron {
@@ -653,7 +659,7 @@
   font-size: 12px;
   border-top: 1px solid var(--border);
   margin-top: 2px;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .tool-detail-args {
@@ -733,7 +739,7 @@
   place-items: center;
   color: var(--text-faint);
   flex: none;
-  transition: transform 120ms ease;
+  transition: transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
 .notification-line.open .notification-line-chevron {
@@ -775,7 +781,7 @@
   font-size: 12px;
   border-top: 1px solid var(--border);
   margin-top: 2px;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease) both;
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .notification-detail-body {
@@ -792,15 +798,10 @@
 
 /* ---- rotating loader ---------------------------------------------------- */
 
-/* rotating loader for in-progress states (see ToolCall) */
+/* rotating loader for in-progress states (see ToolCall); the keyframes are
+ * in motion.css with the other shared ones. */
 .spin {
   animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* ---- narrow windows ------------------------------------------------------- */
@@ -981,8 +982,8 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: background var(--lum-dur-fast) var(--lum-ease),
-    border-color var(--lum-dur-fast) var(--lum-ease);
+  transition: background var(--lum-dur-fast) var(--lum-ease-out),
+    border-color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .ui-card-option:hover {

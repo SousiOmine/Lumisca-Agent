@@ -1,5 +1,11 @@
-import { useEffect, useRef } from "preact/compat";
-import type { ReactNode } from "preact/compat";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "preact/compat";
+import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 
 interface ModalProps {
   /** CSS width of the dialog. The value reaches the stylesheet as a variable
@@ -8,8 +14,24 @@ interface ModalProps {
    * override it — an inline width wins over every rule but `!important`. */
   width?: string;
   className?: string;
+  /**
+   * Unmount the dialog. Called ONCE, after the exit has finished — so a
+   * caller never has to know the exit exists: it passes the same handler it
+   * would pass to a dialog that vanished instantly, and the removal is simply
+   * 140ms later.
+   */
   onClose: () => void;
-  children: ReactNode;
+  /** The dialog's body. A function receives `close`, which starts the exit;
+   * a control INSIDE the dialog must use it instead of its own "close"
+   * prop, or it would remove the sheet in one frame and skip the exit.
+   *
+   * `close(after)` runs `after` once the exit is over, just before
+   * `onClose` — for the decisions that unmount the dialog from the caller's
+   * side (a dialog that asks "stop the run or keep it going?" hands the
+   * answer to its parent, which is what removes it). */
+  children:
+    | ReactNode
+    | ((close: (after?: () => void) => void) => ReactNode);
 }
 
 /** Anything the focus trap will let the user Tab to. */
@@ -22,10 +44,71 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
-/** Shared backdrop + dialog shell: click on the backdrop closes, Escape
- * closes, and Tab cycles inside the dialog (the WCAG modal pattern). */
+/** How long the exit may take before the dialog removes itself anyway. The
+ * transition is 140ms (modals.css); this is the safety net for one that never
+ * runs (an ancestor with `display: none`, a background tab that throttles it).
+ * Keep it above the transition, or a slow frame would cut the exit short. */
+const EXIT_TIMEOUT_MS = 320;
+
+/**
+ * Shared backdrop + dialog shell: click on the backdrop closes, Escape
+ * closes, and Tab cycles inside the dialog (the WCAG modal pattern).
+ *
+ * The sheet also plays its own exit. A dialog that unmounted in one frame
+ * teleported out from under the pointer, which reads as a glitch rather than
+ * as "you are done here"; here the backdrop dims away and the sheet settles
+ * back down (modals.css) before `onClose` is called — once, when that is over.
+ * Every way of closing goes through it: the backdrop, Escape, and the
+ * dialog's own buttons (through the `close` a function child receives).
+ */
 export function Modal({ width, className, onClose, children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  const [closing, setClosing] = useState(false);
+  // The exit ran to its end (or was cut short). `onClose` is delivered from
+  // the effect below rather than from the event, so it cannot run during
+  // another component's render — and exactly once: the caller unmounts this
+  // dialog, but until it does, a re-render would re-run the effect.
+  const [finished, setFinished] = useState(false);
+  const closed = useRef(false);
+  // Whether the exit is drawn. A reduced-motion reader gets none at all, not
+  // even a one-frame `.closing` flash: with the transitions disabled the
+  // class would hide the sheet instantly and then unmount it, which is the
+  // teleport this component exists to avoid.
+  const exiting = closing && !reduceMotion;
+  // What a decision wants done once the sheet is gone, and the latest
+  // `onClose` (the caller passes an inline arrow, so it changes every render;
+  // reading it from a ref keeps the effect from re-running per render).
+  const after = useRef<(() => void) | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const requestClose = useCallback((then?: () => void) => {
+    after.current = then ?? null;
+    setClosing(true);
+  }, []);
+
+  useEffect(() => {
+    if (!finished || closed.current) return;
+    closed.current = true;
+    const then = after.current;
+    after.current = null;
+    then?.();
+    onCloseRef.current();
+  }, [finished]);
+
+  // Reduced motion: there is nothing to wait for, so the sheet goes on the
+  // next commit instead of after a transition that will never start.
+  useEffect(() => {
+    if (!closing || !reduceMotion) return;
+    setFinished(true);
+  }, [closing, reduceMotion]);
+
+  useEffect(() => {
+    if (!exiting || finished) return;
+    const timer = setTimeout(() => setFinished(true), EXIT_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [exiting, finished]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -39,9 +122,12 @@ export function Modal({ width, className, onClose, children }: ModalProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        requestClose();
         return;
       }
+      // The trap opens when the dialog leaves: Tab during the exit would walk
+      // into a sheet that is already fading.
+      if (closing) return;
       if (event.key !== "Tab") return;
       const items = focusables();
       if (items.length === 0) {
@@ -71,20 +157,36 @@ export function Modal({ width, className, onClose, children }: ModalProps) {
     // (a popover inside the modal) handles keydown itself.
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+  }, [requestClose, closing]);
 
+  /** The exit ended on the sheet. The backdrop's transition bubbles through
+   * here too, and so do the children's, so the target is checked. */
+  const onExitEnd = (event: TransitionEvent) => {
+    if (!exiting) return;
+    if (event.target !== dialogRef.current) return;
+    setFinished(true);
+  };
+
+  // The backdrop's click is wrapped: `requestClose` takes an optional
+  // callback, and a bare handler would pass the click event as that callback.
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className={`modal-backdrop${exiting ? " closing" : ""}`}
+      onClick={() => requestClose()}
+    >
       <div
         ref={dialogRef}
-        className={className ? `modal ${className}` : "modal"}
+        className={`${className ? `modal ${className}` : "modal"}${
+          exiting ? " closing" : ""
+        }`}
         style={width ? { "--modal-width": width } : undefined}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
+        onTransitionEnd={onExitEnd}
       >
-        {children}
+        {typeof children === "function" ? children(requestClose) : children}
       </div>
     </div>
   );
