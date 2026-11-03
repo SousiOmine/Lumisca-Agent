@@ -8,53 +8,11 @@ import {
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore, type TodoPhase } from "@lumisca/core";
 
-import { type AppOptions, disposeServer, startServer } from "./app.ts";
+import { disposeServer, startServer } from "./app.ts";
+import { conversationOf, json, setup } from "./test-utils.ts";
 
 import { removeDirRetry } from "@lumisca/core/test-utils";
 
-function setup(
-  env?: () => Record<string, string>,
-  options?: AppOptions,
-) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  const server = startServer(core, 0, options);
-  const port = server.addr.port;
-  const base = `http://127.0.0.1:${port}`;
-  return { core, server, faux, base };
-}
-
-function json(
-  base: string,
-  path: string,
-  init?: RequestInit,
-): Promise<Response> {
-  return fetch(`${base}${path}`, {
-    ...init,
-    headers: { "content-type": "application/json", ...init?.headers },
-  });
-}
-
-/** The transcript without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools) a session publishes ahead of the
- * first user message of a run. Those are not part of a turn, so the tests
- * that count or position turns count this array. */
-
-/** The transcript without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools) a session publishes ahead of the
- * first user message of a run. Those are not part of a turn, so the tests
- * that count or position turns count this array. */
-function conversationOf<T extends { role: string }>(messages: T[]): T[] {
-  return messages.filter((m) => m.role !== "context");
-}
-
-/** The base64 body an icon upload takes: the same bytes the store's tests
- * use, in the shape a browser's `FileReader` produces (minus the data-URL
- * header, which the route also accepts). */
-
-/** The base64 body an icon upload takes: the same bytes the store's tests
- * use, in the shape a browser's `FileReader` produces (minus the data-URL
- * header, which the route also accepts). */
 Deno.test("session prompt roundtrip via API", async () => {
   const { core, server, faux, base } = await setup();
   try {

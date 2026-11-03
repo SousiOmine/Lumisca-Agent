@@ -2,69 +2,18 @@ import { basename, dirname, join, parse } from "node:path";
 import { realpathSync } from "node:fs";
 import {
   fauxAssistantMessage,
-  fauxProvider,
   fauxToolCall,
   type StreamRequest,
 } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
-import { LumiscaCore } from "@lumisca/core";
 import { COMMAND_SAFETY_APPROVALS_KEY } from "@lumisca/core/shared";
-import { type AppOptions, startServer } from "./app.ts";
+import { conversationOf, json, pngBase64, setup } from "./test-utils.ts";
 
 import {
   MINI_PNG,
   promptSession,
   removeDirRetry,
 } from "@lumisca/core/test-utils";
-
-function setup(
-  env?: () => Record<string, string>,
-  options?: AppOptions,
-) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  const server = startServer(core, 0, options);
-  const port = server.addr.port;
-  const base = `http://127.0.0.1:${port}`;
-  return { core, server, faux, base };
-}
-
-function json(
-  base: string,
-  path: string,
-  init?: RequestInit,
-): Promise<Response> {
-  return fetch(`${base}${path}`, {
-    ...init,
-    headers: { "content-type": "application/json", ...init?.headers },
-  });
-}
-
-/** The transcript without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools) a session publishes ahead of the
- * first user message of a run. Those are not part of a turn, so the tests
- * that count or position turns count this array. */
-
-/** The transcript without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools) a session publishes ahead of the
- * first user message of a run. Those are not part of a turn, so the tests
- * that count or position turns count this array. */
-function conversationOf<T extends { role: string }>(messages: T[]): T[] {
-  return messages.filter((m) => m.role !== "context");
-}
-
-/** The base64 body an icon upload takes: the same bytes the store's tests
- * use, in the shape a browser's `FileReader` produces (minus the data-URL
- * header, which the route also accepts). */
-
-/** The base64 body an icon upload takes: the same bytes the store's tests
- * use, in the shape a browser's `FileReader` produces (minus the data-URL
- * header, which the route also accepts). */
-function pngBase64(): string {
-  let binary = "";
-  for (const byte of MINI_PNG) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
 
 function joinMissing(): string {
   return `Z:\\definitely\\not\\here\\lumisca-${crypto.randomUUID()}`;

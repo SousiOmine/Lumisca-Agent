@@ -2,41 +2,11 @@ import { fauxProvider } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "@lumisca/core";
 import { LANGUAGE_KEY } from "@lumisca/core/shared";
-import { type AppOptions, createApp, startServer } from "./app.ts";
+import { createApp } from "./app.ts";
+import { setup } from "./test-utils.ts";
+
 import { validateHostConfig } from "./security.ts";
 
-function setup(
-  env?: () => Record<string, string>,
-  options?: AppOptions,
-) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  const server = startServer(core, 0, options);
-  const port = server.addr.port;
-  const base = `http://127.0.0.1:${port}`;
-  return { core, server, faux, base };
-}
-
-export function json(
-  base: string,
-  path: string,
-  init?: RequestInit,
-): Promise<Response> {
-  return fetch(`${base}${path}`, {
-    ...init,
-    headers: { "content-type": "application/json", ...init?.headers },
-  });
-}
-
-/** The transcript without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools) a session publishes ahead of the
- * first user message of a run. Those are not part of a turn, so the tests
- * that count or position turns count this array. */
-
-/** The transcript without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools) a session publishes ahead of the
- * first user message of a run. Those are not part of a turn, so the tests
- * that count or position turns count this array. */
 Deno.test("server rejects non-loopback Host headers (DNS rebinding guard)", async () => {
   // Deno's fetch forbids overriding Host, so exercise the handler directly
   // with requests that target external hostnames.
