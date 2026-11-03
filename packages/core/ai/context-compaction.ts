@@ -37,60 +37,65 @@ import type {
   AssistantMessage,
   CheckpointMessage,
   LlmMessage,
-  Message,
   Model,
   StreamFn,
 } from "./types.ts";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
-import { CONTEXT_SAFETY_TOKENS } from "./budget.ts";
 import { streamText } from "./stream.ts";
 import {
   estimateMessageTokens,
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
-import { contextTokensOf, inputBudgetTokens } from "../shared/context-usage.ts";
+import { contextTokensOf } from "../shared/context-usage.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import {
-  COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
-  COMPACTION_DEFAULT_RESERVE_PERCENT,
-} from "../shared/settings-keys.ts";
-import { toLlmMessages } from "../types/notification.ts";
+  buildSummarizationPrompt,
+  contextStart,
+  estimateMessagesTokensFrom,
+  selectCompactionSpan,
+} from "./compaction-span.ts";
+
+export type { CompactionSpan } from "./compaction-span.ts";
+export {
+  contextStart,
+  selectCompactionSpan,
+  type TranscriptUnit,
+  transcriptUnits,
+} from "./compaction-span.ts";
+import {
+  CHECKPOINT_PREAMBLE,
+  CHECKPOINT_SUMMARY_TAG,
+  SUMMARIZATION_SYSTEM_PROMPT,
+} from "./compaction-prompts.ts";
+import {
+  type CompactionBudgets,
+  type CompactionPolicy,
+  resolveCompactionBudgets,
+  resolveCompactionPolicy,
+} from "./compaction-policy.ts";
+
+export {
+  CHECKPOINT_PREAMBLE,
+  CHECKPOINT_SUMMARY_TAG,
+  SUMMARIZATION_PROMPT,
+  SUMMARIZATION_SYSTEM_PROMPT,
+  UPDATE_SUMMARIZATION_PROMPT,
+} from "./compaction-prompts.ts";
+export {
+  type CompactionBudgets,
+  type CompactionPolicy,
+  DEFAULT_COMPACTION_POLICY,
+  resolveCompactionBudgets,
+  resolveCompactionPolicy,
+  shareOfWindow,
+} from "./compaction-policy.ts";
 
 /** Module logger (debug-gated): every compaction outcome is logged so a
  * session that kept working past its window can be traced. */
 const log = createLogger("compaction");
-
-/** The compaction tuning (pi's `CompactionSettings`): whether automatic
- * compaction runs, how much room below the window it leaves for the next
- * request, and how much of the newest history stays verbatim.
- *
- * Both sizes are SHARES of the model's window, not token counts: the same
- * count means something different on every model. 16k of a 32k window is
- * half of it; 16k of a 1M window is 98.4% used before anything happens —
- * one turn from a rejected request — and it leaves 240k of history to
- * collapse into 20k, so a compaction on a large window loses most of what
- * it was told to keep. A share behaves the same at every size. */
-export interface CompactionPolicy {
-  enabled: boolean;
-  /** Compact once the projected context passes this share of the window.
-   * It is also the room the summarization request may use for its own
-   * output (see CompactionBudgets.summaryMaxTokens). */
-  reservePercent: number;
-  /** Share of the window kept verbatim. The cut lands on a unit boundary,
-   * so the retained tail is this share rounded up. */
-  keepRecentPercent: number;
-}
-
-/** pi's defaults, as shares: 16k and 20k against the 200k window they were
- * chosen for. */
-export const DEFAULT_COMPACTION_POLICY: CompactionPolicy = {
-  enabled: true,
-  reservePercent: COMPACTION_DEFAULT_RESERVE_PERCENT,
-  keepRecentPercent: COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
-};
 
 /** Extra compaction passes per check, each one a summarization call. The
  * second pass only runs while the projection is still over the threshold
@@ -98,245 +103,9 @@ export const DEFAULT_COMPACTION_POLICY: CompactionPolicy = {
  * passes because the retained tail can itself be large). */
 const MAX_COMPACTION_ATTEMPTS = 2;
 
-/** Smallest head worth a summarization call. Below this the checkpoint
- * (preamble included) could not free anything meaningful, so the call is
- * not spent. An absolute floor rather than a fraction of the threshold: the
- * manual `/compact` path legitimately condenses below the threshold, where
- * a fraction of it would refuse every useful span. */
-const MINIMUM_SPAN_TOKENS = 512;
-
-/** Characters kept per tool result in the serialized conversation (pi's
- * TOOL_RESULT_MAX_CHARS): the full output is not needed to summarize. */
-const TOOL_RESULT_MAX_CHARS = 2_000;
-
-/** Output floor of the summarization request. Below this a summary could
- * not say anything, so the conversation is trimmed instead of failing. */
-const MIN_SUMMARY_TOKENS = 1_024;
-
-/** Fallback output cap of the summarization request when the policy
- * reserves no room (reserveTokens = 0) and the model documents no cap. */
-const FALLBACK_SUMMARY_MAX_TOKENS = 8_192;
-
 /** Structural overhead charged for the request envelope (role markers and
  * the tool-calling scaffold around the system prompt). */
 const ENVELOPE_OVERHEAD_TOKENS = 32;
-
-/** The checkpoint preamble: tells the model what the block is and that the
- * work continues after it (pi's compaction summary prefix). */
-export const CHECKPOINT_PREAMBLE =
-  "This is an automatically generated checkpoint condensing an earlier span " +
-  "of the conversation to free up context. Treat the captured context as " +
-  "established background and build on it without restating it. Continue " +
-  "the task directly from the messages that follow, without acknowledging " +
-  "this checkpoint.";
-
-/** Tags framing the summary inside the checkpoint body. */
-export const CHECKPOINT_SUMMARY_TAG = "compacted-summary";
-
-/** System prompt of the summarization call (pi's
- * SUMMARIZATION_SYSTEM_PROMPT): the auxiliary request must not continue the
- * conversation, and it carries no tools. */
-export const SUMMARIZATION_SYSTEM_PROMPT =
-  "You are a context summarization assistant. Your task is to read a " +
-  "conversation between a user and an AI assistant, then produce a " +
-  "structured summary following the exact format specified.\n\n" +
-  "Do NOT continue the conversation. Do NOT respond to any questions in " +
-  "the conversation. ONLY output the structured summary.";
-
-/** Instruction appended after the serialized conversation on a first
- * compaction (pi's SUMMARIZATION_PROMPT). */
-export const SUMMARIZATION_PROMPT =
-  `The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
-
-Use this EXACT format:
-
-## Goal
-[What is the user trying to accomplish? Can be multiple items if the session covers different tasks.]
-
-## Constraints & Preferences
-- [Any constraints, preferences, or requirements mentioned by user]
-- [Or "(none)" if none were mentioned]
-
-## Progress
-### Done
-- [x] [Completed tasks/changes]
-
-### In Progress
-- [ ] [Current work]
-
-### Blocked
-- [Issues preventing progress, if any]
-
-## Key Decisions
-- **[Decision]**: [Brief rationale]
-
-## Next Steps
-1. [Ordered list of what should happen next]
-
-## Critical Context
-- [Any data, examples, or references needed to continue]
-- [Or "(none)" if not applicable]
-
-Keep each section concise. Preserve exact file paths, function names, and error messages.`;
-
-/** Instruction used when a previous checkpoint exists: the previous summary
- * is merged instead of being replaced (pi's UPDATE_SUMMARIZATION_PROMPT). */
-export const UPDATE_SUMMARIZATION_PROMPT =
-  `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
-
-Update the existing structured summary with new information. RULES:
-- PRESERVE all existing information from the previous summary
-- ADD new progress, decisions, and context from the new messages
-- UPDATE the Progress section: move items from "In Progress" to "Done" when completed
-- UPDATE "Next Steps" based on what was accomplished
-- PRESERVE exact file paths, function names, and error messages
-- If something is no longer relevant, you may remove it
-
-Use this EXACT format:
-
-## Goal
-[Preserve existing goals, add new ones if the task expanded]
-
-## Constraints & Preferences
-- [Preserve existing, add new ones discovered]
-
-## Progress
-### Done
-- [x] [Include previously done items AND newly completed items]
-
-### In Progress
-- [ ] [Current work - update based on progress]
-
-### Blocked
-- [Current blockers - remove if resolved]
-
-## Key Decisions
-- **[Decision]**: [Brief rationale] (preserve all previous, add new)
-
-## Next Steps
-1. [Update based on current state]
-
-## Critical Context
-- [Preserve important context, add new if needed]
-
-Keep each section concise. Preserve exact file paths, function names, and error messages.`;
-
-/** The token budgets one model can actually be asked for. `undefined` when
- * the model documents no window (compaction then stays off: without a
- * capacity there is nothing to measure pressure against) or when the
- * policy disables it. */
-export interface CompactionBudgets {
-  /** The model's prompt budget: its documented window, narrowed to the
-   * input cap the catalog publishes (models.dev `limit.input`) — the two
-   * differ for models whose window counts the completion (see
-   * shared/context-usage.ts inputBudgetTokens). */
-  contextWindow: number;
-  /** Compact when the projected context would exceed this
-   * (`contextWindow - reserveTokens`). */
-  thresholdTokens: number;
-  /** Newest tokens kept verbatim. */
-  keepRecentTokens: number;
-  /** Output cap of the summarization request. */
-  summaryMaxTokens: number;
-}
-
-/** Resolve the policy from the settings input (see
- * shared/settings-keys.ts): omitted or invalid values keep pi's defaults. */
-export function resolveCompactionPolicy(
-  input?: CompactionPolicyInput,
-): CompactionPolicy {
-  return {
-    enabled: input?.enabled ?? DEFAULT_COMPACTION_POLICY.enabled,
-    reservePercent: percent(input?.reservePercent) ??
-      DEFAULT_COMPACTION_POLICY.reservePercent,
-    keepRecentPercent: percent(input?.keepRecentPercent) ??
-      DEFAULT_COMPACTION_POLICY.keepRecentPercent,
-  };
-}
-
-/** A whole percentage in 0-100, or undefined (an out-of-range value is
- * refused rather than clamped: a typo must not silently mean another
- * policy). */
-function percent(value: number | undefined): number | undefined {
-  const parsed = nonNegativeInt(value);
-  return parsed !== undefined && parsed <= 100 ? parsed : undefined;
-}
-
-/** A share of `window` in tokens, rounded up so a non-zero share never
- * becomes zero room. */
-export function shareOfWindow(window: number, percentValue: number): number {
-  return Math.ceil((window * percentValue) / 100);
-}
-
-function nonNegativeInt(value: number | undefined): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? Math.floor(value)
-    : undefined;
-}
-
-/**
- * Resolve the token budgets of a model: the threshold sits the policy's
- * reserve SHARE below the model's prompt budget — its window narrowed to
- * the input cap the catalog publishes (models.dev `limit.input`) — and the
- * summarization call may use at most 80% of that reservation for its own
- * output (pi's `maxTokens`).
- *
- * The shares are turned into tokens here, against the window this model
- * actually has, so the same policy describes the same behaviour at 32k and
- * at 1M. A reservation of 100% (or a window so small it rounds to nothing)
- * leaves no room for a prompt; compaction is then off rather than useless.
- */
-export function resolveCompactionBudgets(
-  model: Model<Api>,
-  policy: CompactionPolicy = DEFAULT_COMPACTION_POLICY,
-): CompactionBudgets | undefined {
-  if (!policy.enabled) return undefined;
-  // The budget is the prompt a request may actually carry: the window
-  // narrowed to the documented input cap. A provider that publishes both
-  // numbers rejects a prompt past the smaller one, so the threshold has to
-  // hang off it rather than off the window.
-  const window = inputBudgetTokens(model);
-  if (window === undefined) {
-    return undefined;
-  }
-  const reserveTokens = shareOfWindow(window, policy.reservePercent);
-  const threshold = window - reserveTokens;
-  // A reservation as large as the window leaves no room for a prompt:
-  // compacting would not make the request acceptable either.
-  if (threshold <= 0) return undefined;
-  const outputCap = model.maxTokens !== undefined && model.maxTokens > 0
-    ? model.maxTokens
-    : undefined;
-  const summaryMaxTokens = reserveTokens > 0
-    ? Math.max(
-      1,
-      Math.min(
-        Math.floor(reserveTokens * 0.8),
-        outputCap ?? Number.POSITIVE_INFINITY,
-      ),
-    )
-    : outputCap ?? FALLBACK_SUMMARY_MAX_TOKENS;
-  return {
-    contextWindow: window,
-    thresholdTokens: threshold,
-    keepRecentTokens: shareOfWindow(window, policy.keepRecentPercent),
-    summaryMaxTokens,
-  };
-}
-
-/** One compaction decision: the head to summarize and where the checkpoint
- * goes. */
-export interface CompactionSpan {
-  /** 0-based transcript index of the head's first message. */
-  start: number;
-  /** 0-based transcript index of the first retained message — where the
-   * checkpoint is inserted. */
-  cutIndex: number;
-  /** Number of messages in the head. */
-  count: number;
-  /** Estimated tokens the head costs the model's view. */
-  headTokens: number;
-}
 
 /** What one compaction attempt did. */
 export interface CompactionResult {
@@ -730,255 +499,4 @@ function formatTokenCount(value: number): string {
     return `${Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1)}K`;
   }
   return String(value);
-}
-
-/** Structural view of an LLM content block (the serializer only reads
- * text, thinking, images, and tool calls). */
-interface ContentBlockLike {
-  type?: string;
-  text?: string;
-  thinking?: string;
-  name?: string;
-  arguments?: unknown;
-}
-
-/** Text of one message's content, with images marked so the summary can
- * still mention that something was attached. */
-function contentText(content: string | readonly unknown[]): string {
-  if (typeof content === "string") return content;
-  const parts: string[] = [];
-  for (const raw of content) {
-    const block = raw as ContentBlockLike;
-    if (block.type === "text" && typeof block.text === "string") {
-      parts.push(block.text);
-    } else if (block.type === "image") {
-      parts.push("[Attached image]");
-    }
-  }
-  return parts.join("\n");
-}
-
-/** Truncate a tool result for the serialized conversation (pi's
- * truncateForSummary). */
-function truncateForSummary(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  const truncated = text.length - maxChars;
-  return `${
-    text.slice(0, maxChars)
-  }\n\n[... ${truncated} more characters truncated]`;
-}
-
-/** Serialize one LLM message into the `[Role]: text` shape pi uses. */
-function serializeMessage(message: Message): string | undefined {
-  if (message.role === "user") {
-    const text = contentText(message.content);
-    return text.trim().length > 0 ? `[User]: ${text}` : undefined;
-  }
-  if (message.role === "assistant") {
-    const blocks = Array.isArray(message.content) ? message.content : [];
-    const thinking: string[] = [];
-    const calls: string[] = [];
-    for (const raw of blocks) {
-      const block = raw as ContentBlockLike;
-      if (block.type === "thinking" && typeof block.thinking === "string") {
-        thinking.push(block.thinking);
-      } else if (block.type === "toolCall") {
-        calls.push(`${block.name}(${JSON.stringify(block.arguments)})`);
-      }
-    }
-    const text = contentText(message.content);
-    const parts: string[] = [];
-    if (thinking.length > 0) {
-      parts.push(`[Assistant thinking]: ${thinking.join("\n")}`);
-    }
-    if (text.trim().length > 0) parts.push(`[Assistant]: ${text}`);
-    if (calls.length > 0) {
-      parts.push(`[Assistant tool calls]: ${calls.join("; ")}`);
-    }
-    return parts.length > 0 ? parts.join("\n") : undefined;
-  }
-  if (message.role === "toolResult") {
-    const text = contentText(message.content);
-    if (text.trim().length === 0) return undefined;
-    const label = message.isError ? "Tool error" : "Tool result";
-    return `[${label}]: ${truncateForSummary(text, TOOL_RESULT_MAX_CHARS)}`;
-  }
-  return undefined;
-}
-
-/** Serialize the head, one part per message (empty messages are skipped). */
-function serializeHead(head: readonly AgentMessage[]): string[] {
-  const parts: string[] = [];
-  for (const message of toLlmMessages([...head])) {
-    const part = serializeMessage(message);
-    if (part !== undefined) parts.push(part);
-  }
-  return parts;
-}
-
-/**
- * Build the summarization prompt: the serialized head inside
- * `<conversation>` tags, the previous summary (when there is one), and the
- * instruction. The oldest parts are dropped when the request would not
- * leave room for the summary itself — pi relies on its overflow retry here,
- * but the late threshold means the head routinely sits near the window, so
- * the request is trimmed instead of failing.
- */
-function buildSummarizationPrompt(
-  head: readonly AgentMessage[],
-  previous: string | undefined,
-  instructions: string | undefined,
-  budgets: CompactionBudgets,
-  sessionId: string,
-): string {
-  const instruction = previous === undefined
-    ? SUMMARIZATION_PROMPT
-    : UPDATE_SUMMARIZATION_PROMPT;
-  const focus = instructions?.trim();
-  let skeleton = previous === undefined
-    ? ""
-    : `<previous-summary>\n${previous}\n</previous-summary>\n\n`;
-  skeleton += instruction;
-  if (focus !== undefined && focus.length > 0) {
-    skeleton += `\n\nAdditional focus: ${focus}`;
-  }
-  const budget = budgets.contextWindow - CONTEXT_SAFETY_TOKENS -
-    MIN_SUMMARY_TOKENS - estimateTextTokens(skeleton);
-  const parts = serializeHead(head);
-  let total = parts.reduce((sum, part) => sum + estimateTextTokens(part), 0);
-  let from = 0;
-  while (from < parts.length - 1 && total > budget) {
-    total -= estimateTextTokens(parts[from]!);
-    from++;
-  }
-  if (from > 0) {
-    log.debug(
-      `session ${sessionId}: compaction request trimmed ${from} older ` +
-        `messages to fit the window`,
-    );
-  }
-  const conversation = parts.slice(from).join("\n\n");
-  return `<conversation>\n${conversation}\n</conversation>\n\n${skeleton}`;
-}
-
-/** Estimated tokens of `messages` from `from` on (avoids the array copy a
- * `slice` would allocate on every measurement). */
-function estimateMessagesTokensFrom(
-  messages: readonly AgentMessage[],
-  from: number,
-): number {
-  let tokens = 0;
-  for (let i = from; i < messages.length; i++) {
-    tokens += estimateMessageTokens(messages[i]!);
-  }
-  return tokens;
-}
-
-/** The start of the model's view: the newest checkpoint, or 0 when the
- * conversation was never compacted. Everything before it stays in the
- * transcript but is not sent to the model. */
-export function contextStart(messages: readonly AgentMessage[]): number {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]!.role === "checkpoint") return i;
-  }
-  return 0;
-}
-
-/** One transcript unit: a message together with the tool results that
- * belong to it. A unit boundary is the only safe cut — an assistant message
- * carrying tool calls must never be separated from its results (providers
- * reject a request with an unanswered call). */
-interface TranscriptUnit {
-  /** 0-based index of the unit's first message. */
-  index: number;
-  /** Number of messages in the unit. */
-  count: number;
-  /** Estimated tokens of the unit. */
-  tokens: number;
-}
-
-/** Split the transcript from `from` on into compaction units: an assistant
- * message together with the tool results directly following it, or a single
- * message. */
-export function transcriptUnits(
-  messages: readonly AgentMessage[],
-  from = 0,
-): TranscriptUnit[] {
-  const units: TranscriptUnit[] = [];
-  for (let i = from; i < messages.length;) {
-    const message = messages[i]!;
-    let count = 1;
-    if (message.role === "assistant") {
-      while (
-        i + count < messages.length &&
-        messages[i + count]!.role === "toolResult"
-      ) {
-        count++;
-      }
-    }
-    let tokens = 0;
-    for (let j = i; j < i + count; j++) {
-      tokens += estimateMessageTokens(messages[j]!);
-    }
-    units.push({ index: i, count, tokens });
-    i += count;
-  }
-  return units;
-}
-
-/**
- * Select the head to summarize: the oldest units of the model's view,
- * stopping where the retained tail reaches its token budget. The newest unit
- * is always retained, so a compaction can never remove the work in
- * progress — the model must keep answering the most recent request.
- *
- * `force` ignores the retention budget and reduces as far as one span can
- * (still keeping the newest unit) — the overflow recovery path, where the
- * alternative is a request the provider already rejected.
- *
- * Two spans are refused in every mode, because summarizing them would churn
- * checkpoints without reducing a request:
- *
- * - one that holds nothing but an earlier checkpoint (a previous compaction
- *   that already covered everything up to the retained tail), and
- * - one too small to free anything (below {@link MINIMUM_SPAN_TOKENS}).
- */
-export function selectCompactionSpan(
-  messages: readonly AgentMessage[],
-  start: number,
-  budgets: CompactionBudgets,
-  force = false,
-): CompactionSpan | null {
-  const units = transcriptUnits(messages, start);
-  if (units.length < 2) return null;
-  // Walk the tail backwards: keep the newest unit, then extend while the
-  // retention budget is not met. Everything before the cut is summarized.
-  let cutUnit = units.length - 1;
-  let retainedTokens = units[cutUnit]!.tokens;
-  while (!force && cutUnit > 0 && retainedTokens < budgets.keepRecentTokens) {
-    cutUnit--;
-    retainedTokens += units[cutUnit]!.tokens;
-  }
-  if (cutUnit <= 0) return null;
-  const first = units[0]!;
-  const cut = units[cutUnit]!;
-  let headTokens = 0;
-  for (let i = 0; i < cutUnit; i++) headTokens += units[i]!.tokens;
-  let hasSourceMessage = false;
-  for (let i = first.index; i < cut.index; i++) {
-    if (messages[i]!.role !== "checkpoint") {
-      hasSourceMessage = true;
-      break;
-    }
-  }
-  if (!hasSourceMessage) return null;
-  if (headTokens < MINIMUM_SPAN_TOKENS) return null;
-  const count = cut.index - first.index;
-  if (count <= 0) return null;
-  return {
-    start: first.index,
-    cutIndex: cut.index,
-    count,
-    headTokens,
-  };
 }
