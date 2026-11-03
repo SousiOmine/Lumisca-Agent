@@ -47,5 +47,4 @@ export {
   mergeNewestWindow as mergeWindow,
   type MergeRules,
   prependHistoricWindow,
-  prependOlderWindow as prependPage,
 } from "./events/merge.ts";

@@ -27,22 +27,6 @@ export function sessionApi(key: string) {
   };
 }
 
-/** Workspace CRUD + filesystem browsing of this server. A workspace is the
- * folder set of the machine the window displays, and the desktop switches
- * machines by navigating to another server (the title bar's connection
- * picker), so these calls never target a peer. */
-export function workspaceApi() {
-  return {
-    create: (name: string, folders: string[]) =>
-      api.createWorkspace(name, folders),
-    update: (id: string, input: { name?: string; folders?: string[] }) =>
-      api.updateWorkspace(id, input),
-    delete: (id: string) => api.deleteWorkspace(id),
-    fsPlaces: () => api.fsPlaces(),
-    fsBrowse: (path: string) => api.fsBrowse(path),
-  };
-}
-
 /** Model-picker data of the peer that owns a session ("" = this server):
  * remote sessions switch models against the machine running the agent. */
 export function modelApi(peerId: string) {

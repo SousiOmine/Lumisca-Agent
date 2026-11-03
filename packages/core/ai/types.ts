@@ -342,22 +342,6 @@ export interface CheckpointMessage {
 
 // ---- tool definition ----------------------------------------------------------
 
-/** The app's tool type (independent of the transport). Converted to a Vercel
- * tool by the agent adapter (agent/tool.ts). */
-export interface Tool<P = unknown> {
-  name: string;
-  label: string;
-  description: string;
-  /** JSON Schema for the arguments. */
-  parameters: unknown;
-  prepareArguments?: (args: unknown) => Record<string, unknown>;
-  execute: (
-    toolCallId: string,
-    params: P,
-    signal?: AbortSignal,
-  ) => Promise<{ content: (TextContent | ImageContent)[]; details: unknown }>;
-}
-
 /** The tool type the agent runtime owns (a Lumisca agent tool). */
 export interface AgentTool<P = unknown> {
   name: string;

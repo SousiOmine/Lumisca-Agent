@@ -14,7 +14,7 @@ import { splitTabKey, tabKey } from "./tabs.ts";
  * (browsers cannot set WS headers), so a token carrying a "/" and a "+"
  * pins that encoding too. */
 globalThis.__LUMISCA_TOKEN__ = "tok/en+1";
-const { connectEvents, modelApi, sessionApi, workspaceApi } = await import(
+const { connectEvents, modelApi, sessionApi } = await import(
   "./api-routing.ts"
 );
 
@@ -31,8 +31,7 @@ type RoutedCase<A> = [
 
 /** One form of the API: the argument its factory takes and the URL prefix
  * that argument must produce. For `sessionApi` the argument is a tab key
- * (composite) and for `modelApi` a peer id ("" = this server); workspaceApi
- * takes none (workspaces belong to the displayed server).
+ * (composite) and for `modelApi` a peer id ("" = this server).
  */
 interface Form {
   key: string;
@@ -69,7 +68,6 @@ async function assertRouted<A>(
 }
 
 type SessionApi = ReturnType<typeof sessionApi>;
-type WorkspaceApi = ReturnType<typeof workspaceApi>;
 type ModelApi = ReturnType<typeof modelApi>;
 
 const SESSION_CASES: Array<RoutedCase<SessionApi>> = [
@@ -114,29 +112,6 @@ const SESSION_CASES: Array<RoutedCase<SessionApi>> = [
   ],
 ];
 
-const WORKSPACE_CASES: Array<RoutedCase<WorkspaceApi>> = [
-  [
-    "POST",
-    "/workspaces",
-    (w) => w.create("Demo", ["/home/u/proj"]),
-    '{"name":"Demo","folders":["/home/u/proj"]}',
-  ],
-  [
-    "PATCH",
-    "/workspaces/ws-1",
-    (w) => w.update("ws-1", { name: "Renamed" }),
-    '{"name":"Renamed"}',
-  ],
-  ["DELETE", "/workspaces/ws-1", (w) => w.delete("ws-1"), undefined],
-  ["GET", "/fs/places", (w) => w.fsPlaces(), undefined],
-  [
-    "GET",
-    "/fs/browse?path=C%3A%5CUsers%5Cme",
-    (w) => w.fsBrowse("C:\\Users\\me"),
-    undefined,
-  ],
-];
-
 const MODEL_CASES: Array<RoutedCase<ModelApi>> = [
   ["GET", "/providers", (m) => m.listProviders(), undefined],
   [
@@ -174,14 +149,6 @@ Deno.test("api-routing: the same session id addresses either machine", async () 
     SESSION_THIS_SERVER,
     SESSION_ON_PEER_1,
   ]);
-});
-
-Deno.test("api-routing: workspace calls always target the displayed server", async () => {
-  // A workspace is the folder set of the server the window displays; another
-  // machine is reached by switching the display (the title bar's connection
-  // picker), not by addressing its workspaces through this one. The factory
-  // therefore takes no peer id at all.
-  await assertRouted(WORKSPACE_CASES, () => workspaceApi(), [THIS_SERVER]);
 });
 
 Deno.test("api-routing: the model picker follows the machine running the agent", async () => {
