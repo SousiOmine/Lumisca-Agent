@@ -27,7 +27,6 @@ import {
   parseBody,
   parseWindowQuery,
   requireNonEmptyString,
-  requireNumber,
 } from "./util.ts";
 import { parsePromptBody, type PromptBody } from "./session-requests.ts";
 import { conversationRoutes } from "./conversation.ts";
@@ -423,19 +422,6 @@ export function stellaRoutes(core: StellaApi): Hono {
       note,
       typeof toolCallId === "string" ? toolCallId : undefined,
     );
-    return c.json({ ok: true });
-  });
-
-  /** Rewind the conversation from a message onward. The message is named by
-   * its timestamp (the same value the entry carries), and everything the
-   * model produced after it goes too — including the rows the conversation
-   * never showed. */
-  app.post("/stella/conversations/:agentId/rewind", async (c) => {
-    const body = await parseBody<{ timestamp?: unknown }>(c);
-    const timestamp = requireNumber(body?.timestamp, "timestamp (number)");
-    const session = requireConversation(c.req.param("agentId"));
-    await core.openSession(session.id);
-    await core.rewind(session.id, timestamp);
     return c.json({ ok: true });
   });
 
