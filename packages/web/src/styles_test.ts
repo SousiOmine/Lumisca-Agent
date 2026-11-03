@@ -515,3 +515,59 @@ Deno.test("the progress rows stay in the composer's column", async () => {
     ".progress-panels must keep the composer's width",
   );
 });
+
+Deno.test("every class a stylesheet defines is referenced somewhere", async () => {
+  // The other direction of the token check: a rule nothing writes is dead
+  // weight that reads as a live contract. `.input-hint` and
+  // `.model-pref-panel` had accumulated exactly that way.
+  //
+  // The check is deliberately about WHOLE tokens, not `className="…"`: many
+  // classes are composed at run time (`\`mp-${kind}\``, a state suffix on a
+  // base, a test's own fixture), so a literal search would report hundreds of
+  // live classes as dead. What it catches is a class no source mentions at
+  // all — which is what a renamed or abandoned rule looks like.
+  const sheets = new Map<string, string>();
+  const sources: string[] = [];
+  for await (const url of sourceFiles(new URL("./", import.meta.url))) {
+    const text = await Deno.readTextFile(url);
+    if (url.pathname.endsWith(".css")) sheets.set(url.pathname, text);
+    else sources.push(text);
+  }
+  assertEquals(sheets.size > 10, true, "the stylesheets were not read");
+  const haystack = sources.join("\n");
+
+  /** Classes a component builds by concatenation: `Panel.tsx` writes
+   * `${kind}-header` for four kinds, so `.todo-panel-header` is real without
+   * ever appearing as a literal. The list is the SHAPE, not the names, so a
+   * new kind needs no edit here. */
+  const COMPOSED = /-(header|title|detail|summary|body)$/;
+  const COMPOSED_PREFIXES = ["todo", "task", "background", "goal"];
+
+  const missing: string[] = [];
+  for (const [path, css] of sheets) {
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    const classes = new Set(
+      [...stripped.matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!),
+    );
+    for (const name of classes) {
+      if (
+        COMPOSED.test(name) &&
+        COMPOSED_PREFIXES.some((prefix) => name.startsWith(`${prefix}-panel`))
+      ) {
+        continue;
+      }
+      // Any appearance of the name as a whole word counts: a className, a
+      // template-literal segment, a state suffix, a test's assertion.
+      if (new RegExp(`(^|[^a-z0-9-])${name}([^a-z0-9-]|$)`).test(haystack)) {
+        continue;
+      }
+      missing.push(`${path.split("/").pop()}: .${name}`);
+    }
+  }
+  assertEquals(
+    missing.sort(),
+    [],
+    "stylesheet rules nothing references (delete them, or fix the name):\n" +
+      missing.sort().join("\n"),
+  );
+});

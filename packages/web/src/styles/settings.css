@@ -326,13 +326,6 @@
 }
 
 /* model preference rows (fast model / image analysis model) */
-.model-pref-panel {
-  /* settings-pane stretches (flex: 1) for full-height panels like the
-     personalization textarea; this panel must not grow, or a large gap
-     appears above the model enablement list below. */
-  flex: none;
-}
-
 .model-pref-item {
   display: flex;
   align-items: center;

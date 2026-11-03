@@ -433,20 +433,6 @@
   padding: 5px 10px;
 }
 
-.input-hint {
-  font-size: 11.5px;
-  color: var(--text-faint);
-}
-
-.input-hint kbd {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  padding: 1px 5px;
-}
-
 /* ---- narrow windows ------------------------------------------------------- */
 
 /* Phone: the composer spans the screen, so its own frame is the only margin
