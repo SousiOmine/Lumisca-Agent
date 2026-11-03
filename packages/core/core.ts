@@ -1897,7 +1897,7 @@ export class LumiscaCore {
   ): WindowPage<AgentMessage> | undefined {
     if (this.pool.get(id) === undefined) return undefined;
     const page = readTranscriptPage(this.messages, id, query, {
-      startsWindow: (message) => startsTranscriptTurn(message.role),
+      startsWindow: (message) => startsTranscriptTurn(message),
       project: (row) => ({
         item: row.message,
         cursor: messageCursorOf(row.message),

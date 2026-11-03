@@ -45,9 +45,12 @@ interface TranscriptProps {
 
 /** Identity of one turn for the arrival diff: the message that started it
  * (a prompt, a notification) and where it sits. A turn has no id of its own;
- * the message keys the transcript already uses are the closest thing. */
+ * the message keys the transcript already uses are the closest thing. A
+ * fragment (a turn whose prompt is on an earlier page) is named by its first
+ * row instead, which is unique for the same reason. */
 function turnKey(turn: ConversationTurnData): string {
-  return messageKey(turn.user);
+  const first = turn.user ?? turn.responses[0];
+  return first === undefined ? "" : messageKey(first);
 }
 
 /** The last thing the agent said in a turn: what the streaming tail would
@@ -140,7 +143,7 @@ export function Transcript(
         )}
         {turns.map((turn, index) => (
           <ConversationTurn
-            key={`${turn.user.timestamp}-${index}`}
+            key={`${turnKey(turn)}-${index}`}
             entering={entering.has(turnKey(turn))}
             turn={turn}
             toolResults={toolResults}

@@ -16,7 +16,10 @@ export type UserMessageImage = {
  * rather than starting a run, so it renders as a single row without the
  * activity header. */
 export interface ConversationTurnData {
-  user: AgentMessage;
+  /** The message that started the run, or undefined for a fragment: the tail
+   * of a turn whose prompt sits on an earlier page (a loaded window may
+   * begin inside a long run — see buildTurns). */
+  user?: AgentMessage;
   responses: AgentMessage[];
   /** True for a compaction checkpoint row (see buildTurns). */
   standalone?: boolean;

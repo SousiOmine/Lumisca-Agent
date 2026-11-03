@@ -11,8 +11,8 @@ import {
   messageCursor,
   type PageRules,
   readTranscriptPage,
-  startsTurnRow,
 } from "./transcript-pager.ts";
+import { startsTranscriptTurn } from "./transcript-window.ts";
 
 /** A session with `count` user prompts, one millisecond apart. */
 function setup(count: number): { db: LumiscaDb; repo: MessageRepo } {
@@ -37,7 +37,7 @@ function setup(count: number): { db: LumiscaDb; repo: MessageRepo } {
 
 /** The code-mode rules: a page is a turn, and the projection drops nothing. */
 const RULES = {
-  startsWindow: (message: AgentMessage) => startsTurnRow(message),
+  startsWindow: (message: AgentMessage) => startsTranscriptTurn(message),
   project: (row: StoredMessage) => ({
     item: row.timestamp,
     cursor: messageCursor(row.message),
@@ -90,6 +90,68 @@ Deno.test("transcript pager: the next page ends where the last one began", () =>
     assertEquals(oldest.items, [1]);
     // The beginning of the transcript ends the walk: no empty page behind it.
     assertEquals(oldest.older, null);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("transcript pager: a runaway turn is bounded, not read whole", () => {
+  const { db, repo } = setup(1);
+  try {
+    // One prompt followed by a runaway tool loop: the turn is far longer than
+    // the page and the lookback. Reading back to the prompt would make
+    // opening the conversation cost the turn's every row, which is the cost
+    // this bound exists to cap.
+    let t = 2;
+    for (let i = 0; i < 1000; i++) {
+      toolTurn(repo, t++);
+      repo.append("s1", {
+        role: "toolResult",
+        toolCallId: "c1",
+        toolName: "read",
+        content: [{ type: "text", text: `r${i}` }],
+        isError: false,
+        timestamp: t++,
+      } as AgentMessage);
+    }
+
+    const page = readTranscriptPage(repo, "s1", { limit: 40 }, RULES);
+    // The page begins inside the turn (the lookback ran out) instead of
+    // growing to the prompt: the renderer draws that head as part of the
+    // turn it fell into (see the web's buildTurns). The cost of opening a
+    // conversation therefore stays at the page, however long its turns got.
+    assertEquals(page.items.length, 40);
+    assert(page.items[0] !== 1);
+    // The way back to the prompt is still named.
+    assert(page.older !== null);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("transcript pager: a turn inside the lookback still begins the page", () => {
+  const { db, repo } = setup(1);
+  try {
+    // One prompt, then a long-but-affordable run (inside the lookback): the
+    // page pulls back to the prompt, so the renderer gets the turn whole
+    // rather than a head it can only draw as a fragment.
+    let t = 2;
+    for (let i = 0; i < 150; i++) {
+      toolTurn(repo, t++);
+      repo.append("s1", {
+        role: "toolResult",
+        toolCallId: "c1",
+        toolName: "read",
+        content: [{ type: "text", text: `r${i}` }],
+        isError: false,
+        timestamp: t++,
+      } as AgentMessage);
+    }
+
+    const page = readTranscriptPage(repo, "s1", { limit: 40 }, RULES);
+    assertEquals(page.items[0], 1);
+    assertEquals(page.items.length, 301);
+    assertEquals(page.older, null);
   } finally {
     db.close();
   }

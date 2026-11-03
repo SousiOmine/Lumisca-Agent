@@ -4,7 +4,6 @@ import type { MessageRepo, StoredMessage } from "./messages.ts";
 import {
   identityCursor,
   messageIdentityOf,
-  startsTranscriptTurn,
   type WindowQuery,
 } from "./transcript-window.ts";
 
@@ -31,13 +30,14 @@ import {
  * skip or repeat a message. Identities survive insertions and suffix
  * deletions (a rewind), and the cursor stays opaque.
  *
- * **A window starts at a turn.** The transcript's renderer groups messages
- * into turns beginning at a prompt, a mode prompt, a notification or a
- * checkpoint; a window that began in the middle would hand it assistant and
- * tool rows whose prompt it does not have, which it can neither draw as a
- * turn nor rewind. The start therefore moves back to the nearest turn
- * beginning, so one long turn can make a window larger than the page size —
- * half a turn is not a useful screen.
+ * **A window prefers to start at a turn.** The transcript's renderer groups
+ * messages into turns beginning at a prompt, a mode prompt, a notification or
+ * a checkpoint, and a window that began in the middle hands it assistant and
+ * tool rows whose prompt it does not have. The start therefore moves back to
+ * the nearest turn beginning — within a bounded lookback. A turn longer than
+ * that budget (a runaway tool loop) makes the page begin inside it, and the
+ * renderer draws that head as a partial turn. Reading to the prompt instead
+ * was unbounded: opening a conversation would have cost its longest turn.
  */
 
 /** Items one read returns when the caller names no count. */
@@ -47,12 +47,20 @@ export const TRANSCRIPT_PAGE_ITEMS = 40;
  * ask for the whole transcript again. */
 export const MAX_TRANSCRIPT_PAGE_ITEMS = 200;
 
-/** How many additional rows one page reads while looking for the turn that
- * contains its start. One turn is a prompt plus its replies, so a group or
- * two covers ordinary traffic; the cap only bounds the case where thousands
- * of rows belong to a single turn (a runaway tool loop), where the page is
- * returned as read rather than scanning the conversation to its beginning. */
-const BOUNDARY_LOOKBACK = 200;
+/** How far back a page looks for the row that begins its turn.
+ *
+ * A turn is a prompt plus the replies it produced, so a group or two of rows
+ * covers ordinary traffic, and the walk stops as soon as it finds the prompt.
+ * A runaway tool loop makes one turn arbitrarily long: this is where that
+ * case stops being "read until the prompt", because the screen must not wait
+ * on a turn of thousands of rows to show its last forty.
+ *
+ * A page that runs out of budget is returned as read, beginning inside the
+ * turn — and the renderer draws such a head as a partial turn rather than
+ * dropping it (see the web's buildTurns). The alternative is what this
+ * budget exists to avoid: opening a conversation costs its whole longest
+ * turn. */
+const BOUNDARY_LOOKBACK = MAX_TRANSCRIPT_PAGE_ITEMS * 2;
 
 /** What one read answers. */
 export interface TranscriptPage<T> {
@@ -96,29 +104,24 @@ export function readTranscriptPage<T>(
     ? total
     : positionOfCursor(repo, sessionId, older, rules.project);
 
-  // The page's own rows plus the lookback before them. `readFrom` is the
-  // absolute position of the first row read, which is what turns an index
-  // into a position.
+  // The page's own rows, plus whatever the walk back to the turn needs.
   const pageStart = Math.max(0, end - limit);
-  const want = end - Math.max(0, pageStart - BOUNDARY_LOOKBACK);
-  const rows = repo.listWindow(sessionId, {
-    // The newest page has no row after it to bound by (an OFFSET at the end
-    // matches nothing), so it is the store's own "newest" query.
-    beforeIndex: end === total ? null : end,
-    limit: want,
-  });
-  const readFrom = end - rows.length;
-  // `rows[0]` sits at `readFrom`. Walk back from the page's start to the
-  // nearest row that begins a unit; stopping at `readFrom` means the lookback
-  // ran out, and the page is returned as read rather than growing.
-  let start = pageStart;
-  while (
-    start > readFrom && !rules.startsWindow(rows[start - readFrom]!.message)
-  ) {
-    start--;
-  }
-
-  const page = rows.slice(start - readFrom);
+  // One contiguous read of the transcript's rows from position `at` up to
+  // (not including) `until`. The read that reaches the transcript's end has
+  // no row after it to bound by (an OFFSET at the end matches nothing), so it
+  // is the store's own "newest" query.
+  const readRows = (at: number, until: number) =>
+    repo.listWindow(sessionId, {
+      beforeIndex: until === total ? null : until,
+      limit: until - at,
+    });
+  const start = turnStartAtOrBefore(
+    pageStart,
+    end,
+    rules.startsWindow,
+    readRows,
+  );
+  const page = readRows(start, end);
   // One projection pass: `items` is what the client draws, and the first
   // projected row carries the cursor for the next page (a dropped row is
   // never held by a client, so it cannot name anything). A page whose whole
@@ -136,6 +139,33 @@ export function readTranscriptPage<T>(
     items,
     older: start > 0 && firstCursor !== undefined ? firstCursor : null,
   };
+}
+
+/** The position the window that ends at `end` must START at: walked back
+ * from `pageStart` to the row that begins its turn, within
+ * {@link BOUNDARY_LOOKBACK}.
+ *
+ * The walk stops at the prompt, at the transcript's head (its first row
+ * always begins a turn), or when the budget runs out — whichever comes first.
+ * Running out means the page begins inside an unusually long turn, which the
+ * renderer draws as a partial turn; a page read as far as the lookup allows
+ * is the cost ceiling, and it is what keeps opening a screen independent of
+ * how long the conversation's turns got. */
+function turnStartAtOrBefore(
+  pageStart: number,
+  end: number,
+  startsWindow: (message: AgentMessage) => boolean,
+  readRows: (at: number, until: number) => StoredMessage[],
+): number {
+  const floor = Math.max(0, pageStart - BOUNDARY_LOOKBACK);
+  if (floor === pageStart) return pageStart;
+  const rows = readRows(floor, end);
+  for (let at = pageStart - floor; at >= 0; at--) {
+    if (startsWindow(rows[at]!.message)) return floor + at;
+  }
+  // Nothing in the budget begins a turn: the page starts where it was going
+  // to, and the renderer draws that head as part of the turn it fell into.
+  return pageStart;
 }
 
 /** The position a cursor names. A cursor that matches nothing is a conflict:
@@ -181,9 +211,4 @@ function pageLimit(
  * produce, so a client holds one kind of string whichever answered it. */
 export function messageCursor(message: AgentMessage): string {
   return identityCursor(messageIdentityOf(message));
-}
-
-/** Whether a message begins a turn in code mode's transcript view. */
-export function startsTurnRow(message: AgentMessage): boolean {
-  return startsTranscriptTurn(message.role);
 }

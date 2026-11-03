@@ -109,7 +109,7 @@ Deno.test("buildTurns: a steered notification joins the run's turn", () => {
     assistant(4, "the reaction"),
   ]);
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(turns[0]!.user!.role, "user");
   assertEquals(
     turns[0]!.responses.map((m) => m.role),
     ["assistant", "notification", "assistant"],
@@ -128,7 +128,7 @@ Deno.test("buildTurns: a steered notification with no open turn starts one", () 
     assistant(2),
   ]);
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.user.role, "notification");
+  assertEquals(turns[0]!.user!.role, "notification");
   assertEquals(turns[0]!.responses.map((m) => m.role), ["assistant"]);
 });
 
@@ -151,7 +151,7 @@ Deno.test("buildTurns: a steered notification after a checkpoint starts one", ()
   ]);
   assertEquals(turns.length, 3);
   assertEquals(turns[1]!.standalone, true);
-  assertEquals(turns[2]!.user.role, "notification");
+  assertEquals(turns[2]!.user!.role, "notification");
   assertEquals(turns[2]!.responses.map((m) => m.role), ["assistant"]);
 });
 
@@ -168,7 +168,7 @@ Deno.test("buildTurns: a prompt steered mid-run joins the run's turn", () => {
     assistant(4, "the reaction"),
   ]);
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(turns[0]!.user!.role, "user");
   assertEquals(
     turns[0]!.responses.map((m) => m.role),
     ["assistant", "user", "assistant"],
@@ -197,8 +197,8 @@ Deno.test("buildTurns: a steered prompt with no open turn starts one", () => {
   // rendered, so it falls back to starting a turn of its own.
   const turns = buildTurns([user(1, true), assistant(2)]);
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.user.role, "user");
-  assertEquals(turns[0]!.user.timestamp, 1);
+  assertEquals(turns[0]!.user!.role, "user");
+  assertEquals(turns[0]!.user!.timestamp, 1);
   assertEquals(turns[0]!.responses.map((m) => m.role), ["assistant"]);
 });
 
@@ -221,7 +221,7 @@ Deno.test("buildTurns: a steered prompt after a checkpoint starts one", () => {
   ]);
   assertEquals(turns.length, 3);
   assertEquals(turns[1]!.standalone, true);
-  assertEquals(turns[2]!.user.role, "user");
+  assertEquals(turns[2]!.user!.role, "user");
   assertEquals(turns[2]!.responses.map((m) => m.role), ["assistant"]);
 });
 
@@ -231,7 +231,7 @@ Deno.test("buildTurns: mode messages (slash-command prompts) start a turn", () =
   // never vanish from the history.
   const turns = buildTurns([mode(1), assistant(2), assistant(3)]);
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.user.role, "mode");
+  assertEquals(turns[0]!.user!.role, "mode");
   assertEquals(turns[0]!.responses.length, 2);
 
   // A mode message mid-history starts its own turn (like a user prompt).
@@ -242,8 +242,8 @@ Deno.test("buildTurns: mode messages (slash-command prompts) start a turn", () =
     assistant(4),
   ]);
   assertEquals(mixed.length, 2);
-  assertEquals(mixed[0]!.user.role, "user");
-  assertEquals(mixed[1]!.user.role, "mode");
+  assertEquals(mixed[0]!.user!.role, "user");
+  assertEquals(mixed[1]!.user!.role, "mode");
   assertEquals(mixed[1]!.responses.length, 1);
 });
 
@@ -257,7 +257,7 @@ Deno.test("buildTurns: retry notifications do not split the turn", () => {
   // One turn: the retry notification neither starts a new turn nor lands
   // in the responses — the retried response joins the same turn.
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(turns[0]!.user!.role, "user");
   const responses = turns[0]!.responses;
   assertEquals(responses.length, 2);
   assertEquals(responses.every((m) => m.role === "assistant"), true);
@@ -291,7 +291,7 @@ Deno.test("buildTurns: context snapshots join the turn they precede", () => {
     assistant(3),
   ]);
   assertEquals(leading.length, 1);
-  assertEquals(leading[0]!.user.role, "user");
+  assertEquals(leading[0]!.user!.role, "user");
   assertEquals(leading[0]!.responses.map((m) => m.role), [
     "context",
     "assistant",
@@ -331,19 +331,19 @@ Deno.test("buildTurns: a compaction checkpoint is a turn of its own", () => {
     assistant(5),
   ]);
   assertEquals(turns.length, 3);
-  assertEquals(turns[0]!.user.role, "user");
-  assertEquals(turns[1]!.user.role, "checkpoint");
+  assertEquals(turns[0]!.user!.role, "user");
+  assertEquals(turns[1]!.user!.role, "checkpoint");
   assertEquals(turns[1]!.standalone, true);
   assertEquals(turns[1]!.responses.length, 0);
-  assertEquals(turns[2]!.user.role, "user");
+  assertEquals(turns[2]!.user!.role, "user");
 
   // A checkpoint that replaced the whole prefix is still a row of its own,
   // followed by the retained turn.
   const leading = buildTurns([checkpoint(1), user(2), assistant(3)]);
   assertEquals(leading.length, 2);
-  assertEquals(leading[0]!.user.role, "checkpoint");
+  assertEquals(leading[0]!.user!.role, "checkpoint");
   assertEquals(leading[0]!.standalone, true);
-  assertEquals(leading[1]!.user.role, "user");
+  assertEquals(leading[1]!.user!.role, "user");
 });
 
 Deno.test("ConversationTurn: a steered notification renders in the work log", () => {
@@ -459,7 +459,7 @@ Deno.test("a notification steered mid-run keeps the running turn last", () => {
   assertEquals(isViewRunning(view), true);
   const turns = buildTurns(view.messages);
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(turns[0]!.user!.role, "user");
   assertEquals(turns[0]!.responses.map((m) => m.role), [
     "assistant",
     "notification",
@@ -501,7 +501,7 @@ Deno.test("a prompt steered mid-run keeps the running turn last", () => {
   assertEquals(isViewRunning(view), true);
   const turns = buildTurns(view.messages);
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.user.role, "user");
+  assertEquals(turns[0]!.user!.role, "user");
   assertEquals(turns[0]!.responses.map((m) => m.role), [
     "assistant",
     "user",
@@ -585,4 +585,75 @@ Deno.test("ConversationTurn: a mode prompt renders the images attached to it", (
   // The short text and the mode badge keep describing the prompt.
   assertStringIncludes(html, "履歴機能を追加して");
   assertStringIncludes(html, "プランモード");
+});
+
+Deno.test("buildTurns: a window that begins inside a turn draws its tail", () => {
+  // The server looks back only so far for the prompt a page starts in, so a
+  // run that outgrew that lookback hands over rows whose prompt is on an
+  // earlier page. Those rows are a fragment: drawn as the turn's tail, never
+  // dropped (the screen would go empty) and never hung under the NEXT prompt
+  // (which would claim the agent did this work for that prompt).
+  const turns = buildTurns([
+    assistant(1, "working"),
+    assistant(2, "still working"),
+  ]);
+  assertEquals(turns.length, 1);
+  assertEquals(turns[0]!.user, undefined);
+  assertEquals(turns[0]!.responses.map((m) => m.timestamp), [1, 2]);
+
+  // A prompt after the fragment opens its own turn; the fragment keeps its
+  // rows instead of them being absorbed by that turn.
+  const withPrompt = buildTurns([
+    assistant(1, "working"),
+    user(2),
+    assistant(3, "the answer"),
+  ]);
+  assertEquals(withPrompt.length, 2);
+  assertEquals(withPrompt[0]!.user, undefined);
+  assertEquals(withPrompt[0]!.responses.map((m) => m.timestamp), [1]);
+  assertEquals(withPrompt[1]!.user!.timestamp, 2);
+  assertEquals(withPrompt[1]!.responses.map((m) => m.timestamp), [3]);
+});
+
+Deno.test("buildTurns: leading context still joins the prompt it precedes", () => {
+  // The dynamic contexts are published right before a run: in a window that
+  // begins with them, they belong to the prompt below, not to a fragment of
+  // the previous turn.
+  const context = (timestamp: number): AgentMessage => ({
+    role: "context",
+    provider: "date",
+    title: "Date",
+    body: "2026-01-01",
+    timestamp,
+  });
+  const turns = buildTurns([context(1), user(2), assistant(3)]);
+  assertEquals(turns.length, 1);
+  assertEquals(turns[0]!.user!.timestamp, 2);
+  assertEquals(turns[0]!.responses.map((m) => m.timestamp), [1, 3]);
+});
+
+Deno.test("ConversationTurn: a fragment renders its rows without a header", () => {
+  // A fragment has no prompt to head it and no start to time: it is the
+  // middle of a run, so its rows are drawn open. An activity header here
+  // would date the whole turn from the first row the window happens to hold.
+  const html = renderToString(createElement(ConversationTurn, {
+    turn: {
+      responses: [
+        fauxAssistantMessage([fauxToolCall("read", { path: "a.ts" })], {
+          timestamp: 2,
+        }) as AgentMessage,
+      ],
+    },
+    entering: false,
+    visualBase: "/api/sessions/s/visual/",
+    attachBase: "/api/sessions/s/attachment/",
+    toolResults: new Map(),
+    runningTools: new Map(),
+    running: false,
+    onRewind: () => {},
+  }));
+  assertEquals(html.match(/class="agent-activity/g), null);
+  // The rows themselves are drawn, inside the work log.
+  assertStringIncludes(html, 'class="agent-work-log"');
+  assertStringIncludes(html, "tool-timeline");
 });

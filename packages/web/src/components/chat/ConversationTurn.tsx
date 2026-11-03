@@ -56,43 +56,80 @@ function isSteered(message: AgentMessage): boolean {
  * marks where older history was replaced, so it must not be absorbed into
  * the surrounding turn (the retained messages before it belong to their own
  * prompt). Its `responses` stay empty — see ConversationTurn, which renders
- * such a turn without an activity header. */
+ * such a turn without an activity header.
+ *
+ * A loaded window usually begins at a prompt, but not always: the server
+ * looks back only so far for the turn a page starts in, so a run that
+ * outgrew that lookback (a runaway tool loop) hands over rows whose prompt
+ * is on an earlier page. Those are returned as a turn of their own with no
+ * `user` — a fragment — instead of being dropped or, worse, hung under the
+ * NEXT prompt as if they were its output. */
 export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   const turns: ConversationTurnData[] = [];
-  // Context snapshots published before the session's first prompt belong to
-  // that first turn: they are part of the run it started, not a turn of
-  // their own.
+  // Rows that arrived before the next turn starts.
   let pending: AgentMessage[] = [];
+  /** Open a turn at `user`, deciding first what the rows before it belong to.
+   *
+   * The dynamic contexts (date, model, skill catalog) are published right
+   * before the run they steer, so they are the turn's own preamble and stay
+   * inside it. Everything else there belongs to the turn whose prompt is on
+   * an earlier page: it is drawn as that turn's tail, in its own fragment, so
+   * the rows are neither dropped nor shown as this turn's work. A compaction
+   * checkpoint is a row of its own and draws no responses, so nothing is hung
+   * under it. */
+  const startTurn = (user: AgentMessage, standalone = false) => {
+    // The contexts are the TRAILING run of rows: everything before them
+    // belongs to what the window inherited. Splitting there keeps both parts
+    // in transcript order.
+    let cut = pending.length;
+    while (cut > 0 && pending[cut - 1]!.role === "context") cut--;
+    const inherited = pending.slice(0, cut);
+    const contexts = pending.slice(cut);
+    pending = [];
+    if (standalone) {
+      if (inherited.length + contexts.length > 0) {
+        turns.push({ responses: [...inherited, ...contexts] });
+      }
+      turns.push({ user, responses: [], standalone: true });
+      return;
+    }
+    if (inherited.length > 0) turns.push({ responses: inherited });
+    turns.push({ user, responses: contexts });
+  };
   for (const message of messages) {
     // A retry notification is an internal repair, not a turn: the message
     // is dropped (the retried response joins the turn it was retried in).
+    // The server reads the same rule when it chooses where a window may
+    // begin (see the core's startsTranscriptTurn), so a window never opens
+    // on a row this drops.
     if (message.role === "notification" && message.kind === "retry") continue;
     if (
       message.role === "user" || message.role === "mode" ||
       message.role === "notification"
     ) {
-      // A steered message joins the turn that is open (a checkpoint row
-      // cannot take responses, and a leading one has no turn to join: both
-      // fall back to starting a turn of their own, so no message is ever
-      // dropped).
+      // A steered message joins the turn that is open — including a fragment,
+      // whose run is the one it was steered into (a checkpoint row cannot
+      // take responses, and a leading one has no turn to join: both fall back
+      // to starting a turn of their own, so no message is ever dropped).
       const current = turns.at(-1);
       if (isSteered(message) && current !== undefined && !current.standalone) {
         current.responses.push(message);
         continue;
       }
-      turns.push({ user: message, responses: pending });
-      pending = [];
+      startTurn(message);
       continue;
     }
     if (message.role === "checkpoint") {
-      turns.push({ user: message, responses: pending, standalone: true });
-      pending = [];
+      startTurn(message, true);
       continue;
     }
     const current = turns.at(-1);
     if (current) current.responses.push(message);
     else pending.push(message);
   }
+  // Nothing opened a turn in this window: it lies entirely inside one run,
+  // so the whole of it is that turn's tail.
+  if (pending.length > 0) turns.push({ responses: pending });
   return turns;
 }
 
@@ -146,12 +183,14 @@ export const ConversationTurn = memo(function ConversationTurn({
         className="conversation-turn"
         data-enter={entering || undefined}
       >
-        <MessageRow
-          message={turn.user}
-          toolResults={toolResults}
-          runningTools={runningTools}
-          visualBase={visualBase}
-        />
+        {turn.user !== undefined && (
+          <MessageRow
+            message={turn.user}
+            toolResults={toolResults}
+            runningTools={runningTools}
+            visualBase={visualBase}
+          />
+        )}
       </section>
     );
   }
@@ -180,9 +219,15 @@ export const ConversationTurn = memo(function ConversationTurn({
     (block): block is ToolCallBlock => block.type === "toolCall",
   ) ?? [];
   const expandable = workLog.length > 0 || finalToolCalls.length > 0;
+  // A fragment (the tail of a turn whose prompt is on an earlier page) has
+  // no prompt to time from and nothing to head: its rows ARE the turn's
+  // content, so they are drawn open, without an activity header.
+  const fragment = turn.user === undefined;
+  const startedAt = turn.user?.timestamp ??
+    turn.responses[0]?.timestamp ?? 0;
   const lastTimestamp = turn.responses.reduce(
     (latest, message) => Math.max(latest, message.timestamp),
-    turn.user.timestamp,
+    startedAt,
   );
   const completionTime = endedAt ?? lastTimestamp;
 
@@ -191,16 +236,18 @@ export const ConversationTurn = memo(function ConversationTurn({
       className="conversation-turn"
       data-enter={entering || undefined}
     >
-      <MessageRow
-        message={turn.user}
-        toolResults={toolResults}
-        runningTools={runningTools}
-        visualBase={visualBase}
-        onRewind={onRewind}
-      />
-      {(running || turn.responses.length > 0) && (
+      {turn.user !== undefined && (
+        <MessageRow
+          message={turn.user}
+          toolResults={toolResults}
+          runningTools={runningTools}
+          visualBase={visualBase}
+          onRewind={onRewind}
+        />
+      )}
+      {!fragment && (running || turn.responses.length > 0) && (
         <AgentActivity
-          startedAt={turn.user.timestamp}
+          startedAt={startedAt}
           endedAt={running ? undefined : completionTime}
           running={running}
           expanded={running || expanded}
@@ -210,7 +257,7 @@ export const ConversationTurn = memo(function ConversationTurn({
           }}
         />
       )}
-      {(running || expanded) && (
+      {(fragment || running || expanded) && (
         <div className="agent-work-log">
           {workLog.map((message, index) => (
             <MessageRow

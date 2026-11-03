@@ -106,8 +106,17 @@ export function identityCursor(identity: MessageIdentity): string {
  * web's buildTurns): a prompt, a mode prompt (`/plan`), a system notification
  * that started its own run, or a compaction checkpoint (a row of its own).
  * Every other role belongs to the turn before it.
+ *
+ * A retry notification is NOT one. It is the loop's own repair of a response
+ * that was empty or cut off, and the renderer drops it rather than drawing a
+ * row for it (see the web's buildTurns). Counting it here made the server
+ * open a window on a row the client discards — and a window that begins with
+ * a row the client does not draw has no turn to show at all, so the screen
+ * stayed empty. The two rules are the same rule, and this is the one place
+ * both read it.
  */
-export function startsTranscriptTurn(role: string): boolean {
-  return role === "user" || role === "mode" || role === "notification" ||
-    role === "checkpoint";
+export function startsTranscriptTurn(message: AgentMessage): boolean {
+  if (message.role === "notification") return message.kind !== "retry";
+  return message.role === "user" || message.role === "mode" ||
+    message.role === "checkpoint";
 }
