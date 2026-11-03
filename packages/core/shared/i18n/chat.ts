@@ -250,8 +250,8 @@ export const chat = {
   },
   "chat.stella.agents.icon": { ja: "アイコン", en: "Icon" },
   "chat.stella.agents.iconHint": {
-    ja: "{formats}、{size} まで",
-    en: "{formats}, up to {size}",
+    ja: "エージェントのアイコンを設定",
+    en: "Set this agent's icon",
   },
   "chat.stella.agents.iconChoose": {
     ja: "画像を選択",

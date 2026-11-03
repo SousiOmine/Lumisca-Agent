@@ -2,7 +2,6 @@ import { useRef, useState } from "preact/compat";
 import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";
-import { AGENT_ICON_FORMATS, MAX_AGENT_ICON_BYTES } from "@lumisca/core/shared";
 import type { StellaAgent, StellaAgentSummary } from "../../types.ts";
 import { Modal } from "../Modal.tsx";
 import { Field } from "../Field.tsx";
@@ -14,13 +13,6 @@ export interface AgentEditDialogProps {
    * into its list without re-reading everything. */
   onChanged: (agent: StellaAgent) => void;
   onClose: () => void;
-}
-
-/** MB with one decimal. The cap is half a megabyte, so a user reads
- * "0.5 MB" rather than a six-digit byte count. */
-function megabytes(bytes: number): string {
-  const value = bytes / (1024 * 1024);
-  return `${value < 10 ? Math.round(value * 10) / 10 : Math.round(value)} MB`;
 }
 
 /** The picture the dialog is about to save. `unchanged` sends no `icon` at
@@ -135,10 +127,7 @@ export function AgentEditDialog(
                 />
                 <div className="agent-icon-text">
                   <p className="agent-icon-hint">
-                    {t("chat.stella.agents.iconHint", {
-                      formats: AGENT_ICON_FORMATS,
-                      size: megabytes(MAX_AGENT_ICON_BYTES),
-                    })}
+                    {t("chat.stella.agents.iconHint")}
                   </p>
                   <div className="agent-icon-actions">
                     {
