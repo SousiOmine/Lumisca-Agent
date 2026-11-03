@@ -1,27 +1,7 @@
 import { fauxProvider } from "@lumisca/core";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "./mod.ts";
-
-function setup(env?: () => Record<string, string>) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  return {
-    core,
-    faux,
-    providerId: faux.provider.id,
-    modelId: faux.getModel().id,
-  };
-}
-
-async function makeWorkspace(core: LumiscaCore, name = "ws") {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
-  const ws = await core.createWorkspace(name, [root]);
-  return { ws, root };
-}
-
-/** First-block text of every transcript message (test messages are
- * text-only). Narrowed explicitly: AgentMessage also includes custom
- * messages without `content` (e.g. BashExecutionMessage). */
+import { setup, makeWorkspace } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom

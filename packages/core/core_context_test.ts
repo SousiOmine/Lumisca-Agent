@@ -18,28 +18,14 @@ import {
 import { DATE_PROVIDER } from "./agent/date-context.ts";
 import { today } from "./environment.ts";
 import { bytesToBase64 } from "./base64.ts";
-import { MINI_PNG, promptSession, removeDirRetry } from "./test-utils.ts";
+import {
+  MINI_PNG,
+  makeWorkspace,
+  promptSession,
+  removeDirRetry,
+  setup,
 
-function setup(env?: () => Record<string, string>) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  return {
-    core,
-    faux,
-    providerId: faux.provider.id,
-    modelId: faux.getModel().id,
-  };
-}
-
-async function makeWorkspace(core: LumiscaCore, name = "ws") {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
-  const ws = await core.createWorkspace(name, [root]);
-  return { ws, root };
-}
-
-/** First-block text of every transcript message (test messages are
- * text-only). Narrowed explicitly: AgentMessage also includes custom
- * messages without `content` (e.g. BashExecutionMessage). */
+} from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom
@@ -55,17 +41,9 @@ function contextMessages(
 }
 
 /** The instruction context messages of a session (AGENTS.md + personal). */
-
-/** The instruction context messages of a session (AGENTS.md + personal). */
 function instructionsMessages(agent: { messages: AgentMessage[] }) {
   return contextMessages(agent, "instructions");
 }
-
-/** The conversation of a session: every message the session and the model
- * exchanged, without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools). Those are prepended before the
- * first user message of a run and are not part of a turn, so a test that
- * counts or positions turns must count this array. */
 
 /** The conversation of a session: every message the session and the model
  * exchanged, without the dynamic-context publications (skill catalog,
@@ -401,6 +379,3 @@ Deno.test("reopened session with history does not regenerate the title", async (
 
   core.close();
 });
-
-/** Wait for the next `question` event of a session (the ask tool fired).
- * The run blocks until the test answers. */

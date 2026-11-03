@@ -15,30 +15,12 @@ import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
 
 import {
   makeRealTempDir,
+  makeWorkspace,
   promptSession,
   removeDirRetry,
+  setup,
+
 } from "./test-utils.ts";
-
-function setup(env?: () => Record<string, string>) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  return {
-    core,
-    faux,
-    providerId: faux.provider.id,
-    modelId: faux.getModel().id,
-  };
-}
-
-async function makeWorkspace(core: LumiscaCore, name = "ws") {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
-  const ws = await core.createWorkspace(name, [root]);
-  return { ws, root };
-}
-
-/** First-block text of every transcript message (test messages are
- * text-only). Narrowed explicitly: AgentMessage also includes custom
- * messages without `content` (e.g. BashExecutionMessage). */
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom
@@ -52,8 +34,6 @@ function contextMessages(
       m.role === "context" && m.provider === provider,
   );
 }
-
-/** The instruction context messages of a session (AGENTS.md + personal). */
 
 /** The instruction context messages of a session (AGENTS.md + personal). */
 class FakeBrowserBackend implements BrowserBackend {
@@ -96,9 +76,6 @@ async function waitForSearchTools(
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
-
-/** What the session's tool_search currently offers — the surface the model
- * itself uses to find MCP tools (empty when the pair is not attached). */
 
 /** What the session's tool_search currently offers — the surface the model
  * itself uses to find MCP tools (empty when the pair is not attached). */
@@ -640,6 +617,3 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
 });
 
 // --- computer use (画面・マウス・キーボード) --------------------------------
-
-/** In-memory computer host: serves one tiny display and records what the
- * tools asked it to do (the unused methods are never reachable here). */

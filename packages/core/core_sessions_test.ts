@@ -28,32 +28,14 @@ import { LANGUAGE_KEY, TOOL_SEARCH } from "./shared/mod.ts";
 import { DATE_PROVIDER } from "./agent/date-context.ts";
 
 import {
-  makeRealTempDir,
   MINI_PNG,
+  makeRealTempDir,
+  makeWorkspace,
   promptSession,
   removeDirRetry,
+  setup,
+
 } from "./test-utils.ts";
-
-function setup(env?: () => Record<string, string>) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  return {
-    core,
-    faux,
-    providerId: faux.provider.id,
-    modelId: faux.getModel().id,
-  };
-}
-
-async function makeWorkspace(core: LumiscaCore, name = "ws") {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
-  const ws = await core.createWorkspace(name, [root]);
-  return { ws, root };
-}
-
-/** First-block text of every transcript message (test messages are
- * text-only). Narrowed explicitly: AgentMessage also includes custom
- * messages without `content` (e.g. BashExecutionMessage). */
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom
@@ -68,9 +50,6 @@ function textsOf(messages: AgentMessage[]): string[] {
 
 /** The context messages (dynamic context snapshots) a session published
  * for one provider, in transcript order. */
-
-/** The context messages (dynamic context snapshots) a session published
- * for one provider, in transcript order. */
 function conversationMessages(
   agent: { messages: AgentMessage[] },
 ): AgentMessage[] {
@@ -81,9 +60,6 @@ function conversationMessages(
  * never reachable in this test — the tools are only exercised through
  * browser_open). */
 const SMALL_WINDOW_MODEL_ID = "small-window";
-
-/** Register a small-window faux model on the provider so a session can be
- * compacted by the real code path (the faux stream answers every call). */
 
 /** Register a small-window faux model on the provider so a session can be
  * compacted by the real code path (the faux stream answers every call). */
@@ -118,15 +94,6 @@ function registerSmallWindowModel(
  * Once the history crosses the threshold the pre-step compaction fires
  * before a turn's own request, so each turn is served a summarization
  * answer followed by its reply. */
-
-/** Answer a session's prompts with `turns` exchanges of a big user message
- * and a short reply, so the transcript holds several units — the shape a
- * long session has, and what makes a compaction possible at all (a single
- * oversized message cannot be repaired by replacing its neighbours).
- *
- * Once the history crosses the threshold the pre-step compaction fires
- * before a turn's own request, so each turn is served a summarization
- * answer followed by its reply. */
 async function fillHistory(
   core: LumiscaCore,
   faux: ReturnType<typeof fauxProvider>,
@@ -152,9 +119,6 @@ async function fillHistory(
 function visualDir(dbDir: string, sessionId: string): string {
   return join(dbDir, VISUALS_DIR_NAME, sessionId);
 }
-
-/** A file-backed core with a faux provider, a workspace, and one coding
- * session — the shape a real server runs. */
 
 /** A file-backed core with a faux provider, a workspace, and one coding
  * session — the shape a real server runs. */

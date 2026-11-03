@@ -7,8 +7,44 @@
  */
 import { realpathSync } from "node:fs";
 import { CoreError } from "./errors.ts";
-import type { LumiscaCore } from "./core.ts";
+import { LumiscaCore } from "./core.ts";
 import type { ImageContent } from "./ai/types.ts";
+import { fauxProvider } from "./ai/faux.ts";
+
+/**
+ * An in-memory core with the faux provider, and the ids a test needs to
+ * address its model. Replaces the identical `setup()` that seven
+ * `core_*_test.ts` files each carried.
+ *
+ * `env` replaces the process environment the model layer reads (see
+ * LumiscaCore.forTesting), so a test never depends on the machine.
+ */
+export function setup(env?: () => Record<string, string>) {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider], env);
+  return {
+    core,
+    faux,
+    providerId: faux.provider.id,
+    modelId: faux.getModel().id,
+  };
+}
+
+/**
+ * A workspace backed by a fresh temp directory. The caller owns the cleanup
+ * (see {@link removeDirRetry}) — the temp dir is real, so a session's tools
+ * can read and write inside it.
+ */
+export async function makeWorkspace(
+  core: LumiscaCore,
+  name = "ws",
+): Promise<
+  { ws: Awaited<ReturnType<LumiscaCore["createWorkspace"]>>; root: string }
+> {
+  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
+  const ws = await core.createWorkspace(name, [root]);
+  return { ws, root };
+}
 
 /** Minimal 1x1 transparent PNG (67 bytes), e.g. for image-attachment and
  * binary-file tests. */

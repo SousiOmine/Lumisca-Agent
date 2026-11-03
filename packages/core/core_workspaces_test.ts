@@ -13,28 +13,14 @@ import { LumiscaCore } from "./mod.ts";
 import { VISUALS_DIR_NAME } from "./mod.ts";
 
 import {
-  makeRealTempDir,
   MINI_PNG,
+  makeRealTempDir,
+  makeWorkspace,
   promptSession,
   removeDirRetry,
+  setup,
+
 } from "./test-utils.ts";
-
-function setup(env?: () => Record<string, string>) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  return {
-    core,
-    faux,
-    providerId: faux.provider.id,
-    modelId: faux.getModel().id,
-  };
-}
-
-async function makeWorkspace(core: LumiscaCore, name = "ws") {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
-  const ws = await core.createWorkspace(name, [root]);
-  return { ws, root };
-}
 
 /** The instruction context messages of a session (AGENTS.md + personal). */
 function instructionsMessages(agent: { messages: AgentMessage[] }) {
@@ -58,12 +44,6 @@ function contextMessages(
  * instructions, date, on-demand tools). Those are prepended before the
  * first user message of a run and are not part of a turn, so a test that
  * counts or positions turns must count this array. */
-
-/** The conversation of a session: every message the session and the model
- * exchanged, without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools). Those are prepended before the
- * first user message of a run and are not part of a turn, so a test that
- * counts or positions turns must count this array. */
 function conversationMessages(
   agent: { messages: AgentMessage[] },
 ): AgentMessage[] {
@@ -76,9 +56,6 @@ function conversationMessages(
 function visualDir(dbDir: string, sessionId: string): string {
   return join(dbDir, VISUALS_DIR_NAME, sessionId);
 }
-
-/** A file-backed core with a faux provider, a workspace, and one coding
- * session — the shape a real server runs. */
 
 /** A file-backed core with a faux provider, a workspace, and one coding
  * session — the shape a real server runs. */

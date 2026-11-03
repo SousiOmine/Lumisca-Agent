@@ -27,28 +27,13 @@ import {
 } from "./shared/mod.ts";
 import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
 
-import { promptSession, removeDirRetry } from "./test-utils.ts";
+import {
+  makeWorkspace,
+  promptSession,
+  removeDirRetry,
+  setup,
 
-function setup(env?: () => Record<string, string>) {
-  const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
-  return {
-    core,
-    faux,
-    providerId: faux.provider.id,
-    modelId: faux.getModel().id,
-  };
-}
-
-async function makeWorkspace(core: LumiscaCore, name = "ws") {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
-  const ws = await core.createWorkspace(name, [root]);
-  return { ws, root };
-}
-
-/** First-block text of every transcript message (test messages are
- * text-only). Narrowed explicitly: AgentMessage also includes custom
- * messages without `content` (e.g. BashExecutionMessage). */
+} from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom
@@ -62,8 +47,6 @@ function contextMessages(
       m.role === "context" && m.provider === provider,
   );
 }
-
-/** The instruction context messages of a session (AGENTS.md + personal). */
 
 /** The instruction context messages of a session (AGENTS.md + personal). */
 class FakeBrowserBackend implements BrowserBackend {
@@ -664,7 +647,3 @@ Deno.test("rewind while a question is pending aborts the run cleanly", async () 
 });
 
 // ---- context compaction (see ai/context-compaction.ts) ------------------
-
-/** A model whose window is small enough that a few turns of history cross
- * the pressure threshold; the completion reserve is part of the budget the
- * provider validates against (`window - outputCap`). */
