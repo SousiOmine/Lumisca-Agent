@@ -206,3 +206,85 @@ Deno.test("transcript pager: a dropped row still marks the page's turn", () => {
     db.close();
   }
 });
+
+Deno.test("transcript pager: a page starts at a checkpoint, not inside it", () => {
+  const { db, repo } = setup(2);
+  try {
+    // A compaction checkpoint is a row of its own in the transcript, so a
+    // page that began in the rows after it would draw a "summarized" marker
+    // above messages it does not summarize.
+    repo.append("s1", {
+      role: "checkpoint",
+      title: "sum",
+      body: "b",
+      timestamp: 3,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "assistant",
+      content: [{ type: "text", text: "after" }],
+      api: "openai-completions",
+      provider: "faux",
+      model: "model",
+      usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+      stopReason: "stop",
+      timestamp: 4,
+    } as AgentMessage);
+
+    const page = readTranscriptPage(repo, "s1", { limit: 1 }, RULES);
+    // The page pulled its start back to the checkpoint, so the assistant row
+    // is served together with the row that opens its turn.
+    assertEquals(page.items, [3, 4]);
+    // History remains before the checkpoint, so the way back is named by it.
+    assertEquals(
+      page.older,
+      messageCursor({
+        role: "checkpoint",
+        title: "sum",
+        body: "b",
+        timestamp: 3,
+      } as AgentMessage),
+    );
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("transcript pager: the cursor survives a checkpoint inserted before it", () => {
+  const { db, repo } = setup(4);
+  try {
+    const newest = readTranscriptPage(repo, "s1", { limit: 2 }, RULES);
+    assertEquals(newest.items, [3, 4]);
+    // Compaction inserts a row in the MIDDLE of the transcript, which shifts
+    // every later index. A cursor by position would now skip or repeat a
+    // message; an identity still names the same one.
+    repo.insertAt("s1", 1, {
+      role: "checkpoint",
+      title: "sum",
+      body: "b",
+      timestamp: 0,
+    } as AgentMessage);
+    const older = readTranscriptPage(
+      repo,
+      "s1",
+      { limit: 2, older: newest.older! },
+      RULES,
+    );
+    // The rows before the cursor: the inserted checkpoint and the second
+    // prompt. A positional cursor would have landed on the first prompt and
+    // repeated it.
+    assertEquals(older.items, [0, 2]);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("transcript pager: an empty transcript has no pages", () => {
+  const { db, repo } = setup(0);
+  try {
+    const page = readTranscriptPage(repo, "s1", { limit: 5 }, RULES);
+    assertEquals(page.items, []);
+    assertEquals(page.older, null);
+  } finally {
+    db.close();
+  }
+});

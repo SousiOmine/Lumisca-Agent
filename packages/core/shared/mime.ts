@@ -35,11 +35,6 @@ export const RASTER_IMAGE_MIME_BY_EXTENSION: Readonly<
   ".bmp": "image/bmp",
 };
 
-/** The raster extensions, in a stable order (error messages list them). */
-export const RASTER_IMAGE_EXTENSIONS: readonly string[] = Object.keys(
-  RASTER_IMAGE_MIME_BY_EXTENSION,
-);
-
 /** The extension a raster image of this content type is stored with, or
  * undefined when the type is not one of the raster formats. The inverse of
  * {@link RASTER_IMAGE_MIME_BY_EXTENSION}, kept beside it so the two cannot

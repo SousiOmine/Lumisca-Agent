@@ -45,12 +45,6 @@ export const INLINE_IMAGE_MIME_BY_EXTENSION: Readonly<
   Record<string, string>
 > = RASTER_IMAGE_MIME_BY_EXTENSION;
 
-/** The extensions of INLINE_IMAGE_MIME_BY_EXTENSION (error messages list
- * them). */
-export const INLINE_IMAGE_EXTENSIONS: readonly string[] = Object.keys(
-  INLINE_IMAGE_MIME_BY_EXTENSION,
-);
-
 /** Whether a file with this extension is shown inline rather than offered
  * as a download. Accepts the extension with its dot, in any case. */
 export function isInlineImageExtension(extension: string): boolean {

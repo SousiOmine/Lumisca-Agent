@@ -1,5 +1,4 @@
 import type { AgentMessage } from "../ai/types.ts";
-import { CoreError } from "../errors.ts";
 import type { MessageIdentity } from "../types/event.ts";
 
 /**
@@ -100,71 +99,6 @@ export function identityCursor(identity: MessageIdentity): string {
     identity.toolCallId ?? "",
     identity.provider ?? "",
   ]);
-}
-
-/**
- * The window of `items` a query names, with the cursor for the next older
- * one. `startsWindow` says whether the item at an index begins a screen unit
- * (a turn); the window's start moves back to the nearest such item.
- *
- * A cursor that matches no item is a conflict: the message it named was
- * rewound away, so this client's view and the transcript have diverged, and
- * answering with a window it did not ask for would hide that. The client
- * re-reads the newest window instead.
- */
-export function readWindow<T>(
-  items: readonly T[],
-  query: WindowQuery,
-  options: {
-    /** The cursor naming one item. */
-    cursor: (item: T) => string;
-    /** Whether the item at this index begins a screen unit. */
-    startsWindow: (index: number) => boolean;
-  },
-): WindowPage<T> {
-  const limit = windowLimit(query.limit);
-  const older = query.older ?? null;
-  const end = older === null
-    ? items.length
-    : indexOfCursor(items, older, options.cursor);
-  let start = Math.max(0, end - limit);
-  while (start > 0 && !options.startsWindow(start)) start--;
-
-  const oldest = items[start];
-  return {
-    items: items.slice(start, end),
-    // Reaching the transcript's beginning ends the walk: there is no empty
-    // page left to fetch.
-    older: start > 0 && oldest !== undefined ? options.cursor(oldest) : null,
-  };
-}
-
-/** The index the cursor names; a cursor that matches nothing conflicts. */
-function indexOfCursor<T>(
-  items: readonly T[],
-  cursor: string,
-  cursorOf: (item: T) => string,
-): number {
-  const index = items.findIndex((item) => cursorOf(item) === cursor);
-  if (index === -1) {
-    throw new CoreError(
-      "The history changed since this page was read",
-      "conflict",
-    );
-  }
-  return index;
-}
-
-/** The page size a query asks for, bounded and positive. */
-function windowLimit(limit: number | undefined): number {
-  if (limit === undefined) return TRANSCRIPT_WINDOW_ITEMS;
-  if (!Number.isInteger(limit) || limit < 1) {
-    throw new CoreError(
-      `Invalid page size: ${limit} (expected a positive integer)`,
-      "invalid",
-    );
-  }
-  return Math.min(limit, MAX_TRANSCRIPT_WINDOW_ITEMS);
 }
 
 /**

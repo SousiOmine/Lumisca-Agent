@@ -1,72 +1,62 @@
+/**
+ * The core's public surface.
+ *
+ * It is the runtime the server embeds and the shapes it returns: nothing
+ * else. A name belongs here only when a consumer outside the package imports
+ * it — the server, the web bundle (types only; see browser-entries.ts for
+ * what reaches the browser at runtime) or a script. Everything the core uses
+ * internally is reached through its own module, so an internal change stays
+ * internal.
+ *
+ * The rule is enforced by a test (repo_hygiene_test.ts): an export nothing
+ * imports fails, and so does a consumer import of a name that is not here.
+ */
 export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
-export {
-  MIN_VACUUM_BYTES,
-  vacuumMarkerPath,
-  vacuumOnStartup,
-} from "./db/vacuum.ts";
-export {
-  createVmManager,
-  type VmManager,
-  type VmProgress,
-  type VmState,
-  type VmStatus,
-} from "./vm/container.ts";
-export {
-  type StellaAvailability,
-  stellaAvailability,
-} from "./vm/availability.ts";
-export {
-  VM_CONTAINER_DIR_NAME,
-  VM_CONTAINERFILE_NAME,
-  VM_SCREEN_HEIGHT,
-  VM_SCREEN_WIDTH,
-  VM_SKILLS_DIR,
-  VM_WORKDIR,
-} from "./vm/contract.ts";
+export { vacuumOnStartup } from "./db/vacuum.ts";
+export { createVmManager } from "./vm/container.ts";
+export type { StellaAvailability } from "./vm/availability.ts";
+export { VM_CONTAINER_DIR_NAME } from "./vm/contract.ts";
 export { CoreError, errorMessage } from "./errors.ts";
-export { base64ToBytes, bytesToBase64, textToBase64 } from "./base64.ts";
+export { base64ToBytes } from "./base64.ts";
 export { createLogger } from "./log.ts";
-export {
-  createAgentRepo,
-  DEFAULT_AGENT_NAME,
-  MAX_AGENT_NAME_CHARS,
-  MAX_AGENT_ROLE_CHARS,
-  type StellaAgent,
-} from "./stella/agents.ts";
-export { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
-export type { HistorySearchTarget } from "./session/history.ts";
-export { createHistorySearchTool } from "./session/history.ts";
-export {
-  MAX_TRANSCRIPT_WINDOW_ITEMS,
-  readWindow,
-  TRANSCRIPT_WINDOW_ITEMS,
-  type WindowPage,
-  type WindowQuery,
-} from "./session/transcript-window.ts";
-export type { Logger } from "./log.ts";
+export type { StellaAgent } from "./stella/agents.ts";
+export type { WindowQuery } from "./session/transcript-window.ts";
 export { refreshCatalogInBackground } from "./models/catalog-refresh.ts";
-export type { CatalogRefresher } from "./models/catalog-refresh.ts";
 export { Sandbox } from "./workspace/sandbox.ts";
 export {
-  fileExists,
   isDirectory,
   listWorkspaceFiles,
   suggestWorkspaceFiles,
+  type WorkspaceFileEntry,
 } from "./workspace/files.ts";
-export type { WorkspaceFileEntry } from "./workspace/files.ts";
 export type { Workspace } from "./types/workspace.ts";
 export type { SessionInfo } from "./types/session.ts";
 export type { ClientEvent } from "./types/event.ts";
-export type { MessageIdentity } from "./types/event.ts";
-export { notificationText, toLlmMessages } from "./types/notification.ts";
-export type { NotificationPayload } from "./types/notification.ts";
 export type {
+  AgentMessage,
+  Api,
+  AssistantMessage,
+  AuthCheck,
+  AuthInteraction,
+  AuthNotice,
+  AuthPrompt,
+  AuthType,
+  CheckpointMessage,
+  ContextMessage,
+  ImageContent,
+  Message,
+  Model,
+  ModeMessage,
   NotificationKind,
   NotificationMessage,
   NotificationStatus,
+  Provider,
+  StreamFn,
+  StreamRequest,
+  TextContent,
+  ToolCall,
 } from "./ai/types.ts";
-export type { ContextProvider, ContextUpdate } from "./ai/context-providers.ts";
 export type {
   StellaConversationSnapshot,
   StellaEntry,
@@ -74,183 +64,84 @@ export type {
   StellaHandover,
   StellaQuestion,
 } from "./types/stella-conversation.ts";
-export { stellaEntryOf, stellaEventsOf } from "./agent/stella-stream.ts";
-export type { ModeMessage } from "./ai/types.ts";
+export { stellaEventsOf } from "./agent/stella-stream.ts";
 export type { ModePrompt } from "./types/mode-message.ts";
-export { Agent, type AgentDefaults, type AgentInit } from "./ai/agent.ts";
-export { LumiscaModels, type LumiscaModelsOptions } from "./ai/models.ts";
-export { languageModelFor } from "./ai/lang-model.ts";
 export { createAssistantMessageEventStream } from "./ai/event-stream.ts";
-export type {
-  AssistantMessageEventStream,
-  PushableAssistantMessageEventStream,
-} from "./ai/mod.ts";
+export type { AssistantMessageEventStream } from "./ai/types.ts";
 export {
   fauxAssistantMessage,
-  type FauxProvider,
   fauxProvider,
   fauxText,
   fauxThinking,
   fauxToolCall,
 } from "./ai/faux.ts";
-export type {
-  AgentEvent,
-  AgentMessage,
-  AgentTool,
-  AssistantMessage,
-  CheckpointMessage,
-  ContextMessage,
-  ImageContent,
-  Message,
-  ModelCompat,
-  StreamFn,
-  StreamRequest,
-  TextContent,
-  ThinkingContent,
-  ThinkingLevelMap,
-  ToolCall,
-  Usage,
-} from "./ai/types.ts";
 export { SessionAgent } from "./agent/session-agent.ts";
-export {
-  type CompactionBudgets,
-  type CompactionPolicy,
-  type CompactionResult,
-  ContextCompactor,
-  DEFAULT_COMPACTION_POLICY,
-  resolveCompactionBudgets,
-  resolveCompactionPolicy,
-} from "./ai/context-compaction.ts";
 export { systemLanguageTags } from "./locale.ts";
-export { AGENT_MODES, findAgentMode } from "./modes/mod.ts";
-export type { AgentMode, AgentModeOption } from "./modes/mod.ts";
-export { buildReviewPrompt, reviewMode } from "./modes/review.ts";
-export type { ReviewTarget } from "./modes/review.ts";
-export {
-  buildGoalPrompt,
-  DEFAULT_MAX_GOAL_ITERATIONS,
-  goalMode,
-} from "./modes/goal.ts";
-export {
-  buildChatSystemPrompt,
-  buildStellaSystemPrompt,
-  buildSystemPrompt,
-  createChatTools,
-  createCodingTools,
-  createStellaTools,
-} from "./tools/mod.ts";
-export type {
-  Infer,
-  Tool,
-  ToolContentBlock,
-  ToolResult,
-  ToolSchema,
-} from "./tools/schema.ts";
-export {
-  discoverSkills,
-  formatAvailableSkills,
-  loadSkillContent,
-  skillInfo,
-} from "./skills/discover.ts";
-export type {
-  DiscoverOptions,
-  SkillDef,
-  SkillInfo,
-  SkillSource,
-} from "./skills/discover.ts";
-export { createSkillTool } from "./skills/tool.ts";
-export { buildSkillPrompt } from "./skills/slash.ts";
-export { parseSkillFrontmatter } from "./skills/frontmatter.ts";
-export { builtinSkills } from "./skills/builtin/mod.ts";
-export type { BuiltinContext } from "./skills/builtin/mod.ts";
-export { AskHub } from "./tools/ask.ts";
+export type { SkillInfo } from "./skills/discover.ts";
 export type { PendingQuestion } from "./tools/ask.ts";
-export { SessionVisualStore, VISUALS_DIR_NAME } from "./session/visuals.ts";
-export {
-  ATTACHMENTS_DIR_NAME,
-  SessionAttachmentStore,
-} from "./session/attachments.ts";
-export { TodoHub } from "./tools/todo.ts";
-export { TaskHub } from "./tools/task-hub.ts";
-export type { ParentDelivery } from "./tools/task-hub.ts";
-export { MAX_SUBAGENT_DEPTH, MAX_SUBAGENTS } from "./tools/task-hub.ts";
+export { VISUALS_DIR_NAME } from "./session/visuals.ts";
+export { ATTACHMENTS_DIR_NAME } from "./session/attachments.ts";
 export type { BrowserBackend } from "./browser/types.ts";
-export {
-  BROWSER_TOOL_NAMES,
-  createBrowserTools,
-  createBrowserToolsFrom,
-} from "./browser/tools.ts";
-export { findCanvasIcuDataFile } from "./pdf/icu-data.ts";
-export {
-  createPdfTools,
-  createUnpdfRenderer,
-  DEFAULT_PDF_DPI,
-  MAX_PDF_PAGES_PER_CALL,
-  PDF_TOOL_NAMES,
-} from "./pdf/tools.ts";
-export type {
-  PdfRenderer,
-  PdfRenderResult,
-  RenderedPdfPage,
-} from "./pdf/tools.ts";
-export { formatSnapshot } from "./browser/tools.ts";
 export { HttpBrowserBackend } from "./browser/client.ts";
-export { checkBrowserUrl, requireAllowedUrl } from "./browser/policy.ts";
 export { createComputerHost } from "./computer/host.ts";
-export { MAX_CAPTURE_DIMENSION } from "./computer/image.ts";
-export {
-  COMPUTER_TOOL_NAMES,
-  createComputerTools,
-  MAX_TYPE_CHARS,
-  MAX_WAIT_MS,
-  MAX_WINDOW_LINES,
-} from "./computer/tools.ts";
-export {
-  DEFAULT_MAX_DIMENSION,
-  encodeCapture,
-  MAX_MAX_DIMENSION,
-  MIN_MAX_DIMENSION,
-} from "./computer/image.ts";
 export type {
   ComputerAction,
   ComputerActionResult,
   ComputerHost,
-  ComputerHostResult,
-  DisplayInfo,
-  MouseButton,
   Point,
   RawCapture,
   Rect,
-  WindowInfo,
 } from "./computer/types.ts";
-export { PROBE_SOURCE } from "./browser/probe.ts";
+export type { BackgroundCommandInfo } from "./tools/background.ts";
+export type { McpInfo, McpServerInfo } from "./mcp/config.ts";
+export type { McpTestResult, McpTestTool } from "./mcp/service.ts";
+export { MCP_OAUTH_CALLBACK_PATH } from "./mcp/oauth.ts";
+export type { McpAuthSnapshot, McpAuthStatus } from "./mcp/oauth-session.ts";
+export { THEME_KEY } from "./settings/repo.ts";
+export { resolveSettingsPath, SETTINGS_DIR_NAME } from "./settings/path.ts";
+export type { ConnectionEntry } from "./settings/connections.ts";
+export { autoAnswerSelect } from "./models/interaction.ts";
 export type {
-  ActionResult,
-  BrowserAction,
-  ConsoleEntry,
-  ElementInfo,
-  ImageResult,
-  NetworkSummary,
-  ObserveOptions,
-  OpenOptions,
-  PageErrorEntry,
-  PageInfo,
-  PageSnapshot,
-  ScreenshotOptions,
-  WaitOptions,
-  WaitResult,
-} from "./browser/types.ts";
+  UserProviderInput,
+  UserProviderSummary,
+} from "./models/user-providers.ts";
+
+// --- front-end-safe helpers the server shares with the web package ---------
+
+export {
+  contentText,
+  LANGUAGE_KEY,
+  MAX_PROMPT_IMAGES,
+  nextRunAt,
+  parseAcceptLanguage,
+  parseLocale,
+  resolveLocale,
+} from "./shared/mod.ts";
 export type {
   AskAnswer,
-  AskOption,
   AskQuestion,
+  CatalogStatus,
+  ContextUsageSummary,
+  GoalInfo,
+  Locale,
+  ModelInfo,
   PromptFileRef,
-} from "./shared/mod.ts";
-/** The sidebar row (an agent plus what its conversation last said) and the
- * preview itself: the route answers the shape and the web package draws it,
- * so it is exported from the barrel like every other wire shape. */
-export type { StellaAgentSummary, StellaPreview } from "./shared/mod.ts";
-export type {
+  ProviderAuthType,
+  ProviderInfo,
+  ProviderLoginEvent,
+  ProviderLoginPrompt,
+  ProviderLoginSnapshot,
+  Routine,
+  SavedPrompt,
+  StellaAgentSummary,
+  SubagentStatus,
+  SubagentType,
+  TaskInfo,
+  ThemeSetting,
+  ThinkingLevel,
+  TodoPhase,
+  TodoStatus,
+  TodoTask,
   WebSearchAvailableProviderView,
   WebSearchProviderForm,
   WebSearchProviderId,
@@ -259,180 +150,3 @@ export type {
   WebSearchSettingsView,
   WebSearchTestView,
 } from "./shared/mod.ts";
-export type { TodoPhase, TodoStatus, TodoTask } from "./shared/mod.ts";
-export type { SubagentStatus, SubagentType, TaskInfo } from "./shared/mod.ts";
-export type { GoalInfo, GoalStatus } from "./shared/mod.ts";
-export type {
-  BackgroundCommandInfo,
-  BackgroundCommandReason,
-  BackgroundCommandState,
-} from "./tools/background.ts";
-export { BackgroundProcessManager } from "./tools/background.ts";
-export { contentText } from "./shared/mod.ts";
-export {
-  MAX_PROMPT_IMAGES,
-  serializeMcpServers,
-  stripDataUrlHeader,
-  toDataUrl,
-} from "./shared/mod.ts";
-export {
-  contextTokensOf,
-  contextUsageRatio,
-  formatCompactTokens,
-  formatContextUsageLine,
-  formatPercent1,
-  summarizeContextUsage,
-} from "./shared/mod.ts";
-export type {
-  ContextUsageLike,
-  ContextUsageMessageLike,
-  ContextUsageSummary,
-} from "./shared/mod.ts";
-export type { McpServerConfigLike } from "./shared/mod.ts";
-export {
-  loadMcpConfig,
-  MCP_CONFIG_FILE,
-  McpConfigError,
-  parseMcpConfig,
-  serializeMcpConfig,
-} from "./mcp/config.ts";
-export type {
-  McpConfig,
-  McpInfo,
-  McpServerConfig,
-  McpServerInfo,
-} from "./mcp/config.ts";
-export type { McpTestResult, McpTestTool } from "./mcp/service.ts";
-export {
-  connectionOAuthProvider,
-  isMcpAuthRequired,
-  MCP_AUTH_REQUIRED_MESSAGE,
-  MCP_OAUTH_CALLBACK_PATH,
-  MCP_OAUTH_KEY_PREFIX,
-  McpAuthRequiredError,
-  McpOAuthProvider,
-  type McpOAuthRecord,
-  McpOAuthStore,
-} from "./mcp/oauth.ts";
-export { McpAuthSession, McpAuthSessions } from "./mcp/oauth-session.ts";
-export type { McpAuthSnapshot, McpAuthStatus } from "./mcp/oauth-session.ts";
-export { createMcpTransport } from "./mcp/client.ts";
-export type { McpTransportOptions } from "./mcp/client.ts";
-export { McpManager } from "./mcp/manager.ts";
-export type { McpServerStatus, McpToolDef } from "./mcp/manager.ts";
-export { McpAttachment } from "./mcp/attachment.ts";
-export { createMcpTools, sanitizeServerName } from "./mcp/tools.ts";
-export { AGENTS_PLUGINS_DIR, discoverPlugins } from "./plugins/discover.ts";
-export type { DiscoverPluginsOptions, PluginDef } from "./plugins/discover.ts";
-export { parsePluginManifest, PLUGIN_SCHEMA_URL } from "./plugins/manifest.ts";
-export type {
-  ManifestLoadResult,
-  PluginAuthor,
-  PluginManifest,
-} from "./plugins/manifest.ts";
-export {
-  MCP_SCHEMA_URL,
-  parsePluginMcp,
-  resolvePluginDataRoot,
-} from "./plugins/mcp.ts";
-export type { PluginMcpResult } from "./plugins/mcp.ts";
-export { CREDENTIAL_KEY_PREFIX } from "./settings/credentials.ts";
-export {
-  assertMutableKey,
-  assertNotProtected,
-  filterExposedSettings,
-  protectedKeyReason,
-} from "./settings/guard.ts";
-export { PersonalizationService } from "./personalization.ts";
-export { SavedPromptsService } from "./saved-prompts.ts";
-export { WorkspaceService } from "./workspaces.ts";
-export type { WorkspaceServiceDeps } from "./workspaces.ts";
-export { THEME_KEY } from "./settings/repo.ts";
-export type { ThemeSetting } from "./shared/mod.ts";
-export type { Locale } from "./shared/mod.ts";
-export { DEFAULT_LOCALE, LANGUAGE_KEY, LOCALES } from "./shared/mod.ts";
-export {
-  localeForTag,
-  localeTag,
-  parseAcceptLanguage,
-  parseLocale,
-  resolveLocale,
-  translate,
-} from "./shared/mod.ts";
-export type { InitialData } from "./shared/mod.ts";
-export type { SavedPrompt } from "./shared/mod.ts";
-export {
-  abortError,
-  decodeUtf8,
-  formatSessionName,
-  parseJsonOrThrow,
-  safeJsonParse,
-  sleep,
-  sleepAbortable,
-  withTimeout,
-  withTimeoutError,
-} from "./shared/mod.ts";
-export {
-  diffLineCounts,
-  formatDiffStat,
-  splitDiffLines,
-} from "./shared/mod.ts";
-export type { DiffLineCounts } from "./shared/mod.ts";
-export {
-  parseSavedPrompts,
-  SAVED_PROMPTS_KEY,
-  serializeSavedPrompts,
-} from "./shared/mod.ts";
-export { resolveSettingsPath, SETTINGS_DIR_NAME } from "./settings/path.ts";
-export { CONNECTIONS_KEY } from "./shared/settings-keys.ts";
-export type { ConnectionEntry } from "./settings/connections.ts";
-export { formatModelMeta } from "./shared/mod.ts";
-export {
-  clampThinkingLevel,
-  getSupportedThinkingLevels,
-  isThinkingLevel,
-} from "./models/thinking.ts";
-export type { ThinkingLevel } from "./shared/mod.ts";
-export type { ModelInfo, ProviderInfo } from "./shared/mod.ts";
-export type { CatalogStatus } from "./shared/mod.ts";
-export { ALLOWED_OPENAI_APIS } from "./shared/mod.ts";
-export {
-  type UserProviderConfig,
-  type UserProviderInput,
-  type UserProviderModel,
-  UserProviderStore,
-  type UserProviderSummary,
-} from "./models/user-providers.ts";
-export type {
-  ProviderAuthType,
-  ProviderLoginEvent,
-  ProviderLoginPrompt,
-  ProviderLoginSnapshot,
-} from "./shared/mod.ts";
-export { autoAnswerSelect } from "./models/interaction.ts";
-export type { SettingsRepo } from "./settings/repo.ts";
-export type { ModelManager } from "./models/mod.ts";
-export type {
-  Api,
-  AuthCheck,
-  AuthInteraction,
-  AuthNotice,
-  AuthPrompt,
-  AuthPromptOption,
-  AuthType,
-  Model,
-  Provider,
-} from "./ai/types.ts";
-
-// --- routines (scheduled requests) -----------------------------------------
-
-export type { RoutineRepo } from "./routine/repo.ts";
-export type { RoutineRunner, RoutineScheduler } from "./routine/scheduler.ts";
-export { scheduleText } from "./routine/tools.ts";
-export type { Routine, RoutineSchedule } from "./shared/routine.ts";
-export { nextRunAt, parseSchedule, scheduleProblem } from "./shared/routine.ts";
-
-// --- the stella machine's hand-over ----------------------------------------
-
-export type { HandoverHub, PendingHandover } from "./vm/handover.ts";
-export { createVmAskUserTool } from "./vm/ask-user.ts";

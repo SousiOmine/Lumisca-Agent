@@ -60,13 +60,6 @@ export async function saveSavedPrompts(
   await reloadSavedPrompts();
 }
 
-/** Drop the store's contents (tests: a fixture must not inherit the previous
- * test's prompts). */
-export function resetSavedPromptsStore(): void {
-  reading = null;
-  store.set({ prompts: [], error: null, loaded: false });
-}
-
 /** The saved prompts for a component; reads once, then stays in step with
  * every write through {@link saveSavedPrompts}. */
 export function useSavedPrompts(): {

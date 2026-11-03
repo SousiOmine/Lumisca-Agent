@@ -197,3 +197,90 @@ Deno.test("every i18n catalogue key is referenced by some source", async () => {
     `i18n keys with no caller (delete them): ${unused.join(", ")}`,
   );
 });
+
+/** Resolve a relative specifier against the importing file's directory,
+ * yielding a repo-relative path with the extension the resolved file has. */
+function resolvePath(dir: string, specifier: string): string {
+  const segments: string[] = [];
+  for (const segment of `${dir}/${specifier}`.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") segments.pop();
+    else segments.push(segment);
+  }
+  const resolved = segments.join("/");
+  return /\.tsx?$/.test(resolved) ? resolved : `${resolved}.ts`;
+}
+
+Deno.test("every export of the core barrel is imported by a consumer", async () => {
+  // The barrel is the package's public surface, and a name nothing imports
+  // is a false claim about the API: it makes the dependency direction
+  // unreadable (which of these does the server actually use?) and turns an
+  // internal change into a public one. This check reads the barrel and the
+  // import statements that name it, so the two cannot drift.
+  const texts = await sourceTexts();
+  const barrelPath = "packages/core/mod.ts";
+  const barrel = texts.get(barrelPath);
+  assert(barrel !== undefined, "the core barrel was not read");
+
+  const exported = new Set<string>();
+  for (
+    const block of barrel.matchAll(
+      /export\s+(?:type\s+)?\{([\s\S]*?)\}\s+from/g,
+    )
+  ) {
+    for (const part of (block[1] ?? "").split(",")) {
+      const text = part.trim().replace(/^type\s+/, "");
+      if (text === "") continue;
+      const name = text.split(/\s+as\s+/).pop()?.trim() ?? "";
+      if (/^[A-Za-z0-9_]+$/.test(name)) exported.add(name);
+    }
+  }
+  assert(exported.size > 80, `only ${exported.size} names in the barrel`);
+
+  const used = new Set<string>();
+  for (const [path, text] of texts) {
+    if (path === barrelPath) continue;
+    if (!path.endsWith(".ts") && !path.endsWith(".tsx")) continue;
+    if (!path.startsWith("packages/") && !path.startsWith("scripts/")) {
+      continue;
+    }
+    // A name is used when someone imports it THROUGH the barrel: the package
+    // name from outside, or a relative specifier that resolves to this file
+    // (core's own tests read their fixtures that way; a script reaches it as
+    // `../packages/core/mod.ts`). Resolving the specifier rather than matching
+    // its spelling is what keeps a third spelling from going unnoticed.
+    const dir = path.slice(0, path.lastIndexOf("/"));
+    for (
+      const block of text.matchAll(
+        /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g,
+      )
+    ) {
+      const specifier = block[2] ?? "";
+      const reachesBarrel = specifier === "@lumisca/core" ||
+        (!specifier.startsWith("@") && !specifier.startsWith("node:") &&
+          !specifier.startsWith("jsr:") && !specifier.startsWith("npm:") &&
+          !specifier.startsWith("http") && !/^\w+:/.test(specifier) &&
+          resolvePath(dir, specifier) === barrelPath);
+      if (!reachesBarrel) continue;
+      for (const part of (block[1] ?? "").split(",")) {
+        const name = (part.trim().replace(/^type\s+/, "").split(
+          /\s+as\s+/,
+        )[0] ?? "").trim();
+        if (/^[A-Za-z0-9_]+$/.test(name)) used.add(name);
+      }
+    }
+    // The web package reaches domain types through one namespace import.
+    if (/import\s+type\s+\*\s+as\s+core\s+from\s+"@lumisca\/core"/.test(text)) {
+      for (const match of text.matchAll(/\bcore\.([A-Za-z0-9_]+)/g)) {
+        used.add(match[1]!);
+      }
+    }
+  }
+
+  const unused = [...exported].filter((name) => !used.has(name)).sort();
+  assertEquals(
+    unused,
+    [],
+    `core barrel exports nothing imports (delete them): ${unused.join(", ")}`,
+  );
+});

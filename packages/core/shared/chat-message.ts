@@ -31,14 +31,6 @@ export interface ChatMessage {
   attachments: AttachmentRef[];
 }
 
-/** Whether a message carries nothing at all. The tool refuses such a call
- * (an empty message would be an empty row), so this only exists for a
- * projection reading a hand-edited or older row. */
-export function isEmptyChatMessage(message: ChatMessage): boolean {
-  return message.text.length === 0 && message.card === null &&
-    message.attachments.length === 0;
-}
-
 /** Read a `send_chat` result's `details` as a {@link ChatMessage}, or
  * undefined when they are not the shape this build wrote (a stored result
  * from another build, a hand-edited row, a result of some other tool). One
