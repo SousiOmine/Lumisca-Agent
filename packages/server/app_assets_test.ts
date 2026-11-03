@@ -1,0 +1,273 @@
+import { fauxProvider } from "@lumisca/core";
+import { assert, assertEquals } from "@std/assert";
+import { LumiscaCore } from "@lumisca/core";
+import { LANGUAGE_KEY } from "@lumisca/core/shared";
+import { createApp, startServer } from "./app.ts";
+
+export function json(
+  base: string,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  return fetch(`${base}${path}`, {
+    ...init,
+    headers: { "content-type": "application/json", ...init?.headers },
+  });
+}
+
+/** The transcript without the dynamic-context publications (skill catalog,
+ * instructions, date, on-demand tools) a session publishes ahead of the
+ * first user message of a run. Those are not part of a turn, so the tests
+ * that count or position turns count this array. */
+
+/** The transcript without the dynamic-context publications (skill catalog,
+ * instructions, date, on-demand tools) a session publishes ahead of the
+ * first user message of a run. Those are not part of a turn, so the tests
+ * that count or position turns count this array. */
+Deno.test("unknown static assets return 404, not the HTML shell", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+    const favicon = await fetch(`${base}/favicon.ico`);
+    assertEquals(favicon.status, 404);
+    const png = await fetch(`${base}/favicon.png`);
+    assertEquals(png.status, 200);
+    assertEquals(png.headers.get("content-type"), "image/png");
+    assertEquals((await png.arrayBuffer()).byteLength > 0, true);
+    const stale = await fetch(`${base}/assets/app.deadbeef.js`);
+    assertEquals(stale.status, 404);
+    const content = await stale.text();
+    assertEquals(content.includes("__INITIAL_DATA__"), false);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("server serves the app shell", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+    // The language is resolved per request; the header pins it so the test
+    // does not depend on the machine's locale.
+    const index = await fetch(`${base}/`, {
+      headers: { "accept-language": "ja-JP,ja;q=0.9" },
+    });
+    assertEquals(index.status, 200);
+    const html = await index.text();
+    // Static shell: an empty #root (the app renders client-side), the
+    // externalized initial data (inline scripts are banned by the page
+    // CSP), and the client bundle script.
+    assertEquals(html.includes('<div id="root"></div>'), true);
+    assertEquals(html.includes('src="/assets/initial-data.js"'), true);
+    assertEquals(html.includes('src="/assets/app.js"'), true);
+    assertEquals(html.includes("styles.css") || html.includes("<style>"), true);
+    // The document already declares the app language (font fallback,
+    // hyphenation, screen readers) before the client bundle runs.
+    assertEquals(html.includes('<html lang="ja"'), true);
+    // The desktop shell bridge (title bar: window controls and the
+    // connection picker) is allowed by the CSP; in plain browsers nothing
+    // listens there and the bridge is unused.
+    assertEquals(html.includes("http://127.0.0.1:*"), true);
+
+    // The initial-data script carries the serialized state, the language
+    // included — the client seeds its catalogue with it before the first
+    // render, so the UI never flashes the wrong language.
+    const dataScript = await fetch(`${base}/assets/initial-data.js`);
+    assertEquals(dataScript.status, 200);
+    const dataText = await dataScript.text();
+    assertEquals(dataText.includes("window.__INITIAL_DATA__"), true);
+    assertEquals(dataText.includes('"language":"ja"'), true);
+
+    // SPA fallback renders the same shell.
+    const fallback = await fetch(`${base}/some/route`);
+    assertEquals(fallback.status, 200);
+    assertEquals((await fallback.text()).includes('id="root"'), true);
+
+    // API must not be shadowed.
+    const health = await fetch(`${base}/api/health`);
+    assertEquals(health.status, 200);
+    assertEquals((await health.json()).ok, true);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("token-required page renders in the request's language", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const app = createApp(core, { token: "secret-token" });
+  const host = { host: "127.0.0.1:8000" };
+  try {
+    // Nothing is stored yet and no app page has been loaded, so the
+    // browser's own preference decides — the only hint a page served
+    // before the app exists can have.
+    const ja = await app.fetch(
+      new Request("http://127.0.0.1:8000/", {
+        headers: { ...host, accept: "text/html", "accept-language": "ja-JP" },
+      }),
+    );
+    assertEquals(ja.status, 401);
+    assertEquals((await ja.text()).includes("トークンが必要です"), true);
+
+    const en = await app.fetch(
+      new Request("http://127.0.0.1:8000/", {
+        headers: {
+          ...host,
+          accept: "text/html",
+          "accept-language": "en-US,en;q=0.9",
+        },
+      }),
+    );
+    assertEquals(en.status, 401);
+    assertEquals((await en.text()).includes("A token is required"), true);
+
+    // A 401 is not a page load of the app: it resolved a language for its
+    // own response but stored nothing, so the first real page load still
+    // decides (and no later request inherits a guess from a rejected one).
+    assertEquals(core.getSetting(LANGUAGE_KEY), undefined);
+  } finally {
+    core.close();
+  }
+});
+
+Deno.test("server resolves the app language once and stores it", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+
+    // First load: nothing is stored yet, so the browser's preference
+    // decides — and the resolved value is remembered, because the language
+    // must not depend on which client happens to create the next session.
+    const first = await fetch(`${base}/`, {
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+    assertEquals((await first.text()).includes('<html lang="en"'), true);
+    const settings = await (await fetch(`${base}/api/settings`)).json();
+    assertEquals(settings.language, "en");
+
+    // A later request with a different preference does not flip it: the
+    // stored setting is the source of truth, and the settings dialog is
+    // its only writer after this point.
+    const second = await fetch(`${base}/`, {
+      headers: { "accept-language": "ja" },
+    });
+    assertEquals((await second.text()).includes('<html lang="en"'), true);
+
+    // The user's explicit choice wins over every fallback.
+    await fetch(`${base}/api/settings/language`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: "ja" }),
+    });
+    const third = await fetch(`${base}/`);
+    assertEquals((await third.text()).includes('<html lang="ja"'), true);
+    const data = await fetch(`${base}/assets/initial-data.js`);
+    assertEquals((await data.text()).includes('"language":"ja"'), true);
+
+    // An unknown stored value is "not chosen": it is replaced by the
+    // resolved language instead of reaching the page.
+    await fetch(`${base}/api/settings/language`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: "fr" }),
+    });
+    const fourth = await fetch(`${base}/`, {
+      headers: { "accept-language": "ja" },
+    });
+    assertEquals((await fourth.text()).includes('<html lang="ja"'), true);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("server bundles and serves the client app", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+    const res = await fetch(`${base}/assets/app.js`);
+    assertEquals(res.status, 200);
+    const js = await res.text();
+    // The entry point is what proves the bundle is the app rather than an
+    // empty or stale file; a byte count only ever approximated that (it
+    // breaks whenever the UI happens to shrink and passes for a bundle that
+    // compiled the wrong entry).
+    assertEquals(js.includes("input-composer"), true);
+    assert(
+      js.length > 10_000,
+      `the bundle is ${js.length} bytes: too small to hold the client app`,
+    );
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("the app's files are compressed and revalidated", async () => {
+  // The app is opened over a tailnet or a WAN as often as on loopback, and
+  // everything it serves is text: the bundle is ~600 KB, the stylesheet is
+  // inlined into the page (~140 KB), and JSON snapshots repeat. Without
+  // compression each of those is several times its size on the wire, and
+  // without a validator every reload pays for it in full.
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+    // `fetch` decodes transparently, so the header is what proves the work
+    // happened (and the decoded body is still the app).
+    const gz = await fetch(`${base}/assets/app.js`, {
+      headers: { "accept-encoding": "gzip" },
+    });
+    assertEquals(gz.headers.get("content-encoding"), "gzip");
+    const js = await gz.text();
+    assertEquals(js.includes("input-composer"), true);
+    // The stylesheet and the page are text too.
+    for (const path of ["/styles.css", "/"]) {
+      const res = await fetch(`${base}${path}`, {
+        headers: { "accept-encoding": "gzip" },
+      });
+      assertEquals(
+        res.headers.get("content-encoding"),
+        "gzip",
+        `${path} was not compressed`,
+      );
+    }
+
+    // A stable URL gets a validator and re-checks: the second read is a
+    // bodyless 304, which is what a reload costs instead of the payload.
+    const first = await fetch(`${base}/assets/app.js`);
+    const etag = first.headers.get("etag");
+    assert(etag !== null, "the bundle carries no validator");
+    assert(first.headers.get("cache-control")?.includes("private") === true);
+    const revalidated = await fetch(`${base}/assets/app.js`, {
+      headers: { "if-none-match": etag },
+    });
+    assertEquals(revalidated.status, 304);
+    assertEquals((await revalidated.arrayBuffer()).byteLength, 0);
+
+    // The page and the bootstrap script carry the auth token: nothing may
+    // keep a copy.
+    for (const path of ["/", "/assets/initial-data.js"]) {
+      const res = await fetch(`${base}${path}`);
+      assertEquals(
+        res.headers.get("cache-control"),
+        "no-store",
+        `${path} is cacheable`,
+      );
+    }
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
