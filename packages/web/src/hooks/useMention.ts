@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "preact/compat";
-import { api, fed } from "../api.ts";
+import { api, fed, peerRouted } from "../api.ts";
 import type { WorkspaceFileEntry } from "../types.ts";
 
 /** An active `@` mention: the caret is inside a query started by `@`. */
@@ -89,9 +89,13 @@ export function useMention(options: {
     const seq = ++fetchSeq.current;
     const timer = setTimeout(async () => {
       try {
-        const result = peerId === ""
-          ? await api.workspaceFiles(workspaceId, mention.query)
-          : await fed.workspaceFiles(peerId, workspaceId, mention.query);
+        // `fed` and `api` are the same table bound to different servers
+        // (peerRoutes), so the choice is the bind, not the call.
+        const result = await peerRouted(
+          peerId,
+          api.workspaceFiles,
+          fed.workspaceFiles,
+        )(workspaceId, mention.query);
         if (fetchSeq.current !== seq || !mention) return;
         setMention((prev) =>
           prev

@@ -708,3 +708,28 @@ Deno.test("api-local: a request that never answers gives up instead of hanging",
     setRequestTimeoutMs(120_000);
   }
 });
+
+Deno.test("peerRoutes: the same path is written once for both machines", async () => {
+  // The table backs `api` (peer "") and `fed` (a peer id), so the local and
+  // proxied spellings of one call cannot drift apart.
+  const { api, peerRoutes } = await import("./api-local.ts");
+  const seen: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = ((url: string, init?: RequestInit) => {
+    seen.push(`${init?.method ?? "GET"} ${url}`);
+    return Promise.resolve(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  }) as typeof fetch;
+  try {
+    await api.listModels("p/1");
+    await peerRoutes.listModels("peer 1", "p/1");
+  } finally {
+    globalThis.fetch = original;
+  }
+  assertEquals(seen[0], "GET /api/providers/p%2F1/models");
+  assertEquals(seen[1], "GET /api/fed/peer%201/providers/p%2F1/models");
+});

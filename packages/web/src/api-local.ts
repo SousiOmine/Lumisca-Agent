@@ -186,6 +186,59 @@ export const sessionRoutes = {
     }),
 } satisfies Record<string, SessionRoute>;
 
+/** Every endpoint that exists on both this server and a peer, in one table:
+ * the peer id ("" = this server, see sessionRequest), then the call's own
+ * args. `api` (this server), `fed` (a peer) and `modelApi` (the peer that
+ * runs a session's agent) are built from it, so the path, method and body are
+ * written once. The same shape as sessionRoutes, for the calls that are not
+ * about one session.
+ *
+ * Workspaces are NOT in here: a workspace is the folder set of the server the
+ * window displays, and the desktop switches machines by navigating (the title
+ * bar's connection picker) instead of addressing a peer's workspaces through
+ * this one. Their paths therefore exist only in `api`. */
+export const peerRoutes = {
+  listProviders: (peerId: string) =>
+    sessionRequest<ProviderInfo[]>(peerId, "/providers"),
+  listModels: (peerId: string, providerId: string) =>
+    sessionRequest<ModelInfo[]>(
+      peerId,
+      `/providers/${encodeURIComponent(providerId)}/models`,
+    ),
+  setModelThinkingLevel: (
+    peerId: string,
+    providerId: string,
+    modelId: string,
+    level: ThinkingLevel,
+  ) =>
+    sessionRequest<{ ok: boolean; thinkingLevel: ThinkingLevel }>(
+      peerId,
+      `/providers/${encodeURIComponent(providerId)}/models/${
+        encodeURIComponent(modelId)
+      }/thinking-level`,
+      { method: "PUT", body: JSON.stringify({ level }) },
+    ),
+  workspaceFiles: (peerId: string, workspaceId: string, query: string) =>
+    sessionRequest<{ entries: WorkspaceFileEntry[] }>(
+      peerId,
+      `/workspaces/${encodeURIComponent(workspaceId)}/files?query=${
+        encodeURIComponent(query)
+      }`,
+    ),
+  getSkills: (peerId: string, workspaceId?: string) =>
+    sessionRequest<{ skills: SkillInfo[] }>(
+      peerId,
+      workspaceId === undefined
+        ? "/skills"
+        : `/skills?workspaceId=${encodeURIComponent(workspaceId)}`,
+    ),
+  listSessions: (peerId: string) =>
+    sessionRequest<SessionInfo[]>(peerId, "/sessions"),
+} satisfies Record<
+  string,
+  (peerId: string, ...args: never[]) => Promise<unknown>
+>;
+
 export const api = {
   listWorkspaces: () => request<Workspace[]>("/api/workspaces"),
   createWorkspace: (name: string, folders: string[]) =>
@@ -203,22 +256,16 @@ export const api = {
   /** @-mention file suggestions: the workspace tree filtered by `query`,
    * paths in the `FolderName/rel/path` form. */
   workspaceFiles: (workspaceId: string, query: string) =>
-    request<{ entries: WorkspaceFileEntry[] }>(
-      `/api/workspaces/${encodeURIComponent(workspaceId)}/files?query=${
-        encodeURIComponent(query)
-      }`,
-    ),
+    peerRoutes.workspaceFiles("", workspaceId, query),
 
   /** The skills a session in this workspace would see (the `/skill`
    * palette's source of truth — the same discovery the agent's skill tool
    * runs). Omitted workspaceId asks for a chat session's skills, like
    * createSession without a workspace. */
   getSkills: (workspaceId?: string) =>
-    request<{ skills: SkillInfo[] }>(
-      workspaceId === undefined
-        ? "/api/skills"
-        : `/api/skills?workspaceId=${encodeURIComponent(workspaceId)}`,
-    ),
+    workspaceId === undefined
+      ? peerRoutes.getSkills("")
+      : peerRoutes.getSkills("", workspaceId),
 
   getDefaultModel: () =>
     request<
@@ -244,7 +291,7 @@ export const api = {
   /** All sessions of this server, newest first (the source of the recent
    * sessions list). stella's conversation is never in it: it is not a
    * session the user opened. */
-  listSessions: () => request<SessionInfo[]>("/api/sessions"),
+  listSessions: () => peerRoutes.listSessions(""),
 
   // --- stella mode -------------------------------------------------------
 
@@ -317,9 +364,8 @@ export const api = {
       `/api/routines/${encodeURIComponent(id)}/stop`,
       { method: "POST" },
     ),
-  listProviders: () => request<ProviderInfo[]>("/api/providers"),
-  listModels: (providerId: string) =>
-    request<ModelInfo[]>(`/api/providers/${providerId}/models`),
+  listProviders: () => peerRoutes.listProviders(""),
+  listModels: (providerId: string) => peerRoutes.listModels("", providerId),
   /** Built-in model catalog status (which source is active, when it was
    * last checked). */
   catalogStatus: () =>
@@ -411,13 +457,7 @@ export const api = {
     providerId: string,
     modelId: string,
     level: ThinkingLevel,
-  ) =>
-    request<{ ok: boolean; thinkingLevel: ThinkingLevel }>(
-      `/api/providers/${providerId}/models/${
-        encodeURIComponent(modelId)
-      }/thinking-level`,
-      { method: "PUT", body: JSON.stringify({ level }) },
-    ),
+  ) => peerRoutes.setModelThinkingLevel("", providerId, modelId, level),
 
   /** The workspace folder picker's sidebar places (the user folders that
    * exist on this machine, then its filesystem roots). */
