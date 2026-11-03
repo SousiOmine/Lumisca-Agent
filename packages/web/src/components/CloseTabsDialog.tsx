@@ -32,7 +32,7 @@ export function CloseTabsDialog({
   // decision is queued behind the exit (`close(after)`) instead of happening
   // while the sheet is still on screen (the dialog would vanish mid-click).
   return (
-    <Modal onClose={onCancel}>
+    <Modal onClose={onCancel} label={t("chrome.tabClose.title")}>
       {(close) => (
         <>
           <h2>{t("chrome.tabClose.title")}</h2>

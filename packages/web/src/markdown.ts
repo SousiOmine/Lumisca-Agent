@@ -136,11 +136,38 @@ function visualError(reason: string, source: string, t: Translator): string {
     `</figure>`;
 }
 
+/** The parser of the last call, with the options it was built for. A parser
+ * binds the renderer of its call (see rendererFor): the base a visual link
+ * resolves against and the language its cards are written in hold for a whole
+ * conversation, not for one token, so a streamed reply must not build a new
+ * one per frame. Rebuilt when either of those changes.
+ *
+ * One slot is enough for the hot path: a streamed token re-renders the
+ * streaming block, whose `t` is memoized per component instance (see
+ * web/src/i18n.ts) and therefore identical across its renders. A commit that
+ * draws several blocks with different instances (a language switch, a window
+ * that just loaded) rebuilds once per block, which is what it did before. */
+let last: { visualBase: string; t: Translator; marked: Marked } | null = null;
+
+function markedFor(options: MarkdownOptions): Marked {
+  if (
+    last !== null && last.visualBase === options.visualBase &&
+    last.t === options.t
+  ) {
+    return last.marked;
+  }
+  const marked = new Marked({ renderer: rendererFor(options) });
+  last = { visualBase: options.visualBase, t: options.t, marked };
+  return marked;
+}
+
 /** Render model output as sanitized markdown HTML. */
 export function renderMarkdown(
   text: string,
   options: MarkdownOptions,
 ): string {
-  return new Marked({ renderer: rendererFor(options) })
-    .parse(text, { async: false }) as string;
+  // The instance keeps no state of its own between parses: each call merges
+  // its own options over the defaults and builds a fresh lexer and parser
+  // (markdown_test.ts renders twice on one instance to hold that).
+  return markedFor(options).parse(text, { async: false }) as string;
 }

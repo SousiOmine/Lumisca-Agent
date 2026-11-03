@@ -22,7 +22,7 @@ export function RecentSessionsModal({
   const t = useT();
   const { items, loading, error, reload } = useRecentSessions();
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} label={t("panels.sessions.title")}>
       {(close) => (
         <>
           <div className="modal-header">

@@ -165,6 +165,37 @@ Deno.test("a fence that is still streaming stays code until it closes", () => {
   assertEquals(closed.includes('class="visual-svg"'), true);
 });
 
+Deno.test("the render parser keeps no state across calls", () => {
+  // renderMarkdown reuses one Marked instance per (visualBase, t) — a streamed
+  // reply must not build a parser per frame. That is only sound if a parse
+  // leaves nothing behind: the same text renders the same HTML twice in a row,
+  // and an earlier call cannot change a later one.
+  const text = "```svg\n" + DIAGRAM +
+    "\n```\n\n![chart](visual:9f3c2a1b4d5e.png)";
+  const first = render(text);
+  const second = render(text);
+  assertEquals(second, first);
+  assertEquals(render("plain"), render("plain"));
+  assertEquals(render(text), first);
+  // The renderer is a closure over the options that built it: a reused
+  // instance must still resolve against the base of the call at hand, not the
+  // one it was first built for.
+  const peer = renderMarkdown("![chart](visual:9f3c2a1b4d5e.png)", {
+    ...OPTIONS,
+    visualBase: "/api/fed/p1/sessions/s/visual/",
+  });
+  assertEquals(
+    peer.includes('src="/api/fed/p1/sessions/s/visual/9f3c2a1b4d5e.png"'),
+    true,
+  );
+  assertEquals(
+    render("![chart](visual:9f3c2a1b4d5e.png)").includes(
+      'src="/api/sessions/s/visual/9f3c2a1b4d5e.png"',
+    ),
+    true,
+  );
+});
+
 Deno.test("the error card is written in the app language", () => {
   const ja = renderMarkdown("```svg\nnope\n```", {
     ...OPTIONS,

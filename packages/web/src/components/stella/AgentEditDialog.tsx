@@ -99,7 +99,10 @@ export function AgentEditDialog(
   };
 
   return (
-    <Modal onClose={busy ? () => {} : onClose}>
+    <Modal
+      onClose={busy ? () => {} : onClose}
+      label={t("chat.stella.agents.editTitle", { name: agent.name })}
+    >
       {(close) => {
         closeRef.current = close;
         return (

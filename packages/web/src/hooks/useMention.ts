@@ -19,6 +19,12 @@ export interface MentionState {
   items: WorkspaceFileEntry[];
   active: number;
   loading: boolean;
+  /** The listing could not be fetched. Kept apart from an empty `items`,
+   * which means the query matched nothing: the popover says "no match" for
+   * one and "could not load" for the other, and a failed request that read
+   * as "no match" sent the reader looking for a file that was never asked
+   * about. */
+  failed: boolean;
 }
 
 /** Find the `@query` under the caret. `@` must start a word (preceded by
@@ -88,12 +94,14 @@ export function useMention(options: {
           : await fed.workspaceFiles(peerId, workspaceId, mention.query);
         if (fetchSeq.current !== seq || !mention) return;
         setMention((prev) =>
-          prev ? { ...prev, items: result.entries, loading: false } : prev
+          prev
+            ? { ...prev, items: result.entries, loading: false, failed: false }
+            : prev
         );
       } catch {
         if (fetchSeq.current !== seq || !mention) return;
         setMention((prev) =>
-          prev ? { ...prev, items: [], loading: false } : prev
+          prev ? { ...prev, items: [], loading: false, failed: true } : prev
         );
       }
     }, 150);
@@ -115,13 +123,14 @@ export function useMention(options: {
       }
       setMention((prev) =>
         prev && prev.start === det.start
-          ? { ...prev, query: det.query, loading: true }
+          ? { ...prev, query: det.query, loading: true, failed: false }
           : {
             start: det.start,
             query: det.query,
             items: [],
             active: 0,
             loading: true,
+            failed: false,
           }
       );
       return true;

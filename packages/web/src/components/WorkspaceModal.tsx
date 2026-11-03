@@ -119,6 +119,9 @@ export function WorkspaceModal(
   return (
     <Modal
       onClose={onClose}
+      label={editing
+        ? t("chrome.workspaceModal.editTitle")
+        : t("chrome.workspaceModal.createTitle")}
       // The two-pane browser wants the width of a file manager window; the
       // form view keeps the default dialog width.
       width={view.kind === "browse"

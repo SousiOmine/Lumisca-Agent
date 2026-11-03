@@ -458,6 +458,7 @@ export function SettingsModal({
       width="min(940px, calc(100vw - 48px))"
       className="modal-settings"
       onClose={onClose}
+      label={t("common.settings")}
     >
       {(close) => (
         <>

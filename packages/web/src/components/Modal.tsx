@@ -14,6 +14,11 @@ interface ModalProps {
    * override it — an inline width wins over every rule but `!important`. */
   width?: string;
   className?: string;
+  /** What the dialog is, for assistive technology. Its visible title is a
+   * child's `<h2>`, which this shell cannot reach to point `aria-labelledby`
+   * at (the body is opaque to it); the value is the same string that heading
+   * shows, so the two never disagree. */
+  label: string;
   /**
    * Unmount the dialog. Called ONCE, after the exit has finished — so a
    * caller never has to know the exit exists: it passes the same handler it
@@ -61,7 +66,13 @@ const EXIT_TIMEOUT_MS = 320;
  * Every way of closing goes through it: the backdrop, Escape, and the
  * dialog's own buttons (through the `close` a function child receives).
  */
-export function Modal({ width, className, onClose, children }: ModalProps) {
+export function Modal({
+  width,
+  className,
+  label,
+  onClose,
+  children,
+}: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const [closing, setClosing] = useState(false);
@@ -110,13 +121,35 @@ export function Modal({ width, className, onClose, children }: ModalProps) {
     return () => clearTimeout(timer);
   }, [exiting, finished]);
 
+  // Where the keyboard was before the dialog took it, restored on unmount:
+  // closing returns the reader to the control that opened the sheet instead of
+  // to the top of the page (which is where `document.body` is). The element
+  // can be gone by then (a row the dialog deleted), so it is checked first.
+  //
+  // Captured in the same effect that moves the focus in, and only once: an
+  // effect of its own that ran earlier would read the field a child already
+  // focused with `autoFocus`, and closing would then return the reader to a
+  // control inside the sheet that no longer exists. Reading it again on later
+  // runs would do the same for the focus the dialog itself has moved.
+  const opener = useRef<HTMLElement | null>(null);
+  const captured = useRef(false);
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     const focusables = (): HTMLElement[] =>
       Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    if (!captured.current) {
+      captured.current = true;
+      const before = document.activeElement;
+      opener.current = before instanceof HTMLElement &&
+          before !== document.body && !dialog.contains(before)
+        ? before
+        : null;
+    }
     // Move focus into the dialog: without this the keyboard stays on the
-    // control behind the backdrop.
+    // control behind the backdrop. A dialog whose child carries `autoFocus`
+    // has already moved it; the check keeps this from stealing it back.
     if (!dialog.contains(document.activeElement)) focusables()[0]?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -159,6 +192,15 @@ export function Modal({ width, className, onClose, children }: ModalProps) {
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [requestClose, closing]);
 
+  // Restored on unmount, not when the exit starts: the sheet is still on
+  // screen while it fades, and moving the keyboard behind it first would put
+  // the focus where the reader cannot see it.
+  useEffect(() => () => {
+    const target = opener.current;
+    opener.current = null;
+    if (target !== null && target.isConnected) target.focus();
+  }, []);
+
   /** The exit ended on the sheet. The backdrop's transition bubbles through
    * here too, and so do the children's, so the target is checked. */
   const onExitEnd = (event: TransitionEvent) => {
@@ -182,6 +224,7 @@ export function Modal({ width, className, onClose, children }: ModalProps) {
         style={width ? { "--modal-width": width } : undefined}
         role="dialog"
         aria-modal="true"
+        aria-label={label}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         onTransitionEnd={onExitEnd}

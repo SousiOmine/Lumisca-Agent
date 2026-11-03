@@ -102,23 +102,33 @@ export function Transcript(
       : messageKey(messages[0]),
     pinToken,
   });
-  const turns = useMemo(() => buildTurns(messages), [messages]);
+  // The rows this transcript draws and diffs, built once per history change:
+  // a streamed token re-renders the component on every frame, and neither a
+  // turn's key (a message key, built from its first message each time) nor
+  // the scan for the last thing the agent said in it can change while a token
+  // arrives. The render loop reads the key from here too, so it is built once
+  // per turn rather than once per turn and frame.
+  const { rows, turnKeys } = useMemo(() => {
+    const rows = buildTurns(messages).map((turn) => ({
+      turn,
+      key: turnKey(turn),
+      text: lastAssistantText(turn),
+    }));
+    return { rows, turnKeys: rows.map((row) => row.key) };
+  }, [messages]);
   // Which turns may animate in: only the ones that arrived at the live edge.
   // The first paint draws the loaded window and paging back inserts turns
   // above the reader — neither is an arrival (see hooks/useArrivals), and an
   // ungated animation staged the whole transcript on every open.
-  const arrivals = useArrivals(turns.map((turn) => turnKey(turn)));
+  const arrivals = useArrivals(turnKeys);
   // The answer that was streaming is the same answer the server then sends as
   // a message; replaying it once it settles would make every reply jump back
   // to its first line. The text is the identity (the stream is a prefix).
-  const entering = withoutHandoff(
-    arrivals,
-    turns.map((turn) => ({
-      key: turnKey(turn),
-      text: lastAssistantText(turn),
-    })),
-    streamed.current,
-  );
+  // Not memoized: `streamed` is a ref (writing it during render is how the
+  // handoff reads the previous commit's text), so a memo would freeze the
+  // decision on a value React does not watch. It costs nothing per token
+  // either — with no arrival in flight it returns the set it was given.
+  const entering = withoutHandoff(arrivals, rows, streamed.current);
   streamed.current = streamingText;
   const toolResults = useMemo(() => {
     const map = new Map<string, ToolResultMessage>();
@@ -141,17 +151,17 @@ export function Transcript(
             <div className="chat-empty-inner">{empty}</div>
           </div>
         )}
-        {turns.map((turn, index) => (
+        {rows.map(({ turn, key }, index) => (
           <ConversationTurn
-            key={`${turnKey(turn)}-${index}`}
-            entering={entering.has(turnKey(turn))}
+            key={`${key}-${index}`}
+            entering={entering.has(key)}
             turn={turn}
             toolResults={toolResults}
             runningTools={runningTools}
             visualBase={visualBase}
             attachBase={attachBase}
-            running={running && index === turns.length - 1}
-            endedAt={index === turns.length - 1 ? agentEndedAt : undefined}
+            running={running && index === rows.length - 1}
+            endedAt={index === rows.length - 1 ? agentEndedAt : undefined}
             onRewind={onRewind}
           />
         ))}

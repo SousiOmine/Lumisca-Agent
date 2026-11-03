@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "preact/compat";
 import type { InitialData } from "./types.ts";
@@ -127,10 +128,21 @@ export function App({ initialData }: AppProps): ReactElement {
   // that to a running tab therefore asks first (CloseTabsDialog); the
   // dialog's "keep running" answer closes the tab without the session.
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
+  // The live view map, for the callbacks below. The map is replaced on every
+  // streamed event, so taking it as a dependency would rebuild every close
+  // callback per event and hand the memoized TabBar a new function each time —
+  // its memo would then never hold. A ref, written in an effect and not
+  // during render: writing during render breaks under concurrent rendering
+  // (the same reason useSessionEvents keeps one).
+  const viewsRef = useRef(views);
+  useEffect(() => {
+    viewsRef.current = views;
+  }, [views]);
   /** Close the given tabs, asking first when one of them is running. */
   const requestClose = useCallback((ids: string[]) => {
+    const live = viewsRef.current;
     const running = ids.filter((id) => {
-      const view = views.get(id);
+      const view = live.get(id);
       return view !== undefined && isViewRunning(view);
     });
     if (running.length === 0) {
@@ -141,10 +153,10 @@ export function App({ initialData }: AppProps): ReactElement {
       ids,
       running: new Set(running),
       names: running.map((id) =>
-        views.get(id)?.info.name || t("chrome.tabBar.newSession")
+        live.get(id)?.info.name || t("chrome.tabBar.newSession")
       ),
     });
-  }, [views, closeTabs, t]);
+  }, [closeTabs, t]);
   /** Answer the dialog: close the tabs, with the running sessions stopped
    * (`keepRunning` false) or left to finish on the server. */
   const resolveClose = (keepRunning: boolean) => {
@@ -217,7 +229,9 @@ export function App({ initialData }: AppProps): ReactElement {
 
   // What the tab bar renders, derived here so its memoized component stays
   // out of the streaming hot path: the view map is replaced on every event,
-  // while this list changes only when a label or a run state does.
+  // so this list is rebuilt per event too — the bar compares it by value
+  // (TabBar's sameTabBar) and re-renders only when a label or a run state
+  // actually differs.
   const tabSummaries = useMemo<TabSummary[]>(
     () =>
       tabs.map((id) => {
@@ -235,7 +249,10 @@ export function App({ initialData }: AppProps): ReactElement {
       }),
     [tabs, views, activeTab],
   );
-  // Stable callbacks (the memoized bar re-renders on their identity).
+  // Stable callbacks: not because the bar re-renders on their identity (it
+  // compares props by value, see TabBar), but so that the bar's comparison
+  // stays a real one — an inline arrow would make every event look like a
+  // change.
   const closeTab = useCallback(
     (id: string) => requestClose(closeTargets("tab", tabs, id)),
     [requestClose, tabs],
@@ -253,7 +270,21 @@ export function App({ initialData }: AppProps): ReactElement {
     [requestClose, tabs],
   );
   const openRecent = useCallback(() => setShowRecent(true), []);
+  const closeRecent = useCallback(() => setShowRecent(false), []);
   const openSettings = useCallback(() => setSettingsCategory("general"), []);
+  const openProviders = useCallback(
+    () => setSettingsCategory("providers"),
+    [],
+  );
+  const openServers = useCallback(() => setSettingsCategory("servers"), []);
+  const closePendingClose = useCallback(() => setPendingClose(null), []);
+  // The mode-selection screen, opened from the app menu ("switch mode") and
+  // closed from its own modal. Both are plain setters with a fixed argument,
+  // so they are stable for the memoized tab bar and the app menu alike: an
+  // inline arrow would be a new function on every event the App re-renders
+  // for, and TabBar's props would then never compare equal.
+  const openModeSelect = useCallback(() => setShowModeSelect(true), []);
+  const closeModeSelect = useCallback(() => setShowModeSelect(false), []);
   // Picking a mode is local and synchronous (localStorage), but stella needs
   // the server's verdict first: `busy` covers that read, so the cards cannot
   // be double-clicked into two different modes while it is in flight.
@@ -314,7 +345,7 @@ export function App({ initialData }: AppProps): ReactElement {
           onOpenRecent={openRecent}
           onOpenSettings={openSettings}
           onQuit={quit}
-          onSwitchMode={() => setShowModeSelect(true)}
+          onSwitchMode={openModeSelect}
           isDesktop={update.source === "shell"}
           buttonClass="app-menu-standalone"
         />
@@ -351,8 +382,8 @@ export function App({ initialData }: AppProps): ReactElement {
         onOpenRecent={openRecent}
         onOpenSettings={openSettings}
         onQuit={quit}
-        onSwitchMode={() => setShowModeSelect(true)}
-        onManageConnections={() => setSettingsCategory("servers")}
+        onSwitchMode={openModeSelect}
+        onManageConnections={openServers}
         tabs={!stellaActive}
       >
         {stellaActive
@@ -378,7 +409,7 @@ export function App({ initialData }: AppProps): ReactElement {
                     onOpenRecent={openRecent}
                     onOpenSettings={openSettings}
                     onQuit={quit}
-                    onSwitchMode={() => setShowModeSelect(true)}
+                    onSwitchMode={openModeSelect}
                     isDesktop={false}
                     tabs={false}
                   />
@@ -399,7 +430,7 @@ export function App({ initialData }: AppProps): ReactElement {
               onOpenSettings={openSettings}
               isDesktop={update.source === "shell"}
               onQuit={quit}
-              onSwitchMode={() => setShowModeSelect(true)}
+              onSwitchMode={openModeSelect}
             />
           )}
       </TitleBar>
@@ -434,6 +465,7 @@ export function App({ initialData }: AppProps): ReactElement {
             >
               <StellaSidebar
                 agents={stella.agents}
+                loading={stella.agentsLoading}
                 activeId={stella.activeAgentId}
                 onSelect={stella.select}
                 onChanged={stella.reloadAgents}
@@ -464,7 +496,7 @@ export function App({ initialData }: AppProps): ReactElement {
                 loadingOlder={stella.loadingOlder}
                 onFinishHandover={(note, toolCallId) =>
                   stella.finishHandover(note, toolCallId)}
-                onOpenSettings={() => setSettingsCategory("providers")}
+                onOpenSettings={openProviders}
                 onBack={narrow ? stella.clearSelection : undefined}
               />
             </div>
@@ -506,7 +538,7 @@ export function App({ initialData }: AppProps): ReactElement {
               }}
               onLoadOlder={() => activeTab !== null && loadOlder(activeTab)}
               loadingOlder={activeTab !== null && olderLoading.has(activeTab)}
-              onOpenSettings={() => setSettingsCategory("providers")}
+              onOpenSettings={openProviders}
             />
           )
           : (
@@ -527,7 +559,7 @@ export function App({ initialData }: AppProps): ReactElement {
               onWorkspaceChanged={handleWorkspaceChanged}
               onDeleteWorkspace={deleteWorkspace}
               onReopenSession={reopenSession}
-              onOpenSettings={() => setSettingsCategory("providers")}
+              onOpenSettings={openProviders}
               settingsVersion={settingsVersion}
             />
           )}
@@ -554,19 +586,22 @@ export function App({ initialData }: AppProps): ReactElement {
         <RecentSessionsModal
           openKeys={new Set(tabs)}
           onOpen={(key) => void reopenSession(key)}
-          onClose={() => setShowRecent(false)}
+          onClose={closeRecent}
         />
       )}
       {pendingClose !== null && (
         <CloseTabsDialog
           names={pendingClose.names}
-          onCancel={() => setPendingClose(null)}
+          onCancel={closePendingClose}
           onStopAndClose={() => resolveClose(false)}
           onKeepRunning={() => resolveClose(true)}
         />
       )}
       {showModeSelect && (
-        <Modal onClose={() => setShowModeSelect(false)}>
+        <Modal
+          onClose={closeModeSelect}
+          label={t("chat.modeSelect.title")}
+        >
           <ModeSelectView
             status={machineStatus}
             mode={mode}
