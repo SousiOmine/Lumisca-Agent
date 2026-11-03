@@ -1,24 +1,20 @@
-import {
-  memo,
-  type MouseEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "preact/compat";
+import { memo, useEffect, useRef, useState } from "preact/compat";
 import { IconChevronRight, IconPlus, IconX } from "@tabler/icons-preact";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
 
 /** What the bar renders of one tab. The App derives it from the live view
- * map, so the bar re-renders only when a label or a run state changes —
- * the map itself is replaced on every streamed event. */
+ * map, which is replaced on every streamed event: this list is rebuilt each
+ * time, and the memoized bar compares it by value (see sameTabBar) rather
+ * than by identity. */
 export interface TabSummary {
   id: string;
   /** Session name; null while the session has none yet (the bar shows its
    * own "new session" label instead). */
   name: string | null;
-  /** Model id, shown as the tab's tooltip. */
+  /** Model id; appended to the tab's tooltip, which carries the whole name
+   * the strip had to clip. */
   modelId: string | null;
   active: boolean;
   running: boolean;
@@ -53,11 +49,48 @@ interface TabMenu {
 
 const MENU_MARGIN = 8;
 
-/** The tab strip. Memoized: the App hands it a summarized list and stable
- * callbacks, so an event that only appends to a session's message log does
- * not re-render the bar (the session views it renders from are rebuilt on
- * every event). */
-export const TabBar = memo(TabBarView);
+/** The tab strip. Memoized, and compared by value: the App hands it a list
+ * it rebuilds on every event of the session stream (the views behind it are
+ * new objects each time), so an identity comparison would re-render the
+ * strip per streamed token while nothing it draws has changed. */
+export const TabBar = memo(TabBarView, sameTabBar);
+
+/** Whether two renders of the bar would draw the same thing: the tab list by
+ * value, every other prop by identity (each is a callback the App keeps
+ * stable, or a primitive). A new field of TabSummary has to be compared here
+ * too — the list is new every event, so an unread field would leave a stale
+ * tab on screen. */
+function sameTabBar(previous: TabBarProps, next: TabBarProps): boolean {
+  return previous.isDesktop === next.isDesktop &&
+    previous.onSelect === next.onSelect &&
+    previous.onClose === next.onClose &&
+    previous.onCloseToRight === next.onCloseToRight &&
+    previous.onCloseToLeft === next.onCloseToLeft &&
+    previous.onCloseOthers === next.onCloseOthers &&
+    previous.onNew === next.onNew &&
+    previous.onOpenRecent === next.onOpenRecent &&
+    previous.onOpenSettings === next.onOpenSettings &&
+    previous.onQuit === next.onQuit &&
+    previous.onSwitchMode === next.onSwitchMode &&
+    sameTabs(previous.tabs, next.tabs);
+}
+
+/** Element-wise shallow equality: a tab is the same when everything it draws
+ * — and its id, which keys the row — still matches. */
+function sameTabs(previous: TabSummary[], next: TabSummary[]): boolean {
+  return previous.length === next.length &&
+    next.every((tab, index) => {
+      const before = previous[index];
+      return before === tab ||
+        (before !== undefined &&
+          before.id === tab.id &&
+          before.name === tab.name &&
+          before.modelId === tab.modelId &&
+          before.active === tab.active &&
+          before.running === tab.running &&
+          before.runningTool === tab.runningTool);
+    });
+}
 
 function TabBarView({
   tabs,
@@ -88,10 +121,14 @@ function TabBarView({
   const menuRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
 
-  const openMenu = (id: string, e: MouseEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setMenu({ tabId: id, x: e.clientX, y: e.clientY });
-    setPos({ x: e.clientX, y: e.clientY });
+  /** Open the menu at a point. The pointer supplies that point, and so does
+   * the keyboard: the ContextMenu key (and Shift+F10) has no cursor
+   * position, so the tab's own corner stands in for it. Both routes go
+   * through here, because the menu holds the bulk closes ("close the others")
+   * that no other control offers. */
+  const openMenu = (id: string, x: number, y: number) => {
+    setMenu({ tabId: id, x, y });
+    setPos({ x, y });
     setSubmenuOpen(false);
   };
 
@@ -153,6 +190,18 @@ function TabBarView({
                 onSelect(id);
                 return;
               }
+              // The keyboard's own "open the context menu" keys. The point
+              // is the tab's bottom-left corner, which is where the pointer
+              // menu would open for a click on the label.
+              if (
+                event.key === "ContextMenu" ||
+                (event.shiftKey && event.key === "F10")
+              ) {
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                openMenu(id, rect.left, rect.bottom);
+                return;
+              }
               if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
                 return;
               }
@@ -162,8 +211,16 @@ function TabBarView({
               const next = tabs[(index + delta + tabs.length) % tabs.length];
               if (next !== undefined) onSelect(next.id);
             }}
-            onContextMenu={(e) => openMenu(id, e)}
-            title={modelId ?? t("chrome.tabBar.newSession")}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              openMenu(id, e.clientX, e.clientY);
+            }}
+            // The strip clips long names, so the tooltip has to carry the
+            // whole one — and the model beside it, which the tab itself has
+            // no room for.
+            title={modelId === null
+              ? name ?? t("chrome.tabBar.newSession")
+              : `${name ?? t("chrome.tabBar.newSession")} — ${modelId}`}
           >
             {running && (
               <span

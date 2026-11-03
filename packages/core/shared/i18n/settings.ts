@@ -492,6 +492,16 @@ export const settings = {
     en: "Custom headers (optional)",
   },
   "settings.userProvider.addHeader": { ja: "ヘッダーを追加", en: "Add header" },
+  /** The trash icons in the editor: several identical buttons sit on one
+   * page, so each names what it removes instead of reading as "button". */
+  "settings.userProvider.removeModel": {
+    ja: "このモデルを削除",
+    en: "Remove this model",
+  },
+  "settings.userProvider.removeHeader": {
+    ja: "このヘッダーを削除",
+    en: "Remove this header",
+  },
   "settings.userProvider.modelsLabel": {
     ja: "モデル（1つ以上）",
     en: "Models (one or more)",

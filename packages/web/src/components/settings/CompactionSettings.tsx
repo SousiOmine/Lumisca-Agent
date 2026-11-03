@@ -198,7 +198,7 @@ export function CompactionSettings() {
       )}
 
       {saved && !saving && (
-        <span className="settings-saved">
+        <span className="settings-saved" role="status">
           {t("common.saved")}
         </span>
       )}

@@ -49,9 +49,13 @@ Deno.test("TabBar renders each tab's label, tooltip and active state", () => {
   ]);
 
   assertStringIncludes(html, "買い物リストの改善");
-  assertStringIncludes(html, 'title="claude-sonnet-4"');
-  // The untitled session falls back to the localized label.
+  // The tooltip carries the whole tab name and the model: the strip clips
+  // the name it shows.
+  assertStringIncludes(html, 'title="買い物リストの改善 — claude-sonnet-4"');
+  // The untitled session falls back to the localized label, and has no
+  // model to append.
   assertStringIncludes(html, "新しいセッション");
+  assertStringIncludes(html, 'title="新しいセッション"');
   // Exactly one tab is marked active, and only that one.
   assertEquals(html.match(/aria-selected="true"/g)?.length, 1);
   assertEquals(html.match(/class="tab active"/g)?.length, 1);

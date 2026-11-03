@@ -67,6 +67,7 @@ function ModelRowEditor({
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <input
           placeholder={t("settings.userProvider.modelIdPlaceholder")}
+          aria-label={t("settings.userProvider.modelIdPlaceholder")}
           value={row.id}
           onChange={(e) => set({ id: e.currentTarget.value })}
           style={{ flex: 1 }}
@@ -75,6 +76,7 @@ function ModelRowEditor({
           type="button"
           className="btn small"
           disabled={!canRemove}
+          aria-label={t("settings.userProvider.removeModel")}
           onClick={onRemove}
         >
           <IconTrash size={14} />
@@ -82,6 +84,7 @@ function ModelRowEditor({
       </div>
       <input
         placeholder={t("settings.userProvider.modelNamePlaceholder")}
+        aria-label={t("settings.userProvider.modelNamePlaceholder")}
         value={row.name}
         onChange={(e) => set({ name: e.currentTarget.value })}
       />
@@ -106,6 +109,7 @@ function ModelRowEditor({
       <div style={{ display: "flex", gap: 6 }}>
         <input
           placeholder={t("settings.userProvider.contextWindowPlaceholder")}
+          aria-label={t("settings.userProvider.contextWindowPlaceholder")}
           value={row.contextWindow}
           inputMode="numeric"
           onChange={(e) => set({ contextWindow: e.currentTarget.value })}
@@ -113,6 +117,7 @@ function ModelRowEditor({
         />
         <input
           placeholder={t("settings.userProvider.maxOutputPlaceholder")}
+          aria-label={t("settings.userProvider.maxOutputPlaceholder")}
           value={row.maxTokens}
           inputMode="numeric"
           onChange={(e) => set({ maxTokens: e.currentTarget.value })}
@@ -137,17 +142,24 @@ function HeaderRowEditor({
     <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
       <input
         placeholder={t("settings.userProvider.headerNamePlaceholder")}
+        aria-label={t("settings.userProvider.headerNamePlaceholder")}
         value={row.key}
         onChange={(e) => onChange({ ...row, key: e.currentTarget.value })}
         style={{ flex: 1 }}
       />
       <input
         placeholder={t("settings.userProvider.headerValuePlaceholder")}
+        aria-label={t("settings.userProvider.headerValuePlaceholder")}
         value={row.value}
         onChange={(e) => onChange({ ...row, value: e.currentTarget.value })}
         style={{ flex: 1 }}
       />
-      <button type="button" className="btn small" onClick={onRemove}>
+      <button
+        type="button"
+        className="btn small"
+        aria-label={t("settings.userProvider.removeHeader")}
+        onClick={onRemove}
+      >
         <IconTrash size={14} />
       </button>
     </div>

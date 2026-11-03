@@ -101,6 +101,13 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
           {copied ? <IconCheck size={14} /> : <IconClipboard size={14} />}
           {t("chrome.serverDown.copyLog")}
         </button>
+        {
+          /* Mounted empty and filled on success: a live region has to be in
+            the tree before its text changes to be announced. */
+        }
+        <span className="visually-hidden" role="status">
+          {copied ? t("chrome.serverDown.copied") : null}
+        </span>
         <button
           type="button"
           className="btn small"

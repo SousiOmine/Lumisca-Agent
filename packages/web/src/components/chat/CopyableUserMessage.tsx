@@ -4,6 +4,7 @@ import {
   IconClipboard,
 } from "@tabler/icons-preact";
 import { useCopy } from "../../hooks/useSave.ts";
+import { useT } from "../../i18n.ts";
 import { ContentImages } from "../ContentImages.tsx";
 import type { UserMessageImage } from "./types.ts";
 
@@ -34,6 +35,7 @@ export function CopyableUserMessage({
     images: UserMessageImage[],
   ) => void;
 }) {
+  const t = useT();
   const { copied, copy } = useCopy(text);
 
   const handleCopy = async () => {
@@ -53,6 +55,7 @@ export function CopyableUserMessage({
         <button
           type="button"
           className="msg-action-btn"
+          aria-label={t("chat.message.rewind")}
           onClick={() => onRewind(timestamp, rewindText ?? text, images)}
         >
           <IconArrowBackUp size={16} stroke={1.5} />
@@ -61,6 +64,7 @@ export function CopyableUserMessage({
           <button
             type="button"
             className="msg-action-btn"
+            aria-label={t("chat.message.copy")}
             onClick={handleCopy}
           >
             {copied
@@ -68,6 +72,14 @@ export function CopyableUserMessage({
               : <IconClipboard size={16} stroke={1.5} />}
           </button>
         )}
+        {
+          /* Mounted empty and filled on success: a live region has to be in
+            the tree before its text changes to be announced, and the
+            checkmark that replaces the icon says nothing. */
+        }
+        <span className="visually-hidden" role="status">
+          {copied ? t("chat.message.copied") : null}
+        </span>
         {modeLabel && <div className="msg-mode-badge">{modeLabel}</div>}
       </div>
     </div>

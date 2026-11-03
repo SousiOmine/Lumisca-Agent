@@ -76,7 +76,9 @@ export function PersonalizePanel() {
       <div className="settings-actions">
         {saving && <span className="settings-note">{t("common.saving")}</span>}
         {!saving && saved && (
-          <span className="settings-saved">{t("common.saved")}</span>
+          <span className="settings-saved" role="status">
+            {t("common.saved")}
+          </span>
         )}
       </div>
     </div>

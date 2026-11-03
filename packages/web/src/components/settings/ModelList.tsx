@@ -83,6 +83,7 @@ export function ModelList() {
     >
       <input
         placeholder={t("settings.model.searchPlaceholder")}
+        aria-label={t("settings.model.searchPlaceholder")}
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
       />
@@ -109,6 +110,7 @@ export function ModelList() {
               <button
                 type="button"
                 className="model-group-header"
+                aria-expanded={isExpanded}
                 onClick={() => toggleExpand(pm.providerId)}
               >
                 <IconChevronRight

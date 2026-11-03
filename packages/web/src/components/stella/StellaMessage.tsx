@@ -6,7 +6,7 @@ import {
 import type { ComponentChildren } from "preact";
 import { useMemo } from "preact/compat";
 import { parseUiMarkup, type UiView } from "@lumisca/core/shared";
-import { useLocale } from "../../i18n.ts";
+import { useLocale, useT } from "../../i18n.ts";
 import { formatClockTime } from "../../format.ts";
 import { useCopy } from "../../hooks/useSave.ts";
 import type { StellaEntry } from "../../types.ts";
@@ -130,6 +130,7 @@ function UserBubble({
   uploadBase: string;
 }) {
   const { copied, copy } = useCopy(entry.text);
+  const t = useT();
   return (
     <div className="msg-user-wrap">
       <div className="msg user">
@@ -149,6 +150,7 @@ function UserBubble({
         <button
           type="button"
           className="msg-action-btn"
+          aria-label={t("chat.message.rewind")}
           onClick={() => onRewind(entry.timestamp, entry.text)}
         >
           <IconArrowBackUp size={16} stroke={1.5} />
@@ -157,6 +159,7 @@ function UserBubble({
           <button
             type="button"
             className="msg-action-btn"
+            aria-label={t("chat.message.copy")}
             onClick={() => void copy()}
           >
             {copied
@@ -164,6 +167,13 @@ function UserBubble({
               : <IconClipboard size={16} stroke={1.5} />}
           </button>
         )}
+        {
+          /* Mounted empty and filled on success: a live region has to be in
+            the tree before its text changes to be announced. */
+        }
+        <span className="visually-hidden" role="status">
+          {copied ? t("chat.message.copied") : null}
+        </span>
         {time}
       </div>
     </div>

@@ -361,6 +361,13 @@ export const chat = {
     en: "Loading earlier history…",
   },
 
+  // --- message actions -----------------------------------------------------
+  /** The icon-only buttons under a message. Both are given a name: a screen
+   * reader would otherwise read two anonymous "button"s. */
+  "chat.message.rewind": { ja: "入力欄に戻す", en: "Restore to composer" },
+  "chat.message.copy": { ja: "コピー", en: "Copy" },
+  "chat.message.copied": { ja: "コピーしました", en: "Copied" },
+
   // --- error banner --------------------------------------------------------
   "chat.error.copyTitle": {
     ja: "クリックしてエラー内容をコピー",

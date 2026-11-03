@@ -348,8 +348,12 @@ export function ProviderDetail({
     // written as a literal in each branch: preact's JSX types make the
     // input attributes a union discriminated by `type` (its ARIA role
     // rules), and a `"text" | "password"` value cannot pick one member.
+    // The flow's question names the field: this branch draws no visible
+    // caption for it (only a select prompt shows its message), so the
+    // placeholder alone would be the whole name, and it may be absent.
     const field = {
       placeholder: prompt.placeholder,
+      "aria-label": prompt.message,
       value: promptValue,
       onChange: (event: TargetedEvent<HTMLInputElement, Event>) =>
         setPromptValue(event.currentTarget.value),
@@ -487,6 +491,7 @@ export function ProviderDetail({
                   placeholder={auth.configured
                     ? t("settings.provider.apiKeyPlaceholderOverwrite")
                     : t("settings.provider.apiKeyPlaceholderNew")}
+                  aria-label={t("settings.provider.apiKeyLabel")}
                   value={key}
                   onChange={(e) => setKey(e.currentTarget.value)}
                   style={{ flex: 1 }}
@@ -501,15 +506,27 @@ export function ProviderDetail({
                 </button>
               </div>
               {savedNotice && (
-                <p className="settings-note" style={{ color: "var(--ok)" }}>
+                <p
+                  className="settings-note"
+                  style={{ color: "var(--ok)" }}
+                  role="status"
+                >
                   {t("settings.provider.apiKeySaved")}
                 </p>
               )}
             </>
           )}
 
+        {
+          /* A notice is the outcome of an action just taken (a copy, a login,
+            a logout): a status line, so it is spoken when it appears. */
+        }
         {notice && (
-          <p className="settings-note" style={{ color: "var(--ok)" }}>
+          <p
+            className="settings-note"
+            style={{ color: "var(--ok)" }}
+            role="status"
+          >
             {notice}
           </p>
         )}

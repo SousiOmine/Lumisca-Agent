@@ -75,6 +75,7 @@ function AttachmentRow({
       download={attachment.displayName}
       target="_blank"
       rel="noopener noreferrer"
+      title={attachment.displayName}
     >
       <span className="attach-file-name">{attachment.displayName}</span>
       <span className="attach-file-size">

@@ -105,6 +105,7 @@ export function AppMenu({
           setOpen((v) => !v);
         }}
         title={t("chrome.appMenu.title")}
+        aria-label={t("chrome.appMenu.title")}
         aria-haspopup="menu"
         aria-expanded={open}
       >

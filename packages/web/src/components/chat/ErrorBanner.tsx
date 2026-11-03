@@ -9,29 +9,43 @@ export function ErrorBanner({ text }: { text: string }) {
   const t = useT();
   const { copied, copy } = useCopy(text);
 
+  // The "copied" line is a status region OUTSIDE the banner: a button's
+  // descendants are presentational, so a live region inside it is never
+  // announced — and the checkmark that replaces the icon says nothing.
   return (
-    <div
-      className="msg error-banner"
-      role="button"
-      tabIndex={0}
-      title={t("chat.error.copyTitle")}
-      aria-label={t("chat.error.copyAriaLabel")}
-      onClick={() => void copy()}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          void copy();
-        }
-      }}
-    >
-      <div className="msg-body error-text">
-        <p>{text}</p>
+    <>
+      <div
+        className="msg error-banner"
+        role="button"
+        tabIndex={0}
+        title={t("chat.error.copyTitle")}
+        aria-label={t("chat.error.copyAriaLabel")}
+        onClick={() => void copy()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            void copy();
+          }
+        }}
+      >
+        <div className="msg-body error-text">
+          <p>{text}</p>
+        </div>
+        <span className="error-copy-btn" aria-hidden>
+          {copied
+            ? <IconCheck size={16} stroke={2} />
+            : <IconClipboard size={16} stroke={1.5} />}
+        </span>
       </div>
-      <span className="error-copy-btn" aria-hidden>
-        {copied
-          ? <IconCheck size={16} stroke={2} />
-          : <IconClipboard size={16} stroke={1.5} />}
+      {
+        /* Mounted empty and filled on success: a live region has to be in the
+          tree before its text changes to be announced. It sits OUTSIDE the
+          banner because a button's descendants are presentational, so a
+          live region inside one is never announced. */
+      }
+      <span className="visually-hidden" role="status">
+        {copied ? t("chat.message.copied") : null}
       </span>
-    </div>
+    </>
   );
 }

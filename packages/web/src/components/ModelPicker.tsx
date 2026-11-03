@@ -302,6 +302,7 @@ export function ModelPicker({
             <input
               className="mp-model-search"
               placeholder={t("chrome.modelPicker.search")}
+              aria-label={t("chrome.modelPicker.search")}
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
             />

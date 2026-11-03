@@ -195,6 +195,9 @@ export const chrome = {
     ja: "ログをクリップボードにコピー",
     en: "Copy log to clipboard",
   },
+  /** Announced after the copy: the button only swaps its icon, which says
+   * nothing to a screen reader. */
+  "chrome.serverDown.copied": { ja: "コピーしました", en: "Copied" },
 
   // --- model picker --------------------------------------------------------
   "chrome.modelPicker.providersError": {

@@ -350,6 +350,7 @@ export function StellaPane({
               type="text"
               className="stella-handover-note"
               placeholder={t("chat.stella.handover.notePlaceholder")}
+              aria-label={t("chat.stella.handover.notePlaceholder")}
               value={note}
               onChange={(event) => setNote(event.currentTarget.value)}
             />

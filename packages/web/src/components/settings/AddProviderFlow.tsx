@@ -35,6 +35,7 @@ export function AddProviderFlow({
       </p>
       <input
         placeholder={t("settings.provider.searchPlaceholder")}
+        aria-label={t("settings.provider.searchPlaceholder")}
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
       />
