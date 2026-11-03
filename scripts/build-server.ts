@@ -28,6 +28,10 @@
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildAssetsManifest } from "../packages/server/assets.ts";
 import { VM_CONTAINER_DIR_NAME } from "../packages/core/vm/contract.ts";
+import {
+  ASSETS_FILE_NAME,
+  ICU_DATA_FILE_NAME,
+} from "../packages/server/layout.ts";
 import { findCanvasIcuDataFile } from "../packages/core/pdf/icu-data.ts";
 import { binaryName, repoRoot, reportUsage } from "./lib.ts";
 
@@ -146,7 +150,7 @@ async function compileServer(outputPath: string): Promise<void> {
  * THIRD-PARTY-NOTICES.md at the repository root).
  */
 async function stageCanvasIcuData(outDir: string): Promise<void> {
-  const target = join(outDir, "icudtl.dat");
+  const target = join(outDir, ICU_DATA_FILE_NAME);
   if (Deno.build.os !== "windows") {
     // macOS/Linux Skia embeds its ICU data; no file to ship. Drop any
     // stale file a previous Windows run left in a shared output directory
@@ -225,7 +229,7 @@ await Deno.mkdir(options.outDir, { recursive: true });
 //    binary, this one file, and the ICU/container data — nothing else to
 //    stage, and no directory whose contents could go stale.
 const { manifest, clientBytes } = await buildAssetsManifest(repoRoot);
-const assetsFile = join(options.outDir, "assets.json");
+const assetsFile = join(options.outDir, ASSETS_FILE_NAME);
 await Deno.writeTextFile(assetsFile, JSON.stringify(manifest));
 console.log(
   `Assets: ${assetsFile} (${clientBytes} bytes of JS: ` +

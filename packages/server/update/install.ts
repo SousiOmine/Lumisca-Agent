@@ -37,7 +37,8 @@ import {
   writeAppliedUpdate,
 } from "./stage.ts";
 import { PORT_WAIT_ENV_KEY } from "../startup.ts";
-import { errorMessage, VM_CONTAINER_DIR_NAME } from "@lumisca/core";
+import { errorMessage } from "@lumisca/core";
+import { installedFileNames } from "../layout.ts";
 
 /** Where the running server lives. */
 export interface InstallEnvironment {
@@ -53,19 +54,6 @@ export class InstallError extends Error {
     super(message);
     this.name = "InstallError";
   }
-}
-
-/** Files a package installs next to the binary (the package layout, see
- * scripts/build-server.ts): the binary, the assets it serves, and the
- * stella machine's container directory. A directory is listed (and
- * installed) as a whole, under its own name. */
-export function installedFileNames(execPath: string): string[] {
-  return [
-    basename(execPath),
-    "assets.json",
-    "icudtl.dat",
-    VM_CONTAINER_DIR_NAME,
-  ];
 }
 
 /** Run `<binary> --version` and return its output. Used to prove a staged

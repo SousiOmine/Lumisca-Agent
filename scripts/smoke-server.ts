@@ -21,7 +21,7 @@
  */
 import { basename, dirname, join } from "node:path";
 import { SERVER_STARTUP_ENV_KEYS } from "../packages/server/startup.ts";
-import { installedFileNames } from "../packages/server/update/install.ts";
+import { installedFileNames } from "../packages/server/layout.ts";
 import { SERVER_VERSION } from "../packages/server/version.ts";
 import {
   absolutePath,
