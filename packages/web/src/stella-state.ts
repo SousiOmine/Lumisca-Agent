@@ -1,3 +1,8 @@
+import {
+  type MergeRules,
+  mergeWindow,
+  prependHistoricWindow as prependHistoric,
+} from "./events.ts";
 import type {
   StellaConversationSnapshot,
   StellaEntry,
@@ -80,13 +85,16 @@ export function stellaStateOf(
 
 /**
  * Merge the newest window of a conversation into the entries a client holds.
+ * The rule is the one both transcripts share (events/merge.ts): entries are
+ * ordered by the transcript, so the window anchors on the ones with the same
+ * identity and anything the client lacks goes in front of the anchor it
+ * precedes; anything after the last anchor extends the end. A window that
+ * shares nothing replaces the entries (the client fell behind by more than a
+ * page), and a window that changes nothing returns what was passed in.
  *
- * Entries are ordered by the transcript, so the window's entries anchor on the
- * ones with the same identity and anything the client lacks goes in front of
- * the anchor it precedes; anything after the last anchor is the conversation's
- * newest and extends the end. A window that shares nothing replaces the
- * entries (the client fell behind by more than a page), and a window that
- * changes nothing returns what was passed in (`replaced: false`).
+ * What differs from a code-mode session is only the identity: a conversation
+ * entry is identified by what it says (see entryKey), and a key is unique by
+ * construction, so one position per key is matched.
  */
 function mergeEntries(
   existing: StellaEntry[],
@@ -94,38 +102,18 @@ function mergeEntries(
 ): { entries: StellaEntry[]; replaced: boolean } {
   if (fetched.length === 0) return { entries: existing, replaced: false };
   if (existing.length === 0) return { entries: fetched, replaced: false };
-  const indexByKey = new Map(
-    existing.map((entry, index) => [entryKey(entry), index] as const),
+  const merged = mergeWindow(
+    { items: existing, older: null },
+    { items: fetched, older: null },
+    ENTRY_RULES,
   );
-  if (!fetched.some((entry) => indexByKey.has(entryKey(entry)))) {
-    return { entries: fetched, replaced: true };
-  }
-
-  const merged: StellaEntry[] = [];
-  let pending: StellaEntry[] = [];
-  let cursor = 0;
-  for (const entry of fetched) {
-    const anchor = indexByKey.get(entryKey(entry));
-    if (anchor === undefined) {
-      pending.push(entry);
-      continue;
-    }
-    while (cursor < anchor) {
-      merged.push(existing[cursor]!);
-      cursor++;
-    }
-    // The same identity is the same entry: the persisted copy wins.
-    merged.push(...pending, entry);
-    pending = [];
-    cursor = anchor + 1;
-  }
-  while (cursor < existing.length) {
-    merged.push(existing[cursor]!);
-    cursor++;
-  }
-  merged.push(...pending);
-  return { entries: merged, replaced: false };
+  return { entries: merged.items, replaced: merged.items === fetched };
 }
+
+/** How the merge identifies one conversation entry. */
+const ENTRY_RULES: MergeRules<StellaEntry> = {
+  key: (entry) => entryKey(entry),
+};
 
 /**
  * Put a page the reader asked for (the entries before `older`) in front of
@@ -133,38 +121,21 @@ function mergeEntries(
  *
  * The page is asked for by cursor, but the cursor names a point in a
  * conversation that keeps growing: by the time the answer arrives, a run may
- * have appended entries AFTER the cursor. Those are not this page's to
- * insert. Prepending everything the client lacks put a live reply at the TOP
- * of the conversation — and because the next live event then appended the
- * same entry again, the conversation showed the message twice (a duplicate
- * that a reload removed, since the server holds it once).
- *
- * So only entries that belong before what the client holds are taken: the
- * page stops at the first entry the client already has, and an entry newer
- * than the client's newest is left to the live stream. A page that adds
- * nothing ends the walk — the client must not be sent round the same window
- * twice.
+ * have appended entries AFTER the cursor. Those are not this page's to insert
+ * (see events/merge.ts: the rule stated once for both transcripts).
  */
 export function prependOlderEntries(
   state: StellaConversationState,
   fetched: StellaEntry[],
   nextOlder: string | null,
 ): StellaConversationState {
-  if (fetched.length === 0) return { ...state, older: null };
-  const known = new Set(state.entries.map(entryKey));
-  const newest = state.entries.at(-1)?.timestamp ?? 0;
-  const added: StellaEntry[] = [];
-  for (const entry of fetched) {
-    // The page has run into what the client holds: everything after this is
-    // history the client already has, not the page before it.
-    if (known.has(entryKey(entry))) break;
-    // An entry the client does not hold but that is newer than its newest
-    // belongs to the live edge, not above it.
-    if (entry.timestamp > newest) break;
-    added.push(entry);
-  }
-  if (added.length === 0) return { ...state, older: null };
-  return { ...state, entries: [...added, ...state.entries], older: nextOlder };
+  const merged = prependHistoric(
+    { items: state.entries, older: state.older },
+    fetched,
+    nextOlder,
+    { key: (entry) => entryKey(entry), timestamp: (entry) => entry.timestamp },
+  );
+  return { ...state, entries: merged.items, older: merged.older };
 }
 
 /** Identity of an entry for dedup.
