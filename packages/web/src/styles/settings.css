@@ -899,6 +899,15 @@ button.provider-row-body:hover .provider-row-chevron {
   position: absolute;
 }
 
+/* The checkbox is what a keyboard focuses, and it is a zero-sized, invisible
+ * box: the ring base.css draws on `input:focus-visible` lands nowhere. The
+ * ring goes on the slider the checkbox is drawn as, so the switch answers a
+ * keyboard reader the way the button it looks like would. */
+.toggle-switch input:focus-visible + .toggle-slider {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .toggle-slider {
   position: absolute;
   inset: 0;

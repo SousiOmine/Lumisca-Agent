@@ -298,16 +298,21 @@
   display: flex;
   gap: 2px;
   flex: none;
-  /* Keep space reserved so hover doesn't change row height / meta position. */
+  /* Keep space reserved so hover doesn't change row height / meta position.
+   * Hidden with `opacity`, not `visibility`: visibility: hidden also takes
+   * the buttons out of the tab order, so a keyboard reader could not reach
+   * the row's edit / delete at all. `pointer-events` keeps an invisible
+   * button from taking a click meant for the row. */
   opacity: 0;
-  visibility: hidden;
+  pointer-events: none;
   transition: opacity var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .workspace-option:hover .workspace-option-actions,
-.workspace-option.selected .workspace-option-actions {
+.workspace-option.selected .workspace-option-actions,
+.workspace-option:focus-within .workspace-option-actions {
   opacity: 1;
-  visibility: visible;
+  pointer-events: auto;
 }
 
 .workspace-option-actions .icon-btn {
@@ -376,7 +381,10 @@
 @media (hover: none), (pointer: coarse) {
   .workspace-option-actions {
     opacity: 1;
-    visibility: visible;
+    /* The row is not hovered or focused on a touch screen, so the resting
+     * `pointer-events: none` has to be lifted here or the buttons would draw
+     * but not take a tap. */
+    pointer-events: auto;
   }
 
   .workspace-option-actions .icon-btn {

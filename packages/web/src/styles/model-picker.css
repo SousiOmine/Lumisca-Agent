@@ -463,16 +463,21 @@
   border: none;
   border-radius: 0;
   box-shadow: none;
-  /* No browser/app-default focus frame around the whole track (in the
-   * light theme it renders as a stray black border); the position
-   * stays visible via the fill, the active tick dot and the name below.
-   * Needs :focus-visible specificity to beat the global
-   * input:focus-visible rule in base.css. */
+  /* No frame at rest: the rail, the fill and the level name are what say
+   * "this is a slider". The focus ring is drawn by the rule below. */
   outline: none;
 }
 
+/* Focus has to be visible here: the slider is a rail whose fill and tick dot
+ * look the same whether or not it has focus, so the ring is the only cue a
+ * keyboard reader gets. It is drawn outside the input's box (an outline
+ * paints without taking room) and the box is the 48px interaction area
+ * around the rail, which the panes leave room for around it.
+ * `:focus-visible` also beats the global `input:focus-visible` of base.css,
+ * so a pointer press still lands without a frame. */
 .tls-range:focus-visible {
-  outline: none;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .tls-range::-webkit-slider-runnable-track {

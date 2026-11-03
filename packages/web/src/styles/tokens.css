@@ -164,8 +164,15 @@ html[data-theme="dark"] {
   --border: #26262f;
   --border-strong: #3b3b47;
   --text: #f3f3f7;
+  /* The two quiet steps of the ramp both clear WCAG AA (4.5:1) on every
+   * surface they are drawn on, accent-soft's row fill included — the worst
+   * case is surface-3 + accent-soft, 4.88 for faint. Faint therefore lands a
+   * hair under dim (1.02:1 between them, all but the same colour): anything
+   * lower (#9a9aa7) drops that worst case to 4.37 and fails, and raising dim
+   * instead would lighten every quiet label in the app to keep two steps
+   * apart. Faint still sits below dim in the ramp, which is what it is for. */
   --text-dim: #a5a5b2;
-  --text-faint: #82828f;
+  --text-faint: #a3a3b2;
   --accent: #f3f3f7;
   --accent-soft: rgba(255, 255, 255, 0.08);
   --accent-dim: #a5a5b2;
@@ -211,8 +218,12 @@ html[data-theme="light"] {
   --border: #e6e8f0;
   --border-strong: #d0d3dd;
   --text: #191920;
+  /* Same floor as the dark theme (4.5:1 on every surface, accent-soft's row
+   * fill included): the old #70707d fell to 3.73 on surface-3 + accent-soft.
+   * Faint stays lighter than dim here — that is what makes it the quieter of
+   * the two — and clears the floor at 4.59 in that worst case. */
   --text-dim: #52525e;
-  --text-faint: #70707d;
+  --text-faint: #62626f;
   --accent: #191920;
   --accent-soft: rgba(25, 25, 32, 0.06);
   --accent-dim: #52525e;

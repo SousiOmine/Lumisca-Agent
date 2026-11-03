@@ -328,7 +328,9 @@
  * and what it holds — edit, delete — is not what the list is for. The one
  * exception is the open menu's own row, which keeps its button drawn while
  * the menu it anchors is on screen (`.app-menu` floats apart from the row, so
- * a vanished button would look like the menu belongs to nothing). */
+ * a vanished button would look like the menu belongs to nothing). Keyboard
+ * focus reveals it the way hover does: a button held at opacity 0 is not
+ * drawn, so the reader would tab onto nothing. */
 .stella-agent-menu {
   flex: none;
   display: flex;
@@ -347,6 +349,7 @@
 }
 
 .stella-agent:hover .stella-agent-menu,
+.stella-agent:focus-within .stella-agent-menu,
 .stella-agent-menu:focus-visible,
 .stella-agent-menu[aria-expanded="true"] {
   opacity: 1;

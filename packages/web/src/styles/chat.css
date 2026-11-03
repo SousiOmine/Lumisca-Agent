@@ -161,7 +161,13 @@
   font-size: 11px;
 }
 
-.msg-user-wrap:hover .msg-action-btn {
+/* Hover and keyboard focus reveal the same actions: a button held at
+ * opacity 0 is drawn nowhere, so a focus ring on it would land on empty
+ * space. `:focus-within` keeps the row's other button drawn while the
+ * reader tabs between copy and rewind. */
+.msg-user-wrap:hover .msg-action-btn,
+.msg-user-wrap:focus-within .msg-action-btn,
+.msg-action-btn:focus-visible {
   opacity: 1;
 }
 

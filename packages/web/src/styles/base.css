@@ -70,9 +70,14 @@ select {
   padding: 8px 12px;
 }
 
-input:focus,
-textarea:focus,
-select:focus {
+/* The pointer focuses a field to type in it, and the border is enough there.
+ * A keyboard focus keeps the ring from the `:focus-visible` rule above: a
+ * plain `:focus` has the same specificity and, written after it, erased the
+ * ring on every field in the app. The ring is the only keyboard cue a text
+ * field has — the border alone is under 3:1 in both themes. */
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
   border-color: var(--border-strong);
   outline: none;
 }
