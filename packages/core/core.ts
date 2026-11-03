@@ -7,7 +7,6 @@ import type { ClientEvent } from "./types/event.ts";
 import type { AgentMessage } from "./ai/types.ts";
 import type { SessionInfo } from "./types/session.ts";
 import type { StellaEntry } from "./types/stella-conversation.ts";
-import { stellaEntryOf } from "./agent/stella-stream.ts";
 import type { Workspace } from "./types/workspace.ts";
 import {
   createFileSettingsRepo,
@@ -77,6 +76,7 @@ import { WorkspaceService } from "./workspaces.ts";
 import { ModelService } from "./services/models.ts";
 import { type DefaultModel, SessionCatalog } from "./services/sessions.ts";
 import { StellaAgentBook } from "./services/stella-agents.ts";
+import { StellaMachines } from "./services/stella-machines.ts";
 import { WebSearchConfigService } from "./services/webSearch.ts";
 import { McpConfigService } from "./services/mcp.ts";
 import { WorkspaceConfigService } from "./services/workspaces.ts";
@@ -106,42 +106,25 @@ import type { VmManager, VmProgress } from "./vm/container.ts";
 import type { StellaAvailability } from "./vm/availability.ts";
 import type { StellaStatus } from "./shared/wire.ts";
 import { StellaMachine } from "./vm/machine.ts";
-import { createVmScreen } from "./vm/screen.ts";
-import { createVmTools } from "./vm/tools.ts";
-import { createVmSemanticTools } from "./vm/semantic.ts";
 import type { StellaRuntime } from "./vm/runtime.ts";
 import {
   type AgentRepo,
   createAgentRepo,
   type StellaAgent,
 } from "./stella/agents.ts";
-import { createAgentCreateTool } from "./stella/tools.ts";
 import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
-import { createHistorySearchTool } from "./session/history.ts";
 import type { WindowPage, WindowQuery } from "./session/transcript-window.ts";
 import type { ContextUsageSummary } from "./shared/context-usage.ts";
-import {
-  createIdentityProvider,
-  createIdentityTool,
-  type IdentityTarget,
-} from "./stella/identity.ts";
 import { createRoutineRepo, type RoutineRepo } from "./routine/repo.ts";
 import {
   createRoutineScheduler,
   type RoutineRunner,
   type RoutineScheduler,
 } from "./routine/scheduler.ts";
-import { createRoutineTools } from "./routine/tools.ts";
 import { HandoverHub, type PendingHandover } from "./vm/handover.ts";
-import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
-import { createVmAskUserTool } from "./vm/ask-user.ts";
+import { vmAgentDir } from "./vm/contract.ts";
 import type { PromptFileRef, Routine } from "./shared/mod.ts";
-import {
-  VmBackgroundSpawner,
-  VmCommandRunner as VmCommandRunnerImpl,
-} from "./vm/shell.ts";
-import { VmFileBackend } from "./vm/fs.ts";
-import type { SkillDef, SkillInfo } from "./skills/discover.ts";
+import type { SkillInfo } from "./skills/discover.ts";
 import type { UploadFile } from "./vm/uploads.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
@@ -152,32 +135,8 @@ import { CommandSafety } from "./safety/command-safety.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
 
-/** How long a stella skill catalog stays usable for opening a conversation.
- * Long enough that scrolling between agents does not pay for a `podman exec`
- * each time, short enough that a skill the agent just wrote shows up on the
- * next visit. */
-const STELLA_SKILLS_TTL_MS = 30_000;
-
 /** Module logger (debug-gated). */
 const log = createLogger("core");
-
-/**
- * The conversation entries a set of stored rows projects to, oldest first.
- *
- * One projection, used by both surfaces that answer "what did the
- * conversation say": the conversation endpoints (a window of entries) and
- * `history_search` (the same entries, filtered by words and dates). Two
- * implementations would let the searchable history drift from the visible
- * one, and the whole rule of the search is that they are the same thing.
- */
-function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
-  const entries: StellaEntry[] = [];
-  for (const message of messages) {
-    const entry = stellaEntryOf(message);
-    if (entry !== null) entries.push(entry);
-  }
-  return entries;
-}
 
 /** One model as the settings list shows it (see
  * ModelService.listModelsDetailed). */
@@ -524,6 +483,7 @@ export class LumiscaCore {
     this.services = {
       sessions: undefined as unknown as SessionCatalog,
       stellaAgents: undefined as unknown as StellaAgentBook,
+      stellaMachines: undefined as unknown as StellaMachines,
       models: this.modelService,
       webSearch: this.webSearchConfig,
       mcp: this.mcpConfig,
@@ -536,8 +496,31 @@ export class LumiscaCore {
       services: {
         sessions: SessionCatalog;
         stellaAgents: StellaAgentBook;
+        stellaMachines: StellaMachines;
       };
     };
+    self.services.stellaMachines = new StellaMachines({
+      machine: this.stella,
+      agents: this.stellaAgents,
+      sessions: this.sessions,
+      messages: this.messages,
+      pool: this.pool,
+      routineRepo: this.routines,
+      routineScheduler: this.routineScheduler,
+      handoverHubs: this.handoverHubs,
+      decorateSession: (session) => this.decorateSession(session),
+      deleteSession: (id) => this.deleteSession(id),
+      emit: (event) => this.emit(event),
+      language: () => this.getLanguage(),
+      chatWorkspace: () => this.getOrCreateChatWorkspace(),
+      requireWorkspace: (id) => this.requireWorkspace(id),
+      resolveDefaultModel: (provider, modelId) =>
+        this.resolveDefaultModel(provider, modelId),
+      createStellaAgent: (input) =>
+        this.services.stellaAgents.createStellaAgent(input),
+      ensureStellaReady: (onProgress) =>
+        this.services.stellaMachines.ensureStellaReady(onProgress),
+    });
     self.services.stellaAgents = new StellaAgentBook({
       agents: this.stellaAgents,
       icons: this.agentIcons,
@@ -1143,29 +1126,6 @@ export class LumiscaCore {
     this.savedPrompts.delete(id);
   }
 
-  // --- the stella machine --------------------------------------------------
-
-  /** Attach the stella machine (the server does this at start-up, once it
-   * has resolved where the container files live). Detach with undefined. */
-  setStellaVm(vm: VmManager | undefined): void {
-    this.stella.set(vm);
-  }
-
-  /** The machine, when one is attached. */
-  getStellaVm(): VmManager | undefined {
-    return this.stella.get();
-  }
-
-  /** Whether stella mode can run here, with the reason when it cannot. Read
-   * from the machine's actual state, so installing podman or building the
-   * image takes effect without a restart. */
-  async getStellaAvailability(): Promise<StellaAvailability> {
-    return await this.stella.availability();
-  }
-
-  // --- stella agents (the agent of each conversation) -----------------------
-
-  /** The agents in the sidebar, most recently used first. */
   // --- stella agents (delegated to StellaAgentBook) -------------------------
 
   /** The agents in the sidebar, most recently used first. */
@@ -1212,127 +1172,51 @@ export class LumiscaCore {
     return this.services.stellaAgents.deleteStellaAgent(id);
   }
 
-  async getOrCreateStellaSession(agentId?: string): Promise<SessionInfo> {
-    const agent = agentId !== undefined
-      ? this.stellaAgents.get(agentId)
-      : this.stellaAgents.latest();
-    if (agent === undefined) {
-      throw new CoreError(
-        agentId !== undefined
-          ? `Agent not found: ${agentId}`
-          : "No agent yet: create one before talking to stella",
-        "not_found",
-      );
-    }
-    // An already-open conversation usually needs none of the preparation
-    // below. Its agent is in the pool, and the skill catalog and working
-    // folder are what opening it created. The one thing that can have changed
-    // is the machine itself (stopped by hand, or the app that owns it looked
-    // at nothing for a while), so that is asked — cheaply, from the status
-    // read the client is already polling (see isRunning) — and everything
-    // else is skipped when it answers.
-    const existing = this.sessions.getByAgent(agent.id);
-    if (existing !== undefined && this.pool.get(existing.id) !== undefined) {
-      if (await this.stella.isRunning()) {
-        this.stellaAgents.touch(agent.id);
-        return this.decorateSession(this.sessions.get(existing.id) ?? existing);
-      }
-    }
-    // The machine must be running before an agent is built on it: without one
-    // the factory refuses (never a stella agent with host tools). Every
-    // caller that wants a conversation wants the machine, so this starts it
-    // rather than making the client ask.
-    await this.ensureStellaReady();
-    // The two steps that follow run together because neither depends on the
-    // other and both cross into the container (`podman exec`): the skill
-    // catalog the factory cannot await (it builds the tools synchronously)
-    // and the agent's working folder, which bash cannot start in when it does
-    // not exist (`podman exec --workdir`). In sequence they were two round
-    // trips the user waited for.
-    await Promise.all([
-      this.primeStellaSkills(),
-      this.stella.ensureAgentDir(agent.id),
-    ]);
-    this.stellaAgents.touch(agent.id);
-    if (existing !== undefined) {
-      const rows = this.messages.listModelView(existing.id);
-      const view = {
-        messages: rows.map((row) => row.message),
-        baseIndex: this.messages.count(existing.id, "all") - rows.length,
-      };
-      this.pool.open(
-        existing,
-        this.requireWorkspace(existing.workspaceId),
-        view.messages,
-        view.baseIndex,
-      );
-      return this.decorateSession(this.sessions.get(existing.id) ?? existing);
-    }
-    const model = await this.resolveDefaultModel(undefined, undefined);
-    const workspace = this.getOrCreateChatWorkspace();
-    const session = this.sessions.create({
-      workspaceId: workspace.id,
-      name: agent.name,
-      modelProvider: model.provider,
-      modelId: model.modelId,
-      stella: true,
-      agentId: agent.id,
-    });
-    this.pool.open(session, workspace, []);
-    const decorated = this.decorateSession(
-      this.sessions.get(session.id) ?? session,
-    );
-    this.emit({ type: "session_created", session: decorated });
-    return decorated;
+  // --- the stella machine (delegated to StellaMachines) --------------------
+
+  /** Attach the stella machine (the server does this at start-up, once it
+   * has resolved where the container files live). Detach with undefined. */
+  setStellaVm(vm: VmManager | undefined): void {
+    this.services.stellaMachines.setStellaVm(vm);
   }
 
-  /**
-   * Make sure the machine is up, starting it (and building its image on a
-   * first run) when it is not.
-   *
-   * There is no "start the machine" step in the product any more: a user who
-   * chose stella mode asked for a machine, not for a container to babysit, so
-   * every path that needs one calls this and the machine appears. The one
-   * thing that cannot be automated is the wait: a first run builds a Debian
-   * image with Chromium in it, which takes minutes, and the caller reports
-   * that through the progress callback rather than freezing.
-   *
-   * Idempotent and safe to call concurrently: two prompts racing on a cold
-   * machine share one start (the promise is memoized until it settles).
-   */
-  async ensureStellaReady(
+  /** The machine, when one is attached. */
+  getStellaVm(): VmManager | undefined {
+    return this.services.stellaMachines.getStellaVm();
+  }
+
+  /** Whether stella mode can run here, with the reason when it cannot. */
+  getStellaAvailability(): Promise<StellaAvailability> {
+    return this.services.stellaMachines.getStellaAvailability();
+  }
+
+  getOrCreateStellaSession(agentId?: string): Promise<SessionInfo> {
+    return this.services.stellaMachines.getOrCreateStellaSession(agentId);
+  }
+
+  ensureStellaReady(
     onProgress?: (progress: VmProgress) => void,
   ): Promise<void> {
-    try {
-      await this.stella.ensureReady(onProgress);
-    } catch (error) {
-      // The machine's reasons are user-facing (an image to build, podman
-      // missing); classify them as unavailable, not as a server fault.
-      throw new CoreError(errorMessage(error), "unavailable");
-    }
+    return this.services.stellaMachines.ensureStellaReady(onProgress);
   }
 
-  /** Whether a machine start is in flight (the status endpoint reports it so
-   * a waiting client can say "starting" instead of showing a stale state). */
   isStellaStarting(): boolean {
-    return this.stella.starting;
+    return this.services.stellaMachines.isStellaStarting();
   }
 
-  /**
-   * The machine's state.
-   *
-   * stella's UI shows no machine controls, so this is not a dashboard: it
-   * exists for the client to know (a) whether the mode is offerable at all
-   * and (b) whether the screen pane can connect. `starting` carries the
-   * first-run build, which is the one wait the user does see.
-   */
-  async getStellaStatus(): Promise<StellaStatus> {
-    return await this.stella.status();
+  getStellaStatus(): Promise<StellaStatus> {
+    return this.services.stellaMachines.getStellaStatus();
   }
 
-  /** The hand-over hub of one session (see vm/handover.ts): created on
-   * first use and dropped on close, so a torn-down session leaves nothing
-   * waiting. */
+  refreshStellaSkills(): Promise<void> {
+    return this.services.stellaMachines.refreshStellaSkills();
+  }
+
+  /** The runtime a stella session's tools run on (see StellaMachines). */
+  private stellaRuntimeFor(session: SessionInfo): StellaRuntime | undefined {
+    return this.services.stellaMachines.stellaRuntimeFor(session);
+  }
+
   private handoverFor(sessionId: string): HandoverHub {
     const existing = this.handoverHubs.get(sessionId);
     if (existing !== undefined) return existing;
@@ -1364,129 +1248,6 @@ export class LumiscaCore {
    * `refreshStellaSkills` before the session opens — the factory cannot await
    * it (a rebuild happens mid-configuration-change).
    */
-  private stellaRuntimeFor(session: SessionInfo): StellaRuntime | undefined {
-    if (session.stella !== true) return undefined;
-    const exec = this.stella.exec();
-    const execBytes = this.stella.execBytes();
-    if (exec === undefined || execBytes === undefined) return undefined;
-    const skills = (): SkillDef[] => this.stella.skills();
-    // The agent's working folder: relative paths and bash start here, the
-    // way a workspace folder does in code mode. It is a default place, not a
-    // boundary — the file backend's root is the machine's home, so one agent
-    // can reach another's folder when the user asks (see vm/fs.ts).
-    const cwd = session.agentId === undefined
-      ? VM_WORKDIR
-      : vmAgentDir(session.agentId);
-    // The identity belongs to the AGENT row, not to the session, and a stella
-    // session always has one (the conversation is created FOR an agent). A
-    // session without one would have nowhere to keep the text, so it fails
-    // here rather than opening with an identity that is silently lost.
-    const agentId = session.agentId;
-    if (agentId === undefined) {
-      throw new CoreError(
-        "The stella session has no agent: its identity has nowhere to live",
-        "invalid",
-      );
-    }
-    const identity: IdentityTarget = {
-      read: () => this.stellaAgents.get(agentId)?.identity ?? "",
-      write: (content) => this.stellaAgents.writeIdentity(agentId, content),
-    };
-    return {
-      cwd,
-      files: new VmFileBackend(exec, { cwd }),
-      runner: new VmCommandRunnerImpl(exec),
-      backgroundSpawner: new VmBackgroundSpawner(exec),
-      skills,
-      refreshSkills: () => this.stella.refreshSkills(),
-      screenTools: [
-        ...createVmTools({ screen: createVmScreen({ exec, execBytes }) }),
-        createVmAskUserTool({
-          handover: this.handoverFor(session.id),
-        }),
-      ],
-      semanticTools: createVmSemanticTools({ exec }),
-      handoverHub: this.handoverFor(session.id),
-      routineTools: createRoutineTools({
-        repo: this.routines,
-        scheduler: this.routineScheduler,
-        agentId: session.agentId ?? "",
-      }),
-      // The tool goes through the same entry point as the API, so the
-      // duplicate-name rule is enforced once.
-      agentTool: createAgentCreateTool({
-        create: (input) => this.createStellaAgent(input),
-      }),
-      // The history of THIS conversation: each stella agent has its own
-      // transcript, so the tool is built per open around the session's rows.
-      // It searches the conversation's ENTRIES, not the transcript: what the
-      // user sees is what the agent can search (see session/history.ts), and
-      // the projection is the same one the conversation endpoints serve.
-      historyTool: createHistorySearchTool({
-        entries: (window) =>
-          entriesOf(
-            this.messages.listBetween(session.id, window).map((row) =>
-              row.message
-            ),
-          ),
-      }),
-      // The identity belongs to this agent: the tool writes it, and the
-      // provider publishes what was written as a context message, so the
-      // snapshotted system prompt never has to change.
-      identityTool: createIdentityTool(identity),
-      identityProvider: createIdentityProvider(identity),
-    };
-  }
-
-  /** Re-read the stella skill catalog. Awaited before a stella session
-   * opens, so the agent's skill tool starts with a current list. */
-  async refreshStellaSkills(): Promise<void> {
-    await this.stella.refreshSkills();
-    this.stellaSkills = {
-      machine: this.stella.get(),
-      at: Date.now(),
-      pending: undefined,
-    };
-  }
-
-  /**
-   * Make the stella skill catalog current enough to open a conversation.
-   *
-   * The catalog lives inside the machine, so reading it costs a `podman
-   * exec` (and, on a self-hosted server reached over a phone, whatever the
-   * link costs on top). A catalog read moments ago — or one this call
-   * started — is reused: a skill the agent wrote during a conversation is
-   * picked up by the next open after the window, not by the open that is
-   * already five calls deep into a cold start.
-   *
-   * Concurrent opens share one read, so two clients cannot queue two
-   * `podman exec`s for the same list.
-   */
-  private async primeStellaSkills(): Promise<void> {
-    const machine = this.stella.get();
-    if (this.stellaSkills.machine !== machine) {
-      // A replaced machine means a replaced catalog; nothing to reuse.
-      this.stellaSkills = {
-        machine,
-        at: 0,
-        pending: undefined,
-      };
-    }
-    if (this.stellaSkills.pending !== undefined) {
-      await this.stellaSkills.pending;
-      return;
-    }
-    if (
-      this.stellaSkills.at !== 0 &&
-      Date.now() - this.stellaSkills.at < STELLA_SKILLS_TTL_MS
-    ) {
-      return;
-    }
-    const pending = this.refreshStellaSkills();
-    this.stellaSkills.pending = pending;
-    await pending;
-  }
-
   // --- workspaces (delegated to WorkspaceService) -------------------------
 
   /** Resolve a model or throw `not_found` (single home for the
@@ -1735,6 +1496,7 @@ export class LumiscaCore {
   readonly services: {
     readonly sessions: SessionCatalog;
     readonly stellaAgents: StellaAgentBook;
+    readonly stellaMachines: StellaMachines;
     readonly models: ModelService;
     readonly webSearch: WebSearchConfigService;
     readonly mcp: McpConfigService;
