@@ -1357,30 +1357,44 @@ export class LumiscaCore {
         "not_found",
       );
     }
+    // An already-open conversation usually needs none of the preparation
+    // below. Its agent is in the pool, and the skill catalog and working
+    // folder are what opening it created. The one thing that can have changed
+    // is the machine itself (stopped by hand, or the app that owns it looked
+    // at nothing for a while), so that is asked — cheaply, from the status
+    // read the client is already polling (see isRunning) — and everything
+    // else is skipped when it answers.
+    const existing = this.sessions.getByAgent(agent.id);
+    if (existing !== undefined && this.pool.get(existing.id) !== undefined) {
+      if (await this.stella.isRunning()) {
+        this.stellaAgents.touch(agent.id);
+        return this.decorateSession(this.sessions.get(existing.id) ?? existing);
+      }
+    }
     // The machine must be running before an agent is built on it: without one
     // the factory refuses (never a stella agent with host tools). Every
     // caller that wants a conversation wants the machine, so this starts it
     // rather than making the client ask.
     await this.ensureStellaReady();
-    // The skill catalog is read from the machine, which the factory cannot
-    // await (it builds synchronously): prime it here, before any open.
-    await this.primeStellaSkills();
-    // The agent's working folder: bash cannot start in a folder that does
-    // not exist (`podman exec --workdir` fails), and a fresh agent has no
-    // files yet.
-    await this.stella.ensureAgentDir(agent.id);
+    // The two steps that follow run together because neither depends on the
+    // other and both cross into the container (`podman exec`): the skill
+    // catalog the factory cannot await (it builds the tools synchronously)
+    // and the agent's working folder, which bash cannot start in when it does
+    // not exist (`podman exec --workdir`). In sequence they were two round
+    // trips the user waited for.
+    await Promise.all([
+      this.primeStellaSkills(),
+      this.stella.ensureAgentDir(agent.id),
+    ]);
     this.stellaAgents.touch(agent.id);
-    const existing = this.sessions.getByAgent(agent.id);
     if (existing !== undefined) {
-      if (this.pool.get(existing.id) === undefined) {
-        const view = this.modelViewOf(existing.id);
-        this.pool.open(
-          existing,
-          this.requireWorkspace(existing.workspaceId),
-          view.messages,
-          view.baseIndex,
-        );
-      }
+      const view = this.modelViewOf(existing.id);
+      this.pool.open(
+        existing,
+        this.requireWorkspace(existing.workspaceId),
+        view.messages,
+        view.baseIndex,
+      );
       return this.decorateSession(this.sessions.get(existing.id) ?? existing);
     }
     const model = await this.resolveDefaultModel(undefined, undefined);

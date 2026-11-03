@@ -16,6 +16,7 @@ import {
   VM_BUILD_TIMEOUT_MS,
   VM_CONTAINER_NAME,
   VM_CONTAINERFILE_NAME,
+  VM_CONTRACT_CACHE_MS,
   VM_COPY_TIMEOUT_MS,
   VM_DISPLAY,
   VM_GID,
@@ -29,7 +30,6 @@ import {
   VM_SCREEN_WIDTH,
   VM_STATUS_CACHE_MS,
   VM_STOP_TIMEOUT_MS,
-  VM_SUDO_PROBE,
   VM_UID,
   VM_USER,
   VM_VNC_PORT,
@@ -96,6 +96,77 @@ export interface VmManagerOptions {
   /** Progress sink: called before each preparation step so the UI can say
    * what is happening. */
   onProgress?: (progress: VmProgress) => void;
+}
+
+/**
+ * One `podman container inspect` answer, in the fields the state is decided
+ * from.
+ *
+ * Tab-separated and parsed here rather than asked as one template per field:
+ * every `podman` call is a process spawn, and the client polls this status
+ * while it watches stella mode. The port mapping is JSON because podman's Go
+ * template exposes it as a map whose fields differ between versions, while
+ * the JSON is the same in all of them.
+ *
+ * `{{.Id}}` and `{{.State.StartedAt}}` together name one INSTANCE of the
+ * machine: the contract below is verified once per instance, so a stop and
+ * start (or a recreation) is verified again and a running one is not asked
+ * again on every poll.
+ */
+const CONTAINER_FACTS_FORMAT =
+  `{{.Id}}\t{{.State.Status}}\t{{.State.StartedAt}}\t{{json .NetworkSettings.Ports}}`;
+
+/**
+ * The contract probes, in one shell.
+ *
+ * Every line is `name=value` and a probe that cannot run leaves its own line
+ * out, so the reader tells "the value is wrong" from "the machine did not
+ * answer" — the two read very differently to a person. They used to be four
+ * separate `podman exec` calls (and the screen probe ran twice), which cost
+ * ~400 ms of pure process spawning on every status read.
+ *
+ * `sudo -n` is a false answer rather than a hang when the rule is missing:
+ * it never prompts.
+ */
+const CONTRACT_PROBE_SCRIPT = `
+printf 'env=%s|%s|%s\\n' "$DISPLAY" "$(id -u)" "$(pwd)"
+if geometry=$(xdotool getdisplaygeometry 2>&1); then
+  printf 'geometry=%s\\n' "$geometry"
+else
+  printf 'geometry_error=%s\\n' "$geometry"
+fi
+if error=$(sudo -n true 2>&1); then
+  printf 'sudo=ok\\n'
+else
+  printf 'sudo_error=%s\\n' "$error"
+fi
+`;
+
+/** What one inspect answered about the container. */
+interface ContainerFacts {
+  /** The container's own id and when its current run began: together they
+   * name the instance whose contract was verified. */
+  id: string;
+  startedAt: string;
+  /** `podman`'s status word; `running` is the only one the machine can serve
+   * calls in. */
+  status: string;
+  /** The host port noVNC's websockify is published on, when one is. */
+  vncPort: number | null;
+}
+
+/** The published host port of the machine's screen, out of the inspect
+ * answer's port mapping (`{"6080/tcp":[{"HostIp":"127.0.0.1",
+ * "HostPort":"35483"}]}`). */
+function vncPortOf(ports: Record<string, unknown>): number | null {
+  const bindings = ports[`${VM_VNC_PORT}/tcp`];
+  if (!Array.isArray(bindings)) return null;
+  for (const binding of bindings) {
+    if (typeof binding !== "object" || binding === null) continue;
+    const port = Number((binding as { HostPort?: unknown }).HostPort);
+    if (Number.isInteger(port) && port > 0) return port;
+  }
+  return null;
 }
 
 export interface VmManager {
@@ -172,6 +243,23 @@ export function createVmManager(options: VmManagerOptions): VmManager {
    * readStatus). Undefined until asked; a host that cannot is not asked
    * again on every poll. */
   let runtimeUsable: boolean | undefined = undefined;
+  /** Whether `podman --version` has answered successfully. Its answer cannot
+   * change while the process runs, and asking it on every status read was one
+   * spawn of the three a poll used to cost. A failure is not remembered (see
+   * readStatus): installing podman must take effect without a restart. */
+  let podmanPresent = false;
+  /** The container instance whose contract passed, and when. Undefined until
+   * asked, and implicitly reset when the instance changes (`<container
+   * id>/<started at>`, see contractOf) so a recreated or restarted machine is
+   * verified again: the check exists to catch an image that drifted from the
+   * definition, and an instance is what can drift.
+   *
+   * Only a PASS is remembered, and only for a bounded window
+   * (VM_CONTRACT_CACHE_MS): a mismatch is re-derived on every read (the
+   * ordinary one is a machine that has not finished booting, and caching that
+   * would report a working machine as broken), and even a pass expires so a
+   * screen that died inside a running container is noticed. */
+  let verified: { instance: string; at: number } | undefined = undefined;
   /** The in-flight status read. Concurrent callers (the status poll, an open,
    * the screen's port lookup) wait for the same podman calls instead of
    * queueing their own: on a slow link each redundant call is a second the
@@ -186,8 +274,16 @@ export function createVmManager(options: VmManagerOptions): VmManager {
   const containerDigest = () => containerFilesDigest(options.containerDir);
 
   /** The digest recorded in the image's label, or null when the image has no
-   * usable record (built before the label existed, which counts as stale). */
+   * usable record (built before the label existed, which counts as stale).
+   *
+   * The answer is kept for the life of this manager: a label only changes
+   * when the image is rebuilt, and a rebuild is something this manager does
+   * itself (see buildImage, which forgets the cached value). Asking podman
+   * again on every status read was a process spawn per poll for an answer
+   * that could not have moved. */
+  let imageDigestCache: { value: string | null } | undefined = undefined;
   async function imageDigest(): Promise<string | null> {
+    if (imageDigestCache !== undefined) return imageDigestCache.value;
     const result = await run(
       podman([
         "image",
@@ -200,12 +296,17 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     );
     if (result.exitCode !== 0) return null;
     const value = result.stdout.trim();
-    return value === "" || value === "<no value>" ? null : value;
+    const digest = value === "" || value === "<no value>" ? null : value;
+    imageDigestCache = { value: digest };
+    return digest;
   }
 
   /** Whether the image still matches the container files on disk. Unknown
    * files (a deployment without them) leave the image alone: there is
-   * nothing to rebuild from. */
+   * nothing to rebuild from.
+   *
+   * The files' digest is read from disk on every check, and the label from
+   * podman: they are compared together, so neither can be reused alone. */
   async function imageIsStale(): Promise<boolean> {
     const wanted = await containerDigest();
     if (wanted === null) return false;
@@ -233,17 +334,26 @@ export function createVmManager(options: VmManagerOptions): VmManager {
 
   async function readStatus(): Promise<VmStatus> {
     // `podman --version` is the cheapest proof that podman exists and runs as
-    // this user (a rootless setup that is not configured fails here too).
-    const version = await run(podman(["--version"]), {
-      timeoutMs: 15_000,
-      maxOutput: 4096,
-    });
-    if (version.exitCode !== 0) {
-      return {
-        state: "podman_missing",
-        vncPort: null,
-        reason: `podman is not available: ${firstLine(version.stderr)}`,
-      };
+    // this user (a rootless setup that is not configured fails here too). A
+    // SUCCESS is remembered — podman does not uninstall itself mid-run, and
+    // every `podman` call is a spawn the watching client waits through — while
+    // a failure is asked again on the next read, because installing podman
+    // must take effect without a restart. It is not inferred from a failed
+    // inspect: guessing "podman is missing" out of an error message would
+    // report a broken installation as an uninstalled one.
+    if (!podmanPresent) {
+      const version = await run(podman(["--version"]), {
+        timeoutMs: 15_000,
+        maxOutput: 4096,
+      });
+      if (version.exitCode !== 0) {
+        return {
+          state: "podman_missing",
+          vncPort: null,
+          reason: `podman is not available: ${firstLine(version.stderr)}`,
+        };
+      }
+      podmanPresent = true;
     }
     // podman answering says nothing about whether a container can run here:
     // inside a container that is itself sandboxed, `podman --version` is fine
@@ -280,18 +390,11 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       }
       imagePresent = true;
     }
-    // `container inspect` answers with JSON even for a stopped container;
-    // a non-zero exit means there is none.
-    const inspect = await run(
-      podman([
-        "container",
-        "inspect",
-        "--format",
-        "{{.State.Status}} {{.State.Running}}",
-        VM_CONTAINER_NAME,
-      ]),
-      { timeoutMs: 30_000, maxOutput: 4096 },
-    );
+    // `container inspect` answers for a stopped container too; a non-zero
+    // exit means there is none. One call gives the state, the instance and
+    // the published port — `podman port` used to be a second process for a
+    // fact that is already in this one.
+    const facts = await readContainerFacts();
     // An image built from older container files (the Containerfile was edited,
     // or a release shipped a new one) is not the machine this installation
     // describes. It is judged before the container, because a machine still
@@ -299,35 +402,20 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     if (await imageIsStale()) {
       return {
         state: "image_stale",
-        vncPort: inspect.exitCode === 0 ? await readVncPort() : null,
+        vncPort: facts?.vncPort ?? null,
         reason: "",
       };
     }
-    if (inspect.exitCode !== 0) {
+    if (facts === undefined) {
       return { state: "container_missing", vncPort: null, reason: "" };
     }
-    const running = / true\b/.test(inspect.stdout) ||
-      inspect.stdout.trim().endsWith(" true");
-    if (!running) {
+    if (facts.status !== "running") {
       return { state: "stopped", vncPort: null, reason: "" };
     }
-    const port = await readVncPort();
-    // Running is not enough: the machine is usable when its workdir answers
-    // and the image still matches the contract. A container left running
-    // from an older image would otherwise serve calls that fail deep inside
-    // a tool.
-    const probe = await run(
-      podmanExec(["sh", "-c", 'test -d "$1"', "sh", VM_WORKDIR]),
-      { timeoutMs: 30_000 },
-    );
-    if (probe.exitCode !== 0) {
-      return {
-        state: "stopped",
-        vncPort: port,
-        reason: `the machine did not answer: ${firstLine(probe.stderr)}`,
-      };
-    }
-    const contract = await verifyContract();
+    const port = facts.vncPort;
+    // Running is not enough: the machine is usable when its own values match
+    // the contract (see contractOf — verified once per instance).
+    const contract = await contractOf(facts);
     if (contract !== null) {
       return { state: "stopped", vncPort: port, reason: contract };
     }
@@ -358,44 +446,97 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     ]);
   }
 
-  /** The host port noVNC is published on, read from podman (the port is
-   * chosen when the container is created, so it cannot be a constant). */
-  async function readVncPort(): Promise<number | null> {
+  /** One `podman container inspect`: the state, the instance it belongs to
+   * and the screen's published port, in one call. Undefined when there is no
+   * such container (a non-zero exit, unlike a stopped one). */
+  async function readContainerFacts(): Promise<ContainerFacts | undefined> {
     const result = await run(
       podman([
-        "port",
+        "container",
+        "inspect",
+        "--format",
+        CONTAINER_FACTS_FORMAT,
         VM_CONTAINER_NAME,
-        `${VM_VNC_PORT}/tcp`,
       ]),
-      { timeoutMs: 30_000, maxOutput: 4096 },
+      { timeoutMs: 30_000, maxOutput: 8192 },
     );
-    if (result.exitCode !== 0) return null;
-    // `127.0.0.1:49153` (IPv4) or `[::1]:49153`; take the last colon.
-    const text = result.stdout.trim().split("\n")[0] ?? "";
-    const colon = text.lastIndexOf(":");
-    if (colon === -1) return null;
-    const port = Number(text.slice(colon + 1));
-    return Number.isInteger(port) && port > 0 ? port : null;
+    if (result.exitCode !== 0) return undefined;
+    const line = result.stdout.trim().split("\n")[0] ?? "";
+    const [id, status, startedAt, ports] = line.split("\t");
+    if (id === undefined || status === undefined) return undefined;
+    let published: Record<string, unknown> = {};
+    try {
+      published = JSON.parse(ports ?? "{}") as Record<string, unknown>;
+    } catch {
+      // An answer without a readable mapping is a machine whose screen cannot
+      // be reached; the status is still worth reporting.
+    }
+    return {
+      id,
+      startedAt: startedAt ?? "",
+      status,
+      vncPort: vncPortOf(published),
+    };
+  }
+
+  /** Verify one instance of the machine, at most once per
+   * VM_CONTRACT_CACHE_MS.
+   *
+   * The contract values (display, uid, workdir, screen size, sudo) are proven
+   * against the RUNNING container. Asking again on every status read was what
+   * made selecting a stella agent cost eighteen `podman` spawns — the client
+   * polls the status while it watches — so a PASS is kept for the instance it
+   * was made about: `<container id>/<started at>` changes when the container
+   * is recreated or restarted, and an image that drifted was already rejected
+   * as stale before this point.
+   *
+   * A mismatch is not remembered: it is re-derived on every read, because the
+   * ordinary one is a machine that has not finished booting ("the screen is
+   * not up") and caching that would report a working machine as broken. A
+   * pass expires as well, so a screen that died inside a running container is
+   * noticed instead of being vouched for forever. */
+  async function contractOf(facts: ContainerFacts): Promise<string | null> {
+    const instance = `${facts.id}/${facts.startedAt}`;
+    if (
+      verified?.instance === instance &&
+      Date.now() - verified.at < VM_CONTRACT_CACHE_MS
+    ) {
+      return null;
+    }
+    const mismatch = await verifyContract();
+    if (mismatch === null) verified = { instance, at: Date.now() };
+    return mismatch;
   }
 
   /** Check the running container against the contract values. Returns the
    * mismatch as a sentence, or null when everything matches. A drifted image
    * would break screenshots (DISPLAY), file ownership (uid/gid), the shell
    * (workdir) or root inside the machine (sudo) silently, so start-up
-   * refuses it instead. */
+   * refuses it instead.
+   *
+   * One `podman exec`, not four: the values are printed by a single shell,
+   * which also answers whether the screen is up and whether sudo works
+   * without a password. Each of those used to be its own spawn, and the
+   * screen probe ran twice on every start. */
   async function verifyContract(): Promise<string | null> {
-    const probe = await run(
-      podmanExec([
-        "sh",
-        "-c",
-        'printf "%s|%s|%s\\n" "$DISPLAY" "$(id -u)" "$(pwd)"',
-      ]),
-      { timeoutMs: 30_000, maxOutput: 4096 },
+    const result = await run(
+      podmanExec(["sh", "-c", CONTRACT_PROBE_SCRIPT]),
+      { timeoutMs: 60_000, maxOutput: 8192 },
     );
-    if (probe.exitCode !== 0) {
-      return `the machine did not answer: ${firstLine(probe.stderr)}`;
+    // Each line is `name=value`; a probe that could not run leaves its line
+    // out, which is reported as "did not answer" rather than as an empty
+    // value that happens to differ.
+    const fields = new Map<string, string>();
+    for (const line of result.stdout.split("\n")) {
+      const at = line.indexOf("=");
+      if (at !== -1) fields.set(line.slice(0, at), line.slice(at + 1));
     }
-    const [display, uid, workdir] = probe.stdout.trim().split("|");
+    if (!fields.has("env")) {
+      return `the machine did not answer: ${
+        firstLine(result.stderr) || firstLine(result.stdout)
+      }`;
+    }
+    const [display, uid, workdir] = fields.get("env")!.split("|");
     if (display !== VM_DISPLAY) {
       return `the machine's display is ${display}, expected ${VM_DISPLAY}`;
     }
@@ -406,14 +547,13 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       return `the machine's working directory is ${workdir}, expected ${VM_WORKDIR}`;
     }
     // The screen must be the size the agent's coordinates assume.
-    const geometry = await run(
-      podmanExec(["xdotool", "getdisplaygeometry"]),
-      { timeoutMs: 30_000, maxOutput: 4096 },
-    );
-    if (geometry.exitCode !== 0) {
-      return `the machine's screen is not up: ${firstLine(geometry.stderr)}`;
+    const geometry = fields.get("geometry");
+    if (geometry === undefined) {
+      return `the machine's screen is not up: ${
+        firstLine(fields.get("geometry_error") ?? "")
+      }`;
     }
-    const [width, height] = geometry.stdout.trim().split(/\s+/);
+    const [width, height] = geometry.split(/\s+/);
     if (
       Number(width) !== VM_SCREEN_WIDTH || Number(height) !== VM_SCREEN_HEIGHT
     ) {
@@ -422,13 +562,9 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     // The agent's sudo must be passwordless. An image built before the rule
     // existed would leave root reachable only through a prompt nobody can
     // answer, so the machine is refused rather than started into that state.
-    const sudo = await run(podmanExec(VM_SUDO_PROBE), {
-      timeoutMs: 30_000,
-      maxOutput: 4096,
-    });
-    if (sudo.exitCode !== 0) {
+    if (!fields.has("sudo")) {
       return `the machine's "${VM_USER}" account cannot run sudo without a ` +
-        `password: ${detail(sudo)}`;
+        `password: ${firstLine(fields.get("sudo_error") ?? "")}`;
     }
     return null;
   }
@@ -462,6 +598,10 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         `Could not build the machine's image: ${detail(result)}`,
       );
     }
+    // The image the label belonged to is gone: the next read must ask again
+    // rather than compare against the build that was just replaced.
+    imageDigestCache = undefined;
+    imagePresent = true;
   }
 
   /** Create the container from the image, without starting it. Starting is a

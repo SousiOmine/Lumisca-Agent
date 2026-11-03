@@ -55,13 +55,6 @@ export const VM_GID = 1000;
  * uid (see `verifyImageContract`, which proves the rule works). */
 export const VM_USER = "agent";
 
-/** The command that proves the agent's sudo is passwordless. Run as the
- * machine's own account (`podman exec` without `--user`), `sudo -n` fails
- * instead of prompting, so a missing rule is a false answer and not a hang.
- * A machine that fails this is refused at start-up: the password prompt would
- * block a shell the agent started, with nothing on the screen to answer it. */
-export const VM_SUDO_PROBE = ["sudo", "-n", "true"] as const;
-
 /** Container and image names. Distinct from any name the user's other
  * containers use, and stable so a restart reuses the same machine. */
 export const VM_CONTAINER_NAME = "lumisca-stella";
@@ -118,3 +111,15 @@ export const VM_STOP_TIMEOUT_MS = 60_000;
  * endpoint ask repeatedly while a client watches, and every answer is a
  * `podman` process; callers that just changed the state bypass the cache. */
 export const VM_STATUS_CACHE_MS = 1_000;
+
+/** How long a PASSED contract check is reused for one container instance.
+ *
+ * The check crosses into the machine (`podman exec`), so asking it on every
+ * status read made each poll of the watching client cost a process spawn —
+ * selecting an agent in stella mode spent about 400 ms on it alone. The
+ * values it proves are set once at start-up and cannot change while the same
+ * instance runs, so the answer is kept — but not forever: the screen can die
+ * inside a running container (Xvfb or Chromium crashing), and a machine
+ * reported as working while its screen is gone fails deep inside a tool. A
+ * bounded window notices that within half a minute. */
+export const VM_CONTRACT_CACHE_MS = 30_000;

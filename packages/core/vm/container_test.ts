@@ -94,6 +94,36 @@ async function currentDigest(dir: string): Promise<string> {
   return digest;
 }
 
+/** The answer of one healthy contract probe: the single `podman exec` that
+ * prints the display, the uid, the workdir, the screen size and whether sudo
+ * works. A probe that cannot run leaves its own line out, so tests change one
+ * line to state one drift. */
+const CONTRACT_OK = `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+  `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+  `sudo=ok\n`;
+
+/** The answer of one `podman container inspect`: the instance, its state and
+ * the screen's published port, as the manager's template asks for them. */
+function containerFacts(
+  options: {
+    id?: string;
+    status?: string;
+    startedAt?: string;
+    port?: number | null;
+  } = {},
+): string {
+  const ports = options.port == null ? {} : {
+    [`${VM_VNC_PORT}/tcp`]: [{
+      HostIp: "127.0.0.1",
+      HostPort: String(options.port),
+    }],
+  };
+  return `${options.id ?? "c0ffee"}\t${options.status ?? "running"}\t` +
+    `${options.startedAt ?? "2026-01-01T00:00:00Z"}\t${
+      JSON.stringify(ports)
+    }\n`;
+}
+
 /** The answers of a healthy, running machine whose image matches the files on
  * disk (`digest` is that directory's digest). */
 function runningMachine(
@@ -115,20 +145,11 @@ function runningMachine(
       },
       {
         match: /^podman container inspect/,
-        result: ok("running true\n"),
+        result: ok(containerFacts({ port: 49153 })),
       },
-      { match: /^podman port/, result: ok(`127.0.0.1:49153\n`) },
-      {
-        // The env probe the contract check runs (display|uid|workdir).
-        match: /printf .*DISPLAY/,
-        result: ok(`${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n`),
-      },
-      {
-        match: /xdotool getdisplaygeometry/,
-        result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
-      },
-      // The sudo probe the contract check runs.
-      { match: /exec .* sudo -n true/, result: ok() },
+      // The one exec the contract check runs: the display, the uid, the
+      // workdir, the screen size and the sudo answer, as `name=value` lines.
+      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
     ],
   };
 }
@@ -187,7 +208,10 @@ Deno.test("status: image_missing / container_missing / stopped", async () => {
           { match: /^podman --version/, result: ok("4.9.3\n") },
           { match: /^podman image exists/, result: ok() },
           { match: /^podman image inspect/, result: ok(`${digest}\n`) },
-          { match: /^podman container inspect/, result: ok("exited false\n") },
+          {
+            match: /^podman container inspect/,
+            result: ok(containerFacts({ status: "exited", port: null })),
+          },
         ],
       });
       const manager = createVmManager({ containerDir: dir, run });
@@ -220,12 +244,15 @@ Deno.test("status: a drifted contract is reported as stopped with the reason", a
   const digest = await currentDigest(dir);
   // A screen of the wrong size: every coordinate the agent reads off a
   // screenshot would be wrong, so the machine must not be offered.
-  // The override stands first so it wins over the built-in geometry answer
+  // The override stands first so it wins over the built-in contract answer
   // (answers are matched in order).
   const { run } = makeRunner({
     answers: [{
-      match: /xdotool getdisplaygeometry/,
-      result: ok("1024 768\n"),
+      match: /printf .*DISPLAY/,
+      result: ok(
+        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+          `geometry=1024 768\nsudo=ok\n`,
+      ),
     }, ...runningMachine(digest).answers],
   });
   try {
@@ -246,8 +273,12 @@ Deno.test("status: a machine without passwordless sudo is refused", async () => 
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
     answers: [{
-      match: /exec .* sudo -n true/,
-      result: fail("sudo: a password is required"),
+      match: /printf .*DISPLAY/,
+      result: ok(
+        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+          `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+          `sudo_error=sudo: a password is required\n`,
+      ),
     }, ...runningMachine(digest).answers],
   });
   try {
@@ -259,6 +290,34 @@ Deno.test("status: a machine without passwordless sudo is refused", async () => 
     assert(
       status.reason.includes("cannot run sudo without a password"),
       `reason must name sudo: ${status.reason}`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: a machine whose screen is not up is refused", async () => {
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  // The ordinary failure of a container that has not finished booting: the
+  // other values are right and only the screen is missing. It must read as
+  // "the screen is not up", not as a wrong display.
+  const { run } = makeRunner({
+    answers: [{
+      match: /printf .*DISPLAY/,
+      result: ok(
+        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+          `geometry_error=Can't open display: :99\nsudo=ok\n`,
+      ),
+    }, ...runningMachine(digest).answers],
+  });
+  try {
+    const manager = createVmManager({ containerDir: dir, run });
+    const status = await manager.status();
+    assertEquals(status.state, "stopped");
+    assert(
+      status.reason.includes("screen is not up"),
+      `reason must name the screen: ${status.reason}`,
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -351,17 +410,14 @@ Deno.test("start: a missing image is built, created, started and verified", asyn
       { match: /^podman image exists/, result: fail("", 1) },
       { match: /^podman build/, result: ok("built\n") },
       { match: /^podman create /, result: ok("abc123\n") },
-      { match: /^podman container inspect/, result: ok("running true\n") },
-      { match: /^podman port/, result: ok("127.0.0.1:49153\n") },
-      {
-        match: /printf .*DISPLAY/,
-        result: ok(`${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n`),
-      },
+      { match: /^podman container inspect/, result: ok(containerFacts()) },
+      // The one exec the contract check runs.
+      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
+      // `waitForScreen` waits for the entry point with one xdotool call.
       {
         match: /xdotool getdisplaygeometry/,
         result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
       },
-      { match: /exec .* sudo -n true/, result: ok() },
     ],
   });
   try {
@@ -456,17 +512,22 @@ Deno.test("start: a broken container is recreated, keeping the agent's home", as
       { match: /^podman --version/, result: ok("4.9.3\n") },
       { match: /^podman image exists/, result: ok() },
       { match: /^podman image inspect/, result: ok(`${digest}\n`) },
-      { match: /^podman container inspect/, result: ok("running true\n") },
-      { match: /^podman port/, result: ok("127.0.0.1:49153\n") },
+      { match: /^podman container inspect/, result: ok(containerFacts()) },
       // A drifted display: the machine is reported as stopped+reason.
-      { match: /printf .*DISPLAY/, result: ok(`:0|${VM_UID}|${VM_WORKDIR}\n`) },
+      {
+        match: /printf .*DISPLAY/,
+        result: ok(
+          `env=:0|${VM_UID}|${VM_WORKDIR}\n` +
+            `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\nsudo=ok\n`,
+        ),
+      },
       { match: /^podman rm/, result: ok() },
       { match: /^podman create /, result: ok("abc123\n") },
+      // `waitForScreen` waits for the entry point with one xdotool call.
       {
         match: /xdotool getdisplaygeometry/,
         result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
       },
-      { match: /exec .* sudo -n true/, result: ok() },
     ],
   });
   try {
@@ -514,19 +575,15 @@ Deno.test("start: a stale image is rebuilt from the container files", async () =
       // An older build: the label names a different set of files.
       { match: /^podman image inspect/, result: ok("older-digest\n") },
       { match: /^podman container exists/, result: ok() },
-      { match: /^podman container inspect/, result: ok("running true\n") },
-      { match: /^podman port/, result: ok("127.0.0.1:49153\n") },
+      { match: /^podman container inspect/, result: ok(containerFacts()) },
       { match: /^podman build/, result: ok("built\n") },
       { match: /^podman create /, result: ok("abc123\n") },
-      {
-        match: /printf .*DISPLAY/,
-        result: ok(`${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n`),
-      },
+      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
+      // `waitForScreen` waits for the entry point with one xdotool call.
       {
         match: /xdotool getdisplaygeometry/,
         result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
       },
-      { match: /exec .* sudo -n true/, result: ok() },
     ],
   });
   try {
@@ -564,18 +621,14 @@ Deno.test("start: an image with no container yet needs no home to carry", async 
         result: fail("no such"),
         once: true,
       },
-      { match: /^podman container inspect/, result: ok("running true\n") },
+      { match: /^podman container inspect/, result: ok(containerFacts()) },
       { match: /^podman create /, result: ok("abc123\n") },
-      { match: /^podman port/, result: ok("127.0.0.1:49153\n") },
-      {
-        match: /printf .*DISPLAY/,
-        result: ok(`${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n`),
-      },
+      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
+      // `waitForScreen` waits for the entry point with one xdotool call.
       {
         match: /xdotool getdisplaygeometry/,
         result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
       },
-      { match: /exec .* sudo -n true/, result: ok() },
     ],
   });
   try {
@@ -629,13 +682,13 @@ Deno.test("stop: a stopped or absent machine is not an error", async () => {
   }
 });
 
-Deno.test("status: the VNC port is null when the machine is not running", async () => {
+Deno.test("status: the VNC port is null when the machine publishes none", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
     answers: [{
-      match: /^podman port/,
-      result: fail("no port mapping"),
+      match: /^podman container inspect/,
+      result: ok(containerFacts({ port: null })),
     }, ...runningMachine(digest).answers],
   });
   try {
@@ -645,6 +698,75 @@ Deno.test("status: the VNC port is null when the machine is not running", async 
     assertEquals(await manager.vncPort(), null);
     // The port constant is part of the contract; the mapping is not.
     assertEquals(VM_VNC_PORT, 6080);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: the contract is proven once per container instance", async () => {
+  // The client polls the status while it watches stella mode. Re-proving the
+  // contract on every read made each poll four `podman exec` spawns; the
+  // answer cannot change while the same instance runs, so it is asked once.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  try {
+    const { run, calls } = makeRunner(runningMachine(digest));
+    const manager = createVmManager({ containerDir: dir, run });
+    assertEquals((await manager.status({ fresh: true })).state, "running");
+    const probes = () =>
+      calls.filter((call) => call.join(" ").includes("printf")).length;
+    assertEquals(probes(), 1);
+    assertEquals((await manager.status({ fresh: true })).state, "running");
+    assertEquals(probes(), 1, "the same instance must not be asked again");
+
+    // A new instance (the container was restarted or recreated) is verified
+    // again: it is the one thing that can have drifted since.
+    const restarted = makeRunner(
+      runningMachine(digest, [{
+        match: /^podman container inspect/,
+        result: ok(containerFacts({ port: 49153, startedAt: "later" })),
+      }]),
+    );
+    assertEquals(
+      (await createVmManager({ containerDir: dir, run: restarted.run })
+        .status())
+        .state,
+      "running",
+    );
+    const secondProbes = restarted.calls.filter((call) =>
+      call.join(" ").includes("printf")
+    ).length;
+    assertEquals(secondProbes, 1, "a fresh manager asks once");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: a machine that is still booting is not remembered as broken", async () => {
+  // The ordinary mismatch is a container that has not finished bringing its
+  // screen up. Remembering that would report a working machine as broken for
+  // as long as the container lived.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  try {
+    const { run } = makeRunner({
+      answers: [
+        {
+          match: /printf .*DISPLAY/,
+          result: ok(
+            `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+              `geometry_error=Can't open display: :99\nsudo=ok\n`,
+          ),
+          once: true,
+        },
+        ...runningMachine(digest).answers,
+      ],
+    });
+    const manager = createVmManager({ containerDir: dir, run });
+    const first = await manager.status({ fresh: true });
+    assertEquals(first.state, "stopped");
+    const second = await manager.status({ fresh: true });
+    assertEquals(second.state, "running");
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

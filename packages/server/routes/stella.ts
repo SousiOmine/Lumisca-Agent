@@ -63,8 +63,8 @@ export interface StellaApi {
     reason: string;
     starting: boolean;
   }>;
-  /** Bring the machine up if it is not (the first conversation starts it). */
-  ensureStellaReady(): Promise<void>;
+  /** The conversation, created on first use. This is also what brings the
+   * machine up: a conversation lives inside it. */
   getOrCreateStellaSession(agentId?: string): Promise<SessionInfo>;
   /** The conversation a stella agent already has, or undefined. The client
    * addresses the conversation by agent, never by session id. */
@@ -328,16 +328,17 @@ export function stellaRoutes(core: StellaApi): Hono {
    * conversation per counterpart, never in a session list), and a client
    * that never learns the session id cannot start treating it as one.
    *
-   * This is also where the machine starts: a conversation needs it, and no
+   * Opening is where the machine starts: a conversation needs it, and no
    * other endpoint is guaranteed to run first. A first run builds the image,
    * so the response can take minutes — the client shows that as its one
-   * piece of machine state. */
+   * piece of machine state. `getOrCreateStellaSession` does that start
+   * itself (a routine opens a conversation without passing through here), so
+   * calling it again would only re-ask podman for an answer already known. */
   app.get("/stella/conversations/:agentId", async (c) => {
     const agentId = c.req.param("agentId");
     // A cold machine's failure is a CoreError("unavailable") — 503 through
     // the same mapping as every other route; an unknown agent is a
     // CoreError("not_found") — 404.
-    await core.ensureStellaReady();
     const session = await core.getOrCreateStellaSession(agentId);
     return c.json(snapshotOf(session, agentId, parseWindowQuery(c.req.url)));
   });

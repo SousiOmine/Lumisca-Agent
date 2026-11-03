@@ -124,6 +124,21 @@ export class StellaMachine {
     return this.#starting !== undefined;
   }
 
+  /** Whether the machine is up, as the status read the client already polls
+   * saw it: no `fresh` bypass, so a read made within the cache window is
+   * free.
+   *
+   * This is the cheap question opening an already-open conversation asks —
+   * "is the machine still there?" — not the expensive one (`ensureReady`,
+   * which decides whether it must be built or started). A container stopped
+   * by hand is therefore noticed and brought back up, without every
+   * selection paying for a fresh round of `podman` calls. */
+  async isRunning(): Promise<boolean> {
+    const vm = this.#vm;
+    if (vm === undefined) return false;
+    return (await vm.status()).state === "running";
+  }
+
   /** The machine's state, as the status endpoint reports it. */
   async status(): Promise<StellaStatus> {
     const vm = this.#vm;
