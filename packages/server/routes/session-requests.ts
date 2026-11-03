@@ -11,6 +11,7 @@ import { base64ToBytes } from "@lumisca/core";
 import {
   MAX_PROMPT_FILE_BASE64_LENGTH,
   MAX_PROMPT_FILES,
+  MAX_PROMPT_TEXT_LENGTH,
   stripDataUrlHeader,
 } from "@lumisca/core/shared";
 import type { AskAnswer, ImageContent, ModePrompt } from "@lumisca/core";
@@ -175,6 +176,14 @@ export function parsePromptBody(body: PromptBody): {
     (text.length === 0 && images.length === 0 && files.length === 0)
   ) {
     throw new AppError("text (string) is required", 400);
+  }
+  // A paste that would fill the context in one turn is refused here rather
+  // than compacted away immediately (see MAX_PROMPT_TEXT_LENGTH).
+  if (text.length > MAX_PROMPT_TEXT_LENGTH) {
+    throw new AppError(
+      `text is longer than ${MAX_PROMPT_TEXT_LENGTH} characters`,
+      400,
+    );
   }
   return {
     text,

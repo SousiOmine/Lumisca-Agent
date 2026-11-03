@@ -22,6 +22,13 @@ export const MAX_PROMPT_FILES = 8;
  * their own, smaller limits on images on top of it. */
 export const MAX_PROMPT_FILE_BASE64_LENGTH = 20 * 1024 * 1024;
 
+/** Most characters one prompt's text may carry. A bound, not a budget: it is
+ * far above any prompt a person writes, and only stops a paste that would
+ * fill the model's context in one turn (a log, a whole file). Enforced by the
+ * composer (which refuses to grow past it, so the text is never silently cut)
+ * and by the API (a client that ignores the field gets a 400 that says why). */
+export const MAX_PROMPT_TEXT_LENGTH = 200_000;
+
 /** Build a `data:<mime>;base64,<data>` URL (previews, rewind restore). */
 export function toDataUrl(mimeType: string, data: string): string {
   return `data:${mimeType};base64,${data}`;

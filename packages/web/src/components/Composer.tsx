@@ -15,12 +15,15 @@ import {
   IconChevronRight,
   IconFile,
   IconFolder,
+  IconPaperclip,
   IconPlayerStop,
   IconX,
 } from "@tabler/icons-preact";
 import {
   formatAttachmentSize,
+  MAX_PROMPT_FILE_BASE64_LENGTH,
   MAX_PROMPT_FILES,
+  MAX_PROMPT_TEXT_LENGTH,
   stripDataUrlHeader,
 } from "@lumisca/core/shared";
 import {
@@ -174,7 +177,12 @@ export function Composer({
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showCtx, setShowCtx] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // Why the last pick or drop was refused, shown above the field. A file that
+  // exceeds the server's limit would otherwise upload in full and come back
+  // as a 400 after the composer had already been emptied.
+  const [attachError, setAttachError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pickerRef = useRef<HTMLInputElement>(null);
   /** Message lookup of the app language (the composer's own labels). */
   const t = useT();
   // Latest images, read inside the async FileReader callback so a burst of
@@ -322,13 +330,25 @@ export function Composer({
     filesRef.current = files;
   }, [files]);
 
+  /** Whether `size` bytes turn into more base64 characters than the API
+   * accepts. The server compares the encoded length, so the check is made on
+   * the encoded length too (`ceil(n / 3) * 4`, without padding): a file at
+   * exactly the binary limit must pass here as well. */
+  const tooLarge = (size: number): boolean =>
+    Math.ceil(size / 3) * 4 > MAX_PROMPT_FILE_BASE64_LENGTH;
+
   /** Add a dropped file that is not an image: it goes to the machine, so the
    * browser only has to read the bytes (no preview, no data URL header). */
   const addFile = (file: File) => {
     if (filesRef.current.length >= MAX_PROMPT_FILES) return;
+    if (tooLarge(file.size)) {
+      setAttachError(t("chat.composer.attach.tooLarge", { name: file.name }));
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== "string") return;
+      setAttachError(null);
       onFilesChange?.([
         ...filesRef.current,
         {
@@ -338,15 +358,25 @@ export function Composer({
         },
       ]);
     };
+    // A read can fail (a folder, a file that moved, a revoked permission).
+    // Staying silent left the reader with a button that did nothing.
+    reader.onerror = () => {
+      setAttachError(t("chat.composer.attach.readFailed", { name: file.name }));
+    };
     reader.readAsDataURL(file);
   };
 
   /** Add a pasted/dropped image file to the attachments. */
   const addImage = (file: File) => {
     if (imagesRef.current.length >= MAX_PROMPT_FILES) return;
+    if (tooLarge(file.size)) {
+      setAttachError(t("chat.composer.attach.tooLarge", { name: file.name }));
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== "string") return;
+      setAttachError(null);
       onImagesChange?.([
         ...imagesRef.current,
         {
@@ -356,7 +386,26 @@ export function Composer({
         },
       ]);
     };
+    reader.onerror = () => {
+      setAttachError(t("chat.composer.attach.readFailed", { name: file.name }));
+    };
     reader.readAsDataURL(file);
+  };
+
+  /** One entry point for anything handed to the composer: the picker, drops
+   * and pastes all route an image to the image list and everything else to
+   * the file list. */
+  const addDropped = (file: File) => {
+    if (file.type.startsWith("image/")) addImage(file);
+    else addFile(file);
+  };
+
+  /** The picker's input is cleared after every answer so picking the same
+   * file twice still fires `change`. */
+  const handlePicked = (e: Event) => {
+    const input = e.currentTarget as HTMLInputElement;
+    for (const file of Array.from(input.files ?? [])) addDropped(file);
+    input.value = "";
   };
 
   /** Paste support: image items in the clipboard become attachments; text
@@ -387,11 +436,10 @@ export function Composer({
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragging(false);
+    // An image is also a file: it is shown inline by the chat, so it takes
+    // the image path. Everything else has no preview and is sent by name.
     for (const file of Array.from(e.dataTransfer?.files ?? [])) {
-      // An image is also a file: it is shown inline by the chat, so it takes
-      // the image path. Everything else has no preview and is sent by name.
-      if (file.type.startsWith("image/")) addImage(file);
-      else addFile(file);
+      addDropped(file);
     }
   };
 
@@ -412,6 +460,14 @@ export function Composer({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // An IME is composing: Enter confirms the conversion and Escape cancels
+    // it. Both are the input method's keys until the composition ends, so
+    // the popovers and the send shortcut stay out of the way — otherwise
+    // typing Japanese with the slash menu open picked a command instead of
+    // the kana the reader was converting. `isComposing` is the property the
+    // spec defines; `keyCode === 229` is what WebKit reports for the same
+    // moment in some IMEs.
+    if (e.isComposing || e.keyCode === 229) return;
     // Ctrl+Enter sends; plain Enter inserts a newline (while the slash menu
     // is open it consumes Enter/Tab to pick the active entry instead).
     if (e.key === "Enter" && e.ctrlKey) {
@@ -441,6 +497,11 @@ export function Composer({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {attachError !== null && (
+        <p className="input-attach-error" role="alert">
+          {attachError}
+        </p>
+      )}
       {files.length > 0 && (
         <div className="input-files">
           {files.map((file, index) => (
@@ -491,18 +552,34 @@ export function Composer({
           ))}
         </div>
       )}
+      {value.length > MAX_PROMPT_TEXT_LENGTH * 0.9 && (
+        // Only near the cap: a counter that is always on screen is one more
+        // number to read on every message.
+        <p
+          className="input-length-note"
+          role={value.length >= MAX_PROMPT_TEXT_LENGTH ? "alert" : undefined}
+        >
+          {t("chat.composer.lengthLeft", {
+            count: Math.max(MAX_PROMPT_TEXT_LENGTH - value.length, 0),
+          })}
+        </p>
+      )}
       <div className="input-box-wrap">
         <textarea
           ref={textareaRef}
           className={`input-box${large ? " large" : ""}`}
           placeholder={placeholder}
+          aria-label={t("chat.composer.label")}
           value={value}
           onChange={(e) => {
-            onChange(e.currentTarget.value);
-            updateSuggestions(
-              e.currentTarget.value,
-              e.currentTarget.selectionStart,
-            );
+            // Pasted text arrives here whole, so this is where the cap is
+            // applied: the value is not replaced with a truncated copy (that
+            // would cut the reader's text without telling them), the input
+            // simply stops growing and the counter below says why.
+            const next = e.currentTarget.value;
+            if (next.length > MAX_PROMPT_TEXT_LENGTH) return;
+            onChange(next);
+            updateSuggestions(next, e.currentTarget.selectionStart);
           }}
           onSelect={(e) => {
             updateSuggestions(
@@ -532,6 +609,12 @@ export function Composer({
               ? (
                 <div className="mention-status">
                   {t("common.loading")}
+                </div>
+              )
+              : mention.failed
+              ? (
+                <div className="mention-status">
+                  {t("chat.composer.mention.failed")}
                 </div>
               )
               : mention.items.length === 0
@@ -695,6 +778,28 @@ export function Composer({
             </div>
           )}
         <div className="input-actions">
+          {
+            /* A picker is the only way to attach on a phone: there is no
+           * drag and nothing to paste. Hidden input, visible button — the
+           * native control is drawn by the OS and cannot take the app's
+           * styling. */
+          }
+          <input
+            ref={pickerRef}
+            type="file"
+            multiple
+            hidden
+            onChange={handlePicked}
+          />
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => pickerRef.current?.click()}
+            title={t("chat.composer.attach.pick")}
+            aria-label={t("chat.composer.attach.pick")}
+          >
+            <IconPaperclip size={15} />
+          </button>
           {contextUsage !== undefined && (
             <div className="ctx-wrap" ref={ctxRef}>
               <ContextUsageTrigger
