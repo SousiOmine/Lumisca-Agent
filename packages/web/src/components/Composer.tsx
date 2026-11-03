@@ -1,6 +1,5 @@
 import {
   type ClipboardEvent,
-  createPortal,
   type DragEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -11,7 +10,6 @@ import {
 } from "preact/compat";
 import {
   IconArrowLeft,
-  IconBrain,
   IconChevronRight,
   IconFile,
   IconFolder,
@@ -29,8 +27,8 @@ import {
   ContextUsageTrigger,
 } from "./ContextUsage.tsx";
 export type { ContextUsageData };
-import { ModelPicker } from "./ModelPicker.tsx";
 import { ComposerPopover } from "./ComposerPopover.tsx";
+import { ComposerModelBar } from "./ComposerModelBar.tsx";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
 import { useMention } from "../hooks/useMention.ts";
@@ -54,7 +52,6 @@ import type {
   ThinkingLevel,
 } from "../types.ts";
 import { useT } from "../i18n.ts";
-import { thinkingLevelLabel } from "../format.ts";
 
 export interface ComposerModel {
   provider: string;
@@ -414,11 +411,6 @@ export function Composer({
     onKeyDown?.(e);
   };
 
-  // Only models that can actually think (more than just "off") get the
-  // level selector; the options are the levels the model supports.
-  const levels = thinkingLevels ?? [];
-  const canThink = levels.length > 1;
-
   // The popover opens above the caret line. Only in the tall new-session
   // textarea does the caret sit near the top often enough to flip below
   // instead of covering the first lines.
@@ -627,75 +619,24 @@ export function Composer({
         )}
       </div>
       <div className="input-row">
-        {modelBar === "none"
-          ? null
-          : (
-            <div className="model-switch-bar" ref={modelPickerRef}>
-              <button
-                type="button"
-                className="model-switch"
-                onClick={() => {
-                  setShowModelPicker((o) => !o);
-                  setShowCtx(false);
-                }}
-                title={t("chat.composer.modelSwitchTitle")}
-              >
-                <span
-                  className="live-dot"
-                  style={{
-                    background: "var(--text-faint)",
-                    width: 6,
-                    height: 6,
-                  }}
-                />
-                <span className="mono">
-                  {model
-                    ? `${model.provider}/${model.modelId}`
-                    : t("chat.composer.modelSelect")}
-                </span>
-                {canThink && (
-                  <span className="model-thinking-label">
-                    <IconBrain size={12} />
-                    <span>
-                      {thinkingLevelLabel(thinkingLevel ?? "off", t)}
-                    </span>
-                  </span>
-                )}
-                <span className={`chevron${showModelPicker ? " open" : ""}`}>
-                  <IconChevronRight size={13} />
-                </span>
-              </button>
-              {showModelPicker && modelPlacement !== null && createPortal(
-                <div
-                  className="mp-popover model-popover"
-                  ref={modelPopoverRef}
-                  style={modelPlacement.style}
-                >
-                  <ModelPicker
-                    value={model}
-                    peerId={peerId}
-                    stacked={!modelPlacement.panes}
-                    roomHeight={modelPlacement.height}
-                    onClose={() => setShowModelPicker(false)}
-                    onSelect={(provider, modelId, info) => {
-                      // Stays open: the thinking pane follows the newly
-                      // selected model, so strength can be tuned in the
-                      // same opening. Closes on outside click / Escape.
-                      onModelSelect(provider, modelId, info);
-                    }}
-                    onOpenSettings={() => {
-                      setShowModelPicker(false);
-                      onOpenSettings?.();
-                    }}
-                    thinkingValue={thinkingLevel}
-                    thinkingLevels={thinkingLevels}
-                    onThinkingChange={onThinkingLevelChange}
-                  />
-                </div>,
-                document.body,
-              )}
-            </div>
-          )}
+        <ComposerModelBar
+          mode={modelBar}
+          model={model}
+          peerId={peerId}
+          thinkingLevel={thinkingLevel}
+          thinkingLevels={thinkingLevels}
+          onModelSelect={onModelSelect}
+          onThinkingLevelChange={onThinkingLevelChange}
+          onOpenSettings={onOpenSettings}
+          open={showModelPicker}
+          onOpenChange={(next) => {
+            setShowModelPicker(next);
+            if (next) setShowCtx(false);
+          }}
+          triggerRef={modelPickerRef}
+          popoverRef={modelPopoverRef}
+          placement={modelPlacement}
+        />
         <div className="input-actions">
           {
             /* A picker is the only way to attach on a phone: there is no
