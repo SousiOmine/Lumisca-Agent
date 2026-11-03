@@ -26,7 +26,7 @@
     "npm:@opencode-ai/models@0.0.112": "0.0.112",
     "npm:@opencode-ai/models@0.0.99": "0.0.99",
     "npm:@preact/preset-vite@2.10.6": "2.10.6_vite@8.3.5_preact@11.1.1_preact-render-to-string@6.8.2__preact@11.1.1",
-    "npm:@tabler/icons-preact@3.50.0": "3.50.0_preact@11.1.0_preact-render-to-string@6.8.2__preact@11.1.0",
+    "npm:@tabler/icons-preact@3.50.0": "3.50.0_preact@11.1.1__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.1",
     "npm:@types/node@*": "26.1.2",
     "npm:ai@7.0.159": "7.0.159_zod@4.4.3",
     "npm:esbuild@0.28.2": "0.28.2",
@@ -794,11 +794,11 @@
     "@standard-schema/spec@1.1.0": {
       "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="
     },
-    "@tabler/icons-preact@3.50.0_preact@11.1.0_preact-render-to-string@6.8.2__preact@11.1.0": {
+    "@tabler/icons-preact@3.50.0_preact@11.1.1__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.1": {
       "integrity": "sha512-O70QkWinmvTH5bnbG3iySlRYnqX25ZjuPfJ+5MLy+OSex1ZYQJLhj5RDfqkf2abdtnHs36ZjKjO6VB8BksOVQA==",
       "dependencies": [
         "@tabler/icons",
-        "preact@11.1.0_preact-render-to-string@6.8.2"
+        "preact@11.1.1_preact-render-to-string@6.8.2"
       ]
     },
     "@tabler/icons@3.50.0": {
@@ -1717,22 +1717,10 @@
         "source-map-js"
       ]
     },
-    "preact-render-to-string@6.8.2_preact@11.1.0": {
-      "integrity": "sha512-Hdx7cKD3AMYgt795TdddBpUbuGEFoL/VeA6s7VrBt9Gjt0r6rCy5wMp5xkDjQ9cbKj62frHsEx1x8yV6EjoOpg=="
-    },
     "preact-render-to-string@6.8.2_preact@11.1.1": {
       "integrity": "sha512-Hdx7cKD3AMYgt795TdddBpUbuGEFoL/VeA6s7VrBt9Gjt0r6rCy5wMp5xkDjQ9cbKj62frHsEx1x8yV6EjoOpg==",
       "dependencies": [
         "preact@11.1.1_preact-render-to-string@6.8.2"
-      ]
-    },
-    "preact@11.1.0_preact-render-to-string@6.8.2": {
-      "integrity": "sha512-hz1VsjWx5pSYPDVEzb9w+XyOmQpP1qW/ZEaMiYm+C8ykJr8KP+TKGZIbCW0QmZ/Yr/jg3XkZoziEWn9iWHZ9Mw==",
-      "dependencies": [
-        "preact-render-to-string@6.8.2_preact@11.1.0"
-      ],
-      "optionalPeers": [
-        "preact-render-to-string@6.8.2_preact@11.1.0"
       ]
     },
     "preact@11.1.1_preact-render-to-string@6.8.2": {
