@@ -105,6 +105,7 @@ import type { StellaStatus } from "./shared/wire.ts";
 import { StellaMachine } from "./vm/machine.ts";
 import { createVmScreen } from "./vm/screen.ts";
 import { createVmTools } from "./vm/tools.ts";
+import { createVmSemanticTools } from "./vm/semantic.ts";
 import type { StellaRuntime } from "./vm/runtime.ts";
 import {
   type AgentRepo,
@@ -1534,6 +1535,7 @@ export class LumiscaCore {
           handover: this.handoverFor(session.id),
         }),
       ],
+      semanticTools: createVmSemanticTools({ exec }),
       handoverHub: this.handoverFor(session.id),
       routineTools: createRoutineTools({
         repo: this.routines,

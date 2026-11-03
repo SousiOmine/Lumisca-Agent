@@ -97,6 +97,42 @@ export const VM_CONTAINERFILE_NAME = "Containerfile";
  * convention, so a skill the agent writes is one it can also read). */
 export const VM_SKILLS_DIR = `${VM_WORKDIR}/.agents/skills`;
 
+/** The session bus `entry.sh` starts, at a fixed path.
+ *
+ * Fixed because the server enters the machine with `podman exec`, which
+ * inherits nothing from the container's first process: an autolaunched bus
+ * (`dbus-launch`) has a different address on every start and could never be
+ * found. The Containerfile exports the same address so a shell the agent runs
+ * by hand reaches the same bus; the contract check proves it against the
+ * running container. */
+export const VM_DBUS_SOCKET = "/tmp/lumisca-dbus/session.sock";
+export const VM_DBUS_ADDRESS = `unix:path=${VM_DBUS_SOCKET}`;
+
+/** The gsettings key that makes a GTK application load its ATK bridge. *
+ * `entry.sh` sets it before anything else starts, because an app reads it once
+ * at start-up: a process that began while it was false never appears on the
+ * accessibility bus, whatever is set later. This is the single switch the
+ * machine's semantic tools depend on. */
+export const VM_A11Y_GSETTINGS_KEY =
+  "org.gnome.desktop.interface toolkit-accessibility";
+
+/** How many wheel notches one scroll amount means.
+ *
+ * The tool says "positive scrolls down"; this is the unit that sentence
+ * counts in. It lives here because three places describe the same rule: the
+ * tool's schema, the tool's result text, and the screen mapper that turns the
+ * amount into wheel clicks. */
+export const VM_SCROLL_NOTCH = 100;
+/** Most notches one call may send (a stray large amount must not spin a list
+ * for minutes). */
+export const VM_SCROLL_MAX_NOTCHES = 20;
+
+/** The helper the semantic tools run inside the machine (`vm_find` / `vm_do`
+ * / `vm_wait`): a Python program over `python3-pyatspi`. Written into the
+ * image by the Containerfile from `helper/`, so the copy on disk and the copy
+ * that runs are the same file (see the digest label). */
+export const VM_A11Y_HELPER = "/usr/local/lib/lumisca/a11y.py";
+
 /** Timeouts for the container operations. Building takes minutes on a first
  * run (a Debian base plus Chromium); everything else is a local call.
  * `podman cp` moves the agent's home when the machine is replaced, so it gets

@@ -24,6 +24,7 @@ import { createVmManager } from "../packages/core/vm/container.ts";
 import { createVmExec } from "../packages/core/vm/container.ts";
 import { runVmCommand } from "../packages/core/vm/command.ts";
 import { VM_CONTAINER_NAME, VM_DISPLAY } from "../packages/core/vm/contract.ts";
+import { createVmSemanticTools } from "../packages/core/vm/semantic.ts";
 import { stellaContainerDir } from "../packages/server/paths.ts";
 import { repoRoot } from "./lib.ts";
 
@@ -125,6 +126,25 @@ log(
       new Uint8Array(shot.stdout.slice(0, 4)).join(",")
     })`
     : `screenshot FAILED: ${new TextDecoder().decode(shot.stderr)}`,
+);
+
+// The semantic tools the agent gets (vm_find / vm_do / vm_wait): one real
+// call through the same seam the tool uses, so a machine whose accessibility
+// bus, gsettings flag or helper is wrong fails here rather than in a
+// conversation.
+const [find] = createVmSemanticTools({ exec });
+if (find === undefined) throw new Error("the semantic tool set is empty");
+const found = await find.execute(
+  "probe",
+  { app: "chromium", actionable: "yes", limit: 5 },
+  undefined,
+);
+log(
+  `vm_find: ${
+    found.content[0]?.type === "text"
+      ? found.content[0].text.split("\n")[0]
+      : "(no text)"
+  }`,
 );
 
 // 4. Stop it (unless asked to keep it for manual poking).

@@ -1,6 +1,7 @@
 import type { SkillDef } from "../discover.ts";
 import { webBrowserSkill } from "./web-browser.ts";
 import { computerUseSkill } from "./computer-use.ts";
+import { desktopAppsSkill } from "./desktop-apps.ts";
 import { agentCreateSkill } from "./agent-create.ts";
 import { codingAgentsSkill } from "./coding-agents.ts";
 import { identitySkill } from "./identity.ts";
@@ -50,6 +51,10 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
   return [
     ...(context.browser ? [webBrowserSkill()] : []),
     ...(context.computer ? [computerUseSkill()] : []),
+    // The machine's GUI, always available in a stella session: the semantic
+    // tools are preloaded there (agent/factory.ts), so the guide is what makes
+    // them the default over reading coordinates off a picture.
+    ...(context.stella === true ? [desktopAppsSkill()] : []),
     ...(context.stella === true ? [agentCreateSkill(), identitySkill()] : []),
     ...(context.subagents ? [codingAgentsSkill()] : []),
   ];

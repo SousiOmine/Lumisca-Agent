@@ -60,6 +60,13 @@ export const TOOL_VISUAL = "visual";
  * at — or click on — the machine it works in. */
 export const TOOL_VM_SCREENSHOT = "vm_screenshot";
 export const TOOL_VM_ACT = "vm_act";
+/** The machine's widgets, by role and name, through the accessibility tree
+ * (`vm_find` / `vm_do` / `vm_wait`). Preloaded for the same reason as the
+ * screen tools: an agent that does not know it can address a button by name
+ * will read coordinates off a picture for everything. */
+export const TOOL_VM_FIND = "vm_find";
+export const TOOL_VM_DO = "vm_do";
+export const TOOL_VM_WAIT = "vm_wait";
 /** Hand the machine's screen to the user and wait (`vm_ask_user`). Preloaded
  * for the same reason as the screen tools: an agent must know that asking a
  * person is an option, or it will try to type the password itself. */

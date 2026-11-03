@@ -1,7 +1,7 @@
 import { assert, assertEquals } from "@std/assert";
 import { scanVmSkillsDir } from "./skills.ts";
 import { createVmTools } from "./tools.ts";
-import { createVmScreen } from "./screen.ts";
+import { createVmScreen, scrollNotches } from "./screen.ts";
 import {
   VM_SCREEN_HEIGHT,
   VM_SCREEN_WIDTH,
@@ -225,4 +225,76 @@ Deno.test("vm tools: click carries the button and count", async () => {
   );
   const joined = calls.map((call) => call.join(" ")).join("\n");
   assert(joined.includes("click --repeat 2 right"), joined);
+});
+
+Deno.test("vm tools: a positive scroll amount scrolls DOWN", async () => {
+  // X11's wheel buttons name the direction the wheel rolls: 4 is up, 5 is
+  // down. The tool's schema says "positive scrolls down", so a positive
+  // amount must send button 5 — the opposite of the number, which is exactly
+  // the mistake this test exists to catch.
+  const { tools, calls } = enclosing();
+  const act = tools[1];
+  assert(act !== undefined);
+  await act.execute(
+    "1",
+    { action: "scroll", x: 1, y: 1, vertical: 100 },
+    undefined,
+  );
+  await act.execute(
+    "1",
+    { action: "scroll", x: 1, y: 1, vertical: -100 },
+    undefined,
+  );
+
+  const joined = calls.map((call) => call.join(" "));
+  const down = joined.find((call) => call.includes("click --repeat"));
+  assert(down !== undefined, joined.join("\n"));
+  assert(down.endsWith(" 5"), `positive vertical sent: ${down}`);
+  const up = joined.filter((call) => call.includes("click --repeat")).at(-1);
+  assert(
+    up !== undefined && up.endsWith(" 4"),
+    `negative vertical sent: ${up}`,
+  );
+});
+
+Deno.test("vm tools: a positive horizontal amount scrolls RIGHT", async () => {
+  const { tools, calls } = enclosing();
+  const act = tools[1];
+  assert(act !== undefined);
+  await act.execute(
+    "1",
+    { action: "scroll", x: 1, y: 1, horizontal: 100 },
+    undefined,
+  );
+  await act.execute(
+    "1",
+    { action: "scroll", x: 1, y: 1, horizontal: -100 },
+    undefined,
+  );
+  const joined = calls.map((call) => call.join(" "));
+  const right = joined.find((call) => call.includes("click --repeat"));
+  assert(right !== undefined && right.endsWith(" 7"), `right sent: ${right}`);
+  const left = joined.filter((call) => call.includes("click --repeat")).at(-1);
+  assert(left !== undefined && left.endsWith(" 6"), `left sent: ${left}`);
+});
+
+Deno.test("vm tools: one scroll amount is one notch, capped at 20", async () => {
+  // The unit is documented (VM_SCROLL_NOTCH per notch) and the cap keeps a
+  // stray large amount from spinning a list for minutes.
+  assertEquals(scrollNotches({ vertical: 100, horizontal: 0 }), 1);
+  assertEquals(scrollNotches({ vertical: 250, horizontal: 0 }), 3);
+  assertEquals(scrollNotches({ vertical: -100, horizontal: 0 }), 1);
+  assertEquals(scrollNotches({ vertical: 100_000, horizontal: 0 }), 20);
+  assertEquals(scrollNotches({ vertical: 0, horizontal: 0 }), 1);
+
+  const { tools, calls } = enclosing();
+  const act = tools[1];
+  assert(act !== undefined);
+  await act.execute(
+    "1",
+    { action: "scroll", x: 1, y: 1, vertical: 250 },
+    undefined,
+  );
+  const joined = calls.map((call) => call.join(" ")).join("\n");
+  assert(joined.includes("click --repeat 3 5"), joined);
 });

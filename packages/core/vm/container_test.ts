@@ -9,7 +9,9 @@ import {
 import type { VmCommandResult, VmCommandRunner } from "./command.ts";
 import { stellaAvailability } from "./availability.ts";
 import {
+  VM_A11Y_HELPER,
   VM_CONTAINER_NAME,
+  VM_DBUS_ADDRESS,
   VM_DISPLAY,
   VM_IMAGE_DIGEST_LABEL,
   VM_SCREEN_HEIGHT,
@@ -95,12 +97,21 @@ async function currentDigest(dir: string): Promise<string> {
 }
 
 /** The answer of one healthy contract probe: the single `podman exec` that
- * prints the display, the uid, the workdir, the screen size and whether sudo
- * works. A probe that cannot run leaves its own line out, so tests change one
- * line to state one drift. */
+ * prints the display, the uid, the workdir, the screen size, whether sudo
+ * works, and whether the semantic tools' bus, accessibility setting and helper
+ * are in place. A probe that cannot run leaves its own line out, so tests
+ * change one line to state one drift. */
 const CONTRACT_OK = `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
   `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
-  `sudo=ok\n`;
+  `sudo=ok\n` +
+  `dbus=${VM_DBUS_ADDRESS}\n` +
+  `toolkit=true\n` +
+  `helper={"error":"no running application matches 'definitely-not-running'"}\n`;
+
+/** The three lines the accessibility probes print when everything is in
+ * place. A test that states one drift keeps them and changes that one line. */
+const A11Y_LINES = `dbus=${VM_DBUS_ADDRESS}\ntoolkit=true\n` +
+  `helper={"error":"no running application matches 'x'"}\n`;
 
 /** The answer of one `podman container inspect`: the instance, its state and
  * the screen's published port, as the manager's template asks for them. */
@@ -251,7 +262,8 @@ Deno.test("status: a drifted contract is reported as stopped with the reason", a
       match: /printf .*DISPLAY/,
       result: ok(
         `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
-          `geometry=1024 768\nsudo=ok\n`,
+          `geometry=1024 768\nsudo=ok\n` +
+          A11Y_LINES,
       ),
     }, ...runningMachine(digest).answers],
   });
@@ -277,7 +289,8 @@ Deno.test("status: a machine without passwordless sudo is refused", async () => 
       result: ok(
         `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
           `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
-          `sudo_error=sudo: a password is required\n`,
+          `sudo_error=sudo: a password is required\n` +
+          A11Y_LINES,
       ),
     }, ...runningMachine(digest).answers],
   });
@@ -307,7 +320,8 @@ Deno.test("status: a machine whose screen is not up is refused", async () => {
       match: /printf .*DISPLAY/,
       result: ok(
         `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
-          `geometry_error=Can't open display: :99\nsudo=ok\n`,
+          `geometry_error=Can't open display: :99\nsudo=ok\n` +
+          A11Y_LINES,
       ),
     }, ...runningMachine(digest).answers],
   });
@@ -319,6 +333,119 @@ Deno.test("status: a machine whose screen is not up is refused", async () => {
       status.reason.includes("screen is not up"),
       `reason must name the screen: ${status.reason}`,
     );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: a machine without the accessibility bus is refused", async () => {
+  // The semantic tools (vm_find / vm_do / vm_wait) reach the machine's widgets
+  // through one bus at a fixed address. A machine whose bus is somewhere else
+  // answers every find with "no running application", which reads like a
+  // missing window rather than a broken machine — so it is refused at start-up.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  const { run } = makeRunner({
+    answers: [{
+      match: /printf .*DISPLAY/,
+      result: ok(
+        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+          `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+          `sudo=ok\n` +
+          `dbus=unix:path=/run/user/1000/bus\ntoolkit=true\n` +
+          `helper={"error":"no running application matches 'x'"}\n`,
+      ),
+    }, ...runningMachine(digest).answers],
+  });
+  try {
+    const status = await createVmManager({ containerDir: dir, run }).status();
+    assertEquals(status.state, "stopped");
+    assert(
+      status.reason.includes("/run/user/1000/bus"),
+      `reason must name the bus: ${status.reason}`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: a machine with accessibility off is refused", async () => {
+  // An application started while `toolkit-accessibility` was false never
+  // appears on the bus, whatever is set afterwards: the whole GUI is invisible
+  // to the semantic tools and only the pixel path works. Say so at start-up.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  const { run } = makeRunner({
+    answers: [{
+      match: /printf .*DISPLAY/,
+      result: ok(
+        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+          `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+          `sudo=ok\ndbus=${VM_DBUS_ADDRESS}\ntoolkit=false\n` +
+          `helper={"error":"no running application matches 'x'"}\n`,
+      ),
+    }, ...runningMachine(digest).answers],
+  });
+  try {
+    const status = await createVmManager({ containerDir: dir, run }).status();
+    assertEquals(status.state, "stopped");
+    assert(
+      status.reason.includes("toolkit-accessibility"),
+      `reason must name the setting: ${status.reason}`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: a machine whose accessibility helper is missing is refused", async () => {
+  // A helper that cannot run turns every semantic call into an unexplained
+  // "the machine did not answer". The probe runs it once with a request that
+  // cannot find anything, so success only proves the program runs.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  const { run } = makeRunner({
+    answers: [{
+      match: /printf .*DISPLAY/,
+      result: ok(
+        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+          `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+          `sudo=ok\ndbus=${VM_DBUS_ADDRESS}\ntoolkit=true\n` +
+          `helper_error=python3: can't open file '/usr/local/lib/lumisca/a11y.py': ` +
+          `[Errno 2] No such file or directory\n`,
+      ),
+    }, ...runningMachine(digest).answers],
+  });
+  try {
+    const status = await createVmManager({ containerDir: dir, run }).status();
+    assertEquals(status.state, "stopped");
+    assert(
+      status.reason.includes("accessibility helper did not run"),
+      `reason must name the helper: ${status.reason}`,
+    );
+    assert(status.reason.includes("a11y.py"), status.reason);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: the accessibility helper is probed with a request that finds nothing", async () => {
+  // The probe must not depend on any window existing, and it must not report
+  // a healthy bus as broken because a find legitimately matched nothing.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  const { run, calls } = makeRunner(runningMachine(digest));
+  try {
+    assertEquals(
+      (await createVmManager({ containerDir: dir, run }).status())
+        .state,
+      "running",
+    );
+    const probe = calls.find((call) => call.join(" ").includes("printf"));
+    assert(probe !== undefined);
+    const joined = probe.join(" ");
+    assert(joined.includes(VM_A11Y_HELPER), joined);
+    assert(joined.includes("definitely-not-running"), joined);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -378,6 +505,28 @@ Deno.test("container files digest: every file in the directory counts", async ()
     assert(afterEdit !== afterFile, "an edit must change the digest");
     // A directory that does not exist has no definition to hash.
     assertEquals(await containerFilesDigest(join(dir, "missing")), null);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("container files digest: a file in a subdirectory counts", async () => {
+  // The accessibility helper lives in helper/, and the Containerfile COPYs it
+  // by that path. A digest that skipped subdirectories would keep an image
+  // whose helper is out of date for the life of the installation, and the
+  // machine would answer every semantic call from the old program.
+  const dir = await containerDir();
+  try {
+    const before = await containerFilesDigest(dir);
+    await Deno.mkdir(join(dir, "helper"));
+    await Deno.writeTextFile(join(dir, "helper", "a11y.py"), "print(1)\n");
+    const after = await containerFilesDigest(dir);
+    assert(after !== before, "adding a nested file must change the digest");
+
+    // An edit inside it must too, not only its presence.
+    await Deno.writeTextFile(join(dir, "helper", "a11y.py"), "print(2)\n");
+    const edited = await containerFilesDigest(dir);
+    assert(edited !== after, "editing a nested file must change the digest");
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

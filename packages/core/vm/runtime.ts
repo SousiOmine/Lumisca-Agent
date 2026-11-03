@@ -35,6 +35,11 @@ export interface StellaRuntime {
   /** The screen tools (`vm_screenshot` / `vm_act` / `vm_ask_user`),
    * preloaded. */
   screenTools: Tool[];
+  /** The semantic tools (`vm_find` / `vm_do` / `vm_wait`), preloaded
+   * alongside the screen tools: they address the machine's widgets by role
+   * and name through the accessibility tree, which is cheaper and more
+   * precise than reading coordinates off a picture. */
+  semanticTools: Tool[];
   /** The routine tools (`routine_create` / `list` / `update` / `delete` /
    * `run`), bound to this session's agent. Discoverable through
    * tool_search, not preloaded. */

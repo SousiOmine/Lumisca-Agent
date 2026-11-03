@@ -540,15 +540,15 @@ export class AgentFactory {
     const { stella, chat, backends, browserAvailable } = where;
     if (stella !== undefined) {
       // stella's tool set: the coding tools over the machine's backends, the
-      // screen tools, and the machine's own skill catalog. `eval` is
-      // deliberately absent (see createStellaTools), and so are `ask` (no
-      // panel to answer it) and `visual`/`chat_attach` (replaced by
+      // screen and semantic tools, and the machine's own skill catalog.
+      // `eval` is deliberately absent (see createStellaTools), and so are
+      // `ask` (no panel to answer it) and `visual`/`chat_attach` (replaced by
       // send_chat, the conversation's only way to speak).
       return createStellaTools({
         backends,
         cwd: stella.cwd,
         skills: stella.skills(),
-        screen: stella.screenTools,
+        screen: [...stella.screenTools, ...stella.semanticTools],
         sendChat: {
           store: this.deps.attachments,
           sessionId: session.id,

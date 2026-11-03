@@ -16,7 +16,10 @@ import {
   TOOL_VISUAL,
   TOOL_VM_ACT,
   TOOL_VM_ASK_USER,
+  TOOL_VM_DO,
+  TOOL_VM_FIND,
   TOOL_VM_SCREENSHOT,
+  TOOL_VM_WAIT,
   TOOL_WEB_FETCH,
   TOOL_WEB_SEARCH,
   TOOL_WRITE,
@@ -245,6 +248,42 @@ const SEND_CHAT_SECTION: PromptSection = {
     "not a failure.",
 };
 
+/** The machine's widgets, in a stella session. Keyed on the tools: an agent
+ * that cannot find an element must not be told to look for one.
+ *
+ * The bullets say which of the two families to reach for, because that is the
+ * one thing neither tool's description can decide for the agent: the screen
+ * tools work in pixels and the semantic tools work in names, and the same
+ * window can be driven either way. */
+const VM_FIND_SECTION: PromptSection = {
+  name: "vm:find",
+  order: ORDER.tool + 142,
+  requires: [TOOL_VM_FIND],
+  text:
+    "- Reach for vm_find + vm_do before coordinates: a control addressed by " +
+    "role and\n  name is the control that is acted on, and the result says " +
+    "what changed.",
+};
+
+const VM_DO_SECTION: PromptSection = {
+  name: "vm:do",
+  order: ORDER.tool + 144,
+  requires: [TOOL_VM_DO],
+  text:
+    "- Use vm_do for a control and vm_act only for what has no element (a " +
+    "canvas,\n  a drag across an image, a game). Do not mix the two on the " +
+    "same target.",
+};
+
+const VM_WAIT_SECTION: PromptSection = {
+  name: "vm:wait",
+  order: ORDER.tool + 146,
+  requires: [TOOL_VM_WAIT],
+  text:
+    "- Wait on a condition (vm_wait with role/name/text) instead of a fixed " +
+    "delay:\n  a guessed pause is a race with whatever is still loading.",
+};
+
 /** The machine's screen, in a stella session. Both halves are keyed on the
  * tools: an agent that cannot look must not be told to check what it sees,
  * and one that cannot act must not be told to click.
@@ -256,9 +295,9 @@ const VM_SCREENSHOT_SECTION: PromptSection = {
   name: "vm:screenshot",
   order: ORDER.tool + 140,
   requires: [TOOL_VM_SCREENSHOT],
-  text:
-    "- Use vm_screenshot before acting on a GUI and again after, to see what " +
-    "the\n  action did.",
+  text: "- Use vm_screenshot to SEE a window (layout, whether something " +
+    "rendered, what an\n  image shows) and again after an action, to see " +
+    "what it did.",
 };
 
 const VM_ACT_SECTION: PromptSection = {
@@ -456,6 +495,9 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   BASH_SECTION,
   ASYNC_BASH_SECTION,
   SKILL_SECTION,
+  VM_FIND_SECTION,
+  VM_DO_SECTION,
+  VM_WAIT_SECTION,
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
   VM_ASK_USER_SECTION,

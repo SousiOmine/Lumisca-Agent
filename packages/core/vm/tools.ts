@@ -43,7 +43,11 @@ function requireCoord(name: string, value: number | undefined): number {
   }
   return requireInteger(name, value);
 }
-import { VM_SCREEN_HEIGHT, VM_SCREEN_WIDTH } from "./contract.ts";
+import {
+  VM_SCREEN_HEIGHT,
+  VM_SCREEN_WIDTH,
+  VM_SCROLL_NOTCH,
+} from "./contract.ts";
 import type { VmScreen } from "./screen.ts";
 
 /** One action may wait at most this long (a deliberate pause for a page to
@@ -73,10 +77,12 @@ const actSchema = object({
       "`Tab`, `ctrl+a`, `super` (key only)",
   )),
   vertical: optional(integer(
-    "Scroll amount: positive scrolls down, negative up (scroll only)",
+    `Scroll amount in wheel notches (${VM_SCROLL_NOTCH} per notch, at most ` +
+      "20 notches): positive scrolls down, negative up (scroll only)",
   )),
   horizontal: optional(integer(
-    "Scroll amount: positive scrolls right, negative left (scroll only)",
+    `Scroll amount in wheel notches (${VM_SCROLL_NOTCH} per notch, at most ` +
+      "20 notches): positive scrolls right, negative left (scroll only)",
   )),
   duration_ms: optional(integer(
     `Milliseconds to wait (wait only, at most ${MAX_WAIT_MS})`,

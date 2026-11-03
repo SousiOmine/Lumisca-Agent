@@ -8,7 +8,12 @@
  * The screen is therefore a fixed 1280x800 (vm/contract.ts) and a capture is
  * never resized: what the agent sees is 1:1 with what it clicks.
  */
-import { VM_SCREEN_HEIGHT, VM_SCREEN_WIDTH } from "./contract.ts";
+import {
+  VM_SCREEN_HEIGHT,
+  VM_SCREEN_WIDTH,
+  VM_SCROLL_MAX_NOTCHES,
+  VM_SCROLL_NOTCH,
+} from "./contract.ts";
 import type { VmExec, VmExecBytes } from "./container.ts";
 
 /** Screenshot bounds: enough for a 1280x800 PNG and nothing more. */
@@ -216,25 +221,23 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
     async scroll(x, y, delta, signal) {
       requireOnScreen(x, y);
       await xdotool(exec, ["mousemove", String(x), String(y)], signal);
-      // xdotool's wheel buttons: 4 up, 5 down, 6 left, 7 right.
+      // X11's wheel buttons are 4 up, 5 down, 6 left, 7 right, and they name
+      // the direction the WHEEL rolls rather than the direction the content
+      // moves: button 5 rolls down and the page scrolls down. A positive
+      // amount therefore means "down"/"right", matching the tool's schema
+      // ("positive scrolls down") and what a person reading a page expects.
       const vertical = delta.vertical === 0
         ? []
-        : [delta.vertical > 0 ? "4" : "5"];
+        : [delta.vertical > 0 ? "5" : "4"];
       const horizontal = delta.horizontal === 0
         ? []
         : [delta.horizontal > 0 ? "7" : "6"];
       const buttons = [...vertical, ...horizontal];
       if (buttons.length === 0) return;
-      const repeats = Math.max(
-        1,
-        Math.min(
-          20,
-          Math.ceil(
-            Math.max(Math.abs(delta.vertical), Math.abs(delta.horizontal)) /
-              100,
-          ),
-        ),
-      );
+      // One wheel click is one notch, so an amount is divided by the notch
+      // size (see VM_SCROLL_NOTCH) and capped: a request cannot spin a list
+      // for minutes.
+      const repeats = scrollNotches(delta);
       for (const button of buttons) {
         await xdotool(
           exec,
@@ -244,4 +247,25 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
       }
     },
   };
+}
+
+/** How many wheel notches one scroll amount means.
+ *
+ * Exported so the tool's result text and its schema describe the same rule
+ * the machine applies: `vertical: 100` is one notch, and the cap keeps a
+ * stray `vertical: 100000` from holding the run. */
+export function scrollNotches(delta: {
+  vertical: number;
+  horizontal: number;
+}): number {
+  return Math.max(
+    1,
+    Math.min(
+      VM_SCROLL_MAX_NOTCHES,
+      Math.ceil(
+        Math.max(Math.abs(delta.vertical), Math.abs(delta.horizontal)) /
+          VM_SCROLL_NOTCH,
+      ),
+    ),
+  );
 }

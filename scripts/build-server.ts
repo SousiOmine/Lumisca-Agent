@@ -184,11 +184,30 @@ async function stageStellaContainer(outDir: string): Promise<void> {
   const source = join(repoRoot, "packages", "core", "vm", "container");
   const target = join(outDir, VM_CONTAINER_DIR_NAME);
   await Deno.remove(target, { recursive: true }).catch(() => {});
+  await copyContainerTree(source, target);
+  console.log(`stella container files: ${target}`);
+}
+
+/**
+ * Copy the container definition beside the binary.
+ *
+ * One level of subdirectories is included (the helper the image installs
+ * lives in `helper/`): the Containerfile names that path, so a copy that
+ * flattened it would build an image whose `COPY` finds nothing.
+ */
+async function copyContainerTree(
+  source: string,
+  target: string,
+): Promise<void> {
   await Deno.mkdir(target, { recursive: true });
   for await (const entry of Deno.readDir(source)) {
-    if (!entry.isFile) continue;
     const from = join(source, entry.name);
     const to = join(target, entry.name);
+    if (entry.isDirectory) {
+      await copyContainerTree(from, to);
+      continue;
+    }
+    if (!entry.isFile) continue;
     await Deno.copyFile(from, to);
     // entry.sh must stay executable: podman runs it as the container's CMD,
     // and a copied mode is not guaranteed by every platform's filesystem.
@@ -196,7 +215,6 @@ async function stageStellaContainer(outDir: string): Promise<void> {
       await Deno.chmod(to, 0o755).catch(() => {});
     }
   }
-  console.log(`stella container files: ${target}`);
 }
 
 const options = parseArgs(Deno.args);

@@ -13,11 +13,14 @@ import { basename, join } from "node:path";
 import { concatBytes } from "../bytes.ts";
 import { firstLine } from "../lines.ts";
 import {
+  VM_A11Y_GSETTINGS_KEY,
+  VM_A11Y_HELPER,
   VM_BUILD_TIMEOUT_MS,
   VM_CONTAINER_NAME,
   VM_CONTAINERFILE_NAME,
   VM_CONTRACT_CACHE_MS,
   VM_COPY_TIMEOUT_MS,
+  VM_DBUS_ADDRESS,
   VM_DISPLAY,
   VM_GID,
   VM_IMAGE_DIGEST_LABEL,
@@ -140,6 +143,17 @@ if error=$(sudo -n true 2>&1); then
 else
   printf 'sudo_error=%s\\n' "$error"
 fi
+printf 'dbus=%s\\n' "$DBUS_SESSION_BUS_ADDRESS"
+if toolkit=$(gsettings get org.gnome.desktop.interface toolkit-accessibility 2>&1); then
+  printf 'toolkit=%s\\n' "$toolkit"
+else
+  printf 'toolkit_error=%s\\n' "$toolkit"
+fi
+if error=$(python3 "$1" '{"command":"find","app":"definitely-not-running"}' 2>&1); then
+  printf 'helper=%s\\n' "$error"
+else
+  printf 'helper_error=%s\\n' "$error"
+fi
 `;
 
 /** What one inspect answered about the container. */
@@ -196,35 +210,52 @@ function podman(args: readonly string[]): string[] {
  * SHA-256 over every file in the directory the machine is built from, or null
  * when the directory cannot be read.
  *
- * The whole directory, not only the Containerfile: it COPYs entry.sh, and a
- * changed entry script is as much a different machine as a changed
- * instruction. The name goes in with the bytes, so adding, removing or
- * renaming a file also changes the digest. Exported for the test that proves
- * an edit changes it.
+ * The whole directory, not only the Containerfile: it COPYs entry.sh and the
+ * accessibility helper, and a changed helper is as much a different machine as
+ * a changed instruction. Subdirectories are walked too (the helper lives in
+ * `helper/`), and a file's path relative to the directory goes in with the
+ * bytes, so adding, removing, renaming or moving a file also changes the
+ * digest. Exported for the test that proves an edit changes it.
  */
 export async function containerFilesDigest(
   containerDir: string,
 ): Promise<string | null> {
-  let names: string[];
+  let files: { path: string; bytes: Uint8Array }[];
   try {
-    names = [...Deno.readDirSync(containerDir)]
-      .filter((entry) => entry.isFile)
-      .map((entry) => entry.name)
-      .sort();
+    files = await readContainerFiles(containerDir);
   } catch {
     return null;
   }
+  files.sort((a, b) => a.path.localeCompare(b.path));
   const encoder = new TextEncoder();
   const parts: Uint8Array[] = [];
-  for (const name of names) {
-    parts.push(encoder.encode(`${name}\u0000`));
-    parts.push(await Deno.readFile(join(containerDir, name)));
+  for (const file of files) {
+    parts.push(encoder.encode(`${file.path}\u0000`));
+    parts.push(file.bytes);
     parts.push(encoder.encode("\u0000"));
   }
   const digest = await crypto.subtle.digest("SHA-256", concatBytes(parts));
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+/** Every file under the container directory, keyed by its relative path with
+ * "/" separators. */
+async function readContainerFiles(
+  dir: string,
+  prefix = "",
+): Promise<{ path: string; bytes: Uint8Array }[]> {
+  const out: { path: string; bytes: Uint8Array }[] = [];
+  for (const entry of Deno.readDirSync(dir)) {
+    const path = `${prefix}${entry.name}`;
+    if (entry.isDirectory) {
+      out.push(...await readContainerFiles(join(dir, entry.name), `${path}/`));
+    } else if (entry.isFile) {
+      out.push({ path, bytes: await Deno.readFile(join(dir, entry.name)) });
+    }
+  }
+  return out;
 }
 
 export function createVmManager(options: VmManagerOptions): VmManager {
@@ -511,16 +542,18 @@ export function createVmManager(options: VmManagerOptions): VmManager {
   /** Check the running container against the contract values. Returns the
    * mismatch as a sentence, or null when everything matches. A drifted image
    * would break screenshots (DISPLAY), file ownership (uid/gid), the shell
-   * (workdir) or root inside the machine (sudo) silently, so start-up
+   * (workdir), root inside the machine (sudo) or the semantic tools (the
+   * session bus, the accessibility setting, the helper) silently, so start-up
    * refuses it instead.
    *
    * One `podman exec`, not four: the values are printed by a single shell,
-   * which also answers whether the screen is up and whether sudo works
-   * without a password. Each of those used to be its own spawn, and the
-   * screen probe ran twice on every start. */
+   * which also answers whether the screen is up, whether sudo works without a
+   * password, whether the accessibility bus is where the helpers expect it,
+   * and whether the helper itself runs. Each of those used to be its own
+   * spawn (or its own tool call, which is later and worse). */
   async function verifyContract(): Promise<string | null> {
     const result = await run(
-      podmanExec(["sh", "-c", CONTRACT_PROBE_SCRIPT]),
+      podmanExec(["sh", "-c", CONTRACT_PROBE_SCRIPT, "sh", VM_A11Y_HELPER]),
       { timeoutMs: 60_000, maxOutput: 8192 },
     );
     // Each line is `name=value`; a probe that could not run leaves its line
@@ -565,6 +598,31 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     if (!fields.has("sudo")) {
       return `the machine's "${VM_USER}" account cannot run sudo without a ` +
         `password: ${firstLine(fields.get("sudo_error") ?? "")}`;
+    }
+    // The semantic tools (vm_find / vm_do / vm_wait) read the machine's
+    // widgets through one accessibility bus, reached by a fixed address, and
+    // only see an application that was started with accessibility on. Each of
+    // the three fails in a way that looks like something else — a find that
+    // answers "no such application", an app whose web area is empty — so the
+    // machine is refused at start-up instead of at the first tool call.
+    const bus = fields.get("dbus");
+    if (bus !== VM_DBUS_ADDRESS) {
+      return `the machine's session bus is ${bus || "(unset)"}, expected ` +
+        `${VM_DBUS_ADDRESS}: the semantic tools could not reach it`;
+    }
+    const toolkit = fields.get("toolkit");
+    if (toolkit === undefined) {
+      return `the machine cannot read its accessibility setting: ` +
+        `${firstLine(fields.get("toolkit_error") ?? "")}`;
+    }
+    if (toolkit.trim() !== "true") {
+      return `the machine's ${VM_A11Y_GSETTINGS_KEY} is ` +
+        `${toolkit.trim() || "(unset)"}, expected true: applications started ` +
+        `without it never appear on the accessibility bus`;
+    }
+    if (!fields.has("helper")) {
+      return `the machine's accessibility helper did not run: ` +
+        `${firstLine(fields.get("helper_error") ?? "")}`;
     }
     return null;
   }

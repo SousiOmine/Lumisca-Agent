@@ -143,6 +143,11 @@ export function createCodingTools(
  * - the screen tools (`vm_screenshot` / `vm_act`) are preloaded, because a
  *   GUI is the one thing a shell cannot reach and an agent must know it can
  *   look;
+ * - the semantic tools (`vm_find` / `vm_do` / `vm_wait`) are preloaded next
+ *   to them: addressing a control by role and name is the default way to
+ *   drive a GUI, and an agent that only knows about coordinates reads pixels
+ *   for everything. Both families ship because they answer different
+ *   questions — see vm/semantic.ts;
  * - `history_search` is preloaded: the conversation outlives any one
  *   context window, and the turns a checkpoint condensed away are still in
  *   the message store — but the agent has to know it can ask for them.
@@ -185,6 +190,8 @@ export function createStellaTools(options: {
   /** Skills discovered for this session (vm/skills.ts), already merged with
    * the built-ins the session is entitled to. */
   skills: SkillDef[];
+  /** The machine's screen tools (`vm_screenshot` / `vm_act` / `vm_ask_user`)
+   * and semantic tools (`vm_find` / `vm_do` / `vm_wait`), preloaded. */
   screen: Tool[];
   /** `send_chat`: the ONE way this conversation's agent says anything — the
    * words, a card, and files, in one call. Without it the agent cannot

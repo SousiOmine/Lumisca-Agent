@@ -17,10 +17,19 @@ ENV LANG=C.UTF-8
 
 # git and tmux are part of the working environment (the agent commits and
 # runs long jobs); the X stack is what a GUI program needs to exist at all.
+#
+# `at-spi2-core` and `libglib2.0-bin` are the accessibility stack: the agent
+# reads and drives a program's widgets through AT-SPI (vm_find / vm_do)
+# instead of guessing at pixels. `libglib2.0-bin` carries `gsettings`, which
+# entry.sh uses to switch accessibility on for every app it launches;
+# `python3-pyatspi` is the client the in-machine helper is written against.
+# Without these an app is invisible to the agent's semantic tools, so they
+# are part of the contract (vm/contract.ts) rather than an optional extra.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb x11-utils x11vnc openbox xdotool scrot imagemagick \
       websockify \
       xterm fonts-noto-cjk dbus-x11 \
+      at-spi2-core libglib2.0-bin python3-pyatspi \
       chromium \
       curl ca-certificates \
       git tmux ripgrep less \
@@ -70,9 +79,24 @@ RUN printf 'agent ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/agent \
 COPY entry.sh /usr/local/bin/entry.sh
 RUN chmod 0755 /usr/local/bin/entry.sh
 
+# The accessibility helper the semantic tools (`vm_find` / `vm_do` / `vm_wait`)
+# run inside the machine. Copied into the image rather than shipped as text on
+# every call: it is a program of a few hundred lines, and `podman exec` starts
+# a process per tool call.
+COPY helper/a11y.py /usr/local/lib/lumisca/a11y.py
+RUN chmod 0644 /usr/local/lib/lumisca/a11y.py
+
 # xdotool, scrot and Chromium read DISPLAY from the environment; entry.sh's
 # export does not reach `podman exec`.
 ENV DISPLAY=:99
+
+# The session bus the semantic tools talk to. entry.sh starts it at exactly
+# this path and switches accessibility on; the accessibility bus itself is
+# found through it (org.a11y.Bus), so nothing else needs to be named. A
+# `podman exec` from the server inherits none of entry.sh's exports, so the
+# address is repeated here (and in vm/contract.ts, which is verified against
+# the running container).
+ENV DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/lumisca-dbus/session.sock
 
 USER agent
 WORKDIR /home/agent

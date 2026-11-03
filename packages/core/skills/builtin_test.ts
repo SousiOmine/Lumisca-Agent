@@ -53,13 +53,17 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
     stella: true,
     subagents: false,
   });
-  assertEquals(skills.map((s) => s.name), ["agent-create", "identity"]);
+  assertEquals(skills.map((s) => s.name), [
+    "desktop-apps",
+    "agent-create",
+    "identity",
+  ]);
 
   // Each guide teaches the tool_search → tool_call path, because neither
   // tool is preloaded (they live in the session's main registry).
-  const agentCreate = skills[0]!;
+  const agentCreate = skills[1]!;
   assert(agentCreate.description.includes("tool_search"));
-  const identity = skills[1]!;
+  const identity = skills[2]!;
   assert(identity.description.includes("tool_search"));
 
   const agentGuide = await loadSkillContent(agentCreate);
@@ -82,6 +86,35 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
     builtinSkills({ browser: false, computer: false, subagents: false }).some((
       s,
     ) => s.name === "agent-create" || s.name === "identity"),
+    false,
+  );
+});
+
+Deno.test("builtinSkills advertises desktop-apps only in a stella session", async () => {
+  const stella = builtinSkills({
+    browser: false,
+    computer: false,
+    stella: true,
+    subagents: false,
+  });
+  const skill = stella.find((s) => s.name === "desktop-apps");
+  assert(skill !== undefined, "stella sessions drive the machine's GUI");
+  // The guide's whole job is to make the semantic path the default, so it has
+  // to name the tools the agent will call and say which one wins.
+  const guide = await loadSkillContent(skill!);
+  for (
+    const tool of ["vm_find", "vm_do", "vm_wait", "vm_screenshot", "vm_act"]
+  ) {
+    assert(guide.includes(tool), `the guide does not mention ${tool}`);
+  }
+  assert(guide.includes("delivered_unverified"));
+
+  // Code mode drives THIS machine's screen with the computer-use tools, not
+  // the machine's own GUI, so it must not advertise this one.
+  assertEquals(
+    builtinSkills({ browser: false, computer: true, subagents: false }).some((
+      s,
+    ) => s.name === "desktop-apps"),
     false,
   );
 });
