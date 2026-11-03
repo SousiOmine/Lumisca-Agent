@@ -20,6 +20,14 @@ const LANGUAGE_NAMES: Record<Locale, string> = {
   en: "English",
 };
 
+/** The English name of a locale, as the model knows it. Shared by the
+ * prompt fragment and the context publication that now carries the rule
+ * (see agent/language-context.ts), so the two cannot name a language
+ * differently. */
+export function languageName(locale: Locale): string {
+  return LANGUAGE_NAMES[locale];
+}
+
 /** The guideline bullet that fixes the reply language. */
 export function outputLanguageBullet(language: Locale): string {
   return `- Write every reply in ${LANGUAGE_NAMES[language]}, the language ` +

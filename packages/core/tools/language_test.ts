@@ -35,37 +35,34 @@ Deno.test("outputLanguageBullet: names the language, in English, for both", () =
   assertEquals(ja.includes("do not switch"), true);
 });
 
-Deno.test("the language rule is the prompt's only guideline", () => {
-  // The per-tool guidance was removed (see system-prompt.ts): a tool's own
-  // description already says what it does, so repeating it in the prompt
-  // only cost every request. What is left is the rule no tool can carry.
+Deno.test("the system prompt carries no guidelines at all", () => {
+  // Both kinds are gone: the per-tool guidance duplicated what each tool's
+  // description already says, and the output-language rule is published as a
+  // context message now (agent/language-context.ts), because it is a setting
+  // that can change while the session lives.
   const prompt = buildSystemPrompt(workspace, {
     tools: TOOLS,
     language: "en",
   });
-  const bullets = prompt.split("\n").filter((line) => line.startsWith("- "));
-  assertEquals(bullets, [outputLanguageBullet("en")]);
-  // The per-tool guidance is gone with it.
+  assertEquals(prompt.split("\n").filter((line) => line.startsWith("- ")), []);
   assertEquals(prompt.includes("- Prioritize correctness."), false);
+  assertEquals(prompt.includes("Write every reply in"), false);
 });
 
-Deno.test("buildSystemPrompt: the session language decides the rule", () => {
+Deno.test("buildSystemPrompt: the prompt is the same whatever the language", () => {
+  // The prompt is a snapshot and the language is a setting: keeping the rule
+  // here froze the language at session creation (see language-context.ts for
+  // where it lives now). The option is still accepted so callers do not have
+  // to know, but it changes nothing.
   const ja = buildSystemPrompt(workspace, { tools: [], language: "ja" });
   const en = buildSystemPrompt(workspace, { tools: [], language: "en" });
-  assertEquals(ja.includes("Write every reply in Japanese"), true);
-  assertEquals(en.includes("Write every reply in English"), true);
-  assertEquals(ja.includes("Write every reply in English"), false);
-  // Omitted → the catalogue's fallback language, never a missing rule.
-  const fallback = buildSystemPrompt(workspace, { tools: [] });
-  assertEquals(
-    fallback.includes(outputLanguageBullet(DEFAULT_LOCALE)),
-    true,
-  );
+  assertEquals(ja, en);
+  assertEquals(ja.includes("Write every reply in"), false);
 });
 
-Deno.test("buildChatSystemPrompt: chat sessions get the rule too", () => {
+Deno.test("buildChatSystemPrompt: no rule in the prompt either", () => {
   const prompt = buildChatSystemPrompt({ tools: [], language: "ja" });
-  assertEquals(prompt.includes("Write every reply in Japanese"), true);
+  assertEquals(prompt.includes("Write every reply in"), false);
 });
 
 Deno.test("subagentSystemPrompt: reports come back in the session language", () => {

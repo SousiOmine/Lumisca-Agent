@@ -824,51 +824,37 @@ Deno.test("migration drops the legacy settings table", async () => {
 
 // --- chat sessions (ワークスペースなしのシンプルチャット) ----------------
 
-Deno.test("session language: the prompt is generated with the setting, then frozen", async () => {
-  const { core, providerId, modelId } = setup();
+Deno.test("session language: the setting reaches an open session, not a frozen prompt", async () => {
+  const { core, faux, providerId, modelId } = setup();
   try {
     // The language is a server setting (the settings dialog writes exactly
-    // this), read when the session's prompt is generated.
+    // this). It is published as a context message, not baked into the
+    // prompt, because it can change while a session lives (see
+    // agent/language-context.ts).
     core.setSetting(LANGUAGE_KEY, "en");
     const english = await core.createSession({
       modelProvider: providerId,
       modelId,
     });
-    const englishPrompt = core.getAgent(english.id)!.agent.state.systemPrompt;
-    assert(
-      englishPrompt.includes("Write every reply in English"),
-      "an English session must be told to answer in English",
-    );
-    // The provisional session name follows the same language.
+    // The provisional session name follows the same language (it is a
+    // one-time write, so it keeps the language it was made in).
     assert(
       english.name.startsWith("Session "),
       `english session name: ${english.name}`,
     );
 
-    // Changing the setting afterwards does not touch an existing session:
-    // its prompt is the snapshot taken at creation, so the agent keeps
-    // answering in the language the session started in.
+    // Switching the setting now reaches the session that is already open —
+    // the reason the rule moved out of the prompt snapshot. The publication
+    // happens before a run (like the date), so one is started.
     core.setSetting(LANGUAGE_KEY, "ja");
-    core.closeSession(english.id);
-    await core.openSession(english.id);
-    assertEquals(
-      core.getAgent(english.id)!.agent.state.systemPrompt,
-      englishPrompt,
-    );
-
-    // A session created after the switch starts in the new language.
-    const japanese = await core.createSession({
-      modelProvider: providerId,
-      modelId,
-    });
-    const japanesePrompt = core.getAgent(japanese.id)!.agent.state.systemPrompt;
+    faux.setResponses([fauxAssistantMessage("ok")]);
+    await promptSession(core, english.id, "hello");
+    const contexts = core.getAgent(english.id)!.messages
+      .filter((message) => message.role === "context")
+      .map((message) => message.body);
     assert(
-      japanesePrompt.includes("Write every reply in Japanese"),
-      "a Japanese session must be told to answer in Japanese",
-    );
-    assert(
-      japanese.name.startsWith("セッション "),
-      `japanese session name: ${japanese.name}`,
+      contexts.some((body) => body.includes("Write every reply in Japanese")),
+      contexts.join("\n---\n"),
     );
   } finally {
     core.close();

@@ -142,9 +142,9 @@ Deno.test("chat prompt lists only the chat guidelines", () => {
     tools: [TOOL_ASK, TOOL_TODO, TOOL_SKILL],
   });
   assert(prompt.includes("You are Lumisca, a helpful AI assistant."));
-  // The chat prompt carries the same single rule as every other prompt; the
-  // per-tool guidance is the tools' own descriptions now.
-  assert(prompt.includes("Write every reply in"));
+  // No guidelines at all: the per-tool guidance is the tools' own
+  // descriptions, and the reply language is a context message now.
+  assertEquals(prompt.includes("Write every reply in"), false);
   assertEquals(
     prompt.includes("`[exit code: N]`"),
     false,

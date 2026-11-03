@@ -22,6 +22,7 @@ import { SessionToolRegistries } from "../tools/registries.ts";
 import { createSkillCatalogProvider } from "../skills/catalog.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
 import { createDateProvider } from "./date-context.ts";
+import { createLanguageProvider } from "./language-context.ts";
 import { createModelProvider } from "./model-context.ts";
 import { createMcpToolsProvider } from "../mcp/context.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
@@ -676,6 +677,11 @@ export class AgentFactory {
       createMcpToolsProvider({
         searchable: () => !registries.main.isEmpty,
       }),
+      // The language the session answers in. Published rather than put in
+      // the prompt for the same reason as the date and the model: it is a
+      // setting, so it can change while the session lives, and the prompt is
+      // a snapshot that never changes.
+      createLanguageProvider({ language: () => this.deps.getLanguage() }),
     ];
   }
 

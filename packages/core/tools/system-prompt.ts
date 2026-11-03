@@ -11,7 +11,6 @@ import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 const VM_WORKDIR = "/home/agent";
 const VM_AGENTS_DIR = `${VM_WORKDIR}/agents`;
 const VM_USER = "agent";
-import { outputLanguageBullet } from "./language.ts";
 
 /** How a session's system prompt is built: the workspace framing for a
  * coding session, or the folder-less framing of a chat session. */
@@ -23,18 +22,6 @@ export interface SystemPromptOptions {
    * it for the session's whole life (see tools/language.ts). Omitted →
    * the default language (tests and callers without a setting). */
   language?: Locale;
-}
-
-/** The one rule every session carries: which language to answer in.
- *
- * The per-tool guidance is NOT repeated here. A tool's own description
- * already states what it does and when to reach for it, so a bullet that
- * repeated it only cost every request (and drifted from the description it
- * duplicated). What is left is the rule no tool can carry — the output
- * language — written in English like the rest of the prompt, with only the
- * language name varying. */
-function guidelines(language: Locale): string {
-  return `\n\n${outputLanguageBullet(language)}\n`;
 }
 
 /**
@@ -53,7 +40,7 @@ export function buildSystemPrompt(
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
-${folders}${guidelines(options.language ?? DEFAULT_LOCALE)}
+${folders}
 `;
 }
 
@@ -114,7 +101,7 @@ files only when the user asks.
 You talk with the user in a single, ongoing chat. To send a message or reply
 to the user you MUST use the send_chat tool: anything you write without it is
 not shown to them. Whatever you want the user to read, send it explicitly with
-send_chat.${guidelines(options.language ?? DEFAULT_LOCALE)}
+send_chat.
 `;
 }
 
@@ -132,8 +119,6 @@ export function buildChatSystemPrompt(
 You are running without a file workspace: the file, shell and sub-agent tools
 are unavailable, so you cannot read, write or execute anything on this
 machine. Answer questions, explain things, and help with text-based tasks.
-Images can be attached to prompts.${
-    guidelines(options.language ?? DEFAULT_LOCALE)
-  }
+Images can be attached to prompts.
 `;
 }
