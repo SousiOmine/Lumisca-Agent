@@ -36,6 +36,20 @@ Deno.test("unknown static assets return 404, not the HTML shell", async () => {
     assertEquals(png.status, 200);
     assertEquals(png.headers.get("content-type"), "image/png");
     assertEquals((await png.arrayBuffer()).byteLength > 0, true);
+    // The favicon follows the same cache rule as the app's other files: a
+    // validator to revalidate against, not a bare content-type (it is on the
+    // token-free list, so every page load may ask for it).
+    const faviconEtag = png.headers.get("etag");
+    assert(faviconEtag !== null, "the favicon must carry a validator");
+    assertEquals(
+      png.headers.get("cache-control"),
+      "private, max-age=0, must-revalidate",
+    );
+    const revalidated = await fetch(`${base}/favicon.png`, {
+      headers: { "if-none-match": faviconEtag },
+    });
+    assertEquals(revalidated.status, 304);
+    assertEquals(await revalidated.text(), "");
     const stale = await fetch(`${base}/assets/app.deadbeef.js`);
     assertEquals(stale.status, 404);
     const content = await stale.text();

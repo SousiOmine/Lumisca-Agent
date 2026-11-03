@@ -4,6 +4,7 @@ import { errorMessage } from "@lumisca/core";
 import type { PeerStatus } from "@lumisca/core/shared";
 import { AppError } from "./util.ts";
 import type { FederationClient } from "../federation.ts";
+import { probeHealth } from "../health-probe.ts";
 
 /** How long the peer-reachability probe may take (see the route below): long
  * enough for a slow tailnet hop, short enough that one unreachable peer does
@@ -82,12 +83,14 @@ export function federationRoutes(fed: FederationClient): Hono {
     const peers = await Promise.all(
       fed.peers().map(async (peer) => {
         try {
-          await fed.requestWithTimeout(
-            peer,
-            "GET",
-            "/api/health",
-            PEER_PROBE_TIMEOUT_MS,
-          );
+          // The one health probe (health-probe.ts), with the short budget a
+          // list can afford: "is this machine up", not "is it this server".
+          const health = await probeHealth({
+            url: peer.url,
+            token: peer.token,
+            timeoutMs: PEER_PROBE_TIMEOUT_MS,
+          });
+          if (health === undefined) throw new Error("no answer");
           const status: PeerStatus = {
             id: peer.id,
             name: peer.name,

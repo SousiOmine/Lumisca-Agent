@@ -15,6 +15,7 @@
  * launcher's unhandled-rejection handler, print, and let the process drain
  * its event loop into a silent exit 0.
  */
+import { probeHealth as probeHealthShared } from "../health-probe.ts";
 import {
   DESKTOP_ENV_KEY,
   type EnvironmentSource,
@@ -88,20 +89,19 @@ export function defaultServiceDeps(
   };
 }
 
+/** How long the installer waits for one health answer while polling a
+ * process it just started. */
+const STARTUP_PROBE_TIMEOUT_MS = 2_000;
+
 /** Default health probe of the started server: the API answers only with the
- * credential, so the token travels with the request. It lives here rather
- * than with `install`'s other checks because the default deps are the only
- * caller (`install` asks through `deps.probe`), and reaching back into the
- * verb would be a cycle. */
+ * credential, so the token travels with the request. The probe itself is
+ * health-probe.ts's (the federation client and the peer list ask the same
+ * question); what lives here is the timeout an installer uses. */
 async function probeHealth(url: string, token: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${url}/api/health`, {
-      headers: { "x-lumisca-token": token },
-      signal: AbortSignal.timeout(2_000),
-    });
-    return response.ok;
-  } catch {
-    // Not listening yet, or already gone: the caller is polling.
-    return false;
-  }
+  const body = await probeHealthShared({
+    url,
+    token,
+    timeoutMs: STARTUP_PROBE_TIMEOUT_MS,
+  });
+  return body !== undefined;
 }

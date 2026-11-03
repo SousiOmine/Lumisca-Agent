@@ -3,6 +3,7 @@ import { createLogger } from "@lumisca/core";
 import { isLoopbackHost } from "@lumisca/core/shared";
 import type { ContentfulStatusCode } from "hono/http-status";
 import { AppError } from "./routes/util.ts";
+import { isSelf } from "./health-probe.ts";
 
 /** Error thrown when a peer cannot be reached or answers with an error;
  * carries the HTTP status to return to the UI. */
@@ -422,19 +423,15 @@ export class FederationClient {
     return probe;
   }
 
-  private async probeIdentity(peer: ConnectionEntry): Promise<boolean> {
-    const selfId = this.getSelfId();
-    if (selfId === "") return false;
-    const response = await fetch(
-      `${peer.url.replace(/\/+$/, "")}/api/health`,
-      {
-        headers: { "x-lumisca-token": peer.token },
-        signal: AbortSignal.timeout(IDENTITY_PROBE_MS),
-      },
-    );
-    if (!response.ok) return false;
-    const body = await response.json() as { instanceId?: unknown };
-    return typeof body.instanceId === "string" && body.instanceId === selfId;
+  private probeIdentity(peer: ConnectionEntry): Promise<boolean> {
+    // The one health probe (health-probe.ts): a peer answered by another
+    // instanceId is not this hub, however it was addressed.
+    return isSelf({
+      url: peer.url,
+      token: peer.token,
+      timeoutMs: IDENTITY_PROBE_MS,
+      selfId: this.getSelfId(),
+    });
   }
 
   /** Drop all peer connections and reconnect to the current registry. */

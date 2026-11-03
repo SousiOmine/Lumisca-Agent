@@ -17,6 +17,7 @@ import { safePageHost } from "./security.ts";
 import { renderHtmlDocument } from "./render.ts";
 import {
   appFileHeaders,
+  bytesEtag,
   contentEtag,
   etagMatches,
 } from "./app-file-headers.ts";
@@ -170,14 +171,32 @@ export function registerPages(
   });
 
   app.get("/favicon.png", async (c) => {
+    let png: Uint8Array;
     try {
-      const png = await assets.getFavicon();
-      return c.newResponse(png.buffer as ArrayBuffer, 200, {
-        "content-type": "image/png",
-      });
+      png = await assets.getFavicon();
     } catch {
       return c.text("not found", 404);
     }
+    // The favicon is the one app file that used to answer with a bare
+    // content-type: no validator and no policy, so every page load fetched
+    // it again (and it is on the token-free list, so a browser may ask for
+    // it on any page). It changes only with a release, which rebuilds the
+    // bundle: revalidate like the other app files.
+    const etag = bytesEtag(png);
+    const headers = {
+      "content-type": "image/png",
+      ...appFileHeaders("revalidate", etag),
+    };
+    if (etagMatches(c.req.header("if-none-match"), etag)) {
+      return c.body(null, 304, headers);
+    }
+    // `c.body` wants a body whose buffer is an ArrayBuffer; the bytes
+    // come from the bundle and are copied exactly as they are.
+    return c.newResponse(
+      new Uint8Array(png).buffer as ArrayBuffer,
+      200,
+      headers,
+    );
   });
 
   return { renderPage };

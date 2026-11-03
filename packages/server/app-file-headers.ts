@@ -69,6 +69,18 @@ export function contentEtag(body: string): string {
   return `W/"${hash.toString(16)}"`;
 }
 
+/** The same validator over raw bytes (the favicon, which is a PNG rather
+ * than text). Kept beside the string version so both use one FNV-1a
+ * definition of the hash, and a caller never formats the tag itself. */
+export function bytesEtag(body: Uint8Array): string {
+  let hash = 0xcbf29ce484222325n;
+  for (let i = 0; i < body.length; i++) {
+    hash ^= BigInt(body[i]!);
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return `W/"${hash.toString(16)}"`;
+}
+
 /** Whether a request's `If-None-Match` accepts this validator. Handles the
  * forms a browser sends (`*`, one tag, a comma-separated list) and compares
  * with the weak prefix ignored, which is what RFC 9110 says a weak

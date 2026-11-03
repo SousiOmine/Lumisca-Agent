@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { TOKEN_HEADER } from "./health-probe.ts";
 import { getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
 import { MCP_OAUTH_CALLBACK_PATH } from "@lumisca/core";
@@ -169,7 +170,7 @@ export function installSecurityMiddleware(
       if (!unguardedPath(c.req.path)) {
         const cookieName = tokenCookieName(c.req.header("host"));
         const remembered = getCookie(c, cookieName);
-        const presented = c.req.header("x-lumisca-token") ??
+        const presented = c.req.header(TOKEN_HEADER) ??
           c.req.query("token");
         if (presented !== token && remembered !== token) {
           // A browser (Accept: text/html) is told what to do; every other
@@ -201,7 +202,7 @@ export function installSecurityMiddleware(
   const corsHandler = cors({
     origin: (origin, c) =>
       isAllowedOrigin(origin, c.req.header("host")) ? origin : undefined,
-    allowHeaders: ["content-type", "x-lumisca-token"],
+    allowHeaders: ["content-type", TOKEN_HEADER],
   });
   app.use("/api/*", corsHandler);
   app.use("/ws", corsHandler);
