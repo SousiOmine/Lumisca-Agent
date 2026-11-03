@@ -1,13 +1,13 @@
 import { LumiscaDb } from "./db/mod.ts";
 import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
 import { createLogger } from "./log.ts";
-import { dirname, extname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ClientEvent } from "./types/event.ts";
 import type { AgentMessage } from "./ai/types.ts";
 import type { SessionInfo } from "./types/session.ts";
 import type { StellaEntry } from "./types/stella-conversation.ts";
-import { stellaEntryCursorOf, stellaEntryOf } from "./agent/stella-stream.ts";
+import { stellaEntryOf } from "./agent/stella-stream.ts";
 import type { Workspace } from "./types/workspace.ts";
 import {
   createFileSettingsRepo,
@@ -34,7 +34,6 @@ import type {
   WebSearchSettingsView,
   WebSearchTestView,
 } from "./shared/mod.ts";
-import { RASTER_IMAGE_MIME_BY_EXTENSION } from "./shared/mod.ts";
 import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
 import type { CredentialStore, Provider } from "./ai/types.ts";
 import type {
@@ -54,7 +53,7 @@ import type {
   UserProviderSummary,
 } from "./models/user-providers.ts";
 import type { ThinkingLevel } from "./shared/mod.ts";
-import type { StellaAgentSummary } from "./shared/mod.ts";
+import type { GoalInfo, StellaAgentSummary } from "./shared/mod.ts";
 import type { CatalogStatus } from "./models/mod.ts";
 import type { AskAnswer } from "./shared/mod.ts";
 import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
@@ -65,7 +64,6 @@ import type { PendingQuestion } from "./tools/ask.ts";
 import {
   COMPUTER_USE_ENABLED_KEY,
   CONNECTIONS_KEY,
-  formatSessionName,
   LANGUAGE_KEY,
   type Locale,
   parseCompactionPolicyInput,
@@ -78,6 +76,7 @@ import { CoreError, errorMessage } from "./errors.ts";
 import { createWorkspaceRepo } from "./workspace/repo.ts";
 import { WorkspaceService } from "./workspaces.ts";
 import { ModelService } from "./services/models.ts";
+import { type DefaultModel, SessionCatalog } from "./services/sessions.ts";
 import { WebSearchConfigService } from "./services/webSearch.ts";
 import { McpConfigService } from "./services/mcp.ts";
 import { WorkspaceConfigService } from "./services/workspaces.ts";
@@ -120,17 +119,8 @@ import { createAgentCreateTool } from "./stella/tools.ts";
 import { latestPreview } from "./stella/previews.ts";
 import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
 import { createHistorySearchTool } from "./session/history.ts";
-import {
-  messageCursorOf,
-  startsTranscriptTurn,
-  type WindowPage,
-  type WindowQuery,
-} from "./session/transcript-window.ts";
-import { readTranscriptPage } from "./session/transcript-pager.ts";
-import {
-  type ContextUsageSummary,
-  summarizeContextUsage,
-} from "./shared/context-usage.ts";
+import type { WindowPage, WindowQuery } from "./session/transcript-window.ts";
+import type { ContextUsageSummary } from "./shared/context-usage.ts";
 import {
   createIdentityProvider,
   createIdentityTool,
@@ -152,16 +142,9 @@ import {
   VmCommandRunner as VmCommandRunnerImpl,
 } from "./vm/shell.ts";
 import { VmFileBackend } from "./vm/fs.ts";
-import { sessionSkills } from "./tools/toolsets.ts";
 import type { SkillDef, SkillInfo } from "./skills/discover.ts";
-import { skillInfo } from "./skills/discover.ts";
 import { DEFAULT_AGENT_NAME, normalizeAgentName } from "./stella/agents.ts";
-import {
-  MAX_PROMPT_IMAGE_BYTES,
-  readUpload,
-  saveUploads,
-  type UploadFile,
-} from "./vm/uploads.ts";
+import type { UploadFile } from "./vm/uploads.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import { McpService } from "./mcp/service.ts";
 import type { McpTestResult } from "./mcp/service.ts";
@@ -541,11 +524,49 @@ export class LumiscaCore {
       });
     this.workspaceConfig = new WorkspaceConfigService(this.workspaces);
     this.services = {
+      sessions: undefined as unknown as SessionCatalog,
       models: this.modelService,
       webSearch: this.webSearchConfig,
       mcp: this.mcpConfig,
       workspaces: this.workspaceConfig,
     };
+    // The session catalog reads its collaborators through the facade
+    // (`sessions`, `pool`, `messages`, `visuals`, `attachments`, `stella`),
+    // which are all assigned above; it is built last for that reason.
+    const self = this as unknown as {
+      services: { sessions: SessionCatalog };
+    };
+    self.services.sessions = new SessionCatalog({
+      sessions: this.sessions,
+      messages: this.messages,
+      pool: this.pool,
+      visuals: this.visuals,
+      attachments: this.attachments,
+      stella: this.stella,
+      models: {
+        getModel: (provider, modelId) =>
+          this.models.getModel(provider, modelId),
+        getSessionModel: (provider, modelId) =>
+          this.models.getSessionModel(provider, modelId),
+        thinkingState: (provider, modelId, model) =>
+          this.models.thinkingState(provider, modelId, model),
+        getThinkingLevel: (provider, modelId) =>
+          this.models.getThinkingLevel(provider, modelId),
+      },
+      requireModel: (provider, modelId) => this.requireModel(provider, modelId),
+      requireWorkspace: (id) => this.requireWorkspace(id),
+      chatWorkspace: () => this.getOrCreateChatWorkspace(),
+      resolveDefaultModel: (provider, modelId) =>
+        this.resolveDefaultModel(provider, modelId),
+      decorate: (session) => this.decorateSession(session),
+      emit: (event) => this.emit(event),
+      forget: (id) => this.forgetSession(id),
+      language: () => this.getLanguage(),
+      browserAvailable: () => this.browserBackend !== undefined,
+      computerAvailable: () => this.computerHostForSession() !== undefined,
+      globalSkillDirs: this.globalSkillDirs,
+      stellaSkills: () => this.stella.skills(),
+    });
   }
 
   /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
@@ -1413,7 +1434,11 @@ export class LumiscaCore {
     ]);
     this.stellaAgents.touch(agent.id);
     if (existing !== undefined) {
-      const view = this.modelViewOf(existing.id);
+      const rows = this.messages.listModelView(existing.id);
+      const view = {
+        messages: rows.map((row) => row.message),
+        baseIndex: this.messages.count(existing.id, "all") - rows.length,
+      };
       this.pool.open(
         existing,
         this.requireWorkspace(existing.workspaceId),
@@ -1672,459 +1697,138 @@ export class LumiscaCore {
 
   // --- MCP configuration ----------------------------------------------------
 
-  // --- sessions -----------------------------------------------------------
+  // --- sessions (delegated to SessionCatalog) ------------------------------
 
-  /** The model a new session would get: the last used model of a
-   * configured provider, or the first enabled model of a configured one.
-   * Null when no model can be resolved — including "no provider is
-   * configured at all", in which case the UI leaves the model unset and
-   * refuses to start a session (there is nothing that could stream).
-   * Includes the model's thinking level so the draft tab can show the
-   * right control. */
-  async getDefaultModel(): Promise<
-    {
-      provider: string;
-      modelId: string;
-      thinkingLevel: ThinkingLevel;
-      thinkingLevels: ThinkingLevel[];
-    } | null
-  > {
-    try {
-      const model = await this.resolveDefaultModel();
-      return {
-        ...model,
-        ...this.models.thinkingState(
-          model.provider,
-          model.modelId,
-          this.models.getModel(model.provider, model.modelId),
-        ),
-      };
-    } catch {
-      return null;
-    }
+  /** The model a new session would get, with its thinking control data. */
+  getDefaultModel(): Promise<DefaultModel | null> {
+    return this.services.sessions.getDefaultModel();
   }
 
-  async createSession(input: CreateSessionInput): Promise<SessionInfo> {
-    // No workspaceId → a chat session in the folder-less chat workspace
-    // (created on first use).
-    const workspace = input.workspaceId !== undefined
-      ? this.requireWorkspace(input.workspaceId)
-      : this.getOrCreateChatWorkspace();
-    const model = await this.resolveDefaultModel(
-      input.modelProvider,
-      input.modelId,
-    );
-    // The system prompt is generated (and persisted) when the session is
-    // opened below: it depends on the tool set the session actually gets,
-    // which only the agent factory knows.
-    const session = this.sessions.create({
-      workspaceId: workspace.id,
-      // The provisional name is replaced by the title generator right
-      // after the first message; it is stored, so it keeps the language it
-      // was created with.
-      name: input.name ?? formatSessionName(this.getLanguage()),
-      modelProvider: model.provider,
-      modelId: model.modelId,
-    });
-    this.pool.open(session, workspace, []);
-    // The event carries the decorated session (chat flag etc.), the same
-    // shape every other SessionInfo consumer sees — never the raw row.
-    // Re-read it: opening generated and persisted the system prompt.
-    const decorated = this.decorateSession(
-      this.sessions.get(session.id) ?? session,
-    );
-    this.emit({ type: "session_created", session: decorated });
-    return decorated;
+  createSession(input: CreateSessionInput): Promise<SessionInfo> {
+    return this.services.sessions.createSession(input);
   }
 
   listSessions(workspaceId?: string): SessionInfo[] {
-    return this.sessions.list(workspaceId).map((s) => this.decorateSession(s));
+    return this.services.sessions.listSessions(workspaceId);
   }
 
   getSession(id: string): SessionInfo | undefined {
-    const session = this.sessions.get(id);
-    return session ? this.decorateSession(session) : undefined;
+    return this.services.sessions.getSession(id);
   }
 
-  /** The file one of a session's published visuals names, with the content
-   * type to serve it as (`GET /api/sessions/:id/visual/:name`). Undefined
-   * when the session has no such asset — an unknown name, or one whose file
-   * is gone. The store validates the name, so a caller cannot ask for
-   * anything outside the session's own directory. */
+  /** The file one of a session's published visuals names. */
   resolveSessionVisual(
     sessionId: string,
     name: string,
   ): Promise<{ path: string; mimeType: string } | undefined> {
-    return this.visuals.resolve(sessionId, name);
+    return this.services.sessions.resolveSessionVisual(sessionId, name);
   }
 
-  /** The file one of a session's attachments names, with the content type
-   * and download name to serve it as
-   * (`GET /api/sessions/:id/attachment/:name`). Undefined when the session
-   * has no such file. The store validates the name, so a caller cannot ask
-   * for anything outside the session's own directory. */
+  /** The file one of a session's attachments names. */
   resolveSessionAttachment(
     sessionId: string,
     name: string,
-  ): Promise<
-    { path: string; mimeType: string; downloadName: string } | undefined
-  > {
-    return this.attachments.resolve(sessionId, name);
+  ): ReturnType<SessionCatalog["resolveSessionAttachment"]> {
+    return this.services.sessions.resolveSessionAttachment(sessionId, name);
   }
 
-  /**
-   * Load a persisted session into memory: the MODEL's view, not the whole
-   * transcript.
-   *
-   * A conversation that runs for years holds far more than any request can
-   * carry, and the agent loop only ever sends what follows the newest
-   * checkpoint. Loading the rest cost a JSON decode of every row on every
-   * open and kept it in memory for the life of the session. The screen is
-   * unaffected: a client pages back through the conversation from the STORE
-   * (readTranscript / readStellaConversation), which reads the rows it draws
-   * and no others.
-   */
   openSession(id: string): SessionInfo {
-    const session = this.sessions.get(id);
-    if (!session) {
-      throw new CoreError(`Session not found: ${id}`, "not_found");
-    }
-    if (!this.pool.get(id)) {
-      const workspace = this.requireWorkspace(session.workspaceId);
-      const view = this.modelViewOf(id);
-      this.pool.open(session, workspace, view.messages, view.baseIndex);
-    }
-    return this.decorateSession(session);
+    return this.services.sessions.openSession(id);
   }
 
-  /** The messages the model is shown: from the newest compaction checkpoint
-   * on (see MessageRepo.listModelView), with the whole-transcript position
-   * they start at. That position is what lets the agent keep the store's
-   * coordinates while holding only the tail. */
-  private modelViewOf(id: string): {
-    messages: AgentMessage[];
-    baseIndex: number;
-  } {
-    const rows = this.messages.listModelView(id);
-    return {
-      messages: rows.map((row) => row.message),
-      baseIndex: this.messages.count(id, "all") - rows.length,
-    };
+  closeSession(id: string): Promise<void> {
+    return this.services.sessions.closeSession(id);
   }
 
-  async closeSession(id: string): Promise<void> {
-    await this.pool.close(id);
-    // The session's in-memory state (and with it the revision count) is
-    // gone: a client still holding the old count sees a difference and
-    // re-reads the snapshot — the right reaction, since the reopened agent
-    // starts from what was persisted.
-    this.forgetSession(id);
-  }
-
-  async deleteSession(id: string): Promise<void> {
-    // Start the teardown first (its synchronous prefix runs inline),
-    // then drop the persisted row synchronously so the session is
-    // synchronously gone for callers that do not await.
-    const closing = this.pool.delete(id);
-    this.sessions.delete(id);
-    this.forgetSession(id);
-    await closing;
-    // The published visuals and the files the agent sent belong to the
-    // session: once it is gone nothing can reference them (a message that
-    // did is gone too).
-    await this.visuals.deleteSession(id);
-    await this.attachments.deleteSession(id);
+  deleteSession(id: string): Promise<void> {
+    return this.services.sessions.deleteSession(id);
   }
 
   getAgent(id: string): SessionAgent | undefined {
-    return this.pool.get(id);
+    return this.services.sessions.getAgent(id);
   }
 
-  /** The session's current todo plan (the todo tool); empty when the
-   * session is not open or has no plan yet. Lets clients restore the
-   * progress panel after a WS drop or page reload. */
   getTodo(id: string): TodoPhase[] {
-    return this.pool.getTodo(id);
+    return this.services.sessions.getTodo(id);
   }
 
-  /** Snapshots of the session's sub-agent tasks (the task tool); empty
-   * when the session is not open or has no tasks yet. Restores the tasks
-   * panel after a WS drop or page reload. */
   getTasks(id: string): TaskInfo[] {
-    return this.pool.getTasks(id);
+    return this.services.sessions.getTasks(id);
   }
 
-  /** Snapshots of the session's background commands (the async_bash tool);
-   * empty when the session is not open or has no commands yet. Restores
-   * the background panel after a WS drop or page reload. */
   getBackground(id: string): BackgroundCommandInfo[] {
-    return this.pool.getBackground(id);
+    return this.services.sessions.getBackground(id);
   }
 
-  /** The questions the session is still waiting on (the ask tool); empty
-   * when nothing is pending. Read with the transcript by the resync
-   * snapshot so a client that (re)connects while a run is blocked on an
-   * ask can still answer it (question events are never replayed). */
   getPendingQuestions(id: string): PendingQuestion[] {
-    return this.pool.getPendingQuestions(id);
+    return this.services.sessions.getPendingQuestions(id);
   }
 
-  /** The skills a session in this workspace would get: the same discovery
-   * the agent's skill tool and the skill catalog provider run
-   * (sessionSkills), so the composer's `/skill` palette lists exactly what
-   * the agent can load — including the browser gate of the built-in skills.
-   * Omitted `workspaceId` lists a chat session's skills (global and
-   * built-in only), the same "omitted → chat" contract as createSession. */
+  /** The skills a session in this workspace would get. */
   listSkills(workspaceId?: string): SkillInfo[] {
-    const folders = workspaceId === undefined
-      ? []
-      : this.requireWorkspace(workspaceId).folders;
-    return sessionSkills(folders, {
-      browserAvailable: this.browserBackend !== undefined,
-      computerAvailable: this.computerHostForSession() !== undefined,
-      globalDirs: this.globalSkillDirs,
-    }).map(skillInfo);
+    return this.services.sessions.listSkills(workspaceId);
   }
 
-  /** The stella conversation's skill catalog: what its agent can actually
-   * load (the machine's own skills, the user's global set, the built-ins).
-   * Separate from `listSkills` because the machine's skills do not exist on
-   * this machine's disk — a workspace lookup would answer a different
-   * question. */
+  /** The stella conversation's skill catalog. */
   listStellaSkills(): SkillInfo[] {
-    return this.stella.skills().map(skillInfo);
+    return this.services.sessions.listStellaSkills();
   }
 
-  /** The session's active goal (`/goal` mode), if any. Persisted in the
-   * sessions table so a reopened session shows it again via the resync
-   * endpoint; the right-side panel renders it while present. */
-  getGoal(id: string): import("./shared/goal.ts").GoalInfo | undefined {
-    return this.sessions.getGoal(id);
+  getGoal(id: string): GoalInfo | undefined {
+    return this.services.sessions.getGoal(id);
   }
 
-  /** Cancel the session's active goal (the panel's cancel button). Clears
-   * the persisted goal and stops the agent's loop; no-op when no goal
-   * runs. The agent emits `goal_done` so the panel clears. */
   cancelGoal(id: string): void {
-    this.pool.require(id).cancelGoal();
-    this.sessions.touch(id);
+    this.services.sessions.cancelGoal(id);
   }
 
-  /** The last failure of a session, if any. Cleared when a new run starts.
-   * Lets non-WebSocket clients (curl, the desktop shell) learn about
-   * failures of fire-and-forget prompts instead of losing them. */
   getSessionLastError(id: string): string | undefined {
-    return this.pool.lastError(id);
+    return this.services.sessions.getSessionLastError(id);
   }
 
-  /**
-   * One window of a session's transcript, for the clients that draw it.
-   *
-   * The page is read from the STORE, not from the agent's memory: the agent
-   * holds the model's view (the newest checkpoint onward), while the
-   * conversation a reader scrolls back through can be far longer. Paging it
-   * out of memory meant loading the whole transcript to draw a screen. See
-   * session/transcript-pager.ts for why a page begins at a turn and why the
-   * cursor is an identity.
-   *
-   * Returns undefined when the session is not open: the caller opens it
-   * first (the snapshot endpoint does), so a client is never served a page
-   * of a transcript nobody is running.
-   */
+  /** One window of a session's transcript, for the clients that draw it. */
   readTranscript(
     id: string,
     query: WindowQuery,
   ): WindowPage<AgentMessage> | undefined {
-    if (this.pool.get(id) === undefined) return undefined;
-    const page = readTranscriptPage(this.messages, id, query, {
-      startsWindow: (message) => startsTranscriptTurn(message),
-      rows: "all",
-      project: (row) => ({
-        item: row.message,
-        cursor: messageCursorOf(row.message),
-      }),
-    });
-    return (query.older ?? null) === null ? this.withLiveTail(id, page) : page;
+    return this.services.sessions.readTranscript(id, query);
   }
 
-  /** Append the rows a run has appended but not yet written, so a snapshot
-   * taken mid-run shows the prompt the reply is answering (see
-   * unpersistedTail). Only the newest page carries them: an older page is
-   * asking about history, which is all persisted. */
-  private withLiveTail(
-    id: string,
-    page: WindowPage<AgentMessage>,
-  ): WindowPage<AgentMessage> {
-    const tail = this.unpersistedTail(id);
-    return tail.length === 0
-      ? page
-      : { items: page.items.concat(tail), older: page.older };
-  }
-
-  /** The session's context usage over the WHOLE transcript.
-   *
-   * The agent holds only the model's view (the newest checkpoint onward), so
-   * the summary comes from the store: every assistant row that reported
-   * usage contributes, wherever it sits. The meter must not shrink because a
-   * reader scrolled away, and it must not grow back when a compaction drops
-   * the older rows from memory. */
+  /** The session's context usage over the WHOLE transcript. */
   getSessionUsage(id: string): ContextUsageSummary {
-    return summarizeContextUsage(this.messages.usageRows(id));
+    return this.services.sessions.getSessionUsage(id);
   }
 
-  /** The conversation a stella agent already has, or undefined before its
-   * first open. The client addresses a conversation by agent (stella has no
-   * session concept), so this is the lookup that needs no session id. */
+  /** The conversation a stella agent already has, if any. */
   findStellaSession(agentId: string): SessionInfo | undefined {
-    const session = this.sessions.getByAgent(agentId);
-    return session === undefined ? undefined : this.decorateSession(session);
+    return this.services.sessions.findStellaSession(agentId);
   }
 
-  /**
-   * The rows of one session the store does NOT hold yet: the tail of the
-   * agent's view past its persisted prefix.
-   *
-   * A run appends its prompt (and its context publications) to the
-   * transcript before those rows are written, so a client that reads the
-   * snapshot while the agent is working would otherwise see the reply with
-   * no question in front of it — the one moment the transcript must be
-   * honest about.
-   */
-  private unpersistedTail(id: string): AgentMessage[] {
-    const agent = this.pool.get(id);
-    if (agent === undefined) return [];
-    const view = agent.messages;
-    const count = agent.persistedCount;
-    return count >= view.length ? [] : view.slice(count);
-  }
-
-  /**
-   * One window of a stella conversation, in the shape its client draws: the
-   * entries, oldest first, with the cursor for the next older window. Same
-   * contract as readTranscript, except that a conversation has no turns — an
-   * entry is a screen unit of its own, so any entry can start a window.
-   * Undefined when the conversation is not open (the caller opens it first).
-   */
+  /** One window of a stella conversation, in the shape its client draws. */
   readStellaConversation(
     id: string,
     query: WindowQuery,
   ): WindowPage<StellaEntry> | undefined {
-    if (this.pool.get(id) === undefined) return undefined;
-    // Project first, page over the projection: a page must count what the
-    // conversation shows, not what the model's history holds (most of a
-    // stella transcript is tool traffic nobody sees). `rows: "conversation"`
-    // is what makes the page a count of those entries — without it a page of
-    // 40 filled up on tool rows during a run and projected to nothing, and
-    // the newest window answered "empty, with nothing before it".
-    const page = readTranscriptPage(this.messages, id, query, {
-      startsWindow: () => true,
-      rows: "conversation",
-      project: (row) => {
-        const entry = stellaEntryOf(row.message);
-        return entry === null
-          ? undefined
-          : { item: entry, cursor: stellaEntryCursorOf(entry) };
-      },
-    });
-    if ((query.older ?? null) !== null) return page;
-    // The prompt of a run in flight is not written yet; a conversation read
-    // mid-run must still show it (see unpersistedTail).
-    const tail = entriesOf(this.unpersistedTail(id));
-    return tail.length === 0
-      ? page
-      : { items: page.items.concat(tail), older: page.older };
+    return this.services.sessions.readStellaConversation(id, query);
   }
 
-  /** Fire-and-forget prompt: completion and failures arrive as events
-   * (agent_end / session_error). The HTTP layer should use this instead of
-   * holding a connection open for the whole run. `images` (base64) are
-   * attached to the user message for vision-capable models. While the
-   * session is streaming the prompt is steered into the running loop
-   * (processed at the next turn boundary) instead of being refused.
-   * `mode` (optional) marks the prompt as generated by an agent mode:
-   * the transcript then stores a ModeMessage (short text + badge in the
-   * UI) instead of a plain user message. */
-  /**
-   * Put a prompt's attached files into the machine.
-   *
-   * The one async step of sending a prompt: everything after it (building
-   * the message, starting the run) is the same work as a prompt without
-   * files, and stays synchronous so the steer path and every existing caller
-   * keep their contract.
-   *
-   * A stella session has a machine to put them in, and the model is told
-   * their paths (see vm/uploads.ts). Every other session has no such place:
-   * its file tools work on the user's own folders, and handing the bytes to
-   * the model instead would be a different feature, with its own limits. A
-   * file sent to a code-mode session is therefore refused by name rather
-   * than silently dropped.
-   */
-  async savePromptUploads(
+  /** Put a prompt's attached files into the machine. */
+  savePromptUploads(
     id: string,
     uploads: readonly UploadFile[],
   ): Promise<PromptFileRef[]> {
-    const session = this.sessions.get(id);
-    if (session === undefined) {
-      throw new CoreError(`Session not found: ${id}`, "not_found");
-    }
-    if (session.stella !== true || session.agentId === undefined) {
-      throw new CoreError(
-        "Attached files can only be sent to a stella conversation: this " +
-          "session's tools work on the user's own folders, so there is " +
-          "nowhere to put them",
-        "invalid",
-      );
-    }
-    const exec = this.stella.exec();
-    if (exec === undefined) {
-      throw new CoreError(
-        "The machine is not available, so the files cannot be put in it",
-        "unavailable",
-      );
-    }
-    return await saveUploads(uploads, { exec, agentId: session.agentId });
+    return this.services.sessions.savePromptUploads(id, uploads);
   }
 
-  /**
-   * Read one file a prompt brought back out of the machine, or undefined
-   * when the machine no longer has it.
-   *
-   * The machine is the record: a file the agent moved, edited or deleted is
-   * gone from the conversation too (the same rule as a picture), and a
-   * client is told so instead of being served bytes from somewhere else. An
-   * unreadable machine is a different sentence and throws.
-   */
-  async resolvePromptUpload(
+  /** Read one file a prompt brought back out of the machine. */
+  resolvePromptUpload(
     agentId: string,
     ref: string,
   ): Promise<{ bytes: Uint8Array; mimeType: string } | undefined> {
-    const exec = this.stella.exec();
-    const execBytes = this.stella.execBytes();
-    if (exec === undefined || execBytes === undefined) {
-      throw new CoreError(
-        "The machine is not available, so the file cannot be read",
-        "unavailable",
-      );
-    }
-    const read = await readUpload(exec, execBytes, {
-      agentId,
-      ref,
-      maxBytes: MAX_PROMPT_IMAGE_BYTES,
-    });
-    if (read === undefined) return undefined;
-    // The type comes from the extension the store chose, not from the bytes:
-    // the name is what the store generated, and a prompt picture was stored
-    // under its own type's extension (see the prompt route).
-    const extension = extname(read.name).toLowerCase();
-    const mimeType = RASTER_IMAGE_MIME_BY_EXTENSION[extension] ??
-      "application/octet-stream";
-    return { bytes: read.bytes, mimeType };
+    return this.services.sessions.resolvePromptUpload(agentId, ref);
   }
 
-  /** Send a prompt into a session (fire-and-forget). `files` are the paths
-   * `savePromptUploads` returned: the message carries them so the
-   * conversation can draw them, and the model is told those paths through
-   * the message's `modelContent` — never through the text the user sees. */
+  /** Send a prompt into a session (fire-and-forget). */
   startPrompt(
     id: string,
     text: string,
@@ -2132,91 +1836,43 @@ export class LumiscaCore {
     mode?: ModePrompt,
     files?: PromptFileRef[],
   ): void {
-    const agent = this.pool.require(id);
-    this.sessions.touch(id);
-    agent.promptWhileRunning(text, images, mode, undefined, files);
+    this.services.sessions.startPrompt(id, text, images, mode, files);
   }
 
   abort(id: string): void {
-    this.pool.require(id).abort();
+    this.services.sessions.abort(id);
   }
 
-  /** Resolve a pending ask (the ask tool) of a session with the user's
-   * answers, letting the blocked run continue. Throws when the session is
-   * closed, the ask is gone (answered or cancelled), or the answers do not
-   * match the pending questions. */
   answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void {
-    this.pool.require(id).answerQuestion(toolCallId, answers);
+    this.services.sessions.answerQuestion(id, toolCallId, answers);
   }
 
-  /** Undo the transcript from a user message onward (see
-   * SessionAgent.rewind): an active run is aborted first. Resolves once
-   * the truncation is complete (memory + database). */
-  async rewind(id: string, timestamp: number): Promise<void> {
-    const agent = this.pool.require(id);
-    this.sessions.touch(id);
-    await agent.rewind(timestamp);
+  rewind(id: string, timestamp: number): Promise<void> {
+    return this.services.sessions.rewind(id, timestamp);
   }
 
-  /** Condense the session's older history into a checkpoint on demand (the
-   * `/compact [instructions]` command), even below the automatic pressure
-   * threshold. `instructions` is the user's extra focus for the summary.
-   * Returns how many messages were summarized, or undefined when nothing
-   * could be condensed (no safe span, or the summarization failed — the
-   * transcript is unchanged either way). */
-  async compactSession(
+  compactSession(
     id: string,
     instructions?: string,
   ): Promise<number | undefined> {
-    const agent = this.pool.require(id);
-    this.sessions.touch(id);
-    const result = await agent.compactNow(instructions);
-    return result?.summarized.length;
+    return this.services.sessions.compactSession(id, instructions);
   }
 
-  /** Switch the model used by a session (persisted). Retired models
-   * (removed upstream, kept for existing sessions) cannot be newly
-   * selected. Throws `conflict` while the session is streaming (rebuilding
-   * a live agent would orphan the running loop). */
   setSessionModel(id: string, provider: string, modelId: string): void {
-    const session = this.sessions.get(id);
-    if (!session) {
-      throw new CoreError(`Session not found: ${id}`, "not_found");
-    }
-    if (this.models.getModel(provider, modelId) === undefined) {
-      throw new CoreError(
-        `Model not found: ${provider}/${modelId}`,
-        "not_found",
-      );
-    }
-    this.pool.applyChange(
-      [{ ...session, modelProvider: provider, modelId }],
-      () => {
-        this.sessions.updateModel(id, provider, modelId);
-      },
-    );
+    this.services.sessions.setSessionModel(id, provider, modelId);
   }
 
-  /** Rename a session (persisted) and notify clients, so open tabs show
-   * the new title. The single path for every rename (auto-generated
-   * titles and any future manual rename). */
   setSessionName(id: string, name: string): void {
-    this.sessions.rename(id, name);
-    this.emit({ type: "session_renamed", sessionId: id, name });
+    this.services.sessions.setSessionName(id, name);
   }
 
-  /** The thinking level stored for a model (the level its sessions use). */
   getModelThinkingLevel(providerId: string, modelId: string): ThinkingLevel {
-    return this.models.getThinkingLevel(providerId, modelId);
+    return this.services.sessions.getModelThinkingLevel(providerId, modelId);
   }
 
   /** Set the thinking level of a model (persisted, per model). Open
    * sessions using the model pick the change up in place from their next
-   * run onward — the agent is not rebuilt, so this never throws `conflict`
-   * while a session is streaming. The in-flight run keeps the level it
-   * started with; newly created sessions use the new level from the start.
-   * Returns the level that will actually be used (unsupported requests are
-   * clamped). */
+   * run onward. */
   setModelThinkingLevel(
     providerId: string,
     modelId: string,
@@ -2256,6 +1912,7 @@ export class LumiscaCore {
    * new code should reach through here.
    */
   readonly services: {
+    readonly sessions: SessionCatalog;
     readonly models: ModelService;
     readonly webSearch: WebSearchConfigService;
     readonly mcp: McpConfigService;
