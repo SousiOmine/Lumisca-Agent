@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useSyncExternalStore } from "preact/compat";
-import { errorMessage as errorText } from "@lumisca/core/shared";
+import { useCallback, useSyncExternalStore } from "preact/compat";
 import { api } from "./api.ts";
-import { createStore } from "./store.ts";
+import { createResourceStore } from "./store.ts";
 import type { ConnectionEntry } from "./types.ts";
 
 /**
@@ -14,38 +13,36 @@ import type { ConnectionEntry } from "./types.ts";
  * fetch returned.
  */
 
-interface ConnectionsState {
+interface ConnectionsValue {
   /** The registry entries, in the server's order. */
   entries: ConnectionEntry[];
-  /** True once a read settled (success or failure). */
-  loaded: boolean;
-  /** Last read failure, or null. */
-  error: string | null;
 }
 
-const store = createStore<ConnectionsState>({
-  entries: [],
-  loaded: false,
-  error: null,
+const store = createResourceStore<ConnectionsValue, string>({
+  initial: { entries: [] },
+  load: async () => ({ entries: (await api.getConnections()).connections }),
+  same: (a, b) => sameEntries(a.entries, b.entries),
 });
 
-/** One read in flight, shared by every caller. */
-let reading: Promise<void> | null = null;
+/** Two registries are the same when every entry matches field by field: a
+ * read that returns the stored list unchanged must not re-render. */
+function sameEntries(
+  a: readonly ConnectionEntry[],
+  b: readonly ConnectionEntry[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((entry, index) => {
+    const other = b[index];
+    return other !== undefined && entry.id === other.id &&
+      entry.name === other.name && entry.url === other.url &&
+      entry.token === other.token;
+  });
+}
 
 /** Re-read the registry (a no-op while a read is already in flight). */
 export function reloadConnections(): Promise<void> {
-  if (reading !== null) return reading;
-  reading = (async () => {
-    try {
-      const { connections } = await api.getConnections();
-      store.set({ entries: connections, loaded: true, error: null });
-    } catch (failure) {
-      store.set({ ...store.get(), loaded: true, error: errorText(failure) });
-    } finally {
-      reading = null;
-    }
-  })();
-  return reading;
+  return store.reload();
 }
 
 /** Replace the whole registry and reflect the server's answer. The server
@@ -56,7 +53,7 @@ export async function putConnections(
   next: readonly ConnectionEntry[],
 ): Promise<void> {
   await api.putConnections([...next]);
-  store.set({ entries: [...next], loaded: true, error: null });
+  store.commit({ entries: [...next] });
 }
 
 /** The registry for a component (re-renders when it changes). */
@@ -71,14 +68,11 @@ export function useConnections(): {
     [],
   );
   const state = useSyncExternalStore(subscribe, () => store.get());
-  useEffect(() => {
-    if (!store.get().loaded) void reloadConnections();
-  }, []);
   return {
     entries: state.entries,
     loaded: state.loaded,
     error: state.error,
-    reload: () => void reloadConnections(),
+    reload: () => void store.reload(),
   };
 }
 

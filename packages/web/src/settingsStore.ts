@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from "preact/compat";
-import { errorMessage } from "@lumisca/core/shared";
 import { api } from "./api.ts";
+import { createResourceStore } from "./store.ts";
 
 /**
  * The app's settings, as one shared store.
@@ -10,130 +10,72 @@ import { api } from "./api.ts";
  * the compaction tuning, computer use, the model preferences). Each of those
  * fetches was a separate request per mount, and the chat view is remounted
  * whenever the active tab changes — so switching tabs re-read the whole
- * settings table each time. The catalog store (modelCatalog.ts) already
- * solved the same problem for providers and models; this is its settings
- * counterpart.
+ * settings table each time.
  *
  * The store answers `undefined` while the first read is in flight (callers
- * that need a value fall back to their documented default) and publishes a
- * new snapshot only when the values actually changed, so subscribers do not
+ * that need a value use their documented default) and publishes a new
+ * snapshot only when the values actually changed, so subscribers do not
  * re-render on an identical refresh.
  */
 export interface SettingsState {
   /** The values the server exposes through the generic settings API
    * (credentials and the other privileged records are absent by design). */
   values: Readonly<Record<string, string>>;
-  /** True once a read settled (success or failure). */
-  loaded: boolean;
-  /** Last read failure, or null. */
-  error: string | null;
 }
 
-const EMPTY: SettingsState = { values: {}, loaded: false, error: null };
+const store = createResourceStore<SettingsState, string>({
+  initial: { values: {} },
+  load: async () => ({ values: await api.getSettings() }),
+  same: (a, b) => sameValues(a.values, b.values),
+});
 
-class SettingsStore {
-  private state: SettingsState = EMPTY;
-  private readonly listeners = new Set<() => void>();
-  private reading: Promise<void> | null = null;
-  /** A write is in flight: a read that lands now would overwrite it with
-   * the stale value the server had before. */
-  private writing = 0;
-
-  /** The current snapshot (stable between publishes). */
-  get(): SettingsState {
-    return this.state;
-  }
-
-  /** Subscribe; the first subscriber reads, later ones reuse the result. */
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    if (!this.state.loaded && this.reading === null) void this.reload();
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
+/** The app's single settings store. */
+export const settingsStore = {
+  get: () => store.get(),
+  subscribe: (listener: () => void) => store.subscribe(listener),
 
   /** The value of one key, or undefined when it is unset or not loaded. */
   value(key: string): string | undefined {
-    return this.state.values[key];
-  }
+    return store.get().values[key];
+  },
 
   /** Re-read the settings. Concurrent calls share one request. */
-  reload(): Promise<void> {
-    if (this.reading !== null) return this.reading;
-    const generation = this.writing;
-    this.reading = (async () => {
-      try {
-        const values = await api.getSettings();
-        if (generation !== this.writing) return;
-        this.publish({ values, loaded: true, error: null });
-      } catch (error) {
-        this.publish({
-          ...this.state,
-          loaded: true,
-          error: errorMessage(error),
-        });
-      } finally {
-        this.reading = null;
-      }
-    })();
-    return this.reading;
-  }
+  reload: () => store.reload(),
 
   /**
    * Write one setting and reflect it locally. The write goes through the
-   * server exactly as before (the caller still handles its failure); the
-   * local value is applied optimistically so a component that just toggled
-   * something does not briefly show the old value, and dropped again when
-   * the write fails.
+   * server as before (the caller handles its failure); the local value is
+   * applied optimistically so a component that just toggled something does
+   * not briefly show the old value, and dropped again when the write fails.
+   *
+   * The commit also discards a read that was already in flight: it carries
+   * the value the server had before this write.
    */
   async set(key: string, value: string): Promise<void> {
-    const previous = this.state.values[key];
-    this.writing++;
-    this.publish({
-      ...this.state,
-      values: { ...this.state.values, [key]: value },
+    const previous = store.get().values[key];
+    store.commit({
+      values: { ...store.get().values, [key]: value },
     });
     try {
       await api.setSetting(key, value);
     } catch (error) {
-      const values = { ...this.state.values };
+      const values = { ...store.get().values };
       if (previous === undefined) delete values[key];
       else values[key] = previous;
-      this.publish({ ...this.state, values });
+      store.commit({ values });
       throw error;
-    } finally {
-      this.writing--;
     }
-  }
+  },
 
   /** Reset the store (tests). */
   reset(): void {
-    this.state = EMPTY;
-    this.reading = null;
-    this.writing = 0;
-    this.notify();
-  }
+    store.commit({ values: {} });
+  },
+};
 
-  private publish(next: SettingsState): void {
-    // Equal content is not a change: re-publishing would re-render every
-    // subscriber for nothing (the tab-switch case this store exists for).
-    if (
-      sameValues(this.state.values, next.values) &&
-      this.state.loaded === next.loaded &&
-      this.state.error === next.error
-    ) {
-      return;
-    }
-    this.state = next;
-    this.notify();
-  }
-
-  private notify(): void {
-    for (const listener of [...this.listeners]) listener();
-  }
-}
-
+/** Whether two settings maps hold the same keys and values: a refresh that
+ * changed nothing must not re-render every subscriber (the tab-switch case
+ * this store exists for). */
 function sameValues(
   a: Readonly<Record<string, string>>,
   b: Readonly<Record<string, string>>,
@@ -146,21 +88,20 @@ function sameValues(
   return true;
 }
 
-/** The app's single settings store. */
-export const settingsStore = new SettingsStore();
-
 /** Settings state for components (re-renders when a value changes). */
 export function useSettings(): SettingsState & {
+  loaded: boolean;
+  error: string | null;
   reload: () => void;
   set: (key: string, value: string) => Promise<void>;
 } {
   const subscribe = useCallback(
-    (listener: () => void) => settingsStore.subscribe(listener),
+    (listener: () => void) => store.subscribe(listener),
     [],
   );
-  const state = useSyncExternalStore(subscribe, () => settingsStore.get());
+  const state = useSyncExternalStore(subscribe, () => store.get());
   const reload = useCallback(() => {
-    void settingsStore.reload();
+    void store.reload();
   }, []);
   const set = useCallback(
     (key: string, value: string) => settingsStore.set(key, value),
@@ -172,9 +113,9 @@ export function useSettings(): SettingsState & {
 /** One setting's value (undefined while unloaded or unset). */
 export function useSetting(key: string): string | undefined {
   const subscribe = useCallback(
-    (listener: () => void) => settingsStore.subscribe(listener),
+    (listener: () => void) => store.subscribe(listener),
     [],
   );
-  const state = useSyncExternalStore(subscribe, () => settingsStore.get());
+  const state = useSyncExternalStore(subscribe, () => store.get());
   return state.values[key];
 }

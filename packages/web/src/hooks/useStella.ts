@@ -15,6 +15,7 @@ import {
   stellaStateOf,
 } from "../stella-state.ts";
 import { compareAgentRows, previewOf, samePreview } from "@lumisca/core/shared";
+import { createReconnectScheduler } from "../reconnect.ts";
 import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 import type {
   PendingFile,
@@ -22,10 +23,6 @@ import type {
   StellaAgent,
   StellaAgentSummary,
 } from "../types.ts";
-
-/** Reconnect backoff of the conversation's event stream: 2s → 4s → … 30s. */
-const RECONNECT_BASE_MS = 2000;
-const RECONNECT_MAX_MS = 30_000;
 
 /** Period between revision probes. While the stream is up the events are the
  * live source; the probe catches frames that were emitted but never arrived
@@ -244,8 +241,7 @@ export function useStella(enabled: boolean): {
     if (!enabled || activeAgentId === null || conversation === null) return;
     let closed = false;
     let close: (() => void) | undefined;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    let attempt = 0;
+    const reconnect = createReconnectScheduler({ stopped: () => closed });
 
     const resync = async () => {
       try {
@@ -278,14 +274,10 @@ export function useStella(enabled: boolean): {
         () => {
           if (closed) return;
           void resync();
-          retry = setTimeout(
-            connect,
-            Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS),
-          );
-          attempt += 1;
+          reconnect.schedule(connect);
         },
         () => {
-          attempt = 0;
+          reconnect.reset();
           void resync();
         },
       );
@@ -308,7 +300,7 @@ export function useStella(enabled: boolean): {
 
     return () => {
       closed = true;
-      if (retry !== undefined) clearTimeout(retry);
+      reconnect.cancel();
       clearInterval(probeTimer);
       close?.();
     };

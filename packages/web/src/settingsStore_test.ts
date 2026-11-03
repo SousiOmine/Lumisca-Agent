@@ -25,22 +25,43 @@ const ok = (body: Record<string, string>) => () =>
     headers: { "content-type": "application/json" },
   });
 
-Deno.test("settings store: one read serves every subscriber", async () => {
+Deno.test("settings store: two subscribers opening together share one read", async () => {
   settingsStore.reset();
   let reads = 0;
   await withFetch(() => {
     reads++;
     return new Response(JSON.stringify({ theme: "dark" }), { status: 200 });
   }, async () => {
-    // Two subscribers, two reads in flight: the second waits for the first
-    // instead of hitting the endpoint again (the tab-switch case).
-    const first = settingsStore.reload();
-    const second = settingsStore.reload();
-    await Promise.all([first, second]);
+    // Two screens mounting in the same tick (the tab-switch case) reuse the
+    // read already in flight instead of asking the server twice.
+    const unsubscribe = [
+      settingsStore.subscribe(() => {}),
+      settingsStore.subscribe(() => {}),
+    ];
     await settingsStore.reload();
+    for (const off of unsubscribe) off();
   });
-  assertEquals(reads, 2, "a concurrent read is shared, a later one is not");
+  assertEquals(reads, 1, "the shared read is issued once");
   assertEquals(settingsStore.value("theme"), "dark");
+});
+
+Deno.test("settings store: the newer read wins", async () => {
+  settingsStore.reset();
+  let call = 0;
+  await withFetch(() => {
+    call++;
+    if (call === 1) {
+      // The first read is held until the second has answered, so its stale
+      // value would land last if the store published whatever came back.
+      return new Response(JSON.stringify({ theme: "old" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ theme: "new" }), { status: 200 });
+  }, async () => {
+    const slow = settingsStore.reload();
+    await settingsStore.reload();
+    await slow;
+  });
+  assertEquals(settingsStore.value("theme"), "new");
 });
 
 Deno.test("settings store: a failed read keeps the values and reports it", async () => {

@@ -8,6 +8,7 @@ import {
   revisionGap,
   type SnapshotParts,
 } from "../events.ts";
+import { createReconnectScheduler } from "../reconnect.ts";
 import { keysForPeer, tabKey } from "../tabs.ts";
 import { maybeNotifyAgentEnd, maybeNotifyQuestion } from "../notify.ts";
 import type { ClientEvent, SessionView, TodoPhase } from "../types.ts";
@@ -24,10 +25,6 @@ const DISCONNECTED_SYNC_INTERVAL_MS = 10_000;
  * never arrived — a socket that died without a close event, a peer's relay
  * gap — within one interval instead of at the next reconnect. */
 const REVISION_PROBE_MS = 30_000;
-
-/** Event-stream reconnect backoff: 2s → 4s → 8s … capped at 30s. */
-const RECONNECT_BASE_MS = 2000;
-const RECONNECT_MAX_MS = 30_000;
 
 /** Fetch one session's panel snapshots — the parts of a view that are not in
  * the transcript snapshot: the sub-agent tasks, the background commands and
@@ -501,10 +498,9 @@ export function useSessionEvents(
 
   useEffect(() => {
     let disposed = false;
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    const reconnect = createReconnectScheduler({ stopped: () => disposed });
     let syncTimer: ReturnType<typeof setInterval> | undefined;
     let disconnect: (() => void) | undefined;
-    let reconnectAttempts = 0;
     // Whether the event stream is currently connected. While it is up the
     // events are the live source; while it is down a short-interval sync
     // covers everything (see syncState). The flags live in this effect's
@@ -550,26 +546,15 @@ export function useSessionEvents(
     /** Cancel any pending reconnect and close the existing socket, so
      * connect() always starts from a clean slate (prevents double-open). */
     const cleanup = () => {
-      if (reconnectTimer !== undefined) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = undefined;
-      }
+      reconnect.cancel();
       disconnect?.();
       disconnect = undefined;
     };
 
-    /** Schedule the next reconnect with exponential backoff. */
+    /** Schedule the next reconnect with exponential backoff (see
+     * reconnect.ts: both event streams share the rule). */
     const scheduleReconnect = () => {
-      if (disposed || reconnectTimer !== undefined) return;
-      const delay = Math.min(
-        RECONNECT_BASE_MS * 2 ** reconnectAttempts,
-        RECONNECT_MAX_MS,
-      );
-      reconnectAttempts++;
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = undefined;
-        connect();
-      }, delay);
+      reconnect.schedule(connect);
     };
 
     // Opportunistic sync: a run that finishes entirely inside a disconnect
@@ -589,10 +574,7 @@ export function useSessionEvents(
       } else {
         // Tab returns to foreground while disconnected: try to reconnect
         // immediately instead of waiting for the backoff timer.
-        if (reconnectTimer !== undefined) {
-          clearTimeout(reconnectTimer);
-          reconnectTimer = undefined;
-        }
+        reconnect.cancel();
         connect();
       }
     };
@@ -621,7 +603,7 @@ export function useSessionEvents(
           // was down are merged in) and stop the fallback interval — the
           // stream is the live source again. Reset the backoff counter.
           connected = true;
-          reconnectAttempts = 0;
+          reconnect.reset();
           stopSyncTimer();
           options.onConnectionOpen?.();
           resync();

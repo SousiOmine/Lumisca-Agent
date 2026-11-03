@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useSyncExternalStore } from "preact/compat";
-import { errorMessage as errorText } from "@lumisca/core/shared";
+import { useCallback, useSyncExternalStore } from "preact/compat";
 import { api } from "../api.ts";
 import type { SavedPrompt } from "../types.ts";
-import { createStore } from "../store.ts";
+import { createResourceStore } from "../store.ts";
 
 /**
  * The saved prompts (the settings panel's list, and the `/prompt` menu the
@@ -16,39 +15,30 @@ import { createStore } from "../store.ts";
  * and the last read where they disagreed.
  */
 
-interface SavedPromptsState {
+interface SavedPromptsValue {
   prompts: SavedPrompt[];
-  /** Last read failure, or null. The previously known list is kept: an empty
-   * menu would be worse than a stale one, but the caller can say so. */
-  error: string | null;
-  /** True once a read settled (success or failure). */
-  loaded: boolean;
 }
 
-const store = createStore<SavedPromptsState>({
-  prompts: [],
-  error: null,
-  loaded: false,
+const store = createResourceStore<SavedPromptsValue, string>({
+  initial: { prompts: [] },
+  load: async () => ({ prompts: (await api.getSavedPrompts()).prompts }),
+  // A read that returns the stored list unchanged must not re-render the
+  // screens that draw it.
+  same: (a, b) => samePrompts(a.prompts, b.prompts),
 });
 
-/** One read in flight, shared by every caller (the answer is the same). */
-let reading: Promise<void> | null = null;
-
-function reloadSavedPrompts(): Promise<void> {
-  if (reading !== null) return reading;
-  reading = (async () => {
-    try {
-      const result = await api.getSavedPrompts();
-      store.set({ prompts: result.prompts, error: null, loaded: true });
-    } catch (failure) {
-      // Keep the last known list, but do not hide the failure: the user
-      // would otherwise wonder why a prompt added elsewhere is missing.
-      store.set({ ...store.get(), error: errorText(failure), loaded: true });
-    } finally {
-      reading = null;
-    }
-  })();
-  return reading;
+/** Whether two prompt lists hold the same prompts, in the same order. */
+function samePrompts(
+  a: readonly SavedPrompt[],
+  b: readonly SavedPrompt[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((prompt, index) => {
+    const other = b[index];
+    return other !== undefined && prompt.id === other.id &&
+      prompt.label === other.label && prompt.prompt === other.prompt;
+  });
 }
 
 /** Replace the list and read it back from the server, so every screen sees
@@ -57,7 +47,7 @@ export async function saveSavedPrompts(
   write: () => Promise<unknown>,
 ): Promise<void> {
   await write();
-  await reloadSavedPrompts();
+  await store.reload();
 }
 
 /** The saved prompts for a component; reads once, then stays in step with
@@ -72,16 +62,9 @@ export function useSavedPrompts(): {
     [],
   );
   const state = useSyncExternalStore(subscribe, () => store.get());
-  // The first subscriber reads; later ones reuse the result (the panels can
-  // open in any order, and none of them should re-fetch what another screen
-  // already loaded). Deferred to an effect: a read that settled synchronously
-  // would publish during this render.
-  useEffect(() => {
-    if (!store.get().loaded) void reloadSavedPrompts();
-  }, []);
   return {
     prompts: state.prompts,
     error: state.error,
-    reload: () => void reloadSavedPrompts(),
+    reload: () => void store.reload(),
   };
 }

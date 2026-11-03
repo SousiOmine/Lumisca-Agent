@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useSyncExternalStore } from "preact/compat";
+import { useCallback, useSyncExternalStore } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
 import { api, modelApi } from "./api.ts";
 import { modelCatalog, type PeerCatalogState } from "./modelCatalog.ts";
-import { createStore } from "./store.ts";
+import { createResourceStore } from "./store.ts";
 import { splitTabKey } from "./tabs.ts";
 import type {
   SessionView,
@@ -17,39 +17,22 @@ import type {
  * its own copy: `SettingsModal` called `reload()` after a save, which
  * refreshed ITS list while the detail panel beside it kept the previous
  * answer. One store, one read, and a write is visible everywhere. */
-interface UserProvidersState {
+interface UserProvidersValue {
   providers: UserProviderSummary[];
-  loaded: boolean;
-  error: string | null;
 }
 
-const userProvidersStore = createStore<UserProvidersState>({
-  providers: [],
-  loaded: false,
-  error: null,
+const userProvidersStore = createResourceStore<UserProvidersValue, string>({
+  initial: { providers: [] },
+  load: async () => ({ providers: await api.listUserProviders() }),
+  // The list is rebuilt on every read; compare it by content so an unchanged
+  // catalog does not re-render the settings dialog.
+  same: (a, b) =>
+    a.providers.length === b.providers.length &&
+    a.providers.every((provider, index) =>
+      provider.id === b.providers[index]?.id &&
+      provider.name === b.providers[index]?.name
+    ),
 });
-
-/** One read in flight, shared by every caller. */
-let userProvidersReading: Promise<void> | null = null;
-
-function reloadUserProviders(): Promise<void> {
-  if (userProvidersReading !== null) return userProvidersReading;
-  userProvidersReading = (async () => {
-    try {
-      const providers = await api.listUserProviders();
-      userProvidersStore.set({ providers, loaded: true, error: null });
-    } catch (e) {
-      userProvidersStore.set({
-        ...userProvidersStore.get(),
-        loaded: true,
-        error: errorText(e),
-      });
-    } finally {
-      userProvidersReading = null;
-    }
-  })();
-  return userProvidersReading;
-}
 
 /**
  * User-defined OpenAI-compatible providers (the settings UI manages these).
@@ -68,13 +51,10 @@ export function useUserProviders(): {
     [],
   );
   const state = useSyncExternalStore(subscribe, () => userProvidersStore.get());
-  useEffect(() => {
-    if (!userProvidersStore.get().loaded) void reloadUserProviders();
-  }, []);
   return {
     providers: state.providers,
     error: state.error,
-    reload: () => void reloadUserProviders(),
+    reload: () => void userProvidersStore.reload(),
     ids: new Set(state.providers.map((p) => p.id)),
   };
 }

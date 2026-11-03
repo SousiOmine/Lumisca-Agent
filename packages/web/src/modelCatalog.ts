@@ -1,5 +1,6 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { modelApi } from "./api.ts";
+import { createResourceStore, type ResourceStore } from "./store.ts";
 import type { ModelInfo, ProviderInfo } from "./types.ts";
 
 /** Catalog fetch failure, tagged with the phase that broke so the UI can
@@ -33,19 +34,6 @@ export interface PeerCatalogState extends PeerCatalog {
  * exercised without a server (tests); the default fetches over HTTP. */
 export type CatalogLoader = (peerId: string) => Promise<PeerCatalog>;
 
-/** Per-peer fetch bookkeeping. Peers are few and long-lived, so entries
- * are never evicted. */
-interface Entry {
-  state: PeerCatalogState;
-  listeners: Set<() => void>;
-  /** True once a fetch settled (success or failure). */
-  loaded: boolean;
-  /** True while a fetch is in flight. */
-  fetching: boolean;
-  /** Fetch generation: a response from a superseded fetch is dropped. */
-  generation: number;
-}
-
 /** Store key of one model's enablement (see `ModelCatalog.localEnabled`). */
 function enabledKey(
   peerId: string,
@@ -70,7 +58,10 @@ function enabledKey(
  * dies with the component, and the next mount would show the stale catalog
  * again. */
 export class ModelCatalog {
-  private readonly entries = new Map<string, Entry>();
+  private readonly stores = new Map<
+    string,
+    ResourceStore<PeerCatalog, CatalogFetchError>
+  >();
   /** Committed `enabled` flags, by store key. A fetch issued before a flag
    * reached the server still carries the old value; applying that snapshot
    * verbatim would resurrect the pre-commit value (turning a visible toggle
@@ -84,55 +75,19 @@ export class ModelCatalog {
   /** The peer's current state. Stable between publishes, which is what
    * makes it usable as `useSyncExternalStore`'s snapshot. */
   state(peerId: string): PeerCatalogState {
-    return this.entry(peerId).state;
+    return this.store(peerId).get();
   }
 
   /** Subscribe to a peer's catalog; returns the unsubscribe function. The
    * first subscriber loads the peer, later ones reuse the settled result. */
   subscribe(peerId: string, listener: () => void): () => void {
-    const entry = this.entry(peerId);
-    entry.listeners.add(listener);
-    if (!entry.loaded && !entry.fetching) void this.reload(peerId);
-    return () => {
-      entry.listeners.delete(listener);
-    };
+    return this.store(peerId).subscribe(listener);
   }
 
   /** Re-fetch the peer's providers and models. Resolves when the fetch
    * settles (callers that only trigger it ignore the result). */
-  async reload(peerId: string): Promise<void> {
-    const entry = this.entry(peerId);
-    const generation = ++entry.generation;
-    entry.fetching = true;
-    // Already loading with no error to clear: publishing an equal-content
-    // object would only cost an extra render.
-    if (!entry.state.loading || entry.state.error !== null) {
-      this.publish(peerId, { ...entry.state, loading: true, error: null });
-    }
-
-    let patch: Partial<PeerCatalogState>;
-    try {
-      const catalog = await this.load(peerId);
-      patch = {
-        providers: catalog.providers,
-        modelsByProvider: this.withLocalEnabled(
-          peerId,
-          catalog.modelsByProvider,
-        ),
-      };
-    } catch (error) {
-      patch = { error: toCatalogFetchError(error) };
-    }
-    // A newer fetch superseded this one: its result is authoritative.
-    if (generation !== entry.generation) return;
-    entry.fetching = false;
-    entry.loaded = true;
-    this.publish(peerId, {
-      ...entry.state,
-      loading: false,
-      error: null,
-      ...patch,
-    });
+  reload(peerId: string): Promise<void> {
+    return this.store(peerId).reload();
   }
 
   /** Apply a model's committed `enabled` flag to the cached catalog, so
@@ -148,15 +103,15 @@ export class ModelCatalog {
     enabled: boolean,
   ): void {
     this.localEnabled.set(enabledKey(peerId, providerId, modelId), enabled);
-    const entry = this.entry(peerId);
-    const models = entry.state.modelsByProvider.get(providerId);
+    const state = this.store(peerId).get();
+    const models = state.modelsByProvider.get(providerId);
     if (models === undefined || !models.some((m) => m.id === modelId)) return;
-    const modelsByProvider = new Map(entry.state.modelsByProvider);
+    const modelsByProvider = new Map(state.modelsByProvider);
     modelsByProvider.set(
       providerId,
       models.map((m) => m.id === modelId ? { ...m, enabled } : m),
     );
-    this.publish(peerId, { ...entry.state, modelsByProvider });
+    this.store(peerId).commit({ providers: state.providers, modelsByProvider });
   }
 
   /** Re-apply the committed flags (see `localEnabled`) over a fetched model
@@ -184,32 +139,64 @@ export class ModelCatalog {
     return out ?? modelsByProvider;
   }
 
-  private entry(peerId: string): Entry {
-    let entry = this.entries.get(peerId);
-    if (entry === undefined) {
-      entry = {
-        state: {
-          providers: [],
-          modelsByProvider: new Map(),
-          loading: true,
-          error: null,
+  /** One peer's store, created on first use. Peers are few and long-lived,
+   * so entries are never evicted. */
+  private store(
+    peerId: string,
+  ): ResourceStore<PeerCatalog, CatalogFetchError> {
+    let store = this.stores.get(peerId);
+    if (store === undefined) {
+      store = createResourceStore<PeerCatalog, CatalogFetchError>({
+        initial: { providers: [], modelsByProvider: new Map() },
+        load: async () => {
+          const catalog = await this.load(peerId);
+          return {
+            providers: catalog.providers,
+            modelsByProvider: this.withLocalEnabled(
+              peerId,
+              catalog.modelsByProvider,
+            ),
+          };
         },
-        listeners: new Set(),
-        loaded: false,
-        fetching: false,
-        generation: 0,
-      };
-      this.entries.set(peerId, entry);
+        // Every read rebuilds both maps, so compare them by content: a
+        // catalog that did not change must not re-render its consumers.
+        same: sameCatalog,
+        describeError: toCatalogFetchError,
+      });
+      this.stores.set(peerId, store);
     }
-    return entry;
+    return store;
   }
+}
 
-  private publish(peerId: string, state: PeerCatalogState): void {
-    const entry = this.entry(peerId);
-    entry.state = state;
-    // Copy first: a listener may unsubscribe while we notify.
-    for (const listener of [...entry.listeners]) listener();
+/** Two catalogs are the same when the provider list and every model list
+ * match: a re-read that produced the same catalog renders nothing. */
+function sameCatalog(a: PeerCatalog, b: PeerCatalog): boolean {
+  if (
+    a.providers === b.providers && a.modelsByProvider === b.modelsByProvider
+  ) {
+    return true;
   }
+  if (a.providers.length !== b.providers.length) return false;
+  for (const [index, provider] of a.providers.entries()) {
+    if (provider.id !== b.providers[index]?.id) return false;
+  }
+  if (a.modelsByProvider.size !== b.modelsByProvider.size) return false;
+  for (const [providerId, models] of a.modelsByProvider) {
+    const other = b.modelsByProvider.get(providerId);
+    if (other === undefined || other.length !== models.length) return false;
+    for (const [index, model] of models.entries()) {
+      const counterpart = other[index];
+      if (counterpart === undefined) return false;
+      if (
+        model.id !== counterpart.id || model.enabled !== counterpart.enabled ||
+        model.name !== counterpart.name
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 /** Every catalog fetch of the app (the store's default loader). */

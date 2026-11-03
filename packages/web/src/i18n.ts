@@ -12,6 +12,7 @@
  * rolls back), so the store must be written only through it or setLocale.
  */
 import { useMemo, useSyncExternalStore } from "preact/compat";
+import { createStore } from "./store.ts";
 import {
   createTranslator,
   DEFAULT_LOCALE,
@@ -22,35 +23,30 @@ import {
   type Translator,
 } from "@lumisca/core/shared";
 
-let current: Locale = DEFAULT_LOCALE;
-const listeners = new Set<() => void>();
+const store = createStore<Locale>(DEFAULT_LOCALE);
 
 /** The language the UI renders in right now. */
 export function getLocale(): Locale {
-  return current;
+  return store.get();
 }
 
 /** Seed the store from the server's bootstrap data, before the first
  * render (client.tsx). No notification: nothing is mounted yet. */
 export function initLocale(locale: Locale): void {
-  current = locale;
+  store.set(locale);
   applyDocumentLanguage();
 }
 
 /** Switch the language and re-render every consumer. */
 export function setLocale(locale: Locale): void {
-  if (locale === current) return;
-  current = locale;
+  if (locale === store.get()) return;
+  store.set(locale);
   applyDocumentLanguage();
-  for (const listener of [...listeners]) listener();
 }
 
 /** Subscribe to language changes (useLocale's subscription). */
 export function subscribeLocale(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  return store.subscribe(listener);
 }
 
 /** The current language, re-rendering the component when it changes. */
@@ -68,12 +64,12 @@ export function useT(): Translator {
 /** Message lookup outside the render tree (notification text, module-level
  * helpers). Components use {@link useT}. */
 export function t(key: MessageKey, params?: MessageParams): string {
-  return translate(current, key, params);
+  return translate(store.get(), key, params);
 }
 
 /** Keep the document's language in sync: the stylesheet and assistive
  * technology use it (font fallback, hyphenation, screen-reader voice). */
 function applyDocumentLanguage(): void {
   if (typeof document === "undefined") return;
-  document.documentElement.lang = current;
+  document.documentElement.lang = store.get();
 }
