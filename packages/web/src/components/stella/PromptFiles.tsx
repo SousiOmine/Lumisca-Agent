@@ -1,6 +1,7 @@
 import { useState } from "preact/compat";
 import { useT } from "../../i18n.ts";
 import { formatAttachmentSize, type PromptFileRef } from "@lumisca/core/shared";
+import { Lightbox } from "../Lightbox.tsx";
 
 /** Show one file a prompt brought in, read back from the machine.
  *
@@ -24,8 +25,14 @@ export function PromptFiles({
   base: string;
 }) {
   const t = useT();
+  const [open, setOpen] = useState<PromptFileRef | null>(null);
   const images = files.filter((file) => file.image);
   const others = files.filter((file) => !file.image);
+  /** One picture's URL. `preview` is the downscaled copy the list draws; the
+   * original (no query) is what a click opens, because the point of looking
+   * closer is to see what the thumbnail could not show. */
+  const srcOf = (file: PromptFileRef, preview: boolean) =>
+    `${base}?ref=${encodeURIComponent(file.ref)}${preview ? "" : "&preview=0"}`;
   return (
     <>
       {images.length > 0 && (
@@ -34,11 +41,19 @@ export function PromptFiles({
             <PromptImage
               key={file.ref}
               file={file}
-              src={`${base}?ref=${encodeURIComponent(file.ref)}`}
+              src={srcOf(file, true)}
               goneLabel={t("chat.stella.fileGone")}
+              onOpen={() => setOpen(file)}
             />
           ))}
         </div>
+      )}
+      {open !== null && (
+        <Lightbox
+          src={srcOf(open, false)}
+          alt={open.name}
+          onClose={() => setOpen(null)}
+        />
       )}
       {others.length > 0 && (
         <ul className="msg-files">
@@ -62,10 +77,12 @@ function PromptImage({
   file,
   src,
   goneLabel,
+  onOpen,
 }: {
   file: PromptFileRef;
   src: string;
   goneLabel: string;
+  onOpen: () => void;
 }) {
   const [gone, setGone] = useState(false);
   if (gone) {
@@ -81,6 +98,7 @@ function PromptImage({
       src={src}
       alt=""
       onError={() => setGone(true)}
+      onClick={onOpen}
     />
   );
 }

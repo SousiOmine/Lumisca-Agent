@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { createCanvas, Image } from "@napi-rs/canvas";
 import { assert, assertEquals } from "@std/assert";
 import {
   fauxProvider,
@@ -161,5 +162,45 @@ Deno.test("a cookie is enough: an <img> can send nothing else", async () => {
       (await request({ cookie: `lumisca_token_8100=${token}` })).status,
       401,
     );
+  });
+});
+
+Deno.test("a big visual is served downscaled, and whole on request", async () => {
+  await withApp(async ({ get, sessionId, storeDir }) => {
+    // A 2000px picture: bigger than the preview edge, so it has both forms.
+    const big = await makeRealTempDir("lumisca-visuals-big-");
+    try {
+      const canvas = createCanvas(2000, 1000);
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#204080";
+      context.fillRect(0, 0, 2000, 1000);
+      const bytes = new Uint8Array(canvas.toBuffer("image/png"));
+      const name = "aaaaaaaabbbb.png";
+      await Deno.writeFile(join(storeDir, name), bytes);
+
+      // The default answer is the small copy: the list draws it a few
+      // hundred pixels wide, so the rest is bytes nobody sees.
+      const preview = await get(`/api/sessions/${sessionId}/visual/${name}`);
+      assertEquals(preview.status, 200);
+      assertEquals(preview.headers.get("content-type"), "image/png");
+      const previewBytes = new Uint8Array(await preview.arrayBuffer());
+      const previewImage = new Image();
+      previewImage.src = previewBytes;
+      assertEquals(previewImage.width, 1280);
+      assert(
+        previewBytes.byteLength < bytes.byteLength,
+        `preview ${previewBytes.byteLength} < source ${bytes.byteLength}`,
+      );
+
+      // `preview=0` is the original: what a click opens.
+      const original = await get(
+        `/api/sessions/${sessionId}/visual/${name}?preview=0`,
+      );
+      assertEquals(original.status, 200);
+      const originalBytes = new Uint8Array(await original.arrayBuffer());
+      assertEquals(originalBytes.byteLength, bytes.byteLength);
+    } finally {
+      await removeDirRetry(big);
+    }
   });
 });

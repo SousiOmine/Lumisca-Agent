@@ -137,11 +137,19 @@ export class AssetDir {
   private async count(dir: string): Promise<number> {
     let held = 0;
     for await (const entry of Deno.readDir(dir)) {
-      // Sidecars belong to their asset, so they are not assets themselves.
-      if (entry.isFile && !entry.name.endsWith(".json")) held++;
+      // Sidecars and previews belong to their asset, so they are not assets
+      // themselves (a cap must count the pictures, not their bookkeeping).
+      if (entry.isFile && !isDerivedFile(entry.name)) held++;
     }
     return held;
   }
+}
+
+/** Whether a file in an asset directory belongs to another file there rather
+ * than being an asset of its own: the sidecar (`<name>.json`) and the
+ * downscaled preview (`<name>.preview`, see media/preview-cache.ts). */
+export function isDerivedFile(fileName: string): boolean {
+  return fileName.endsWith(".json") || fileName.endsWith(".preview");
 }
 
 /** 12 hex characters of randomness per asset name. The name is visible in a

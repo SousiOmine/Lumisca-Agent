@@ -2,6 +2,10 @@ import { Hono } from "hono";
 import type { SessionInfo } from "@lumisca/core";
 import { AppError } from "./util.ts";
 import { assetHeaders } from "./asset-headers.ts";
+import {
+  ensurePreview,
+  previewPathOf,
+} from "../../core/media/preview-cache.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface VisualApi {
@@ -41,6 +45,23 @@ export function visualRoutes(core: VisualApi): Hono {
       throw new AppError(`Visual not found: ${name}`, 404);
     }
     const headers = assetHeaders({ mimeType: visual.mimeType });
+    // A picture is drawn small: the conversation gets a downscaled copy, and
+    // `preview=0` asks for the original (what a click opens, and what the
+    // model reads). The preview is stored beside its source under a name
+    // derived from it (see media/preview-cache.ts), so this costs one read
+    // after the first draw and can never go stale.
+    const wantsPreview = c.req.query("preview") !== "0";
+    const preview = wantsPreview
+      ? await ensurePreview(
+        visual.path,
+        name,
+        previewPathOf(visual.path, name),
+        visual.mimeType,
+      )
+      : undefined;
+    if (preview !== undefined) {
+      return c.newResponse(preview.buffer as ArrayBuffer, 200, headers);
+    }
     const bytes = await Deno.readFile(visual.path);
     // The asset is bounded by the store's limit (4 MiB), so buffering it
     // needs no stream handling; the buffer is an ArrayBuffer of its own.

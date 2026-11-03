@@ -67,6 +67,9 @@ function rendererFor(options: MarkdownOptions): RendererObject {
     },
     image(token: Tokens.Image) {
       const name = parseVisualRef(token.href);
+      // A published visual is drawn from its downscaled preview by default
+      // (the route produces one when the picture is big); the click opens the
+      // original through the lightbox, which asks for `preview=0`.
       const href = name === undefined
         ? safeImageHref(token.href)
         : `${visualBase}${name}`;

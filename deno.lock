@@ -19,14 +19,14 @@
     "npm:@ai-sdk/provider@4.0.10": "4.0.10",
     "npm:@jellybrick/dbus-next@0.11.4": "0.11.4",
     "npm:@modelcontextprotocol/sdk@1.32.2": "1.32.2_zod@4.4.3",
-    "npm:@napi-rs/canvas@1.1.0": "1.1.0",
+    "npm:@napi-rs/canvas@^1.1.0": "1.1.0",
     "npm:@novnc/novnc@*": "1.7.0",
     "npm:@novnc/novnc@1.7.0": "1.7.0",
     "npm:@opencode-ai/models@*": "0.0.112",
     "npm:@opencode-ai/models@0.0.112": "0.0.112",
     "npm:@opencode-ai/models@0.0.99": "0.0.99",
-    "npm:@preact/preset-vite@2.10.6": "2.10.6_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_preact@11.1.1__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.1",
-    "npm:@tabler/icons-preact@3.50.0": "3.50.0_preact@11.1.0__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.0",
+    "npm:@preact/preset-vite@2.10.6": "2.10.6_vite@8.3.5_preact@11.1.1_preact-render-to-string@6.8.2__preact@11.1.1",
+    "npm:@tabler/icons-preact@3.50.0": "3.50.0_preact@11.1.0_preact-render-to-string@6.8.2__preact@11.1.0",
     "npm:@types/node@*": "26.1.2",
     "npm:ai@7.0.159": "7.0.159_zod@4.4.3",
     "npm:esbuild@0.28.2": "0.28.2",
@@ -630,7 +630,7 @@
     "@pkgjs/parseargs@0.11.0": {
       "integrity": "sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg=="
     },
-    "@preact/preset-vite@2.10.6_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_preact@11.1.1__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.1": {
+    "@preact/preset-vite@2.10.6_vite@8.3.5_preact@11.1.1_preact-render-to-string@6.8.2__preact@11.1.1": {
       "integrity": "sha512-ZZ5RIT2ZVXg8UxRA8VZpoT8CdpDG7RFIqOT4bELqNBp85+HKvQBbgmh3gsoW1UOQXx26TLe+ZRNKI7q281Kckw==",
       "dependencies": [
         "@babel/core",
@@ -650,7 +650,7 @@
     "@prefresh/babel-plugin@0.5.3": {
       "integrity": "sha512-57LX2SHs4BX2s1IwCjNzTE2OJeEepRCNf1VTEpbNcUyHfMO68eeOWGDIt4ob9aYlW6PEWZ1SuwNikuoIXANDtQ=="
     },
-    "@prefresh/core@1.5.11_preact@11.1.1__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.1": {
+    "@prefresh/core@1.5.11_preact@11.1.1_preact-render-to-string@6.8.2__preact@11.1.1": {
       "integrity": "sha512-Ml00PP8jeHaADxfQqxUs4+M5JS+T5J26UnvPVfsrmlpGw2I3e9XtM0DMeuzkmvg+Tn7VdHSMpLBrDPG0iHoDqQ==",
       "dependencies": [
         "preact@11.1.1_preact-render-to-string@6.8.2"
@@ -659,7 +659,7 @@
     "@prefresh/utils@1.2.1": {
       "integrity": "sha512-vq/sIuN5nYfYzvyayXI4C2QkprfNaHUQ9ZX+3xLD8nL3rWyzpxOm1+K7RtMbhd+66QcaISViK7amjnheQ/4WZw=="
     },
-    "@prefresh/vite@2.4.12_preact@11.1.1__preact-render-to-string@6.8.2_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_preact-render-to-string@6.8.2__preact@11.1.1": {
+    "@prefresh/vite@2.4.12_preact@11.1.1_vite@8.3.5_preact-render-to-string@6.8.2__preact@11.1.1": {
       "integrity": "sha512-FY1fzXpUjiuosznMV0YM7XAOPZjB5FIdWS0W24+XnlxYkt9hNAwwsiKYn+cuTEoMtD/ZVazS5QVssBr9YhpCQA==",
       "dependencies": [
         "@babel/core",
@@ -794,7 +794,7 @@
     "@standard-schema/spec@1.1.0": {
       "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="
     },
-    "@tabler/icons-preact@3.50.0_preact@11.1.0__preact-render-to-string@6.8.2_preact-render-to-string@6.8.2__preact@11.1.0": {
+    "@tabler/icons-preact@3.50.0_preact@11.1.0_preact-render-to-string@6.8.2__preact@11.1.0": {
       "integrity": "sha512-O70QkWinmvTH5bnbG3iySlRYnqX25ZjuPfJ+5MLy+OSex1ZYQJLhj5RDfqkf2abdtnHs36ZjKjO6VB8BksOVQA==",
       "dependencies": [
         "@tabler/icons",
@@ -1718,10 +1718,7 @@
       ]
     },
     "preact-render-to-string@6.8.2_preact@11.1.0": {
-      "integrity": "sha512-Hdx7cKD3AMYgt795TdddBpUbuGEFoL/VeA6s7VrBt9Gjt0r6rCy5wMp5xkDjQ9cbKj62frHsEx1x8yV6EjoOpg==",
-      "dependencies": [
-        "preact@11.1.0_preact-render-to-string@6.8.2"
-      ]
+      "integrity": "sha512-Hdx7cKD3AMYgt795TdddBpUbuGEFoL/VeA6s7VrBt9Gjt0r6rCy5wMp5xkDjQ9cbKj62frHsEx1x8yV6EjoOpg=="
     },
     "preact-render-to-string@6.8.2_preact@11.1.1": {
       "integrity": "sha512-Hdx7cKD3AMYgt795TdddBpUbuGEFoL/VeA6s7VrBt9Gjt0r6rCy5wMp5xkDjQ9cbKj62frHsEx1x8yV6EjoOpg==",
@@ -2078,7 +2075,7 @@
     "vary@1.1.2": {
       "integrity": "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg=="
     },
-    "vite-prerender-plugin@0.5.13_vite@8.3.5__@types+node@26.1.2__esbuild@0.28.2_@types+node@26.1.2_esbuild@0.28.2": {
+    "vite-prerender-plugin@0.5.13_vite@8.3.5_@types+node@26.1.2_esbuild@0.28.2": {
       "integrity": "sha512-IKSpYkzDBsKAxa05naRbj7GvNVMSdww/Z/E89oO3xndz+gWnOBOKOAbEXv7qDhktY/j3vHgJmoV1pPzqU2tx9g==",
       "dependencies": [
         "kolorist",
@@ -2171,7 +2168,7 @@
       "npm:@ai-sdk/openai@4.0.106",
       "npm:@jellybrick/dbus-next@0.11.4",
       "npm:@modelcontextprotocol/sdk@1.32.2",
-      "npm:@napi-rs/canvas@1.1.0",
+      "npm:@napi-rs/canvas@^1.1.0",
       "npm:@novnc/novnc@1.7.0",
       "npm:@opencode-ai/models@0.0.112",
       "npm:@tabler/icons-preact@3.50.0",

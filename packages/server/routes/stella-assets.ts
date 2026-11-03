@@ -12,6 +12,7 @@ import { Hono } from "hono";
 import type { StellaAgent } from "@lumisca/core";
 import { AppError } from "./util.ts";
 import { assetHeaders } from "./asset-headers.ts";
+import { renderPreview } from "../../core/media/preview.ts";
 
 /** The slice of the core the file routes need (interface segregation). */
 export interface StellaAssetApi {
@@ -81,7 +82,17 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
     if (file === undefined) {
       throw new AppError("That file is no longer in the machine", 404);
     }
-    return new Response(new Uint8Array(file.bytes), {
+    // A picture is drawn small, so the conversation gets a downscaled copy
+    // (`preview=0` asks for the original, which is what a click opens). The
+    // bytes are not cached: this file lives in the MACHINE, where the agent
+    // may change it at any moment, so a cached preview could outlive its
+    // source.
+    const wantsPreview = c.req.query("preview") !== "0";
+    const bytes = wantsPreview
+      ? renderPreview(new Uint8Array(file.bytes), file.mimeType) ??
+        new Uint8Array(file.bytes)
+      : new Uint8Array(file.bytes);
+    return new Response(bytes.buffer as ArrayBuffer, {
       headers: assetHeaders({ mimeType: file.mimeType }),
     });
   });

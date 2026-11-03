@@ -9,6 +9,7 @@ import type { LocalizedText } from "./types.ts";
 export const common = {
   // --- generic actions ------------------------------------------------------
   "common.close": { ja: "閉じる", en: "Close" },
+  "common.imagePreview": { ja: "画像の拡大表示", en: "Enlarged picture" },
   "common.back": { ja: "戻る", en: "Back" },
   "common.cancel": { ja: "キャンセル", en: "Cancel" },
   "common.save": { ja: "保存", en: "Save" },

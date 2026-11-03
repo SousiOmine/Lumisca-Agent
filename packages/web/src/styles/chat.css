@@ -211,6 +211,36 @@
   border: 1px solid var(--border);
   background: var(--surface-2);
   object-fit: contain;
+  /* A picture in a message is there to be read, and 320px is not enough for
+   * a screenshot's text: clicking opens it whole (see Lightbox). The cursor
+   * says so before the click. */
+  cursor: zoom-in;
+}
+
+/* The enlarged picture: the one overlay in the app that is about a single
+ * object, so it takes the whole window and dims everything else. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 82%);
+  /* The picture is the content; a scrollbar here would be about the page
+   * behind it. */
+  overflow: hidden;
+}
+
+.lightbox-image {
+  max-width: 100%;
+  max-height: 100%;
+  /* Full size is the point of opening it, so the image is drawn at its own
+   * resolution up to the window (never beyond: `contain` keeps a tall
+   * screenshot inside). */
+  object-fit: contain;
+  border-radius: var(--radius);
+  cursor: zoom-out;
 }
 
 /* ---- files a prompt brought into the machine ------------------------------ */
