@@ -28,11 +28,9 @@ import {
   type SlashCommandItem,
 } from "./Composer.tsx";
 import {
-  actionCommandFromText,
   buildSlashCommands,
-  skillPromptFromText,
+  resolveComposerText,
   slashPrompt,
-  slashPromptFromText,
 } from "../slashCommands.ts";
 import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
@@ -192,23 +190,22 @@ export function ChatView(
     if (!text && images.length === 0) return;
     if (providerUnconfigured) return;
     if (message === undefined) {
-      // Actions first: `/compact` is a client-side command, never a
-      // message, and its argument is the summarizer's extra focus.
-      const action = actionCommandFromText(text);
-      if (action !== null) {
+      // One resolver for both composers (see slashCommands.resolveComposerText).
+      const resolved = resolveComposerText(text, {
+        chat: view.info.chat === true,
+        skills,
+        t,
+        allowActions: true,
+      });
+      if (resolved.kind === "incomplete") return;
+      if (resolved.kind === "action") {
         onInputChange("");
         onImagesChange([]);
-        onActionCommand?.(action.commandId, action.instructions);
+        onActionCommand?.(resolved.commandId, resolved.instructions);
         return;
       }
-      // Modes next: their token is a mode id, so the two never collide.
-      const line = (view.info.chat ? null : slashPromptFromText(text, t)) ??
-        skillPromptFromText(text, skills);
-      if (line !== null) {
-        if (line.kind === "needs-text") return;
-        text = line.text;
-        mode = line.mode;
-      }
+      text = resolved.text;
+      mode = resolved.mode;
     }
     // While the agent is running the prompt is steered into the running
     // loop (the server accepts it, no need to block the send button).

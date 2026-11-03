@@ -432,3 +432,64 @@ export function skillPromptFromText(
   }
   return null;
 }
+
+/** What a composer's submit does with the text the user typed. */
+export type ComposerSubmission =
+  /** Send this text (a mode's wrapped prompt when the line was one), with
+   * the mode it came from. */
+  | { kind: "send"; text: string; mode?: ModePrompt }
+  /** Run a client-side action instead of sending (`/compact`). */
+  | { kind: "action"; commandId: string; instructions?: string }
+  /** The line names a command that still needs its argument (`/plan` with
+   * no request): send nothing, leave the text in the composer. */
+  | { kind: "incomplete" };
+
+/**
+ * Resolve composer text into what the submit should do, in one place.
+ *
+ * Both composers (the session's and the draft's) run the same three steps in
+ * the same order, and used to carry a copy each:
+ *
+ *  1. an action command (`/compact`) never becomes a message — it is a
+ *     client-side call, and its argument is the summarizer's extra focus;
+ *  2. a mode token (`/plan …`) wraps the request into the mode's prompt;
+ *  3. a skill line (`/skill 名前 依頼文`) wraps it into the skill prompt.
+ *
+ * The steps are ordered because their tokens cannot collide: a token is
+ * either a mode id, a skill command, or an action — never two of them.
+ *
+ * `allowActions` is the one difference between the two callers: a draft has
+ * no session to condense yet, so `/compact` there leaves the text alone
+ * instead of sending it as a literal message.
+ */
+export function resolveComposerText(
+  text: string,
+  options: {
+    /** A chat session has no modes (see ChatView's submit). */
+    chat: boolean;
+    skills?: readonly SkillInfo[];
+    t: Translator;
+    allowActions: boolean;
+  },
+): ComposerSubmission {
+  if (options.allowActions) {
+    const action = actionCommandFromText(text);
+    if (action !== null) {
+      return {
+        kind: "action",
+        commandId: action.commandId,
+        ...(action.instructions === undefined
+          ? {}
+          : { instructions: action.instructions }),
+      };
+    }
+  }
+  // Modes next: their token is a mode id, so the two never collide.
+  const line = (options.chat ? null : slashPromptFromText(text, options.t)) ??
+    skillPromptFromText(text, options.skills ?? []);
+  if (line !== null) {
+    if (line.kind === "needs-text") return { kind: "incomplete" };
+    return { kind: "send", text: line.text, mode: line.mode };
+  }
+  return { kind: "send", text };
+}

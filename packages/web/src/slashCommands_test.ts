@@ -9,6 +9,7 @@ import {
   actionCommandFromText,
   buildSlashCommands,
   modeRewindText,
+  resolveComposerText,
   skillPromptFromText,
   slashCompletion,
   slashPrompt,
@@ -481,4 +482,101 @@ Deno.test("actionCommandFromText: only a leading token, and only this client's c
   assertEquals(actionCommandFromText("/nope なにか"), null);
   // A path is not a command (the same word-start rule as the slash menu).
   assertEquals(actionCommandFromText("/usr/local/bin"), null);
+});
+
+Deno.test("resolveComposerText: a plain message is sent unchanged", () => {
+  const t = createTranslator("ja");
+  assertEquals(
+    resolveComposerText("hello", {
+      chat: false,
+      t,
+      allowActions: true,
+    }),
+    { kind: "send", text: "hello" },
+  );
+});
+
+Deno.test("resolveComposerText: an action command runs instead of sending", () => {
+  const t = createTranslator("ja");
+  const resolved = resolveComposerText("/compact テストに集中", {
+    chat: false,
+    t,
+    allowActions: true,
+  });
+  assertEquals(resolved.kind, "action");
+  if (resolved.kind !== "action") return;
+  assertEquals(resolved.instructions, "テストに集中");
+});
+
+Deno.test("resolveComposerText: a draft without actions sends /compact as text", () => {
+  const t = createTranslator("ja");
+  // The draft composer has no session to condense: allowActions=false keeps
+  // the text untouched instead of silently dropping it.
+  assertEquals(
+    resolveComposerText("/compact", {
+      chat: false,
+      t,
+      allowActions: false,
+    }),
+    { kind: "send", text: "/compact" },
+  );
+});
+
+Deno.test("resolveComposerText: a mode line wraps the request", () => {
+  const t = createTranslator("ja");
+  const resolved = resolveComposerText("/plan 履歴を追加", {
+    chat: false,
+    t,
+    allowActions: true,
+  });
+  assertEquals(resolved.kind, "send");
+  if (resolved.kind !== "send") return;
+  // The mode id rides along, and the wrapped text is not the raw line.
+  assertEquals(resolved.mode?.modeId, "plan");
+  assertNotEquals(resolved.text, "/plan 履歴を追加");
+});
+
+Deno.test("resolveComposerText: a chat session has no modes", () => {
+  const t = createTranslator("ja");
+  const resolved = resolveComposerText("/plan 履歴を追加", {
+    chat: true,
+    t,
+    allowActions: true,
+  });
+  // A chat workspace does not build sessions with modes, so the token stays
+  // text (the same rule the composer's menu follows).
+  assertEquals(resolved, { kind: "send", text: "/plan 履歴を追加" });
+});
+
+Deno.test("resolveComposerText: a command without its argument sends nothing", () => {
+  const t = createTranslator("ja");
+  assertEquals(
+    resolveComposerText("/plan", {
+      chat: false,
+      t,
+      allowActions: true,
+    }),
+    { kind: "incomplete" },
+  );
+  assertEquals(
+    resolveComposerText("/skill", {
+      chat: false,
+      t,
+      allowActions: true,
+    }),
+    { kind: "incomplete" },
+  );
+});
+
+Deno.test("resolveComposerText: a skill line wraps into the skill prompt", () => {
+  const t = createTranslator("ja");
+  const resolved = resolveComposerText("/skill demo 説明して", {
+    chat: false,
+    skills: [{ name: "demo", description: "d" }],
+    t,
+    allowActions: true,
+  });
+  assertEquals(resolved.kind, "send");
+  if (resolved.kind !== "send") return;
+  assertNotEquals(resolved.text, "/skill demo 説明して");
 });

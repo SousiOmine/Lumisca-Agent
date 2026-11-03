@@ -14,11 +14,9 @@ import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { describeError, useT } from "../i18n.ts";
 import { setModelThinkingLevel } from "../providers.ts";
 import {
-  actionCommandFromText,
   buildSlashCommands,
-  skillPromptFromText,
+  resolveComposerText,
   slashPrompt,
-  slashPromptFromText,
 } from "../slashCommands.ts";
 import {
   Composer,
@@ -279,18 +277,20 @@ export function NewSessionView(
       return;
     }
     if (message === undefined) {
-      // Client-side actions need a session to condense, and this composer
-      // starts one: the text is left in the composer instead of being sent
-      // as a prompt.
-      if (actionCommandFromText(trimmed) !== null) return;
-      // Modes next: their token is a mode id, so the two never collide.
-      const line = (isChat ? null : slashPromptFromText(trimmed, t)) ??
-        skillPromptFromText(trimmed, skills);
-      if (line !== null) {
-        if (line.kind === "needs-text") return;
-        trimmed = line.text;
-        mode = line.mode;
-      }
+      // One resolver for both composers (see slashCommands.resolveComposerText).
+      // A client-side action needs a session to condense and this composer
+      // starts one, so `/compact` leaves the text in place rather than
+      // sending it as a prompt.
+      const resolved = resolveComposerText(trimmed, {
+        chat: isChat,
+        skills,
+        t,
+        allowActions: false,
+      });
+      if (resolved.kind === "incomplete") return;
+      if (resolved.kind === "action") return;
+      trimmed = resolved.text;
+      mode = resolved.mode;
     }
     setBusy(true);
     setError(undefined);
