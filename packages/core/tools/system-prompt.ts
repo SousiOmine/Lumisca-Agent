@@ -1,5 +1,5 @@
 import type { Workspace } from "../types/workspace.ts";
-import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
+import type { Locale } from "../shared/mod.ts";
 /** The machine's home, the folder its agents work in, and the account the
  * tools run as.
  *
@@ -34,7 +34,11 @@ export interface SystemPromptOptions {
  */
 export function buildSystemPrompt(
   workspace: Workspace,
-  options: SystemPromptOptions = {},
+  // Accepted and unused: the prompt no longer varies with anything in here
+  // (the reply language is a context message now, see agent/language-context
+  // .ts). Callers still pass the session's options, and removing the
+  // parameter would only move that fact to every call site.
+  _options: SystemPromptOptions = {},
 ): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
   return `You are Lumisca, a coding agent that works inside a workspace.
@@ -112,7 +116,8 @@ send_chat.
  * their `requires`, so the prompt never mentions a tool the session lacks.
  */
 export function buildChatSystemPrompt(
-  options: SystemPromptOptions = {},
+  // Same as buildSystemPrompt: the chat prompt no longer varies either.
+  _options: SystemPromptOptions = {},
 ): string {
   return `You are Lumisca, a helpful AI assistant.
 

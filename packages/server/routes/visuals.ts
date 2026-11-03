@@ -54,7 +54,6 @@ export function visualRoutes(core: VisualApi): Hono {
     const preview = wantsPreview
       ? await ensurePreview(
         visual.path,
-        name,
         previewPathOf(visual.path, name),
         visual.mimeType,
       )

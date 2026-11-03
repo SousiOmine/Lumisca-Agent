@@ -43,7 +43,6 @@ export function previewName(name: string): string {
  */
 export async function ensurePreview(
   sourcePath: string,
-  sourceName: string,
   previewPath: string,
   mimeType: string,
 ): Promise<Uint8Array | undefined> {
