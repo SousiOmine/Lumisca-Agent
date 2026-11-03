@@ -90,10 +90,8 @@ export const chrome = {
       "The close includes {count} running tabs. Closing stops their runs, their background commands and their sub-agents.",
   },
   "chrome.tabClose.keepRunningNote": {
-    ja:
-      "「実行を続けて閉じる」を選択した場合、セッションはサーバー側でバックグラウンド実行を継続します（タブは閉じられますが、セッション履歴から再度開くことができます）。",
-    en:
-      'With "Close and keep running", the running sessions continue on the server (the other tabs still close; reopen them from the session history).',
+    ja: "閉じても実行は続きます",
+    en: "They keep running after the tab closes",
   },
   "chrome.tabClose.stop": { ja: "中止して閉じる", en: "Stop and close" },
   "chrome.tabClose.keepRunning": {

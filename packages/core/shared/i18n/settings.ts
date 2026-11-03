@@ -589,30 +589,25 @@ export const settings = {
     en: "Automatic compaction",
   },
   "settings.compaction.enabledDesc": {
-    ja:
-      "コンテキストの上限に近づいたとき、過去の会話履歴を自動で要約して消費量を抑えます。stella mode の会話は、最後のやり取りから 3 時間たったときにも要約します。会話履歴自体は保持されます。",
+    ja: "上限に近づいたら履歴を要約します。履歴自体は消えません。",
     en:
-      "Automatically summarizes older conversation history when approaching the context limit to reduce usage. stella mode's conversations are also summarized once three hours have passed since the last exchange. The conversation history itself is kept.",
+      "Summarizes the history as it approaches the limit. Nothing is deleted.",
   },
   "settings.compaction.reservePercent": {
     ja: "予約（ウィンドウ比 %）",
     en: "Reserved (% of window)",
   },
   "settings.compaction.reservePercentDesc": {
-    ja:
-      "モデルのコンテキスト上限に対して、この割合の余裕を残した位置で圧縮を実行します。割合なので、32K のモデルでも 1M のモデルでも同じだけ手前で圧縮します。既定値は 8% です。",
-    en:
-      "Compact once this share of the model's context window is all that is left free. A share, not a token count, so a 32K model and a 1M model compact the same distance from their limits. Default 8%.",
+    ja: "上限に対して残す余裕。既定 8%。",
+    en: "Free space kept below the limit. Default 8%.",
   },
   "settings.compaction.keepRecentPercent": {
     ja: "保持（ウィンドウ比 %）",
     en: "Kept (% of window)",
   },
   "settings.compaction.keepRecentPercentDesc": {
-    ja:
-      "圧縮後も要約せずに保持する直近の割合です。大きくするほど文脈は残りますが、圧縮の効果は小さくなります。既定値は 20% です。",
-    en:
-      "Share of the window kept verbatim after a compaction. Larger keeps more context but frees less. Default 20%.",
+    ja: "圧縮後も残す直近の割合。既定 20%。",
+    en: "Recent share kept after a compaction. Default 20%.",
   },
   "settings.compaction.saveFailed": {
     ja: "圧縮の設定を保存できませんでした: {error}",
@@ -841,10 +836,8 @@ export const settings = {
   /** Desktop only: the choice here is written to the shell's settings and
    * restored on the next launch. */
   "settings.connection.persistedNote": {
-    ja:
-      "選択した接続先は保存され、次回の起動時もそのサーバーを表示します。接続できない場合は起動画面で再試行やローカルサーバーへの切り替えを選択できます。",
-    en:
-      "The chosen server is saved and reopened on the next launch. If it cannot be reached, the startup screen offers a retry and the local server.",
+    ja: "次回の起動時もこの接続先を使います。",
+    en: "This server is used on the next launch too.",
   },
 
   // --- command safety panel --------------------------------------------------
@@ -928,10 +921,8 @@ export const settings = {
   "settings.webSearch.keyUnset": { ja: "APIキー未登録", en: "No API key" },
   "settings.webSearch.remove": { ja: "削除", en: "Remove" },
   "settings.webSearch.removeConfirm": {
-    ja:
-      "「{name}」を削除しますか？ エージェントはこのプロバイダーで検索できなくなります。既定のプロバイダーだった場合は、残りのプロバイダーのいずれかが既定になります。",
-    en:
-      "Remove {name}? The agent can no longer search with it. If it was the default, another configured provider becomes the default.",
+    ja: "「{name}」を削除しますか？",
+    en: "Remove {name}?",
   },
   "settings.webSearch.loadFailed": {
     ja: "Web検索の設定を読み込めませんでした: {error}",
@@ -984,10 +975,8 @@ export const settings = {
     en: "Let the agent use this machine's screen",
   },
   "settings.computerUse.description": {
-    ja:
-      "エージェントが画面を確認し、マウスやキーボードを操作できるようにします。Windows および Linux（Wayland）に対応しています（Linux では初回に画面キャプチャの許可が必要です）。",
-    en:
-      "Allows the agent to view the screen and control the mouse and keyboard. Supported on Windows and Linux (Wayland).",
+    ja: "エージェントが画面を見て操作できるようにします。",
+    en: "Lets the agent see and control the screen.",
   },
   "settings.computerUse.tooltip": {
     ja:
