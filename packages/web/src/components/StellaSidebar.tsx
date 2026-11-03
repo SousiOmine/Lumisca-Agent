@@ -175,6 +175,22 @@ export function StellaSidebar(
     });
   };
 
+  /** The same menu from a right click on the row, at the pointer. A row's two
+   * verbs (edit, delete) are the browser's context-menu verbs too, and a
+   * right click is where a reader looks for them; the ⋮ button stays for
+   * touch, where there is no right click. */
+  const openMenuAt = (
+    agent: StellaAgentSummary,
+    event: MouseEvent,
+  ) => {
+    event.preventDefault();
+    setMenu({
+      agent,
+      right: globalThis.innerWidth - event.clientX,
+      top: event.clientY,
+    });
+  };
+
   return (
     <aside className="stella-sidebar">
       <div className="stella-sidebar-header">
@@ -200,6 +216,7 @@ export function StellaSidebar(
             key={agent.id}
             className={`stella-agent${agent.id === activeId ? " active" : ""}`}
             data-enter={entering.has(agent.id) || undefined}
+            onContextMenu={(event) => openMenuAt(agent, event)}
           >
             {
               /* The picture is part of the row's name button, not a control of
