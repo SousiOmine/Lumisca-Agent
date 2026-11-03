@@ -12,6 +12,7 @@ import { workspaceRoutes } from "./routes/workspaces.ts";
 import { skillRoutes } from "./routes/skills.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 import { stellaRoutes } from "./routes/stella.ts";
+import { stellaAssetRoutes } from "./routes/stella-assets.ts";
 import { routineRoutes } from "./routes/routines.ts";
 import { stellaScreenRoute } from "./stella-screen.ts";
 import { visualRoutes } from "./routes/visuals.ts";
@@ -177,6 +178,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // conversation has no streaming text (its agent's own words never reach
   // the screen), so there is no batch to time.
   app.route("/api", stellaRoutes(core));
+  // An agent's picture and a prompt's uploaded file: raw bytes, same prefix.
+  app.route("/api", stellaAssetRoutes(core));
   // Routines: the scheduled requests of a stella conversation. Addressed by
   // agent, because a routine belongs to one conversation.
   app.route(

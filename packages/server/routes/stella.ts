@@ -31,7 +31,6 @@ import {
 } from "./util.ts";
 import { parsePromptBody, type PromptBody } from "./session-requests.ts";
 import { conversationRoutes } from "./conversation.ts";
-import { assetHeaders } from "./asset-headers.ts";
 import { createEventStream } from "./ws-stream.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -56,12 +55,6 @@ export interface StellaApi {
       icon?: { bytes: Uint8Array; extension: string } | null;
     },
   ): Promise<StellaAgent>;
-  /** The icon file one of an agent's names refers to (the route serves it).
-   * Undefined for an unknown name or a file that is gone. */
-  resolveStellaAgentIcon(
-    id: string,
-    name: string,
-  ): Promise<{ path: string; mimeType: string } | undefined>;
   deleteStellaAgent(id: string): Promise<void>;
   getStellaStatus(): Promise<{
     availability: StellaAvailability;
@@ -92,12 +85,6 @@ export interface StellaApi {
   getAgent(sessionId: string): { isStreaming: boolean } | undefined;
   getStellaAgent(id: string): StellaAgent | undefined;
   openSession(sessionId: string): SessionInfo;
-  /** Read one file a prompt brought into the machine, for the conversation
-   * to draw. Undefined when the machine no longer has it. */
-  resolvePromptUpload(
-    agentId: string,
-    ref: string,
-  ): Promise<{ bytes: Uint8Array; mimeType: string } | undefined>;
   /** Send a prompt into the conversation (fire-and-forget; the events carry
    * the progress). `uploads` are the files and pictures the user sent: they
    * are already inside the machine, and the message records where. Optional
@@ -332,65 +319,6 @@ export function stellaRoutes(core: StellaApi): Hono {
   app.delete("/stella/agents/:id", async (c) => {
     await core.deleteStellaAgent(c.req.param("id"));
     return c.json({ ok: true });
-  });
-
-  // --- agents' icons (the picture each is drawn with) ----------------------
-
-  /** The picture itself.
-   *
-   * Named by the file the store generated, not by the agent alone: a
-   * replaced picture keeps the OLD URL valid for whatever already drew it
-   * (the answer is cacheable forever, and a URL that changed content would
-   * keep showing the old face), while a fresh upload gets a fresh name. The
-   * agent must exist — a name alone must not tell a caller whether one ever
-   * did — and the store answers only names it generated. */
-  app.get("/stella/agents/:id/icon/:name", async (c) => {
-    const agentId = c.req.param("id");
-    if (core.getStellaAgent(agentId) === undefined) {
-      throw new AppError(`Agent not found: ${agentId}`, 404);
-    }
-    const icon = await core.resolveStellaAgentIcon(
-      agentId,
-      c.req.param("name"),
-    );
-    if (icon === undefined) {
-      throw new AppError(`Icon not found: ${c.req.param("name")}`, 404);
-    }
-    const bytes = await Deno.readFile(icon.path);
-    return new Response(bytes, {
-      headers: assetHeaders({ mimeType: icon.mimeType }),
-    });
-  });
-
-  /**
-   * One file a prompt brought into the machine, read back for the
-   * conversation to draw.
-   *
-   * The machine is the truth. A file the agent moved, edited or deleted is
-   * gone from the conversation too, and the answer is a 404 the client draws
-   * as "this file is no longer in the machine" — the ordinary end of a
-   * message-app attachment, and the same for a picture and a document. The
-   * bytes are never copied into the store, so nothing can show a stale copy
-   * of something the machine no longer has.
-   *
-   * `ref` is the address the transcript carries (`uploads/<batch>/<name>`),
-   * validated before it becomes a path, so a caller cannot reach anything
-   * outside the agent's uploads folder.
-   */
-  app.get("/stella/conversations/:agentId/upload", async (c) => {
-    const agentId = c.req.param("agentId");
-    const ref = c.req.query("ref") ?? "";
-    const agent = core.getStellaAgent(agentId);
-    if (agent === undefined) {
-      throw new AppError(`Agent not found: ${agentId}`, 404);
-    }
-    const file = await core.resolvePromptUpload(agentId, ref);
-    if (file === undefined) {
-      throw new AppError("That file is no longer in the machine", 404);
-    }
-    return new Response(new Uint8Array(file.bytes), {
-      headers: assetHeaders({ mimeType: file.mimeType }),
-    });
   });
 
   /** The stella conversation, created on first use, plus the snapshot the
