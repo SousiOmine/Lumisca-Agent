@@ -449,3 +449,32 @@ function styleSheetsSync(): [string, string][] {
   }
   return sheets;
 }
+
+Deno.test("a card's action lines up with the plain cards around it", async () => {
+  // Regression: a registry entry (settings → 接続先サーバー) drew its own
+  // padded box instead of using the card's padding, so the 表示 buttons in
+  // the column sat a few pixels apart from each other.
+  const settings = await Deno.readTextFile(
+    new URL("./styles/settings.css", import.meta.url),
+  );
+  assertEquals(
+    /\.setting-card-stack\s*\{[^}]*flex-direction:\s*column/.test(settings),
+    true,
+    ".setting-card-stack must stack its rows",
+  );
+  // The row keeps the card's own padding: it must not add padding of its own,
+  // which is what put the action out of line.
+  const row = /\.setting-card-row\s*\{([^}]*)\}/.exec(settings);
+  assertEquals(row !== null, true, ".setting-card-row must exist");
+  assertEquals(
+    /padding/.test(row![1]!),
+    false,
+    ".setting-card-row must not set its own padding",
+  );
+  // The action keeps its width: a long name shrinks, the button never does.
+  assertEquals(
+    /\.setting-card-action\s*\{[^}]*flex:\s*none/.test(settings),
+    true,
+    ".setting-card-action must not shrink",
+  );
+});

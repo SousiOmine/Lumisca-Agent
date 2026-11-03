@@ -331,17 +331,8 @@ function ServerCard({
     : t("settings.connection.unnamed");
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        padding: "10px 12px",
-        background: "var(--surface-2)",
-        borderRadius: "var(--radius)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <div className="setting-card setting-card-stack">
+      <div className="setting-card-row">
         <button
           type="button"
           className="btn setting-card-open"
@@ -376,7 +367,7 @@ function ServerCard({
         </button>
         <button
           type="button"
-          className="btn primary"
+          className="btn primary setting-card-action"
           disabled={busy || testing}
           onClick={onConnect}
         >
