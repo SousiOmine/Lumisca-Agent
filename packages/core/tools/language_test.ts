@@ -35,21 +35,18 @@ Deno.test("outputLanguageBullet: names the language, in English, for both", () =
   assertEquals(ja.includes("do not switch"), true);
 });
 
-Deno.test("outputLanguageSection: leads the guidelines of a coding prompt", () => {
+Deno.test("the language rule is the prompt's only guideline", () => {
+  // The per-tool guidance was removed (see system-prompt.ts): a tool's own
+  // description already says what it does, so repeating it in the prompt
+  // only cost every request. What is left is the rule no tool can carry.
   const prompt = buildSystemPrompt(workspace, {
     tools: TOOLS,
     language: "en",
   });
-  const guidelines = prompt.slice(prompt.indexOf("Guidelines:"));
-  const firstBullet = guidelines.split("\n").find((line) =>
-    line.startsWith("- ")
-  );
-  assertEquals(firstBullet, outputLanguageBullet("en"));
-  // The sections after it are untouched.
-  assertEquals(
-    prompt.includes("- Prioritize correctness."),
-    true,
-  );
+  const bullets = prompt.split("\n").filter((line) => line.startsWith("- "));
+  assertEquals(bullets, [outputLanguageBullet("en")]);
+  // The per-tool guidance is gone with it.
+  assertEquals(prompt.includes("- Prioritize correctness."), false);
 });
 
 Deno.test("buildSystemPrompt: the session language decides the rule", () => {
@@ -69,7 +66,6 @@ Deno.test("buildSystemPrompt: the session language decides the rule", () => {
 Deno.test("buildChatSystemPrompt: chat sessions get the rule too", () => {
   const prompt = buildChatSystemPrompt({ tools: [], language: "ja" });
   assertEquals(prompt.includes("Write every reply in Japanese"), true);
-  assertEquals(prompt.includes("Guidelines:"), true);
 });
 
 Deno.test("subagentSystemPrompt: reports come back in the session language", () => {

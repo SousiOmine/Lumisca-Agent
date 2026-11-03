@@ -598,34 +598,6 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
   assertEquals(stellaTools.includes("ask"), false, "stella must not ask");
 });
 
-Deno.test("stella tool set: the prompt teaches the machine, not a workspace", async () => {
-  const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
-  const prompt = buildStellaSystemPrompt({
-    tools: [
-      "read",
-      "write",
-      "edit",
-      "bash",
-      "vm_screenshot",
-      "vm_act",
-    ],
-  });
-  // The screens are described only because the tools are there.
-  assert(prompt.includes("vm_screenshot"), prompt);
-  assert(prompt.includes("vm_act"), prompt);
-  // The history search is described for the same reason: a session that was
-  // condensed must know the earlier turns are still reachable.
-  const withHistory = buildStellaSystemPrompt({
-    tools: ["read", "history_search"],
-  });
-  assert(withHistory.includes("history_search"), withHistory);
-  // A session without them gets no such guidance (the sections are
-  // tool-gated, like every other section).
-  const without = buildStellaSystemPrompt({ tools: ["read", "bash"] });
-  assert(!without.includes("vm_screenshot"), without);
-  assert(!without.includes("history_search"), without);
-});
-
 /** A core with a running machine, one agent and its conversation open.
  * The faux provider is the core's own: a second one would script a model
  * nothing is listening to. */
@@ -656,13 +628,9 @@ function lastHistoryResult(core: LumiscaCore, sessionId: string): string {
 Deno.test("stella conversation: history_search is preloaded and reads its own rows", async () => {
   const { faux, core, session } = await stellaConversation("Solo");
   try {
-    // The prompt is snapshotted from the tool set, so this is the proof the
-    // tool is preloaded for a real stella session — not only for a hand-built
-    // tool set.
-    assert(
-      (session.systemPrompt ?? "").includes("history_search"),
-      session.systemPrompt ?? "",
-    );
+    // Preloaded for a real stella session — not only for a hand-built tool
+    // set. Proved by the call below succeeding: the prompt no longer names
+    // its tools (see system-prompt.ts), so the transcript cannot show it.
 
     faux.setResponses([fauxAssistantMessage("Noted.")]);
     await promptSession(core, session.id, "The code word is pelican.");
@@ -1157,4 +1125,25 @@ Deno.test("stella agents: the preview is the newest entry, not the newest row", 
   } finally {
     await core.close();
   }
+});
+
+Deno.test("stella prompt: send_chat is the only way to reach the user", async () => {
+  // The rule the model has to follow, in the prompt: everything it writes
+  // without send_chat stays invisible. The wording matters — the earlier
+  // version described the model's own text as "working notes", which reads
+  // as a permission to think out loud rather than as an instruction to send.
+  const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
+  const prompt = buildStellaSystemPrompt({ tools: ["read", "send_chat"] });
+  assert(
+    prompt.includes("you MUST use the send_chat tool"),
+    prompt,
+  );
+  assert(
+    prompt.includes("anything you write without it is\nnot shown to them"),
+    prompt,
+  );
+  assert(
+    prompt.includes("send it explicitly with\nsend_chat"),
+    prompt,
+  );
 });

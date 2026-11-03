@@ -11,14 +11,7 @@ import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 const VM_WORKDIR = "/home/agent";
 const VM_AGENTS_DIR = `${VM_WORKDIR}/agents`;
 const VM_USER = "agent";
-import { outputLanguageSection } from "./language.ts";
-import {
-  CHAT_PROMPT_SECTIONS,
-  CODING_PROMPT_SECTIONS,
-  type PromptSection,
-  renderPromptSections,
-  STELLA_PROMPT_SECTIONS,
-} from "./prompt-sections.ts";
+import { outputLanguageBullet } from "./language.ts";
 
 /** How a session's system prompt is built: the workspace framing for a
  * coding session, or the folder-less framing of a chat session. */
@@ -32,20 +25,16 @@ export interface SystemPromptOptions {
   language?: Locale;
 }
 
-/** The "Guidelines:" block, filled from the sections visible for the
- * session's tool set. The output-language rule leads the list: it applies
- * to every reply, whatever tools the session has. */
-function guidelines(
-  sections: readonly PromptSection[],
-  toolNames: readonly string[],
-  language: Locale,
-): string {
-  return `\n\nGuidelines:\n${
-    renderPromptSections(
-      [outputLanguageSection(language), ...sections],
-      toolNames,
-    )
-  }`;
+/** The one rule every session carries: which language to answer in.
+ *
+ * The per-tool guidance is NOT repeated here. A tool's own description
+ * already states what it does and when to reach for it, so a bullet that
+ * repeated it only cost every request (and drifted from the description it
+ * duplicated). What is left is the rule no tool can carry — the output
+ * language — written in English like the rest of the prompt, with only the
+ * language name varying. */
+function guidelines(language: Locale): string {
+  return `\n\n${outputLanguageBullet(language)}\n`;
 }
 
 /**
@@ -64,13 +53,7 @@ export function buildSystemPrompt(
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
-${folders}${
-    guidelines(
-      CODING_PROMPT_SECTIONS,
-      options.tools ?? [],
-      options.language ?? DEFAULT_LOCALE,
-    )
-  }
+${folders}${guidelines(options.language ?? DEFAULT_LOCALE)}
 `;
 }
 
@@ -128,15 +111,10 @@ machine's own screen services — Xvfb, openbox, Chromium, x11vnc, websockify
 them. Other agents have sibling folders under ${VM_AGENTS_DIR}; change their
 files only when the user asks.
 
-You talk with the user in a single, ongoing chat, and the user sees only what
-you send with the send_chat tool. Your own text is your working notes — think
-in it, plan in it, and do not expect it to reach anyone.${
-    guidelines(
-      STELLA_PROMPT_SECTIONS,
-      options.tools ?? [],
-      options.language ?? DEFAULT_LOCALE,
-    )
-  }
+You talk with the user in a single, ongoing chat. To send a message or reply
+to the user you MUST use the send_chat tool: anything you write without it is
+not shown to them. Whatever you want the user to read, send it explicitly with
+send_chat.${guidelines(options.language ?? DEFAULT_LOCALE)}
 `;
 }
 
@@ -155,11 +133,7 @@ You are running without a file workspace: the file, shell and sub-agent tools
 are unavailable, so you cannot read, write or execute anything on this
 machine. Answer questions, explain things, and help with text-based tasks.
 Images can be attached to prompts.${
-    guidelines(
-      CHAT_PROMPT_SECTIONS,
-      options.tools ?? [],
-      options.language ?? DEFAULT_LOCALE,
-    )
+    guidelines(options.language ?? DEFAULT_LOCALE)
   }
 `;
 }

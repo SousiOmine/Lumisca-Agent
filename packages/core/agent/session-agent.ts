@@ -174,6 +174,9 @@ export class SessionAgent {
   /** The rows this session owns in the messages table, and how many leading
    * transcript messages they cover (see transcript.ts). */
   private readonly transcript: TranscriptStore;
+  /** The tool names this session was built with (see the `toolNames`
+   * accessor). */
+  private readonly toolNamesOfSession: string[];
   private readonly onEvent: (event: ClientEvent) => void;
   /** The session's MCP attachment: its servers gate the first prompt, and
    * its tools land in the session's shared registry once discovery finished. */
@@ -304,6 +307,7 @@ export class SessionAgent {
       deliver: (payload) => this.injectNotification(payload),
     });
 
+    this.toolNamesOfSession = options.tools.map((tool) => tool.name);
     this.agent = new Agent({
       initialState: {
         systemPrompt: options.systemPrompt,
@@ -465,6 +469,13 @@ export class SessionAgent {
 
   get isStreaming(): boolean {
     return this.agent.state.isStreaming;
+  }
+
+  /** The names of the tools this session was built with. The prompt no
+   * longer names its tools (see tools/system-prompt.ts), so this is the only
+   * way to ask a live session what it can do. */
+  get toolNames(): string[] {
+    return this.toolNamesOfSession;
   }
 
   get messages(): AgentMessage[] {

@@ -103,10 +103,10 @@ Deno.test("coding prompt carries the workspace and the tool guidance it has", ()
   const prompt = buildSystemPrompt(workspace, { tools: CODING_TOOLS });
   assert(prompt.includes("You are Lumisca, a coding agent"));
   assert(prompt.includes("The workspace contains these folders"));
-  assert(
-    prompt.includes(TOOL_TASK),
-    "task guidance expected with the task tool",
-  );
+  // The prompt does NOT restate the tools: each tool's description carries
+  // its own contract, and the prompt repeats only the output-language rule
+  // (see system-prompt.ts).
+  assertEquals(prompt.includes("Guidelines:\n- Use"), false);
   // The machine's specs are not in the prompt: they are stable, cheap to
   // probe from a command, and every line of the prompt is paid for on every
   // request (see environment.ts).
@@ -142,8 +142,9 @@ Deno.test("chat prompt lists only the chat guidelines", () => {
     tools: [TOOL_ASK, TOOL_TODO, TOOL_SKILL],
   });
   assert(prompt.includes("You are Lumisca, a helpful AI assistant."));
-  assert(prompt.includes("Write answers with future readers in mind"));
-  assert(prompt.includes("Ask the user when a task is ambiguous."));
+  // The chat prompt carries the same single rule as every other prompt; the
+  // per-tool guidance is the tools' own descriptions now.
+  assert(prompt.includes("Write every reply in"));
   assertEquals(
     prompt.includes("`[exit code: N]`"),
     false,

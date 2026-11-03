@@ -1316,23 +1316,23 @@ Deno.test("a coding session gets chat_attach and visual; a chat session neither"
   try {
     // Both tools are preloaded in code mode: `chat_attach` hands a file
     // over as a card, `visual` puts an image inside the reply's markdown.
-    const coding = core.getSession(sessionId)!.systemPrompt ?? "";
-    assert(coding.includes("chat_attach"));
-    assert(coding.includes("publish it with the visual"));
-    assert(coding.includes("```svg"));
+    // Read from the session's tool list — the prompt no longer names its
+    // tools (see tools/system-prompt.ts).
+    const coding = core.getAgent(sessionId)!.toolNames;
+    assert(coding.includes("chat_attach"), coding.join(", "));
+    assert(coding.includes("visual"), coding.join(", "));
 
     // A chat session has no workspace to read a file from, so it must not be
-    // pointed at either tool — but the fence works everywhere.
+    // given either tool.
     const faux = fauxProvider();
     core.models.models.setProvider(faux.provider);
     const chat = await core.createSession({
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
     });
-    const chatPrompt = core.getSession(chat.id)!.systemPrompt ?? "";
-    assertEquals(chatPrompt.includes("chat_attach"), false);
-    assertEquals(chatPrompt.includes("publish it with the visual"), false);
-    assert(chatPrompt.includes("```svg"));
+    const chatTools = core.getAgent(chat.id)!.toolNames;
+    assertEquals(chatTools.includes("chat_attach"), false);
+    assertEquals(chatTools.includes("visual"), false);
   } finally {
     await core.close();
     await removeDirRetry(dir);

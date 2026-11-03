@@ -87,9 +87,11 @@ Deno.test("core: unknown provider ids are refused", async () => {
  * guideline. The prompt is built from the tool set the session actually has
  * (agent/factory.ts), so it is the observable proof that the pair was
  * preloaded — and that it was absent when no provider was configured. */
-function promptHasWebTools(core: LumiscaCore, sessionId: string): boolean {
-  const prompt = core.getSession(sessionId)?.systemPrompt ?? "";
-  return prompt.includes("Use web_search");
+function sessionHasWebTools(core: LumiscaCore, sessionId: string): boolean {
+  // Read from the session's own tool list: the prompt no longer names its
+  // tools (see tools/system-prompt.ts).
+  const names = core.getAgent(sessionId)?.toolNames ?? [];
+  return names.includes("web_search") && names.includes("web_fetch");
 }
 
 Deno.test("core: a search provider becomes the session's web tools", async () => {
@@ -104,20 +106,19 @@ Deno.test("core: a search provider becomes the session's web tools", async () =>
     // No provider configured: a new session is not given the web tools, and
     // its prompt does not point at them.
     const plain = await core.createSession({ workspaceId: workspace.id });
-    assertEquals(promptHasWebTools(core, plain.id), false);
+    assertEquals(sessionHasWebTools(core, plain.id), false);
 
     core.addWebSearchProvider({ id: "brave", apiKey: "k" });
     const configured = await core.createSession({ workspaceId: workspace.id });
-    // The prompt is built from the tool set the session actually has, so a
-    // session created after the provider was added carries the guidance that
-    // is keyed on the pair.
-    assert(promptHasWebTools(core, configured.id));
+    // The tool set is built per session, so one created after the provider
+    // was added carries the pair.
+    assert(sessionHasWebTools(core, configured.id));
 
     // Clearing the default keeps the configuration but stops search: the
     // next session gets no web tools again.
     core.setDefaultWebSearchProvider(null);
     const off = await core.createSession({ workspaceId: workspace.id });
-    assertEquals(promptHasWebTools(core, off.id), false);
+    assertEquals(sessionHasWebTools(core, off.id), false);
   } finally {
     await core.close();
   }
