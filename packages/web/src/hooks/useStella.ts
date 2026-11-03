@@ -75,11 +75,13 @@ export function useStella(enabled: boolean): {
   /** Send the composer's text with the attachments: `images` are shown
    * inline and passed to the model as content, `files` are written into the
    * machine and named in the text the model receives. */
+  /** Send the prompt. Rejects when the server did not take it (the
+   * conversation error is set as well); the composer restores the text. */
   prompt: (
     text: string,
     images?: PendingImage[],
     files?: PendingFile[],
-  ) => void;
+  ) => Promise<void>;
   abort: () => void;
   answer: (
     toolCallId: string,
@@ -376,24 +378,28 @@ export function useStella(enabled: boolean): {
   }, [activeAgentId]);
 
   const prompt = useCallback(
-    (text: string, images?: PendingImage[], files?: PendingFile[]) => {
+    async (
+      text: string,
+      images?: PendingImage[],
+      files?: PendingFile[],
+    ): Promise<void> => {
       const agentId = requireAgent();
-      // Fire-and-forget: the run's progress arrives on the event stream, so
-      // the composer is cleared immediately and a failure surfaces as the
-      // conversation's error. That error is the CONVERSATION's, not the
-      // hook's: a send that failed leaves the conversation open, and
-      // replacing the whole transcript with an error screen (which is what
-      // `error` does) would throw away the history the user retries from.
-      void stellaApi.prompt(agentId, text, images, files).catch(
-        (failure: unknown) => {
-          setConversation((current) =>
-            current === null ? current : {
-              ...current,
-              error: describeError(failure, t),
-            }
-          );
-        },
-      );
+      // The failure is the CONVERSATION's, not the hook's: a send that
+      // failed leaves the conversation open, and replacing the whole
+      // transcript with an error screen (which is what `error` does) would
+      // throw away the history the user retries from. It is rethrown as
+      // well, so the composer can put the text back (see ChatView.submit).
+      try {
+        await stellaApi.prompt(agentId, text, images, files);
+      } catch (failure) {
+        setConversation((current) =>
+          current === null ? current : {
+            ...current,
+            error: describeError(failure, t),
+          }
+        );
+        throw failure;
+      }
     },
     [requireAgent, t],
   );

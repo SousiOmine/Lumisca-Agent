@@ -60,7 +60,13 @@ interface ChatViewProps {
   onInputChange: (value: string) => void;
   images: PendingImage[];
   onImagesChange: (images: PendingImage[]) => void;
-  onPrompt: (text: string, images: PendingImage[], mode?: ModePrompt) => void;
+  /** Send the prompt. Rejects when the server did not take it, so the
+   * composer can put the text back (see submit). */
+  onPrompt: (
+    text: string,
+    images: PendingImage[],
+    mode?: ModePrompt,
+  ) => Promise<void>;
   onAbort: () => void;
   /** Rewind the transcript from a user message onward (the message and
    * everything after it are deleted; an active run is aborted first).
@@ -115,6 +121,10 @@ export function ChatView(
   // jump (see TranscriptScrollOptions.pinToken): this view holds the intent,
   // not the ref.
   const [pinToken, setPinToken] = useState(0);
+  // A prompt is on its way to the server. The composer stays filled until it
+  // lands (see submit), so the send button has to say "not yet" explicitly —
+  // an empty input used to be what kept a second send from starting.
+  const [sending, setSending] = useState(false);
   const t = useT();
   const isRunning = isViewRunning(view);
 
@@ -202,10 +212,30 @@ export function ChatView(
     }
     // While the agent is running the prompt is steered into the running
     // loop (the server accepts it, no need to block the send button).
-    onPrompt(text, images, mode);
-    onInputChange("");
-    onImagesChange([]);
-    setPinToken((token) => token + 1);
+    //
+    // The composer is cleared only once the server has taken it: clearing
+    // first meant a failed send (the server stopped, the network down, the
+    // request rejected) threw away what the reader had written, and a long
+    // prompt was the most expensive thing to lose. `sending` blocks a second
+    // submit while the first is in flight — without it, putting the text back
+    // on failure would invite a double send.
+    setSending(true);
+    void (async () => {
+      try {
+        await onPrompt(text, images, mode);
+        onInputChange("");
+        onImagesChange([]);
+        setPinToken((token) => token + 1);
+      } catch {
+        // The view already shows why (useSessionActions puts the classified
+        // error on the session). Putting the text back is this function's
+        // share: the remark is the same text the reader wrote.
+        onInputChange(message ?? input);
+        onImagesChange(images);
+      } finally {
+        setSending(false);
+      }
+    })();
   };
 
   /** A `run` or `action` command was picked at the start of the input (the
@@ -392,7 +422,7 @@ export function ChatView(
           submitIcon={IconSend}
           submitIconOnly
           submitDisabled={(!input.trim() && images.length === 0) ||
-            providerUnconfigured}
+            providerUnconfigured || sending}
           onAbort={isRunning ? onAbort : undefined}
           onSubmit={() => submit()}
           onOpenSettings={onOpenSettings}

@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
   intercept,
   jsonError,
@@ -15,7 +15,13 @@ import type { UserProviderInput } from "./types.ts";
  * here is what the header assertions expect on every request. */
 globalThis.__LUMISCA_TOKEN__ = "test-token";
 const { api } = await import("./api-local.ts");
-const { ApiError, onServerFailure } = await import("./api-client.ts");
+const {
+  ApiError,
+  onServerFailure,
+  request,
+  setRequestTimeoutMs,
+  TimeoutError,
+} = await import("./api-client.ts");
 /** The failure classification, as a type only (the value is imported above,
  * because it must exist before the module graph loads the token). */
 type ApiErrorKind = InstanceType<typeof ApiError>["kind"];
@@ -674,5 +680,31 @@ Deno.test("api-local: a failure is classified by what went wrong", async () => {
     } else {
       assertEquals(error.message, testCase.message, testCase.name);
     }
+  }
+});
+
+Deno.test("api-local: a request that never answers gives up instead of hanging", async () => {
+  // A server that accepted the connection and then stopped (a hang, a
+  // suspended machine) leaves `fetch` pending forever: no error to show, no
+  // retry, and the composer would hold a promise it can never settle. The
+  // bound is what turns that into a failure the reader can see.
+  const original = globalThis.fetch;
+  setRequestTimeoutMs(20);
+  globalThis.fetch = (_input, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        reject(new DOMException("aborted", "AbortError"));
+      });
+    });
+  try {
+    const error = await request("/api/never", {})
+      .then(() => undefined)
+      .catch((cause: unknown) => cause);
+    assertEquals(error instanceof TimeoutError, true, String(error));
+    assertEquals((error as InstanceType<typeof ApiError>).kind, "network");
+    assertStringIncludes((error as Error).message, "timed out");
+  } finally {
+    globalThis.fetch = original;
+    setRequestTimeoutMs(120_000);
   }
 });

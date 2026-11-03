@@ -57,6 +57,43 @@ function networkError(error: unknown): ApiError {
   return new ApiError(message, "network", { cause: error });
 }
 
+/**
+ * How long a request may stay unanswered before it is treated as an outage.
+ *
+ * Without a bound, a server that accepted the connection and then stopped
+ * (a hang, a suspended machine, a proxy holding the socket) left the promise
+ * pending forever: no error to show, no retry, and — before the composer was
+ * fixed — the text already cleared from the field.
+ *
+ * Generous on purpose. The longest legitimate call is a prompt carrying the
+ * maximum attachment (base64 of ~15 MB) or a compaction that summarizes a
+ * long history; both are slow uploads, not hangs. The bound only has to be
+ * below "the user has given up".
+ */
+export const REQUEST_TIMEOUT_MS = 120_000;
+
+/** The bound `request` applies, as a value a test can shorten. Not a
+ * per-call option: every caller would then have to think about it, and the
+ * one number that matters is the app's. */
+let requestTimeoutMs = REQUEST_TIMEOUT_MS;
+
+/** Replace the request bound (tests only: a two-minute wait is not something
+ * a suite can spend). */
+export function setRequestTimeoutMs(ms: number): void {
+  requestTimeoutMs = ms;
+}
+
+/** Why a request timed out: a network failure in every sense the reader
+ * cares about (nothing came back, retrying may help), said as its own
+ * sentence because "the server never answered" is not the same as "the
+ * connection was refused". */
+export class TimeoutError extends ApiError {
+  constructor(ms: number) {
+    super(`Request timed out after ${ms} ms`, "network");
+    this.name = "TimeoutError";
+  }
+}
+
 export async function request<T>(
   path: string,
   init?: RequestInit,
@@ -64,16 +101,31 @@ export async function request<T>(
   const headers = new Headers(init?.headers);
   headers.set("content-type", "application/json");
   if (token) headers.set("x-lumisca-token", token);
+  // A caller that brings its own signal keeps it: the timeout is combined
+  // with it rather than replacing it (a screen that unmounts cancels too).
+  //
+  // The deadline is an AbortController and a timer that is ALWAYS cleared,
+  // not `AbortSignal.timeout`: that helper's timer stays pending for the
+  // whole interval, which keeps the event loop alive for two minutes after
+  // every call (Deno's test sanitizer reports exactly that, and a server-side
+  // caller would be held open the same way).
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), requestTimeoutMs);
+  const signal = init?.signal === undefined || init.signal === null
+    ? deadline.signal
+    : AbortSignal.any([init.signal, deadline.signal]);
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+    res = await fetch(`${API_BASE}${path}`, { ...init, headers, signal });
   } catch (error) {
-    // Network-level failure (server down, not an HTTP error): tell the
-    // desktop health monitor so its banner can classify (crashed vs hung)
-    // and offer restart + log copy-paste. Plain browsers have no monitor
-    // (no shell), so the dispatch is a no-op there.
+    // A timeout is not an outage the desktop can restart its way out of any
+    // differently from a refused connection, so the monitor is told either
+    // way; the message is where the difference is kept.
     notifyServerFailure();
+    if (deadline.signal.aborted) throw new TimeoutError(requestTimeoutMs);
     throw networkError(error);
+  } finally {
+    clearTimeout(timer);
   }
   if (!res.ok) {
     // Errors are answered as `{ error }`; a proxy or a half-dead server

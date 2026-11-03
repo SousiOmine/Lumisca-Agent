@@ -86,13 +86,13 @@ export function useSessionActions(
         );
         return next;
       });
-      try {
-        await sessionApi(key).prompt(text.trim(), images, mode);
-      } catch (error) {
-        setViewError(key, error);
-      }
+      // Both failures leave this function as a rejection: the caller keeps
+      // the text it was about to send (the composer restores it), and the
+      // view shows why. Swallowing them here is what made a failed first
+      // prompt lose the draft.
+      await sessionApi(key).prompt(text.trim(), images, mode);
     },
-    [setTabs, setActiveTab, setViews, setViewError],
+    [setTabs, setActiveTab, setViews],
   );
 
   const prompt = useCallback(
@@ -105,11 +105,14 @@ export function useSessionActions(
       const textTrimmed = text.trim();
       if (!textTrimmed && images.length === 0) return;
       // The user message appears via the WebSocket event stream
-      // (message_start), so no optimistic append is needed.
+      // (message_start), so no optimistic append is needed. A failure is
+      // both shown on the view and rethrown: the composer keeps the text
+      // (see ChatView.submit).
       try {
         await sessionApi(key).prompt(textTrimmed, images, mode);
       } catch (error) {
         setViewError(key, error);
+        throw error;
       }
     },
     [setViewError],
