@@ -369,7 +369,7 @@ export function App({ initialData }: AppProps): ReactElement {
           ? (
             <div className="tabbar stella-titlebar-label">
               <span className="stella-titlebar-text">
-                {t("chat.modeSelect.stella.title")}
+                {t("chat.stella.titleBarLabel")}
               </span>
               {
                 /* On desktop the app menu lives in the title bar's controls; in

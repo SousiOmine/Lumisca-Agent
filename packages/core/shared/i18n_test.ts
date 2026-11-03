@@ -248,6 +248,7 @@ Deno.test("catalogue: user-facing text is not left in one language only", () => 
     // Product names: the mode names are the same word in every language.
     "chat.modeSelect.code.title",
     "chat.modeSelect.stella.title",
+    "chat.stella.titleBarLabel", // the app's own name
   ]);
   for (const key of Object.keys(messages)) {
     if (allowed.has(key)) continue;

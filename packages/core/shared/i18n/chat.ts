@@ -180,6 +180,14 @@ export const chat = {
       "A coding agent for your workspaces. Sessions live in tabs, and it uses this machine's files and shell directly.",
   },
   "chat.modeSelect.stella.title": { ja: "stella mode", en: "stella mode" },
+  /** The title bar's label for a stella conversation. Not the mode's name:
+   * what the window shows is the app, not which mode was picked — the mode is
+   * already the only thing on screen, and "stella mode" in the corner names a
+   * setting the reader chose once rather than the program they are in. */
+  "chat.stella.titleBarLabel": {
+    ja: "Lumisca Agent",
+    en: "Lumisca Agent",
+  },
   "chat.modeSelect.stella.description": {
     ja: "シームレスな開発体験",
     en: "A seamless development experience",
