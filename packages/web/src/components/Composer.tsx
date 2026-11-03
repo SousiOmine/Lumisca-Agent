@@ -21,10 +21,7 @@ import {
 } from "@tabler/icons-preact";
 import {
   formatAttachmentSize,
-  MAX_PROMPT_FILE_BASE64_LENGTH,
-  MAX_PROMPT_FILES,
   MAX_PROMPT_TEXT_LENGTH,
-  stripDataUrlHeader,
 } from "@lumisca/core/shared";
 import {
   ContextUsageCard,
@@ -42,6 +39,7 @@ import {
   type SlashState,
   useSlashMenu,
 } from "../hooks/useSlashMenu.ts";
+import { useAttachments } from "../hooks/useAttachments.ts";
 import {
   type SlashCommand,
   type SlashCommandItem,
@@ -180,7 +178,6 @@ export function Composer({
   // Why the last pick or drop was refused, shown above the field. A file that
   // exceeds the server's limit would otherwise upload in full and come back
   // as a 400 after the composer had already been emptied.
-  const [attachError, setAttachError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
   /** Message lookup of the app language (the composer's own labels). */
@@ -330,94 +327,34 @@ export function Composer({
     filesRef.current = files;
   }, [files]);
 
-  /** Whether `size` bytes turn into more base64 characters than the API
-   * accepts. The server compares the encoded length, so the check is made on
-   * the encoded length too (`ceil(n / 3) * 4`, without padding): a file at
-   * exactly the binary limit must pass here as well. */
-  const tooLarge = (size: number): boolean =>
-    Math.ceil(size / 3) * 4 > MAX_PROMPT_FILE_BASE64_LENGTH;
-
-  /** Add a dropped file that is not an image: it goes to the machine, so the
-   * browser only has to read the bytes (no preview, no data URL header). */
-  const addFile = (file: File) => {
-    if (filesRef.current.length >= MAX_PROMPT_FILES) return;
-    if (tooLarge(file.size)) {
-      setAttachError(t("chat.composer.attach.tooLarge", { name: file.name }));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") return;
-      setAttachError(null);
-      onFilesChange?.([
-        ...filesRef.current,
-        {
-          name: file.name,
-          size: file.size,
-          data: stripDataUrlHeader(reader.result),
-        },
-      ]);
-    };
-    // A read can fail (a folder, a file that moved, a revoked permission).
-    // Staying silent left the reader with a button that did nothing.
-    reader.onerror = () => {
-      setAttachError(t("chat.composer.attach.readFailed", { name: file.name }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  /** Add a pasted/dropped image file to the attachments. */
-  const addImage = (file: File) => {
-    if (imagesRef.current.length >= MAX_PROMPT_FILES) return;
-    if (tooLarge(file.size)) {
-      setAttachError(t("chat.composer.attach.tooLarge", { name: file.name }));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") return;
-      setAttachError(null);
-      onImagesChange?.([
-        ...imagesRef.current,
-        {
-          data: reader.result,
-          mimeType: file.type || "image/png",
-          name: file.name,
-        },
-      ]);
-    };
-    reader.onerror = () => {
-      setAttachError(t("chat.composer.attach.readFailed", { name: file.name }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  /** One entry point for anything handed to the composer: the picker, drops
-   * and pastes all route an image to the image list and everything else to
-   * the file list. */
-  const addDropped = (file: File) => {
-    if (file.type.startsWith("image/")) addImage(file);
-    else addFile(file);
-  };
+  // Reading attachments (size limits, FileReader, the failure message) lives
+  // in the hook: none of it has anything to do with rendering.
+  const attachments = useAttachments({
+    images,
+    files,
+    onImagesChange,
+    onFilesChange,
+    t,
+  });
 
   /** The picker's input is cleared after every answer so picking the same
    * file twice still fires `change`. */
   const handlePicked = (e: Event) => {
     const input = e.currentTarget as HTMLInputElement;
-    for (const file of Array.from(input.files ?? [])) addDropped(file);
+    attachments.addAll(Array.from(input.files ?? []));
     input.value = "";
   };
 
   /** Paste support: image items in the clipboard become attachments; text
    * pastes behave as usual (no preventDefault). */
   const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(e.clipboardData?.items ?? [])
+    const images = Array.from(e.clipboardData?.items ?? [])
       .filter((item) => item.type.startsWith("image/"))
       .map((item) => item.getAsFile())
       .filter((f): f is File => f !== null);
-    if (files.length === 0) return;
+    if (images.length === 0) return;
     e.preventDefault(); // never paste raw image bytes into the textarea
-    for (const file of files) addImage(file);
+    attachments.addAll(images);
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -436,11 +373,7 @@ export function Composer({
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragging(false);
-    // An image is also a file: it is shown inline by the chat, so it takes
-    // the image path. Everything else has no preview and is sent by name.
-    for (const file of Array.from(e.dataTransfer?.files ?? [])) {
-      addDropped(file);
-    }
+    attachments.addAll(Array.from(e.dataTransfer?.files ?? []));
   };
 
   /** Re-evaluate the slash command and the mention under the caret after
@@ -497,9 +430,9 @@ export function Composer({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {attachError !== null && (
+      {attachments.error !== null && (
         <p className="input-attach-error" role="alert">
-          {attachError}
+          {attachments.error}
         </p>
       )}
       {files.length > 0 && (
