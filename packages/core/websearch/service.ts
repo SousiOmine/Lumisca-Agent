@@ -34,7 +34,11 @@ import {
   type WebSearchSettingsStore,
 } from "./settings.ts";
 import { isWebSearchProviderId, providerInfo } from "./providers/registry.ts";
-import type { FetchLike, WebSearchProviderId } from "./types.ts";
+import type {
+  FetchLike,
+  SearchProvider,
+  WebSearchProviderId,
+} from "./types.ts";
 import type { Locale } from "../shared/i18n/mod.ts";
 
 export interface WebSearchServiceOptions {
@@ -61,7 +65,7 @@ export class WebSearchService {
   /** The provider the agent searches with, or null when none is usable. Read
    * on every session open and on every tool call's creation, so a change
    * applies to the sessions opened after it. */
-  provider() {
+  provider(): SearchProvider | null {
     return this.manager.provider();
   }
 

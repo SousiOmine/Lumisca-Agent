@@ -467,6 +467,14 @@ export class ModelManager {
     return this.models.logout(providerId);
   }
 
+  /** Replace a provider's stored API key. The credential store is the model
+   * layer's (a key belongs to a provider, not to the settings table), so a
+   * caller that may write keys uses this instead of reaching into
+   * settings/credentials.ts with a store it does not own. */
+  async setApiKey(providerId: string, key: string): Promise<void> {
+    await setApiKey(this.credentials, providerId, key);
+  }
+
   async checkAuth(
     providerId: string,
   ): Promise<AuthCheck | undefined> {

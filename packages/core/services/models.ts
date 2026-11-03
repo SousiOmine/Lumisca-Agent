@@ -1,10 +1,20 @@
-import type { Api, AuthCheck, Model, Provider } from "../ai/types.ts";
+import type {
+  Api,
+  AuthCheck,
+  AuthInteraction,
+  AuthType,
+  Model,
+  Provider,
+} from "../ai/types.ts";
 import type { ModelManager } from "../models/mod.ts";
+import type { CatalogStatus } from "../models/mod.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
   UserProviderSummary,
 } from "../models/user-providers.ts";
+import { CoreError } from "../errors.ts";
+import { isThinkingLevel } from "../models/thinking.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 
 /**
@@ -12,9 +22,13 @@ import type { ThinkingLevel } from "../shared/mod.ts";
  * models, their credentials, the enablement flags and the live models.dev
  * catalog.
  *
- * One delegation per method to the ModelManager; the class exists so a route
- * can be handed the surface it may use instead of the whole facade, and so
- * LumiscaCore stays a list of areas rather than a phone book of every call.
+ * Almost every method delegates to the ModelManager; two rules live here
+ * because they are about a MODEL, not about storage: the thinking level is
+ * validated before it is stored, and a provider's auth type is a fact about
+ * its declaration (a login button is offered before anything is configured).
+ * The class exists so a route can be handed the surface it may use instead of
+ * the whole facade, and so LumiscaCore stays a list of areas rather than a
+ * phone book of every call.
  */
 export class ModelService {
   constructor(private readonly models: ModelManager) {}
@@ -146,7 +160,7 @@ export class ModelService {
 
   /** Where the active built-in model catalog came from (live fetch, disk
    * cache, or the bundled snapshot). */
-  getModelCatalogStatus(): import("../models/mod.ts").CatalogStatus {
+  getModelCatalogStatus(): CatalogStatus {
     return this.models.getCatalogStatus();
   }
 
@@ -160,7 +174,51 @@ export class ModelService {
       timeoutMs?: number;
       baseUrl?: string;
     } = {},
-  ): Promise<import("../models/mod.ts").CatalogStatus> {
+  ): Promise<CatalogStatus> {
     return this.models.refreshCatalog(options);
+  }
+
+  // --- what a route may do with one provider's credentials ------------------
+
+  /** Replace a provider's stored API key. */
+  async setProviderApiKey(providerId: string, key: string): Promise<void> {
+    await this.models.setApiKey(providerId, key);
+  }
+
+  /** Run a provider-owned login flow (OAuth) and persist the returned
+   * credential. The interaction bridges the flow's prompts and notices to
+   * the UI. Only "oauth" is supported: API keys have their own surface
+   * (setProviderApiKey). */
+  async loginProvider(
+    providerId: string,
+    type: AuthType,
+    interaction: AuthInteraction,
+  ): Promise<void> {
+    await this.models.login(providerId, type, interaction);
+  }
+
+  /** Remove the stored credential for a provider. */
+  async logoutProvider(providerId: string): Promise<void> {
+    await this.models.logout(providerId);
+  }
+
+  /** The thinking level a model stores, clamped to what it supports.
+   * Refuses an unknown level and an unknown model outright: a level that
+   * cannot be stored is a client bug, not a value to coerce. */
+  setModelThinkingLevel(
+    providerId: string,
+    modelId: string,
+    level: string,
+  ): ThinkingLevel {
+    if (!isThinkingLevel(level)) {
+      throw new CoreError(`Unknown thinking level: ${level}`, "invalid");
+    }
+    if (this.models.getModel(providerId, modelId) === undefined) {
+      throw new CoreError(
+        `Model not found: ${providerId}/${modelId}`,
+        "not_found",
+      );
+    }
+    return this.models.setThinkingLevel(providerId, modelId, level);
   }
 }

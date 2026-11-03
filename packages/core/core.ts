@@ -29,7 +29,11 @@ import {
   type FetchLike,
 } from "./websearch/mod.ts";
 import { WebSearchService } from "./websearch/service.ts";
-import type { WebSearchSettingsView, WebSearchTestView } from "./shared/mod.ts";
+import type {
+  ProviderAuthType,
+  WebSearchSettingsView,
+  WebSearchTestView,
+} from "./shared/mod.ts";
 import { RASTER_IMAGE_MIME_BY_EXTENSION } from "./shared/mod.ts";
 import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
 import type { CredentialStore, Provider } from "./ai/types.ts";
@@ -49,9 +53,9 @@ import type {
   UserProviderInput,
   UserProviderSummary,
 } from "./models/user-providers.ts";
-import { isThinkingLevel } from "./models/thinking.ts";
 import type { ThinkingLevel } from "./shared/mod.ts";
 import type { StellaAgentSummary } from "./shared/mod.ts";
+import type { CatalogStatus } from "./models/mod.ts";
 import type { AskAnswer } from "./shared/mod.ts";
 import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
 import type { CommandApproval } from "./shared/mod.ts";
@@ -192,6 +196,20 @@ function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
     if (entry !== null) entries.push(entry);
   }
   return entries;
+}
+
+/** One model as the settings list shows it (see
+ * ModelService.listModelsDetailed). */
+export interface ModelInfoDetailed {
+  id: string;
+  name: string;
+  contextWindow?: number;
+  maxInputTokens?: number;
+  reasoning?: boolean;
+  input?: string[];
+  enabled: boolean;
+  thinkingLevel: ThinkingLevel;
+  thinkingLevels: ThinkingLevel[];
 }
 
 export interface CreateSessionInput {
@@ -522,6 +540,12 @@ export class LumiscaCore {
         deleteSession: (id) => this.deleteSession(id),
       });
     this.workspaceConfig = new WorkspaceConfigService(this.workspaces);
+    this.services = {
+      models: this.modelService,
+      webSearch: this.webSearchConfig,
+      mcp: this.mcpConfig,
+      workspaces: this.workspaceConfig,
+    };
   }
 
   /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
@@ -2198,14 +2222,13 @@ export class LumiscaCore {
     modelId: string,
     level: string,
   ): ThinkingLevel {
-    if (!isThinkingLevel(level)) {
-      throw new CoreError(
-        `Unknown thinking level: ${level}`,
-        "invalid",
-      );
-    }
-    this.requireModel(providerId, modelId);
-    const effective = this.models.setThinkingLevel(providerId, modelId, level);
+    const effective = this.modelService.setModelThinkingLevel(
+      providerId,
+      modelId,
+      level,
+    );
+    // The level is the model's, but a session already running on it must
+    // apply it to the run in progress (see SessionPool.setThinkingLevel).
     for (const session of this.sessions.list()) {
       if (
         session.modelProvider === providerId && session.modelId === modelId
@@ -2222,194 +2245,195 @@ export class LumiscaCore {
 
   // --- model catalog (models.dev live sync) -------------------------------
 
+  /**
+   * The areas this facade is made of, each a class over its own
+   * collaborators. A route can be handed the one it needs (see the
+   * `XxxApi` interfaces in packages/server/routes), and a caller that wants
+   * to know what the app can do reads this list instead of scrolling a
+   * two-thousand-line class.
+   *
+   * The delegating methods below stay so an existing caller keeps working;
+   * new code should reach through here.
+   */
+  readonly services: {
+    readonly models: ModelService;
+    readonly webSearch: WebSearchConfigService;
+    readonly mcp: McpConfigService;
+    readonly workspaces: WorkspaceConfigService;
+  };
+
   // --- the extracted areas ------------------------------------------------
   //
-  // Each block below used to be implemented here. The implementation now
-  // lives in services/ — one class per area — so this facade is a list of the
-  // areas the app has rather than a phone book of every call, and a route can
-  // be handed the one it needs. The signatures are unchanged: a caller sees
-  // the same method it always did.
+  // One line per area: the implementation lives in services/, and these
+  // methods keep the signatures callers already use. A new area should not
+  // add another block of them — reach it through `services` instead.
 
   // workspaces
   async createWorkspace(name: string, folders: string[]): Promise<Workspace> {
-    return await this.workspaceConfig.createWorkspace(name, folders);
+    return await this.services.workspaces.createWorkspace(name, folders);
   }
 
   listWorkspaces(): Workspace[] {
-    return this.workspaceConfig.listWorkspaces();
+    return this.services.workspaces.listWorkspaces();
   }
 
   getWorkspace(id: string): Workspace | undefined {
-    return this.workspaceConfig.getWorkspace(id);
+    return this.services.workspaces.getWorkspace(id);
   }
 
   async updateWorkspace(
     id: string,
     input: { name?: string; folders?: string[] },
   ): Promise<Workspace> {
-    return await this.workspaceConfig.updateWorkspace(id, input);
+    return await this.services.workspaces.updateWorkspace(id, input);
   }
 
   deleteWorkspace(id: string): Promise<void> {
-    return this.workspaceConfig.deleteWorkspace(id);
+    return this.services.workspaces.deleteWorkspace(id);
   }
 
-  // webSearch
+  // web search
   getWebSearchSettings(): WebSearchSettingsView {
-    return this.webSearchConfig.getWebSearchSettings();
+    return this.services.webSearch.getWebSearchSettings();
   }
 
   addWebSearchProvider(
     input: { id: string; apiKey: string },
   ): WebSearchSettingsView {
-    return this.webSearchConfig.addWebSearchProvider(input);
+    return this.services.webSearch.addWebSearchProvider(input);
   }
 
   updateWebSearchProvider(
     id: string,
     input: { apiKey: string },
   ): WebSearchSettingsView {
-    return this.webSearchConfig.updateWebSearchProvider(id, input);
+    return this.services.webSearch.updateWebSearchProvider(id, input);
   }
 
   removeWebSearchProvider(id: string): WebSearchSettingsView {
-    return this.webSearchConfig.removeWebSearchProvider(id);
+    return this.services.webSearch.removeWebSearchProvider(id);
   }
 
   setDefaultWebSearchProvider(id: string | null): WebSearchSettingsView {
-    return this.webSearchConfig.setDefaultWebSearchProvider(id);
+    return this.services.webSearch.setDefaultWebSearchProvider(id);
   }
 
   testWebSearchProvider(input: {
     id: string;
     apiKey: string | null;
   }): Promise<WebSearchTestView> {
-    return this.webSearchConfig.testWebSearchProvider(input);
+    return this.services.webSearch.testWebSearchProvider(input);
   }
 
-  // mcp
+  // MCP configuration
   getAppMcpInfo(): McpInfo {
-    return this.mcpConfig.getAppMcpInfo();
+    return this.services.mcp.getAppMcpInfo();
   }
 
   setAppMcpConfig(text: string): McpInfo {
-    return this.mcpConfig.setAppMcpConfig(text);
+    return this.services.mcp.setAppMcpConfig(text);
   }
 
   getMcpInfo(workspaceId: string): McpInfo {
-    return this.mcpConfig.getMcpInfo(workspaceId);
+    return this.services.mcp.getMcpInfo(workspaceId);
   }
 
   setMcpConfig(workspaceId: string, text: string): McpInfo {
-    return this.mcpConfig.setMcpConfig(workspaceId, text);
+    return this.services.mcp.setMcpConfig(workspaceId, text);
   }
 
   testMcpServer(text: string): Promise<McpTestResult> {
-    return this.mcpConfig.testMcpServer(text);
+    return this.services.mcp.testMcpServer(text);
   }
 
   startMcpAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
-    return this.mcpConfig.startMcpAuth(text, redirectUri);
+    return this.services.mcp.startMcpAuth(text, redirectUri);
   }
 
   getMcpAuth(sessionId: string): McpAuthSnapshot | undefined {
-    return this.mcpConfig.getMcpAuth(sessionId);
+    return this.services.mcp.getMcpAuth(sessionId);
   }
 
   cancelMcpAuth(sessionId: string): boolean {
-    return this.mcpConfig.cancelMcpAuth(sessionId);
+    return this.services.mcp.cancelMcpAuth(sessionId);
   }
 
   completeMcpAuth(
     input: { state: string; code?: string; error?: string },
   ): Promise<McpAuthSnapshot | undefined> {
-    return this.mcpConfig.completeMcpAuth(input);
+    return this.services.mcp.completeMcpAuth(input);
   }
 
   // models
   listProviders(): readonly Provider[] {
-    return this.modelService.listProviders();
+    return this.services.models.listProviders();
   }
 
   listModels(providerId?: string): readonly Model<Api>[] {
-    return this.modelService.listModels(providerId);
+    return this.services.models.listModels(providerId);
   }
 
   getModel(providerId: string, modelId: string): Model<Api> | undefined {
-    return this.modelService.getModel(providerId, modelId);
+    return this.services.models.getModel(providerId, modelId);
   }
 
-  async checkAuth(providerId: string): Promise<AuthCheck | undefined> {
-    return await this.modelService.checkAuth(providerId);
+  checkAuth(providerId: string): Promise<AuthCheck | undefined> {
+    return this.services.models.checkAuth(providerId);
   }
 
-  getProviderAuthType(
-    providerId: string,
-  ): "oauth" | "api_key" | undefined {
-    return this.modelService.getProviderAuthType(providerId);
+  getProviderAuthType(providerId: string): ProviderAuthType | undefined {
+    return this.services.models.getProviderAuthType(providerId);
   }
 
-  async hasProviderAuth(providerId: string): Promise<boolean> {
-    return await this.modelService.hasProviderAuth(providerId);
+  hasProviderAuth(providerId: string): Promise<boolean> {
+    return this.services.models.hasProviderAuth(providerId);
   }
 
-  async hasConfiguredAuth(providerId: string): Promise<boolean> {
-    return await this.modelService.hasConfiguredAuth(providerId);
+  hasConfiguredAuth(providerId: string): Promise<boolean> {
+    return this.services.models.hasConfiguredAuth(providerId);
   }
 
   setModelEnabled(providerId: string, modelId: string, enabled: boolean): void {
-    return this.modelService.setModelEnabled(providerId, modelId, enabled);
+    this.services.models.setModelEnabled(providerId, modelId, enabled);
   }
 
   isModelEnabled(providerId: string, modelId: string): boolean {
-    return this.modelService.isModelEnabled(providerId, modelId);
+    return this.services.models.isModelEnabled(providerId, modelId);
   }
 
-  listModelsDetailed(providerId: string): Array<{
-    id: string;
-    name: string;
-    contextWindow?: number;
-    maxInputTokens?: number;
-    reasoning?: boolean;
-    input?: string[];
-    enabled: boolean;
-    thinkingLevel: ThinkingLevel;
-    thinkingLevels: ThinkingLevel[];
-  }> {
-    return this.modelService.listModelsDetailed(providerId);
+  listModelsDetailed(providerId: string): ModelInfoDetailed[] {
+    return this.services.models.listModelsDetailed(providerId);
   }
 
-  async listUserProviders(): Promise<UserProviderSummary[]> {
-    return await this.modelService.listUserProviders();
+  listUserProviders(): Promise<UserProviderSummary[]> {
+    return this.services.models.listUserProviders();
   }
 
   getUserProvider(id: string): UserProviderConfig | undefined {
-    return this.modelService.getUserProvider(id);
+    return this.services.models.getUserProvider(id);
   }
 
-  async addUserProvider(
-    input: UserProviderInput,
-  ): Promise<UserProviderSummary> {
-    return await this.modelService.addUserProvider(input);
+  addUserProvider(input: UserProviderInput): Promise<UserProviderSummary> {
+    return this.services.models.addUserProvider(input);
   }
 
-  async updateUserProvider(
+  updateUserProvider(
     id: string,
     input: UserProviderInput,
   ): Promise<UserProviderSummary> {
-    return await this.modelService.updateUserProvider(id, input);
+    return this.services.models.updateUserProvider(id, input);
   }
 
-  async removeUserProvider(id: string): Promise<void> {
-    return await this.modelService.removeUserProvider(id);
+  removeUserProvider(id: string): Promise<void> {
+    return this.services.models.removeUserProvider(id);
   }
 
   isUserProvider(id: string): boolean {
-    return this.modelService.isUserProvider(id);
+    return this.services.models.isUserProvider(id);
   }
 
-  getModelCatalogStatus(): import("./models/mod.ts").CatalogStatus {
-    return this.modelService.getModelCatalogStatus();
+  getModelCatalogStatus(): CatalogStatus {
+    return this.services.models.getModelCatalogStatus();
   }
 
   refreshModelCatalog(
@@ -2418,8 +2442,8 @@ export class LumiscaCore {
       timeoutMs?: number;
       baseUrl?: string;
     } = {},
-  ): Promise<import("./models/mod.ts").CatalogStatus> {
-    return this.modelService.refreshModelCatalog(options);
+  ): Promise<CatalogStatus> {
+    return this.services.models.refreshModelCatalog(options);
   }
 
   // --- internals ----------------------------------------------------------
