@@ -2,6 +2,8 @@ Lumisca-Agent は、LLM を用いてアプリケーション開発を支援す�
 
 LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用します。モデルのメタデータは models.dev（`@opencode-ai/models`）を基準とし、アプリケーション側でプロバイダーの生成と API キーの注入を行います。
 
+**この文書は作業者向けの手引きです。** 何をどう触るか、どこで間違えやすいかだけを書きます。なぜその設計なのかは `ARCHITECTURE.md` にあり、ここには書きません（同じことを 2 か所に書くと、片方だけが古くなります）。
+
 ## 作業前の確認
 
 コードを編集する前に、ローカルリポジトリが最新の状態であるかを確認してください。リモートの更新を取り込み、古いコードに基づく編集や競合を防ぎます。
@@ -20,7 +22,7 @@ git status
 
 ### デスクトップのシェルブリッジ
 
-ページはサーバーが配信するため Tauri のコマンドを呼べません。ウィンドウ操作・接続先の切り替え・更新は、シェルが立てる loopback の HTTP の口へ送ります（`packages/desktop/src-tauri/src/bridge_server.rs`、ページ側は `packages/web/src/shell.ts`）。origin はメインウィンドウの initialization script（`window.__LUMISCA_BRIDGE__`）でページへ渡します。
+ページはサーバーが配信するため Tauri のコマンドを呼べません。シェル操作は loopback の HTTP の口へ送ります（`packages/desktop/src-tauri/src/bridge_server.rs`）。理由と過去の経緯は `ARCHITECTURE.md` の「シェルブリッジは loopback の HTTP で、独自スキームではない」にあります。
 
 - **独自スキームにしない**: WKWebView（macOS）は http(s) のページから独自スキームを fetch させず、`lumisca://` だった頃は macOS でタイトルバーごと描画されませんでした。CSP の `connect-src` に `http://127.0.0.1:*` を足すのを忘れないでください（`packages/server/render.ts`）。
 - **macOS のウィンドウ操作は OS のもの**: `tauri.macos.conf.json` で `decorations: true` + `titleBarStyle: "overlay"` にし、信号機ボタンはネイティブのものを使います。ページは帯を信号機の右から始め、閉じる／最小化／最大化のボタンを描きません。Windows / Linux はフレームレスのまま、ページが右端に描きます。どちらかは `state` の `platform` が答えます。
@@ -118,7 +120,7 @@ npm outdated                                                   # packages/deskto
 - **本文の差分はセッション単位でまとめる**: `/ws` と stella の会話ストリームは `message_delta` / `delta` を 16 ms 分まとめて 1 フレームにします（`packages/core/shared/ws-batch.ts`）。**キーはセッション id**です。1 本のソケットが複数タブのイベントを運ぶので、キーを分けないと別タブの語が混ざります。ツール開始・メッセージ確定・実行終了などのイベントは遅延させず、送る前に保留分を flush します（順序が崩れると本文が確定メッセージの後に届きます）。
 - **rev はイベント数のまま**: フレームには含めた最後の `rev` と、含めたイベント数 `events` を載せます。クライアントの `revisionGap` は `events` を使います。ここを「1 フレーム = 1 イベント」に戻すと、結合のたびにスナップショットを取り直します。
 - **クライアントも rAF でまとめる**: サーバーがまとめても描画前に複数フレームが届きます。`useSessionEvents` / `useStella` は保留中の delta をアニメーションフレーム単位で反映し、他のイベントの適用前に必ず flush します（`resync` も同様）。
-- **応答は圧縮し、アセットは再検証させる**: `hono/compress`（閾値 1 KB）を全応答に掛けます。`/assets/app.js` と `/styles.css` は `ETag` + `private, max-age=0, must-revalidate`（304 で本文なし）、ページと `/assets/initial-data.js` はトークンを運ぶため `no-store` です。規則は `packages/server/app-file-headers.ts` に集約しています。
+- **応答は圧縮し、アセットは再検証させる**: 全応答を gzip し、`/assets/app.js` と `/styles.css` は `ETag` で再検証、ページと初期データはトークンを運ぶため `no-store` です。規則は `packages/server/app-file-headers.ts` に集約しています（測定値は `ARCHITECTURE.md`）。
 - **プロキシのタイムアウトは用途別**: `packages/server/federation.ts` の `proxyTimeoutFor` がパスから決めます（通常 30 秒、open／messages／compact／rewind は 120 秒、`/fed/peers` の到達性確認は 3 秒）。一律の短いタイムアウトは、遅いが正常なリモート処理を 502 にします。
 - **プロキシはヘッダを選んで透過する**: `content-disposition`・`cache-control`・`etag`・`vary`・`content-security-policy`・`x-content-type-options` は通します。`content-encoding` は通しません（ハブの `fetch` が解凍済み）。
 - **同一サーバーの判定はスキームを見ない**: CORS と WebSocket の Origin 検証は、Origin のホスト＋ポートが `Host` と一致するかで決めます（`packages/server/security.ts` の `sameServerAuthority`。MCP の `redirect_uri` も同じ関数）。TLS 終端（`tailscale serve` 等）は https を受けて http で転送するため、スキームまで比べるとページが自分自身のサーバーに対して cross-origin になります。そうなると `/ws` が 403 で拒否され、画面は 10 秒間隔のスナップショット取得だけが情報源になって「送信してから反映まで約 10 秒・本文が流れない」状態になります。別ポートと外部ホストは今も拒否します。
@@ -143,14 +145,12 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
 - **eval ツールは渡しません。** サーバープロセス内で JavaScript を実行するため、VM の外に出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使ってください。同じ理由で、このモードのサブエージェントにも `eval` は渡しません（`SubagentRuntime.eval` が `false`）。
 - **ツールの集合**: ファイル・シェル・画面・`send_chat`・`history_search`・`skill`・サブエージェントがプリロードされます。`ask` と `todo` はありません（質問に答えるパネルも進捗パネルも、この会話には無いため）。`identity` と `agent_create` は**プリロードせず**、セッションの main レジストリに置いて `tool_search` で見つけさせます（使い方は組み込みスキル `identity` / `agent-create` が教えます）。
 - **話す手段は `send_chat` だけ**: 会話に現れるエージェントの発言は、`send_chat` で明示的に送ったものだけです（`packages/core/tools/send-chat.ts`）。**アシスタントの本文は画面に出ません** — モデルは何を聞かれても content を書くので、それをそのまま出すと、ルーチンが調べて何も無かったときのような「報告することが無い」run でも段落を押し付けることになります。本文はモデルの作業メモとして履歴に留まり、送らないターンは画面に何も残しません（実行中は点のインジケーターだけ）。`text`（本文）・`card`（カード）・`paths`（ファイル）は 1 回の呼び出しで 1 つのメッセージになり、少なくとも 1 つ必要です。旧 `chat_ui` と stella の `chat_attach` はこれに統合しました（`chat_ui` は stella 専用だったので削除、`chat_attach` は code mode にのみ残ります）。既存の会話に残る旧カード・旧添付・過去のアシスタント本文は**表示されません**（互換の分岐は置いていません）。
-  - **モデルに返るのは受領書だけ**: 結果の `content` は「Sent … to the user.」で、本文・カード・添付は `details`（モデルには渡らない）に入ります。同じ本文を `content` にも書くと、ツール呼び出しの引数と結果で二重に履歴へ載り、長い会話ほどコンテキストが膨らむためです。モデルは自分の送った本文を直前の呼び出しの引数から読め、圧縮でその区間が畳まれた後は `history_search` で引けます。
-  - **ストリーミングはしません**: 本文は完成した時点で 1 度に届きます（`StellaEvent` に `delta` が無く、stella の WebSocket は差分チャネルを持ちません）。生成中の見え方は点（`RunningIndicator`）だけです。
 - **ツールレジストリの分離**: セッションは `main` と `subagent` の 2 つのレジストリを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけに入ります。stella のサブエージェントは VM の中で code mode と同じツール集合で動きますが、この 3 種は `tool_search` でも見つかりません。
 - **作業フォルダとパスの境界**: 相対パスと `bash` は `/home/agent/agents/<agent id>` を基点にしますが、境界はマシンのホーム `/home/agent` です。ほかの相手のフォルダにも絶対パスで触れます（`packages/core/vm/fs.ts` の `resolveVmPath`）。境界を変えるときはシステムプロンプト（`packages/core/tools/system-prompt.ts`）の記述も合わせてください。
 - **画面の受け渡し**: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。待機中は画面ペインが操作可能になり、エージェントは止まっています。待ちを解く経路（完了・停止・セッション終了）を増やすときは `cancelAll` とイベントの後始末も合わせて確認してください。
 - **ルーチン**: スケジュールは `daily` / `weekly` / `every` の 3 種類だけで、cron は扱いません。次回時刻は「保存済みの値」ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます（後回しにすると、長い実行が重複して走ります）。
 - **放置された会話の圧縮**: stella の会話は何週間も生き、何時間・何日かぶりに開かれます。しきい値に届かなくても、最後のメッセージから 3 時間たったら履歴を畳みます（`SessionAgentOptions.idleCompactionMs`。値を渡すのは stella セッションだけで、既定は 0 = しきい値のみ。定数は `packages/core/agent/factory.ts` の `STELLA_IDLE_COMPACTION_MS`）。予約は会話を開いたときと run が終わったときに引き直し、run が始まったら外します（使用中の会話を背後で畳まない）。要約の間に会話が動いたら挿入せずに捨てます（`ContextCompactor.compactNow` の `canCommit`）。
-- **畳んだ区間は捨てる（stella のみ）**: チェックポイントが覆った区間は、モデルも画面も `history_search` も読まないので、ペイロードを落とします（`packages/core/session/prune.ts`、`SessionAgentOptions.pruneCondensed`。stella だけ true）。**会話の表示に要るものだけが残ります** — ユーザーの本文、`send_chat` の結果（送った本文・カード・添付。モデルが自分の発言を引き直す先でもあります）、チェックポイント、そして空にした `thinking` ブロック（`requiresReasoningContentOnAssistantMessages` のモデルが履歴の欠落を拒否するため）。ツール呼び出し（`write` の引数はファイル全体）、ツール結果（スクリーンショットは 16 MiB まで）、通知、context publication は数十バイトのマーカーになります。**行は消しません**（rowid 順＝トランスクリプト順の前提を壊さないため）。縮小は圧縮直後と会話を開いたときに走り、冪等です。code mode は作業ログが画面なので対象外です。
+- **畳んだ区間は捨てる（stella のみ）**: チェックポイントが覆った区間のペイロードを落とします（`packages/core/session/prune.ts`、stella だけ `pruneCondensed`）。**残るのは会話に表示されるものだけ**で、行は消しません。詳細は `ARCHITECTURE.md` の「コンテキスト圧縮」にあります。
 - **履歴は遅延読み込み**: エージェントがメモリに持つのは**モデルの視界**（最新チェックポイント以降）だけです（`MessageRepo.listModelView`）。画面の遡りはストアからページを引きます（`packages/core/session/transcript-pager.ts`。カーソルは identity、ページはターン境界から始まる）。巻き戻しが視界より前を指す場合は DB で位置を引いて視界を作り直します（`TranscriptStore.positionOf` / `reload`、`Agent.replaceMessages`）。文脈使用量は全会話を SQL で集計します（`MessageRepo.usageRows`）。実行中のプロンプトはまだ DB に無いので、最新ページには未保存分をメモリから足します（`LumiscaCore.unpersistedTail`）。
 - **空いた領域は次の起動で返す**: SQLite は削除したページを再利用しますが、ファイルを自分では縮めません。縮小が十分なバイト数を解放したら、`close()` がデータベースの隣にマーカーを書き（`packages/core/db/vacuum.ts` の `vacuumMarkerPath`、64 MiB 未満は書かない）、次の起動時にリクエストを受け付ける前に**ファイルを作り直して差し替え**ます（`vacuumOnStartup`、`packages/server/mod.ts`）。`node:sqlite` は `SQLITE_MAX_ATTACHED=0` で `VACUUM` も `VACUUM INTO` も使えないため、実装は「同じスキーマの新ファイルへ全行をコピー → rename」です（`VACUUM` が内部でやることと同じ）。失敗（ディスク不足など）は起動を止めず、マーカーを残して次回に回します。
 - **`history_search` は会話の射影を検索**: 検索対象は**画面に出るもの**だけです（`StellaEntry` = ユーザーの発言・`send_chat` で送ったもの・カード・送ったファイル・添付したファイル）。**モデル自身の本文は検索対象外**です（画面に出ないため）。ただしモデルはそれを失いません — 圧縮前は `send_chat` 呼び出しの引数として履歴にあり、圧縮後は残された結果の行から引けます。ツール名・引数・結果は検索にも表示にも出ません（必要なら再実行させます）。チェックポイントより前は要約に畳まれているので、その期間を検索したときは「要約に畳まれている」と添えます。

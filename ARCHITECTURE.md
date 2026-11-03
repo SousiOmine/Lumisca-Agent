@@ -1,5 +1,7 @@
 # Lumisca-Agent アーキテクチャ概要
 
+**この文書は設計の理由を書く場所です。** なぜその形にしたか、代わりに何を捨てたかを残します。作業の手順と落とし穴は `AGENTS.md` にあり、ここには書きません。
+
 ## 0. 動作モード（code mode / stella mode）
 
 アプリケーションは 2 つの動作モードを持ちます。どちらを使うかは初回起動時に選び、**そのクライアントの** `localStorage`（`lumisca.appMode`）に保存されます。アプリメニューの「モードを切り替える」から選び直せます。
@@ -65,7 +67,7 @@ stella の会話は「どのセッションを開くか」ではなく「**誰�
 | `role` | ユーザー（作成時のみ、変更不可） | システムプロンプト（セッション作成時にスナップショット） |
 | `identity` | エージェント自身（`identity` ツール） | context メッセージ（毎ターン読み直し、変わったときだけ再公開） |
 
-`identity` をシステムプロンプトに書かないのは、書き換えのたびにプロンプト先頭が変わり、プロバイダのキャッシュ済みプレフィックスを捨てることになるためです（`agent/context-providers.ts` と同じ理由）。代わりに `stella/identity.ts` の provider が本文を `context` メッセージとして transcript に追記するので、書き換えは**次のターン**から効き、キャッシュは切れません。Terasuma のように圧縮まで待つ必要はありません（システムプロンプトに凍結コピーが存在しないため）。
+`identity` をシステムプロンプトに書かないのは、書き換えのたびにプロンプト先頭が変わり、プロバイダのキャッシュ済みプレフィックスを捨てることになるためです（`ai/context-providers.ts` と同じ理由）。代わりに `stella/identity.ts` の provider が本文を `context` メッセージとして transcript に追記するので、書き換えは**次のターン**から効き、キャッシュは切れません。Terasuma のように圧縮まで待つ必要はありません（システムプロンプトに凍結コピーが存在しないため）。
 
 - 上限は 4,000 文字（`MAX_AGENT_IDENTITY_CHARS`）。空文字で消去します。
 - ツールは preload します（`identity`）。定義は 1 行分で、書けることを知らないエージェントは書かないためです。
@@ -218,7 +220,7 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
   ターン（`buildTurns`）は、実行を開始したメッセージ（ユーザープロンプトや通知）を起点に分割します。実行中の処理に割り込んだプロンプトや通知（`steered`）は、進行中のターンに合流させて描画します。これにより、作業ログが途中で不自然に折りたたまれる現象を防ぎます。
 
 - **モードごとに変わる表示はデータの違いとして表す**  
-  stella mode の会話は、code mode のセッションと**別のエンドポイント・別の型・別のイベントストリーム**を持ちます（`/api/stella/conversations/:agentId/*` と `…/events`、`core/types/stella-conversation.ts`、`agent/stella-stream.ts`）。会話に届くのはユーザー発言と `send_chat` で送ったもの（本文・カード・ファイル）だけで、モデル向けの `context`（日付・モデル名・スキル一覧・identity・on-demand tools）、エージェント自身の本文（作業メモ）、ツール呼び出しと結果、通知、圧縮チェックポイントはモデル履歴に留まり、クライアントには送られません。したがって表示側に「隠す」フラグはありません（`components/stella/StellaTranscript.tsx` はそもそも描けない）。Terasuma の `isDisplayPart` と同じ判断を、Lumisca ではサーバーの配信境界（`stellaEventsOf` / `stellaEntryOf`）で 1 回だけ行います。会話はセッション id ではなく agent id で指すため、`sessionId` は画像の置き場としてのみスナップショットに載ります。
+  stella mode の会話は、code mode のセッションと**別のエンドポイント・別の型・別のイベントストリーム**を持ちます（`/api/stella/conversations/:agentId/*` と `…/events`、`packages/core/types/stella-conversation.ts`、`agent/stella-stream.ts`）。会話に届くのはユーザー発言と `send_chat` で送ったもの（本文・カード・ファイル）だけで、モデル向けの `context`（日付・モデル名・スキル一覧・identity・on-demand tools）、エージェント自身の本文（作業メモ）、ツール呼び出しと結果、通知、圧縮チェックポイントはモデル履歴に留まり、クライアントには送られません。したがって表示側に「隠す」フラグはありません（`components/stella/StellaTranscript.tsx` はそもそも描けない）。Terasuma の `isDisplayPart` と同じ判断を、Lumisca ではサーバーの配信境界（`stellaEventsOf` / `stellaEntryOf`）で 1 回だけ行います。会話はセッション id ではなく agent id で指すため、`sessionId` は画像の置き場としてのみスナップショットに載ります。
 - **stella の作業ログと進捗パネルは無い**  
   stella の会話には「作業中／作業完了」の見出しも、ツール行も、todo・タスク・バックグラウンドのパネルもありません。実行中であることは、本文が流れ始めるまで点（`RunningIndicator`）だけで示します。整合のため stella のセッションは `todo` ツールを作りません（`createStellaTools`）。
 
@@ -244,13 +246,13 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
 - **差分フレームの結合（リモート接続のなめらかさ）**  
   モデルの本文は 1 トークン 1 イベント（`message_delta`）で届きます。ループバックでは送信がメモリコピーなので見えませんが、Tailscale や WAN 越しでは 1 フレーム = 1 パケットの確認応答になり、細かいフレームがまとめて到着します。到着ごとに全体を再描画すると、本文は「流れる」のではなく「飛ぶ」ように見えます。
 
-  - **送信側**: `core/shared/ws-batch.ts` の `createFrameBatcher` が、**セッションごとに**差分を 16 ms（1 表示フレーム）分まとめて 1 フレームにします。他のイベント（ツール開始、メッセージ確定、実行終了）は意味を持つので遅延させず、その前に必ず保留分を送ります（順序が崩れると、確定したメッセージより本文が後に届きます）。**まとめるのは同じセッションの差分だけ**です — 1 本のソケットは複数タブのイベントを運ぶので、混ぜると別タブの語が混ざります。`/ws` と stella の会話ストリームの両方がこれを使います。
+  - **送信側**: `packages/core/shared/ws-batch.ts` の `createFrameBatcher` が、**セッションごとに**差分を 16 ms（1 表示フレーム）分まとめて 1 フレームにします。他のイベント（ツール開始、メッセージ確定、実行終了）は意味を持つので遅延させず、その前に必ず保留分を送ります（順序が崩れると、確定したメッセージより本文が後に届きます）。**まとめるのは同じセッションの差分だけ**です — 1 本のソケットは複数タブのイベントを運ぶので、混ぜると別タブの語が混ざります。`/ws` と stella の会話ストリームの両方がこれを使います。
   - **rev はイベント数のまま**: 結合しても rev は「サーバーが発行したイベント数」を数え続け、フレームには**含めた最後の rev** と**含めたイベント数（`events`）**を載せます。クライアントの `revisionGap` はこの `events` を使って判定するので、1 フレームが 6 トークンを運んでも欠落とは見なされません。ここを誤ると、結合のたびにスナップショットを取り直して逆に遅くなります。
   - **受信側**: クライアントも 1 アニメーションフレーム 1 回にまとめます（`useSessionEvents` の `pendingDeltas`、`useStella` の `pendingDelta`）。サーバーが 16 ms でまとめても、描画前に複数フレームが届くことがあるためです。保留中の delta は、他のイベントの適用前に必ず反映します（`resync` も同様）。
   - **スクロールの追従**: `useTranscriptScroll` の `ResizeObserver` による追従も rAF で 1 回に間引きます。レイアウト変更のたびに `scrollTop` を書くと、フレーム内で何度も同期リフローが走ります。
 
 - **転送（圧縮とキャッシュ）**  
-  サーバーは応答を gzip します（`hono/compress`、閾値 1 KB）。実測でクライアントバンドル 610 KB → 179 KB、HTML にインラインした CSS を含むページ 140 KB → 31 KB です。`/assets/app.js` と `/styles.css` は内容ハッシュの `ETag` を付け、`Cache-Control: private, max-age=0, must-revalidate` で再検証させます（変わらなければ 304、本文なし）。ページと `/assets/initial-data.js` はトークンを運ぶため `no-store` です。規則は `server/app-file-headers.ts` に 1 箇所だけあります。
+  サーバーは応答を gzip します（`hono/compress`、閾値 1 KB）。実測でクライアントバンドル 610 KB → 179 KB、HTML にインラインした CSS を含むページ 140 KB → 31 KB です。`/assets/app.js` と `/styles.css` は内容ハッシュの `ETag` を付け、`Cache-Control: private, max-age=0, must-revalidate` で再検証させます（変わらなければ 304、本文なし）。ページと `/assets/initial-data.js` はトークンを運ぶため `no-store` です。規則は `packages/server/app-file-headers.ts` に 1 箇所だけあります。
 
 - **フェデレーション経路の予算とヘッダ**  
   ハブのプロキシは用途別のタイムアウトを持ちます（`federation.ts` の `proxyTimeoutFor`）: 通常は 30 秒、セッションの open・transcript window・compact・rewind と stella の会話取得は 120 秒です。一律 10 秒だった頃は、リモートの遅いが正常な処理が 502 になっていました。`/api/fed/peers` の到達性確認は 3 秒で打ち切り、セッション一覧を待たせません。プロキシは `content-type` に加えて `content-disposition`（ダウンロード名）、`cache-control`、`etag`、`vary`、`content-security-policy`、`x-content-type-options` を透過します。`content-encoding` は透過しません（ハブの `fetch` が解凍済みのため）。
@@ -296,7 +298,7 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
 - **エージェント管理（`agent/`）**  
   `SessionAgent`（エージェント本体）、`RetryManager`（リトライ制御）、`GoalRunner`（ゴール自律実行）、`SessionPool`（ライフサイクル管理）で構成されます。`TranscriptStore` がメッセージの永続化とメモリ上の履歴の整合性を管理します。
 
-- **コンテキスト圧縮（`agent/context-compaction.ts`）**  
+- **コンテキスト圧縮（`ai/context-compaction.ts`）**  
   モデルのコンテキスト上限を超えないよう、履歴を自動圧縮します。
   - **計測と予算**: 直近の利用量とトークン見積もりから合計消費量を算出します。予算はモデルのコンテキスト長を公開された入力上限（models.dev の `limit.input`）まで狭めた値で、しきい値（`予算 - reserveTokens`）に達した際に圧縮を実行します。
   - **非破壊的な挿入**: 過去のメッセージを削除せず、区切り位置に `checkpoint` メッセージを挿入します。モデルには最新のチェックポイント以降のメッセージのみを渡します。
@@ -383,7 +385,7 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
 - **`preact/compat`**: Web UI 全体で React 互換レイヤーとして使用します。
 - **ブラウザラボの実装**: デスクトップ環境のブラウザラボは独立したウィンドウとして表示します。ページの操作や待機処理はクロスプラットフォームで共通化し、画面キャプチャのみ各 OS のネイティブ API を呼び出します。
 - **Rust の排他制御**: スレッド間のロック取得は、すべて `lib.rs` の `LockRecover::lock_recover()` を経由して実行します。Poison 状態からの復旧処理を一元化し、パニックによる無応答を防ぎます。
-- **ビルド構成の分離**: 本番配布物のバンドル生成には esbuild（`server/bundle.ts`）を使用し、開発環境の HMR およびプロキシには Vite（`web/vite.config.ts`）を使用します。
+- **ビルド構成の分離**: 本番配布物のバンドル生成には esbuild（`packages/server/bundle.ts`）を使用し、開発環境の HMR およびプロキシには Vite（`packages/web/vite.config.ts`）を使用します。
 - **モデルへのメッセージ変換**: モデルに送信するロールは `user`, `assistant`, `toolResult` の 3 種類のみです。通知やコンテキストなどの内部ロールは、送信時に `user` ロールへ変換されます。
 
 ---

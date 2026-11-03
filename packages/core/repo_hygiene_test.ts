@@ -284,3 +284,88 @@ Deno.test("every export of the core barrel is imported by a consumer", async () 
     `core barrel exports nothing imports (delete them): ${unused.join(", ")}`,
   );
 });
+
+Deno.test("the design documents only name files that exist", async () => {
+  // A document that names a file the repository moved away is worse than no
+  // reference: the reader trusts it and looks in the wrong place (both docs
+  // pointed at `agent/context-compaction.ts` after it moved to `ai/`). Each
+  // `*.ts`-style path in backticks is resolved against the directories the
+  // docs actually address, so a rename fails here.
+  const texts = await sourceTexts();
+  const roots = [
+    "",
+    "packages/core",
+    "packages/core/ai",
+    "packages/core/agent",
+    "packages/core/tools",
+    "packages/core/tools/host",
+    "packages/core/session",
+    "packages/core/shared",
+    "packages/core/shared/i18n",
+    "packages/core/vm",
+    "packages/core/stella",
+    "packages/core/computer",
+    "packages/core/computer/portal",
+    "packages/core/mcp",
+    "packages/core/models",
+    "packages/core/websearch",
+    "packages/core/skills",
+    "packages/core/plugins",
+    "packages/core/db",
+    "packages/core/routine",
+    "packages/core/safety",
+    "packages/core/workspace",
+    "packages/core/browser",
+    "packages/core/types",
+    "packages/core/goal",
+    "packages/core/modes",
+    "packages/core/pdf",
+    "packages/server",
+    "packages/server/routes",
+    "packages/server/update",
+    "packages/server/systemd",
+    "packages/web/src",
+    "packages/web/src/components",
+    "packages/web/src/components/settings",
+    "packages/web/src/components/chat",
+    "packages/web/src/components/stella",
+    "packages/web/src/hooks",
+    "packages/web/src/styles",
+    "packages/desktop",
+    "packages/desktop/src-tauri",
+    "packages/desktop/src-tauri/src",
+    "packages/browser-rpc",
+    "packages/browser-rpc/src",
+    "scripts",
+  ];
+  const missing: string[] = [];
+  for (const doc of ["ARCHITECTURE.md", "AGENTS.md"]) {
+    const text = texts.get(doc);
+    assert(text !== undefined, `${doc} was not read`);
+    const refs = new Set(
+      [...text.matchAll(/`([A-Za-z0-9_./-]+\.(?:ts|tsx|rs|css|yml|toml))`/g)]
+        .map((match) => match[1]!),
+    );
+    for (const ref of refs) {
+      if (roots.some((root) => fileExistsAt(root, ref))) continue;
+      missing.push(`${doc}: ${ref}`);
+    }
+  }
+  assertEquals(
+    missing,
+    [],
+    `the documents name files that do not exist: ${missing.join(", ")}`,
+  );
+});
+
+/** Whether `ref` names a file under `root` (the docs address files from a
+ * handful of package directories, not from the repository root alone). */
+function fileExistsAt(root: string, ref: string): boolean {
+  const prefix = root === "" ? "" : `${root}/`;
+  try {
+    Deno.statSync(new URL(`${prefix}${ref}`, ROOT));
+    return true;
+  } catch {
+    return false;
+  }
+}
