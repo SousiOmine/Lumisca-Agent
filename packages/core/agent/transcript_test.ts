@@ -59,7 +59,7 @@ Deno.test("transcript store: an append writes only what is missing", () => {
     assertEquals(view.length, 3);
     view.push({ role: "user", content: "new", timestamp: 9 } as AgentMessage);
     store.persist(view);
-    assertEquals(repo.count("s1"), 6);
+    assertEquals(repo.count("s1", "all"), 6);
     assertEquals(store.persistedCount, 4);
   } finally {
     db.close();
@@ -106,7 +106,7 @@ Deno.test("transcript store: a rewind beyond the view re-reads it", () => {
     assertEquals(removed.length, 7);
     assertEquals(store.reload(), []);
     assertEquals(store.baseIndex, 0);
-    assertEquals(repo.count("s1"), 0);
+    assertEquals(repo.count("s1", "all"), 0);
   } finally {
     db.close();
   }

@@ -420,19 +420,34 @@ Deno.test("messages: listWindow pages backwards, oldest first", () => {
       } as AgentMessage);
     }
 
-    const newest = repo.listWindow("s1", { beforeIndex: null, limit: 2 });
+    const newest = repo.listWindow("s1", {
+      beforeIndex: null,
+      limit: 2,
+      rows: "all",
+    });
     assertEquals(newest.map((row) => row.timestamp), [4, 5]);
 
     // The page before it, ending where the previous one started (row 4's
     // position is 3 — rows are 0-based positions in transcript order).
-    const older = repo.listWindow("s1", { beforeIndex: 3, limit: 2 });
+    const older = repo.listWindow("s1", {
+      beforeIndex: 3,
+      limit: 2,
+      rows: "all",
+    });
     assertEquals(older.map((row) => row.timestamp), [2, 3]);
 
-    const oldest = repo.listWindow("s1", { beforeIndex: 1, limit: 2 });
+    const oldest = repo.listWindow("s1", {
+      beforeIndex: 1,
+      limit: 2,
+      rows: "all",
+    });
     assertEquals(oldest.map((row) => row.timestamp), [1]);
 
     // Before the first row there is nothing, not an error.
-    assertEquals(repo.listWindow("s1", { beforeIndex: 0, limit: 2 }), []);
+    assertEquals(
+      repo.listWindow("s1", { beforeIndex: 0, limit: 2, rows: "all" }),
+      [],
+    );
   } finally {
     db.close();
   }
@@ -458,7 +473,11 @@ Deno.test("messages: listWindow never reads another session's rows", () => {
       timestamp: 2,
     } as AgentMessage);
 
-    const page = repo.listWindow("s1", { beforeIndex: null, limit: 10 });
+    const page = repo.listWindow("s1", {
+      beforeIndex: null,
+      limit: 10,
+      rows: "all",
+    });
     assertEquals(page.map((row) => row.timestamp), [1]);
   } finally {
     db.close();
@@ -530,7 +549,7 @@ Deno.test("messages: pruneCondensed reduces only what a checkpoint covers", () =
     assertEquals(again.freedBytes, 0);
     // The row count never changes: positions are transcript order, and a
     // hole would move every row after it.
-    assertEquals(repo.count("s1"), 4);
+    assertEquals(repo.count("s1", "all"), 4);
   } finally {
     db.close();
   }

@@ -18,6 +18,59 @@ export interface MessageWindow {
   to: number | null;
 }
 
+/**
+ * Which of a session's rows a transcript position counts.
+ *
+ * A page is a count of SCREEN units, and the two surfaces' units are the
+ * same rows only in code mode. A stella conversation draws what the
+ * conversation shows — its prompts and what the agent sent (see
+ * agent/stella-stream.ts) — and none of the tool traffic between them. A page
+ * that counted raw rows filled up on rows nobody sees: the newest page then
+ * projected to zero entries and answered `older: null`, which reads as "an
+ * empty conversation with nothing before it". During a tool-heavy run the
+ * screen therefore stayed on the typing dots with none of the conversation
+ * behind it, and no re-read could bring those messages back — every resync
+ * asked for the same window and got the same nothing.
+ *
+ * `"conversation"` is the candidate set of a conversation entry as SQL sees
+ * it (the same filter `newestConversationRows` uses). The projection still
+ * decides which candidates become entries, so this is a superset by design —
+ * but it is the subset a page has to count to be a page of entries.
+ */
+export type TranscriptRows = "all" | "conversation";
+
+/**
+ * The rows a conversation can draw, as SQL — the single definition of
+ * `TranscriptRows: "conversation"`. It names what `agent/stella-stream.ts`
+ * projects to an entry: a prompt (`user`; `mode` is code-mode-only but
+ * projected the same way) and the result of a successful `send_chat`.
+ *
+ * The tool name is read through `COALESCE` because the store holds two
+ * envelopes: rows this build wrote (`{ v, message }`) and rows from before the
+ * version stamp (a bare message). `decodeStoredMessage` reads both, so a
+ * filter that only understood one would leave a conversation's last message
+ * invisible while the conversation itself showed it.
+ *
+ * A page and the sidebar's preview both read this constant, so the two cannot
+ * disagree about what a conversation shows.
+ */
+export const CONVERSATION_ROWS_SQL = `
+        (
+          role IN ('user', 'mode')
+          OR (
+            role = 'toolResult'
+            AND COALESCE(
+              json_extract(content, '$.message.toolName'),
+              json_extract(content, '$.toolName')
+            ) = 'send_chat'
+            AND COALESCE(
+              json_extract(content, '$.message.isError'),
+              json_extract(content, '$.isError'),
+              0
+            ) = 0
+          )
+        )`;
+
 export interface MessageRepo {
   append(sessionId: string, message: AgentMessage): StoredMessage;
   list(sessionId: string): StoredMessage[];
@@ -33,20 +86,33 @@ export interface MessageRepo {
    * conversation's whole history (see session/transcript-window.ts). */
   listModelView(sessionId: string): StoredMessage[];
   /** One window of the conversation as a client draws it: up to `limit`
-   * rows ending just before `beforeIndex` (a 0-based transcript position),
-   * or the newest window when it is `null`. Rows come back oldest first.
-   * The window's start is pulled back to `startsWindow` — a page must begin
-   * at a turn, not in the middle of one (see session/transcript-pager.ts). */
+   * rows of `rows`' scope ending just before `beforeIndex` (a 0-based
+   * position in that same scope), or the newest window when it is `null`.
+   * Rows come back oldest first. The window's start is pulled back to
+   * `startsWindow` — a page must begin at a turn, not in the middle of one
+   * (see session/transcript-pager.ts).
+   *
+   * `rows` is required (see TranscriptRows): a page is a count of screen
+   * units, and only the caller knows what its screen draws. A conversation
+   * passes `"conversation"`, so a page of 40 counts 40 entries rather than
+   * 40 rows of tool traffic nobody sees. */
   listWindow(
     sessionId: string,
-    query: { beforeIndex: number | null; limit: number },
+    query: {
+      beforeIndex: number | null;
+      limit: number;
+      rows: TranscriptRows;
+    },
   ): StoredMessage[];
-  /** The 0-based transcript position of the first row matching `match`, or
-   * undefined when none does. Backs the cursor (see transcript-pager): the
-   * cursor names a message, and the store answers where it is. */
+  /** The 0-based position of the first row matching `match` within `rows`'
+   * scope, or undefined when none does. Backs the cursor (see
+   * transcript-pager): the cursor names a message, and the store answers
+   * where it is. The scope must be the one the page was read with, because
+   * it is what the positions count. */
   positionOf(
     sessionId: string,
     match: (row: StoredMessage) => boolean,
+    rows: TranscriptRows,
   ): number | undefined;
   /** The newest rows that could be something the conversation SHOWS, newest
    * first, at most `limit`.
@@ -62,8 +128,9 @@ export interface MessageRepo {
    * the newest entry retries with a larger limit rather than scanning the
    * session. */
   newestConversationRows(sessionId: string, limit: number): StoredMessage[];
-  /** How many rows the session holds (a page's end is the row count). */
-  count(sessionId: string): number;
+  /** How many rows the session holds in `rows`' scope (a page's end is the
+   * count of what the page counts). */
+  count(sessionId: string, rows: TranscriptRows): number;
   /** The `usage` of every assistant row that reported one, in transcript
    * order — the input of the context meter. Read from the store rather than
    * from memory because the agent holds only the model's view, while the
@@ -204,66 +271,68 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       )
     ORDER BY rowid
   `);
-  // One page ending at a position: the newest `limit` rows strictly before
-  // the 0-based transcript position `beforeIndex`, oldest first. The bound
-  // is resolved to a rowid with the same OFFSET rule deleteFrom uses, so a
-  // caller counts rows the way the rest of the store does and never has to
-  // know a rowid (which insertAt rewrites). The subquery projects rowid
-  // explicitly: a bare `SELECT *` does not carry it out, and the outer ORDER
-  // BY is what restores transcript order after the inner DESC limit. A null
-  // bound (no older page requested) reads the newest rows instead, which is
-  // its own statement.
-  const windowFromStmt = db.db.prepare(`
-    SELECT * FROM (
-      SELECT rowid AS rid, * FROM messages
-      WHERE session_id = ?
-        AND rowid < (
-          SELECT rowid FROM messages
-          WHERE session_id = ?
-          ORDER BY rowid
-          LIMIT 1 OFFSET ?
-        )
-      ORDER BY rowid DESC LIMIT ?
-    ) ORDER BY rid
-  `);
-  const windowNewestStmt = db.db.prepare(`
-    SELECT * FROM (
-      SELECT rowid AS rid, * FROM messages
-      WHERE session_id = ?
-      ORDER BY rowid DESC LIMIT ?
-    ) ORDER BY rid
+  // One page of a transcript, counted in the SCOPE the caller names (see
+  // TranscriptRows): the newest `limit` rows of that scope, or the rows just
+  // before the scoped position `beforeIndex`. Scoping the OFFSET is what
+  // makes a page a page of screen units — a conversation counts only the rows
+  // it draws, so 40 is 40 entries rather than 40 rows of tool traffic that
+  // project to nothing.
+  //
+  // Two statements rather than one with a conditional filter: SQLite plans
+  // each statement once, and the unscoped read (code mode) should not pay for
+  // a predicate it never uses.
+  //
+  // A position is resolved to a rowid with the same OFFSET rule deleteFrom
+  // uses, so a caller counts rows the way the rest of the store does and
+  // never has to know a rowid (which insertAt rewrites). The newest page has
+  // no row after it to bound by, so it is a plain descending limit.
+  const windowStatement = (scope: string) =>
+    db.db.prepare(`
+      SELECT * FROM (
+        SELECT rowid AS rid, * FROM messages
+        WHERE session_id = ?1
+          AND ${scope}
+          AND rowid < (
+            SELECT rowid FROM messages
+            WHERE session_id = ?1
+              AND ${scope}
+            ORDER BY rowid
+            LIMIT 1 OFFSET ?3
+          )
+        ORDER BY rowid DESC LIMIT ?2
+      ) ORDER BY rid
+    `);
+  const windowStatementNewest = (scope: string) =>
+    db.db.prepare(`
+      SELECT * FROM (
+        SELECT rowid AS rid, * FROM messages
+        WHERE session_id = ?1
+          AND ${scope}
+        ORDER BY rowid DESC LIMIT ?2
+      ) ORDER BY rid
+    `);
+  const windowAllStmt = windowStatement("1");
+  const windowAllNewestStmt = windowStatementNewest("1");
+  const windowConversationStmt = windowStatement(CONVERSATION_ROWS_SQL);
+  const windowConversationNewestStmt = windowStatementNewest(
+    CONVERSATION_ROWS_SQL,
+  );
+  // Every row of a conversation's scope, in transcript order: a cursor is an
+  // identity, so resolving one means decoding the scope's rows (see
+  // positionOf).
+  const conversationRowsStmt = db.db.prepare(`
+    SELECT * FROM messages
+    WHERE session_id = ? AND ${CONVERSATION_ROWS_SQL}
+    ORDER BY rowid
   `);
   // The newest rows that could be a conversation entry, newest first (see
-  // newestConversationRows). A conversation can show exactly three kinds of
-  // row — a prompt (`user`; `mode` is code-mode-only but projected the same
-  // way), and the result of a successful `send_chat` (see
-  // agent/stella-stream.ts) — so the filter names them and the scan stays
-  // inside the session's index range however long the transcript is.
-  //
-  // The tool name is read through `COALESCE` because the store holds two
-  // envelopes: rows this build wrote (`{ v, message }`) and rows from before
-  // the version stamp (a bare message). `decodeStoredMessage` reads both, so
-  // this query has to see both — a filter that only understood one would
-  // leave a conversation's last message invisible in the sidebar while the
-  // conversation itself showed it.
+  // newestConversationRows). The filter is CONVERSATION_ROWS_SQL — the same
+  // one a conversation's page counts by — so the scan stays inside the
+  // session's index range however long the transcript is.
   const newestEntryRowsStmt = db.db.prepare(`
     SELECT * FROM messages
     WHERE session_id = ?1
-      AND (
-        role IN ('user', 'mode')
-        OR (
-          role = 'toolResult'
-          AND COALESCE(
-            json_extract(content, '$.message.toolName'),
-            json_extract(content, '$.toolName')
-          ) = 'send_chat'
-          AND COALESCE(
-            json_extract(content, '$.message.isError'),
-            json_extract(content, '$.isError'),
-            0
-          ) = 0
-        )
-      )
+      AND ${CONVERSATION_ROWS_SQL}
     ORDER BY rowid DESC
     LIMIT ?2
   `);
@@ -299,6 +368,14 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
 
   const list = (sessionId: string): StoredMessage[] => {
     const rows = listStmt.all(sessionId) as Array<
+      Parameters<typeof toStored>[0]
+    >;
+    return rows.map(toStored);
+  };
+
+  /** The rows of a conversation (see TranscriptRows): what it can draw. */
+  const conversationRows = (sessionId: string): StoredMessage[] => {
+    const rows = conversationRowsStmt.all(sessionId) as Array<
       Parameters<typeof toStored>[0]
     >;
     return rows.map(toStored);
@@ -355,15 +432,22 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     },
 
     listWindow(sessionId, query): StoredMessage[] {
+      // `beforeIndex` is a position in the SAME scope the page is read in: a
+      // conversation's positions count the rows it draws (see
+      // TranscriptRows), so its page ends at an entry.
+      const statement = query.rows === "conversation"
+        ? query.beforeIndex === null
+          ? windowConversationNewestStmt
+          : windowConversationStmt
+        : query.beforeIndex === null
+        ? windowAllNewestStmt
+        : windowAllStmt;
       const rows =
         (query.beforeIndex === null
-          ? windowNewestStmt.all(sessionId, query.limit)
-          : windowFromStmt.all(
-            sessionId,
-            sessionId,
-            query.beforeIndex,
-            query.limit,
-          )) as Array<Parameters<typeof toStored>[0]>;
+          ? statement.all(sessionId, query.limit)
+          : statement.all(sessionId, query.limit, query.beforeIndex)) as Array<
+            Parameters<typeof toStored>[0]
+          >;
       return rows.map(toStored);
     },
 
@@ -374,23 +458,36 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       return rows.map(toStored);
     },
 
-    positionOf(sessionId, match): number | undefined {
+    positionOf(sessionId, match, rows): number | undefined {
       // The rows are decoded because the cursor is an identity, not a
       // column: it names role + timestamp (+ tool call id), which only the
       // message itself carries. Called once per page (a client that reaches
       // the top), so the decode of the session's rows is acceptable; the
       // alternative would be a cursor column the store does not have.
-      const rows = list(sessionId);
-      for (let index = 0; index < rows.length; index++) {
-        if (match(rows[index]!)) return index;
+      //
+      // A positional read is in the same scope as the page that named it: a
+      // conversation's positions count only the rows it draws, so resolving a
+      // cursor against every row would land somewhere else than the page it
+      // came from. The scope is the SQL filter, so one definition answers
+      // both (see CONVERSATION_ROWS_SQL).
+      const scoped = rows === "conversation"
+        ? conversationRows(sessionId)
+        : list(sessionId);
+      for (let index = 0; index < scoped.length; index++) {
+        if (match(scoped[index]!)) return index;
       }
       return undefined;
     },
 
-    count(sessionId): number {
-      const row = db.db.prepare(
-        "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?",
-      ).get(sessionId) as { n: number };
+    count(sessionId, rows): number {
+      const row = (rows === "conversation"
+        ? db.db.prepare(`
+          SELECT COUNT(*) AS n FROM messages
+          WHERE session_id = ? AND ${CONVERSATION_ROWS_SQL}
+        `)
+        : db.db.prepare(
+          "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?",
+        )).get(sessionId) as { n: number };
       return Number(row.n);
     },
 

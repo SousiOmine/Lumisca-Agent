@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../ai/types.ts";
 import { CoreError } from "../errors.ts";
-import type { MessageRepo, StoredMessage } from "./messages.ts";
+import type { MessageRepo, StoredMessage, TranscriptRows } from "./messages.ts";
 import {
   identityCursor,
   messageIdentityOf,
@@ -80,6 +80,11 @@ export interface PageRules<T> {
   project(row: StoredMessage): { item: T; cursor: string } | undefined;
   /** Whether the row begins a screen unit. */
   startsWindow(message: AgentMessage): boolean;
+  /** Which rows a page counts (see MessageRepo.listWindow and
+   * TranscriptRows). Required, because a page is a count of screen units and
+   * only the surface knows what its screen draws: a conversation reads
+   * `"conversation"` (its entries), code mode `"all"` (every row is drawn). */
+  rows: TranscriptRows;
   pageItems?: number;
   maxPageItems?: number;
 }
@@ -98,14 +103,15 @@ export function readTranscriptPage<T>(
     rules.pageItems ?? TRANSCRIPT_PAGE_ITEMS,
     rules.maxPageItems ?? MAX_TRANSCRIPT_PAGE_ITEMS,
   );
+  const rows = rules.rows;
   const older = query.older ?? null;
-  const total = repo.count(sessionId);
+  // Every position here is in `rows`' scope, so a page counts what the client
+  // draws (see TranscriptRows).
+  const total = repo.count(sessionId, rows);
   const end = older === null
     ? total
-    : positionOfCursor(repo, sessionId, older, rules.project);
+    : positionOfCursor(repo, sessionId, older, rules.project, rows);
 
-  // The page's own rows, plus whatever the walk back to the turn needs.
-  const pageStart = Math.max(0, end - limit);
   // One contiguous read of the transcript's rows from position `at` up to
   // (not including) `until`. The read that reaches the transcript's end has
   // no row after it to bound by (an OFFSET at the end matches nothing), so it
@@ -114,19 +120,52 @@ export function readTranscriptPage<T>(
     repo.listWindow(sessionId, {
       beforeIndex: until === total ? null : until,
       limit: until - at,
+      rows,
     });
-  const start = turnStartAtOrBefore(
+  const pageStart = Math.max(0, end - limit);
+  let start = turnStartAtOrBefore(
     pageStart,
     end,
     rules.startsWindow,
     readRows,
   );
-  const page = readRows(start, end);
-  // One projection pass: `items` is what the client draws, and the first
-  // projected row carries the cursor for the next page (a dropped row is
-  // never held by a client, so it cannot name anything). A page whose whole
-  // extent is dropped answers null rather than a cursor that would land on
-  // the same rows again.
+  let projected = projectPage(readRows(start, end), rules);
+  // The scope is a SUPERSET of what the client draws (the projection, not
+  // SQL, decides what an entry is), so a page of scoped rows can still
+  // project to nothing: a prompt with neither words nor files, a `send_chat`
+  // that sent nothing. Handing that back as `{ items: [], older: null }` is
+  // the answer "an empty conversation, and nothing before it" — a screen with
+  // no way out, because every later read asks for the same window. So the
+  // window keeps growing backwards until it holds something drawable, within
+  // the same bound as the turn walk.
+  const floor = Math.max(0, end - limit - BOUNDARY_LOOKBACK);
+  while (projected.items.length === 0 && start > 0) {
+    const next = turnStartAtOrBefore(
+      Math.max(floor, start - limit),
+      start,
+      rules.startsWindow,
+      readRows,
+    );
+    if (next >= start) break;
+    start = next;
+    projected = projectPage(readRows(start, end), rules);
+  }
+  return {
+    items: projected.items,
+    // `older` names the entry that begins the page: the reader can hold only
+    // something it draws, so a page with nothing drawable names nothing.
+    older: start > 0 && projected.firstCursor !== undefined
+      ? projected.firstCursor
+      : null,
+  };
+}
+
+/** One projection pass: what the client draws, and the cursor naming the
+ * first of it (the way back is anchored on a row the client holds). */
+function projectPage<T>(
+  page: readonly StoredMessage[],
+  rules: PageRules<T>,
+): { items: T[]; firstCursor: string | undefined } {
   const items: T[] = [];
   let firstCursor: string | undefined;
   for (const row of page) {
@@ -135,10 +174,7 @@ export function readTranscriptPage<T>(
     if (firstCursor === undefined) firstCursor = projected.cursor;
     items.push(projected.item);
   }
-  return {
-    items,
-    older: start > 0 && firstCursor !== undefined ? firstCursor : null,
-  };
+  return { items, firstCursor };
 }
 
 /** The position the window that ends at `end` must START at: walked back
@@ -171,16 +207,19 @@ function turnStartAtOrBefore(
 /** The position a cursor names. A cursor that matches nothing is a conflict:
  * the message it named was rewound away, so the client's view and the
  * transcript have diverged, and answering with a window it did not ask for
- * would hide that. */
+ * would hide that. The position is in the page's own scope: a cursor names a
+ * row the client DRAWS, and `rows` is what the positions count. */
 function positionOfCursor<T>(
   repo: MessageRepo,
   sessionId: string,
   cursor: string,
   project: (row: StoredMessage) => { item: T; cursor: string } | undefined,
+  rows: TranscriptRows,
 ): number {
   const position = repo.positionOf(
     sessionId,
     (row) => project(row)?.cursor === cursor,
+    rows,
   );
   if (position === undefined) {
     throw new CoreError(

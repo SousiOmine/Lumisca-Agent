@@ -109,8 +109,6 @@ export function useStella(enabled: boolean): {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [agentsVersion, setAgentsVersion] = useState(0);
-  // Opening twice (a re-render, a retry) must not create two conversations.
-  const opening = useRef<string | null>(null);
   /** An older window is in flight; a second reach for the top waits for it
    * rather than reading the same page twice. The state is what the transcript
    * reads to keep the reader's position until the page lands. */
@@ -203,13 +201,20 @@ export function useStella(enabled: boolean): {
   // Open the active agent's conversation. The server starts the machine on
   // this call, so a first run waits here (minutes) — `loading` is what the
   // view shows during it.
+  //
+  // No "already opening" guard: the effect's dependencies are the agent and
+  // the mode, so it runs once per selection, and the server's open is
+  // idempotent (one conversation per agent, and the machine's start is
+  // memoized). A guard keyed by agent id used to hold the id of an open whose
+  // effect had already been cleaned up — leaving a conversation disposed
+  // mid-flight — and the next selection of that same agent returned early
+  // against it: nothing was read, `loading` never cleared, and the screen
+  // waited forever.
   useEffect(() => {
     if (!enabled || activeAgentId === null) {
       setConversation(null);
       return;
     }
-    if (opening.current === activeAgentId) return;
-    opening.current = activeAgentId;
     setLoading(true);
     setError(null);
     let disposed = false;
@@ -224,7 +229,6 @@ export function useStella(enabled: boolean): {
       } catch (failure) {
         if (!disposed) setError(errorText(failure));
       } finally {
-        if (opening.current === activeAgentId) opening.current = null;
         if (!disposed) setLoading(false);
       }
     })();
@@ -314,14 +318,13 @@ export function useStella(enabled: boolean): {
   // Switching agents drops the previous conversation's state (the
   // conversation itself stays on the server; coming back re-reads it).
   const select = useCallback((id: string) => {
-    setActiveAgentId((current) => {
-      if (current !== id) {
-        setConversation(null);
-        setSessionId(null);
-      }
-      return id === current ? current : id;
-    });
-  }, []);
+    // The same agent picked again is not a switch: leaving the state alone
+    // keeps the open conversation (and its stream) where it is.
+    if (id === activeAgentId) return;
+    setConversation(null);
+    setSessionId(null);
+    setActiveAgentId(id);
+  }, [activeAgentId]);
 
   /** Go back to the list of agents (a phone's conversation screen's back
    * button). The conversation is not deleted — it lives on the server — so

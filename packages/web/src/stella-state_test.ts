@@ -183,6 +183,30 @@ Deno.test("stellaStateOf: a re-read snapshot merges into paged history", () => {
   assertEquals(merged.older, "cursor-old");
 });
 
+Deno.test("stellaStateOf: an empty window keeps the conversation it holds", () => {
+  // A snapshot can hold no entries and still not be the beginning of the
+  // conversation: a run whose visible entries are all older than the window.
+  // Replacing the state with it would empty a screen that was showing the
+  // conversation — and, because the cursor went with it, leave no way back.
+  const first = entry("user", "最初", 1);
+  const current = state({ entries: [first], older: "cursor-old" });
+  const merged = stellaStateOf({
+    entries: [],
+    older: null,
+    running: true,
+    questions: [],
+    handover: null,
+    agentName: "Aide",
+    sessionId: "s1",
+    model: { provider: "faux", modelId: "model" },
+    rev: 9,
+  }, current);
+  assertEquals(merged.entries.map(entryKey), [entryKey(first)]);
+  assertEquals(merged.older, "cursor-old");
+  // The run state still comes from the snapshot: that is what it is for.
+  assertEquals(merged.running, true);
+});
+
 Deno.test("stellaStateOf: a window that shares nothing replaces the state", () => {
   const current = state({
     entries: [entry("user", "古い", 1)],

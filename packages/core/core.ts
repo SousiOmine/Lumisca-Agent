@@ -1768,7 +1768,7 @@ export class LumiscaCore {
     const rows = this.messages.listModelView(id);
     return {
       messages: rows.map((row) => row.message),
-      baseIndex: this.messages.count(id) - rows.length,
+      baseIndex: this.messages.count(id, "all") - rows.length,
     };
   }
 
@@ -1898,6 +1898,7 @@ export class LumiscaCore {
     if (this.pool.get(id) === undefined) return undefined;
     const page = readTranscriptPage(this.messages, id, query, {
       startsWindow: (message) => startsTranscriptTurn(message),
+      rows: "all",
       project: (row) => ({
         item: row.message,
         cursor: messageCursorOf(row.message),
@@ -1971,9 +1972,13 @@ export class LumiscaCore {
     if (this.pool.get(id) === undefined) return undefined;
     // Project first, page over the projection: a page must count what the
     // conversation shows, not what the model's history holds (most of a
-    // stella transcript is tool traffic nobody sees).
+    // stella transcript is tool traffic nobody sees). `rows: "conversation"`
+    // is what makes the page a count of those entries — without it a page of
+    // 40 filled up on tool rows during a run and projected to nothing, and
+    // the newest window answered "empty, with nothing before it".
     const page = readTranscriptPage(this.messages, id, query, {
       startsWindow: () => true,
+      rows: "conversation",
       project: (row) => {
         const entry = stellaEntryOf(row.message);
         return entry === null

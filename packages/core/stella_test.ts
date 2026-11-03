@@ -731,6 +731,101 @@ Deno.test("stella conversation: what send_chat sends is the conversation", async
   }
 });
 
+Deno.test("stella conversation: a tool-heavy run still shows the conversation", async () => {
+  // The screen draws entries, not rows. A page that counted raw rows filled
+  // up on the tool traffic of one run and projected to zero entries, and the
+  // newest window then answered "empty, with nothing before it" — during a
+  // run, exactly when the dots are showing. The client could never recover:
+  // every resync asked for the same window and got the same nothing, so
+  // looking away from a working agent and back left the conversation blank.
+  const { faux, core, session } = await stellaConversation("Surveyor");
+  try {
+    // A prompt, then one turn that runs more tools than a page holds rows.
+    faux.setResponses([
+      fauxAssistantMessage("まず調べます。"),
+    ]);
+    await promptSession(core, session.id, "調べて");
+
+    const responses = [];
+    for (let i = 0; i < 25; i++) {
+      responses.push(
+        fauxAssistantMessage(
+          [fauxToolCall("history_search", { query: `probe-${i}` })],
+          { stopReason: "toolUse" },
+        ),
+      );
+    }
+    responses.push(fauxAssistantMessage("done"));
+    faux.setResponses(responses);
+    await promptSession(core, session.id, "詳しく");
+
+    const page = core.readStellaConversation(session.id, {})!;
+    // Both prompts are in the newest window: the page counts entries, so the
+    // tool rows between them cannot crowd the conversation out of it.
+    assertEquals(page.items.map((entry) => entry.role), ["user", "user"]);
+    assertEquals(
+      page.items.map((entry) => entry.text),
+      ["調べて", "詳しく"],
+    );
+    // The beginning of the conversation is still behind it, so it is named.
+    assertEquals(page.older, null);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: a long conversation pages back by entries", async () => {
+  // The way back has to be measured in the same units as the page: a cursor
+  // resolved against every row would land somewhere other than the entry it
+  // names, and the reader would be handed a window that repeats or skips.
+  const { faux, core, session } = await stellaConversation("Archivist");
+  try {
+    const responses = [];
+    for (let i = 0; i < 3; i++) {
+      responses.push(
+        fauxAssistantMessage(
+          [fauxToolCall("send_chat", { text: `message ${i}` }, `call-${i}`)],
+          { stopReason: "toolUse" },
+        ),
+      );
+      responses.push(fauxAssistantMessage("sent"));
+    }
+    faux.setResponses(responses);
+    for (let i = 0; i < 3; i++) {
+      await promptSession(core, session.id, `prompt ${i}`);
+    }
+
+    const newest = core.readStellaConversation(session.id, { limit: 2 })!;
+    assertEquals(newest.items.map((entry) => entry.text), [
+      "prompt 2",
+      "message 2",
+    ]);
+    assert(newest.older !== null, "the conversation has history before it");
+
+    const older = core.readStellaConversation(session.id, {
+      limit: 2,
+      older: newest.older,
+    })!;
+    assertEquals(older.items.map((entry) => entry.text), [
+      "prompt 1",
+      "message 1",
+    ]);
+
+    const oldest = core.readStellaConversation(session.id, {
+      limit: 2,
+      older: older.older,
+    })!;
+    assertEquals(oldest.items.map((entry) => entry.text), [
+      "prompt 0",
+      "message 0",
+    ]);
+    // Read in entries, the walk ends exactly at the conversation's beginning.
+    assertEquals(oldest.older, null);
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("stella conversation: history_search reads the message after a prune", async () => {
   // A checkpoint replaces the span that held the call (whose arguments carry
   // the words), so the send_chat ROW is what keeps the message readable —

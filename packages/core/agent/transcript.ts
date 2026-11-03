@@ -114,7 +114,11 @@ export class TranscriptStore {
   positionOf(
     match: (message: AgentMessage) => boolean,
   ): number | undefined {
-    return this.repo.positionOf(this.sessionId, (row) => match(row.message));
+    return this.repo.positionOf(
+      this.sessionId,
+      (row) => match(row.message),
+      "all",
+    );
   }
 
   /** Drop every row from whole-transcript position `index` on and return
@@ -133,7 +137,7 @@ export class TranscriptStore {
    * behind it) and re-anchor this store to it. */
   reload(): AgentMessage[] {
     const rows = this.repo.listModelView(this.sessionId);
-    this.base = this.repo.count(this.sessionId) - rows.length;
+    this.base = this.repo.count(this.sessionId, "all") - rows.length;
     this.count = rows.length;
     return rows.map((row) => row.message);
   }

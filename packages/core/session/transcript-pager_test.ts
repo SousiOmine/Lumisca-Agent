@@ -35,8 +35,9 @@ function setup(count: number): { db: LumiscaDb; repo: MessageRepo } {
   return { db, repo };
 }
 
-/** The code-mode rules: a page is a turn, and the projection drops nothing. */
-const RULES = {
+/** The code-mode rules: a page is a turn, and every row is drawn. */
+const RULES: PageRules<number> = {
+  rows: "all",
   startsWindow: (message: AgentMessage) => startsTranscriptTurn(message),
   project: (row: StoredMessage) => ({
     item: row.timestamp,
@@ -244,6 +245,7 @@ Deno.test("transcript pager: a dropped row still marks the page's turn", () => {
     } as AgentMessage);
 
     const dropped: PageRules<number> = {
+      rows: "all",
       startsWindow: () => true,
       project: (row) =>
         row.role === "toolResult" ? undefined : {
