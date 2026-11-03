@@ -12,7 +12,7 @@ import {
   type ThemeSetting,
 } from "@lumisca/core";
 import type { InitialData } from "@lumisca/core/shared";
-import type { Assets } from "./assets.ts";
+import type { AssetFile, Assets } from "./assets.ts";
 import { safePageHost } from "./security.ts";
 import { renderHtmlDocument } from "./render.ts";
 import {
@@ -108,16 +108,17 @@ export function registerPages(
   });
 
   /** Answer a revalidatable app file, or 304 when the client already has
-   * this exact build. The bundle is ~600 KB and its URL is stable across
+   * this exact build. The bundle is ~450 KB and its URL is stable across
    * builds, so the round trip is what a reload costs instead of the payload
    * — the difference between opening the app over a tailnet in a second and
-   * in several. */
+   * in several. `etag` comes from the file: the manifest records it at build
+   * time, the stylesheet is hashed here. */
   const serveRevalidatable = (
     c: Context,
     body: string,
     contentType: string,
+    etag: string,
   ): Response => {
-    const etag = contentEtag(body);
     const headers = {
       "content-type": contentType,
       ...appFileHeaders("revalidate", etag),
@@ -130,26 +131,39 @@ export function registerPages(
     return c.body(body, 200, headers);
   };
 
-  app.get("/assets/app.js", async (c) => {
+  /** The client build: the entry chunk the page loads (`app.js`) and the
+   * chunks its dynamic imports fetch later (`@novnc/novnc` for the stella
+   * screen, `motion/mini`). The name is looked up in the manifest, never
+   * joined to a path, so a path-like or stale name is simply not this
+   * build's file. */
+  app.get("/assets/:file", async (c) => {
+    let file: AssetFile | undefined;
     try {
-      const js = await assets.getAppJs();
-      return serveRevalidatable(
-        c,
-        js,
-        "application/javascript; charset=utf-8",
-      );
+      file = await assets.getClientFile(c.req.param("file"));
     } catch (error) {
       return c.text(
         `Client bundle build failed: ${errorMessage(error)}`,
         500,
       );
     }
+    if (file === undefined) return c.text("Not found", 404);
+    return serveRevalidatable(
+      c,
+      file.body,
+      "application/javascript; charset=utf-8",
+      file.etag,
+    );
   });
 
   app.get("/styles.css", async (c) => {
     try {
       const css = await assets.getCss();
-      return serveRevalidatable(c, css, "text/css; charset=utf-8");
+      return serveRevalidatable(
+        c,
+        css,
+        "text/css; charset=utf-8",
+        contentEtag(css),
+      );
     } catch (error) {
       return c.text(`Stylesheet build failed: ${errorMessage(error)}`, 500);
     }

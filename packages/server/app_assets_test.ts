@@ -40,6 +40,15 @@ Deno.test("unknown static assets return 404, not the HTML shell", async () => {
     assertEquals(stale.status, 404);
     const content = await stale.text();
     assertEquals(content.includes("__INITIAL_DATA__"), false);
+    // The route answers from the manifest, never from a path: an encoded
+    // traversal decodes into a `:file` value and misses like any other name.
+    const traversal = await fetch(`${base}/assets/..%2f..%2fetc%2fpasswd`);
+    assertEquals(traversal.status, 404);
+    assertEquals((await traversal.text()).includes("root:"), false);
+    // A prototype member is not a file either (the manifest is a plain
+    // object, so a lookup that did not ask for an own property would answer
+    // with `Object.prototype.constructor`).
+    assertEquals((await fetch(`${base}/assets/constructor`)).status, 404);
   } finally {
     server.shutdown();
     core.close();
@@ -207,6 +216,43 @@ Deno.test("server bundles and serves the client app", async () => {
       js.length > 10_000,
       `the bundle is ${js.length} bytes: too small to hold the client app`,
     );
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("the client's chunks are served and the entry loads them lazily", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+    const entry = await (await fetch(`${base}/assets/app.js`)).text();
+    // Splitting is what keeps noVNC and motion off the first load: the entry
+    // must reference a chunk by a relative dynamic import instead of holding
+    // their code. A build without `splitting` inlines both and the entry
+    // names neither.
+    const chunks = [...entry.matchAll(/import\("\.\/([^"]+\.js)"\)/g)].map(
+      (match) => match[1]!,
+    );
+    assert(chunks.length > 0, "the entry has no dynamic import");
+
+    // Each named chunk is a real route answer, not a 404 the browser would
+    // discover only when the reader opens the stella screen.
+    for (const name of chunks) {
+      const res = await fetch(`${base}/assets/${name}`);
+      assertEquals(res.status, 200, `${name} was not served`);
+      assertEquals(
+        res.headers.get("content-type"),
+        "application/javascript; charset=utf-8",
+      );
+      assert((await res.text()).length > 0, `${name} is empty`);
+    }
+    // The chunks the build makes are the dynamic imports the entry names:
+    // noVNC for the stella screen, motion/mini for an exit animation.
+    assertEquals(chunks.some((name) => name.startsWith("rfb-")), true);
+    assertEquals(chunks.some((name) => name.startsWith("mini-")), true);
   } finally {
     server.shutdown();
     core.close();

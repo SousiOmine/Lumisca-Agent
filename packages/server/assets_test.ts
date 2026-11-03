@@ -2,13 +2,19 @@ import { removeDirRetry } from "@lumisca/core/test-utils";
 import { join } from "node:path";
 import { assertEquals, assertRejects } from "@std/assert";
 import { Assets, type AssetsManifest, bundleStylesCss } from "./assets.ts";
+import { contentEtag } from "./app-file-headers.ts";
 
 Deno.test("packaged assets use the startup-captured manifest path", async () => {
   const root = await Deno.makeTempDir();
   const manifestPath = join(root, "assets.json");
   const favicon = new Uint8Array([0, 1, 2, 255]);
+  const appJs = "console.log('packaged');";
+  const chunk = "export const lazy = 1;";
   const manifest: AssetsManifest = {
-    "app.js": "console.log('packaged');",
+    client: {
+      "app.js": { body: appJs, etag: contentEtag(appJs) },
+      "lazy-ABC123.js": { body: chunk, etag: contentEtag(chunk) },
+    },
     "styles.css": "body { color: white; }",
     "favicon.png": btoa(String.fromCharCode(...favicon)),
   };
@@ -16,7 +22,16 @@ Deno.test("packaged assets use the startup-captured manifest path", async () => 
 
   try {
     const assets = new Assets(root, join(root, "cache"), manifestPath);
-    assertEquals(await assets.getAppJs(), manifest["app.js"]);
+    assertEquals((await assets.getClientFile("app.js"))?.body, appJs);
+    assertEquals((await assets.getClientFile("lazy-ABC123.js"))?.body, chunk);
+    // The manifest is the whole surface: a name it does not list is not a
+    // file, whatever it looks like.
+    assertEquals(await assets.getClientFile("missing.js"), undefined);
+    assertEquals(await assets.getClientFile("../app.js"), undefined);
+    // A prototype member (`Object.prototype.constructor`) is not a file
+    // either — the manifest is a plain object, so the lookup has to ask for
+    // an own property.
+    assertEquals(await assets.getClientFile("constructor"), undefined);
     assertEquals(await assets.getCss(), manifest["styles.css"]);
     assertEquals(await assets.getFavicon(), favicon);
   } finally {
@@ -27,18 +42,21 @@ Deno.test("packaged assets use the startup-captured manifest path", async () => 
 Deno.test("a manifest read that fails is retried instead of poisoning the process", async () => {
   const root = await Deno.makeTempDir();
   const manifestPath = join(root, "assets.json");
+  const lateJs = "console.log('late');";
   try {
     // The packaged startup path: the manifest appears only after the first
     // request (a half-finished update, an unpacking installer) — the process
     // must serve its UI once it is there, not stay broken until a restart.
     const assets = new Assets(root, join(root, "cache"), manifestPath);
-    await assertRejects(() => assets.getAppJs());
+    await assertRejects(() => assets.getClientFile("app.js"));
 
     await Deno.writeTextFile(
       manifestPath,
-      JSON.stringify({ "app.js": "console.log('late');" }),
+      JSON.stringify({
+        client: { "app.js": { body: lateJs, etag: contentEtag(lateJs) } },
+      }),
     );
-    assertEquals(await assets.getAppJs(), "console.log('late');");
+    assertEquals((await assets.getClientFile("app.js"))?.body, lateJs);
   } finally {
     await removeDirRetry(root);
   }

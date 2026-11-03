@@ -1,17 +1,31 @@
 import { dirname, join, relative } from "node:path";
+import { contentEtag } from "./app-file-headers.ts";
 import { bundleClient } from "./bundle.ts";
 import { webClientEntry, webFaviconPath, webStylesPath } from "./paths.ts";
 
 /**
- * The frontend assets a server can serve: the bundled client, the styles,
- * and the favicon (binary assets base64-encoded so the manifest is text).
- * This module is the single owner of those assets — both the pre-build
- * script (scripts/build-server.ts) and the runtime Assets class use it, so
- * the packaged and dev asset sources cannot drift.
+ * The frontend assets a server can serve: the bundled client (the entry chunk
+ * and the chunks its dynamic imports fetch), the styles, and the favicon
+ * (binary assets base64-encoded so the manifest is text). This module is the
+ * single owner of those assets — both the pre-build script
+ * (scripts/build-server.ts) and the runtime Assets class use it, so the
+ * packaged and dev asset sources cannot drift.
  */
 
+/** One file of the client build. */
+export interface AssetFile {
+  /** The file's contents. */
+  body: string;
+  /** The validator of `body` (see app-file-headers.ts), recorded at build
+   * time so serving the file is a lookup rather than a scan of ~450 KB. */
+  etag: string;
+}
+
 export interface AssetsManifest {
-  "app.js": string;
+  /** The client build, keyed by the name its `/assets/*` URL serves: the
+   * entry chunk (`app.js`, the one render.ts loads) and every chunk a dynamic
+   * import fetches later. */
+  client: Record<string, AssetFile>;
   "styles.css": string;
   "favicon.png": string;
 }
@@ -56,23 +70,48 @@ export async function bundleStylesCss(entryPath: string): Promise<string> {
   return bodies.join("\n");
 }
 
+/** Bundle the client into `outdir` and read every file the build wrote. The
+ * returned map is the client's whole serving surface: a name the build did
+ * not produce has no entry, so the `/assets/*` route cannot reach a file it
+ * should not serve. */
+async function bundleClientFiles(
+  repoRoot: string,
+  outdir: string,
+): Promise<Record<string, AssetFile>> {
+  await Deno.mkdir(outdir, { recursive: true });
+  const bundle = await bundleClient({
+    cwd: repoRoot,
+    entry: webClientEntry(repoRoot),
+    outdir,
+  });
+  const files: Record<string, AssetFile> = {};
+  for (const name of bundle.files) {
+    const body = await Deno.readTextFile(join(outdir, name));
+    files[name] = { body, etag: contentEtag(body) };
+  }
+  return files;
+}
+
+/** The client's size as it goes on the wire: the manifest is text, so each
+ * file costs its UTF-8 encoding. */
+function clientBytesOf(client: Record<string, AssetFile>): number {
+  const encoder = new TextEncoder();
+  let bytes = 0;
+  for (const file of Object.values(client)) {
+    bytes += encoder.encode(file.body).length;
+  }
+  return bytes;
+}
+
 /** Bundle the client and read the static assets into a manifest. This is
  * the only producer of embedded assets; the runtime Assets class serves
  * either these or the repository sources. */
 export async function buildAssetsManifest(
   repoRoot: string,
-): Promise<{ manifest: AssetsManifest; appJsBytes: number }> {
-  const tmp = join(
-    Deno.env.get("TMPDIR") ?? Deno.env.get("TEMP") ?? "/tmp",
-    `lumisca-app-${crypto.randomUUID()}.js`,
-  );
+): Promise<{ manifest: AssetsManifest; clientBytes: number }> {
+  const outdir = await Deno.makeTempDir({ prefix: "lumisca-client-" });
   try {
-    await bundleClient({
-      cwd: repoRoot,
-      entry: webClientEntry(repoRoot),
-      outfile: tmp,
-    });
-    const appJs = await Deno.readTextFile(tmp);
+    const client = await bundleClientFiles(repoRoot, outdir);
     const css = await bundleStylesCss(webStylesPath(repoRoot));
     const faviconBytes = await Deno.readFile(webFaviconPath(repoRoot));
     // Chunked so any icon size stays within the call-stack limits of
@@ -85,14 +124,14 @@ export async function buildAssetsManifest(
     }
     return {
       manifest: {
-        "app.js": appJs,
+        client,
         "styles.css": css,
         "favicon.png": faviconB64,
       },
-      appJsBytes: appJs.length,
+      clientBytes: clientBytesOf(client),
     };
   } finally {
-    await Deno.remove(tmp).catch(() => {});
+    await Deno.remove(outdir, { recursive: true }).catch(() => {});
   }
 }
 
@@ -101,11 +140,11 @@ export function readAssetsManifest(path: string): AssetsManifest {
   return JSON.parse(Deno.readTextFileSync(path)) as AssetsManifest;
 }
 
-/** Lazily built/loaded frontend assets (client bundle, css, favicon). */
+/** Lazily built/loaded frontend assets (client files, css, favicon). */
 export class Assets {
   // A single memoized promise: a resolved promise keeps returning the same
   // value, and a failed build nulls the slot so the next request retries.
-  private appJsPromise: Promise<string> | null = null;
+  private clientPromise: Promise<Record<string, AssetFile>> | null = null;
   private cssCache: string | null = null;
   private faviconCache: Uint8Array | null = null;
   /** Memoized embedded manifest (undefined = not read yet, or the last read
@@ -123,16 +162,16 @@ export class Assets {
    * (scripts/build-server.ts), or from the path given by
    * LUMISCA_ASSETS_FILE (the desktop shell passes its resource copy).
    *
-   * Read once per process: the manifest is ~350 KB and never changes while
-   * the server runs — and after an update the *new* manifest must not start
-   * leaking into the still-running old server (the updater replaces it in
-   * place; see packages/server/update/install.ts), which would pair a new
-   * UI with an old API. A read that FAILS is not memoized (the real
-   * manifest may be mid-replace, or the desktop bundle not unpacked yet):
-   * the next request retries, like the sibling caches, so a transient
-   * failure cannot leave the process unable to serve its UI until it is
-   * restarted. */
-  private embedded(name: keyof AssetsManifest): string | undefined {
+   * Read once per process: the manifest is the whole client build and the
+   * stylesheet (several hundred KB) and never changes while the server
+   * runs — and after an update the *new* manifest must not start leaking
+   * into the still-running old server (the updater replaces it in place; see
+   * packages/server/update/install.ts), which would pair a new UI with an old
+   * API. A read that FAILS is not memoized (the real manifest may be
+   * mid-replace, or the desktop bundle not unpacked yet): the next request
+   * retries, like the sibling caches, so a transient failure cannot leave the
+   * process unable to serve its UI until it is restarted. */
+  private embedded(): AssetsManifest | undefined {
     if (!this.assetsFile) return undefined;
     if (this.manifestCache === undefined) {
       try {
@@ -142,7 +181,7 @@ export class Assets {
         return undefined;
       }
     }
-    return this.manifestCache?.[name];
+    return this.manifestCache;
   }
 
   private hasWebSources(): boolean {
@@ -154,37 +193,45 @@ export class Assets {
   }
 
   /** Build once; concurrent first requests share the same build. */
-  getAppJs(): Promise<string> {
-    if (this.appJsPromise === null) {
-      this.appJsPromise = this.buildAppJs().catch((error) => {
+  private getClient(): Promise<Record<string, AssetFile>> {
+    if (this.clientPromise === null) {
+      this.clientPromise = this.buildClient().catch((error) => {
         // A failed build must not poison the cache: the next request
-        // retries (in dev, invalidate() also clears it).
-        this.appJsPromise = null;
+        // retries.
+        this.clientPromise = null;
         throw error;
       });
     }
-    return this.appJsPromise;
+    return this.clientPromise;
   }
 
-  private buildAppJs(): Promise<string> {
-    return (async (): Promise<string> => {
+  /** One file of the client build by the name its `/assets/*` URL carries,
+   * or undefined when this build has no such file. The manifest is the whole
+   * authority: an unknown (or path-like) name never reaches the file
+   * system.
+   *
+   * `hasOwn` because the manifest is a plain object: without it a request
+   * for `/assets/constructor` would find `Object`'s member rather than a
+   * file. */
+  async getClientFile(name: string): Promise<AssetFile | undefined> {
+    const client = await this.getClient();
+    return Object.hasOwn(client, name) ? client[name] : undefined;
+  }
+
+  private buildClient(): Promise<Record<string, AssetFile>> {
+    return (async (): Promise<Record<string, AssetFile>> => {
       if (!this.hasWebSources()) {
         // Packaged build: serve the prebuilt bundle.
-        const embedded = this.embedded("app.js");
+        const embedded = this.embedded()?.client;
         if (embedded !== undefined) return embedded;
         throw new Error(
           "Frontend sources not found and no embedded assets " +
             "(set LUMISCA_ASSETS_FILE or run from the repository)",
         );
       }
-      await Deno.mkdir(this.cacheDir, { recursive: true });
-      const outfile = join(this.cacheDir, "app.js");
-      await bundleClient({
-        cwd: this.repoRoot,
-        entry: webClientEntry(this.repoRoot),
-        outfile,
-      });
-      return Deno.readTextFile(outfile);
+      const outdir = join(this.cacheDir, "client");
+      await Deno.mkdir(outdir, { recursive: true });
+      return await bundleClientFiles(this.repoRoot, outdir);
     })();
   }
 
@@ -193,7 +240,7 @@ export class Assets {
       if (this.hasWebSources()) {
         this.cssCache = await bundleStylesCss(webStylesPath(this.repoRoot));
       } else {
-        const embedded = this.embedded("styles.css");
+        const embedded = this.embedded()?.["styles.css"];
         if (embedded === undefined) {
           throw new Error("styles.css not found and no embedded assets");
         }
@@ -208,7 +255,7 @@ export class Assets {
       if (this.hasWebSources()) {
         this.faviconCache = await Deno.readFile(webFaviconPath(this.repoRoot));
       } else {
-        const embedded = this.embedded("favicon.png");
+        const embedded = this.embedded()?.["favicon.png"];
         if (embedded === undefined) {
           throw new Error("favicon.png not found and no embedded assets");
         }

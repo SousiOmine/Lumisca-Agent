@@ -202,11 +202,17 @@ async function stageStellaContainer(outDir: string): Promise<void> {
 const options = parseArgs(Deno.args);
 await Deno.mkdir(options.outDir, { recursive: true });
 
-// 1. Bundle the client and read the static assets into the manifest.
-const { manifest, appJsBytes } = await buildAssetsManifest(repoRoot);
+// 1. Bundle the client and read the static assets into the manifest. The
+//    client's chunks travel inside `assets.json`, so a package stays the
+//    binary, this one file, and the ICU/container data — nothing else to
+//    stage, and no directory whose contents could go stale.
+const { manifest, clientBytes } = await buildAssetsManifest(repoRoot);
 const assetsFile = join(options.outDir, "assets.json");
 await Deno.writeTextFile(assetsFile, JSON.stringify(manifest));
-console.log(`Assets: ${assetsFile} (${appJsBytes} bytes of JS)`);
+console.log(
+  `Assets: ${assetsFile} (${clientBytes} bytes of JS: ` +
+    `${Object.keys(manifest.client).join(", ")})`,
+);
 
 // 2. Stage Skia's ICU data file (Windows only; removed elsewhere), and the
 //    stella machine's container files (used by `podman build` at runtime).
