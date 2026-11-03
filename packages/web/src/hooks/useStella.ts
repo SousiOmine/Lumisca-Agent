@@ -17,18 +17,13 @@ import {
 import { compareAgentRows, previewOf, samePreview } from "@lumisca/core/shared";
 import { createReconnectScheduler } from "../reconnect.ts";
 import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
+import { startRevisionProbe } from "./useRevisionProbe.ts";
 import type {
   PendingFile,
   PendingImage,
   StellaAgent,
   StellaAgentSummary,
 } from "../types.ts";
-
-/** Period between revision probes. While the stream is up the events are the
- * live source; the probe catches frames that were emitted but never arrived
- * (a socket that died without a close event) by re-reading the snapshot when
- * the conversation's counter moved. */
-const REVISION_PROBE_MS = 30_000;
 
 /** How often the agent list is re-read while the page is visible.
  *
@@ -311,24 +306,26 @@ export function useStella(enabled: boolean): {
     };
 
     connect();
-    let probe = 0;
-    const probeTimer = setInterval(() => {
-      void (async () => {
-        try {
-          const { rev } = await stellaApi.getRevision(activeAgentId);
-          if (closed) return;
-          if (probe !== 0 && rev !== probe) await resync();
-          probe = rev;
-        } catch {
-          // A failed probe is not an outage: the next one retries.
-        }
-      })();
-    }, REVISION_PROBE_MS);
+    // The conversation has a revision counter of its own; a probe compares it
+    // with what this view has seen (see useRevisionProbe).
+    let probe: number | undefined;
+    const stopProbe = startRevisionProbe({
+      knownRevision: () => probe,
+      remember: (_key, revision) => {
+        probe = revision;
+      },
+      readRevision: async () =>
+        (await stellaApi.getRevision(activeAgentId)).rev,
+      onMoved: () => void resync(),
+      keys: () => [activeAgentId],
+      enabled: () => true,
+      disposed: () => closed,
+    });
 
     return () => {
       closed = true;
       reconnect.cancel();
-      clearInterval(probeTimer);
+      stopProbe();
       close?.();
     };
     // `conversation === null` gates the first connection: there is no

@@ -1,7 +1,6 @@
-import { useCallback, useSyncExternalStore } from "preact/compat";
 import { api } from "../api.ts";
 import type { SavedPrompt } from "../types.ts";
-import { createResourceStore } from "../store.ts";
+import { createResourceStore, useStore } from "../store.ts";
 
 /**
  * The saved prompts (the settings panel's list, and the `/prompt` menu the
@@ -57,11 +56,7 @@ export function useSavedPrompts(): {
   error: string | null;
   reload: () => void;
 } {
-  const subscribe = useCallback(
-    (listener: () => void) => store.subscribe(listener),
-    [],
-  );
-  const state = useSyncExternalStore(subscribe, () => store.get());
+  const state = useStore(store);
   return {
     prompts: state.prompts,
     error: state.error,

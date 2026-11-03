@@ -1,6 +1,6 @@
-import { useCallback, useSyncExternalStore } from "preact/compat";
+import { useCallback } from "preact/compat";
 import { api } from "./api.ts";
-import { createResourceStore } from "./store.ts";
+import { createResourceStore, useStore } from "./store.ts";
 
 /**
  * The app's settings, as one shared store.
@@ -95,11 +95,7 @@ export function useSettings(): SettingsState & {
   reload: () => void;
   set: (key: string, value: string) => Promise<void>;
 } {
-  const subscribe = useCallback(
-    (listener: () => void) => store.subscribe(listener),
-    [],
-  );
-  const state = useSyncExternalStore(subscribe, () => store.get());
+  const state = useStore(store);
   const reload = useCallback(() => {
     void store.reload();
   }, []);
@@ -112,10 +108,5 @@ export function useSettings(): SettingsState & {
 
 /** One setting's value (undefined while unloaded or unset). */
 export function useSetting(key: string): string | undefined {
-  const subscribe = useCallback(
-    (listener: () => void) => store.subscribe(listener),
-    [],
-  );
-  const state = useSyncExternalStore(subscribe, () => store.get());
-  return state.values[key];
+  return useStore(store).values[key];
 }

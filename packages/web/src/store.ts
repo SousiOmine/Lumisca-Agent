@@ -1,3 +1,5 @@
+import { useCallback, useSyncExternalStore } from "preact/compat";
+
 /**
  * The UI's shared values: one store shape, and the loading it needs.
  *
@@ -203,4 +205,20 @@ export function createResourceStore<T, E = string>(
  * Error). */
 function describeThrown(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Subscribe a component to a store.
+ *
+ * The three lines this wraps (`useCallback` around `subscribe`, then
+ * `useSyncExternalStore`) were copied verbatim into every store's hook —
+ * four copies, each one a place to forget the `[]` dependency array and
+ * re-subscribe on every render.
+ */
+export function useStore<T>(store: Store<T>): T {
+  const subscribe = useCallback(
+    (listener: () => void) => store.subscribe(listener),
+    [store],
+  );
+  return useSyncExternalStore(subscribe, () => store.get());
 }

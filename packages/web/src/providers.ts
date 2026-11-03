@@ -2,7 +2,7 @@ import { useCallback, useSyncExternalStore } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
 import { api, modelApi } from "./api.ts";
 import { modelCatalog, type PeerCatalogState } from "./modelCatalog.ts";
-import { createResourceStore } from "./store.ts";
+import { createResourceStore, useStore } from "./store.ts";
 import { splitTabKey } from "./tabs.ts";
 import type {
   SessionView,
@@ -46,11 +46,7 @@ export function useUserProviders(): {
    * delete button in ProviderDetail). */
   ids: Set<string>;
 } {
-  const subscribe = useCallback(
-    (listener: () => void) => userProvidersStore.subscribe(listener),
-    [],
-  );
-  const state = useSyncExternalStore(subscribe, () => userProvidersStore.get());
+  const state = useStore(userProvidersStore);
   return {
     providers: state.providers,
     error: state.error,

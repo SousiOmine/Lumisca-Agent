@@ -9,6 +9,7 @@ import {
   type SnapshotParts,
 } from "../events.ts";
 import { createReconnectScheduler } from "../reconnect.ts";
+import { startRevisionProbe } from "./useRevisionProbe.ts";
 import { keysForPeer, tabKey } from "../tabs.ts";
 import { maybeNotifyAgentEnd, maybeNotifyQuestion } from "../notify.ts";
 import type { ClientEvent, SessionView, TodoPhase } from "../types.ts";
@@ -18,13 +19,6 @@ import type { ClientEvent, SessionView, TodoPhase } from "../types.ts";
  * live source; a tab returning to the foreground is the only other moment
  * a re-sync runs. */
 const DISCONNECTED_SYNC_INTERVAL_MS = 10_000;
-
-/** Period between revision probes of the open tabs while connected: one
- * tiny request per tab, and a snapshot re-read only when a revision moved
- * (see the probe in useSessionEvents). Catches events that were emitted but
- * never arrived — a socket that died without a close event, a peer's relay
- * gap — within one interval instead of at the next reconnect. */
-const REVISION_PROBE_MS = 30_000;
 
 /** Fetch one session's panel snapshots — the parts of a view that are not in
  * the transcript snapshot: the sub-agent tasks, the background commands and
@@ -533,22 +527,17 @@ export function useSessionEvents(
     // and a snapshot re-read only when a count moved. A socket that died
     // without a close event, or a peer relay gap, is then noticed within an
     // interval instead of at the next reconnect.
-    const probeTimer = setInterval(async () => {
-      if (disposed || !connected) return;
-      for (const key of [...revsRef.current.keys()]) {
-        if (!viewsRef.current.has(key)) continue;
-        try {
-          const { rev } = await sessionApi(key).getRevision();
-          if (disposed) return;
-          // The marker may have moved while the request was in flight (an
-          // event arrived): compare against the fresh value.
-          if (rev !== revsRef.current.get(key)) void syncState([key]);
-        } catch {
-          // Opportunistic: a failed probe is not a state change. The
-          // socket's own liveness is the heartbeat watchdog's business.
-        }
-      }
-    }, REVISION_PROBE_MS);
+    const stopProbe = startRevisionProbe({
+      knownRevision: (key) => revsRef.current.get(key),
+      remember: (key, revision) => revsRef.current.set(key, revision),
+      readRevision: async (key) => (await sessionApi(key).getRevision()).rev,
+      onMoved: (key) => void syncState([key]),
+      // Only the open tabs: a key with no view has nothing to compare.
+      keys: () =>
+        [...revsRef.current.keys()].filter((key) => viewsRef.current.has(key)),
+      enabled: () => connected,
+      disposed: () => disposed,
+    });
 
     /** Cancel any pending reconnect and close the existing socket, so
      * connect() always starts from a clean slate (prevents double-open). */
@@ -623,7 +612,7 @@ export function useSessionEvents(
       disposed = true;
       cleanup();
       stopSyncTimer();
-      clearInterval(probeTimer);
+      stopProbe();
       // Text buffered for the next frame must land before the views are
       // left alone (the page may be navigating away, and the snapshot on
       // return would be the only remaining source).

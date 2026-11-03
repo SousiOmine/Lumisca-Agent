@@ -1,6 +1,5 @@
-import { useCallback, useSyncExternalStore } from "preact/compat";
 import { api } from "./api.ts";
-import { createResourceStore } from "./store.ts";
+import { createResourceStore, useStore } from "./store.ts";
 import type { ConnectionEntry } from "./types.ts";
 
 /**
@@ -63,11 +62,7 @@ export function useConnections(): {
   error: string | null;
   reload: () => void;
 } {
-  const subscribe = useCallback(
-    (listener: () => void) => store.subscribe(listener),
-    [],
-  );
-  const state = useSyncExternalStore(subscribe, () => store.get());
+  const state = useStore(store);
   return {
     entries: state.entries,
     loaded: state.loaded,
