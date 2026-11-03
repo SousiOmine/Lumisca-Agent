@@ -40,8 +40,8 @@ import {
 import { CoreError } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { SearchProvider } from "../websearch/types.ts";
-import type { SessionPoolDeps } from "./pool.ts";
-import type { SessionResources } from "./pool.ts";
+import type { SessionPoolDeps } from "./deps.ts";
+import type { SessionResources } from "./deps.ts";
 import {
   TOOL_AGENT_CREATE,
   TOOL_IDENTITY,

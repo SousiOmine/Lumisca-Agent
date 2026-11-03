@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../ai/types.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
-import type { RemovedMessage } from "./rewinder.ts";
+import type { MessageIdentity } from "../types/event.ts";
 
 /**
  * The persisted part of a session's transcript, and where it sits in the
@@ -119,7 +119,7 @@ export class TranscriptStore {
 
   /** Drop every row from whole-transcript position `index` on and return
    * their identities (what a client needs to drop them from its view). */
-  truncateFrom(index: number): RemovedMessage[] {
+  truncateFrom(index: number): MessageIdentity[] {
     const removed = this.repo
       .list(this.sessionId)
       .slice(index)

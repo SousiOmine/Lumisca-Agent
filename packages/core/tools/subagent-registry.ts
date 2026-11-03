@@ -189,3 +189,35 @@ export class SubagentRegistry {
     }
   }
 }
+
+/**
+ * What the task-family tools call on the hub that owns them.
+ *
+ * The tools (task.ts) and the hub (task-hub.ts) need each other — the hub
+ * builds the tools, the tools call the hub — and importing one from the other
+ * made a cycle that only the type system hid. Declaring the slice the tools
+ * use here, in the module both already depend on, leaves one direction:
+ * task.ts -> this interface, task-hub.ts -> task.ts.
+ */
+export interface SubagentHub {
+  spawn(
+    parentId: string,
+    parentDepth: number,
+    type: SubagentType,
+    description: string,
+    prompt: string,
+  ): TaskInfo;
+  info(agentId: string): TaskInfo;
+  wait(
+    agentId: string,
+    callerId: string,
+    timeoutSec: number,
+    signal?: AbortSignal,
+  ): Promise<TaskInfo>;
+  sendMessage(
+    from: string,
+    to: string,
+    summary: string,
+    message: string,
+  ): { deliveredTo: string };
+}

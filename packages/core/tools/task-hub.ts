@@ -40,7 +40,7 @@ import {
   readOnlyInvestigationTools,
   sessionSkills,
   type ToolBackends,
-} from "./toolsets.ts";
+} from "./tool-pieces.ts";
 import { ContextCompactor } from "../ai/context-compaction.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { createSkillTool } from "../skills/tool.ts";
@@ -53,7 +53,7 @@ import {
 } from "./subagent-format.ts";
 import { notificationMessage } from "../types/notification.ts";
 import type { Subagent } from "./subagent-registry.ts";
-import { SubagentRegistry } from "./subagent-registry.ts";
+import { type SubagentHub, SubagentRegistry } from "./subagent-registry.ts";
 import {
   createSendMessageTool,
   createTaskOutputTool,
@@ -197,6 +197,12 @@ export interface TaskHubOptions {
  * one agent: sub-agents run independently of the agent run — aborting a run
  * never stops them — and survive agent rebuilds. close() aborts them all.
  */
+/** The hub the task-family tools are written against (see SubagentHub): a
+ * signature that moves on this class and not on the interface fails to
+ * compile here. */
+export type TaskHubImplementsToolsSeam = TaskHub extends SubagentHub ? true
+  : never;
+
 export class TaskHub {
   private readonly subagents: SubagentRegistry;
   private counter = 0;

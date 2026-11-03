@@ -3,13 +3,13 @@ import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";
 import { AGENT_ICON_FORMATS, MAX_AGENT_ICON_BYTES } from "@lumisca/core/shared";
-import type { StellaAgent } from "../../types.ts";
+import type { StellaAgent, StellaAgentSummary } from "../../types.ts";
 import { Modal } from "../Modal.tsx";
 import { Field } from "../Field.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 
 export interface AgentEditDialogProps {
-  agent: StellaAgent;
+  agent: StellaAgentSummary;
   /** Called with the row the server answered, so the caller can put it back
    * into its list without re-reading everything. */
   onChanged: (agent: StellaAgent) => void;

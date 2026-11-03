@@ -1,4 +1,4 @@
-import type { AgentMode } from "./mod.ts";
+import type { AgentMode } from "./types.ts";
 
 /** What the review covers: the branch's diff against its base, or the
  * uncommitted worktree changes. */

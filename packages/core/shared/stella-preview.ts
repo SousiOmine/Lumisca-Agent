@@ -31,7 +31,6 @@
  * every refresh. The fold is presentational (markers and emphasis), so what
  * remains is what a reader would have seen emphasised in the bubble.
  */
-import type { StellaAgent } from "../stella/agents.ts";
 import type { StellaEntry } from "../types/stella-conversation.ts";
 
 /** What a sidebar row says under the name.
@@ -181,10 +180,33 @@ function foldInline(text: string): string {
     .trim();
 }
 
+/** What a sidebar row needs to know about the agent itself: the label, the
+ * picture, and when it was last spoken to.
+ *
+ * The fields a row PRESENTS, not the whole row of the store: this module is
+ * bundled into the browser and must not reach into stella/agents.ts (the
+ * SQLite-backed repo). stella/agents.ts extends this shape, so the server's
+ * answer and the client's type still cannot disagree.
+ */
+export interface StellaAgentSummaryBase {
+  /** The agent's id: the row's identity, and the last tie-break of the
+   * order. */
+  id: string;
+  /** The label the user gave it (the conversation header prints it too). */
+  name: string;
+  /** The icon store's file name, or "" when the agent has no picture. */
+  icon: string;
+  /** When the user last talked to it (the "most recently used" order). */
+  updatedAt: number;
+  /** When the agent was created: the last tie-break of the row order, so two
+   * conversations that have said nothing still sort stably. */
+  createdAt: number;
+}
+
 /** One row of the agent list: the agent and what its conversation last
  * said. Defined here beside the preview so the route and the client agree on
  * the shape (the server answers it, the sidebar draws it). */
-export interface StellaAgentSummary extends StellaAgent {
+export interface StellaAgentSummary extends StellaAgentSummaryBase {
   /** The newest thing the conversation shows, or null when nothing has been
    * said yet (a fresh agent: the row then has one line, like a message app's
    * row for someone you have not talked to). */

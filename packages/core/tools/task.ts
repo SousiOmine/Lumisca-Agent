@@ -4,7 +4,7 @@ import {
   TOOL_TASK_OUTPUT,
 } from "../shared/mod.ts";
 import type { SubagentType } from "../shared/mod.ts";
-import type { TaskHub } from "./task-hub.ts";
+import type { SubagentHub } from "./subagent-registry.ts";
 import {
   boolean,
   integer,
@@ -39,7 +39,7 @@ const taskSchema = object({
  * result arrives later as a "[Task ...]" notification (or via
  * task_output). */
 export function createTaskTool(
-  hub: TaskHub,
+  hub: SubagentHub,
   agentId: string,
   depth: number,
 ): Tool<typeof taskSchema> {
@@ -100,7 +100,7 @@ const taskOutputSchema = object({
  * `wait: true` blocks the caller until the agent settles (bounded by
  * `timeout_sec`, and settled by the caller's run abort). */
 export function createTaskOutputTool(
-  hub: TaskHub,
+  hub: SubagentHub,
   agentId: string,
 ): Tool<typeof taskOutputSchema> {
   return {
@@ -145,7 +145,7 @@ const sendMessageSchema = object({
  * agent or any sub-agent of the session's tree). The recipient sees it as a
  * "[Message from ...]" notification on its next step. */
 export function createSendMessageTool(
-  hub: TaskHub,
+  hub: SubagentHub,
   agentId: string,
 ): Tool<typeof sendMessageSchema> {
   return {

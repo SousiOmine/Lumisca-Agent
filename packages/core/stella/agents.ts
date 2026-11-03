@@ -1,5 +1,6 @@
 import type { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
+import type { StellaAgentSummaryBase } from "../shared/stella-preview.ts";
 
 /**
  * The assistants of stella mode.
@@ -30,7 +31,9 @@ import { CoreError } from "../errors.ts";
  * `identity` tool. Keeping them apart is what lets an agent learn its job
  * without rewriting the instruction it was given.
  */
-export interface StellaAgent {
+/** The row the store keeps: what a sidebar row needs (see
+ * shared/stella-preview.ts) plus the agent's own text and timestamps. */
+export interface StellaAgent extends StellaAgentSummaryBase {
   id: string;
   /** The label the user gave it: the sidebar row and the conversation's
    * header, and nothing the model reads. Renaming is therefore a display

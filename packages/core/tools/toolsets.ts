@@ -1,15 +1,11 @@
 import type { Workspace } from "../types/workspace.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
-import { HostFileBackend } from "./host/files.ts";
-import { HostCommandRunner } from "./host/command-runner.ts";
-import type { FileBackend } from "./file-backend.ts";
-import type { CommandRunner } from "./command-backend.ts";
+import type { SkillDef } from "../skills/discover.ts";
 import {
-  createEditFileTool,
-  createListDirTool,
-  createReadFileTool,
-  createWriteFileTool,
-} from "./filesystem.ts";
+  fileTools,
+  hostBackends,
+  sessionSkills,
+  type ToolBackends,
+} from "./tool-pieces.ts";
 import { createBashTool } from "./bash.ts";
 import { createAsyncBashTools } from "./background.ts";
 import type { BackgroundProcessManager } from "./background.ts";
@@ -21,96 +17,18 @@ import { createWebSearchTools } from "./web.ts";
 import type { SearchProvider } from "../websearch/types.ts";
 import type { Tool } from "./schema.ts";
 import { createSkillTool } from "../skills/tool.ts";
-import { builtinSkills } from "../skills/builtin/mod.ts";
-import { discoverPlugins } from "../plugins/discover.ts";
-import { discoverSkills, type SkillDef } from "../skills/discover.ts";
 import { type AskHub, createAskTool } from "./ask.ts";
 import { createTodoTool, type TodoHub } from "./todo.ts";
 import type { TaskHub } from "./task-hub.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 
-/** Skills for a session, in precedence order: workspace `.agents/skills`,
- * then agent plugin skills (`skills/` of `.agents/plugins` plugins), then
- * global `~/.agents/skills`, then app-embedded built-in skills — any user
- * skill shadows a same-named built-in one. Shared with the sub-agent tool
- * builders (tools/task.ts) so both agent kinds see the same skill set.
- *
- * `browserAvailable` gates the built-in web-browser skill: it is only
- * advertised when a browser backend is attached to the session, so a
- * session that can never run browser tools does not point the agent at
- * them. Undefined → the browser skill is not advertised (callers that
- * know the backend state must say so). `computerAvailable` gates the
- * built-in computer-use skill the same way: it is only advertised when the
- * machine can actually be driven AND the user enabled the feature.
- * `globalDirs` overrides the global skills directory (~/.agents/skills);
- * tests pass a fixture directory so they never read the developer's own
- * skills. */
-export function sessionSkills(
-  folders: string[],
-  options: {
-    browserAvailable?: boolean;
-    computerAvailable?: boolean;
-    /** Whether this session can start coding sub-agents (see the
-     * coding-agents skill). */
-    subagents?: boolean;
-    globalDirs?: string[];
-  } = {},
-): SkillDef[] {
-  const plugins = discoverPlugins(folders);
-  return discoverSkills(folders, {
-    pluginSkills: plugins.flatMap((p) => p.skills),
-    builtinSkills: builtinSkills({
-      browser: options.browserAvailable === true,
-      computer: options.computerAvailable === true,
-      subagents: options.subagents === true,
-    }),
-    globalDirs: options.globalDirs,
-  });
-}
-
-/** The sandboxed file tool set: read, write, edit, list_dir. The core of
- * every coding tool set (main agent and general sub-agents share it, so new
- * tools cannot drift between the two). Searching is the shell's job: bash
- * already has grep and find, and a second surface for the same directory
- * tree only makes the agent choose on every look. */
-export function fileTools(files: FileBackend): Tool[] {
-  return [
-    createReadFileTool({ files }),
-    createWriteFileTool({ files }),
-    createEditFileTool({ files }),
-    createListDirTool({ files }),
-  ];
-}
-
-/** The read-only investigation tool set: read, list_dir, and a shell that
- * can search but not change anything (the prompt states the restriction;
- * the `explore` sub-agent is read-only by instruction, and bash is how it
- * greps and finds). */
-export function readOnlyInvestigationTools(
-  files: FileBackend,
-  runner: CommandRunner,
-  safety: CommandSafety | undefined,
-): Tool[] {
-  return [
-    createReadFileTool({ files }),
-    createListDirTool({ files }),
-    createBashTool({ files, runner, safety }),
-  ];
-}
-
-/** The tool backend of a workspace on this machine: files under the
- * workspace folders, commands on this host. The single place the host
- * implementations are chosen, so a caller that wants the stella VM's
- * backends has to say so explicitly. */
-export function hostBackends(workspace: Workspace): {
-  files: FileBackend;
-  runner: CommandRunner;
-} {
-  return {
-    files: new HostFileBackend(new Sandbox(workspace.folders)),
-    runner: new HostCommandRunner(),
-  };
-}
+export {
+  fileTools,
+  hostBackends,
+  readOnlyInvestigationTools,
+  sessionSkills,
+  type ToolBackends,
+} from "./tool-pieces.ts";
 
 export interface ToolFactoryOptions {
   /** Extra environment variables for bash commands. */
@@ -161,12 +79,6 @@ export interface ToolFactoryOptions {
    * are not built: without a configured provider there is nothing to search
    * with, and a tool that can only fail is not worth showing the model. */
   webSearch?: SearchProvider;
-}
-
-/** The two backends a tool set is built on. */
-export interface ToolBackends {
-  files: FileBackend;
-  runner: CommandRunner;
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace.

@@ -1,4 +1,4 @@
-import type { AgentMode } from "./mod.ts";
+import type { AgentMode } from "./types.ts";
 
 /** Default upper bound for the autonomous goal loop (see goal/loop.ts).
  * Kept here so the prompt text and the runtime agree on the same number;

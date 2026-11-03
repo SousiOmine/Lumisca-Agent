@@ -1,4 +1,7 @@
 import type { McpConfig, McpServerConfig } from "./config.ts";
+import type { McpServerStatus } from "./status.ts";
+
+export type { McpServerStatus } from "./status.ts";
 import { errorMessage } from "../errors.ts";
 import {
   formatContent,
@@ -16,24 +19,6 @@ import type { McpOAuthStore } from "./oauth.ts";
  * server's name. */
 export interface McpToolDef extends McpToolInfo {
   server: string;
-}
-
-/** Status snapshot of one server, for the settings UI. `status` is
- * widened to include "not_started" so the same union serves the merged
- * config+status surface (McpServerInfo); the manager itself only ever
- * reports "ok" or "error". */
-export interface McpServerStatus {
-  name: string;
-  type: "stdio" | "http";
-  enabled: boolean;
-  /** Number of tools discovered (0 until the first successful listing). */
-  toolCount: number;
-  status: "ok" | "error" | "not_started";
-  error?: string;
-  /** The failure is "this server wants an OAuth sign-in" rather than a
-   * broken server, so the settings UI can offer the sign-in instead of only
-   * showing the message. */
-  needsAuth?: boolean;
 }
 
 /**

@@ -22,22 +22,19 @@ import type {
   WebSearchSettingsView,
   WebSearchTestView,
 } from "../shared/web-search.ts";
+import { createWebSearchManager, type WebSearchManager } from "./manager.ts";
 import {
   addWebSearchProvider,
   availableProviderIds,
   configuredProviderIds,
-  createWebSearchManager,
-  type FetchLike,
-  isWebSearchProviderId,
   normalizeApiKey,
-  providerInfo,
   removeWebSearchProvider,
   setDefaultWebSearchProvider,
   updateWebSearchProvider,
-  type WebSearchManager,
-  type WebSearchProviderId,
   type WebSearchSettingsStore,
-} from "../websearch/mod.ts";
+} from "./settings.ts";
+import { isWebSearchProviderId, providerInfo } from "./providers/registry.ts";
+import type { FetchLike, WebSearchProviderId } from "./types.ts";
 import type { Locale } from "../shared/i18n/mod.ts";
 
 export interface WebSearchServiceOptions {

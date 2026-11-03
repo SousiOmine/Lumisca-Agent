@@ -1,5 +1,4 @@
 /** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db, no Node APIs), bundled into the browser client. */
-import { safeJsonParse } from "./misc.ts";
 
 /*
  * Every settings-table key lives in this module: it is the single source of
@@ -228,7 +227,7 @@ export function serializeModelPreference(pref: ModelPreference): string {
 export function parseModelPreference(
   raw: string | undefined | null,
 ): ModelPreference | undefined {
-  const parsed = safeJsonParse<unknown>(raw);
+  const parsed = parseStoredJson<unknown>(raw);
   if (
     typeof parsed === "object" && parsed !== null &&
     typeof (parsed as ModelPreference).provider === "string" &&
@@ -244,7 +243,7 @@ export function parseModelPreference(
 export function parseSavedPrompts(
   raw: string | undefined | null,
 ): SavedPrompt[] {
-  const parsed = safeJsonParse<unknown>(raw);
+  const parsed = parseStoredJson<unknown>(raw);
   if (Array.isArray(parsed)) {
     return parsed.filter(
       (e): e is SavedPrompt =>
@@ -260,6 +259,18 @@ export function parseSavedPrompts(
 /** Serialize saved prompts for the settings store. */
 export function serializeSavedPrompts(prompts: SavedPrompt[]): string {
   return JSON.stringify(prompts);
+}
+
+/** JSON of a stored setting value, or undefined when it is absent or
+ * malformed (a hand-edited settings file must read as "unset", never as an
+ * error: the caller then applies its documented default). */
+function parseStoredJson<T>(raw: string | undefined | null): T | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Theme preference stored in settings; "system" follows the OS color

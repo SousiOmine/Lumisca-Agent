@@ -43,7 +43,7 @@ interface StellaSidebarProps {
  * list. Fixed-position, because the list scrolls and an absolutely placed
  * menu would be clipped by it (the app menu is placed the same way). */
 interface MenuAnchor {
-  agent: StellaAgent;
+  agent: StellaAgentSummary;
   /** Distance from the viewport's right and top edges. */
   right: number;
   top: number;
@@ -99,11 +99,11 @@ export function StellaSidebar(
   const t = useT();
   const locale = useLocale();
   const [creating, setCreating] = useState(false);
-  const [deleting, setDeleting] = useState<StellaAgent | null>(null);
+  const [deleting, setDeleting] = useState<StellaAgentSummary | null>(null);
   /** The row whose menu is open, with where to draw it. */
   const [menu, setMenu] = useState<MenuAnchor | null>(null);
   /** The agent being edited (its name and picture), or null. */
-  const [editing, setEditing] = useState<StellaAgent | null>(null);
+  const [editing, setEditing] = useState<StellaAgentSummary | null>(null);
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
@@ -145,7 +145,7 @@ export function StellaSidebar(
     }
   };
 
-  const remove = async (agent: StellaAgent) => {
+  const remove = async (agent: StellaAgentSummary) => {
     setDeleting(null);
     try {
       await api.deleteStellaAgent(agent.id);
@@ -160,7 +160,7 @@ export function StellaSidebar(
    * only useful answer (and a menu placed in CSS would be clipped by the
    * scrolling list it lives in). */
   const openMenu = (
-    agent: StellaAgent,
+    agent: StellaAgentSummary,
     button: HTMLButtonElement,
   ) => {
     if (menu?.agent.id === agent.id) {

@@ -16,7 +16,7 @@ import {
   parseMcpConfig,
 } from "./config.ts";
 import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
-import type { McpServerStatus } from "./manager.ts";
+import type { McpServerStatus } from "./status.ts";
 import { probeMcpServer } from "./client.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
 import {

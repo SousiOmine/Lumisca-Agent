@@ -1,4 +1,4 @@
-import type { AgentMode } from "./mod.ts";
+import type { AgentMode } from "./types.ts";
 
 /**
  * Plan mode: the agent drafts an implementation plan for the user's

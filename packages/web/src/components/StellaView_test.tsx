@@ -6,19 +6,18 @@ import {
   emptyStellaState,
   type StellaConversationState,
 } from "../stella-state.ts";
-import type { StellaAgent, StellaStatus } from "../types.ts";
+import type { StellaAgentSummary, StellaStatus } from "../types.ts";
 import { StellaView } from "./StellaView.tsx";
 
 /** One agent, so the header (and the screen toggle it holds) is drawn. The
  * other props are the App's job, not the subject. */
-const agent: StellaAgent = {
+const agent: StellaAgentSummary = {
   id: "a1",
   name: "Aide",
-  role: "",
-  identity: "",
   icon: "",
   createdAt: 0,
   updatedAt: 0,
+  preview: null,
 };
 
 function status(overrides: Partial<StellaStatus> = {}): StellaStatus {

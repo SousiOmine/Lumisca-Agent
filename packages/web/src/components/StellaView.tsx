@@ -15,6 +15,7 @@ import type {
   PendingFile,
   PendingImage,
   StellaAgent,
+  StellaAgentSummary,
   StellaStatus,
 } from "../types.ts";
 import { Composer } from "./Composer.tsx";
@@ -31,7 +32,7 @@ interface StellaViewProps {
    * the conversation's title and its avatar opens the edit dialog; its
    * absence (first run, before an agent exists) is why the composer is
    * disabled. */
-  agent: StellaAgent | null;
+  agent: StellaAgentSummary | null;
   /** The agent row the server answered after an edit, so the App can replace
    * it without re-reading the list. */
   onAgentChanged: (agent: StellaAgent) => void;

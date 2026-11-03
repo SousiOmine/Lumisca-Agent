@@ -2,7 +2,7 @@ import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../../i18n.ts";
-import type { StellaAgent } from "../../types.ts";
+import type { StellaAgentSummary } from "../../types.ts";
 import { AgentEditDialog } from "./AgentEditDialog.tsx";
 
 /**
@@ -14,17 +14,16 @@ import { AgentEditDialog } from "./AgentEditDialog.tsx";
  * not touch) has no field at all.
  */
 
-const agent: StellaAgent = {
+const agent: StellaAgentSummary = {
   id: "a1",
   name: "Aide",
-  role: "You keep notes.",
-  identity: "",
   icon: "",
   createdAt: 0,
   updatedAt: 0,
+  preview: null,
 };
 
-function render(target: StellaAgent = agent): string {
+function render(target: StellaAgentSummary = agent): string {
   initLocale("ja");
   return renderToString(
     createElement(AgentEditDialog, {

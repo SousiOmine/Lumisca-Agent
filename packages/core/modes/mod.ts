@@ -1,66 +1,9 @@
-import type { MessageKey } from "../shared/mod.ts";
+import type { AgentMode } from "./types.ts";
+
+export type { AgentMode, AgentModeOption } from "./types.ts";
 import { goalMode } from "./goal.ts";
 import { planMode } from "./plan.ts";
 import { reviewMode } from "./review.ts";
-
-/** One selectable option of a mode (the second menu level, e.g. the review
- * target). Modes without options keep an empty array: the mode executes
- * directly from the first menu level. */
-export interface AgentModeOption {
-  id: string;
-  /** Catalogue key of the menu label. */
-  label: MessageKey;
-  /** Catalogue key of the menu description shown under the label. */
-  description: MessageKey;
-  /** Catalogue key of the short text stored with the message this option
-   * sends: the transcript shows it instead of the mode's full prompt. */
-  shortText: MessageKey;
-}
-
-/**
- * An agent operating mode: a per-message behavior overlay. Selecting a mode
- * in the UI sends `buildPrompt(optionId)` (or `buildPromptForText(text)`
- * for text-taking modes) as the user message, so the agent adopts the
- * mode's role and rules for that run without any server support.
- *
- * The menu text is NOT here: the labels are catalogue keys (shared/i18n),
- * so a mode reads in the app language like every other UI string. The
- * PROMPTS, in contrast, are uniformly English — the language the agent
- * answers in is fixed by the session's system prompt (tools/language.ts),
- * not by the language of the instructions it receives.
- *
- * To add a mode: create a file in this directory implementing AgentMode,
- * add its menu text to the catalogue, and register it in AGENT_MODES. The
- * UI renders every registered mode generically (see the web package's
- * slashCommands.ts), so no UI changes are needed.
- */
-export interface AgentMode {
-  id: string;
-  /** Catalogue key of the menu label. */
-  label: MessageKey;
-  /** Catalogue key of the menu description. */
-  description: MessageKey;
-  /** Catalogue key of the badge shown under the user message. */
-  modeLabel: MessageKey;
-  /** Catalogue key of the short text stored with a mode's message when the
-   * mode has NO options (it is what the transcript shows instead of the
-   * full prompt). Modes with options carry one per option; text-taking
-   * modes never need it — there the user's own request is the short text.
-   * Omitted and unreachable → the badge text is used. */
-  shortText?: MessageKey;
-  /** Second-level options offered after selecting the mode. */
-  options: AgentModeOption[];
-  /** The user message sent when the mode (or one of its options) is
-   * selected. `optionId` is empty for modes without options. */
-  buildPrompt(optionId: string): string;
-  /** When set, the mode takes the user's own text as its subject instead
-   * of fixed options: the composer keeps the text typed after the command
-   * token (e.g. `/plan add a history feature`), and this method builds the
-   * full prompt from it. The UI then requires that text (nothing is sent
-   * while it is missing) and never calls `buildPrompt` for the mode. Modes
-   * with this method must have no options. */
-  buildPromptForText?(text: string): string;
-}
 
 /** Every registered agent mode, in menu order. */
 export const AGENT_MODES: AgentMode[] = [reviewMode, planMode, goalMode];

@@ -369,3 +369,93 @@ function fileExistsAt(root: string, ref: string): boolean {
     return false;
   }
 }
+
+Deno.test("the core's own modules form a DAG", async () => {
+  // A cycle between modules is a cycle between their responsibilities: two
+  // areas that each need the other are one area, or a seam is missing. The
+  // graph is read from the import statements, so a new edge is checked the
+  // moment it is written.
+  //
+  // Type-only edges count too. They cost nothing at run time, but they are
+  // what made `shared/` (bundled into the browser) depend on the SQLite-backed
+  // stella repo, and nothing noticed until the type was needed as a value.
+  const texts = await sourceTexts();
+  const files = [...texts.keys()].filter((path) =>
+    path.startsWith("packages/core/") &&
+    (path.endsWith(".ts") || path.endsWith(".tsx")) &&
+    !path.includes("_test.") &&
+    path !== "packages/core/mod.ts"
+  );
+  const known = new Set(files);
+
+  function resolve(from: string, specifier: string): string | undefined {
+    if (!specifier.startsWith(".")) return undefined;
+    const segments: string[] = [];
+    for (const segment of `${from}/${specifier}`.split("/")) {
+      if (segment === "" || segment === ".") continue;
+      if (segment === "..") segments.pop();
+      else segments.push(segment);
+    }
+    const path = segments.join("/");
+    for (const candidate of [`${path}.ts`, `${path}.tsx`, path]) {
+      if (known.has(candidate)) return candidate;
+    }
+    return undefined;
+  }
+
+  const graph = new Map<string, string[]>();
+  for (const path of files) {
+    const deps: string[] = [];
+    const source = texts.get(path) ?? "";
+    for (
+      const match of source.matchAll(
+        /(?:import|export)[\s\S]*?from\s*"(\.[^"]+)"/g,
+      )
+    ) {
+      const target = resolve(path.slice(0, path.lastIndexOf("/")), match[1]!);
+      if (target !== undefined) deps.push(target);
+    }
+    graph.set(path, deps);
+  }
+
+  // Tarjan: every strongly connected component with more than one member is a
+  // cycle.
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const cycles: string[][] = [];
+  let next = 0;
+  const visit = (node: string) => {
+    index.set(node, next);
+    low.set(node, next);
+    next++;
+    stack.push(node);
+    onStack.add(node);
+    for (const dep of graph.get(node) ?? []) {
+      if (!index.has(dep)) {
+        visit(dep);
+        low.set(node, Math.min(low.get(node)!, low.get(dep)!));
+      } else if (onStack.has(dep)) {
+        low.set(node, Math.min(low.get(node)!, index.get(dep)!));
+      }
+    }
+    if (low.get(node) === index.get(node)) {
+      const component: string[] = [];
+      let member: string;
+      do {
+        member = stack.pop()!;
+        onStack.delete(member);
+        component.push(member);
+      } while (member !== node);
+      if (component.length > 1) cycles.push(component.sort());
+    }
+  };
+  for (const path of files) if (!index.has(path)) visit(path);
+
+  assertEquals(
+    cycles.map((cycle) => cycle.join(" ⇄ ")),
+    [],
+    "modules that depend on each other (join them, or add the missing seam)",
+  );
+});

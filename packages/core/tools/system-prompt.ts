@@ -1,6 +1,16 @@
 import type { Workspace } from "../types/workspace.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
-import { VM_AGENTS_DIR, VM_USER, VM_WORKDIR } from "../vm/contract.ts";
+/** The machine's home, the folder its agents work in, and the account the
+ * tools run as.
+ *
+ * Local to this module on purpose: the prompt is the one place outside the
+ * machine's own code that names these paths, and tool layer -> vm/contract is
+ * a dependency in the wrong direction (the machine is where the tools run,
+ * not something the prompt builder must know about). vm/contract_test.ts
+ * compares the values, so the copies cannot drift. */
+const VM_WORKDIR = "/home/agent";
+const VM_AGENTS_DIR = `${VM_WORKDIR}/agents`;
+const VM_USER = "agent";
 import { outputLanguageSection } from "./language.ts";
 import {
   CHAT_PROMPT_SECTIONS,

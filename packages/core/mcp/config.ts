@@ -1,7 +1,7 @@
 import { isAbsolute, join } from "node:path";
 import { parseJsonOrThrow } from "../shared/mod.ts";
 import { serializeMcpServers } from "../shared/mod.ts";
-import type { McpServerStatus } from "./manager.ts";
+import type { McpServerStatus } from "./status.ts";
 
 /** One configured MCP server (normalized form of `.mcp.json`). */
 export interface McpServerConfig {

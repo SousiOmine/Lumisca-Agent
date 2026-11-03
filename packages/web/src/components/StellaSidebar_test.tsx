@@ -18,8 +18,6 @@ function agent(
   return {
     id,
     name: id === "a1" ? "Aide" : id,
-    role: "",
-    identity: "",
     icon: "",
     createdAt: 0,
     updatedAt: 0,

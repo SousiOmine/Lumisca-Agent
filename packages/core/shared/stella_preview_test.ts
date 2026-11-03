@@ -172,8 +172,6 @@ function row(
   return {
     id,
     name: id,
-    role: "",
-    identity: "",
     icon: "",
     createdAt: 0,
     updatedAt: 0,
