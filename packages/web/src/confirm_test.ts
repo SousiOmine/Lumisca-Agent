@@ -28,7 +28,12 @@ Deno.test("confirm.ts is the only place that calls the browser dialog", async ()
     if (path === "confirm.ts") continue;
     const text = await Deno.readTextFile(new URL(path, SRC));
     // `confirmAction(` is the allowed spelling; a bare `confirm(` is not.
-    if (/(?<![\w.])confirm\(/.test(text)) offenders.push(path);
+    // Comments are not calls: this module's own documentation names the
+    // browser dialog, and a prose mention is not a second call site.
+    const code = text
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    if (/(?<![\w.])confirm\(/.test(code)) offenders.push(path);
   }
   assertEquals(
     offenders,

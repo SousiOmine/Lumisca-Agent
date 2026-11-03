@@ -17,6 +17,7 @@ import type {
 } from "../types.ts";
 import type { Translator } from "@lumisca/core/shared";
 import { Modal } from "./Modal.tsx";
+import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Field } from "./Field.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
 import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
@@ -402,31 +403,13 @@ export function StellaSidebar(
         </Modal>
       )}
       {deleting !== null && (
-        <Modal
-          onClose={() => setDeleting(null)}
-          label={t("chat.stella.agents.deleteTitle", { name: deleting.name })}
-        >
-          <h2>
-            {t("chat.stella.agents.deleteTitle", { name: deleting.name })}
-          </h2>
-          <p className="confirm-body">{t("chat.stella.agents.deleteBody")}</p>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setDeleting(null)}
-            >
-              {t("common.cancel")}
-            </button>
-            <button
-              type="button"
-              className="btn danger"
-              onClick={() => void remove(deleting)}
-            >
-              {t("common.delete")}
-            </button>
-          </div>
-        </Modal>
+        <ConfirmDialog
+          title={t("chat.stella.agents.deleteTitle", { name: deleting.name })}
+          body={t("chat.stella.agents.deleteBody")}
+          confirmLabel={t("common.delete")}
+          onConfirm={() => void remove(deleting)}
+          onCancel={() => setDeleting(null)}
+        />
       )}
       {editing !== null && (
         <AgentEditDialog

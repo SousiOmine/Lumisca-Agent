@@ -11,8 +11,9 @@
  * is not a place you navigate to, and leaving the conversation to see one
  * would lose the scroll position on the way back.
  */
-import { useEffect, useRef } from "preact/compat";
+import { useRef } from "preact/compat";
 import { useT } from "../i18n.ts";
+import { useModalKeyboard } from "../hooks/useModalKeyboard.ts";
 
 export interface LightboxProps {
   /** The picture to show, already a URL the browser can load. */
@@ -25,36 +26,9 @@ export interface LightboxProps {
 export function Lightbox({ src, alt, onClose }: LightboxProps) {
   const t = useT();
   const overlayRef = useRef<HTMLDivElement>(null);
-  // Escape closes it: a full-window overlay has to be dismissable from the
-  // keyboard, and the picture is not a dialog the browser knows about.
-  useEffect(() => {
-    // The overlay takes the focus while it is open. Without this the keyboard
-    // stays on the app behind it, where Tab walks through controls the reader
-    // cannot see and Escape is the only way back out. It is restored on close
-    // for the same reason a dialog's focus is (see Modal).
-    const opener = document.activeElement;
-    overlayRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-      // Tab has nowhere to go inside the overlay (the picture is not
-      // interactive), so it is kept on the overlay rather than walked into
-      // the page behind it.
-      if (event.key === "Tab") {
-        event.preventDefault();
-        overlayRef.current?.focus();
-      }
-    };
-    globalThis.addEventListener("keydown", onKey);
-    // Scrolling the conversation behind an open picture would move what the
-    // reader just left; the overlay takes the wheel instead.
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      globalThis.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
-    };
-  }, [onClose]);
+  // Escape, Tab, the focus and the scroll lock behind the overlay: the same
+  // four things a dialog owes (see the hook).
+  useModalKeyboard({ surface: overlayRef, onClose });
 
   return (
     <div
