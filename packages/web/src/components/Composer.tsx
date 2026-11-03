@@ -30,6 +30,7 @@ import {
 } from "./ContextUsage.tsx";
 export type { ContextUsageData };
 import { ModelPicker } from "./ModelPicker.tsx";
+import { ComposerPopover } from "./ComposerPopover.tsx";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
 import { useMention } from "../hooks/useMention.ts";
@@ -525,10 +526,9 @@ export function Composer({
           autoFocus={autoFocus}
         />
         {mention && caretPos && (
-          <div
-            className={showMentionAbove
-              ? "mention-popover"
-              : "mention-popover below"}
+          <ComposerPopover
+            className="mention-popover"
+            {...(showMentionAbove ? {} : { placementClass: "below" })}
             /* The caret position is handed to the stylesheet as variables
              * rather than as final offsets: the sheet decides where that
              * puts the list, so a narrow layout can pin it to the composer
@@ -537,107 +537,93 @@ export function Composer({
               "--caret-x": `${caretPos.x}px`,
               "--caret-y": `${caretPos.y}px`,
             }}
-          >
-            {mention.loading && mention.items.length === 0
-              ? (
-                <div className="mention-status">
-                  {t("common.loading")}
-                </div>
-              )
+            items={mention.items}
+            active={mention.active}
+            // A mention commits on mousedown: its selection rewrites the
+            // token under the caret, which must still be where it was.
+            commit="mousedown"
+            keyOf={(item) => item.path}
+            onSelect={selectMention}
+            onHover={(index) =>
+              setMention((prev) => prev ? { ...prev, active: index } : prev)}
+            empty={mention.loading && mention.items.length === 0
+              ? <div className="mention-status">{t("common.loading")}</div>
               : mention.failed
               ? (
                 <div className="mention-status">
                   {t("chat.composer.mention.failed")}
                 </div>
               )
-              : mention.items.length === 0
-              ? (
+              : (
                 <div className="mention-status">
                   {t("chat.composer.mention.noMatch")}
                 </div>
-              )
-              : (
-                mention.items.map((item, index) => (
-                  <button
-                    key={item.path}
-                    type="button"
-                    className={`mention-item${
-                      index === mention.active ? " active" : ""
-                    }`}
-                    onMouseDown={(e) => {
-                      e.preventDefault(); // keep focus in the textarea
-                      selectMention(index);
-                    }}
-                    onMouseEnter={() =>
-                      setMention((prev) =>
-                        prev ? { ...prev, active: index } : prev
-                      )}
-                  >
-                    {item.isDir
-                      ? <IconFolder size={13} className="mention-icon" />
-                      : <IconFile size={13} className="mention-icon" />}
-                    <span className="mention-item-name">{item.name}</span>
-                    <span className="mention-item-path">{item.path}</span>
-                  </button>
-                ))
               )}
-          </div>
+            renderRow={(item) => (
+              <>
+                {item.isDir
+                  ? <IconFolder size={13} className="mention-icon" />
+                  : <IconFile size={13} className="mention-icon" />}
+                <span className="mention-item-name">{item.name}</span>
+                <span className="mention-item-path">{item.path}</span>
+              </>
+            )}
+          />
         )}
         {slash && (
-          <div className="slash-popover">
-            {slash.submenu && (
-              <div className="slash-submenu-header">
-                <button
-                  type="button"
-                  className="slash-back"
-                  title={t("chat.composer.slash.back")}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() =>
-                    setSlash({ ...slash, submenu: null, active: 0 })}
-                >
-                  <IconArrowLeft size={13} />
-                  <span>{slash.submenu.label}</span>
-                </button>
-              </div>
-            )}
-            {slashEntries.length === 0
+          <ComposerPopover
+            className="slash-popover"
+            items={slashEntries}
+            active={slash.active}
+            // A command commits on click: its handler moves the caret itself
+            // (it replaces the token), so it does not need the pre-blur
+            // timing a mention does. The mousedown preventDefault still
+            // keeps the focus in the textarea.
+            commit="click"
+            keyOf={(item) => item.id}
+            onSelect={selectSlash}
+            onHover={(index) =>
+              setSlash((prev) => (prev ? { ...prev, active: index } : prev))}
+            header={slash.submenu
               ? (
-                <div className="slash-status">
-                  {t("chat.composer.slash.empty")}
+                <div className="slash-submenu-header">
+                  <button
+                    type="button"
+                    className="slash-back"
+                    title={t("chat.composer.slash.back")}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() =>
+                      setSlash({ ...slash, submenu: null, active: 0 })}
+                  >
+                    <IconArrowLeft size={13} />
+                    <span>{slash.submenu.label}</span>
+                  </button>
                 </div>
               )
-              : slashEntries.map((item, index) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`slash-item${
-                    index === slash.active ? " active" : ""
-                  }`}
-                  onMouseDown={(e) => {
-                    e.preventDefault(); // keep focus in the textarea
-                  }}
-                  onMouseEnter={() =>
-                    setSlash((prev) =>
-                      prev ? { ...prev, active: index } : prev
-                    )}
-                  onClick={() => selectSlash(index)}
-                >
-                  {item.icon && <item.icon size={14} className="slash-icon" />}
-                  <span className="slash-item-text">
-                    <span className="slash-item-label">{item.label}</span>
-                    {item.description && (
-                      <span className="slash-item-desc">
-                        {item.description}
-                      </span>
-                    )}
-                  </span>
-                  {slash.submenu === null && isSlashCommand(item) &&
-                    (item.items?.length ?? 0) > 0 && (
-                    <IconChevronRight size={13} className="slash-chevron" />
+              : undefined}
+            empty={
+              <div className="slash-status">
+                {t("chat.composer.slash.empty")}
+              </div>
+            }
+            renderRow={(item) => (
+              <>
+                {item.icon && <item.icon size={14} className="slash-icon" />}
+                <span className="slash-item-text">
+                  <span className="slash-item-label">{item.label}</span>
+                  {item.description && (
+                    <span className="slash-item-desc">
+                      {item.description}
+                    </span>
                   )}
-                </button>
-              ))}
-          </div>
+                </span>
+                {slash.submenu === null && isSlashCommand(item) &&
+                  (item.items?.length ?? 0) > 0 && (
+                  <IconChevronRight size={13} className="slash-chevron" />
+                )}
+              </>
+            )}
+          />
         )}
       </div>
       <div className="input-row">
