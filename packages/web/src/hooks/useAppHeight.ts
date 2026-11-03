@@ -18,8 +18,7 @@ export const APP_HEIGHT_VAR = "--app-height";
  * there would shrink the layout as the user zooms; the variable is dropped
  * while `scale !== 1` (the token default applies again). The value is
  * written straight to the root element rather than held in state: nothing
- * renders from it, only the stylesheet reads it (the same reason
- * usePanelInset writes its measured height directly). */
+ * renders from it, only the stylesheet reads it. */
 export function useAppHeight(): void {
   useEffect(() => {
     const viewport = globalThis.visualViewport;

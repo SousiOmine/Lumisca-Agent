@@ -13,24 +13,40 @@ const STATUS_MARKS: Record<TodoTask["status"], string> = {
   blocked: "⚠",
 };
 
-/** "done/total" summary across the whole plan. */
-function summary(todos: TodoPhase[]): string {
-  const tasks = todos.flatMap((p) => p.tasks);
-  const done = tasks.filter((t) => t.status === "completed").length;
-  return `${done}/${tasks.length}`;
+/** The tasks of a plan, in reading order. */
+function tasksOf(todos: TodoPhase[]): TodoTask[] {
+  return todos.flatMap((p) => p.tasks);
+}
+
+/** "done/total": finished work against the whole plan. Abandoned tasks stay
+ * counted in the total — they were dropped, not done. */
+function summary(todoTasks: TodoTask[]): string {
+  const done = todoTasks.filter((t) => t.status === "completed").length;
+  return `${done}/${todoTasks.length}`;
+}
+
+/** Whether the plan has nothing left to show: every task is finished or was
+ * dropped on purpose. The row then leaves the composer alone — an all-done
+ * plan is read in the transcript, not above the field. */
+function settled(todoTasks: TodoTask[]): boolean {
+  return todoTasks.every((t) =>
+    t.status === "completed" || t.status === "abandoned"
+  );
 }
 
 /** The session's todo plan (the todo tool). Renders nothing while the plan
- * is empty. */
+ * is empty or has nothing left to settle. */
 export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
   const t = useT();
-  if (todos.length === 0) return null;
+  const todoTasks = tasksOf(todos);
+  if (todoTasks.length === 0 || settled(todoTasks)) return null;
   return (
     <CollapsiblePanel
       kind="todo-panel"
       icon={<IconListCheck size={14} />}
       title={t("panels.todo.title")}
-      summary={summary(todos)}
+      detail={todoTasks.find((task) => task.status === "in_progress")?.name}
+      summary={summary(todoTasks)}
     >
       {todos.map((phase) => (
         <div key={phase.id} className="todo-phase">

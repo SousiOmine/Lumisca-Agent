@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "preact/compat";
 import { IconDownload, IconRefresh, IconX } from "@tabler/icons-preact";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
-import type { BannerMount } from "../hooks/usePanelInset.ts";
 import { useT } from "../i18n.ts";
 
 /** The "update ready" strip under the title bar (renders nothing when no
@@ -13,16 +12,8 @@ import { useT } from "../i18n.ts";
  * Two shapes share the strip: the desktop shell installs and restarts the
  * app in one step, while a standalone server installs the files first and
  * takes effect at the next start (the restart is its own decision).
- *
- * The element goes to the app through `onMount` so its layout can
- * measure this strip while it is on screen (see usePanelInset). */
-export function UpdateBanner(
-  { update, onMount }: {
-    update: UpdateControls;
-    /** The strip's element while it is shown, `null` while it is not. */
-    onMount?: BannerMount;
-  },
-) {
+ */
+export function UpdateBanner({ update }: { update: UpdateControls }) {
   const t = useT();
   const [dismissed, setDismissed] = useState(false);
   const status = update.status;
@@ -73,7 +64,7 @@ export function UpdateBanner(
     : readyText + t("chrome.update.installRestart");
 
   return (
-    <div className="update-banner" ref={onMount}>
+    <div className="update-banner">
       {restartPending ? <IconRefresh size={16} /> : <IconDownload size={16} />}
       <span className="update-banner-text">{text}</span>
       {restartPending

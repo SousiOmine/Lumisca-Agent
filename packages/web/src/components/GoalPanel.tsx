@@ -18,9 +18,10 @@ export function GoalPanel(
       kind="goal-panel"
       icon={<IconTarget size={14} />}
       title={t("panels.goal.title")}
+      detail={goal.text}
       summary={summary}
     >
-      <div className="goal-text" title={goal.text}>{goal.text}</div>
+      <div className="goal-text">{goal.text}</div>
       {goal.lastReason && (
         <div className="goal-reason" title={goal.lastReason}>
           {goal.lastReason}

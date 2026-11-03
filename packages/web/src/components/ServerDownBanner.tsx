@@ -5,7 +5,6 @@ import {
   IconClipboard,
 } from "@tabler/icons-preact";
 import type { ServerHealth } from "../hooks/useServerHealth.ts";
-import type { BannerMount } from "../hooks/usePanelInset.ts";
 import { useT } from "../i18n.ts";
 import { useSavedNotice } from "../hooks/useSave.ts";
 
@@ -14,16 +13,8 @@ import { useSavedNotice } from "../hooks/useSave.ts";
  * failures persisting while the child is alive (a hang). Offers one-click
  * restart (through the shell) and the captured server log tail for
  * copy-paste diagnosis ("勝手に落ちる" reports).
- *
- * The element goes to the app through `onMount` so its layout can measure
- * this strip while it is on screen (see usePanelInset). */
-export function ServerDownBanner(
-  { health, onMount }: {
-    health: ServerHealth;
-    /** The strip's element while it is shown, `null` while it is not. */
-    onMount?: BannerMount;
-  },
-) {
+ */
+export function ServerDownBanner({ health }: { health: ServerHealth }) {
   const t = useT();
   const [showLog, setShowLog] = useState(false);
   const { saved: copied, flash: flashCopied } = useSavedNotice(1500);
@@ -59,7 +50,7 @@ export function ServerDownBanner(
   };
 
   return (
-    <div className="server-down-banner" role="alert" ref={onMount}>
+    <div className="server-down-banner" role="alert">
       <IconAlertTriangle size={16} className="server-down-icon" />
       <div className="server-down-body">
         <span className="server-down-text">

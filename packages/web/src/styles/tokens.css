@@ -38,9 +38,10 @@
  *
  *   900px  compact: tablet-like widths. Tighten spacing, allow wrapping,
  *                   drop fixed widths that no longer fit.
- *   600px  phone: one column; full-screen modals; the progress panels
- *                stack at the top of the chat; the floating chat pane gives
- *                up its margin and lands edge to edge (--app-inset).
+ *   600px  phone: one column; full-screen modals; the progress rows above
+ *                the composer keep to a smaller height cap; the floating
+ *                chat pane gives up its margin and lands edge to edge
+ *                (--app-inset).
  *
  * Touch ergonomics follow the input device, not the width
  * (`@media (hover: none), (pointer: coarse)`): hover-only affordances stay
@@ -74,12 +75,6 @@
   --app-inset: 12px;
 
   --tab-height: 40px;
-  /* Height of the banners the app stacks above the chat (the update banner
-   * today). Zero here: the app replaces it with a measured value while a
-   * banner is on screen, and the fixed top-right panels use it to start
-   * below that band (see hooks/usePanelInset.ts). The default must stay a
-   * length — an undefined variable would drop the panels' whole calc(). */
-  --app-banner-height: 0px;
   /* Height of the app root. The token is the browser's dynamic viewport
    * height; on touch devices useAppHeight.ts overwrites the variable with
    * the visualViewport height while the software keyboard is open, so the
@@ -88,7 +83,7 @@
   --app-height: 100dvh;
   /* Fill factor (0..1) of the thinking-strength slider, written per render
    * by the component (see ThinkingLevelSlider). The zero here keeps the
-   * calc() that reads it valid — the same reason as --app-banner-height. */
+   * calc() that reads it valid. */
   --tls-fill: 0;
   /* Hue (0..359) of a stella agent's avatar, written per render by the
    * component and derived from the agent's id (shared/agent-avatar.ts). It is

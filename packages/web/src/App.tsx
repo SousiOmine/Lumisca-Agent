@@ -16,7 +16,6 @@ import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useServerHealth } from "./hooks/useServerHealth.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
-import { usePanelInset } from "./hooks/usePanelInset.ts";
 import { useNarrowViewport } from "./hooks/useMediaQuery.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
@@ -190,11 +189,6 @@ export function App({ initialData }: AppProps): ReactElement {
   // server's when this page runs outside the shell); polled here and shared
   // with the settings panel and the update banner below.
   const update = useUpdateStatus(true);
-  // The panels inside the chat are fixed to the top-right corner, while the
-  // banners below are part of the app body's flow: the hook measures the
-  // band they occupy (--app-banner-height) so the panels start below it.
-  // Every banner added to the app body needs its callback here.
-  const { appRef, onUpdateBannerMount, onServerBannerMount } = usePanelInset();
   const {
     startSession,
     prompt,
@@ -314,7 +308,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // on the same server is never dragged into it.
   if (mode === null) {
     return (
-      <div className="app" ref={appRef}>
+      <div className="app">
         <AppMenu
           onNew={openDraftTab}
           onOpenRecent={openRecent}
@@ -346,7 +340,7 @@ export function App({ initialData }: AppProps): ReactElement {
   }
 
   return (
-    <div className="app" ref={appRef}>
+    <div className="app">
       {
         /* The desktop window is undecorated; the title bar strip holds the
        * tab bar, the app menu and the window controls (in a plain browser
@@ -411,8 +405,8 @@ export function App({ initialData }: AppProps): ReactElement {
       </TitleBar>
       {/* Everything below the title bar. */}
       <div className="app-body">
-        <UpdateBanner update={update} onMount={onUpdateBannerMount} />
-        <ServerDownBanner health={serverHealth} onMount={onServerBannerMount} />
+        <UpdateBanner update={update} />
+        <ServerDownBanner health={serverHealth} />
         {loadError && (
           <div className="msg">
             <div className="msg-body error-text">

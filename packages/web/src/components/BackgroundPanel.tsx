@@ -15,6 +15,7 @@ export function BackgroundPanel({ commands }: { commands: BackgroundView[] }) {
       kind="background-panel"
       icon={<IconTerminal size={14} />}
       title={t("panels.background.title")}
+      detail={running[0]?.command}
       summary={`${running.length} running`}
     >
       {running.map((command) => (

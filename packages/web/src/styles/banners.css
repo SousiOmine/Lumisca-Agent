@@ -5,9 +5,7 @@
 /* ---- update banner -------------------------------------------------------- */
 
 /* A banner is a card lying above the chat pane, in the same margin the pane
- * uses, so it does not cut the canvas in two with a full-width strip. The
- * measured band (--app-banner-height) still comes from the element's own
- * height; only the box around it changed. */
+ * uses, so it does not cut the canvas in two with a full-width strip. */
 .update-banner {
   display: flex;
   align-items: center;

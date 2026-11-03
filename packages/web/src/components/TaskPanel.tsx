@@ -14,6 +14,7 @@ export function TaskPanel({ tasks }: { tasks: TaskView[] }) {
       kind="task-panel"
       icon={<IconUsers size={14} />}
       title={t("panels.task.title")}
+      detail={running[0]?.description}
       summary={`${running.length} running`}
     >
       {running.map((task) => (

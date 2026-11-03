@@ -478,3 +478,40 @@ Deno.test("a card's action lines up with the plain cards around it", async () =>
     ".setting-card-action must not shrink",
   );
 });
+
+Deno.test("the progress rows stay in the composer's column", async () => {
+  // Regression: the progress stack (todo, goal, tasks, background) was a
+  // fixed card stack in the window's top-right corner — the same corner the
+  // desktop title bar opens the connection picker's menu in. The two drew
+  // over each other and whichever came last took the click, so the plan
+  // covered the server list. The rows now sit in the input area's own
+  // column, where nothing can be stacked on them; this test fails if one
+  // goes back to floating over the page.
+  const css = await Deno.readTextFile(
+    new URL("./styles/side-panels.css", import.meta.url),
+  );
+  const rule = /\.progress-panels\s*\{([^}]*)\}/.exec(css);
+  assertEquals(rule !== null, true, ".progress-panels must be styled");
+  assertEquals(
+    /position\s*:\s*(fixed|absolute)/.test(rule![1]!),
+    false,
+    "the progress rows must not be taken out of the input area's flow",
+  );
+  // The panels themselves are rows, not floating faces: a fixed position
+  // anywhere in this sheet's progress block brings the overlap back.
+  const block = css.slice(
+    css.indexOf(".progress-panels"),
+    css.indexOf(".question-panel"),
+  );
+  assertEquals(
+    /\bposition\s*:\s*(fixed|absolute)/.test(block),
+    false,
+    "a progress row must not position itself over the page",
+  );
+  // They share the composer's width so the column reads as one control.
+  assertEquals(
+    /max-width:\s*880px/.test(rule![1]!),
+    true,
+    ".progress-panels must keep the composer's width",
+  );
+});

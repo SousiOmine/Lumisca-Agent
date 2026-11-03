@@ -308,12 +308,6 @@ export function ChatView(
 
   return (
     <div className="chat">
-      <div className="chat-panels">
-        <GoalPanel goal={view.goal} onCancel={onCancelGoal} />
-        <TodoPanel todos={view.todos} />
-        <TaskPanel tasks={view.tasks} />
-        <BackgroundPanel commands={view.backgrounds} />
-      </div>
       <Transcript
         messages={view.messages}
         onLoadOlder={onLoadOlder}
@@ -333,6 +327,12 @@ export function ChatView(
           : <p>{t("chat.empty.workspace")}</p>}
       />
       <div className="input-area">
+        <div className="progress-panels">
+          <GoalPanel goal={view.goal} onCancel={onCancelGoal} />
+          <TodoPanel todos={view.todos} />
+          <TaskPanel tasks={view.tasks} />
+          <BackgroundPanel commands={view.backgrounds} />
+        </div>
         <QuestionPanel pending={view.pendingQuestions} onAnswer={onAnswer} />
         {providerUnconfigured && (
           <div className="settings-note" role="status">
