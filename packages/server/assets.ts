@@ -219,53 +219,77 @@ export class Assets {
   }
 
   private buildClient(): Promise<Record<string, AssetFile>> {
-    return (async (): Promise<Record<string, AssetFile>> => {
-      if (!this.hasWebSources()) {
-        // Packaged build: serve the prebuilt bundle.
-        const embedded = this.embedded()?.client;
-        if (embedded !== undefined) return embedded;
-        throw new Error(
-          "Frontend sources not found and no embedded assets " +
-            "(set LUMISCA_ASSETS_FILE or run from the repository)",
-        );
-      }
-      const outdir = join(this.cacheDir, "client");
-      await Deno.mkdir(outdir, { recursive: true });
-      return await bundleClientFiles(this.repoRoot, outdir);
-    })();
+    return this.source(
+      async () => {
+        const outdir = join(this.cacheDir, "client");
+        await Deno.mkdir(outdir, { recursive: true });
+        return await bundleClientFiles(this.repoRoot, outdir);
+      },
+      (manifest) => manifest.client,
+      "Frontend sources not found and no embedded assets " +
+        "(set LUMISCA_ASSETS_FILE or run from the repository)",
+    );
   }
 
   async getCss(): Promise<string> {
     if (this.cssCache === null) {
-      if (this.hasWebSources()) {
-        this.cssCache = await bundleStylesCss(webStylesPath(this.repoRoot));
-      } else {
-        const embedded = this.embedded()?.["styles.css"];
-        if (embedded === undefined) {
-          throw new Error("styles.css not found and no embedded assets");
-        }
-        this.cssCache = embedded;
-      }
+      this.cssCache = await this.source(
+        () => bundleStylesCss(webStylesPath(this.repoRoot)),
+        (manifest) => manifest["styles.css"],
+        "styles.css not found and no embedded assets",
+      ).catch((error) => {
+        // A failed build must not poison the cache: the next request
+        // retries (same rule as the client bundle).
+        this.cssCache = null;
+        throw error;
+      });
     }
     return this.cssCache;
   }
 
   async getFavicon(): Promise<Uint8Array> {
     if (this.faviconCache === null) {
-      if (this.hasWebSources()) {
-        this.faviconCache = await Deno.readFile(webFaviconPath(this.repoRoot));
-      } else {
-        const embedded = this.embedded()?.["favicon.png"];
-        if (embedded === undefined) {
-          throw new Error("favicon.png not found and no embedded assets");
-        }
+      this.faviconCache = await this.source(
+        () => Deno.readFile(webFaviconPath(this.repoRoot)),
         // The packaged manifest stores binary assets as base64 text.
-        this.faviconCache = Uint8Array.from(
-          atob(embedded),
-          (c) => c.charCodeAt(0),
-        );
-      }
+        (manifest) => {
+          const encoded = manifest["favicon.png"];
+          return encoded === undefined
+            ? undefined
+            : Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+        },
+        "favicon.png not found and no embedded assets",
+      ).catch((error) => {
+        this.faviconCache = null;
+        throw error;
+      });
     }
     return this.faviconCache;
+  }
+
+  /**
+   * Resolve one asset from this checkout, or from the packaged manifest when
+   * there is no checkout to build from.
+   *
+   * Every asset makes the same two-way decision (`hasWebSources`), and each
+   * used to carry its own copy of the `if` plus its own "no embedded assets"
+   * message — three branches, three error strings, three chances for one of
+   * them to forget the retry-after-failure rule. What differs is only where
+   * the asset comes from: this is that half.
+   *
+   * `readEmbedded` gets the whole manifest because the three assets are read
+   * from different keys (a client map, a stylesheet string, a base64 icon);
+   * a missing entry is the caller's own failure message.
+   */
+  private async source<T>(
+    build: () => Promise<T> | T,
+    readEmbedded: (manifest: AssetsManifest) => T | undefined,
+    missing: string,
+  ): Promise<T> {
+    if (this.hasWebSources()) return await build();
+    const manifest = this.embedded();
+    const value = manifest === undefined ? undefined : readEmbedded(manifest);
+    if (value === undefined) throw new Error(missing);
+    return value;
   }
 }
