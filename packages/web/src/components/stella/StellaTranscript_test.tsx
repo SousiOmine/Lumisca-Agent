@@ -161,8 +161,14 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
   assertStringIncludes(html, "msg-user-wrap");
   assertStringIncludes(html, "stella-msg");
   assertStringIncludes(html, "stella-msg-avatar");
-  // Each message carries the time it was said under it.
+  // Each message carries the time it was said under it, and the time is the
+  // RIGHTMOST thing there: the actions come first, so the clock does not
+  // move when a button appears on hover.
   assertStringIncludes(html, "msg-time");
+  const meta = html.slice(html.indexOf('class="msg-meta"'));
+  const order = [...meta.matchAll(/class="(msg-action-btn|msg-time)"/g)]
+    .map((match) => match[1]);
+  assertEquals(order.at(-1), "msg-time", order.join(","));
 });
 
 Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", () => {

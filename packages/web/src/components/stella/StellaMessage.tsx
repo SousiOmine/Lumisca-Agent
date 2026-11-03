@@ -146,7 +146,6 @@ function UserBubble({
         </div>
       </div>
       <div className="msg-meta">
-        {time}
         <button
           type="button"
           className="msg-action-btn"
@@ -165,6 +164,7 @@ function UserBubble({
               : <IconClipboard size={16} stroke={1.5} />}
           </button>
         )}
+        {time}
       </div>
     </div>
   );
