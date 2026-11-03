@@ -1,4 +1,4 @@
-import { Agent } from "../ai/agent.ts";
+import type { Agent } from "../ai/agent.ts";
 import type { AgentEvent, AgentMessage, StreamFn } from "../ai/types.ts";
 import type { Api, AssistantMessage, Model } from "../ai/types.ts";
 import { CoreError, errorMessage } from "../errors.ts";
@@ -20,7 +20,6 @@ import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import { withOnDemandToolsNote } from "../mcp/context.ts";
 import type { ToolRegistry } from "./registry.ts";
 import type { NotificationPayload } from "../types/notification.ts";
-import { toLlmMessages } from "../types/notification.ts";
 import type {
   SubagentStatus,
   SubagentType,
@@ -34,6 +33,7 @@ import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { toAgentTool } from "./pi-adapter.ts";
+import { createSubagentAgent } from "../agent/subagent-runner.ts";
 import type { Tool } from "./schema.ts";
 import {
   fileTools,
@@ -41,7 +41,6 @@ import {
   sessionSkills,
   type ToolBackends,
 } from "./tool-pieces.ts";
-import { ContextCompactor } from "../ai/context-compaction.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { createWebSearchTools } from "./web.ts";
@@ -451,24 +450,24 @@ export class TaskHub {
     const systemPrompt = searchable.length > 0
       ? withOnDemandToolsNote(basePrompt)
       : basePrompt;
-    const agent = new Agent({
-      initialState: {
-        systemPrompt,
+    // The agent is built by the agent layer (agent/subagent-runner.ts): this
+    // hub owns the delegation protocol, not how an agent is assembled.
+    const { agent, compactor } = createSubagentAgent(
+      {
+        id,
         model: runtime.model,
+        systemPrompt,
         tools: tools.map(toAgentTool),
         thinkingLevel: runtime.thinkingLevel,
+        streamFn: this.streamFn,
       },
-      streamFn: this.streamFn,
-      sessionId: id,
-      // Steered notifications must reach the sub-agent's LLM as user
-      // messages (the default conversion would drop their role).
-      convertToLlm: (messages) => toLlmMessages(messages),
-      // Sub-agents run their own long tool chains, so they condense their
-      // history like the main agent: same seam, same budgets. The
-      // transcript is private (memory only — nothing is persisted and no
-      // client watches it), so the replacement is a plain splice.
-      beforeStep: (signal) => this.compactBeforeStep(id, signal),
-    });
+      {
+        beforeStep: (signal) => this.compactBeforeStep(id, signal),
+        ...(this.compactionPolicy !== undefined
+          ? { compactionPolicy: this.compactionPolicy }
+          : {}),
+      },
+    );
     const abort = new AbortController();
     const sub: Subagent = {
       id,
@@ -478,23 +477,7 @@ export class TaskHub {
       description,
       status: "running",
       agent,
-      compactor: new ContextCompactor({
-        model: runtime.model,
-        systemPrompt: () => agent.state.systemPrompt,
-        tools: () => agent.state.tools,
-        streamFn: this.streamFn,
-        sessionId: id,
-        ...(this.compactionPolicy !== undefined
-          ? { policy: this.compactionPolicy }
-          : {}),
-        // Memory only: a sub-agent's transcript is never persisted and no
-        // client watches it, so the checkpoint is spliced straight into the
-        // in-memory transcript the agent loop reads (the model's view then
-        // starts at the checkpoint, exactly like the main agent's).
-        insert: (index, message) => {
-          agent.state.messages.splice(index, 0, message);
-        },
-      }),
+      compactor,
       startedAt: Date.now(),
       tail: "",
       resultText: "",
