@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks";
+import { useState } from "preact/compat";
 import { useT } from "../../i18n.ts";
 import { formatAttachmentSize, type PromptFileRef } from "@lumisca/core/shared";
 

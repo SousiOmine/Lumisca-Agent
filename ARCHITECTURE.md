@@ -419,3 +419,26 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
 `packages/server/version.ts` の定義値は、コンパイル後の単体サーバーが自身のバージョンを把握し、自動更新時のバージョン比較に使用します。
 
 各ファイル間のバージョン整合性は `scripts/check-versions.ts` で検証され、CI およびリリースフローで不整合を防止しています。
+## 8. 採用しなかった選択肢
+
+変更のたびに同じ検討をやり直さないよう、検討して採らなかったものを理由ごと残します。判断を覆すときは、ここに書いた理由が今も成り立つかを先に確かめてください。
+
+- **`node:sqlite` を別のドライバーへ替えない。** `VACUUM` と `VACUUM INTO` が使えない（`SQLITE_MAX_ATTACHED=0`）制約は、`db/vacuum.ts` の「同じスキーマの新ファイルへ全行をコピーして rename」で閉じています。これは `VACUUM` が内部でやることと同じで、外部依存を 1 つ増やして得られるものがありません。
+
+- **`hono` を別の HTTP フレームワークへ替えない。** ルート・圧縮・WebSocket・CORS・フェデレーションのプロキシが 1 つのミドルウェア列で動いており、置き換えるとセキュリティの前提（Host ガード、Origin 検証、トークン）を作り直すことになります。得られるのは好みの差だけです。
+
+- **`preact/compat` を `preact/hooks` へ移さない。** 96 ファイルが `preact/compat` を使い、`createPortal`・`useId`・`memo` に依存しています。`preact/hooks` を使っているのは `PromptFiles.tsx` の 1 ファイルだけだったので、移すべき方向はその 1 ファイルを `preact/compat` に揃えることでした（揃えました）。
+
+- **`@preact/signals` を入れない。** 共有値は `store.ts` の `createStore` / `createResourceStore` で足ります。ストアを 1 つに寄せた後の実測で、非同期読み込みの重複排除・楽観更新の巻き戻し・差分通知のすべてが 1 か所に収まりました。フレームワークを増やす理由がありません。
+
+- **`shared/i18n/settings.ts`（約 1,000 行）を分割しない。** これはデータであり、行数は責任の数ではありません。分割するとキーの所在が散り、`repo_hygiene_test.ts` の「使われていないキー」検査も読みにくくなります。
+
+- **`AGENTS.md` と `ARCHITECTURE.md` を統合しない。** 読者が違います（前者は作業者、後者は設計を読む人）。統合すると、作業中に読む必要のない設計の理由が毎回目に入ります。重複だけを消しました。
+
+- **`eval` ツールから `sucrase` を外さない。** 外すと TypeScript を受け付けなくなり、コードモードの `eval` が「素の JavaScript だけ」に狭まります。`sucrase` は遅延 import（`await import("sucrase")`）なので起動コストはゼロで、依存 1 つ分の保守は `eval` の使い勝手に釣り合っています。stella には `eval` 自体を渡していません。
+
+- **`packages/core` を物理的に複数パッケージへ割らない。** 3 層（`shared` / `domain` / 実行時）の考え方は `deno.json` の `exports` と `browser-entries.ts` で表現し、`web` の境界テストが縛っています。物理分割は `deno compile` の入力とワークスペースの設定を作り直すことになり、得られるのは import の書き方の厳格さだけです。`repo_hygiene_test.ts` の DAG 検査で循環は止めています。
+
+- **`LumiscaCore` を完全に無くさない。** `server` のルートは部分インターフェースで受け取りますが、ファサードが無いと `mod.ts` の公開面がルートごとにばらけます。抽出した 4 領域は `services/` にあり、ファサードはその一覧です。
+
+- **Rust のクレートを統合しない。** `browser-rpc` は `desktop/src-tauri` からパス依存で入っており、プロトコルの定数をテストで突き合わせる仕組み（`browser/types_test.ts`）が機能しています。統合すると、その突き合わせが同じクレート内の参照になり、検査の意味が薄れます。
