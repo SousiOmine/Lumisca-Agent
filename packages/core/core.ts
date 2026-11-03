@@ -73,6 +73,10 @@ import { systemLanguageTags } from "./locale.ts";
 import { CoreError, errorMessage } from "./errors.ts";
 import { createWorkspaceRepo } from "./workspace/repo.ts";
 import { WorkspaceService } from "./workspaces.ts";
+import { ModelService } from "./services/models.ts";
+import { WebSearchConfigService } from "./services/webSearch.ts";
+import { McpConfigService } from "./services/mcp.ts";
+import { WorkspaceConfigService } from "./services/workspaces.ts";
 import { PersonalizationService } from "./personalization.ts";
 import { SavedPromptsService } from "./saved-prompts.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
@@ -228,6 +232,11 @@ export class LumiscaCore {
   private readonly messages: MessageRepo;
   private readonly requestShapes: RequestShapeRepo;
   private readonly pool: SessionPool;
+  /** The extracted areas of this facade (see services/). */
+  private readonly modelService: ModelService;
+  private readonly webSearchConfig: WebSearchConfigService;
+  private readonly mcpConfig: McpConfigService;
+  private readonly workspaceConfig: WorkspaceConfigService;
   private readonly mcp: McpService;
   /** Where the sessions' published visuals live (the images an agent shows
    * inside its reply — see session/visuals.ts). Shared with the session pool
@@ -498,6 +507,9 @@ export class LumiscaCore {
         this.pool.applyMcpConfigChange(sessions, mutate),
       refreshSessionMcp: (sessions) => this.pool.refreshMcp(sessions),
     });
+    this.modelService = new ModelService(this.models);
+    this.webSearchConfig = new WebSearchConfigService(this.webSearch);
+    this.mcpConfig = new McpConfigService(this.mcp);
     this.workspaces = overrides.workspaces ??
       new WorkspaceService(createWorkspaceRepo(db), {
         listSessions: (workspaceId) => this.sessions.list(workspaceId),
@@ -508,6 +520,7 @@ export class LumiscaCore {
         // directly (the pool alone would leave the assets behind).
         deleteSession: (id) => this.deleteSession(id),
       });
+    this.workspaceConfig = new WorkspaceConfigService(this.workspaces);
   }
 
   /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
@@ -1590,37 +1603,6 @@ export class LumiscaCore {
 
   // --- workspaces (delegated to WorkspaceService) -------------------------
 
-  async createWorkspace(name: string, folders: string[]): Promise<Workspace> {
-    return await this.workspaces.create(name, folders);
-  }
-
-  /** The user-facing workspace list. The folder-less chat workspace is an
-   * internal singleton (created on first chat session): it is excluded so
-   * every client — web UI, API consumers, federated peers — only sees
-   * workspaces they can actually manage. Chat sessions are started without
-   * a workspaceId instead of by picking this workspace. */
-  listWorkspaces(): Workspace[] {
-    return this.workspaces.list();
-  }
-
-  getWorkspace(id: string): Workspace | undefined {
-    return this.workspaces.get(id);
-  }
-
-  /** Update a workspace (name and/or folders); running sessions get rebuilt
-   * tools when the folders change. Returns the updated workspace. Throws
-   * `conflict` while a session in the workspace is streaming. */
-  async updateWorkspace(
-    id: string,
-    input: { name?: string; folders?: string[] },
-  ): Promise<Workspace> {
-    return await this.workspaces.update(id, input);
-  }
-
-  deleteWorkspace(id: string): Promise<void> {
-    return this.workspaces.delete(id);
-  }
-
   /** Resolve a model or throw `not_found` (single home for the
    * "Model not found" guard every model-taking path shares). Retired
    * models (removed upstream, kept for existing sessions) still resolve
@@ -1648,114 +1630,7 @@ export class LumiscaCore {
 
   // --- web search -----------------------------------------------------------
 
-  /** The web-search setting, as the settings screen shows it: which
-   * providers are configured, which one search uses, and which can still be
-   * added. Keys never leave this process; only whether one is stored. */
-  getWebSearchSettings(): WebSearchSettingsView {
-    return this.webSearch.view();
-  }
-
-  /** Add a search provider. The first one becomes the default, so a user who
-   * adds one provider has working search without a second step. */
-  addWebSearchProvider(
-    input: { id: string; apiKey: string },
-  ): WebSearchSettingsView {
-    return this.webSearch.add(input);
-  }
-
-  /** Replace one provider's key; an empty key keeps the stored one. */
-  updateWebSearchProvider(
-    id: string,
-    input: { apiKey: string },
-  ): WebSearchSettingsView {
-    return this.webSearch.update(id, input);
-  }
-
-  /** Remove a provider (the default moves to the next one when it was the
-   * default). */
-  removeWebSearchProvider(id: string): WebSearchSettingsView {
-    return this.webSearch.remove(id);
-  }
-
-  /** Choose the provider search uses; null turns search off. */
-  setDefaultWebSearchProvider(id: string | null): WebSearchSettingsView {
-    return this.webSearch.setDefault(id);
-  }
-
-  /** Search once with a key the user typed, saving nothing (the screen
-   * checks before it stores). A failure is the answer, not an exception. */
-  testWebSearchProvider(input: {
-    id: string;
-    apiKey: string | null;
-  }): Promise<WebSearchTestView> {
-    return this.webSearch.test(input);
-  }
-
   // --- MCP configuration ----------------------------------------------------
-
-  /** The app-level (global) MCP config with live statuses from every open
-   * session. Stored in the settings file; applies to all workspaces. */
-  getAppMcpInfo(): McpInfo {
-    return this.mcp.getAppMcpInfo();
-  }
-
-  /** Replace the app-level MCP config (validating first), then rebuild
-   * every open session so the new tools take effect. Throws `conflict`
-   * while any session is streaming. */
-  setAppMcpConfig(text: string): McpInfo {
-    return this.mcp.setAppMcpConfig(text);
-  }
-
-  /** The workspace's own `.mcp.json` with live statuses from the
-   * workspace's open sessions. Read fresh from disk each time, so external
-   * edits are reflected here too. */
-  getMcpInfo(workspaceId: string): McpInfo {
-    return this.mcp.getMcpInfo(workspaceId);
-  }
-
-  /** Replace the workspace's `.mcp.json` (validating first), then rebuild
-   * every session in the workspace so the new tools take effect. Throws
-   * `conflict` while any session is streaming. */
-  setMcpConfig(workspaceId: string, text: string): McpInfo {
-    return this.mcp.setMcpConfig(workspaceId, text);
-  }
-
-  /** One-shot connection test of a single-server config, used by the
-   * settings UI before it saves a new server. Reaching the server and
-   * listing its tools happens here: the browser cannot spawn the stdio
-   * child processes this app owns. */
-  testMcpServer(text: string): Promise<McpTestResult> {
-    return this.mcp.testServer(text);
-  }
-
-  /** Start an interactive OAuth sign-in for one HTTP MCP server (the
-   * settings UI's "sign in" flow). `redirectUri` is where the browser is
-   * sent back — a path of this server, so the callback reaches the process
-   * that holds the PKCE verifier. Resolves once the flow either waits for
-   * the browser (the snapshot carries the authorization URL) or fails to
-   * start. */
-  startMcpAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
-    return this.mcp.startAuth(text, redirectUri);
-  }
-
-  /** Live state of one sign-in, for the UI's poll. */
-  getMcpAuth(sessionId: string): McpAuthSnapshot | undefined {
-    return this.mcp.getAuth(sessionId);
-  }
-
-  /** Abandon a sign-in. False once it is gone (already settled/expired). */
-  cancelMcpAuth(sessionId: string): boolean {
-    return this.mcp.cancelAuth(sessionId);
-  }
-
-  /** Finish the sign-in the browser came back to: `state` names the flow,
-   * `code` is exchanged for tokens, an `error` records the authorization
-   * server's refusal. Undefined when no sign-in waits on that state. */
-  completeMcpAuth(
-    input: { state: string; code?: string; error?: string },
-  ): Promise<McpAuthSnapshot | undefined> {
-    return this.mcp.completeAuth(input);
-  }
 
   // --- sessions -----------------------------------------------------------
 
@@ -2322,72 +2197,153 @@ export class LumiscaCore {
 
   // --- model enablement ----------------------------------------------------
 
-  /** Providers with their models; the settings UI uses this to render
-   * pickers. */
+  // --- user-defined OpenAI-compatible providers ----------------------------
+
+  // --- model catalog (models.dev live sync) -------------------------------
+
+  // --- the extracted areas ------------------------------------------------
+  //
+  // Each block below used to be implemented here. The implementation now
+  // lives in services/ — one class per area — so this facade is a list of the
+  // areas the app has rather than a phone book of every call, and a route can
+  // be handed the one it needs. The signatures are unchanged: a caller sees
+  // the same method it always did.
+
+  // workspaces
+  async createWorkspace(name: string, folders: string[]): Promise<Workspace> {
+    return this.workspaceConfig.createWorkspace(name, folders);
+  }
+
+  listWorkspaces(): Workspace[] {
+    return this.workspaceConfig.listWorkspaces();
+  }
+
+  getWorkspace(id: string): Workspace | undefined {
+    return this.workspaceConfig.getWorkspace(id);
+  }
+
+  async updateWorkspace(
+    id: string,
+    input: { name?: string; folders?: string[] },
+  ): Promise<Workspace> {
+    return this.workspaceConfig.updateWorkspace(id, input);
+  }
+
+  deleteWorkspace(id: string): Promise<void> {
+    return this.workspaceConfig.deleteWorkspace(id);
+  }
+
+  // webSearch
+  getWebSearchSettings(): WebSearchSettingsView {
+    return this.webSearchConfig.getWebSearchSettings();
+  }
+
+  addWebSearchProvider(
+    input: { id: string; apiKey: string },
+  ): WebSearchSettingsView {
+    return this.webSearchConfig.addWebSearchProvider(input);
+  }
+
+  updateWebSearchProvider(
+    id: string,
+    input: { apiKey: string },
+  ): WebSearchSettingsView {
+    return this.webSearchConfig.updateWebSearchProvider(id, input);
+  }
+
+  removeWebSearchProvider(id: string): WebSearchSettingsView {
+    return this.webSearchConfig.removeWebSearchProvider(id);
+  }
+
+  setDefaultWebSearchProvider(id: string | null): WebSearchSettingsView {
+    return this.webSearchConfig.setDefaultWebSearchProvider(id);
+  }
+
+  testWebSearchProvider(input: {
+    id: string;
+    apiKey: string | null;
+  }): Promise<WebSearchTestView> {
+    return this.webSearchConfig.testWebSearchProvider(input);
+  }
+
+  // mcp
+  getAppMcpInfo(): McpInfo {
+    return this.mcpConfig.getAppMcpInfo();
+  }
+
+  setAppMcpConfig(text: string): McpInfo {
+    return this.mcpConfig.setAppMcpConfig(text);
+  }
+
+  getMcpInfo(workspaceId: string): McpInfo {
+    return this.mcpConfig.getMcpInfo(workspaceId);
+  }
+
+  setMcpConfig(workspaceId: string, text: string): McpInfo {
+    return this.mcpConfig.setMcpConfig(workspaceId, text);
+  }
+
+  testMcpServer(text: string): Promise<McpTestResult> {
+    return this.mcpConfig.testMcpServer(text);
+  }
+
+  startMcpAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
+    return this.mcpConfig.startMcpAuth(text, redirectUri);
+  }
+
+  getMcpAuth(sessionId: string): McpAuthSnapshot | undefined {
+    return this.mcpConfig.getMcpAuth(sessionId);
+  }
+
+  cancelMcpAuth(sessionId: string): boolean {
+    return this.mcpConfig.cancelMcpAuth(sessionId);
+  }
+
+  completeMcpAuth(
+    input: { state: string; code?: string; error?: string },
+  ): Promise<McpAuthSnapshot | undefined> {
+    return this.mcpConfig.completeMcpAuth(input);
+  }
+
+  // models
   listProviders(): readonly Provider[] {
-    return this.models.getProviders();
+    return this.modelService.listProviders();
   }
 
   listModels(providerId?: string): readonly Model<Api>[] {
-    return this.models.getModels(providerId);
+    return this.modelService.listModels(providerId);
   }
 
   getModel(providerId: string, modelId: string): Model<Api> | undefined {
-    return this.models.getModel(providerId, modelId);
+    return this.modelService.getModel(providerId, modelId);
   }
 
-  /** Whether a provider's credentials are complete. */
   async checkAuth(providerId: string): Promise<AuthCheck | undefined> {
-    return await this.models.checkAuth(providerId);
+    return this.modelService.checkAuth(providerId);
   }
 
-  /** Which credential method a provider accepts ("oauth", "api_key"), or
-   * undefined for providers with only ambient auth (env vars etc.).
-   * Static provider metadata — no credential required — so the settings UI
-   * can offer a login button even before anything is configured. */
   getProviderAuthType(
     providerId: string,
   ): "oauth" | "api_key" | undefined {
-    const provider = this.models.getProvider(providerId);
-    if (!provider) return undefined;
-    if (provider.auth.oauth) return "oauth";
-    if (provider.auth.apiKey) return "api_key";
-    return undefined;
+    return this.modelService.getProviderAuthType(providerId);
   }
 
-  /** Local (network-free) auth check: env var or stored key resolves.
-   * This is the runtime capability check (can requests actually be
-   * made); it deliberately includes ambient env auth, so it must not be
-   * used to decide what the UI lists as configured — see
-   * `hasConfiguredAuth`. */
   async hasProviderAuth(providerId: string): Promise<boolean> {
-    return await this.models.hasProviderAuth(providerId);
+    return this.modelService.hasProviderAuth(providerId);
   }
 
-  /** Whether the provider is set up inside Lumisca itself: a stored API
-   * key / OAuth credential, or a custom provider from Lumisca's own config
-   * (models.json / LUMISCA_* env vars, a user-defined provider) whose auth
-   * resolves. Ambient machine auth that the SDK happens to find — e.g.
-   * ANTHROPIC_API_KEY or HF_TOKEN set for other tools — does NOT count:
-   * providers must not appear as "added" just because an env var exists.
-   * Also the gate for the default-model resolution and the UI's send
-   * buttons: what the settings list calls "設定済み" must be exactly what
-   * can be used. */
   async hasConfiguredAuth(providerId: string): Promise<boolean> {
-    return await this.models.hasConfiguredAuth(providerId);
+    return this.modelService.hasConfiguredAuth(providerId);
   }
 
-  /** Enable or disable a model for the UI. Disabled models are hidden
-   * from model pickers. Enabled is the default (nothing stored). */
   setModelEnabled(providerId: string, modelId: string, enabled: boolean): void {
-    this.models.setModelEnabled(providerId, modelId, enabled);
+    return this.modelService.setModelEnabled(providerId, modelId, enabled);
   }
 
   isModelEnabled(providerId: string, modelId: string): boolean {
-    return this.models.isModelEnabled(providerId, modelId);
+    return this.modelService.isModelEnabled(providerId, modelId);
   }
 
-  /** Models of a provider with enablement info, for the settings UI. */
   listModelsDetailed(providerId: string): Array<{
     id: string;
     name: string;
@@ -2399,68 +2355,42 @@ export class LumiscaCore {
     thinkingLevel: ThinkingLevel;
     thinkingLevels: ThinkingLevel[];
   }> {
-    return this.models.getModels(providerId).map((m) => ({
-      ...this.models.describeModel(m),
-      enabled: this.isModelEnabled(providerId, m.id),
-      ...this.models.thinkingState(providerId, m.id, m),
-    }));
+    return this.modelService.listModelsDetailed(providerId);
   }
 
-  // --- user-defined OpenAI-compatible providers ----------------------------
-
-  /** Every user-defined OpenAI-compatible provider (settings UI list).
-   * The API key is never included — `hasApiKey` reports whether one is set. */
   async listUserProviders(): Promise<UserProviderSummary[]> {
-    return await this.models.listUserProviders();
+    return this.modelService.listUserProviders();
   }
 
-  /** A single user-defined provider config (prefilling the edit form), or
-   * undefined when it does not exist. */
   getUserProvider(id: string): UserProviderConfig | undefined {
-    return this.models.getUserProvider(id);
+    return this.modelService.getUserProvider(id);
   }
 
-  /** Create a user-defined OpenAI-compatible provider. Validates, persists,
-   * and registers it; an `apiKey` in the input is stored in the credential
-   * store. Returns the summary. */
   async addUserProvider(
     input: UserProviderInput,
   ): Promise<UserProviderSummary> {
-    return await this.models.addUserProvider(input);
+    return this.modelService.addUserProvider(input);
   }
 
-  /** Update a user-defined provider (id fixed by the route, matching the
-   * path). An `apiKey` of "" clears the stored key; omitted leaves it. */
   async updateUserProvider(
     id: string,
     input: UserProviderInput,
   ): Promise<UserProviderSummary> {
-    return await this.models.updateUserProvider(id, input);
+    return this.modelService.updateUserProvider(id, input);
   }
 
-  /** Remove a user-defined provider and its stored API key. */
   async removeUserProvider(id: string): Promise<void> {
-    await this.models.removeUserProvider(id);
+    return this.modelService.removeUserProvider(id);
   }
 
-  /** Whether the provider was added by the user (the settings UI)
-   * rather than built in or from the env/models.json custom config. */
   isUserProvider(id: string): boolean {
-    return this.models.isUserProvider(id);
+    return this.modelService.isUserProvider(id);
   }
 
-  // --- model catalog (models.dev live sync) -------------------------------
-
-  /** Where the active built-in model catalog came from (live fetch, disk
-   * cache, or the bundled snapshot). */
   getModelCatalogStatus(): import("./models/mod.ts").CatalogStatus {
-    return this.models.getCatalogStatus();
+    return this.modelService.getModelCatalogStatus();
   }
 
-  /** Refresh the built-in model catalog from models.dev (`live → cache →
-   * snapshot`). Non-blocking by design: callers fire and forget at startup
-   * and await it from the manual refresh UI/API. Never throws — the
-   * resolved status (including `error`) is always returned. */
   refreshModelCatalog(
     options: {
       fetch?: typeof globalThis.fetch;
@@ -2468,7 +2398,7 @@ export class LumiscaCore {
       baseUrl?: string;
     } = {},
   ): Promise<import("./models/mod.ts").CatalogStatus> {
-    return this.models.refreshCatalog(options);
+    return this.modelService.refreshModelCatalog(options);
   }
 
   // --- internals ----------------------------------------------------------
