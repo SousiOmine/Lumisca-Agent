@@ -19,7 +19,12 @@ import { fauxProvider } from "./ai/faux.ts";
  * `env` replaces the process environment the model layer reads (see
  * LumiscaCore.forTesting), so a test never depends on the machine.
  */
-export function setup(env?: () => Record<string, string>) {
+export function setup(env?: () => Record<string, string>): {
+  core: LumiscaCore;
+  faux: ReturnType<typeof fauxProvider>;
+  providerId: string;
+  modelId: string;
+} {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider], env);
   return {

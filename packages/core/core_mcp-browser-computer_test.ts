@@ -1,14 +1,9 @@
 import { join } from "node:path";
 
-import {
-  fauxAssistantMessage,
-  fauxProvider,
-  fauxText,
-  fauxToolCall,
-} from "@lumisca/core";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import type { AgentMessage, BrowserBackend } from "./mod.ts";
-import { LumiscaCore } from "./mod.ts";
+import type { LumiscaCore } from "./mod.ts";
 
 import { TOOL_CALL, TOOL_PDF_READ_PAGES, TOOL_SEARCH } from "./shared/mod.ts";
 import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
@@ -19,7 +14,6 @@ import {
   promptSession,
   removeDirRetry,
   setup,
-
 } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are

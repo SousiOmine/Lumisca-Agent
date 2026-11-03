@@ -13,13 +13,12 @@ import { LumiscaCore } from "./mod.ts";
 import { VISUALS_DIR_NAME } from "./mod.ts";
 
 import {
-  MINI_PNG,
   makeRealTempDir,
   makeWorkspace,
+  MINI_PNG,
   promptSession,
   removeDirRetry,
   setup,
-
 } from "./test-utils.ts";
 
 /** The instruction context messages of a session (AGENTS.md + personal). */

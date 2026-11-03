@@ -19,12 +19,11 @@ import { DATE_PROVIDER } from "./agent/date-context.ts";
 import { today } from "./environment.ts";
 import { bytesToBase64 } from "./base64.ts";
 import {
-  MINI_PNG,
   makeWorkspace,
+  MINI_PNG,
   promptSession,
   removeDirRetry,
   setup,
-
 } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are

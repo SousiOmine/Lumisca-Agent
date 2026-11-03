@@ -1,9 +1,4 @@
-import {
-  fauxAssistantMessage,
-  fauxProvider,
-  fauxText,
-  fauxToolCall,
-} from "@lumisca/core";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import type {
   AgentMessage,
@@ -16,7 +11,7 @@ import type {
   RawCapture,
   Rect,
 } from "./mod.ts";
-import { LumiscaCore } from "./mod.ts";
+import type { LumiscaCore } from "./mod.ts";
 
 import {
   TOOL_BROWSER_OPEN,
@@ -32,7 +27,6 @@ import {
   promptSession,
   removeDirRetry,
   setup,
-
 } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are

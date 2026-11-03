@@ -18,13 +18,7 @@ import {
 } from "./shared/mod.ts";
 
 import { bytesToBase64 } from "./base64.ts";
-import {
-  MINI_PNG,
-  makeWorkspace,
-  promptSession,
-  setup,
-
-} from "./test-utils.ts";
+import { makeWorkspace, MINI_PNG, promptSession, setup } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom

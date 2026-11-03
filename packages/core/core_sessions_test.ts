@@ -28,13 +28,12 @@ import { LANGUAGE_KEY, TOOL_SEARCH } from "./shared/mod.ts";
 import { DATE_PROVIDER } from "./agent/date-context.ts";
 
 import {
-  MINI_PNG,
   makeRealTempDir,
   makeWorkspace,
+  MINI_PNG,
   promptSession,
   removeDirRetry,
   setup,
-
 } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are

@@ -1,7 +1,7 @@
 import { fauxProvider } from "@lumisca/core";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "./mod.ts";
-import { setup, makeWorkspace } from "./test-utils.ts";
+import { makeWorkspace, setup } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom
