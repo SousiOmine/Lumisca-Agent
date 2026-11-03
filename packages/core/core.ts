@@ -2211,7 +2211,7 @@ export class LumiscaCore {
 
   // workspaces
   async createWorkspace(name: string, folders: string[]): Promise<Workspace> {
-    return this.workspaceConfig.createWorkspace(name, folders);
+    return await this.workspaceConfig.createWorkspace(name, folders);
   }
 
   listWorkspaces(): Workspace[] {
@@ -2226,7 +2226,7 @@ export class LumiscaCore {
     id: string,
     input: { name?: string; folders?: string[] },
   ): Promise<Workspace> {
-    return this.workspaceConfig.updateWorkspace(id, input);
+    return await this.workspaceConfig.updateWorkspace(id, input);
   }
 
   deleteWorkspace(id: string): Promise<void> {
@@ -2319,7 +2319,7 @@ export class LumiscaCore {
   }
 
   async checkAuth(providerId: string): Promise<AuthCheck | undefined> {
-    return this.modelService.checkAuth(providerId);
+    return await this.modelService.checkAuth(providerId);
   }
 
   getProviderAuthType(
@@ -2329,11 +2329,11 @@ export class LumiscaCore {
   }
 
   async hasProviderAuth(providerId: string): Promise<boolean> {
-    return this.modelService.hasProviderAuth(providerId);
+    return await this.modelService.hasProviderAuth(providerId);
   }
 
   async hasConfiguredAuth(providerId: string): Promise<boolean> {
-    return this.modelService.hasConfiguredAuth(providerId);
+    return await this.modelService.hasConfiguredAuth(providerId);
   }
 
   setModelEnabled(providerId: string, modelId: string, enabled: boolean): void {
@@ -2359,7 +2359,7 @@ export class LumiscaCore {
   }
 
   async listUserProviders(): Promise<UserProviderSummary[]> {
-    return this.modelService.listUserProviders();
+    return await this.modelService.listUserProviders();
   }
 
   getUserProvider(id: string): UserProviderConfig | undefined {
@@ -2369,18 +2369,18 @@ export class LumiscaCore {
   async addUserProvider(
     input: UserProviderInput,
   ): Promise<UserProviderSummary> {
-    return this.modelService.addUserProvider(input);
+    return await this.modelService.addUserProvider(input);
   }
 
   async updateUserProvider(
     id: string,
     input: UserProviderInput,
   ): Promise<UserProviderSummary> {
-    return this.modelService.updateUserProvider(id, input);
+    return await this.modelService.updateUserProvider(id, input);
   }
 
   async removeUserProvider(id: string): Promise<void> {
-    return this.modelService.removeUserProvider(id);
+    return await this.modelService.removeUserProvider(id);
   }
 
   isUserProvider(id: string): boolean {

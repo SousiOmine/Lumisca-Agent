@@ -1,5 +1,5 @@
 import type { Api, AuthCheck, Model, Provider } from "../ai/types.ts";
-import type { CatalogStatus, ModelManager } from "../models/mod.ts";
+import type { ModelManager } from "../models/mod.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
