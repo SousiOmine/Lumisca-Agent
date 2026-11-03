@@ -20,7 +20,7 @@ import {
 } from "@tabler/icons-preact";
 import {
   formatAttachmentSize,
-  MAX_PROMPT_IMAGES,
+  MAX_PROMPT_FILES,
   stripDataUrlHeader,
 } from "@lumisca/core/shared";
 import {
@@ -325,7 +325,7 @@ export function Composer({
   /** Add a dropped file that is not an image: it goes to the machine, so the
    * browser only has to read the bytes (no preview, no data URL header). */
   const addFile = (file: File) => {
-    if (filesRef.current.length >= MAX_PROMPT_IMAGES) return;
+    if (filesRef.current.length >= MAX_PROMPT_FILES) return;
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== "string") return;
@@ -343,7 +343,7 @@ export function Composer({
 
   /** Add a pasted/dropped image file to the attachments. */
   const addImage = (file: File) => {
-    if (imagesRef.current.length >= MAX_PROMPT_IMAGES) return;
+    if (imagesRef.current.length >= MAX_PROMPT_FILES) return;
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result !== "string") return;

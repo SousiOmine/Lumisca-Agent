@@ -111,7 +111,6 @@ export type {
 export {
   contentText,
   LANGUAGE_KEY,
-  MAX_PROMPT_IMAGES,
   nextRunAt,
   parseAcceptLanguage,
   parseLocale,

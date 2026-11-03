@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import { parsePromptBody } from "./sessions.ts";
+import { parsePromptBody } from "./session-requests.ts";
 import { AppError } from "./util.ts";
 
 Deno.test("parsePromptBody passes text-only prompts through", () => {

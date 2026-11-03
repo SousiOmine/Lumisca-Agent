@@ -1,5 +1,5 @@
+import type { SessionSnapshot } from "@lumisca/core/shared";
 import type {
-  AgentMessage,
   AskAnswer,
   BackgroundCommandInfo,
   CatalogStatus,
@@ -13,7 +13,6 @@ import type {
   ModelInfo,
   ModePrompt,
   PendingImage,
-  PendingQuestion,
   ProviderAuthType,
   ProviderInfo,
   ProviderLoginSnapshot,
@@ -36,7 +35,6 @@ import type {
   WorkspaceFileEntry,
 } from "./types.ts";
 import type { CommandApproval, SavedPrompt } from "@lumisca/core/shared";
-import type { ContextUsageSummary } from "@lumisca/core/shared";
 import {
   promptBody,
   request,
@@ -48,42 +46,6 @@ import {
 
 /** Session info as served by the API: includes the last run error, if any. */
 export type SessionInfoDto = SessionInfo & { lastError?: string };
-
-/** What GET /sessions/:id/messages serves: the session's live state that
- * the event stream cannot restore on its own. Events are never replayed, so
- * a client that (re)connects (page load, WS drop) learns the run state, the
- * pending ask questions, the last failure, and the current title only from
- * here — and the server reads every piece in one handler so they cannot
- * disagree with the transcript they travel with (see events.applyRunState
- * for `running`). */
-export interface SessionSnapshot {
-  /** A WINDOW of the transcript, oldest first: the newest messages on open,
-   * or the ones before the `older` cursor a client asked for. A long
-   * session's transcript is not sent whole (see `older`). */
-  messages: AgentMessage[];
-  /** The cursor for the window before `messages[0]`, or null at the
-   * transcript's beginning. Opaque; echo it back to read further. */
-  older: string | null;
-  /** A run is active right now (its `agent_start` was never replayed). */
-  running: boolean;
-  /** Questions the agent is waiting on (the ask tool); empty when none is
-   * pending. The run stays blocked until they are answered. */
-  questions: PendingQuestion[];
-  /** The last run failure, if any (cleared when a new run starts). Absent
-   * when the session has not failed. */
-  error?: string;
-  /** The session's current title (it may have been generated after the
-   * client last read the session info). */
-  name: string;
-  /** Context usage over the WHOLE transcript. A window cannot answer this
-   * (its older turns are not loaded), and the meter would silently report
-   * the window's average as the session's. */
-  usage: ContextUsageSummary;
-  /** The session's revision at the moment of this snapshot (see
-   * `api.getRevision`): the client seeds its "everything seen up to here"
-   * marker from it, so a later probe can tell whether anything was missed. */
-  rev: number;
-}
 
 /** Every session-scoped endpoint, in one table: the peer id of the machine
  * that owns the session ("" = this server, see sessionRequest), the session

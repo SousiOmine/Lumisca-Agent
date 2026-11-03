@@ -29,11 +29,8 @@ import {
   requireNonEmptyString,
   requireNumber,
 } from "./util.ts";
-import {
-  parseAnswerBody,
-  parsePromptBody,
-  type PromptBody,
-} from "./sessions.ts";
+import { parsePromptBody, type PromptBody } from "./session-requests.ts";
+import { conversationRoutes } from "./conversation.ts";
 import { assetHeaders } from "./asset-headers.ts";
 import { createEventStream } from "./ws-stream.ts";
 
@@ -470,26 +467,13 @@ export function stellaRoutes(core: StellaApi): Hono {
   });
 
   /** Stop the run. */
-  app.post("/stella/conversations/:agentId/abort", (c) => {
-    const session = requireConversation(c.req.param("agentId"));
-    core.abort(session.id);
-    return c.json({ ok: true });
-  });
-
-  /** Answer the questions the run is blocked on (the ask tool). */
-  app.post("/stella/conversations/:agentId/answer", async (c) => {
-    const body = await parseBody<{
-      toolCallId?: unknown;
-      answers?: unknown;
-    }>(c);
-    const toolCallId = requireNonEmptyString(body?.toolCallId, "toolCallId");
-    const answers = parseAnswerBody({
-      toolCallId,
-      answers: body?.answers as AskAnswer[],
-    }).answers;
-    const session = requireConversation(c.req.param("agentId"));
-    core.answerQuestion(session.id, toolCallId, answers);
-    return c.json({ ok: true });
+  // Stop, answer and rewind are the handlers a session shares
+  // (routes/conversation.ts): only the path and how an id is resolved differ
+  // between a conversation and a code-mode session.
+  conversationRoutes(app, core, {
+    base: "/stella/conversations/:agentId",
+    resolve: (c) => requireConversation(c.req.param("agentId")!).id,
+    modelResponse: "ok",
   });
 
   /** The user finished at the screen (`vm_ask_user`): the blocked run
@@ -523,33 +507,6 @@ export function stellaRoutes(core: StellaApi): Hono {
     const session = requireConversation(c.req.param("agentId"));
     await core.openSession(session.id);
     await core.rewind(session.id, timestamp);
-    return c.json({ ok: true });
-  });
-
-  /** Switch the model the conversation runs on.
-   *
-   * A conversation lives for years; the model it started on can be retired
-   * from the catalog, its provider can go away, or a better model can simply
-   * appear. Without this the only way out of a dead model was to delete the
-   * agent — and with it the whole conversation. The switch is refused while a
-   * run is active (see LumiscaCore.setSessionModel): rebuilding a streaming
-   * agent would orphan the running loop.
-   *
-   * The system prompt does not change: the model is published as a context
-   * message (see agent/model-context.ts), so the next run tells the agent
-   * which model it is on without touching the request's cached prefix. */
-  app.post("/stella/conversations/:agentId/model", async (c) => {
-    const body = await parseBody<{ provider?: unknown; modelId?: unknown }>(c);
-    const provider = requireNonEmptyString(body?.provider, "provider").trim();
-    const modelId = requireNonEmptyString(body?.modelId, "modelId").trim();
-    // Blank values describe the request, so they are refused here rather
-    // than reaching the core as an id no catalog has (which would answer a
-    // confusing 404 for a request that was never about a real model).
-    if (provider === "" || modelId === "") {
-      throw new AppError("provider and modelId must not be blank", 400);
-    }
-    const session = requireConversation(c.req.param("agentId"));
-    core.setSessionModel(session.id, provider, modelId);
     return c.json({ ok: true });
   });
 

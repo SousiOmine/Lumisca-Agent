@@ -12,6 +12,9 @@
  * Frontend-safe (no Deno, no `node:`): the web bundle imports this through
  * `@lumisca/core/shared`.
  */
+import type { AgentMessage } from "../ai/types.ts";
+import type { ContextUsageSummary } from "./context-usage.ts";
+import type { AskQuestion } from "./interaction.ts";
 
 // --- the folder picker (server/routes/fs.ts ↔ web/components/FolderBrowser) --
 
@@ -101,4 +104,51 @@ export interface StellaStatus {
   /** True while the machine is being prepared (a first run builds the image,
    * which takes minutes — the one wait the UI shows). */
   starting: boolean;
+}
+
+// --- a code-mode session's snapshot (server/routes/sessions.ts ↔ web) --------
+
+/** One ask still waiting for the user's answers, as a snapshot carries it:
+ * the tool call that asked, and its questions. (The core's own
+ * `PendingQuestion` in tools/ask.ts is the same pair, but that module holds
+ * the hub, which is backend-only; a wire shape cannot live there.) */
+export interface PendingQuestionLike {
+  toolCallId: string;
+  questions: AskQuestion[];
+}
+
+/** What `GET /api/sessions/:id/messages` answers: the run's state and the
+ * transcript window, read in one handler so they describe the same instant.
+ *
+ * It lives here rather than in the web package because BOTH sides need it: a
+ * field renamed on the server only failed at run time while the shape was
+ * declared twice (and the client's copy stayed "required" after the server
+ * stopped sending it). stella's conversation snapshot is the same kind of
+ * shape and lives in the core's types for the same reason. */
+export interface SessionSnapshot {
+  /** A WINDOW of the transcript, oldest first: the newest messages on open,
+   * or the ones before the `older` cursor a client asked for. */
+  messages: AgentMessage[];
+  /** The cursor for the window before `messages[0]`, or null at the
+   * transcript's beginning. Opaque; echo it back to read further. */
+  older: string | null;
+  /** A run is active right now (its `agent_start` was never replayed). */
+  running: boolean;
+  /** Questions the agent is waiting on (the ask tool); empty when none is
+   * pending. The run stays blocked until they are answered. */
+  questions: PendingQuestionLike[];
+  /** The last run failure, if any (cleared when a new run starts). Absent
+   * when the session has not failed. */
+  error?: string;
+  /** The session's current title (it may have been generated after the
+   * client last read the session info). */
+  name: string;
+  /** Context usage over the WHOLE transcript. A window cannot answer this
+   * (its older turns are not loaded), and the meter would silently report
+   * the window's average as the session's. */
+  usage: ContextUsageSummary;
+  /** The session's revision at the moment of this snapshot: the client seeds
+   * its "everything seen up to here" marker from it, so a later probe can
+   * tell whether anything was missed. */
+  rev: number;
 }

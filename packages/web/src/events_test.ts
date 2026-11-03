@@ -17,7 +17,7 @@ import {
   sameTodoPlan,
 } from "./events.ts";
 import { summarizeContextUsage } from "@lumisca/core/shared";
-import type { SessionSnapshot } from "./api-local.ts";
+import type { SessionSnapshot } from "@lumisca/core/shared";
 import {
   type AgentMessage,
   type BackgroundCommandInfo,

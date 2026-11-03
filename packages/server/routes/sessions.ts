@@ -1,6 +1,4 @@
 import { Hono } from "hono";
-import { base64ToBytes, MAX_PROMPT_IMAGES } from "@lumisca/core";
-import { stripDataUrlHeader } from "@lumisca/core/shared";
 import type { ContextUsageSummary } from "@lumisca/core/shared";
 import type {
   AgentMessage,
@@ -18,221 +16,9 @@ import type {
   TodoPhase,
   WindowQuery,
 } from "@lumisca/core";
-import {
-  AppError,
-  parseBody,
-  parseWindowQuery,
-  requireBody,
-  requireNonEmptyString,
-  requireNumber,
-} from "./util.ts";
-
-/** Decode a base64 payload that may still carry a data-URL header (a
- * `FileReader` result). A malformed payload describes the request, so it is a
- * 400 — never a store-level failure. */
-function decodeBase64Payload(data: string, what: string): Uint8Array {
-  try {
-    return base64ToBytes(stripDataUrlHeader(data));
-  } catch {
-    throw new AppError(`${what} data is not valid base64`, 400);
-  }
-}
-
-interface SessionBody {
-  /** Omitted → a chat session ("simple chat" without a workspace). */
-  workspaceId?: unknown;
-  name?: unknown;
-  modelProvider?: unknown;
-  modelId?: unknown;
-}
-
-/** Attachments allowed per prompt (shared with the composer's cap), and
- * the base64 length cap per image (~15MB binary). Bounds for what a
- * browser can sensibly send; LLM APIs impose their own smaller limits on
- * top of this. */
-const MAX_IMAGE_BASE64_LENGTH = 20 * 1024 * 1024;
-
-export /** One attached file as the browser sends it (the bytes base64-encoded, the
- * name the user knows it by). */
-interface PromptFileBody {
-  name?: unknown;
-  data?: unknown;
-}
-
-export interface PromptBody {
-  text?: unknown;
-  images?: unknown;
-  files?: unknown;
-  mode?: unknown;
-}
-
-interface AnswerBody {
-  toolCallId?: unknown;
-  answers?: unknown;
-}
-
-/** Longest custom focus a `/compact` instruction may carry. The text is
- * appended to the summarization prompt, so it is bounded like any other
- * user-facing prompt fragment. */
-const MAX_COMPACT_INSTRUCTIONS_LENGTH = 2_000;
-
-/** Validate the optional `/compact` instruction: a string (trimmed), an
- * empty value meaning "no instruction". Anything else — a non-string, or
- * one longer than the cap — is rejected rather than silently dropped. */
-function optionalInstructions(value: unknown): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") {
-    throw new AppError("instructions must be a string", 400);
-  }
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return undefined;
-  if (trimmed.length > MAX_COMPACT_INSTRUCTIONS_LENGTH) {
-    throw new AppError(
-      `instructions must be at most ${MAX_COMPACT_INSTRUCTIONS_LENGTH} characters`,
-      400,
-    );
-  }
-  return trimmed;
-}
-
-/** Validate an answer request body for a pending ask (the ask tool): the
- * tool call id and the answer list shape. The core validates the values
- * against the pending questions (ids and non-empty values; option labels
- * or free-text input). */
-export function parseAnswerBody(body: AnswerBody): {
-  toolCallId: string;
-  answers: AskAnswer[];
-} {
-  const toolCallId = requireNonEmptyString(
-    body.toolCallId,
-    "toolCallId (string)",
-  );
-  if (!Array.isArray(body.answers) || body.answers.length === 0) {
-    throw new AppError("answers (array) is required", 400);
-  }
-  const answers: AskAnswer[] = [];
-  for (const item of body.answers as Array<Record<string, unknown>>) {
-    const { id, values } = item;
-    if (
-      typeof id !== "string" ||
-      !Array.isArray(values) ||
-      values.some((v) => typeof v !== "string")
-    ) {
-      throw new AppError(
-        "each answer must have an `id` (string) and `values` (array of strings)",
-        400,
-      );
-    }
-    answers.push({ id, values: values as string[] });
-  }
-  return { toolCallId, answers };
-}
-
-/** Validate a prompt request body; `images` are base64 data + mimeType,
- * converted into the content blocks the agent expects. `text` may be
- * empty when at least one image is attached (image-only prompts). */
-export function parsePromptBody(body: PromptBody): {
-  text: string;
-  images?: ImageContent[];
-  files?: { name: string; bytes: Uint8Array }[];
-  mode?: ModePrompt;
-} {
-  // Parse optional mode metadata.
-  let mode: ModePrompt | undefined;
-  if (body.mode !== undefined) {
-    if (typeof body.mode !== "object" || body.mode === null) {
-      throw new AppError("mode must be an object", 400);
-    }
-    const m = body.mode as Record<string, unknown>;
-    if (
-      typeof m.modeId !== "string" ||
-      typeof m.optionId !== "string" ||
-      typeof m.modeLabel !== "string" ||
-      typeof m.shortText !== "string"
-    ) {
-      throw new AppError(
-        "mode must have modeId, optionId, modeLabel, and shortText (strings)",
-        400,
-      );
-    }
-    mode = {
-      modeId: m.modeId,
-      optionId: m.optionId,
-      modeLabel: m.modeLabel,
-      shortText: m.shortText,
-    };
-  }
-  const images: ImageContent[] = [];
-  if (body.images !== undefined) {
-    if (!Array.isArray(body.images) || body.images.length > MAX_PROMPT_IMAGES) {
-      throw new AppError(
-        `images must be an array of at most ${MAX_PROMPT_IMAGES} items`,
-        400,
-      );
-    }
-    for (const item of body.images as Array<Record<string, unknown>>) {
-      const { data, mimeType } = item;
-      if (
-        typeof data !== "string" ||
-        typeof mimeType !== "string" ||
-        !mimeType.startsWith("image/")
-      ) {
-        throw new AppError(
-          "each image must have a base64 `data` string and an `image/*` mimeType",
-          400,
-        );
-      }
-      if (data.length > MAX_IMAGE_BASE64_LENGTH) {
-        throw new AppError(
-          "image exceeds the size limit (15MB binary)",
-          400,
-        );
-      }
-      images.push({ type: "image", data, mimeType });
-    }
-  }
-  // Files the user attached: written into the machine by the caller (this
-  // parser only owns the wire shape), so what is bounded here is what the
-  // transfer can carry — not what the machine will store.
-  const files: { name: string; bytes: Uint8Array }[] = [];
-  if (body.files !== undefined) {
-    if (!Array.isArray(body.files) || body.files.length > MAX_PROMPT_IMAGES) {
-      throw new AppError(
-        `files must be an array of at most ${MAX_PROMPT_IMAGES} items`,
-        400,
-      );
-    }
-    for (const item of body.files as PromptFileBody[]) {
-      const { name, data } = item;
-      if (typeof data !== "string" || typeof name !== "string") {
-        throw new AppError(
-          "each file must have a `name` and a base64 `data` string",
-          400,
-        );
-      }
-      if (data.length > MAX_IMAGE_BASE64_LENGTH) {
-        throw new AppError("file exceeds the size limit (15MB binary)", 400);
-      }
-      files.push({
-        name,
-        bytes: decodeBase64Payload(data, "file"),
-      });
-    }
-  }
-  const text = body.text === undefined ? "" : body.text;
-  if (
-    typeof text !== "string" ||
-    (text.length === 0 && images.length === 0 && files.length === 0)
-  ) {
-    throw new AppError("text (string) is required", 400);
-  }
-  return {
-    text,
-    images: images.length > 0 ? images : undefined,
-    files: files.length > 0 ? files : undefined,
-    mode,
-  };
-}
+import { AppError, parseBody, parseWindowQuery } from "./util.ts";
+import { parsePromptBody, type PromptBody } from "./session-requests.ts";
+import { conversationRoutes } from "./conversation.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface SessionApi {
@@ -312,7 +98,40 @@ export interface SessionApi {
   cancelGoal(id: string): void;
 }
 
+/** The body `POST /sessions` reads. */
+interface SessionBody {
+  /** Omitted → a chat session ("simple chat" without a workspace). */
+  workspaceId?: unknown;
+  name?: unknown;
+  modelProvider?: unknown;
+  modelId?: unknown;
+}
+
 export function sessionRoutes(core: SessionApi): Hono {
+  /** Longest custom focus a `/compact` instruction may carry. The text is
+   * appended to the summarization prompt, so it is bounded like any other
+   * user-facing prompt fragment. */
+  const MAX_COMPACT_INSTRUCTIONS_LENGTH = 2_000;
+
+  /** Validate the optional `/compact` instruction: a string (trimmed), an
+   * empty value meaning "no instruction". Anything else — a non-string, or one
+   * longer than the cap — is rejected rather than silently dropped. */
+  function optionalInstructions(value: unknown): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value !== "string") {
+      throw new AppError("instructions must be a string", 400);
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return undefined;
+    if (trimmed.length > MAX_COMPACT_INSTRUCTIONS_LENGTH) {
+      throw new AppError(
+        `instructions must be at most ${MAX_COMPACT_INSTRUCTIONS_LENGTH} characters`,
+        400,
+      );
+    }
+    return trimmed;
+  }
+
   const app = new Hono();
 
   /** 404 unless a session with this id exists. */
@@ -535,38 +354,13 @@ export function sessionRoutes(core: SessionApi): Hono {
     return c.json({ ok: true });
   });
 
-  app.post("/sessions/:id/abort", (c) => {
-    const id = c.req.param("id");
-    requireSession(id);
-    core.abort(id);
-    return c.json({ ok: true });
-  });
-
-  /** Answer a pending ask (the ask tool): resolves the blocked run with
-   * the user's answers. Throws 404 when the ask is gone (already answered,
-   * or the run was aborted/rewound), 400 for malformed or mismatched
-   * answers. */
-  app.post("/sessions/:id/answer", async (c) => {
-    const body = await parseBody<AnswerBody>(c);
-    const { toolCallId, answers } = parseAnswerBody(body ?? {});
-    const id = c.req.param("id");
-    requireSession(id);
-    core.answerQuestion(id, toolCallId, answers);
-    return c.json({ ok: true });
-  });
-
-  /** Rewind the transcript from a user message onward (deletes that
-   * message and everything after it; an active run is aborted first). The
-   * request resolves once the truncation is complete so the client can
-   * restore the rewound text to the composer. */
-  app.post("/sessions/:id/rewind", async (c) => {
-    const body = await parseBody<{ timestamp?: unknown }>(c);
-    const timestamp = requireNumber(body?.timestamp, "timestamp (number)");
-    const id = c.req.param("id");
-    requireSession(id);
-    await core.openSession(id);
-    await core.rewind(id, timestamp);
-    return c.json({ ok: true });
+  // Stop, answer, rewind and a model switch are the handlers a conversation
+  // shares (routes/conversation.ts): only the path and how an id is resolved
+  // differ between a session and a conversation.
+  conversationRoutes(app, core, {
+    base: "/sessions/:id",
+    resolve: (c) => requireSession(c.req.param("id")!).id,
+    modelResponse: "session",
   });
 
   /** Condense the session's older history into a checkpoint on demand (the
@@ -585,16 +379,6 @@ export function sessionRoutes(core: SessionApi): Hono {
       optionalInstructions(body?.instructions),
     );
     return c.json({ ok: true, compacted });
-  });
-
-  app.post("/sessions/:id/model", async (c) => {
-    const body = requireBody(
-      await parseBody<{ provider?: unknown; modelId?: unknown }>(c),
-    );
-    const provider = requireNonEmptyString(body.provider, "provider");
-    const modelId = requireNonEmptyString(body.modelId, "modelId");
-    core.setSessionModel(c.req.param("id"), provider, modelId);
-    return c.json(core.getSession(c.req.param("id")));
   });
 
   return app;

@@ -41,7 +41,7 @@ import { requireIntegerInRange } from "../tools/validate.ts";
 export const PDF_TOOL_NAMES: readonly string[] = [TOOL_PDF_READ_PAGES];
 
 /** One tool call never puts more images into the context than a user
- * message could attach (see MAX_PROMPT_IMAGES). */
+ * message could attach (see MAX_PROMPT_FILES). */
 export const MAX_PDF_PAGES_PER_CALL = 8;
 
 /** Default render resolution: crisp enough for text/figures, cheap enough

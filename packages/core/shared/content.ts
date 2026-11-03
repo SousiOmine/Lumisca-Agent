@@ -12,9 +12,15 @@ export function contentText(
     .join("");
 }
 
-/** Images attachable to one prompt (the composer's cap and the server's
- * validation limit — one constant so the UI can never exceed the API). */
-export const MAX_PROMPT_IMAGES = 8;
+/** Files attachable to one prompt (images and documents alike): the
+ * composer's cap and the server's validation limit, so the UI can never
+ * exceed the API. */
+export const MAX_PROMPT_FILES = 8;
+
+/** Most base64 characters one attached file may carry (~15 MB of bytes).
+ * Bounds what a browser can sensibly send in one prompt; the LLM APIs impose
+ * their own, smaller limits on images on top of it. */
+export const MAX_PROMPT_FILE_BASE64_LENGTH = 20 * 1024 * 1024;
 
 /** Build a `data:<mime>;base64,<data>` URL (previews, rewind restore). */
 export function toDataUrl(mimeType: string, data: string): string {

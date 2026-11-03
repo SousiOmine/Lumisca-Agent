@@ -9,7 +9,7 @@ import type {
   TaskView,
   TodoPhase,
 } from "../types.ts";
-import type { SessionSnapshot } from "../api-local.ts";
+import type { SessionSnapshot } from "@lumisca/core/shared";
 import { applyRunState, mergeNewestWindow } from "./identity.ts";
 import {
   sameBackgrounds,
