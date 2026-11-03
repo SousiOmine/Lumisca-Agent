@@ -24,6 +24,11 @@ import { useArrivals } from "../hooks/useArrivals.ts";
 
 interface StellaSidebarProps {
   agents: StellaAgentSummary[];
+  /** The first read of the list is in flight. `agents` is empty until it
+   * lands, so this is what keeps the empty state ("no agent yet") from being
+   * shown over a list that is on its way. Optional: a caller that has no
+   * read of its own (or a test) simply never shows the wait. */
+  loading?: boolean;
   /** The agent whose conversation is showing; null before one exists. */
   activeId: string | null;
   onSelect: (id: string) => void;
@@ -93,8 +98,15 @@ function previewTextOf(
  * stray click from the thing the list exists for.
  */
 export function StellaSidebar(
-  { agents, activeId, onSelect, onChanged, onAgentChanged, running }:
-    StellaSidebarProps,
+  {
+    agents,
+    loading = false,
+    activeId,
+    onSelect,
+    onChanged,
+    onAgentChanged,
+    running,
+  }: StellaSidebarProps,
 ) {
   const t = useT();
   const locale = useLocale();
@@ -206,7 +218,16 @@ export function StellaSidebar(
         </button>
       </div>
       <nav className="stella-sidebar-list">
-        {agents.length === 0 && (
+        {
+          /* An empty list and a list still being read look identical, and the
+            empty state's advice ("create one") is wrong for half of them. */
+        }
+        {agents.length === 0 && loading && (
+          <p className="stella-sidebar-empty" role="status">
+            {t("common.loading")}
+          </p>
+        )}
+        {agents.length === 0 && !loading && (
           <p className="stella-sidebar-empty">
             {t("chat.stella.agents.empty")}
           </p>
@@ -341,14 +362,15 @@ export function StellaSidebar(
         <p className="error-text stella-sidebar-error" role="alert">{error}</p>
       )}
       {creating && (
-        <Modal onClose={resetForm}>
+        <Modal onClose={resetForm} label={t("chat.stella.agents.new")}>
           <h2>{t("chat.stella.agents.new")}</h2>
           <Field label={t("chat.stella.agents.name")}>
             <input
               type="text"
               value={name}
               placeholder={t("chat.stella.agents.nameHint")}
-              onInput={(event) => setName(event.currentTarget.value)}
+              onInput={(event) =>
+                setName(event.currentTarget.value)}
               autoFocus
             />
           </Field>
@@ -357,7 +379,8 @@ export function StellaSidebar(
               value={role}
               rows={4}
               placeholder={t("chat.stella.agents.roleHint")}
-              onInput={(event) => setRole(event.currentTarget.value)}
+              onInput={(event) =>
+                setRole(event.currentTarget.value)}
             />
           </Field>
           {error !== null && <p className="error-text" role="alert">{error}</p>}
@@ -379,7 +402,10 @@ export function StellaSidebar(
         </Modal>
       )}
       {deleting !== null && (
-        <Modal onClose={() => setDeleting(null)}>
+        <Modal
+          onClose={() => setDeleting(null)}
+          label={t("chat.stella.agents.deleteTitle", { name: deleting.name })}
+        >
           <h2>
             {t("chat.stella.agents.deleteTitle", { name: deleting.name })}
           </h2>

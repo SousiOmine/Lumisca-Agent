@@ -132,6 +132,30 @@ Deno.test("StellaView: the back button appears only when the caller gives one", 
   assertStringIncludes(narrow, "エージェント一覧に戻る");
 });
 
+Deno.test("StellaView: a failed send leaves the conversation on screen", () => {
+  // The hook puts a prompt/abort failure on the conversation, not on the
+  // "could not open it" error: replacing the transcript with an error screen
+  // because one send failed throws away the history the user retries from.
+  const html = render({
+    conversation: {
+      entries: [{
+        role: "user",
+        text: "README を直して",
+        card: null,
+        attachments: [],
+        files: [],
+        timestamp: 1,
+      }],
+      error: "サーバー側でエラーが起きました",
+    },
+  });
+  // The conversation is still drawn, and the failure sits inside it.
+  assertStringIncludes(html, "README を直して");
+  assertStringIncludes(html, "stella-column");
+  assertStringIncludes(html, "サーバー側でエラーが起きました");
+  assertEquals(html.includes("会話を開けませんでした"), false);
+});
+
 Deno.test("StellaView: opening a conversation shows the wait, not an empty pane", () => {
   // Opening means starting the machine, so the pane has a placeholder while
   // it is in flight. An empty transcript reads as "the tap did nothing".

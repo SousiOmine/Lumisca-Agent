@@ -126,12 +126,15 @@ export function ChatView(
 
   // --- saved prompts (shared hook so the menu refreshes after the settings
   // panel mutates the list) ----------------------------------------------
-  const { prompts: savedPrompts } = useSavedPrompts();
+  const { prompts: savedPrompts, error: promptsError } = useSavedPrompts();
 
   // The session's skill catalog (the `/skill` palette): the same discovery
   // the agent's skill tool ran, fetched from the machine running the agent
   // (the workspace may live on a peer).
-  const { skills } = useSkills(peerId ?? "", view.info.workspaceId);
+  const { skills, error: skillsError } = useSkills(
+    peerId ?? "",
+    view.info.workspaceId,
+  );
 
   // The owning peer's provider catalog (the composer's context meter below
   // reads the same one). Its `configured` flags are the same verdict the
@@ -229,6 +232,8 @@ export function ChatView(
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Escape during an IME conversion cancels the conversion, not the run.
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Escape" && isRunning) {
       e.preventDefault();
       onAbort();
@@ -334,6 +339,23 @@ export function ChatView(
           <BackgroundPanel commands={view.backgrounds} />
         </div>
         <QuestionPanel pending={view.pendingQuestions} onAnswer={onAnswer} />
+        {
+          /* The slash menu is the only place these lists appear, and a menu
+            that opens with no entries says nothing about why. The failure is
+            said here, above the composer, where the user would have typed the
+            command: an empty palette is not an empty catalog, and the two must
+            not read the same. */
+        }
+        {skillsError !== null && (
+          <p className="settings-note" role="status">
+            {t("chat.skills.unavailable")}
+          </p>
+        )}
+        {promptsError !== null && (
+          <p className="settings-note" role="status">
+            {t("chat.prompts.unavailable")}
+          </p>
+        )}
         {providerUnconfigured && (
           <div className="settings-note" role="status">
             <span>

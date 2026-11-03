@@ -91,10 +91,39 @@ export const chat = {
     en: "Type a message or instruction…",
   },
   "chat.composer.submit": { ja: "送信", en: "Send" },
+  /** The composer's own name: the placeholder disappears once the reader
+   * types, so the field would otherwise have no label at all to announce. */
+  "chat.composer.label": { ja: "メッセージ入力", en: "Message" },
   "chat.composer.image.remove": { ja: "添付画像を削除", en: "Remove image" },
+  /** Attaching without a drag: the picker button, and the two ways a pick
+   * can be refused before anything is sent. */
+  "chat.composer.attach.pick": {
+    ja: "ファイルを添付",
+    en: "Attach files",
+  },
+  /** Shown above the field once the text is close to the cap (the composer
+   * stops accepting input at 0, so the count never goes negative). */
+  "chat.composer.lengthLeft": {
+    ja: "あと {count} 文字入力できます",
+    en: "{count} characters left",
+  },
+  "chat.composer.attach.tooLarge": {
+    ja: "「{name}」は大きすぎるため添付できません",
+    en: '"{name}" is too large to attach',
+  },
+  "chat.composer.attach.readFailed": {
+    ja: "「{name}」を読み取れませんでした",
+    en: 'Could not read "{name}"',
+  },
   "chat.composer.mention.noMatch": {
     ja: "一致するファイルが見つかりません",
     en: "No matching files",
+  },
+  /** The mention list could not be loaded at all: the reader must be able to
+   * tell an unreachable server from a query that matched nothing. */
+  "chat.composer.mention.failed": {
+    ja: "ファイル一覧を取得できませんでした",
+    en: "Could not load the file list",
   },
   "chat.composer.slash.back": {
     ja: "コマンド一覧に戻る",
@@ -206,6 +235,13 @@ export const chat = {
   "chat.stella.noAgent": {
     ja: "左の一覧からエージェントを選んでください",
     en: "Pick an agent on the left",
+  },
+  /** The conversation is open and empty (a fresh agent, or one whose earlier
+   * messages were all removed). Without this the pane is blank, which reads
+   * as a broken view rather than as "nothing has been said yet". */
+  "chat.stella.transcript.empty": {
+    ja: "まだメッセージがありません",
+    en: "No messages yet",
   },
   /** Shown while the conversation is being opened (the server is making sure
    * the machine is up). Without it the pane is empty for as long as that
@@ -367,6 +403,16 @@ export const chat = {
   "chat.message.rewind": { ja: "入力欄に戻す", en: "Restore to composer" },
   "chat.message.copy": { ja: "コピー", en: "Copy" },
   "chat.message.copied": { ja: "コピーしました", en: "Copied" },
+  /** A list that failed to load, said where it was needed: the empty state
+   * of the same list would otherwise be indistinguishable from an outage. */
+  "chat.skills.unavailable": {
+    ja: "スキル一覧を読み込めませんでした",
+    en: "Could not load the skills",
+  },
+  "chat.prompts.unavailable": {
+    ja: "保存済みプロンプトを読み込めませんでした",
+    en: "Could not load the saved prompts",
+  },
 
   // --- error banner --------------------------------------------------------
   "chat.error.copyTitle": {

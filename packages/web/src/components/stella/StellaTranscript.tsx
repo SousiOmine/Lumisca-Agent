@@ -1,4 +1,4 @@
-import { Fragment } from "preact/compat";
+import { Fragment, useMemo } from "preact/compat";
 import { useArrivals } from "../../hooks/useArrivals.ts";
 import { useTranscriptScroll } from "../../hooks/useTranscriptScroll.ts";
 import { useLocale, useT } from "../../i18n.ts";
@@ -73,10 +73,14 @@ export function StellaTranscript({
   // Which messages may animate in: only the ones that arrived at the live
   // edge of the conversation. The first paint draws the whole loaded window,
   // and paging back inserts history above the reader (see hooks/useArrivals) —
-  // neither is an arrival.
-  const entering = useArrivals(
-    conversation.entries.map((entry) => entryKey(entry)),
+  // neither is an arrival. The keys are memoized: a stella conversation also
+  // re-renders on tokens (the run's status), and entryKey rebuilds a string
+  // per entry from its attachments and files.
+  const keys = useMemo(
+    () => conversation.entries.map((entry) => entryKey(entry)),
+    [conversation.entries],
   );
+  const entering = useArrivals(keys);
 
   // The separators are derived, not stored: the day an entry belongs to is
   // a fact about its timestamp, so a re-render (a language switch, a new
@@ -90,6 +94,11 @@ export function StellaTranscript({
         {loadingOlder && (
           <p className="chat-history-note" role="status">
             {t("chat.history.loadingOlder")}
+          </p>
+        )}
+        {conversation.entries.length === 0 && !conversation.running && (
+          <p className="stella-loading" role="status">
+            {t("chat.stella.transcript.empty")}
           </p>
         )}
         {conversation.entries.map((entry, index) => {

@@ -7,7 +7,7 @@ import {
 } from "preact/compat";
 import { api } from "../api.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
-import { errorText } from "../providers.ts";
+import { describeError, useT } from "../i18n.ts";
 import {
   applyStellaEvent,
   prependOlderEntries,
@@ -58,6 +58,10 @@ const AGENT_LIST_REFRESH_MS = 30_000;
 export function useStella(enabled: boolean): {
   /** The sidebar's rows, newest message first (see compareAgentRows). */
   agents: StellaAgentSummary[];
+  /** The first read of the agent list is in flight. The list is empty until
+   * it lands, so without this the sidebar says "no agent yet" over a list
+   * that is on its way — a line the reader reads and believes. */
+  agentsLoading: boolean;
   activeAgentId: string | null;
   select: (id: string) => void;
   /** Return to the list of agents (a phone's back button); the conversation
@@ -90,7 +94,11 @@ export function useStella(enabled: boolean): {
   loadOlder: () => boolean;
   /** Whether that read is still in flight. */
   loadingOlder: boolean;
-  /** Why the conversation could not be opened, or null. */
+  /** Why the conversation could not be opened, or null. A failed prompt or
+   * abort is NOT this: that failure leaves the conversation open and is shown
+   * in the transcript (see prompt / abort), because replacing a whole
+   * conversation with an error because one send failed loses the history the
+   * user would retry from. */
   error: string | null;
   loading: boolean;
   /** Re-read the agent list (after a create / delete). */
@@ -100,7 +108,15 @@ export function useStella(enabled: boolean): {
    * re-read of the list. */
   replaceAgent: (agent: StellaAgent) => void;
 } {
+  // Failure text is written in the language the app is in when it happens
+  // (the hook holds strings, not failure objects).
+  const t = useT();
   const [agents, setAgents] = useState<StellaAgentSummary[]>([]);
+  /** Whether the first read of the list has settled (a failure counts: the
+   * list is then known to be empty). `agentsLoading` is derived from it, so
+   * the very first paint already says "reading" instead of flashing the
+   * empty state for a frame. */
+  const [agentsSettled, setAgentsSettled] = useState(false);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<
     StellaConversationState | null
@@ -138,6 +154,7 @@ export function useStella(enabled: boolean): {
   useEffect(() => {
     if (!enabled) {
       setAgents([]);
+      setAgentsSettled(false);
       setActiveAgentId(null);
       return;
     }
@@ -155,13 +172,17 @@ export function useStella(enabled: boolean): {
         });
         setError(null);
       } catch (failure) {
-        if (!disposed) setError(errorText(failure));
+        if (!disposed) setError(describeError(failure, t));
+      } finally {
+        // Settled either way: a failed read leaves an empty list, and the
+        // empty state is then the truth.
+        if (!disposed) setAgentsSettled(true);
       }
     })();
     return () => {
       disposed = true;
     };
-  }, [enabled, agentsVersion]);
+  }, [enabled, agentsVersion, t]);
 
   // The list's second line goes stale on its own: another window, or a
   // routine, writes into conversations this client has no stream for. A
@@ -227,7 +248,7 @@ export function useStella(enabled: boolean): {
         setConversation(stellaStateOf(snapshot));
         setSessionId(snapshot.sessionId);
       } catch (failure) {
-        if (!disposed) setError(errorText(failure));
+        if (!disposed) setError(describeError(failure, t));
       } finally {
         if (!disposed) setLoading(false);
       }
@@ -235,7 +256,7 @@ export function useStella(enabled: boolean): {
     return () => {
       disposed = true;
     };
-  }, [enabled, activeAgentId]);
+  }, [enabled, activeAgentId, t]);
 
   // The conversation's event stream. One socket per open conversation; a
   // drop re-reads the snapshot (the events are never replayed) and
@@ -359,22 +380,37 @@ export function useStella(enabled: boolean): {
       const agentId = requireAgent();
       // Fire-and-forget: the run's progress arrives on the event stream, so
       // the composer is cleared immediately and a failure surfaces as the
-      // conversation's error.
+      // conversation's error. That error is the CONVERSATION's, not the
+      // hook's: a send that failed leaves the conversation open, and
+      // replacing the whole transcript with an error screen (which is what
+      // `error` does) would throw away the history the user retries from.
       void stellaApi.prompt(agentId, text, images, files).catch(
         (failure: unknown) => {
-          setError(errorText(failure));
+          setConversation((current) =>
+            current === null ? current : {
+              ...current,
+              error: describeError(failure, t),
+            }
+          );
         },
       );
     },
-    [requireAgent],
+    [requireAgent, t],
   );
 
   const abort = useCallback(() => {
     const agentId = requireAgent();
+    // Same rule as prompt: a refused abort is a fact about this run, said in
+    // the transcript beside it, not a reason to hide the conversation.
     void stellaApi.abort(agentId).catch((failure: unknown) => {
-      setError(errorText(failure));
+      setConversation((current) =>
+        current === null ? current : {
+          ...current,
+          error: describeError(failure, t),
+        }
+      );
     });
-  }, [requireAgent]);
+  }, [requireAgent, t]);
 
   const answer = useCallback(
     async (
@@ -451,6 +487,10 @@ export function useStella(enabled: boolean): {
 
   return {
     agents: rows,
+    // Only the very first read counts: a 30-second refresh replaces rows that
+    // are already on screen, and swapping them for "Loading…" would take real
+    // content away to say nothing new.
+    agentsLoading: enabled && !agentsSettled,
     activeAgentId,
     select,
     clearSelection,

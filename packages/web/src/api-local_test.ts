@@ -1,5 +1,10 @@
 import { assert, assertEquals } from "@std/assert";
-import { intercept, jsonError, record } from "./api-test-utils.ts";
+import {
+  intercept,
+  jsonError,
+  record,
+  type Responder,
+} from "./api-test-utils.ts";
 
 import type { UserProviderInput } from "./types.ts";
 
@@ -10,7 +15,10 @@ import type { UserProviderInput } from "./types.ts";
  * here is what the header assertions expect on every request. */
 globalThis.__LUMISCA_TOKEN__ = "test-token";
 const { api } = await import("./api-local.ts");
-const { onServerFailure } = await import("./api-client.ts");
+const { ApiError, onServerFailure } = await import("./api-client.ts");
+/** The failure classification, as a type only (the value is imported above,
+ * because it must exist before the module graph loads the token). */
+type ApiErrorKind = InstanceType<typeof ApiError>["kind"];
 
 /** One call under test: what it is (for failure messages), the HTTP method
  * and the path (pathname + query) the client must build, the call itself and
@@ -573,8 +581,13 @@ Deno.test("api-local: a network failure notifies the health monitor, an HTTP err
       () => api.listWorkspaces(),
       () => Promise.reject(new TypeError("Failed to fetch")),
     );
-    assert(offline.error instanceof TypeError, "the fetch error must surface");
+    assert(offline.error instanceof ApiError, "the call must fail");
     assertEquals(offline.error.message, "Failed to fetch");
+    assertEquals(
+      offline.error.kind,
+      "network",
+      "a fetch rejection is an outage",
+    );
     assertEquals(failures.length, 1, "a fetch rejection is an outage");
 
     const answered = await intercept(
@@ -585,5 +598,81 @@ Deno.test("api-local: a network failure notifies the health monitor, an HTTP err
     assertEquals(failures.length, 1, "an answered HTTP error is not an outage");
   } finally {
     unsubscribe();
+  }
+});
+
+Deno.test("api-local: a failure is classified by what went wrong", async () => {
+  // The reader is told the KIND of failure (i18n.describeError), so the
+  // classification has to be right: "retrying will not help" is the wrong
+  // thing to say about a dropped connection, and the opposite is wrong for a
+  // rejected input. `message` keeps the raw text either way — the error
+  // banner copies it.
+  const cases: {
+    name: string;
+    respond: Responder;
+    kind: ApiErrorKind;
+    status: number | null;
+    detail: string | null;
+    /** The raw message, when it is the client's or the server's own text. A
+     * parse failure keeps the runtime parser's message, which differs
+     * between engines, so that case asserts only that it is not empty. */
+    message: string | null;
+  }[] = [
+    {
+      name: "a 4xx carries the server's text",
+      respond: jsonError(400, "provider not configured"),
+      kind: "http-4xx",
+      status: 400,
+      detail: "provider not configured",
+      message: "provider not configured",
+    },
+    {
+      name: "a 5xx carries the server's text",
+      respond: jsonError(503, "Workspace store is locked"),
+      kind: "http-5xx",
+      status: 503,
+      detail: "Workspace store is locked",
+      message: "Workspace store is locked",
+    },
+    {
+      // A proxy or a half-dead server answers HTML: no detail to show.
+      name: "an error body that is not JSON falls back to the status",
+      respond: () => new Response("<html>down</html>", { status: 502 }),
+      kind: "http-5xx",
+      status: 502,
+      detail: null,
+      message: "Request failed: 502",
+    },
+    {
+      // A 2xx whose body is not JSON: the call produced no value, and the
+      // SyntaxError the parser threw is not the reader's problem.
+      name: "a 2xx that is not JSON is a parse failure",
+      respond: () =>
+        new Response("<html>login</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+      kind: "parse",
+      status: 200,
+      detail: null,
+      message: null,
+    },
+  ];
+  for (const testCase of cases) {
+    const { error } = await intercept(
+      () => api.listWorkspaces(),
+      testCase.respond,
+    );
+    assert(error instanceof ApiError, `${testCase.name}: the call must fail`);
+    assertEquals(error.kind, testCase.kind, testCase.name);
+    assertEquals(error.status, testCase.status, testCase.name);
+    assertEquals(error.detail, testCase.detail, testCase.name);
+    // The raw message is unchanged: existing callers and the copy button
+    // read it, and the localisation happens at the display side.
+    if (testCase.message === null) {
+      assert(error.message.length > 0, `${testCase.name}: no message`);
+    } else {
+      assertEquals(error.message, testCase.message, testCase.name);
+    }
   }
 });

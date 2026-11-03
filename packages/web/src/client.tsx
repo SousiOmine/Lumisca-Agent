@@ -1,7 +1,8 @@
+import { Component } from "preact/compat";
 import { createRoot } from "preact/compat/client";
 import { DEFAULT_LOCALE } from "@lumisca/core/shared";
 import { App } from "./App.tsx";
-import { initLocale } from "./i18n.ts";
+import { initLocale, t } from "./i18n.ts";
 import type { InitialData } from "./types.ts";
 
 declare global {
@@ -23,8 +24,62 @@ if (location.search.includes("token=")) {
 // setting, else the browser's Accept-Language — see server/app.ts).
 initLocale(globalThis.__INITIAL_DATA__?.language ?? DEFAULT_LOCALE);
 
+/**
+ * The last net under the app: a throw in a component's render unmounts the
+ * whole tree, and without this the window goes white with nothing to click —
+ * no title bar, no way back, and no hint that reloading helps. One boundary at
+ * the root rather than per view: the failure is a bug in the render code, so
+ * there is nothing per-surface to say about it, and rendering nothing at all
+ * (the alternative) is the white screen this exists to prevent.
+ *
+ * The message is deliberately not shown: an exception's text describes the
+ * component's internals, and the reader can do nothing with it. Reloading is
+ * the only action that helps, so it is the only one offered.
+ */
+class AppErrorBoundary extends Component<
+  { children: unknown },
+  { failed: boolean }
+> {
+  override state = { failed: false };
+
+  static override getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: unknown): void {
+    // Still reported: the boundary replaces the screen, not the diagnosis.
+    console.error(error);
+  }
+
+  override render() {
+    if (!this.state.failed) return this.props.children;
+    // The classes are the empty state's: a screen with nothing to show, and
+    // the one line it says — no new stylesheet rule for a state the app is
+    // never supposed to be in.
+    return (
+      <div className="chat-empty" role="alert">
+        <div className="chat-empty-inner">
+          <p className="error-text">{t("common.crash.title")}</p>
+          <p>{t("common.crash.hint")}</p>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => location.reload()}
+          >
+            {t("common.crash.reload")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 const root = document.getElementById("root");
 if (!root) throw new Error("root element not found");
 
 // The app is rendered client-side; the server only serves a static shell.
-createRoot(root).render(<App initialData={globalThis.__INITIAL_DATA__} />);
+createRoot(root).render(
+  <AppErrorBoundary>
+    <App initialData={globalThis.__INITIAL_DATA__} />
+  </AppErrorBoundary>,
+);

@@ -50,6 +50,39 @@ export const common = {
     ja: "サーバーに接続できません: {error}",
     en: "Cannot reach the server: {error}",
   },
+  /** A failed request, said by what failed: the raw message the server or
+   * the network produced is not in the reader's language, and "Failed to
+   * fetch" does not tell them whether to retry or to fix the input. The
+   * server's own text travels along as `{detail}`. */
+  "common.error.network": {
+    ja: "サーバーに接続できません（自動で再試行します）",
+    en: "Cannot reach the server (retrying)",
+  },
+  "common.error.badRequest": {
+    ja: "入力が受け付けられませんでした",
+    en: "The request was rejected",
+  },
+  "common.error.server": {
+    ja: "サーバー側でエラーが起きました",
+    en: "The server failed to handle the request",
+  },
+  "common.error.parse": {
+    ja: "サーバーの応答を解釈できませんでした",
+    en: "The server's reply could not be read",
+  },
+  /** Appended to the line above when the server explained itself. */
+  "common.error.detail": { ja: "詳細: {detail}", en: "Details: {detail}" },
+  /** A crash while drawing the page (the client's error boundary). Without
+   * it an exception unmounts the whole tree and leaves a blank window. */
+  "common.crash.title": {
+    ja: "画面を表示できませんでした",
+    en: "This screen could not be shown",
+  },
+  "common.crash.hint": {
+    ja: "再読み込みすると元に戻ることがあります。",
+    en: "Reloading usually brings it back.",
+  },
+  "common.crash.reload": { ja: "再読み込み", en: "Reload" },
   /** Confirmation before deleting a workspace (the shared delete flow in
    * hooks/useWorkspaces.ts). */
   "common.workspaceDeleteConfirm": {

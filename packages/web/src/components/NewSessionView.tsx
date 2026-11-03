@@ -11,8 +11,8 @@ import type {
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { useSkills } from "../hooks/useSkills.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
-import { useT } from "../i18n.ts";
-import { errorText, setModelThinkingLevel } from "../providers.ts";
+import { describeError, useT } from "../i18n.ts";
+import { setModelThinkingLevel } from "../providers.ts";
 import {
   actionCommandFromText,
   buildSlashCommands,
@@ -149,7 +149,7 @@ export function NewSessionView(
 
   // --- saved prompts (shared hook so the menu refreshes after the settings
   // panel mutates the list) ----------------------------------------------
-  const { prompts: savedPrompts } = useSavedPrompts();
+  const { prompts: savedPrompts, error: promptsError } = useSavedPrompts();
   /** Why the default model could not be resolved; shown above the picker so
    * the empty selection is explained instead of silently staying blank. */
   const [defaultModelError, setDefaultModelError] = useState<string | null>(
@@ -188,7 +188,7 @@ export function NewSessionView(
     } catch (error) {
       // Non-critical for starting a session (the server resolves its own
       // default), but the user must know why the picker is empty.
-      if (!isStale()) setDefaultModelError(errorText(error));
+      if (!isStale()) setDefaultModelError(describeError(error, t));
     }
   }, [settingsVersion]);
 
@@ -250,7 +250,10 @@ export function NewSessionView(
   // The skills of the selected workspace (the `/skill` palette); a chat
   // draft asks for a chat session's skills (global and built-in only),
   // exactly like the session it starts.
-  const { skills } = useSkills("", isChat ? undefined : selectedWorkspace?.id);
+  const { skills, error: skillsError } = useSkills(
+    "",
+    isChat ? undefined : selectedWorkspace?.id,
+  );
   const allSlashCommands = useMemo<SlashCommand[]>(
     () => buildSlashCommands(savedPrompts, isChat, skills, t),
     [isChat, savedPrompts, skills, t],
@@ -294,7 +297,7 @@ export function NewSessionView(
     try {
       await onStart(selectedWorkspace, model, trimmed, images, mode);
     } catch (e) {
-      setError(errorText(e));
+      setError(describeError(e, t));
       setBusy(false);
     }
   };
@@ -318,7 +321,7 @@ export function NewSessionView(
     try {
       await onDeleteWorkspace(workspace);
     } catch (e) {
-      setError(errorText(e));
+      setError(describeError(e, t));
     }
   };
 
@@ -340,7 +343,7 @@ export function NewSessionView(
           : current
       );
     } catch (e) {
-      setError(errorText(e));
+      setError(describeError(e, t));
     }
   };
 
@@ -388,6 +391,22 @@ export function NewSessionView(
                   </button>
                 )}
               </div>
+            )}
+            {
+              /* The slash menu's two lists. A failed read leaves the menu
+                with fewer entries than the user expects and no reason; the
+                note says which list is missing (an empty catalog and an
+                unreachable machine must not read the same). */
+            }
+            {skillsError !== null && (
+              <p className="settings-note" role="status">
+                {t("chat.skills.unavailable")}
+              </p>
+            )}
+            {promptsError !== null && (
+              <p className="settings-note" role="status">
+                {t("chat.prompts.unavailable")}
+              </p>
             )}
             <Composer
               value={input}

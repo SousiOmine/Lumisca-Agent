@@ -13,9 +13,11 @@
  */
 import { useMemo, useSyncExternalStore } from "preact/compat";
 import { createStore } from "./store.ts";
+import { ApiError } from "./api-client.ts";
 import {
   createTranslator,
   DEFAULT_LOCALE,
+  errorMessage,
   type Locale,
   type MessageKey,
   type MessageParams,
@@ -65,6 +67,38 @@ export function useT(): Translator {
  * helpers). Components use {@link useT}. */
 export function t(key: MessageKey, params?: MessageParams): string {
   return translate(store.get(), key, params);
+}
+
+/**
+ * A failure as a sentence the reader can act on: what kind of failure it was
+ * in the app's language, plus the server's own explanation when it sent one.
+ *
+ * The raw message cannot be shown as-is — "Failed to fetch" is not Japanese
+ * or English prose, and it does not say whether sending again could help —
+ * so the kind picks the sentence and the server's text travels along as the
+ * detail (a proxy's HTML page as that sentence would blame the wrong party).
+ * Anything that is not an {@link ApiError} keeps its message: it did not come
+ * from the transport, so no classification is known about it.
+ *
+ * Pure (the translator is passed in) so the table can be tested without a
+ * browser or a store, and so a caller outside the render tree — a module
+ * helper formatting a failure it will store — can pass the translator of the
+ * language current at that moment.
+ */
+export function describeError(error: unknown, t: Translator): string {
+  if (!(error instanceof ApiError)) return errorMessage(error);
+  const line = t(
+    error.kind === "network"
+      ? "common.error.network"
+      : error.kind === "http-4xx"
+      ? "common.error.badRequest"
+      : error.kind === "http-5xx"
+      ? "common.error.server"
+      : "common.error.parse",
+  );
+  return error.detail === null
+    ? line
+    : `${line}: ${t("common.error.detail", { detail: error.detail })}`;
 }
 
 /** Keep the document's language in sync: the stylesheet and assistive

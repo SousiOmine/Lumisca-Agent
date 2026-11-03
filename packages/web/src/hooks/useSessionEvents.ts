@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { connectEvents, sessionApi, type SessionSnapshot } from "../api.ts";
-import { errorText } from "../providers.ts";
+import { describeError, useT } from "../i18n.ts";
 import {
   applyEvent,
   applySnapshot,
@@ -94,6 +94,9 @@ export function useSessionEvents(
 ) {
   const [views, setViews] = useState<Map<string, SessionView>>(new Map());
   const viewsRef = useRef(views);
+  // The failure text a view shows is written in the language the app is in
+  // when the failure happens.
+  const t = useT();
   // Per-tab revision marker: the last event count this client has accounted
   // for (seeded from a snapshot, advanced by every event). A frame whose
   // count skips ahead means frames were lost, and a probe that reads a
@@ -485,16 +488,20 @@ export function useSessionEvents(
   );
 
   /** Record an error on a session view (no-op when the tab is gone). The
-   * key is the composite tab key (peerId:sessionId). */
+   * key is the composite tab key (peerId:sessionId). The failure is
+   * described in the language the view is read in NOW: `view.error` is a
+   * string, so the translation happens here, where the failure is still an
+   * object that knows what kind of failure it was (see describeError). */
   const setViewError = useCallback((key: string, error: unknown) => {
+    const text = describeError(error, t);
     setViews((prev) => {
       const current = prev.get(key);
       if (!current) return prev;
       const next = new Map(prev);
-      next.set(key, { ...current, error: errorText(error) });
+      next.set(key, { ...current, error: text });
       return next;
     });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let disposed = false;

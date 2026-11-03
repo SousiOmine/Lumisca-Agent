@@ -292,3 +292,15 @@ Deno.test("StellaTranscript: a prompt's pictures are drawn in the bubble", () =>
   assertStringIncludes(html, "msg-images");
   assertStringIncludes(html, "/upload?ref=uploads%2F1-ab%2F01-image-1.png");
 });
+
+Deno.test("StellaTranscript: a conversation with nothing said yet says so", () => {
+  // A fresh agent's pane used to be blank, which reads as a view that failed
+  // to load rather than as "nothing has been said yet".
+  const html = render({});
+  assertStringIncludes(html, "まだメッセージがありません");
+  assertStringIncludes(html, 'role="status"');
+  // A run in progress has the typing dots to say it is alive; the empty line
+  // would contradict them.
+  const running = render({ running: true });
+  assertEquals(running.includes("まだメッセージがありません"), false);
+});

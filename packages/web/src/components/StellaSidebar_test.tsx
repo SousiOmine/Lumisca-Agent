@@ -28,6 +28,8 @@ function agent(
 /** A conversation that was spoken in at `at` (2026-09-15 12:00 local). */
 const AT = new Date(2026, 8, 15, 12, 0, 0).getTime();
 
+/** Render the list. `loading` is the optional prop the App passes while the
+ * first read of the agents is in flight. */
 function render(
   agents: StellaAgentSummary[] = [agent("a1", {
     kind: "text",
@@ -35,6 +37,7 @@ function render(
     at: AT,
   })],
   running = false,
+  loading?: boolean,
 ): string {
   initLocale("ja");
   return renderToString(
@@ -45,6 +48,7 @@ function render(
       onChanged={() => {}}
       onAgentChanged={() => {}}
       running={running}
+      {...(loading === undefined ? {} : { loading })}
     />,
   );
 }
@@ -120,6 +124,27 @@ Deno.test("StellaSidebar: a row's actions live behind its ⋮ menu", () => {
   // further in, behind the menu (the menu is closed here, so its own items
   // are not in the markup at all).
   assertEquals(html.includes(">削除<"), false);
+});
+
+Deno.test("StellaSidebar: the empty list is not shown while it is being read", () => {
+  // An empty list and a list still on its way look the same on screen, and
+  // the empty state's advice ("create one") is wrong for half of them: the
+  // wait is said instead until the read settles.
+  const waiting = render([], false, true);
+  assertStringIncludes(waiting, "読み込み中");
+  assertEquals(
+    waiting.includes("登録されているエージェントがありません"),
+    false,
+  );
+
+  // Settled with nothing: the empty state (and its advice) is now the truth.
+  const empty = render([], false, false);
+  assertStringIncludes(empty, "登録されているエージェントがありません");
+  assertEquals(empty.includes("読み込み中"), false);
+
+  // A list with rows is drawn as rows whether a read is in flight or not: a
+  // refresh must never replace real content with the wait.
+  assertStringIncludes(render(undefined, false, true), "Aide");
 });
 
 Deno.test("StellaSidebar: the create dialog's fields are optional", async () => {

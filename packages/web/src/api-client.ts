@@ -14,6 +14,49 @@ declare global {
  * WS URL carries it as a query parameter instead. */
 export const token = globalThis.__LUMISCA_TOKEN__;
 
+/**
+ * Why a request failed, as the UI has to say it.
+ *
+ * `message` keeps the raw text the client always threw ("Request failed:
+ * 503", the server's own `{ error }`, the fetch rejection's message): it is
+ * what the logs and the error-copy button carry, and what code that only
+ * reads a message still reads. `kind` is what the reader is told, because
+ * "Failed to fetch" is not a sentence in their language and does not say
+ * whether retrying could help — see i18n.ts describeError.
+ */
+export class ApiError extends Error {
+  readonly kind: "network" | "http-4xx" | "http-5xx" | "parse";
+  /** The HTTP status for `http-4xx` / `http-5xx`, null otherwise. */
+  readonly status: number | null;
+  /** The server's own explanation, when it sent one. */
+  readonly detail: string | null;
+
+  constructor(
+    message: string,
+    kind: ApiError["kind"],
+    options: {
+      status?: number | null;
+      detail?: string | null;
+      cause?: unknown;
+    } = {},
+  ) {
+    super(message, { cause: options.cause });
+    this.name = "ApiError";
+    this.kind = kind;
+    this.status = options.status ?? null;
+    this.detail = options.detail ?? null;
+  }
+}
+
+/** Classify a failed `fetch`: the request never got an answer, so it is a
+ * network failure however the runtime spelled the rejection (a browser's
+ * TypeError, a wrapped DOMException). The original error is kept as the
+ * cause — the health monitor and the console read it. */
+function networkError(error: unknown): ApiError {
+  const message = error instanceof Error ? error.message : String(error);
+  return new ApiError(message, "network", { cause: error });
+}
+
 export async function request<T>(
   path: string,
   init?: RequestInit,
@@ -30,16 +73,29 @@ export async function request<T>(
     // and offer restart + log copy-paste. Plain browsers have no monitor
     // (no shell), so the dispatch is a no-op there.
     notifyServerFailure();
-    throw error;
+    throw networkError(error);
   }
   if (!res.ok) {
+    // Errors are answered as `{ error }`; a proxy or a half-dead server
+    // answers HTML instead, and the status alone still names the failure.
     const body = await res.json().catch(() => null);
-    const message = body && typeof body.error === "string"
-      ? body.error
-      : `Request failed: ${res.status}`;
-    throw new Error(message);
+    const detail = body && typeof body.error === "string" ? body.error : null;
+    const message = detail ?? `Request failed: ${res.status}`;
+    throw new ApiError(
+      message,
+      res.status < 500 ? "http-4xx" : "http-5xx",
+      { status: res.status, detail },
+    );
   }
-  return res.json() as Promise<T>;
+  try {
+    return await res.json() as T;
+  } catch (error) {
+    // A 2xx whose body is not JSON (a captive portal's login page, a proxy
+    // that answered for the server): the call did not produce a value, and
+    // saying "unexpected token <" would blame the reader's input.
+    const message = error instanceof Error ? error.message : String(error);
+    throw new ApiError(message, "parse", { status: res.status });
+  }
 }
 
 /** Client-side server-failure listeners (the desktop health monitor
