@@ -191,10 +191,12 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
 
   設定 →「接続先サーバー」の一覧も同じ問いに答える場所なので、こちらは編集用です（`ConnectionList`）。行を畳んだ状態が既定で、行を押すと入力欄が開き、保存すると閉じます。名前を空のまま URL を先に入力した場合は、そのホスト名を名前に補完します（`withUrl`。手で入れた名前は上書きしません）。
 
-- **シェルブリッジは loopback の HTTP で、独自スキームではない**  
-  ページはサーバーが配信し、Tauri のコマンドは呼べないため、シェル操作（ウィンドウ操作・接続先の切り替え・更新）はページから小さな HTTP の口へ送ります（`packages/desktop/src-tauri/src/bridge_server.rs`、ページ側は `packages/web/src/shell.ts` の `shellCall`）。口は 127.0.0.1 の任意ポート（bind 0）で、その origin をシェルがメインウィンドウの initialization script（`window.__LUMISCA_BRIDGE__`）として注入します。splash も同じ経路です。
+- **シェルブリッジは loopback の HTTP、HTTPS のページは Tauri IPC へ退避する**  
+  ページはサーバーが配信し、通常は Tauri のコマンドを呼べないため、シェル操作（ウィンドウ操作・接続先の切り替え・更新）はページから小さな HTTP の口へ送ります（`packages/desktop/src-tauri/src/bridge_server.rs`、ページ側は `packages/web/src/shell.ts` の `shellCall`）。口は 127.0.0.1 の任意ポート（bind 0）で、その origin をシェルがメインウィンドウの initialization script（`window.__LUMISCA_BRIDGE__`）として注入します。splash も同じ経路です。
 
-  かつては `lumisca://` という独自スキームでしたが、**WKWebView（macOS）は http(s) のページから独自スキームを fetch させません**（WebView2 は `http://lumisca.localhost` に載せ替えるため通ります）。結果 macOS ではブリッジが一度も答えず、`state` が取れないのでタイトルバーごと描画されない（＝接続先もウィンドウ操作も出ない）状態でした。Tauri 自身の IPC も同じ理由で `postMessage` へ退避する実装です。loopback はどの engine でも通常の HTTP で、https のページからも「安全な origin」として扱われます。CSP の `connect-src` は `http://127.0.0.1:*` を許可します（`packages/server/render.ts`）。
+  かつては `lumisca://` という独自スキームでしたが、**WKWebView（macOS）は http(s) のページから独自スキームを fetch させません**（WebView2 は `http://lumisca.localhost` に載せ替えるため通ります）。結果 macOS ではブリッジが一度も答えず、`state` が取れないのでタイトルバーごと描画されない（＝接続先もウィンドウ操作も出ない）状態でした。CSP の `connect-src` は `http://127.0.0.1:*` を許可します（`packages/server/render.ts`）。
+
+  **HTTPS のページから loopback への fetch は、WebKit では混在コンテンツとして遮断されます。** loopback は spec 上 potentially trustworthy ですが、WebKit はそう扱わず、`127.0.0.1` も `localhost` も同じです（WebKit bug 171934）。リモートのサーバーは通常 https なので、そのページでは `state` が取れず、タイトルバーが描画されないまま信号機ボタンの上にページの見出しが重なっていました。そこで `shellCall` は**通信段階の失敗**のときだけ Tauri の IPC（`bridge::shell_action`）へ退避します。IPC はネットワーク要求ではないので混在コンテンツの対象外で、同じ `handle_shell_action` に届き、キーの検証も同じです（HTTP エラーはアクション自身の答えなので再実行しません）。リモートページに許すコマンドは `capabilities/remote-shell.json` の `allow-shell-action` だけで、キーが無ければ何も動きません。
 
   ドラッグとダブルクリックの最大化は、macOS では OS のタイトルバーが持つためブリッジを使いません。
 

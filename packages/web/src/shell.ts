@@ -41,6 +41,14 @@ declare global {
    * injected as the main window's initialization script. Absent in a plain
    * browser and in the browser lab. */
   var __LUMISCA_BRIDGE__: string | undefined;
+  /** Tauri's IPC, injected into every page of the desktop window. It is the
+   * fallback road to the same shell actions when the loopback bridge cannot
+   * be fetched (see `shellCall`). Absent in a plain browser. */
+  var __TAURI_INTERNALS__:
+    | {
+      invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
+    }
+    | undefined;
 }
 
 /** Bridge base URL, or undefined outside the desktop shell. */
@@ -51,18 +59,59 @@ const BRIDGE = globalThis.__LUMISCA_BRIDGE__;
  * server can drive the bridge. */
 const key = globalThis.__LUMISCA_TOKEN__;
 
+/** Tauri's IPC `invoke`, or undefined in a plain browser. */
+const invoke = globalThis.__TAURI_INTERNALS__?.invoke;
+
+/** Run one action over Tauri's IPC (`bridge::shell_action`). This is the
+ * same action handler the loopback bridge calls, with the same key gate; the
+ * only difference is the road to the shell. */
+async function invokeShell<T>(
+  action: string,
+  params: Record<string, string>,
+): Promise<T> {
+  const args = key === undefined ? params : { ...params, key };
+  try {
+    return await invoke!<T>("shell_action", { action, params: args });
+  } catch (error) {
+    // A Tauri command rejects with the string it returned as `Err`; wrap it
+    // so callers see the same Error shape as a failed bridge request.
+    throw new Error(
+      typeof error === "string"
+        ? error
+        : error instanceof Error
+        ? error.message
+        : String(error),
+    );
+  }
+}
+
 export async function shellCall<T>(
   action: string,
   params: Record<string, string> = {},
 ): Promise<T> {
   if (BRIDGE === undefined) {
-    // Plain browser: there is no shell, and the callers (the title bar, the
-    // update controls) read the rejection as "desktop-only".
+    // Desktop shell without a bridge origin (unexpected, but IPC still
+    // knows the way); a plain browser has neither, so callers (the title
+    // bar, the update controls) read the rejection as "desktop-only".
+    if (invoke !== undefined) return invokeShell<T>(action, params);
     throw new Error("the desktop shell is not available");
   }
   const query = new URLSearchParams(params);
   if (key) query.set("key", key);
-  const res = await fetch(`${BRIDGE}/${action}?${query}`);
+  let res: Response;
+  try {
+    res = await fetch(`${BRIDGE}/${action}?${query}`);
+  } catch (error) {
+    // WebKit refuses an HTTPS page's fetch to the loopback bridge as mixed
+    // content, even though 127.0.0.1 is loopback. A remote server is
+    // normally reached over HTTPS, so that is the normal case there, not an
+    // error. Tauri's IPC is not a network request and carries the same
+    // action to the same handler, so fall back to it. Only a transport
+    // failure takes this path: an HTTP error below is the action's own
+    // answer and must not be replayed.
+    if (invoke === undefined) throw error;
+    return invokeShell<T>(action, params);
+  }
   const body = await res.json().catch(() => null) as { error?: string } | null;
   if (!res.ok) {
     throw new Error(body?.error ?? `Request failed: ${res.status}`);
@@ -73,7 +122,9 @@ export async function shellCall<T>(
 /** Whether the desktop shell's bridge is reachable (false in browsers).
  * Bounded by a timeout so a slow answer does not stall the UI. */
 export function shellAvailable(): Promise<boolean> {
-  if (BRIDGE === undefined) return Promise.resolve(false);
+  if (BRIDGE === undefined && invoke === undefined) {
+    return Promise.resolve(false);
+  }
   return withTimeout(
     shellCall<ShellState>("state").then(
       () => true,
@@ -88,7 +139,9 @@ export function shellAvailable(): Promise<boolean> {
  * AND display the local server (only then are picked paths on the machine
  * owning the workspaces; against a remote server they would be wrong). */
 export function nativeFolderPickerAvailable(): Promise<boolean> {
-  if (BRIDGE === undefined) return Promise.resolve(false);
+  if (BRIDGE === undefined && invoke === undefined) {
+    return Promise.resolve(false);
+  }
   return withTimeout(
     shellCall<ShellState>("state").then(
       (s) => s.mode === "local",

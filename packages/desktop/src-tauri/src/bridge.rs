@@ -83,6 +83,49 @@ fn bridge_error(status: StatusCode, message: &str) -> BridgeReply {
     bridge_json(status, serde_json::json!({ "error": message }))
 }
 
+/// Turn the loopback bridge's HTTP answer into the IPC command's result:
+/// the JSON body on success, the bridge's own error text on failure.
+fn bridge_reply_to_result(reply: BridgeReply) -> Result<serde_json::Value, String> {
+    let (status, body) = reply;
+    let value = serde_json::from_slice::<serde_json::Value>(&body)
+        .map_err(|e| format!("invalid shell reply: {e}"))?;
+    if status.is_success() {
+        Ok(value)
+    } else {
+        Err(value
+            .get("error")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("shell action failed: {status}")))
+    }
+}
+
+/// Run one shell action over Tauri's IPC.
+///
+/// The loopback bridge ([`crate::bridge_server`]) is unreachable from a page
+/// served over HTTPS: WebKit (macOS) refuses a mixed-content fetch from an
+/// HTTPS document to `http://127.0.0.1`, loopback or not. A remote server is
+/// normally reached over HTTPS, so the page falls back to this command
+/// (`packages/web/src/shell.ts`). The action and its key gate are the same
+/// ones the listener uses, so a shell action has one implementation.
+///
+/// The action runs on a blocking worker: `pick-folder` opens a modal sheet
+/// and `connect-local` may wait for a server, and neither may occupy the IPC
+/// thread.
+#[tauri::command]
+pub(crate) async fn shell_action(
+    app: AppHandle,
+    action: String,
+    params: std::collections::HashMap<String, String>,
+) -> Result<serde_json::Value, String> {
+    let params = params.into_iter().collect::<Vec<_>>();
+    tauri::async_runtime::spawn_blocking(move || {
+        bridge_reply_to_result(handle_shell_action(&app, &action, &params))
+    })
+    .await
+    .map_err(|e| format!("shell action task failed: {e}"))?
+}
+
 /// Answer one bridge action. `action` is everything after `/shell/`
 /// (`state`, `connect-remote`, `update/status`, ...) and `params` are the
 /// query string's parameters (`key` included).
@@ -352,5 +395,37 @@ pub(crate) fn handle_shell_action(
             bridge_json(StatusCode::OK, serde_json::json!({ "path": path }))
         }
         _ => bridge_error(StatusCode::NOT_FOUND, "unknown action"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bridge_reply_success_is_the_json_body() {
+        let reply = (StatusCode::OK, br#"{"ok":true}"#.to_vec());
+        assert_eq!(
+            bridge_reply_to_result(reply).unwrap(),
+            serde_json::json!({ "ok": true })
+        );
+    }
+
+    #[test]
+    fn bridge_reply_failure_uses_the_error_message() {
+        let reply = (
+            StatusCode::UNAUTHORIZED,
+            br#"{"error":"invalid key"}"#.to_vec(),
+        );
+        assert_eq!(bridge_reply_to_result(reply).unwrap_err(), "invalid key");
+    }
+
+    #[test]
+    fn bridge_reply_failure_without_a_message_names_the_status() {
+        let reply = (StatusCode::BAD_GATEWAY, b"{}".to_vec());
+        assert_eq!(
+            bridge_reply_to_result(reply).unwrap_err(),
+            "shell action failed: 502 Bad Gateway"
+        );
     }
 }

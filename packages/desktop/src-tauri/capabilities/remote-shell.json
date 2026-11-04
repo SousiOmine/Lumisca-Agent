@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-shell",
+  "description": "Shell bridge actions for pages served by a remote server",
+  "local": false,
+  "remote": {
+    "urls": ["http://*:*", "https://*:*"]
+  },
+  "windows": ["main"],
+  "permissions": ["allow-shell-action"]
+}

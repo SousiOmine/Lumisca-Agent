@@ -112,6 +112,10 @@ pub(crate) struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // The loopback bridge's actions, for pages that cannot reach it
+        // (an HTTPS page's mixed-content fetch to loopback is blocked by
+        // WebKit). See `bridge::shell_action`.
+        .invoke_handler(tauri::generate_handler![bridge::shell_action])
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         // OS notifications for background agent events (see notify.rs).
