@@ -31,10 +31,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       xterm fonts-noto-cjk dbus-x11 \
       at-spi2-core libglib2.0-bin python3-pyatspi \
       chromium \
-      curl ca-certificates \
+      curl ca-certificates gnupg \
       git tmux ripgrep less \
       sudo \
  && rm -rf /var/lib/apt/lists/*
+
+# The GitHub CLI, from the official apt repository.
+#
+# `git` is in the base install; `gh` is what makes a repository usable without
+# a browser — cloning a private one, opening a pull request, reading an issue.
+# Debian's own package is not shipped in a usable version, and the official
+# repository is the upstream's own, signed by its key (which is written to a
+# path apt reads, so the repository stays trusted on later `apt-get update`
+# runs inside the machine).
+RUN set -eu; \
+    mkdir -p /etc/apt/keyrings; \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+    chmod 0644 /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gh; \
+    rm -rf /var/lib/apt/lists/*
 
 # Node.js, from the official build: the Debian package is older than what
 # most current tooling requires, and adding a third-party apt repository is a

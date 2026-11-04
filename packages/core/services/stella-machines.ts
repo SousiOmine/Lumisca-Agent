@@ -24,6 +24,7 @@ import {
 } from "../vm/shell.ts";
 import { createVmScreen } from "../vm/screen.ts";
 import { createVmTools } from "../vm/tools.ts";
+import { createVmLaunchTool } from "../vm/launcher.ts";
 import { createVmAskUserTool } from "../vm/ask-user.ts";
 import { createVmSemanticTools } from "../vm/semantic.ts";
 import { createRoutineTools } from "../routine/tools.ts";
@@ -313,6 +314,7 @@ export class StellaMachines {
       refreshSkills: () => this.deps.machine.refreshSkills(),
       screenTools: [
         ...createVmTools({ screen: createVmScreen({ exec, execBytes }) }),
+        createVmLaunchTool({ exec }),
         createVmAskUserTool({
           handover: this.handoverFor(session.id),
         }),

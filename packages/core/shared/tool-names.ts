@@ -67,6 +67,10 @@ export const TOOL_VM_ACT = "vm_act";
 export const TOOL_VM_FIND = "vm_find";
 export const TOOL_VM_DO = "vm_do";
 export const TOOL_VM_WAIT = "vm_wait";
+/** Start a GUI program in the machine (`vm_launch`), and list the ones
+ * installed. Preloaded for the same reason as the screen tools: an agent that
+ * cannot see what is installed starts a program it assumes exists. */
+export const TOOL_VM_LAUNCH = "vm_launch";
 /** Hand the machine's screen to the user and wait (`vm_ask_user`). Preloaded
  * for the same reason as the screen tools: an agent must know that asking a
  * person is an option, or it will try to type the password itself. */

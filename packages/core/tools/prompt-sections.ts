@@ -18,6 +18,7 @@ import {
   TOOL_VM_ASK_USER,
   TOOL_VM_DO,
   TOOL_VM_FIND,
+  TOOL_VM_LAUNCH,
   TOOL_VM_SCREENSHOT,
   TOOL_VM_WAIT,
   TOOL_WEB_FETCH,
@@ -310,6 +311,17 @@ const VM_ACT_SECTION: PromptSection = {
     "leaves a record.",
 };
 
+/** Starting a program on the machine's screen. Keyed on its tool, like the
+ * other machine sections. */
+const VM_LAUNCH_SECTION: PromptSection = {
+  name: "vm:launch",
+  order: ORDER.tool + 146,
+  requires: [TOOL_VM_LAUNCH],
+  text: "- The machine has a display but no desktop menu: a program that is " +
+    'not started\n  with vm_launch has no window. `action: "list"` says ' +
+    "what is installed — check\n  it instead of assuming a name.",
+};
+
 /** The conversation's own history, in a stella session. Keyed on the tool:
  * a session whose history was condensed must be told the earlier turns are
  * still reachable, and one without the tool would be sent looking for it.
@@ -500,6 +512,7 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   VM_WAIT_SECTION,
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
+  VM_LAUNCH_SECTION,
   VM_ASK_USER_SECTION,
   SEND_CHAT_SECTION,
   HISTORY_SEARCH_SECTION,
