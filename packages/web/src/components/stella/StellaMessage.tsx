@@ -201,6 +201,8 @@ function AgentBubble({
   onSend: (text: string) => void;
   time: ComponentChildren;
 }) {
+  const { copied, copy } = useCopy(entry.text);
+  const t = useT();
   return (
     <div
       className={`stella-msg${showAvatar ? "" : " continued"}`}
@@ -231,7 +233,31 @@ function AgentBubble({
           )}
           <AttachmentCard attachments={entry.attachments} base={attachBase} />
         </div>
-        <div className="msg-meta start">{time}</div>
+        {
+          /* The time, then the copy control — the same shape as the reader's
+           * own message, only mirrored: there the buttons come before the
+           * clock because the bubble is right-aligned, here the text starts
+           * on the left, so the clock comes first and the button closes the
+           * row. Copying the agent's words is what a reader does with an
+           * answer (a command, a path, a paragraph) and it was the one
+           * message they could not take away. */
+        }
+        <div className="msg-meta start">
+          {time}
+          {entry.text && (
+            <button
+              type="button"
+              className="msg-action-btn"
+              onClick={() => void copy()}
+              title={t("chat.message.copy")}
+              aria-label={t("chat.message.copy")}
+            >
+              {copied
+                ? <IconCheck size={16} stroke={2} />
+                : <IconClipboard size={16} stroke={1.5} />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

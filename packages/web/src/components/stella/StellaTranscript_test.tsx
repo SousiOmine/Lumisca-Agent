@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../../i18n.ts";
@@ -161,14 +161,26 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
   assertStringIncludes(html, "msg-user-wrap");
   assertStringIncludes(html, "stella-msg");
   assertStringIncludes(html, "stella-msg-avatar");
-  // Each message carries the time it was said under it, and the time is the
-  // RIGHTMOST thing there: the actions come first, so the clock does not
-  // move when a button appears on hover.
+  // Each message carries the time it was said under it.
   assertStringIncludes(html, "msg-time");
-  const meta = html.slice(html.indexOf('class="msg-meta"'));
-  const order = [...meta.matchAll(/class="(msg-action-btn|msg-time)"/g)]
+  // The reader's own message: the time is the RIGHTMOST thing there, so the
+  // clock does not move when the actions appear on hover. (The agent's
+  // message mirrors it — the clock first, then its copy control — because
+  // that text starts on the left.)
+  const userMeta = html.slice(
+    html.indexOf('class="msg-meta"'),
+    html.indexOf('class="msg-meta start"'),
+  );
+  const order = [...userMeta.matchAll(/class="(msg-action-btn|msg-time)"/g)]
     .map((match) => match[1]);
   assertEquals(order.at(-1), "msg-time", order.join(","));
+  // …and the agent's answer can be copied too, after its clock.
+  const agentMeta = html.slice(html.indexOf('class="msg-meta start"'));
+  const agentOrder = [
+    ...agentMeta.matchAll(/class="(msg-action-btn|msg-time)"/g),
+  ].map((match) => match[1]);
+  assertEquals(agentOrder[0], "msg-time", agentOrder.join(","));
+  assert(agentOrder.includes("msg-action-btn"), agentOrder.join(","));
 });
 
 Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", () => {

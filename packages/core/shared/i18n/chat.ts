@@ -87,8 +87,8 @@ export const chat = {
 
   // --- composer ------------------------------------------------------------
   "chat.composer.placeholder": {
-    ja: "指示・メッセージを入力してください…",
-    en: "Type a message or instruction…",
+    ja: "メッセージを入力...",
+    en: "Type a message...",
   },
   "chat.composer.submit": { ja: "送信", en: "Send" },
   /** The composer's own name: the placeholder disappears once the reader
@@ -160,8 +160,8 @@ export const chat = {
       "No provider is configured, so no model can be selected. Register an API key in the settings.",
   },
   "chat.newSession.placeholder": {
-    ja: "依頼するタスクを入力してください…",
-    en: "Enter a task to start…",
+    ja: "メッセージを入力...",
+    en: "Type a message...",
   },
   "chat.newSession.submitCreating": { ja: "作成中…", en: "Creating…" },
   "chat.newSession.submitStart": { ja: "開始", en: "Start" },
@@ -335,8 +335,8 @@ export const chat = {
     en: "Could not open the conversation: {error}",
   },
   "chat.stella.placeholder": {
-    ja: "依頼を入力してください…",
-    en: "Enter a request…",
+    ja: "メッセージを入力...",
+    en: "Type a message...",
   },
   /** A file a prompt brought into the machine that the machine no longer
    * has (the agent moved or deleted it): the conversation says so rather
