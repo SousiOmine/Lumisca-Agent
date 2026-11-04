@@ -1,6 +1,6 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "preact/compat";
-import { settingsStore } from "../settingsStore.ts";
-import { errorMessage as errorText, THEME_KEY } from "@lumisca/core/shared";
+import { useCallback, useLayoutEffect } from "preact/compat";
+import { THEME_KEY } from "@lumisca/core/shared";
+import { usePreference } from "./usePreference.ts";
 import type { ThemeSetting } from "../types.ts";
 
 /** Resolve a theme setting to the color scheme applied to <html data-theme>.
@@ -15,51 +15,35 @@ export function resolveTheme(setting: ThemeSetting): "light" | "dark" {
  * server settings; the resolved scheme is applied to <html data-theme> and
  * follows OS changes while "system" is selected.
  *
- * A failed persist reverts the choice and reports the error: the applied
- * scheme is what the server stored, so a silent failure would make the
- * setting vanish on the next reload. */
+ * A failed persist reverts the choice and reports the error (see
+ * usePreference): the applied scheme is what the server stored, so a silent
+ * failure would make the setting vanish on the next reload. */
 export function useTheme(initial: ThemeSetting = "dark"): {
   theme: ThemeSetting;
   setTheme: (next: ThemeSetting) => void;
   error: string | null;
 } {
-  const [setting, setSetting] = useState<ThemeSetting>(initial);
-  const [error, setError] = useState<string | null>(null);
-  // The value the last persist attempt wrote. A failed request must roll
-  // back to what the server still holds, but only while the user has not
-  // picked something newer in the meantime — reading `setting` from the
-  // callback closure would revert a later choice with a stale value.
-  const chosen = useRef(setting);
+  const apply = useCallback((next: ThemeSetting) => {
+    document.documentElement.dataset.theme = resolveTheme(next);
+  }, []);
+  const { value, set, error } = usePreference<ThemeSetting>({
+    key: THEME_KEY,
+    initial,
+    apply,
+  });
 
+  // "system" follows the OS while it is selected: the preference only says
+  // which scheme to use, the media query is what changes it.
   useLayoutEffect(() => {
-    document.documentElement.dataset.theme = resolveTheme(setting);
-    if (setting !== "system" || typeof matchMedia !== "function") return;
+    apply(value);
+    if (value !== "system" || typeof matchMedia !== "function") return;
     const mq = matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => {
+    const onChange = () => {
       document.documentElement.dataset.theme = mq.matches ? "dark" : "light";
     };
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, [setting]);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [value, apply]);
 
-  const setTheme = useCallback((next: ThemeSetting) => {
-    const previous = chosen.current;
-    if (previous === next) return;
-    chosen.current = next;
-    setError(null);
-    // Optimistic: the scheme applies immediately; a failed persist rolls
-    // back to the value the server still holds.
-    setSetting(next);
-    // Through the settings store, not `api.setSetting` directly: the store is
-    // what every other screen reads, so a theme picked here must land there
-    // too (a panel open beside this one would otherwise keep the old value).
-    settingsStore.set(THEME_KEY, next).catch((failure) => {
-      setError(errorText(failure));
-      if (chosen.current !== next) return; // a newer choice superseded this one
-      chosen.current = previous;
-      setSetting(previous);
-    });
-  }, []);
-
-  return { theme: setting, setTheme, error };
+  return { theme: value, setTheme: set, error };
 }
