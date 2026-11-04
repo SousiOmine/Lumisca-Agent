@@ -43,10 +43,11 @@ Deno.test("packageEntryPath keeps the package layout and refuses the rest", () =
     packageEntryPath(`./dir/stella-container/entry.sh`),
     "stella-container/entry.sh",
   );
-  // The helper the stella machine's image installs sits one level deeper.
+  // The accessibility helper ships beside the Containerfile, not below it:
+  // the reader a running server already carries accepts one directory deep.
   assertEquals(
-    packageEntryPath(`${LINUX_PREFIX}/stella-container/helper/a11y.py`),
-    "stella-container/helper/a11y.py",
+    packageEntryPath(`${LINUX_PREFIX}/stella-container/a11y.py`),
+    "stella-container/a11y.py",
   );
 
   for (
@@ -57,8 +58,8 @@ Deno.test("packageEntryPath keeps the package layout and refuses the rest", () =
       "./assets.json",
       "../escape.txt",
       `${WINDOWS_PREFIX}/../../escape.txt`,
-      `${WINDOWS_PREFIX}/nested/deeper/even-deeper/file.txt`,
-      `${WINDOWS_PREFIX}/stella-container/helper/deeper/a11y.py`,
+      `${WINDOWS_PREFIX}/nested/deeper/file.txt`,
+      `${WINDOWS_PREFIX}/stella-container/helper/a11y.py`,
       `C:/Windows/system32/evil.exe`,
       `C:\\Windows\\system32\\evil.exe`,
       `${WINDOWS_PREFIX}\\lumisca-server.exe`,
@@ -192,7 +193,7 @@ Deno.test("zip: unsafe paths and duplicate names are refused", async () => {
   );
   const nested = await writeArchive(
     await buildZip([{
-      name: `${WINDOWS_PREFIX}/nested/deeper/even-deeper/evil.txt`,
+      name: `${WINDOWS_PREFIX}/nested/deeper/evil.txt`,
       content: "x",
     }]),
     "nested.zip",

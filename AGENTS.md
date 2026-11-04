@@ -148,7 +148,8 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
 - **ツールレジストリの分離**: セッションは `main` と `subagent` の 2 つのレジストリを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけに入ります。stella のサブエージェントは VM の中で code mode と同じツール集合で動きますが、この 3 種は `tool_search` でも見つかりません。
 - **作業フォルダとパスの境界**: 相対パスと `bash` は `/home/agent/agents/<agent id>` を基点にしますが、境界はマシンのホーム `/home/agent` です。ほかの相手のフォルダにも絶対パスで触れます（`packages/core/vm/fs.ts` の `resolveVmPath`）。境界を変えるときはシステムプロンプト（`packages/core/tools/system-prompt.ts`）の記述も合わせてください。
 - **GUI は意味で操作する（`vm_find` / `vm_do` / `vm_wait`）**: 画面のツール（`vm_screenshot` / `vm_act`）は画素で動き、座標を読んで渡すしかない対象（キャンバス、ドラッグ、ゲーム）のためのものです。ボタンを押す用途には、要素を role と name で指す 3 つを使います。行為はアプリ自身のアクセシビリティインターフェースを通るので**ポインタが動かず、隣の要素に当たりません**。結果は読み戻して `delivered_verified` か `delivered_unverified` を返します（後者はアプリが受け取ったが読める変化が無い、という意味です。繰り返すと二重に押すことになります）。
-  - **実装は VM の中の 1 本の Python**（`packages/core/vm/container/helper/a11y.py`）。Deno 側（`vm/semantic.ts`）は要求を JSON で渡し、返った JSON を文にするだけです。木は機械の中からしか触れないためで、role の対応やキーボードへの落とし方も向こうにあります。
+  - **実装は VM の中の 1 本の Python**（`packages/core/vm/container/a11y.py`）。Deno 側（`vm/semantic.ts`）は要求を JSON で渡し、返った JSON を文にするだけです。木は機械の中からしか触れないためで、role の対応やキーボードへの落とし方も向こうにあります。
+  - **同梱ファイルを入れ子にしない**: 配布アーカイブのパッケージ内は**1 段まで**です（`stella-container/Containerfile` は可、`stella-container/helper/a11y.py` は不可）。アーカイブを読むのは**動いているサーバーのバイナリ**で、その深さの規則はビルド時に焼き込まれていて後から変えられません。深くすると、その版より前にインストールされたサーバーが更新を適用できなくなります（v0.10.7 → v0.10.8 がこれで失敗しました。ヘルパーを `helper/` に置いたのが原因）。`archive.ts` の `MAX_PACKAGE_DEPTH` を上げるのは、旧版からの更新を諦めるときだけにしてください。
   - **ref はスナップショットに属します**（`@s12345:e7`）。`vm_do` は保存した経路をたどり、role と name が変わっていれば拒否します。窓が変わったら `vm_find` からやり直す、が契約です。
   - **経路は walk が組み立てます**。ノードに親を聞いて作ると、デスクトップまでの添字（アプリ自身の位置や `-1`）が混ざり、次の解決で別の要素を指します。`a11y.py` の `walk` が降りながら tuple で持ちます。
   - **読み戻しも同一性（role と name）で引き直します**。行為は木を変える（メニューが閉じて行の中身が入れ替わる）ので、行為前の経路は行為後には別の要素を指します。見つからなければ `delivered_unverified` です。
@@ -156,7 +157,7 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
   - **xterm のようにバスへ出ないアプリ**は `vm_find` に出ません。エラーは動いているアプリ名を返すので、そこから判断します。
 - **アクセシビリティはイメージ側の設定**: 追加パッケージは `at-spi2-core`・`libglib2.0-bin`・`python3-pyatspi` です。`entry.sh` がセッション D-Bus を固定パス（`/tmp/lumisca-dbus/session.sock`）で立て、**アプリを起動する前に** `gsettings set org.gnome.desktop.interface toolkit-accessibility true` を実行します。GTK アプリはこの値を起動時に 1 度だけ読み、false なら ATK ブリッジを読み込みません（後から変えても、そのプロセスはバスに出ません）。AT-SPI バス自体は D-Bus の activation で立ち上がるので、launcher を明示的に起動する必要はありません。Chromium には `--force-renderer-accessibility` を付けます。これが無いと**ページの中身**（ボタン、入力欄、表のセル）がバスに出ず、窓枠だけになります。
   - 契約値は `contract.ts` の `VM_DBUS_ADDRESS` / `VM_A11Y_GSETTINGS_KEY` / `VM_A11Y_HELPER` で、`verifyImageContract` が 1 回の `podman exec` で検査します（バスの場所、`toolkit-accessibility` が true、ヘルパーが動く）。どれも欠けると `vm_find` は「アプリが無い」と答えるので、起動時に落とします。
-  - `containerFilesDigest` は**サブディレクトリも含めます**。`helper/a11y.py` は `helper/` にあり、これを外すとヘルパーだけを直したときにイメージが作り直されません。
+  - `containerFilesDigest` は**サブディレクトリも含めます**。将来コンテナ定義の中にディレクトリを足すと（配布アーカイブには入れ子で入れられませんが、イメージのビルド元としては自由です）、それを外すとそのファイルだけを直したときにイメージが作り直されません。
   - スクロールは X11 のホイールボタン（4 上・5 下・6 左・7 右）で、**ボタン名はホイールが転がる向き**です。ツールの「positive scrolls down」に合わせて、正の値で 5 を送ります。単位はノッチ（`VM_SCROLL_NOTCH` = 100、上限 20）。
 - **画面の受け渡し**: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。待機中は画面ペインが操作可能になり、エージェントは止まっています。待ちを解く経路（完了・停止・セッション終了）を増やすときは `cancelAll` とイベントの後始末も合わせて確認してください。
 - **ルーチン**: スケジュールは `daily` / `weekly` / `every` の 3 種類だけで、cron は扱いません。次回時刻は「保存済みの値」ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます（後回しにすると、長い実行が重複して走ります）。

@@ -188,7 +188,7 @@ const base = `http://127.0.0.1:${port}`;
 const workDir = await Deno.makeTempDir({ prefix: "lumisca-smoke-" });
 
 /** Copy a directory tree (the stella machine's container files: the
- * Containerfile, the entry script, and the `helper/` the image installs).
+ * Containerfile, the entry script and the accessibility helper).
  * A depth written here would silently drop the files below it, so it
  * descends as far as the tree does. */
 async function copyTree(from: string, to: string): Promise<void> {

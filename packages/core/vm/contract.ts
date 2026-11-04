@@ -129,8 +129,8 @@ export const VM_SCROLL_MAX_NOTCHES = 20;
 
 /** The helper the semantic tools run inside the machine (`vm_find` / `vm_do`
  * / `vm_wait`): a Python program over `python3-pyatspi`. Written into the
- * image by the Containerfile from `helper/`, so the copy on disk and the copy
- * that runs are the same file (see the digest label). */
+ * image by the Containerfile from the file beside it, so the copy on disk and
+ * the copy that runs are the same file (see the digest label). */
 export const VM_A11Y_HELPER = "/usr/local/lib/lumisca/a11y.py";
 
 /** Timeouts for the container operations. Building takes minutes on a first

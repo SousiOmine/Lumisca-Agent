@@ -83,7 +83,12 @@ RUN chmod 0755 /usr/local/bin/entry.sh
 # run inside the machine. Copied into the image rather than shipped as text on
 # every call: it is a program of a few hundred lines, and `podman exec` starts
 # a process per tool call.
-COPY helper/a11y.py /usr/local/lib/lumisca/a11y.py
+#
+# It sits beside this file, not in a subdirectory: the update reader a running
+# server already carries accepts package entries at most one directory deep
+# (the `stella-container/` the container files ship in), and a package it
+# cannot read is one it cannot install.
+COPY a11y.py /usr/local/lib/lumisca/a11y.py
 RUN chmod 0644 /usr/local/lib/lumisca/a11y.py
 
 # xdotool, scrot and Chromium read DISPLAY from the environment; entry.sh's

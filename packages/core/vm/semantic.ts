@@ -16,7 +16,7 @@
  * VNC does not see their cursor jump.
  *
  * THE TREE IS READ INSIDE THE MACHINE. Everything here is one `podman exec`
- * of a Python helper (`vm/container/helper/a11y.py`) that walks AT-SPI and
+ * of a Python helper (`vm/container/a11y.py`) that walks AT-SPI and
  * prints one JSON object; this layer parses that and turns it into a tool
  * result. The helper is where the platform knowledge lives (roles, actions,
  * the keyboard fallback for a web field), because the tree is only reachable

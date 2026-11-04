@@ -195,9 +195,11 @@ async function stageStellaContainer(outDir: string): Promise<void> {
 /**
  * Copy the container definition beside the binary.
  *
- * One level of subdirectories is included (the helper the image installs
- * lives in `helper/`): the Containerfile names that path, so a copy that
- * flattened it would build an image whose `COPY` finds nothing.
+ * The whole tree is copied, subdirectories included: the Containerfile names
+ * its inputs by relative path, so a flattened copy would build an image whose
+ * `COPY` finds nothing. The files themselves sit flat today (the package
+ * layout a running server can read is one directory deep); the walk stays
+ * recursive so that fact is not a hidden assumption of this function.
  */
 async function copyContainerTree(
   source: string,

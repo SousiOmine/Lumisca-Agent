@@ -510,21 +510,20 @@ Deno.test("container files digest: every file in the directory counts", async ()
   }
 });
 
-Deno.test("container files digest: a file in a subdirectory counts", async () => {
-  // The accessibility helper lives in helper/, and the Containerfile COPYs it
-  // by that path. A digest that skipped subdirectories would keep an image
-  // whose helper is out of date for the life of the installation, and the
-  // machine would answer every semantic call from the old program.
+Deno.test("container files digest: a nested file still counts", async () => {
+  // The container directory ships as a tree and the digest walks it: a
+  // digest that only hashed the top level would keep an image whose files
+  // are out of date for the life of the installation.
   const dir = await containerDir();
   try {
     const before = await containerFilesDigest(dir);
-    await Deno.mkdir(join(dir, "helper"));
-    await Deno.writeTextFile(join(dir, "helper", "a11y.py"), "print(1)\n");
+    await Deno.mkdir(join(dir, "nested"));
+    await Deno.writeTextFile(join(dir, "nested", "extra.txt"), "one\n");
     const after = await containerFilesDigest(dir);
     assert(after !== before, "adding a nested file must change the digest");
 
     // An edit inside it must too, not only its presence.
-    await Deno.writeTextFile(join(dir, "helper", "a11y.py"), "print(2)\n");
+    await Deno.writeTextFile(join(dir, "nested", "extra.txt"), "two\n");
     const edited = await containerFilesDigest(dir);
     assert(edited !== after, "editing a nested file must change the digest");
   } finally {

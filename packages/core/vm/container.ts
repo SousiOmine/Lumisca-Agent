@@ -212,10 +212,10 @@ function podman(args: readonly string[]): string[] {
  *
  * The whole directory, not only the Containerfile: it COPYs entry.sh and the
  * accessibility helper, and a changed helper is as much a different machine as
- * a changed instruction. Subdirectories are walked too (the helper lives in
- * `helper/`), and a file's path relative to the directory goes in with the
- * bytes, so adding, removing, renaming or moving a file also changes the
- * digest. Exported for the test that proves an edit changes it.
+ * a changed instruction. Subdirectories are walked too, and a file's path
+ * relative to the directory goes in with the bytes, so adding, removing,
+ * renaming or moving a file also changes the digest. Exported for the test
+ * that proves an edit changes it.
  */
 export async function containerFilesDigest(
   containerDir: string,
