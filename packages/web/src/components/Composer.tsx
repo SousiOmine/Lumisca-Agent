@@ -491,6 +491,31 @@ export function Composer({
         </p>
       )}
       <div className="input-box-wrap">
+        {
+          /* A picker is the only way to attach on a phone: there is no drag
+           * and nothing to paste. The control sits at the LEFT of the field,
+           * where the writing starts — the row below belongs to what the
+           * message will be (model, context, send), and a paperclip there
+           * read as one more thing about sending. Hidden input, visible
+           * button: the native control is drawn by the OS and cannot take
+           * the app's styling. */
+        }
+        <input
+          ref={pickerRef}
+          type="file"
+          multiple
+          hidden
+          onChange={handlePicked}
+        />
+        <button
+          type="button"
+          className="icon-btn input-attach"
+          onClick={() => pickerRef.current?.click()}
+          title={t("chat.composer.attach.pick")}
+          aria-label={t("chat.composer.attach.pick")}
+        >
+          <IconPaperclip size={15} />
+        </button>
         <textarea
           ref={textareaRef}
           className={`input-box${large ? " large" : ""}`}
@@ -638,28 +663,6 @@ export function Composer({
           placement={modelPlacement}
         />
         <div className="input-actions">
-          {
-            /* A picker is the only way to attach on a phone: there is no
-           * drag and nothing to paste. Hidden input, visible button — the
-           * native control is drawn by the OS and cannot take the app's
-           * styling. */
-          }
-          <input
-            ref={pickerRef}
-            type="file"
-            multiple
-            hidden
-            onChange={handlePicked}
-          />
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => pickerRef.current?.click()}
-            title={t("chat.composer.attach.pick")}
-            aria-label={t("chat.composer.attach.pick")}
-          >
-            <IconPaperclip size={15} />
-          </button>
           {contextUsage !== undefined && (
             <div className="ctx-wrap" ref={ctxRef}>
               <ContextUsageTrigger
@@ -694,7 +697,7 @@ export function Composer({
           )}
           <button
             type="button"
-            className="btn primary"
+            className={`btn primary${submitIconOnly ? "" : " btn-with-label"}`}
             onClick={onSubmit}
             disabled={submitDisabled}
             aria-label={submitIconOnly ? submitLabel : undefined}

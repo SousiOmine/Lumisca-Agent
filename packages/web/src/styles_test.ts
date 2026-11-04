@@ -571,3 +571,58 @@ Deno.test("every class a stylesheet defines is referenced somewhere", async () =
       missing.sort().join("\n"),
   );
 });
+
+Deno.test("the composer draws one frame, and its buttons are one size", async () => {
+  // Three rules a reader sees at once. Each was wrong in a way a screenshot
+  // shows and a type check does not:
+  //
+  // - the field drew its own border once it took focus, so the capsule
+  //   around it had a box drawn inside it;
+  // - the attach control sat with the send buttons, on the far side of the
+  //   field from where the writing starts;
+  // - the stop and send buttons carried one glyph each but were as wide as
+  //   their padding made them, so they were not square.
+  const css = await Deno.readTextFile(
+    new URL("./styles/composer.css", import.meta.url),
+  );
+
+  // The field keeps no frame of its own, in either focus state.
+  const field =
+    /\.input-box,\n\.input-box:focus,\n\.input-box:focus-visible \{([^}]*)\}/;
+  const fieldBlock = field.exec(css);
+  assertEquals(fieldBlock !== null, true, "the field's rule must cover focus");
+  assertEquals(
+    /border:\s*none/.test(fieldBlock![1]!),
+    true,
+    "the field must not draw a border",
+  );
+  assertEquals(
+    /outline:\s*none/.test(fieldBlock![1]!),
+    true,
+    "the field must not draw an outline",
+  );
+
+  // The attach control belongs to the field's row.
+  const wrap = /\.input-box-wrap \{([^}]*)\}/.exec(css);
+  assertEquals(wrap !== null, true, ".input-box-wrap must exist");
+  assertEquals(
+    /display:\s*flex/.test(wrap![1]!),
+    true,
+    "the attach control must sit beside the field, not in the action row",
+  );
+  assertEquals(
+    /\.input-attach \{([^}]*)\}/.exec(css) !== null,
+    true,
+    ".input-attach must be placed",
+  );
+
+  // The icon-only buttons are square, at one size.
+  const actions = /\.input-actions \.btn:not\(\.btn-with-label\) \{([^}]*)\}/
+    .exec(css);
+  assertEquals(actions !== null, true, "the icon buttons need a shape rule");
+  assertEquals(
+    /aspect-ratio:\s*1/.test(actions![1]!),
+    true,
+    "a one-glyph button must be square",
+  );
+});

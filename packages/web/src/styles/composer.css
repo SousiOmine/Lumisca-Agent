@@ -42,8 +42,24 @@
     box-shadow var(--lum-dur-fast) var(--lum-ease-out);
 }
 
+/* The field and the attach control beside it. The textarea keeps the whole
+ * remaining width; the button sits where the writing starts. */
 .input-box-wrap {
   position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+/* Pinned to the first line rather than centred: the field grows downward as
+ * the message does, and a button that drifts to the middle of a long draft
+ * is no longer "beside the writing". Its 32px square is the app's icon
+ * target (see .icon-btn); `flex: none` keeps it that size inside the row. */
+.input-attach {
+  flex: none;
+  margin-top: 1px;
+  width: 32px;
+  height: 32px;
 }
 
 /* The remaining-length line: quiet, and only present near the cap. */
@@ -388,7 +404,14 @@
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
-.input-box {
+/* No frame of its own, focused or not: the composer's rounded capsule IS the
+ * frame, and a second border inside it drew a box within a box as soon as
+ * the field took focus (the keyboard ring the rest of the app needs would
+ * otherwise appear here, where the capsule already answers the focus). The
+ * rule below is what keeps that promise under `:focus-visible` too. */
+.input-box,
+.input-box:focus,
+.input-box:focus-visible {
   width: 100%;
   resize: none;
   background: transparent;
@@ -425,6 +448,22 @@
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+/* Stop and send: the two buttons that carry one glyph and no words.
+ *
+ * They are squares, not capsules — an icon-only control reads as a target
+ * and the reader aims at its centre, so a shape whose width follows its
+ * padding makes one of them a different size from the other for no reason
+ * (the stop glyph and the send glyph are both 14px). `aspect-ratio` is what
+ * says "square": the height comes from the icon and the padding, and the
+ * width follows it, so neither growing the glyph nor changing the font
+ * breaks the pair. */
+.input-actions .btn:not(.btn-with-label) {
+  aspect-ratio: 1;
+  width: 32px;
+  padding: 0;
+  justify-content: center;
 }
 
 .input-composer .model-switch {
