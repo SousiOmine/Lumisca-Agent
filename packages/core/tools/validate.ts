@@ -57,16 +57,28 @@ export function requireOneOf<T extends string>(
 }
 
 /**
- * Enforce the numeric bounds a tool's schema declares. Called at the adapter
- * boundary, so every call — preloaded tools, discoverable tools, the
+ * Enforce what a tool's schema declares about its arguments. Called at the
+ * adapter boundary, so every call — preloaded tools, discoverable tools, the
  * sub-agent's tools — is checked the same way, and a tool's `execute` never
- * sees an out-of-range value.
+ * sees a value the schema forbids.
  *
- * Only top-level integers are examined, which is where every bound in this
- * codebase lives (a nested range would need the same declaration walk, so
- * extend this when one appears). Values of another type are left to the
- * tool: the schema's type is what the provider was told, and a mismatch is
- * the tool's own contract to report.
+ * Two checks, both here for the same reason (the schema is what the provider
+ * was TOLD, not what it sends):
+ *
+ * - Required arguments must be present. JSON Schema `required` is advisory
+ *   at the wire, and a model omits a key it considers obvious — the `cwd` of
+ *   `bash` went missing in roughly one call in twenty, and every one of them
+ *   failed deep inside path resolution with "Path must be a non-empty
+ *   string", which names neither the argument nor the tool. Reporting the
+ *   omission here costs nothing and says which argument to add.
+ * - Declared integer bounds must hold. A model can (and does) send
+ *   `max_results: -5`.
+ *
+ * Only top-level values are examined, which is where every declaration in
+ * this codebase lives (a nested one would need the same walk, so extend this
+ * when one appears). Values of another type are left to the tool: a type
+ * mismatch is the tool's own contract to report, and its error says more
+ * about what the value is used for.
  */
 export function assertSchemaBounds(
   parameters: ToolSchema,
@@ -75,6 +87,18 @@ export function assertSchemaBounds(
   if (parameters.type !== "object" || params === null) return;
   if (typeof params !== "object" || Array.isArray(params)) return;
   const properties = (parameters as SchemaObject).properties;
+  const sent = params as Record<string, unknown>;
+  for (const name of (parameters as SchemaObject).required) {
+    // `null` counts as missing: it is what a model sends for a field it chose
+    // not to fill, and it reaches the tool as a value no argument parser
+    // accepts (path resolution sees a non-string and says "Path must be a
+    // non-empty string"). A required argument is either answered or absent.
+    if (sent[name] !== undefined && sent[name] !== null) continue;
+    throw new CoreError(
+      `Missing required argument: ${name}. Send it and call again.`,
+      "invalid",
+    );
+  }
   for (const [name, schema] of Object.entries(properties)) {
     if (schema.type !== "integer") continue;
     const value = (params as Record<string, unknown>)[name];

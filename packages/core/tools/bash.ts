@@ -33,7 +33,10 @@ export const MAX_BASH_TIMEOUT_SEC = 3600;
 
 const bashSchema = object({
   cwd: string(
-    "Working directory: a workspace folder name (e.g. `Aaa`) or an absolute path",
+    "Working directory (required): a workspace folder name (e.g. `Aaa`) or " +
+      "an absolute path. Pass it on every call, even when the command starts " +
+      "with `cd` — this argument decides where the shell starts and the " +
+      "call fails without it.",
   ),
   command: string("The shell command to execute"),
   timeout: optional(integer(

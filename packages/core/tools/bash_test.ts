@@ -629,3 +629,30 @@ Deno.test("bash tool keeps only the newest spills and drops them on close", asyn
     await removeDirRetry(root);
   }
 });
+
+// The `cwd` argument is the one thing every call needs, and it is the one
+// thing a model has repeatedly left out. Nothing else in the tool tells it
+// so: `required` in the JSON Schema is advisory at the wire, and the
+// system prompt no longer carries per-tool guidance (removed in 4f2a5c8).
+// The before/after is measured — omit `cwd` and the call fails, every time.
+Deno.test("bash tells the model that cwd is required", async () => {
+  const { tool, root } = makeTool();
+  try {
+    const parameters = tool.parameters as {
+      properties: Record<string, { description?: string }>;
+      required: string[];
+    };
+    assertEquals(parameters.required.includes("cwd"), true);
+    const description = parameters.properties.cwd?.description ?? "";
+    // The word that went missing in e30793c, and the reason its loss was
+    // silent: the schema still listed `cwd` as required, so nothing failed
+    // until a model chose to omit it.
+    assertEquals(
+      description.includes("required"),
+      true,
+      `cwd description must say it is required: ${description}`,
+    );
+  } finally {
+    await removeDirRetry(root);
+  }
+});
