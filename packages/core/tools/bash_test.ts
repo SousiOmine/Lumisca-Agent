@@ -498,11 +498,14 @@ Deno.test("the spill is readable through the same file backend", async () => {
   }
 });
 
-Deno.test("bash tool description documents the spilled full output", async () => {
+Deno.test("bash tool description says the cut output is in a file", async () => {
   const { tool, root } = makeTool();
   try {
-    assert(tool.description.includes("full output: <path>"));
-    assert(tool.description.includes("truncated to the last 65536 bytes;"));
+    // The one fact a model needs when output is long: the rest is in a file
+    // it can read, so re-running the command is the wrong move.
+    assert(tool.description.includes("65536"));
+    assert(tool.description.includes("names a file holding the rest"));
+    assert(tool.description.includes("rather than re-running"));
   } finally {
     await removeDirRetry(root);
   }

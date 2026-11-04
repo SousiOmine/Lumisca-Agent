@@ -641,12 +641,9 @@ export function createAsyncBashTools(
     name: TOOL_ASYNC_BASH_STATUS,
     label: "Async Bash Status",
     description:
-      "Report the state of background commands started with async_bash. " +
-      "With `id`, the result is the command's state (`running (pid N) for " +
-      "Ns`, `finished after Ns (exit code N)`, or `killed`) followed by the " +
-      "tail of its output; an unknown id fails with `Unknown background " +
-      "command: <id>`. Without `id`, every command of the session is listed " +
-      "one per line as `#id  state  duration  command (cwd: …)`.",
+      "Report background commands from async_bash. With `id`: that " +
+      "command's state and the tail of its output. Without `id`: every " +
+      "command of the session, one per line.",
     parameters: statusSchema,
     execute: async (_id, params) => {
       if (params.id === undefined) {
@@ -686,12 +683,9 @@ export function createAsyncBashTools(
     name: TOOL_ASYNC_BASH_KILL,
     label: "Async Bash Kill",
     description:
-      "Stop a background command and its whole process tree. The result " +
-      "reports which of the three cases happened: `Killed background " +
-      "command #N.`, `Background command #N was already finished; nothing " +
-      "to kill.`, or `Kill requested for background command #N, but the " +
-      "process did not settle within Ns.` (the last one means the kill was " +
-      "sent but the process tree has not confirmed its exit yet).",
+      "Stop a background command and its process tree. The result says " +
+      "which happened: killed, already finished, or a kill that did not " +
+      "settle in time.",
     parameters: killSchema,
     execute: async (_id, params) => {
       const { alreadyExited, timedOut } = await manager.kill(params.id);

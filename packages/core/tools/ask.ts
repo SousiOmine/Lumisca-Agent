@@ -180,13 +180,9 @@ export function createAskTool(hub: AskHub): Tool<typeof askSchema> {
     name: TOOL_ASK,
     label: "Ask",
     description:
-      "Ask the user one or more questions and block until they answer (or " +
-      "the run is aborted). The user answers in the UI (a panel appears " +
-      "above the chat input); the selected option labels and/or the " +
-      "free-text input come back as the result. Every question offers " +
-      "predefined options (use `multi: true` when several may apply, " +
-      "`recommended` to preselect one) and a free-text field is always " +
-      'shown alongside them, so do not add your own "Other" option.',
+      "Ask the user questions and block until they answer. Each question " +
+      "offers options (`multi: true` for several, `recommended` to " +
+      'preselect) plus a free-text field, so do not add an "Other" option.',
     parameters: askSchema,
     execute: async (toolCallId, params, _signal): Promise<ToolResult> => {
       const questions = params.questions;

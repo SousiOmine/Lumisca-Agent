@@ -46,13 +46,9 @@ export function createVisualTool(
     name: TOOL_VISUAL,
     label: "Visual",
     description:
-      "Publish an image file so it can be shown in your reply. The file is " +
-      "copied into the session's visual store, and the result carries the " +
-      "markdown image snippet to paste where the image belongs. `path` takes " +
-      "the same form as the file tools (absolute, or relative with a " +
-      "workspace folder name first). Supported: PNG / JPEG / GIF / WebP / " +
-      "BMP up to 4 MiB, SVG up to 256 KiB. A path outside the workspace, a " +
-      "missing file, a non-image file, and an oversized file fail.",
+      "Publish an image so your reply can show it. The result carries the " +
+      "markdown snippet to paste where it belongs. PNG/JPEG/GIF/WebP/BMP up " +
+      "to 4 MiB, SVG up to 256 KiB.",
     parameters: visualSchema,
     execute: async (_id, params) => {
       // The backend resolves a path that does not exist yet (the file tools

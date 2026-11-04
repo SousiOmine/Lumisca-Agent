@@ -290,21 +290,13 @@ export function createEvalTool(
     name: TOOL_EVAL,
     label: "Eval",
     description:
-      "Evaluate a JavaScript/TypeScript snippet in a persistent REPL and " +
-      "return its completion value (a promise is awaited) plus anything it " +
-      "logged. Top-level `var`, `let`, `const` and function declarations " +
-      "persist between calls; re-declaring a `let`/`const` name in a later " +
-      "call fails (use `var` for mutable state, or `reset` to start over). " +
-      "Code with top-level `await` runs in an async wrapper: there the " +
-      "completion value is not returned, so print results with " +
-      "`console.log` and declare persistent state with `globalThis`. The " +
-      "snippet runs in the server process with the same permissions as bash " +
-      "(files, network, processes, env) and gets Deno, fetch, " +
-      "AbortController, TextEncoder/TextDecoder, crypto, timers and the " +
-      "other standard web globals; node internals (process, require, " +
-      "Buffer) are absent. A failure of the snippet itself is a result, not " +
-      "a tool error: it comes back as `[error]` followed by the message, " +
-      "and the session state survives for the next call.",
+      "Run a JavaScript/TypeScript snippet in a persistent REPL and return " +
+      "its completion value (a promise is awaited) and its logs. Top-level " +
+      "declarations persist between calls. Code with top-level `await` " +
+      "returns nothing, so `console.log` there. It runs with bash's " +
+      "permissions and the standard web globals (no node internals). An " +
+      "error in the snippet comes back as `[error] <message>`, not as a tool " +
+      "failure.",
     parameters: evalSchema,
     execute: async (_id, params): Promise<ToolResult> => {
       const run = async (): Promise<ToolResult> => {

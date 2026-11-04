@@ -47,12 +47,11 @@ export function createTaskTool(
     name: TOOL_TASK,
     label: "Task",
     description:
-      "Start a sub-agent on one self-contained job and return its agent id " +
-      "immediately; it runs in the background and does not see this " +
-      "conversation, so the prompt must carry every fact it needs. Its " +
-      "outcome arrives later as a `[Task <id> ...]` notification, or on " +
-      "demand through `task_output`. For independent parts, call this once " +
-      "per part in the same turn: they run at the same time.",
+      "Start a sub-agent on one self-contained job and return its id at " +
+      "once; it runs in the background and cannot see this conversation, so " +
+      "the prompt carries every fact it needs. The outcome arrives as a " +
+      "`[Task <id> ...]` notification or through `task_output`. Call it once " +
+      "per part in the same turn to run independent parts in parallel.",
     parameters: taskSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       const subagentType = requireOneOf(
@@ -107,13 +106,11 @@ export function createTaskOutputTool(
     name: TOOL_TASK_OUTPUT,
     label: "Task Output",
     description:
-      "Report one sub-agent started with the task tool: its status, and " +
-      "either its final report (once settled) or the tail of its live " +
-      "response (while running). `wait: true` blocks until the agent " +
-      "settles or `timeout_sec` elapses. A report that ends inside a " +
-      "tool-call block carries a `[warning]` that it never executed " +
-      "completely; a failed run keeps whatever it produced under " +
-      "`[partial output before the failure]`.",
+      "Report one sub-agent: its status and either its final report or the " +
+      "tail of its live response. `wait: true` blocks until it settles or " +
+      "`timeout_sec` elapses. A report ending inside a tool call is marked " +
+      "`[warning]`; a failed run keeps what it produced under `[partial " +
+      "output before the failure]`.",
     parameters: taskOutputSchema,
     async execute(_toolCallId, params, signal): Promise<ToolResult> {
       const timeoutSec = requireIntegerInRange(
@@ -152,12 +149,9 @@ export function createSendMessageTool(
     name: TOOL_SEND_MESSAGE,
     label: "Send Message",
     description:
-      "Send a message to another agent of this session (the main agent or a " +
-      "sub-agent started with the task tool). `to` is the agent id, or " +
-      '"parent" to reach the agent that started this one. The recipient ' +
-      'sees it as a "[Message from ...]" notification on its next step. ' +
-      "The call only delivers the message and reports the recipient; any " +
-      "answer arrives separately as a message from the other side.",
+      "Send a message to another agent of this session. `to` is an agent " +
+      'id, or "parent" for the one that started this agent. It arrives as a ' +
+      '"[Message from ...]" notification; the answer comes back separately.',
     parameters: sendMessageSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       const { deliveredTo } = hub.sendMessage(

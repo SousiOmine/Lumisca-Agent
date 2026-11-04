@@ -123,17 +123,11 @@ export function createReadFileTool(
   return {
     name: TOOL_READ,
     label: "Read File",
-    description:
-      "Read a file's contents as text. Append a line range to the path to " +
-      "read only those lines: `src/main.ts:50-100` (inclusive), " +
-      "`src/main.ts:50+20` (50 lines starting at 50), or " +
-      "`src/main.ts:5-16,960-973` (multiple ranges). Raster images " +
-      "(PNG/JPEG/GIF/WebP/BMP, up to 10MB) are passed to the model as images " +
-      "when read in full. A whole-file read keeps at most " +
-      `${Math.floor(DEFAULT_READ_LIMIT / 1024)}KB of the file: a file that ` +
-      "continues past that point ends with `[file continues; read with " +
-      "<path>:<line>+2000]`. A ranged read ends with `[end of file: N " +
-      "lines]` when it reached the last line.",
+    description: "Read a file as text. Append a line range to the path: " +
+      "`f.ts:50-100`, `f.ts:50+20` (20 lines from 50), `f.ts:5-16,960-973`. " +
+      "Raster images (PNG/JPEG/GIF/WebP/BMP) come back as images. A " +
+      `whole-file read keeps ${Math.floor(DEFAULT_READ_LIMIT / 1024)}KB and ` +
+      "ends with `[file continues; read with <path>:<line>+2000]`.",
     parameters: readSchema,
     execute: async (_id, params) => {
       const { path, spec, ranges } = splitRangeSuffix(params.path);
@@ -296,13 +290,10 @@ export function createEditFileTool(
     name: TOOL_EDIT,
     label: "Edit File",
     description:
-      "Replace `old_string` with `new_string` in a file. `old_string` must " +
-      "appear exactly once: a missing match fails with `old_string not " +
-      "found in <path>`, and an ambiguous match fails with `old_string " +
-      "appears N times in <path>` without changing the file — include more " +
-      "surrounding context to make it unique. Line endings (CRLF vs LF) are " +
-      "matched leniently and the replacement keeps the file's existing " +
-      "line-ending style.",
+      "Replace `old_string` with `new_string` in a file. It must appear " +
+      "exactly once: a missing match fails with `old_string not found`, an " +
+      "ambiguous one with `old_string appears N times` without changing the " +
+      "file — add surrounding context. Line endings are matched leniently.",
     parameters: editSchema,
     execute: async (_id, params) => {
       const filePath = await requireResolved(files, params.path);

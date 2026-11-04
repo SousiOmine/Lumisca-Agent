@@ -115,22 +115,11 @@ export function createBashTool(
     name: TOOL_BASH,
     label: "Bash",
     description:
-      "Execute a shell command in the workspace and return its output; a " +
-      "command that outlives `timeout` is killed. Every result ends with " +
-      "`[exit code: N]` — a kill reports the kill's exit code — followed by " +
-      "`[duration: X]`, how long the command ran (`850ms`, `1.4s`, `12s`, " +
-      "`2m 05s`). stdout and stderr are capped separately: a cut stream " +
-      "keeps its last 65536 bytes and ends with `[stdout truncated to the " +
-      "last 65536 bytes; full output: <path>]` — that file holds the whole " +
-      "stream, so read it back (bash: `sed -n '1,200p' <path>` or grep; " +
-      "`read` with offset/limit when the path is inside the workspace) " +
-      "instead of re-running the command. A command that leaves a process " +
-      "of its own holding the output streams (a `server &`) is reported " +
-      "with `[command left a process holding its output streams; later " +
-      "output is not reported]` and returns without waiting for that " +
-      "process. On Windows the shell " +
-      "is PowerShell (7 if installed, else Windows PowerShell, with Git Bash " +
-      "or cmd.exe as a fallback); on macOS/Linux it is /bin/sh.",
+      "Run a shell command in the workspace. A command that outlives " +
+      "`timeout` is killed. The result ends with `[exit code: N]` and " +
+      "`[duration: X]`. Output over 65536 bytes per stream keeps its tail " +
+      "and names a file holding the rest — read that file rather than " +
+      "re-running the command.",
     parameters: bashSchema,
     // A session with one working folder does not make the model repeat it on
     // every call (see defaultCwd). Injecting it here, before validation,

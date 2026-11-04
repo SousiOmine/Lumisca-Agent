@@ -196,15 +196,10 @@ export function createTodoTool(hub: TodoHub): Tool<typeof todoSchema> {
     name: TOOL_TODO,
     label: "Todo",
     description:
-      "Record and update the task list for the current work. Send the " +
-      "ENTIRE plan on every call — it REPLACES the previous one (there are " +
-      "no partial updates, no per-item edits): each phase with its tasks " +
-      "and their statuses. Tasks default to `pending`; the statuses are " +
-      "`pending` (not started), `in_progress` (being worked on now), " +
-      "`completed` (finished), `abandoned` (dropped on purpose), and " +
-      "`blocked` (waiting on something outside the work). An empty `phases` " +
-      "array clears the plan. The result reports the resulting counts; the " +
-      "user sees the plan live in the UI.",
+      "Record and update the task list. Send the ENTIRE plan on every call: " +
+      "it replaces the previous one. Tasks default to `pending`; the other " +
+      "statuses are `in_progress`, `completed`, `abandoned` and `blocked`. " +
+      "An empty `phases` clears the plan. The user sees it live in the UI.",
     parameters: todoSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       const phases = normalizePlan(params.phases ?? []);
