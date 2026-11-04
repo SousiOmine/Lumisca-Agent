@@ -6,6 +6,10 @@
          same on Android when the software keyboard opens (the app height is
          then reduced by the browser itself); browsers that do not know the
          key ignore it, and iOS is handled by hooks/useAppHeight.ts. -->
+    <!-- Keep this viewport (and the meta comment above it) identical to the
+         one packages/server/render.ts writes: the dev page and the served
+         page are two shells for the same app, and a phone that behaves in one
+         and not the other is a difference nobody looks for here. -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"

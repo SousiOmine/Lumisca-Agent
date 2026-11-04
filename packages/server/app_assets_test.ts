@@ -292,8 +292,9 @@ Deno.test("the app's files are compressed and revalidated", async () => {
     assertEquals(gz.headers.get("content-encoding"), "gzip");
     const js = await gz.text();
     assertEquals(js.includes("input-composer"), true);
-    // The stylesheet and the page are text too.
-    for (const path of ["/styles.css", "/"]) {
+    // The page is text too. (The stylesheet has no route of its own: the page
+    // carries it inline in a `<style>` element.)
+    for (const path of ["/"]) {
       const res = await fetch(`${base}${path}`, {
         headers: { "accept-encoding": "gzip" },
       });

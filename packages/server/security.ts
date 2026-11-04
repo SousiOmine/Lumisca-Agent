@@ -52,9 +52,14 @@ function hostnameOf(host: string | undefined): string {
 
 /** Paths the token guard lets through: the app's bundle and icon (no
  * secret in them) and the MCP OAuth callback. `/assets/initial-data.js`
- * carries the token itself and is deliberately absent. */
+ * carries the token itself and is deliberately absent.
+ *
+ * `/styles.css` used to be on this list for a route that served the
+ * stylesheet as its own file. The page inlines the CSS into its `<style>`
+ * element (render.ts), and nothing else ever requested that URL, so both the
+ * route and this exemption are gone. */
 function unguardedPath(path: string): boolean {
-  return path === "/assets/app.js" || path === "/styles.css" ||
+  return path === "/assets/app.js" ||
     path === "/favicon.png" || path === MCP_OAUTH_CALLBACK_PATH;
 }
 

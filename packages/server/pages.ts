@@ -15,12 +15,7 @@ import type { InitialData } from "@lumisca/core/shared";
 import type { AssetFile, Assets } from "./assets.ts";
 import { safePageHost } from "./security.ts";
 import { renderHtmlDocument } from "./render.ts";
-import {
-  appFileHeaders,
-  bytesEtag,
-  contentEtag,
-  etagMatches,
-} from "./app-file-headers.ts";
+import { appFileHeaders, bytesEtag, etagMatches } from "./app-file-headers.ts";
 
 /** Theme preference from the core settings ("system" when unset/unknown).
  * The client resolves "system" via prefers-color-scheme; the shell falls back
@@ -154,20 +149,6 @@ export function registerPages(
       "application/javascript; charset=utf-8",
       file.etag,
     );
-  });
-
-  app.get("/styles.css", async (c) => {
-    try {
-      const css = await assets.getCss();
-      return serveRevalidatable(
-        c,
-        css,
-        "text/css; charset=utf-8",
-        contentEtag(css),
-      );
-    } catch (error) {
-      return c.text(`Stylesheet build failed: ${errorMessage(error)}`, 500);
-    }
   });
 
   app.get("/favicon.png", async (c) => {
