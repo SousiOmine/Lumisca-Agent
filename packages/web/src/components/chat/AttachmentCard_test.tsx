@@ -1,4 +1,4 @@
-import { assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../../i18n.ts";
@@ -28,9 +28,41 @@ Deno.test("AttachmentCard: an image is drawn from the session's base", () => {
     inline: true,
   }]);
   assertStringIncludes(html, `src="${BASE}9f3c2a1b4d5e.png"`);
-  // The alt text is the name the agent found on disk, not the stored name.
-  assertStringIncludes(html, 'alt="chart.png"');
   assertStringIncludes(html, "attach-image");
+  // The picture is the control's content, so the CONTROL carries the name
+  // (the name the agent found on disk, not the stored one) and the image is
+  // marked decorative — announcing both would read the name twice.
+  assertStringIncludes(html, 'aria-label="chart.png"');
+  // Preact writes an empty `alt` as the bare attribute, which is the same
+  // thing to a browser: the image adds nothing to the control's name.
+  assertEquals(/<img[^>]*\salt[\s/>]/.test(html), true, html);
+  assertEquals(/alt="chart\.png"/.test(html), false, html);
+});
+
+Deno.test("AttachmentCard: the picture opens in the app, not in a new tab", () => {
+  // A new tab would leave the conversation behind and lose the scroll
+  // position on the way back; the lightbox is the app's own way of showing
+  // one picture whole (see Lightbox).
+  const html = render([{
+    name: "9f3c2a1b4d5e.png",
+    displayName: "chart.png",
+    size: 4096,
+    inline: true,
+  }]);
+  // A button, not a link.
+  assertStringIncludes(html, 'type="button"');
+  assertEquals(
+    /<a[^>]*attach-image/.test(html),
+    false,
+    "the picture must not be a link",
+  );
+  // The original is asked for, not the downscaled copy the list drew.
+  // (Checked on the source, because the lightbox only mounts on a click.)
+  const source = Deno.readTextFileSync(
+    new URL("./AttachmentCard.tsx", import.meta.url),
+  );
+  assertStringIncludes(source, "?preview=0");
+  assertStringIncludes(source, "<Lightbox");
 });
 
 Deno.test("AttachmentCard: anything else is a download row", () => {

@@ -335,12 +335,19 @@
   margin-top: 10px;
 }
 
+/* The picture is a button now (it opens the lightbox, see AttachmentCard).
+ * A button brings the browser's own background, padding and font with it, so
+ * they are reset here: what should be visible is the picture. */
 .attach-image {
   display: block;
   max-width: min(100%, 320px);
+  padding: 0;
+  border: none;
+  background: none;
   border-radius: var(--radius);
   overflow: hidden;
   line-height: 0;
+  cursor: zoom-in;
 }
 
 .attach-image img {

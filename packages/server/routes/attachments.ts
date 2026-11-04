@@ -2,6 +2,10 @@ import { Hono } from "hono";
 import type { SessionInfo } from "@lumisca/core";
 import { AppError } from "./util.ts";
 import { assetHeaders } from "./asset-headers.ts";
+import {
+  ensurePreview,
+  previewPathOf,
+} from "../../core/media/preview-cache.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface AttachmentApi {
@@ -48,6 +52,21 @@ export function attachmentRoutes(core: AttachmentApi): Hono {
       mimeType: attachment.mimeType,
       downloadName: attachment.downloadName,
     });
+    // A picture is drawn small, so the conversation gets a downscaled copy
+    // (`preview=0` asks for the original, which is what a click opens). The
+    // preview is stored beside its source under a name derived from it (see
+    // media/preview-cache.ts), so this costs one read after the first draw.
+    const wantsPreview = c.req.query("preview") !== "0";
+    const preview = wantsPreview
+      ? await ensurePreview(
+        attachment.path,
+        previewPathOf(attachment.path, name),
+        attachment.mimeType,
+      )
+      : undefined;
+    if (preview !== undefined) {
+      return new Response(preview.buffer as ArrayBuffer, { headers });
+    }
     const bytes = await Deno.readFile(attachment.path);
     return new Response(bytes, { headers });
   });
