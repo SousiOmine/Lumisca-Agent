@@ -33,6 +33,7 @@ import {
   releaseTargetFor,
 } from "./release.ts";
 import {
+  clearStagedPackage,
   clearStaging,
   readAppliedUpdate,
   readStagedUpdate,
@@ -335,12 +336,17 @@ export class UpdateService {
    * Look for a newer release. In auto mode (startup, the periodic timer, the
    * automatic toggle) an available update is downloaded and applied right
    * away; a manual check only records it.
+   *
+   * A package already staged does not stop the check. It used to: `ready`
+   * made every later check return immediately, so when applying a package
+   * failed (its layout unreadable, its binary refusing to run) the
+   * installation offered that same package forever and never saw the release
+   * that replaced it. Being ready is about the *staged* package; the manifest
+   * is still the authority on what the newest release is.
    */
   async check(auto = false): Promise<UpdateStatus> {
     if (!this.#status.supported) return this.status();
-    if (
-      this.#busy !== null || this.#status.ready || this.#status.restartPending
-    ) {
+    if (this.#busy !== null || this.#status.restartPending) {
       return this.status();
     }
     this.#busy = "checking";
@@ -361,18 +367,45 @@ export class UpdateService {
       );
       this.#manifest = manifest;
       const newer = isNewerVersion(manifest.version, this.#currentVersion);
-      this.#patch({
-        checking: false,
-        available: newer,
-        latestVersion: newer ? manifest.version : null,
-      });
+      const staged = this.#staged;
       if (!newer) {
         // Nothing to install: whatever was pending is not newer than this
         // process after all.
         this.#manifest = null;
-        this.#patch({ ready: false });
+        this.#staged = null;
+        this.#patch({
+          checking: false,
+          available: false,
+          latestVersion: null,
+          ready: false,
+        });
+        void clearStagedPackage(this.#environment.installDir);
         return this.status();
       }
+      if (staged !== null && staged.version === manifest.version) {
+        // The staged package *is* the newest release: keep it (a retry must
+        // not re-download it) and report it as ready.
+        this.#patch({
+          checking: false,
+          available: true,
+          latestVersion: staged.version,
+        });
+        return this.status();
+      }
+      // Either nothing is staged or a different release is newer than it.
+      // The staged package is stale now: dropping it is what lets the next
+      // download and apply start from the release the manifest names.
+      // Awaited because `download` reads the staging directory next.
+      if (staged !== null) {
+        this.#staged = null;
+        await clearStagedPackage(this.#environment.installDir);
+      }
+      this.#patch({
+        checking: false,
+        available: true,
+        latestVersion: manifest.version,
+        ready: false,
+      });
     } catch (error) {
       this.#fail(`更新の確認に失敗しました: ${errorMessage(error)}`);
       return this.status();

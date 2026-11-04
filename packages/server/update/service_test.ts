@@ -457,6 +457,77 @@ Deno.test("apply keeps the staged package when the version check fails", async (
   });
 });
 
+Deno.test("a failed apply does not pin the installation to that package", async () => {
+  // The package of one release can turn out to be uninstallable (v0.10.8's
+  // was: a running update reader refused its layout). Keeping it staged is
+  // right — a retry must not re-download 100 MB — but it must not stop the
+  // next check from seeing a *newer* release, or the installation is stuck
+  // offering the broken package forever.
+  await withTempDir("lumisca-service-", async (dir) => {
+    await seedInstall(dir);
+    const broken = await packageFixture();
+    // Applying fails: the extracted binary reports the wrong version.
+    const failed = harness(dir, {
+      fixture: broken,
+      settings: { [UPDATE_AUTO_KEY]: "0" },
+      versionCheck: () => Promise.resolve("0.7.9"),
+    });
+    await failed.service.check();
+    const downloaded = await failed.service.download();
+    assertEquals(downloaded.ready, true, "the package is verified and staged");
+    const status = await failed.service.apply();
+    assertEquals(status.applied, false);
+    assertEquals(status.error?.includes("バージョンが一致しません"), true);
+    assertEquals(status.ready, true, "the package is kept for a retry");
+    assertEquals(readStagedUpdate(dir)?.version, NEXT);
+
+    // A newer release is published. A check must find it even though the
+    // broken package is still staged.
+    const fixed = await packageFixture("0.7.9");
+    const next = harness(dir, {
+      fixture: fixed,
+      settings: { [UPDATE_AUTO_KEY]: "0" },
+    });
+    assertEquals(next.service.status().latestVersion, NEXT, "staged on start");
+
+    const checked = await next.service.check();
+    assertEquals(checked.error, null);
+    assertEquals(checked.latestVersion, "0.7.9");
+    assertEquals(checked.available, true);
+    // The stale package is gone, so the next download fetches the new one.
+    assertEquals(checked.ready, false);
+  });
+});
+
+Deno.test("a check keeps the staged package when it is still the newest", async () => {
+  // The other half of the rule: checking must not throw away a package that
+  // is exactly the release the manifest names — a retry installs it without
+  // downloading 100 MB again.
+  await withTempDir("lumisca-service-", async (dir) => {
+    await seedInstall(dir);
+    const fixture = await packageFixture();
+    const first = harness(dir, {
+      fixture,
+      settings: { [UPDATE_AUTO_KEY]: "0" },
+    });
+    await first.service.check();
+    assertEquals((await first.service.download()).ready, true);
+
+    const again = harness(dir, {
+      fixture,
+      settings: { [UPDATE_AUTO_KEY]: "0" },
+    });
+    assertEquals(again.service.status().ready, true, "staged on start");
+    const checked = await again.service.check();
+    assertEquals(checked.error, null);
+    assertEquals(checked.latestVersion, NEXT);
+    assertEquals(checked.ready, true, "the same package stays usable");
+    assertEquals(readStagedUpdate(dir)?.version, NEXT);
+    // And it installs without another download.
+    assertEquals((await again.service.apply()).applied, true);
+  });
+});
+
 Deno.test("the status payload is JSON-serializable and complete", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();

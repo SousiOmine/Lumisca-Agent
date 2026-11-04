@@ -144,7 +144,7 @@ export async function clearStaging(installDir: string): Promise<void> {
 
 /** Remove the staged package and its metadata, keeping the applied marker
  * (and the in-flight download's `.part` file, which the download owns). */
-async function clearStagedPackage(installDir: string): Promise<void> {
+export async function clearStagedPackage(installDir: string): Promise<void> {
   const dir = stagingDir(installDir);
   for (const format of ["zip", "tar.gz"] as const) {
     await Deno.remove(stagedArchivePath(installDir, format)).catch(() => {});

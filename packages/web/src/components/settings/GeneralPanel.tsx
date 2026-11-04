@@ -255,13 +255,30 @@ export function GeneralPanel(
                         : null
                       : status.ready
                       ? (
-                        <button
-                          type="button"
-                          className="btn push"
-                          onClick={onInstall}
-                        >
-                          {t("settings.general.install")}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="btn push"
+                            onClick={onInstall}
+                          >
+                            {t("settings.general.install")}
+                          </button>
+                          {
+                            /* The staged package is the *previous* release
+                              when a newer one is out (a failed install keeps
+                              its package staged), so checking must stay
+                              reachable — otherwise the screen offers a
+                              package that cannot be installed and no way to
+                              learn that a new release exists. */
+                          }
+                          <button
+                            type="button"
+                            className="btn small"
+                            onClick={onCheck}
+                          >
+                            {t("settings.general.checkForUpdate")}
+                          </button>
+                        </>
                       )
                       : status.available
                       ? (
