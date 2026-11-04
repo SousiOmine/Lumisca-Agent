@@ -5,7 +5,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-preact";
-import { useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
 import { useLocale, useT } from "../i18n.ts";
@@ -45,15 +45,27 @@ interface StellaSidebarProps {
   running: boolean;
 }
 
-/** Where a row's menu is drawn: under its ⋮ button, right-aligned to the
- * list. Fixed-position, because the list scrolls and an absolutely placed
- * menu would be clipped by it (the app menu is placed the same way). */
+/** Where a row's menu is drawn, in viewport coordinates from the LEFT and
+ * top edges. Fixed-position, because the list scrolls and an absolutely
+ * placed menu would be clipped by it (the app menu is placed the same way).
+ *
+ * Left, not right: a right click near the left edge would push a
+ * right-anchored menu off the screen, and the sidebar is the leftmost
+ * surface in the app. The opening point is a preference, not the final
+ * position — the menu is measured after it renders and clamped to the
+ * viewport (see MENU_MARGIN). */
 interface MenuAnchor {
   agent: StellaAgentSummary;
-  /** Distance from the viewport's right and top edges. */
-  right: number;
+  /** Distance of the menu's left edge from the viewport's left edge. */
+  x: number;
+  /** Distance of the menu's top edge from the viewport's top edge. */
   top: number;
 }
+
+/** Gap the menu keeps from the viewport's edges, so a menu at the very edge
+ * of the screen still reads as a floating surface (the tab menu uses the
+ * same value). */
+const MENU_MARGIN = 8;
 
 /** The line a row shows under the name: the words that were said, or — for a
  * message that carried no words — what it carried. Kept beside the row that
@@ -122,6 +134,9 @@ export function StellaSidebar(
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  /** Where the menu is drawn, after it was measured (see MENU_MARGIN). Starts
+   * at the point it was opened from and is corrected on the next frame. */
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   // Which rows just appeared (a new agent, or one the agent created itself).
   // Only those animate: the first paint of the list must not stage itself
   // (see hooks/useArrivals).
@@ -129,6 +144,38 @@ export function StellaSidebar(
 
   // The menu belongs to the row, so it closes whenever the row is gone
   // (deleted, or replaced by the edited one).
+  /** Keep the menu inside the window.
+   *
+   * The opening point is where the reader pointed, but a right click near the
+   * left edge (the sidebar IS the left edge) would push a menu anchored to
+   * that point partly off the screen, and a click near the bottom does the
+   * same vertically. Measuring after render is the only honest way: the menu
+   * sizes itself to its items and to the language (a long word in one
+   * language changes its width), so no constant here would be right.
+   *
+   * Runs once per opening: `menu` is a fresh object each time it opens, and
+   * the position it computes is not an input to it.
+   */
+  useEffect(() => {
+    if (menu === null) {
+      setPos(null);
+      return;
+    }
+    const element = menuRef.current;
+    if (element === null) return;
+    const rect = element.getBoundingClientRect();
+    setPos({
+      x: Math.max(
+        MENU_MARGIN,
+        Math.min(menu.x, globalThis.innerWidth - rect.width - MENU_MARGIN),
+      ),
+      y: Math.max(
+        MENU_MARGIN,
+        Math.min(menu.top, globalThis.innerHeight - rect.height - MENU_MARGIN),
+      ),
+    });
+  }, [menu]);
+
   useClickOutside(menuRef, () => setMenu(null), menu !== null, {
     onScroll: true,
   });
@@ -183,7 +230,7 @@ export function StellaSidebar(
     const rect = button.getBoundingClientRect();
     setMenu({
       agent,
-      right: globalThis.innerWidth - rect.right,
+      x: rect.left,
       top: rect.bottom + 4,
     });
   };
@@ -199,7 +246,7 @@ export function StellaSidebar(
     event.preventDefault();
     setMenu({
       agent,
-      right: globalThis.innerWidth - event.clientX,
+      x: event.clientX,
       top: event.clientY,
     });
   };
@@ -329,8 +376,12 @@ export function StellaSidebar(
           ref={menuRef}
           style={{
             position: "fixed",
-            top: menu.top,
-            right: menu.right,
+            // Drawn at the measured point. Until the measurement lands (the
+            // frame this mounts), the menu stays invisible rather than
+            // flashing at a position it is about to leave.
+            top: pos?.y ?? menu.top,
+            left: pos?.x ?? menu.x,
+            visibility: pos === null ? "hidden" : "visible",
           }}
         >
           <button

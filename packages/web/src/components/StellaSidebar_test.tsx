@@ -156,3 +156,28 @@ Deno.test("StellaSidebar: the create dialog's fields are optional", async () => 
   const name = translate("ja", "chat.stella.agents.nameHint");
   assertStringIncludes(name, "自動");
 });
+
+Deno.test("StellaSidebar: the row menu is placed from the left edge", () => {
+  // Regression: the menu was anchored to the viewport's RIGHT edge, so a
+  // right click near the left edge (the sidebar IS the left edge) pushed the
+  // menu off the screen. It is drawn from the point it was opened at, and
+  // that point is measured against the left edge.
+  const source = Deno.readTextFileSync(
+    new URL("./StellaSidebar.tsx", import.meta.url),
+  );
+  // The anchor stores a left offset, not a right one.
+  assertStringIncludes(source, "x: number;");
+  assertEquals(
+    /right: globalThis\.innerWidth - /.test(source),
+    false,
+    "the menu must not be anchored to the right edge",
+  );
+  // It is clamped to the window after it renders: a constant would be wrong,
+  // because the menu sizes itself to its items and to the language.
+  assertStringIncludes(source, "getBoundingClientRect();");
+  assertStringIncludes(source, "globalThis.innerWidth - rect.width");
+  assertStringIncludes(source, "globalThis.innerHeight - rect.height");
+  // And it is drawn from that measurement, hidden until it lands.
+  assertStringIncludes(source, "left: pos?.x ?? menu.x");
+  assertStringIncludes(source, 'pos === null ? "hidden" : "visible"');
+});
