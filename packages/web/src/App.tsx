@@ -40,11 +40,10 @@ import {
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 import { ModeSelectView } from "./components/ModeSelectView.tsx";
-import { StellaView } from "./components/StellaView.tsx";
+import { StellaModeScreen } from "./components/StellaModeScreen.tsx";
 import { useAppMode } from "./hooks/useAppMode.ts";
 import { useStella } from "./hooks/useStella.ts";
 import { useRoutines } from "./hooks/useRoutines.ts";
-import { StellaSidebar } from "./components/StellaSidebar.tsx";
 
 export interface AppProps {
   /** Preloaded data from the bootstrap script; undefined when not served. */
@@ -447,59 +446,24 @@ export function App({ initialData }: AppProps): ReactElement {
         )}
         {stellaActive
           ? (
-            // stella mode: the agents on the left, one conversation in
-            // the middle, the machine's screen beside it. Rendered instead of
+            // stella mode: the agents, the open conversation and the
+            // machine's screen (see StellaModeScreen). Rendered instead of
             // the tab branch (not beside it): a tab strip is exactly the
             // session-list surface this mode exists to remove.
-            //
-            // A phone cannot show two columns of this, so the same two
-            // surfaces become two screens: the list until one is picked, the
-            // conversation afterwards (with a back button). Which one shows
-            // is the selection itself — no extra state — so going back and
-            // opening the same agent lands where the reader left off.
-            <div
-              className="stella-shell"
-              data-screen={narrow && stella.activeAgentId !== null
-                ? "conversation"
-                : "list"}
-            >
-              <StellaSidebar
-                agents={stella.agents}
-                loading={stella.agentsLoading}
-                activeId={stella.activeAgentId}
-                onSelect={stella.select}
-                onChanged={stella.reloadAgents}
-                onAgentChanged={stella.replaceAgent}
-                running={stella.conversation?.running === true}
-              />
-              <StellaView
-                agent={stellaAgent ?? null}
-                onAgentChanged={stella.replaceAgent}
-                conversation={stella.conversation}
-                sessionId={stella.sessionId}
-                conversationError={stella.error}
-                loading={stella.loading}
-                status={machineStatus}
-                input={draft.input}
-                onInputChange={(input) => updateDraft(draftKey, { input })}
-                images={draft.images}
-                onImagesChange={(images) => updateDraft(draftKey, { images })}
-                files={draft.files}
-                onFilesChange={(files) => updateDraft(draftKey, { files })}
-                onPrompt={(text, images, files) =>
-                  stella.prompt(text, images, files)}
-                onAbort={() => stella.abort()}
-                onRewind={(timestamp) => stella.rewind(timestamp)}
-                onModelChange={(provider, modelId) =>
-                  stella.setModel(provider, modelId)}
-                onLoadOlder={stella.loadOlder}
-                loadingOlder={stella.loadingOlder}
-                onFinishHandover={(note, toolCallId) =>
-                  stella.finishHandover(note, toolCallId)}
-                onOpenSettings={openProviders}
-                onBack={narrow ? stella.clearSelection : undefined}
-              />
-            </div>
+            <StellaModeScreen
+              stella={stella}
+              agent={stellaAgent ?? null}
+              status={machineStatus}
+              narrow={narrow}
+              input={draft.input}
+              onInputChange={(input) => updateDraft(draftKey, { input })}
+              images={draft.images}
+              onImagesChange={(images) => updateDraft(draftKey, { images })}
+              files={draft.files}
+              onFilesChange={(files) => updateDraft(draftKey, { files })}
+              onAgentChanged={stella.replaceAgent}
+              onOpenSettings={openProviders}
+            />
           )
           : activeView
           ? (

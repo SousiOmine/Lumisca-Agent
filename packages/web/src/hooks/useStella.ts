@@ -50,7 +50,7 @@ const AGENT_LIST_REFRESH_MS = 30_000;
  * user's: the server starts it when the conversation is requested, and the one
  * consequence the client shows is `starting` on the status it already polls.
  */
-export function useStella(enabled: boolean): {
+export type StellaHook = {
   /** The sidebar's rows, newest message first (see compareAgentRows). */
   agents: StellaAgentSummary[];
   /** The first read of the agent list is in flight. The list is empty until
@@ -104,7 +104,9 @@ export function useStella(enabled: boolean): {
    * upload or clear), so the sidebar and the header redraw without a full
    * re-read of the list. */
   replaceAgent: (agent: StellaAgent) => void;
-} {
+};
+
+export function useStella(enabled: boolean): StellaHook {
   // Failure text is written in the language the app is in when it happens
   // (the hook holds strings, not failure objects).
   const t = useT();
