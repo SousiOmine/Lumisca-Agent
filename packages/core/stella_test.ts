@@ -1229,8 +1229,8 @@ Deno.test("stella prompt: the reply is the message, silence is asked for", async
   // therefore produces a message rather than an unanswered question.
   const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
   const prompt = buildStellaSystemPrompt({ tools: ["read", "send_chat"] });
-  assert(prompt.includes("Your reply IS your message"), prompt);
-  assert(prompt.includes("write exactly NO_RESPONSE"), prompt);
+  assert(prompt.includes("Your reply is the message"), prompt);
+  assert(prompt.includes("replies with exactly NO_RESPONSE"), prompt);
   // …and the tool is described as the second channel, not the first.
-  assert(prompt.includes("Never put the final answer there"), prompt);
+  assert(prompt.includes("send_chat carries what a reply cannot"), prompt);
 });

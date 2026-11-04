@@ -89,10 +89,10 @@ export type SendChatTarget = ChatAttachTarget;
  * differ per session, no examples that would have to be edited.
  */
 const DESCRIPTION = [
-  "Send the user something your reply cannot carry: a card, a file, or a progress note while long work is still running.",
-  "Your normal reply is already the message the user reads, so do NOT put the answer here — a final answer written as a call arrives as a second message, after the one that should have carried it.",
+  "Send the user a card, a file, or a progress note while long work is still running.",
+  "Your reply is already the message the user reads; this is for what a reply cannot carry.",
   "One call is one message: the words (text), a card (card), and files (paths), in any combination; at least one of the three is required.",
-  "A run with nothing to report does not call this and does not write an answer: it replies with exactly NO_RESPONSE (see the system prompt).",
+  "A run with nothing to report replies with exactly NO_RESPONSE (see the system prompt).",
 ].join(" ");
 
 /**
