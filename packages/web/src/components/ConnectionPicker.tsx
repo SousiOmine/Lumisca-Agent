@@ -14,7 +14,7 @@ import {
 } from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
-import { shellCall, type ShellState } from "../shell.ts";
+import { shellCall, type ShellState, shellState } from "../shell.ts";
 import type { ConnectionEntry } from "../types.ts";
 
 interface ConnectionPickerProps {
@@ -72,7 +72,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   /** The displayed server, as the shell reports it. */
   useEffect(() => {
     let stale = false;
-    shellCall<ShellState>("state").then((shell) => {
+    shellState.read().then((shell) => {
       if (!stale) setState(shell);
     }).catch((failure: unknown) => {
       if (!stale) setError(errorText(failure));

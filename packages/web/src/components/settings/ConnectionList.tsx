@@ -2,7 +2,12 @@ import { useEffect, useState } from "preact/compat";
 import type { CSSProperties } from "preact/compat";
 import { IconChevronDown, IconPlus, IconTrash } from "@tabler/icons-preact";
 import type { ConnectionEntry } from "../../types.ts";
-import { shellAvailable, shellCall, type ShellState } from "../../shell.ts";
+import {
+  shellAvailable,
+  shellCall,
+  type ShellState,
+  shellState,
+} from "../../shell.ts";
 import { errorText } from "../../providers.ts";
 import {
   connectionLabel,
@@ -63,7 +68,7 @@ export function ConnectionList() {
       const ok = await shellAvailable();
       setDesktop(ok);
       if (ok) {
-        shellCall<ShellState>("state").then(setState).catch(() => {});
+        shellState.read().then(setState).catch(() => {});
       }
     })();
   }, []);

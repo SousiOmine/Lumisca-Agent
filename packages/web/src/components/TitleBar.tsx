@@ -1,6 +1,6 @@
 import { type MouseEvent, type ReactNode, useState } from "preact/compat";
 import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
-import { shellCall, type ShellState, windowApi } from "../shell.ts";
+import { type ShellState, shellState, windowApi } from "../shell.ts";
 import { useVisibleInterval } from "../hooks/useVisibleInterval.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
@@ -69,7 +69,7 @@ export function TitleBar({
   // it, and the platform decides which controls to draw.
   const [pollMs, setPollMs] = useState(POLL_MS);
   useVisibleInterval(() => {
-    void shellCall<ShellState>("state").then(
+    void shellState.read().then(
       (next) => {
         setState(next);
         setPollMs(POLL_MS);

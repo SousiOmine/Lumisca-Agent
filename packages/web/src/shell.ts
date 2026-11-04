@@ -284,3 +284,42 @@ export const serverApi = {
   status: () => shellCall<LocalServerStatus>("server/status"),
   restart: () => shellCall<{ ok: boolean; url: string }>("server/restart"),
 };
+
+/**
+ * The shell's state, read once and shared.
+ *
+ * Five places asked the bridge for it independently — the title bar, the
+ * connection picker, the settings list, and the two availability helpers
+ * above — each with its own local copy and its own `.catch`. The trigger
+ * shows the displayed server's name while the popover is closed, so it must
+ * answer on mount; the other readers want the same answer and paid a second
+ * round trip for it.
+ *
+ * A plain loader rather than a store: `ShellState` only changes when the
+ * window navigates (a connection switch reloads the page), so the value a
+ * mount reads is good for that mount's life.
+ */
+export interface ShellStateSource {
+  /** Read the state, sharing one bridge call per page load. */
+  read(): Promise<ShellState>;
+  /** Forget the cached answer (a test's harness, or after `connect-local`). */
+  reset(): void;
+}
+
+export const shellState: ShellStateSource = (() => {
+  let pending: Promise<ShellState> | null = null;
+  return {
+    read(): Promise<ShellState> {
+      pending ??= shellCall<ShellState>("state").catch((error) => {
+        // A failed read must not be cached: the bridge may not be listening
+        // yet on the very first mount of a cold window.
+        pending = null;
+        throw error;
+      });
+      return pending;
+    },
+    reset(): void {
+      pending = null;
+    },
+  };
+})();
