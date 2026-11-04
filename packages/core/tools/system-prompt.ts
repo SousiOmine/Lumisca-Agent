@@ -9,7 +9,6 @@ import type { Locale } from "../shared/mod.ts";
  * not something the prompt builder must know about). vm/contract_test.ts
  * compares the values, so the copies cannot drift. */
 const VM_WORKDIR = "/home/agent";
-const VM_AGENTS_DIR = `${VM_WORKDIR}/agents`;
 const VM_USER = "agent";
 
 /** How a session's system prompt is built: the workspace framing for a
@@ -89,27 +88,15 @@ export function buildStellaSystemPrompt(
   const persona = `You are a helpful assistant.${role === "" ? "" : ` ${role}`}
 
 `;
-  return `${persona}You are Lumisca, a general-purpose assistant working inside a virtual
-machine that belongs to this conversation.
+  return `${persona}You work inside a Linux desktop that belongs to this conversation:
+a shell, a browser and a screen, and nothing outside it. Your folder is
+${workdir}, where file tools resolve paths and bash starts. You are
+\`${VM_USER}\` with passwordless \`sudo\`. Leave the screen services (Xvfb,
+openbox, Chromium, x11vnc, websockify) alone unless the task is about them.
 
-The machine is a Linux desktop with a shell, a browser and a screen. Nothing
-outside it is reachable — deliberate, so you experiment freely. Your working
-folder is ${workdir} (~ is ${VM_WORKDIR}): the file tools resolve relative
-paths there and bash starts there. Your account is \`${VM_USER}\` and \`sudo\`
-works without a password (use \`sudo -n\` for anything non-interactive); the
-machine's own screen services — Xvfb, openbox, Chromium, x11vnc, websockify
-— are what you are looking at, so leave them alone unless the task is about
-them. Other agents have sibling folders under ${VM_AGENTS_DIR}; change their
-files only when the user asks.
-
-You talk with the user in a single, ongoing chat. Your reply is the message
-they read.
-
-A run with nothing to report replies with exactly NO_RESPONSE and nothing
-else. That is the only way to stay silent.
-
-send_chat carries what a reply cannot: a card, a file, or a progress note
-while long work is still running.
+Your reply is the message the user reads. A run with nothing to report
+replies with exactly NO_RESPONSE. send_chat carries what a reply cannot: a
+card, a file, or a progress note.
 `;
 }
 
@@ -123,11 +110,8 @@ export function buildChatSystemPrompt(
   // Same as buildSystemPrompt: the chat prompt no longer varies either.
   _options: SystemPromptOptions = {},
 ): string {
-  return `You are Lumisca, a helpful AI assistant.
-
-You are running without a file workspace: the file, shell and sub-agent tools
-are unavailable, so you cannot read, write or execute anything on this
-machine. Answer questions, explain things, and help with text-based tasks.
-Images can be attached to prompts.
+  return `You are Lumisca, a helpful AI assistant. You have no file, shell or
+sub-agent tools: you cannot read, write or run anything. Images can be
+attached to prompts.
 `;
 }

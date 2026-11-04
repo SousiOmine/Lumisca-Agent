@@ -29,13 +29,13 @@ import {
   TOOL_EVAL,
   TOOL_LIST_DIR,
   TOOL_READ,
-  TOOL_SEND_CHAT,
   TOOL_SEND_MESSAGE,
   TOOL_SKILL,
   TOOL_TASK,
   TOOL_TASK_OUTPUT,
   TOOL_TODO,
   TOOL_VISUAL,
+  TOOL_VM_LAUNCH,
   TOOL_WEB_FETCH,
   TOOL_WEB_SEARCH,
   TOOL_WRITE,
@@ -222,32 +222,29 @@ Deno.test("the file bullet follows the tool it needs", () => {
   );
 });
 
-Deno.test("the send_chat bullet follows the tool it needs", () => {
-  // The one thing the tool's own description cannot state: that sending
-  // nothing is a legitimate outcome (a routine that finds nothing stays
-  // silent). Everything else about speaking is the description's job, so
-  // the bullet rides on the tool and stays short.
+Deno.test("a bullet rides on its tool, and never names one that is absent", () => {
+  // The launcher's guidance is the one thing its tool's description cannot
+  // state: that a program which is not started through it has no window at
+  // all. It must appear with the tool and disappear without it.
   const withTool = renderPromptSections(STELLA_PROMPT_SECTIONS, [
-    TOOL_SEND_CHAT,
+    TOOL_VM_LAUNCH,
   ]);
-  assert(withTool.includes("nothing to report"), withTool);
-  assert(withTool.includes("not a failure"), withTool);
-  // The bullet does not restate the arguments: those are the tool's
-  // description, and repeating them costs every request.
-  assertEquals(withTool.includes("card (card)"), false, withTool);
-  assertEquals(withTool.includes("paths) together"), false, withTool);
+  assert(withTool.includes("vm_launch"), withTool);
+  assert(withTool.includes("no desktop menu"), withTool);
+  // It does not restate the arguments: those are the tool's description, and
+  // repeating them costs every request.
+  assertEquals(withTool.includes("`id`"), false, withTool);
 
   assertEquals(
     renderPromptSections(STELLA_PROMPT_SECTIONS, [TOOL_READ])
-      .includes("send_chat"),
+      .includes("vm_launch"),
     false,
     "without the tool there is no bullet about it",
   );
-  // Code mode is not told about it: there the reply's own text is what the
-  // user reads, and chat_attach hands files over.
+  // Code mode is not told about it: a workspace has no machine screen.
   assertEquals(
-    renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS)
-      .includes("send_chat"),
+    renderPromptSections(CODING_PROMPT_SECTIONS, ["vm_launch"])
+      .includes("vm_launch"),
     false,
   );
 });

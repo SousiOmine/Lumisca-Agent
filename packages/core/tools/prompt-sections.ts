@@ -5,10 +5,8 @@ import {
   TOOL_CHAT_ATTACH,
   TOOL_EDIT,
   TOOL_EVAL,
-  TOOL_HISTORY_SEARCH,
   TOOL_LIST_DIR,
   TOOL_READ,
-  TOOL_SEND_CHAT,
   TOOL_SEND_MESSAGE,
   TOOL_SKILL,
   TOOL_TASK,
@@ -16,11 +14,9 @@ import {
   TOOL_VISUAL,
   TOOL_VM_ACT,
   TOOL_VM_ASK_USER,
-  TOOL_VM_DO,
   TOOL_VM_FIND,
   TOOL_VM_LAUNCH,
   TOOL_VM_SCREENSHOT,
-  TOOL_VM_WAIT,
   TOOL_WEB_FETCH,
   TOOL_WEB_SEARCH,
   TOOL_WRITE,
@@ -233,22 +229,6 @@ const CHAT_ATTACH_SECTION: PromptSection = {
     "writing its path\n  for them to open.",
 };
 
-/** Speaking in a stella conversation, where `send_chat` is the only channel.
- *
- * One bullet, and it carries the half of the contract the tool's description
- * cannot state: what to do when there is nothing to say. Everything else
- * (the arguments, the card language, the receipt the call returns) is the
- * tool's own description, and repeating it here only costs every request. */
-const SEND_CHAT_SECTION: PromptSection = {
-  name: "tool:send_chat",
-  order: ORDER.tool + 126,
-  requires: [TOOL_SEND_CHAT],
-  text:
-    "- A turn with nothing to report (a routine that found nothing, a check " +
-    "that passed)\n  ends without a message — that is the expected outcome, " +
-    "not a failure.",
-};
-
 /** The machine's widgets, in a stella session. Keyed on the tools: an agent
  * that cannot find an element must not be told to look for one.
  *
@@ -264,25 +244,6 @@ const VM_FIND_SECTION: PromptSection = {
     "- Reach for vm_find + vm_do before coordinates: a control addressed by " +
     "role and\n  name is the control that is acted on, and the result says " +
     "what changed.",
-};
-
-const VM_DO_SECTION: PromptSection = {
-  name: "vm:do",
-  order: ORDER.tool + 144,
-  requires: [TOOL_VM_DO],
-  text:
-    "- Use vm_do for a control and vm_act only for what has no element (a " +
-    "canvas,\n  a drag across an image, a game). Do not mix the two on the " +
-    "same target.",
-};
-
-const VM_WAIT_SECTION: PromptSection = {
-  name: "vm:wait",
-  order: ORDER.tool + 146,
-  requires: [TOOL_VM_WAIT],
-  text:
-    "- Wait on a condition (vm_wait with role/name/text) instead of a fixed " +
-    "delay:\n  a guessed pause is a race with whatever is still loading.",
 };
 
 /** The machine's screen, in a stella session. Both halves are keyed on the
@@ -320,22 +281,6 @@ const VM_LAUNCH_SECTION: PromptSection = {
   text: "- The machine has a display but no desktop menu: a program that is " +
     'not started\n  with vm_launch has no window. `action: "list"` says ' +
     "what is installed — check\n  it instead of assuming a name.",
-};
-
-/** The conversation's own history, in a stella session. Keyed on the tool:
- * a session whose history was condensed must be told the earlier turns are
- * still reachable, and one without the tool would be sent looking for it.
- *
- * What the search covers (the conversation's entries, not tool output) is in
- * the tool's description; this says when to reach for it. */
-const HISTORY_SEARCH_SECTION: PromptSection = {
-  name: "tool:history_search",
-  order: ORDER.tool + 135,
-  requires: [TOOL_HISTORY_SEARCH],
-  text:
-    "- Use history_search when you cannot recall something said earlier (a " +
-    "path, a\n  decision, an error) — before saying you do not remember or " +
-    "asking the user to\n  repeat.",
 };
 
 /** Handing the screen to the user. Keyed on the tool: an agent that cannot
@@ -501,23 +446,16 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
  * neither a visual nor a chat_attach bullet: `send_chat` is this
  * conversation's only channel, and it carries files itself. */
 export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
-  READ_SECTION,
-  WRITE_SECTION,
-  EDIT_SECTION,
-  BASH_SECTION,
-  ASYNC_BASH_SECTION,
-  SKILL_SECTION,
+  // The per-tool sections are deliberately absent: a tool's own description
+  // already says what it does and when to reach for it, so repeating it here
+  // only costs every request (and drifts from the description it copies).
+  // What is left is what no tool can carry — how to choose BETWEEN tools,
+  // and the rules that hold across calls.
   VM_FIND_SECTION,
-  VM_DO_SECTION,
-  VM_WAIT_SECTION,
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
   VM_LAUNCH_SECTION,
   VM_ASK_USER_SECTION,
-  SEND_CHAT_SECTION,
-  HISTORY_SEARCH_SECTION,
-  WEB_SEARCH_SECTION,
-  TASK_SECTION,
   NOTIFICATION_SECTION,
   SUBAGENT_MESSAGE_SECTION,
   QUALITY_SECTION,

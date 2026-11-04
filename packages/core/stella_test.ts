@@ -380,7 +380,10 @@ Deno.test("stella conversation: its system prompt is the machine's, not the name
       prompt.slice(0, 300),
     );
     // The machine framing, not the folder-less chat one.
-    assert(prompt.includes("virtual"), `prompt: ${prompt.slice(0, 200)}`);
+    assert(
+      prompt.includes("inside a Linux desktop"),
+      `prompt: ${prompt.slice(0, 200)}`,
+    );
     assert(prompt.includes("/home/agent"), prompt.slice(0, 400));
     // And it is not told it cannot run anything (the chat prompt's opening).
     assert(
@@ -393,7 +396,7 @@ Deno.test("stella conversation: its system prompt is the machine's, not the name
     assert(prompt.includes("`agent`"), prompt.slice(0, 800));
     assert(prompt.includes("sudo"), prompt.slice(0, 800));
     assert(
-      prompt.includes("without a password"),
+      prompt.includes("passwordless"),
       `the prompt must say sudo needs no password: ${prompt.slice(0, 800)}`,
     );
   } finally {
@@ -550,10 +553,26 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
   // tool's own description, with no cross-call guidance to add. Adding a
   // name here says the tool needs no bullet — never that one was forgotten.
   const noSection = [
+    // A tool whose whole contract is its description. The prompt repeats
+    // nothing of it: an agent reads the description whenever it decides.
+    "read",
+    "write",
+    "edit",
     "list_dir",
+    "bash",
+    "async_bash",
     "async_bash_status",
     "async_bash_kill",
+    "skill",
+    "send_chat",
+    "history_search",
+    "web_search",
+    "web_fetch",
+    "task",
     "task_output",
+    "send_message",
+    "vm_do",
+    "vm_wait",
   ];
   const unguided = stellaTools.filter((name) =>
     !covered.has(name) && !noSection.includes(name)
