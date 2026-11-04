@@ -356,6 +356,17 @@ export const chat = {
   },
   "chat.stella.agents.preview.card": { ja: "カード", en: "Card" },
   "chat.stella.machine.screen": { ja: "画面", en: "Screen" },
+  /** Filling the window with the machine's screen: the picture is small in a
+   * column, and looking at something in it means seeing more than a thumbnail
+   * shows. */
+  "chat.stella.machine.fullscreen": {
+    ja: "全画面で表示",
+    en: "Show full screen",
+  },
+  "chat.stella.machine.exitFullscreen": {
+    ja: "全画面を終了",
+    en: "Exit full screen",
+  },
   /** The header's show/hide control of the screen pane: the pane is a panel
    * the user opens and closes, so the label says which way the next click
    * goes. */

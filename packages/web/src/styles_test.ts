@@ -626,3 +626,33 @@ Deno.test("the composer draws one frame, and its buttons are one size", async ()
     "a one-glyph button must be square",
   );
 });
+
+Deno.test("the machine's screen fills the window without reflowing it", async () => {
+  // The pane grows from its column to the whole viewport. `position: fixed`
+  // is what makes that possible without re-parenting the element (a new
+  // parent would mount a new noVNC client and drop the connection), and
+  // without reflowing the transcript behind it.
+  const css = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const rule = /\.stella-pane\.fullscreen \{([^}]*)\}/.exec(css);
+  assertEquals(rule !== null, true, ".stella-pane.fullscreen must exist");
+  const body = rule![1]!;
+  assertEquals(
+    /position:\s*fixed/.test(body),
+    true,
+    "it must cover the window",
+  );
+  assertEquals(/inset:\s*0/.test(body), true, "it must reach every edge");
+  // Its own frame goes away: a rounded, shadowed box inset from the edges is
+  // a column, not a screen.
+  assertEquals(/border:\s*none/.test(body), true, "no border in full screen");
+  assertEquals(/border-radius:\s*0/.test(body), true, "no rounding");
+  // The width is NOT transitioned: noVNC derives its scale from this box, so
+  // an animated width would re-scale the streamed picture every frame.
+  assertEquals(
+    /transition:[^;]*width/.test(body),
+    false,
+    "the box must not animate its width",
+  );
+});

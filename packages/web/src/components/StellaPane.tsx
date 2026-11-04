@@ -1,4 +1,8 @@
-import { IconX } from "@tabler/icons-preact";
+import {
+  IconArrowsMaximize,
+  IconArrowsMinimize,
+  IconX,
+} from "@tabler/icons-preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/compat";
 import { errorMessage } from "@lumisca/core/shared";
 import { token } from "../api-client.ts";
@@ -192,6 +196,21 @@ export function StellaPane({
   }, [exiting, reduceMotion, narrow, onExitDone]);
   const clientRef = useRef<RfbClient | null>(null);
   const [state, setState] = useState<ConnectionState>("idle");
+  /** The pane covers the window instead of sitting in its column. */
+  const [fullscreen, setFullscreen] = useState(false);
+
+  /** Escape leaves full screen, the way every other expanded surface in the
+   * app answers Escape. The listener lives only while the mode does: the pane
+   * is not otherwise a keyboard surface, and a global handler that is always
+   * on would swallow the key from the composer. */
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFullscreen(false);
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [fullscreen]);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [finishing, setFinishing] = useState(false);
@@ -301,11 +320,31 @@ export function StellaPane({
     <aside
       ref={paneRef}
       className={`stella-pane${interactive ? " handover" : ""}${
-        exiting ? " exiting" : ""
-      }`}
+        fullscreen ? " fullscreen" : ""
+      }${exiting ? " exiting" : ""}`}
     >
       <header className="stella-pane-header">
         <span>{t("chat.stella.machine.screen")}</span>
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => setFullscreen((on) => !on)}
+          title={t(
+            fullscreen
+              ? "chat.stella.machine.exitFullscreen"
+              : "chat.stella.machine.fullscreen",
+          )}
+          aria-label={t(
+            fullscreen
+              ? "chat.stella.machine.exitFullscreen"
+              : "chat.stella.machine.fullscreen",
+          )}
+          aria-pressed={fullscreen}
+        >
+          {fullscreen
+            ? <IconArrowsMinimize size={15} />
+            : <IconArrowsMaximize size={15} />}
+        </button>
         {onClose !== undefined && (
           <button
             type="button"

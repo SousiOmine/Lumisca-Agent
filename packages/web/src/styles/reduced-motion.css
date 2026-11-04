@@ -70,6 +70,14 @@
     animation-name: lum-fade-only;
   }
 
+  /* The machine's screen going full: it is already a fade, and fading is what
+   * "reduced" keeps. Named here because the guard asks every animated
+   * selector to say what it does under reduced motion, not because the rule
+   * changes anything. */
+  .stella-pane.fullscreen {
+    animation-name: lum-fade-only;
+  }
+
   /* Popovers and dialogs are anchored to something; the scale is what says
    * "this came from here", and it is also what makes a reduced-motion reader
    * dizzy. They open with the fade alone. */

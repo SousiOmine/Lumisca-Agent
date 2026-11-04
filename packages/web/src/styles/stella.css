@@ -714,6 +714,43 @@
    * a size change would make noVNC re-derive its scale on every frame. */
 }
 
+/* Full screen: the machine's screen covers the window.
+ *
+ * The pane grows from its column to the whole viewport instead of being
+ * re-parented (a new parent would mount a new RFB client and drop the
+ * connection). `position: fixed` is what makes that possible without
+ * touching the layout: the transcript behind it does not reflow, so nothing
+ * moves under the window while the picture is being looked at.
+ *
+ * The width is NOT transitioned. noVNC derives its scale from this box
+ * (`scaleViewport`), so an animated width would re-scale the remote picture
+ * on every frame — the frame that is being streamed would stutter for the
+ * whole transition. The change is instant at the box and smooth at the
+ * picture: the entry animation below fades the pane in from its own column,
+ * which is what the eye follows. */
+.stella-pane.fullscreen {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  z-index: 60;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+/* The header keeps its height so the close and full-screen controls stay
+ * where the pointer left them; only its label and border step back. */
+.stella-pane.fullscreen .stella-pane-header {
+  background: var(--surface);
+}
+
+.stella-pane.fullscreen .stella-pane-body {
+  min-height: 0;
+}
+
 .stella-pane-header {
   display: flex;
   align-items: center;
