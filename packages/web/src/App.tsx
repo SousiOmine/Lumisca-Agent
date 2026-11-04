@@ -3,7 +3,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "preact/compat";
 import type { InitialData } from "./types.ts";
@@ -24,6 +23,7 @@ import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
 import { quit } from "./shell.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
 import { useTabs } from "./hooks/useTabs.ts";
+import { useTabClose } from "./hooks/useTabClose.ts";
 import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
 import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { CloseTabsDialog } from "./components/CloseTabsDialog.tsx";
@@ -125,45 +125,13 @@ export function App({ initialData }: AppProps): ReactElement {
   // Closing a tab closes its session, which stops the run (and the
   // session's background commands and sub-agents). A close that would do
   // that to a running tab therefore asks first (CloseTabsDialog); the
-  // dialog's "keep running" answer closes the tab without the session.
-  const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
-  // The live view map, for the callbacks below. The map is replaced on every
-  // streamed event, so taking it as a dependency would rebuild every close
-  // callback per event and hand the memoized TabBar a new function each time —
-  // its memo would then never hold. A ref, written in an effect and not
-  // during render: writing during render breaks under concurrent rendering
-  // (the same reason useSessionEvents keeps one).
-  const viewsRef = useRef(views);
-  useEffect(() => {
-    viewsRef.current = views;
-  }, [views]);
-  /** Close the given tabs, asking first when one of them is running. */
-  const requestClose = useCallback((ids: string[]) => {
-    const live = viewsRef.current;
-    const running = ids.filter((id) => {
-      const view = live.get(id);
-      return view !== undefined && isViewRunning(view);
-    });
-    if (running.length === 0) {
-      closeTabs(ids);
-      return;
-    }
-    setPendingClose({
-      ids,
-      running: new Set(running),
-      names: running.map((id) =>
-        live.get(id)?.info.name || t("chrome.tabBar.newSession")
-      ),
-    });
-  }, [closeTabs, t]);
-  /** Answer the dialog: close the tabs, with the running sessions stopped
-   * (`keepRunning` false) or left to finish on the server. */
-  const resolveClose = (keepRunning: boolean) => {
-    if (pendingClose === null) return;
-    const { ids, running } = pendingClose;
-    setPendingClose(null);
-    closeTabs(ids, keepRunning ? running : undefined);
-  };
+  // Closing a tab closes its session, which stops the run (and the
+  // session's background commands and sub-agents). A close that would do
+  // that to a running tab therefore asks first (see useTabClose).
+  const tabClose = useTabClose({ views, closeTabs });
+  const { request: requestClose, resolve: resolveClose } = tabClose;
+  const pendingClose = tabClose.pending;
+
   // Unsent composer content per tab: the chat view remounts on every tab
   // switch (keyed below), so the draft lives here and is fed back into
   // the view when its tab is shown again. Closing a tab discards it.
@@ -276,7 +244,7 @@ export function App({ initialData }: AppProps): ReactElement {
     [],
   );
   const openServers = useCallback(() => setSettingsCategory("servers"), []);
-  const closePendingClose = useCallback(() => setPendingClose(null), []);
+  const closePendingClose = tabClose.cancel;
   // The mode-selection screen, opened from the app menu ("switch mode") and
   // closed from its own modal. Both are plain setters with a fixed argument,
   // so they are stable for the memoized tab bar and the app menu alike: an
