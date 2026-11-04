@@ -69,6 +69,24 @@ export const VM_IMAGE_NAME = "lumisca-stella";
  * runtime's answer to be readable. */
 export const VM_PROBE_IMAGE = "docker.io/library/debian:bookworm-slim";
 
+/** The volume the agent's home lives on.
+ *
+ * The home — the files the agent wrote, the folders its conversations work
+ * in — must outlive the container, because the container does not: a release
+ * rebuilds it, and a `podman rm` or a reset storage takes it away entirely.
+ * Kept inside the container, the home was lost with it, and the two paths
+ * that recreate the container disagreed about that (an image rebuild carried
+ * it across with `podman cp`, a missing container did not).
+ *
+ * A named volume is the smallest thing that survives all of that and still
+ * keeps the machine isolated: it is podman's own storage, not a host
+ * directory, so nothing of the host becomes reachable from inside. The
+ * container's uid 1000 owns what it writes there, because the volume is
+ * created with the same userns mapping the container runs with.
+ *
+ * No setting for the name, for the same reason as every other value here. */
+export const VM_HOME_VOLUME = "lumisca-stella-home";
+
 /** Label marking containers this application created, so it can tell its own
  * machine from a same-named one a user made by hand. */
 export const VM_MANAGED_LABEL = "lumisca.stella=1";

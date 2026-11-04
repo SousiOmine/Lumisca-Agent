@@ -23,6 +23,7 @@ import {
   VM_DBUS_ADDRESS,
   VM_DISPLAY,
   VM_GID,
+  VM_HOME_VOLUME,
   VM_IMAGE_DIGEST_LABEL,
   VM_IMAGE_NAME,
   VM_MANAGED_LABEL,
@@ -683,6 +684,14 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         // The screen bridge, on the host's loopback only.
         "--publish",
         `127.0.0.1::${VM_VNC_PORT}`,
+        // The agent's home lives on a named volume, not in the container's
+        // own writable layer: the container is rebuilt by a release and can
+        // be removed by anything, and the files the agent wrote must not go
+        // with it (see VM_HOME_VOLUME). Podman creates the volume on first
+        // use and keeps it once the container is gone, which is the whole
+        // point — nothing has to copy the home out before a removal.
+        "--volume",
+        `${VM_HOME_VOLUME}:${VM_WORKDIR}`,
         VM_IMAGE_NAME,
       ]),
       { timeoutMs: VM_RUN_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
@@ -694,78 +703,137 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     }
   }
 
-  /** Replace the container, keeping the agent's home.
+  /** Whether the running/stopped container mounts the home volume.
    *
-   * The home is the agent's work — the files it wrote, the folders its
-   * conversations work in — and it lives inside the container, so recreating
-   * the container would otherwise erase it. It travels through a temporary
-   * directory (`podman cp`) rather than being mounted, because the machine's
-   * isolation is the point: nothing of the host is reachable from inside.
-   * Files root wrote (through sudo) come back owned by the agent account —
-   * the copy crosses the userns mapping — which is the right owner for
-   * anything under the agent's home.
+   * A container created before the volume existed keeps its home in its own
+   * writable layer. Replacing it would start the machine on an empty volume —
+   * the files would still be in the old container, unreachable and deleted
+   * with it. So an installation that predates the volume is migrated first:
+   * the home is copied out of the old container and into the volume, while
+   * the old container still exists to copy from.
+   */
+  async function containerUsesHomeVolume(): Promise<boolean> {
+    const result = await run(
+      podman([
+        "container",
+        "inspect",
+        "--format",
+        "{{range .Mounts}}{{.Destination}}={{.Type}} {{end}}",
+        VM_CONTAINER_NAME,
+      ]),
+      { timeoutMs: 30_000, maxOutput: 8192 },
+    );
+    if (result.exitCode !== 0) return true; // no container: nothing to migrate
+    return result.stdout.includes(`${VM_WORKDIR}=volume`);
+  }
+
+  /** Copy an existing container's home onto the volume.
    *
-   * `rebuildImage` is what differs between the two callers: a broken container
-   * only needs a fresh one from the same image, while a stale image needs the
-   * image itself rebuilt first. The home is saved before either starts, and
-   * if saving fails the container is left untouched — better a machine that
-   * still starts than one whose files are half-moved. */
-  async function recreateContainer(
+   * Runs before the container is replaced. A machine with nothing in its home
+   * (every fresh install, and any installation whose agent never wrote
+   * anything) copies nothing and costs one `podman cp` with an empty source.
+   * A failure here is reported rather than skipped: replacing the container
+   * would throw the files away, and a machine that starts empty after an
+   * update is the failure this whole change exists to prevent.
+   */
+  async function migrateHomeToVolume(
     options: { rebuildImage: boolean },
   ): Promise<void> {
-    const home = await Deno.makeTempDir({ prefix: "lumisca-stella-home-" });
+    const home = await Deno.makeTempDir({ prefix: "lumisca-stella-migrate-" });
     try {
-      const present = await run(
-        podman(["container", "exists", VM_CONTAINER_NAME]),
-        { timeoutMs: 30_000 },
+      const stopped = await run(
+        podman(["stop", "--time", "5", VM_CONTAINER_NAME]),
+        { timeoutMs: VM_STOP_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
       );
-      const keepHome = present.exitCode === 0;
-      if (keepHome) {
-        // Stop before copying: a running machine keeps writing to its home.
-        await run(podman(["stop", "--time", "5", VM_CONTAINER_NAME]), {
-          timeoutMs: VM_STOP_TIMEOUT_MS,
-          maxOutput: VM_TEXT_OUTPUT_LIMIT,
-        });
-        const copyOut = await run(
-          podman(["cp", `${VM_CONTAINER_NAME}:${VM_WORKDIR}`, home]),
-          { timeoutMs: VM_COPY_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
+      if (stopped.exitCode !== 0) {
+        throw new Error(
+          `Could not stop the machine to move its files: ${detail(stopped)}`,
         );
-        if (copyOut.exitCode !== 0) {
-          throw new Error(
-            `Could not save the machine's files before replacing it, so it ` +
-              `was left as it was: ${detail(copyOut)}`,
-          );
-        }
-        await run(podman(["rm", "--force", VM_CONTAINER_NAME]), {
-          timeoutMs: VM_REMOVE_TIMEOUT_MS,
-        });
+      }
+      const copyOut = await run(
+        podman(["cp", `${VM_CONTAINER_NAME}:${VM_WORKDIR}`, home]),
+        { timeoutMs: VM_COPY_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
+      );
+      if (copyOut.exitCode !== 0) {
+        throw new Error(
+          `Could not read the machine's files to move them onto its new ` +
+            `home: ${detail(copyOut)}`,
+        );
+      }
+      // The old container still holds the name: it is removed now that its
+      // home has been read. The volume outlives it, so the replacement is
+      // the one that mounts the files (its home is empty, so the copy below
+      // goes straight in).
+      const removed = await run(
+        podman(["rm", "--force", VM_CONTAINER_NAME]),
+        { timeoutMs: VM_REMOVE_TIMEOUT_MS },
+      );
+      if (removed.exitCode !== 0) {
+        throw new Error(
+          `Could not replace the machine after reading its files ` +
+            `(they are kept in ${home}): ${detail(removed)}`,
+        );
       }
       if (options.rebuildImage) await buildImage();
       await createContainer();
-      if (keepHome) {
-        // `podman cp <container>:<home> <dir>` unpacks the home INTO the
-        // directory, under its own base name, so the copy back is from
-        // `<dir>/agent`.
-        const saved = join(home, basename(VM_WORKDIR));
-        const copyIn = await run(
-          podman([
-            "cp",
-            `${saved}/.`,
-            `${VM_CONTAINER_NAME}:${VM_WORKDIR}/`,
-          ]),
-          { timeoutMs: VM_COPY_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
-        );
-        if (copyIn.exitCode !== 0) {
-          throw new Error(
-            `The machine was replaced but its files could not be put back ` +
-              `(they are kept in ${saved}): ${detail(copyIn)}`,
-          );
-        }
-      }
       await startContainer();
+      const saved = join(home, basename(VM_WORKDIR));
+      const copyIn = await run(
+        podman(["cp", `${saved}/.`, `${VM_CONTAINER_NAME}:${VM_WORKDIR}/`]),
+        { timeoutMs: VM_COPY_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
+      );
+      if (copyIn.exitCode !== 0) {
+        throw new Error(
+          `The machine's files were read but could not be put back ` +
+            `(they are kept in ${saved}): ${detail(copyIn)}`,
+        );
+      }
     } finally {
       await Deno.remove(home, { recursive: true }).catch(() => {});
     }
+  }
+
+  /** Replace the container.
+   *
+   * The agent's home is not touched: it lives on a named volume (see
+   * VM_HOME_VOLUME), which podman keeps when the container is removed, so a
+   * replacement reads the same files the old one wrote. Nothing is copied in
+   * or out — the copy this used to do was the way a home survived a
+   * container, and it could not help when there was no container left to
+   * copy from.
+   *
+   * `rebuildImage` is what differs between the two callers: a broken container
+   * only needs a fresh one from the same image, while a stale image needs the
+   * image itself rebuilt first. Both ends with a started container.
+   */
+  async function recreateContainer(
+    options: { rebuildImage: boolean },
+  ): Promise<void> {
+    // Stopping first, not removing: `podman rm` on a running container would
+    // be `--force` (a kill), and the volume's files are written by processes
+    // the machine is still running.
+    const present = await run(
+      podman(["container", "exists", VM_CONTAINER_NAME]),
+      { timeoutMs: 30_000 },
+    );
+    if (present.exitCode === 0) {
+      await run(podman(["stop", "--time", "5", VM_CONTAINER_NAME]), {
+        timeoutMs: VM_STOP_TIMEOUT_MS,
+        maxOutput: VM_TEXT_OUTPUT_LIMIT,
+      });
+      const removed = await run(
+        podman(["rm", "--force", VM_CONTAINER_NAME]),
+        { timeoutMs: VM_REMOVE_TIMEOUT_MS },
+      );
+      if (removed.exitCode !== 0) {
+        throw new Error(
+          `Could not replace the machine: ${detail(removed)}`,
+        );
+      }
+    }
+    if (options.rebuildImage) await buildImage();
+    await createContainer();
+    await startContainer();
   }
 
   async function startContainer(): Promise<void> {
@@ -819,12 +887,16 @@ export function createVmManager(options: VmManagerOptions): VmManager {
           await startContainer();
           break;
         case "image_stale":
-          // The container files changed under the image. Rebuild it and carry
-          // the agent's home across: the files are the agent's work, and a
-          // machine built from older instructions is not the machine this
-          // installation describes (it may lack anything the definition now
-          // grants).
-          await recreateContainer({ rebuildImage: true });
+          // The container files changed under the image. A machine built from
+          // older instructions is not the machine this installation describes
+          // (it may lack anything the definition now grants), so it is
+          // replaced. An installation that predates the home volume has its
+          // files moved onto it first — see migrateHomeToVolume.
+          if (!await containerUsesHomeVolume()) {
+            await migrateHomeToVolume({ rebuildImage: true });
+          } else {
+            await recreateContainer({ rebuildImage: true });
+          }
           break;
         case "container_missing":
           await createContainer();
@@ -833,11 +905,16 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         case "stopped":
           if (before.reason !== "") {
             // The container exists but is broken (a drifted image, a dead
-            // entry point). Recreating it is the only way forward. Its home
-            // is the agent's work, so it is carried into the new container;
-            // losing it would make "the machine misbehaved" cost the user
-            // everything the agent had done.
-            await recreateContainer({ rebuildImage: false });
+            // entry point). Recreating it is the only way forward. The home
+            // is the agent's work, so an installation that predates the
+            // volume has it moved across first; losing it would make "the
+            // machine misbehaved" cost the user everything the agent had
+            // done.
+            if (!await containerUsesHomeVolume()) {
+              await migrateHomeToVolume({ rebuildImage: false });
+            } else {
+              await recreateContainer({ rebuildImage: false });
+            }
           } else {
             await startContainer();
           }

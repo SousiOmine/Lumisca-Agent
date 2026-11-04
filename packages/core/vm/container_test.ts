@@ -13,6 +13,7 @@ import {
   VM_CONTAINER_NAME,
   VM_DBUS_ADDRESS,
   VM_DISPLAY,
+  VM_HOME_VOLUME,
   VM_IMAGE_DIGEST_LABEL,
   VM_SCREEN_HEIGHT,
   VM_SCREEN_WIDTH,
@@ -652,7 +653,7 @@ Deno.test("start: a missing image definition fails with its path", async () => {
   }
 });
 
-Deno.test("start: a broken container is recreated, keeping the agent's home", async () => {
+Deno.test("start: a broken container is recreated on the same home volume", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run, calls } = makeRunner({
@@ -660,6 +661,12 @@ Deno.test("start: a broken container is recreated, keeping the agent's home", as
       { match: /^podman --version/, result: ok("4.9.3\n") },
       { match: /^podman image exists/, result: ok() },
       { match: /^podman image inspect/, result: ok(`${digest}\n`) },
+      // The container this version created already mounts the home volume,
+      // so nothing has to be migrated.
+      {
+        match: /^podman container inspect --format \{\{range \.Mounts\}\}/,
+        result: ok(`${VM_WORKDIR}=volume\n`),
+      },
       { match: /^podman container inspect/, result: ok(containerFacts()) },
       // A drifted display: the machine is reported as stopped+reason.
       {
@@ -687,23 +694,24 @@ Deno.test("start: a broken container is recreated, keeping the agent's home", as
       true,
       `the broken container must be removed: ${joined.join("\n")}`,
     );
-    // The home is the agent's work: it is saved before the container is
-    // dropped and put back before the new one starts.
-    const copyOut = joined.findIndex((c) =>
-      c.startsWith(`podman cp ${VM_CONTAINER_NAME}:${VM_WORKDIR}`)
-    );
+    // The home is the agent's work, and it is NOT carried through a copy any
+    // more: it lives on a named volume that podman keeps when the container
+    // is removed. What this pins is that every container created for the
+    // machine mounts that volume, and that nothing copies the home (a copy
+    // cannot work when there is no container to copy from).
     const removed = joined.findIndex((c) => c.startsWith("podman rm"));
     const created = joined.findIndex((c) => c.startsWith("podman create "));
-    const copyIn = joined.findIndex((c) =>
-      c.startsWith("podman cp ") &&
-      c.endsWith(`${VM_CONTAINER_NAME}:${VM_WORKDIR}/`)
-    );
-    assert(copyOut !== -1, `the home must be saved: ${joined.join("\n")}`);
-    assert(removed > copyOut, "the home must be saved before the removal");
     assert(created > removed, "a fresh container must follow the removal");
     assert(
-      copyIn > created,
-      "the home must be restored into the new container",
+      joined.some((c) =>
+        c.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`)
+      ),
+      `the new container must mount the home volume: ${joined.join("\n")}`,
+    );
+    assertEquals(
+      joined.filter((c) => c.startsWith("podman cp")).length,
+      0,
+      `the home must not be copied: ${joined.join("\n")}`,
     );
     assert(
       joined.some((c) => c.startsWith("podman start")),
@@ -723,6 +731,12 @@ Deno.test("start: a stale image is rebuilt from the container files", async () =
       // An older build: the label names a different set of files.
       { match: /^podman image inspect/, result: ok("older-digest\n") },
       { match: /^podman container exists/, result: ok() },
+      // The container this version created already mounts the home volume,
+      // so nothing has to be migrated.
+      {
+        match: /^podman container inspect --format \{\{range \.Mounts\}\}/,
+        result: ok(`${VM_WORKDIR}=volume\n`),
+      },
       { match: /^podman container inspect/, result: ok(containerFacts()) },
       { match: /^podman build/, result: ok("built\n") },
       { match: /^podman create /, result: ok("abc123\n") },
@@ -744,12 +758,19 @@ Deno.test("start: a stale image is rebuilt from the container files", async () =
       joined.some((c) => c.startsWith("podman build")),
       `the image must be rebuilt: ${joined.join("\n")}`,
     );
-    const saved = joined.findIndex((c) =>
-      c.startsWith(`podman cp ${VM_CONTAINER_NAME}:${VM_WORKDIR}`)
+    // Nothing is copied: the home is on a volume that survives both the
+    // rebuild and the removed container.
+    assertEquals(
+      joined.filter((c) => c.startsWith("podman cp")).length,
+      0,
+      `the home must not be copied: ${joined.join("\n")}`,
     );
-    const build = joined.findIndex((c) => c.startsWith("podman build"));
-    assert(saved !== -1, `the home must be saved: ${joined.join("\n")}`);
-    assert(saved < build, "the home must be saved before the image is rebuilt");
+    assert(
+      joined.some((c) =>
+        c.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`)
+      ),
+      `the rebuilt machine must mount the home volume: ${joined.join("\n")}`,
+    );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
@@ -1000,6 +1021,155 @@ Deno.test("status: podman that cannot start a container is not offered", async (
     assert(
       verdict.reason.includes("cannot start one"),
       `verdict: ${verdict.reason}`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("the home volume is mounted on every container the machine makes", async () => {
+  // The reason the volume exists: a container is replaced (a release rebuilds
+  // it) and can be removed by anything, and the files the agent wrote must
+  // not go with it. A container created WITHOUT the mount would start on an
+  // empty home and look healthy — the worst kind of failure.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  const { run, calls } = makeRunner({
+    answers: [
+      { match: /^podman --version/, result: ok("4.9.3\n") },
+      { match: /^podman image exists/, result: ok() },
+      { match: /^podman image inspect/, result: ok(`${digest}\n`) },
+      // No container yet: the machine is created from scratch.
+      {
+        match: /^podman container inspect/,
+        result: fail("no such"),
+        once: true,
+      },
+      { match: /^podman container inspect/, result: ok(containerFacts()) },
+      { match: /^podman create /, result: ok("abc123\n") },
+      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
+      {
+        match: /xdotool getdisplaygeometry/,
+        result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
+      },
+    ],
+  });
+  try {
+    const manager = createVmManager({ containerDir: dir, run });
+    await manager.start();
+    const create = calls
+      .map((c) => c.join(" "))
+      .find((c) => c.startsWith("podman create "));
+    assert(create !== undefined, "the machine must be created");
+    assert(
+      create!.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`),
+      `the home must be on its volume: ${create}`,
+    );
+    // A named volume, not a host path: the machine's isolation rests on
+    // nothing of the host being reachable from inside.
+    assert(
+      !create!.includes("/home/agent/agents") &&
+        !create!.includes(VM_WORKDIR + ":"),
+      `nothing of the host may be mounted: ${create}`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("an install older than the volume has its home moved onto it", async () => {
+  // The container from before the volume keeps its home in its own writable
+  // layer. Replacing it without moving the files would start the machine on
+  // an empty volume and delete the old container — the files would be gone
+  // with no error to show for it.
+  const dir = await containerDir();
+  const { run, calls } = makeRunner({
+    answers: [
+      { match: /^podman --version/, result: ok("4.9.3\n") },
+      { match: /^podman image exists/, result: ok() },
+      // An older build: the container files changed under the image.
+      { match: /^podman image inspect/, result: ok("older-digest\n") },
+      { match: /^podman container exists/, result: ok() },
+      // The old container's home is in its own layer, not on a volume.
+      {
+        match: /^podman container inspect --format \{\{range .Mounts\}\}/,
+        result: ok(`${VM_WORKDIR}=bind\n`),
+      },
+      { match: /^podman container inspect/, result: ok(containerFacts()) },
+      { match: /^podman stop/, result: ok() },
+      { match: /^podman cp /, result: ok() },
+      { match: /^podman rm/, result: ok() },
+      { match: /^podman build/, result: ok("built\n") },
+      { match: /^podman create /, result: ok("abc123\n") },
+      { match: /^podman start/, result: ok() },
+      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
+      {
+        match: /xdotool getdisplaygeometry/,
+        result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
+      },
+    ],
+  });
+  try {
+    const manager = createVmManager({ containerDir: dir, run });
+    await assertRejects(() => manager.start(), Error);
+    const joined = calls.map((c) => c.join(" "));
+    // The files are read out of the OLD container before it is removed...
+    const copyOut = joined.findIndex((c) =>
+      c.startsWith(`podman cp ${VM_CONTAINER_NAME}:${VM_WORKDIR}`)
+    );
+    const removed = joined.findIndex((c) => c.startsWith("podman rm"));
+    const created = joined.findIndex((c) => c.startsWith("podman create "));
+    const copyIn = joined.findIndex((c) =>
+      c.startsWith("podman cp ") &&
+      c.endsWith(`${VM_CONTAINER_NAME}:${VM_WORKDIR}/`)
+    );
+    assert(copyOut !== -1, `the home must be read out: ${joined.join("\n")}`);
+    assert(
+      removed > copyOut,
+      "the old container must keep the files until read",
+    );
+    assert(created > removed, "the replacement comes after the removal");
+    assert(copyIn > created, "the files go into the volume-backed container");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("a container already on the volume is not migrated again", async () => {
+  // Every start after the first would otherwise copy the home through a
+  // temporary directory, on every release, forever.
+  const dir = await containerDir();
+  const { run, calls } = makeRunner({
+    answers: [
+      { match: /^podman --version/, result: ok("4.9.3\n") },
+      { match: /^podman image exists/, result: ok() },
+      { match: /^podman image inspect/, result: ok("older-digest\n") },
+      { match: /^podman container exists/, result: ok() },
+      {
+        match: /^podman container inspect --format \{\{range .Mounts\}\}/,
+        result: ok(`${VM_WORKDIR}=volume\n`),
+      },
+      { match: /^podman container inspect/, result: ok(containerFacts()) },
+      { match: /^podman stop/, result: ok() },
+      { match: /^podman rm/, result: ok() },
+      { match: /^podman build/, result: ok("built\n") },
+      { match: /^podman create /, result: ok("abc123\n") },
+      { match: /^podman start/, result: ok() },
+      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
+      {
+        match: /xdotool getdisplaygeometry/,
+        result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
+      },
+    ],
+  });
+  try {
+    const manager = createVmManager({ containerDir: dir, run });
+    await assertRejects(() => manager.start(), Error);
+    const joined = calls.map((c) => c.join(" "));
+    assertEquals(
+      joined.filter((c) => c.startsWith("podman cp")).length,
+      0,
+      `an already-migrated machine must not copy: ${joined.join("\n")}`,
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
