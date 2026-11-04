@@ -1,5 +1,8 @@
 import { fileURLToPath } from "node:url";
-import { consumeServerStartupEnvironment } from "../../server/startup.ts";
+// The dependency-free half of the server startup, not startup.ts: this
+// directory is outside the workspace, so the root import map (and therefore
+// `@lumisca/core`) is unavailable to anything reached from here.
+import { consumeServerStartupEnvironment } from "../../server/startup-env.ts";
 
 // A released Lumisca server launches coding tools with its own process
 // environment. Scrub that server-instance configuration before Tauri starts,

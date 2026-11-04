@@ -17,6 +17,7 @@ git status
 
 - **`packages/desktop` のワークスペース除外**  
   `packages/desktop` はルートの `deno.json` の `workspace` に含めないでください。含めると Deno がシンボリックリンクを作成し、サーバーバイナリのコンパイル時に `src-tauri/target` を巻き込んで巨大なバイナリが生成されます。デスクトップの開発タスクはルートから `deno task dev:desktop` で実行します。
+  このディレクトリから import するサーバー側のモジュールは、ルートの import map が効かないため bare specifier を持てません（`@lumisca/core` を import する `server/startup.ts` を辿ると `dev:desktop` が解決に失敗します）。環境の取り出しは `server/startup-env.ts` のように依存の無いモジュールへ分け、`startup.ts` から再輸出します。
 - **サーバーのビルド経路**  
   サーバーバイナリのビルドは `scripts/build-server.ts` に集約しています。デスクトップ同梱向けと単体配布向けの双方がこのスクリプトを経由します。動作確認は `deno task smoke:server` で行います。
 
