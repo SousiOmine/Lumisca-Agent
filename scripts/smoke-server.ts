@@ -315,12 +315,15 @@ try {
       `status ${appJs.status}, ${appJsText.length} bytes`,
     );
 
-    const css = await fetch(`${base}/styles.css`);
-    const cssText = await css.text();
+    // The stylesheet ships inside the page's `<style>` element (render.ts),
+    // not as its own URL — the packaged assets manifest only has to have
+    // resolved `styles.css` into that text. A page whose CSS build failed
+    // still answers 200 with the shell, so the check is on the content.
+    const inlineCss = html.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
     check(
-      "GET /styles.css serves the stylesheet",
-      css.status === 200 && cssText.length > 1_000,
-      `status ${css.status}, ${cssText.length} bytes`,
+      "GET / inlines the built stylesheet",
+      inlineCss.length > 1_000,
+      `${html.length} bytes of HTML, ${inlineCss.length} bytes of CSS`,
     );
 
     const data = await fetch(`${base}/assets/initial-data.js`);

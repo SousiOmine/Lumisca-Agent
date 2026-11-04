@@ -265,7 +265,7 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
   - **スクロールの追従**: `useTranscriptScroll` の `ResizeObserver` による追従も rAF で 1 回に間引きます。レイアウト変更のたびに `scrollTop` を書くと、フレーム内で何度も同期リフローが走ります。
 
 - **転送（圧縮とキャッシュ）**  
-  サーバーは応答を gzip します（`hono/compress`、閾値 1 KB）。実測でクライアントバンドル 610 KB → 179 KB、HTML にインラインした CSS を含むページ 140 KB → 31 KB です。`/assets/app.js` と `/styles.css` は内容ハッシュの `ETag` を付け、`Cache-Control: private, max-age=0, must-revalidate` で再検証させます（変わらなければ 304、本文なし）。ページと `/assets/initial-data.js` はトークンを運ぶため `no-store` です。規則は `packages/server/app-file-headers.ts` に 1 箇所だけあります。
+  サーバーは応答を gzip します（`hono/compress`、閾値 1 KB）。実測でクライアントバンドル 610 KB → 179 KB、HTML にインラインした CSS を含むページ 140 KB → 31 KB です。`/assets/*`（エントリと分割チャンク）は内容ハッシュの `ETag` を付け、`Cache-Control: private, max-age=0, must-revalidate` で再検証させます（変わらなければ 304、本文なし）。CSS は独立した URL を持たず、ページの `<style>` にインラインするので、この規則の対象はアセットだけです。ページと `/assets/initial-data.js` はトークンを運ぶため `no-store` です。規則は `packages/server/app-file-headers.ts` に 1 箇所だけあります。
 
 - **フェデレーション経路の予算とヘッダ**  
   ハブのプロキシは用途別のタイムアウトを持ちます（`federation.ts` の `proxyTimeoutFor`）: 通常は 30 秒、セッションの open・transcript window・compact・rewind と stella の会話取得は 120 秒です。一律 10 秒だった頃は、リモートの遅いが正常な処理が 502 になっていました。`/api/fed/peers` の到達性確認は 3 秒で打ち切り、セッション一覧を待たせません。プロキシは `content-type` に加えて `content-disposition`（ダウンロード名）、`cache-control`、`etag`、`vary`、`content-security-policy`、`x-content-type-options` を透過します。`content-encoding` は透過しません（ハブの `fetch` が解凍済みのため）。
