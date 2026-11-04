@@ -14,7 +14,7 @@
  * stale as long as it is stored under the source's own identity.
  */
 
-import { createCanvas, Image } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 /** Longest edge of a preview, in pixels.
  *
@@ -66,19 +66,24 @@ export function previewSize(
  * bytes the decoder cannot read, or an image already within
  * {@link PREVIEW_EDGE} — in that case the caller serves the original, which is
  * smaller than any re-encode would be.
+ *
+ * Asynchronous because it decodes through `loadImage`. Setting `Image.src`
+ * decodes synchronously, and on Deno 2.9.8 a process that did so once
+ * segfaults while shutting down (exit 139, intermittently) — the test runner
+ * loses the whole file, and a server would die on its way out. `loadImage`
+ * decodes on a microtask after `onload` and does not leave that state behind.
  */
-export function renderPreview(
+export async function renderPreview(
   source: Uint8Array,
   mimeType: string,
-): Uint8Array | undefined {
+): Promise<Uint8Array | undefined> {
   if (!isPreviewable(mimeType)) return undefined;
-  let image: Image;
+  let image: Awaited<ReturnType<typeof loadImage>>;
   try {
-    image = new Image();
-    image.src = source;
-  } catch {
     // Not decodable: the caller serves the original rather than a broken
-    // image.
+    // image. An empty source rejects here too (loadImage refuses it).
+    image = await loadImage(source);
+  } catch {
     return undefined;
   }
   const width = image.width;

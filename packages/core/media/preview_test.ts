@@ -7,7 +7,7 @@
  * (re-encoding it would only cost bytes).
  */
 import { assert, assertEquals } from "@std/assert";
-import { createCanvas, Image } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import {
   isPreviewable,
   PREVIEW_EDGE,
@@ -25,9 +25,10 @@ function makePng(width: number, height: number): Uint8Array {
   return new Uint8Array(canvas.toBuffer("image/png"));
 }
 
-function pngSize(bytes: Uint8Array): { width: number; height: number } {
-  const image = new Image();
-  image.src = bytes;
+async function pngSize(
+  bytes: Uint8Array,
+): Promise<{ width: number; height: number }> {
+  const image = await loadImage(bytes);
   return { width: image.width, height: image.height };
 }
 
@@ -44,32 +45,44 @@ Deno.test("previewSize: an image already small enough is unchanged", () => {
   assertEquals(previewSize(320, 200), { width: 320, height: 200 });
 });
 
-Deno.test("renderPreview: a big picture comes back smaller", () => {
+Deno.test("renderPreview: a big picture comes back smaller", async () => {
   const source = makePng(2400, 1200);
-  const preview = renderPreview(source, "image/png");
+  const preview = await renderPreview(source, "image/png");
   assert(preview !== undefined, "a 2400px picture must have a preview");
-  assertEquals(pngSize(preview!), { width: PREVIEW_EDGE, height: 640 });
+  assertEquals(await pngSize(preview!), {
+    width: PREVIEW_EDGE,
+    height: 640,
+  });
   assert(
     preview!.byteLength < source.byteLength,
     `preview ${preview!.byteLength} < source ${source.byteLength}`,
   );
 });
 
-Deno.test("renderPreview: an image within the edge produces nothing", () => {
+Deno.test("renderPreview: an image within the edge produces nothing", async () => {
   // The caller serves the original: a re-encode of a small picture is bigger
   // than the picture, and identical to the eye.
-  assertEquals(renderPreview(makePng(320, 200), "image/png"), undefined);
+  assertEquals(await renderPreview(makePng(320, 200), "image/png"), undefined);
 });
 
-Deno.test("renderPreview: an unsupported or broken source produces nothing", () => {
-  // SVG is a document, not pixels; bytes that do not decode have no preview.
-  // Both fall back to the original rather than to an error.
-  assertEquals(renderPreview(new Uint8Array(), "image/svg+xml"), undefined);
-  assertEquals(
-    renderPreview(new Uint8Array([1, 2, 3]), "image/png"),
-    undefined,
-  );
-});
+Deno.test(
+  "renderPreview: an unsupported or broken source produces nothing",
+  async () => {
+    // SVG is a document, not pixels; bytes that do not decode have no
+    // preview. Both fall back to the original rather than to an error.
+    assertEquals(
+      await renderPreview(new Uint8Array(), "image/svg+xml"),
+      undefined,
+    );
+    assertEquals(
+      await renderPreview(new Uint8Array([1, 2, 3]), "image/png"),
+      undefined,
+    );
+    // An empty body of a type this module does decode: loadImage refuses it,
+    // and the route answers with the original.
+    assertEquals(await renderPreview(new Uint8Array(), "image/png"), undefined);
+  },
+);
 
 Deno.test("isPreviewable names the raster formats the route can scale", () => {
   for (const type of ["image/png", "image/jpeg", "image/webp"]) {

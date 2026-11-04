@@ -89,7 +89,7 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
     // source.
     const wantsPreview = c.req.query("preview") !== "0";
     const bytes = wantsPreview
-      ? renderPreview(new Uint8Array(file.bytes), file.mimeType) ??
+      ? await renderPreview(new Uint8Array(file.bytes), file.mimeType) ??
         new Uint8Array(file.bytes)
       : new Uint8Array(file.bytes);
     return new Response(bytes.buffer as ArrayBuffer, {

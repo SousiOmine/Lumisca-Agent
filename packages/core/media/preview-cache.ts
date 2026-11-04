@@ -60,7 +60,7 @@ export async function ensurePreview(
     // answers 404 from its own resolve, so nothing to add here.
     return undefined;
   }
-  const preview = renderPreview(source, mimeType);
+  const preview = await renderPreview(source, mimeType);
   if (preview === undefined) return undefined;
   try {
     // Written to a temporary name and renamed: a concurrent request must

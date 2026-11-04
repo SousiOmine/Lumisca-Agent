@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { createCanvas, Image } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { assert, assertEquals } from "@std/assert";
 import {
   fauxProvider,
@@ -184,8 +184,8 @@ Deno.test("a big visual is served downscaled, and whole on request", async () =>
       assertEquals(preview.status, 200);
       assertEquals(preview.headers.get("content-type"), "image/png");
       const previewBytes = new Uint8Array(await preview.arrayBuffer());
-      const previewImage = new Image();
-      previewImage.src = previewBytes;
+      // Decoded through `loadImage` (not `Image.src`): see renderPreview.
+      const previewImage = await loadImage(previewBytes);
       assertEquals(previewImage.width, 1280);
       assert(
         previewBytes.byteLength < bytes.byteLength,
