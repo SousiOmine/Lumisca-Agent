@@ -127,7 +127,11 @@
   .stella-agent,
   .stella-header-avatar,
   .stella-screen-toggle,
-  .msg-action-btn {
+  .msg-action-btn,
+  /* The columns trading width when the machine's screen opens: a layout that
+   * slides is motion like any other, and a reader who asked for less of it
+   * wants the space to be there, not to watch it arrive. */ .stella-pane,
+  .stella-main {
     transition: none;
   }
 

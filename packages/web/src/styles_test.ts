@@ -656,3 +656,31 @@ Deno.test("the machine's screen fills the window without reflowing it", async ()
     "the box must not animate its width",
   );
 });
+
+Deno.test("the columns trade width in one movement", async () => {
+  // The pane widening and the conversation beside it narrowing are one
+  // change; without the transition the transcript jumped a hundred pixels in
+  // a single frame while the eye was on the pane.
+  //
+  // What makes this safe for the picture inside: noVNC answers a resize with
+  // one requestAnimationFrame that writes the canvas's CSS width
+  // (`Display._rescale`) — it does not repaint the pixels, so following the
+  // box costs nothing per frame.
+  const css = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const pane = /\.stella-pane \{([^}]*)\}/.exec(css);
+  assertEquals(pane !== null, true, ".stella-pane must exist");
+  assertEquals(
+    /transition: width var\(--lum-dur-mid\)/.test(pane![1]!),
+    true,
+    "the pane must animate its width with the motion token",
+  );
+  const main = /\.stella-main \{([^}]*)\}/.exec(css);
+  assertEquals(main !== null, true, ".stella-main must exist");
+  assertEquals(
+    /transition: flex-basis var\(--lum-dur-mid\)/.test(main![1]!),
+    true,
+    "the conversation must follow in the same duration",
+  );
+});

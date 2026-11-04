@@ -382,6 +382,10 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* The other half of the pane's width transition: the two columns trade
+   * space in one movement instead of the conversation snapping to its new
+   * width after the pane has already arrived. */
+  transition: flex-basis var(--lum-dur-mid) var(--lum-ease-out);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -710,8 +714,16 @@
   overflow: hidden;
   /* No `animation` here: the pane's entrance and exit are played by
    * motion.ts, because the pane has to stay mounted through the exit (see
-   * StellaView and hooks/usePresence) and only opacity/transform may move —
-   * a size change would make noVNC re-derive its scale on every frame. */
+   * StellaView and hooks/usePresence).
+   *
+   * The WIDTH does transition, and the conversation beside it follows: the
+   * column widening is the change the eye is watching, and snapping it left
+   * the transcript jumping a hundred pixels in one frame. The picture inside
+   * does not suffer for it — noVNC answers a resize with one `requestAnimation
+   * Frame` that writes the canvas's CSS width (`_updateScale` →
+   * `Display._rescale`); it does not repaint the pixels, so the scale moves
+   * with the box and the stream keeps playing. */
+  transition: width var(--lum-dur-mid) var(--lum-ease-out);
 }
 
 /* Full screen: the machine's screen covers the window.
