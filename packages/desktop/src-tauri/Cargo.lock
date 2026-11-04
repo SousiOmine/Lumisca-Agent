@@ -2073,7 +2073,7 @@ dependencies = [
 
 [[package]]
 name = "lumisca-desktop"
-version = "0.10.9"
+version = "0.10.10"
 dependencies = [
  "base64 0.23.1",
  "block2",
