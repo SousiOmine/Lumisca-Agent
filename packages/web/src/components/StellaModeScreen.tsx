@@ -7,7 +7,6 @@ import type {
   StellaAgentSummary,
   StellaStatus,
 } from "../types.ts";
-import type { StellaConversationState } from "../stella-state.ts";
 import type { StellaHook } from "../hooks/useStella.ts";
 
 /**

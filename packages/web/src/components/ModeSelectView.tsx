@@ -3,7 +3,7 @@ import { useT } from "../i18n.ts";
 import type { StellaStatus } from "../types.ts";
 import type { AppMode } from "@lumisca/core/shared";
 
-interface ModeSelectViewProps {
+export interface ModeSelectViewProps {
   /** What this server can do; null while the first read is in flight (both
    * cards stay disabled: neither mode can be honest about itself yet). */
   status: StellaStatus | null;

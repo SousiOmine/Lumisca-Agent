@@ -8,7 +8,6 @@ import {
 import type { InitialData } from "./types.ts";
 import { isViewRunning, type SessionView } from "./types.ts";
 import { closeTargets, DRAFT_TAB, splitTabKey } from "./tabs.ts";
-import type { AppMode } from "@lumisca/core/shared";
 import { useT } from "./i18n.ts";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useLanguage } from "./hooks/useLanguage.ts";
@@ -29,7 +28,6 @@ import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { CloseTabsDialog } from "./components/CloseTabsDialog.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
 import { AppMenu } from "./components/AppMenu.tsx";
-import { Modal } from "./components/Modal.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
 import { RecentSessionsModal } from "./components/RecentSessionsModal.tsx";
@@ -39,7 +37,7 @@ import {
 } from "./components/SettingsModal.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
-import { ModeSelectView } from "./components/ModeSelectView.tsx";
+import { ModeGate, ModeGateDialog } from "./components/ModeGate.tsx";
 import { StellaModeScreen } from "./components/StellaModeScreen.tsx";
 import { useAppMode } from "./hooks/useAppMode.ts";
 import { useStella } from "./hooks/useStella.ts";
@@ -252,23 +250,6 @@ export function App({ initialData }: AppProps): ReactElement {
   // for, and TabBar's props would then never compare equal.
   const openModeSelect = useCallback(() => setShowModeSelect(true), []);
   const closeModeSelect = useCallback(() => setShowModeSelect(false), []);
-  // Picking a mode is local and synchronous (localStorage), but stella needs
-  // the server's verdict first: `busy` covers that read, so the cards cannot
-  // be double-clicked into two different modes while it is in flight.
-  const [modeBusy, setModeBusy] = useState(false);
-  /** Choose the mode and close the switch dialog. A refusal (stella on a
-   * server without a usable machine) keeps the dialog open showing its
-   * reason — closing it would hide why nothing happened. */
-  const chooseMode = (next: AppMode) => {
-    setModeBusy(true);
-    void setMode(next).then(
-      () => {
-        setModeBusy(false);
-        setShowModeSelect(false);
-      },
-      () => setModeBusy(false),
-    );
-  };
   // Ctrl+T (the shortcut the app menu advertises): open the draft tab. Only
   // code mode has tabs; stella's conversation is the whole surface. The
   // handler is on the window because the shortcut must work from the
@@ -325,12 +306,11 @@ export function App({ initialData }: AppProps): ReactElement {
             </div>
           )
           : (
-            <ModeSelectView
+            <ModeGate
               status={machineStatus}
               mode={mode}
               error={modeError}
-              busy={modeBusy}
-              onChoose={chooseMode}
+              choose={setMode}
             />
           )}
       </div>
@@ -532,18 +512,13 @@ export function App({ initialData }: AppProps): ReactElement {
         />
       )}
       {showModeSelect && (
-        <Modal
+        <ModeGateDialog
+          status={machineStatus}
+          mode={mode}
+          error={modeError}
+          choose={setMode}
           onClose={closeModeSelect}
-          label={t("chat.modeSelect.title")}
-        >
-          <ModeSelectView
-            status={machineStatus}
-            mode={mode}
-            error={modeError}
-            busy={modeBusy}
-            onChoose={chooseMode}
-          />
-        </Modal>
+        />
       )}
     </div>
   );
