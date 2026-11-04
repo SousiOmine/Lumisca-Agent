@@ -198,10 +198,10 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
 
   **HTTPS のページから loopback への fetch は、WebKit では混在コンテンツとして遮断されます。** loopback は spec 上 potentially trustworthy ですが、WebKit はそう扱わず、`127.0.0.1` も `localhost` も同じです（WebKit bug 171934）。リモートのサーバーは通常 https なので、そのページでは `state` が取れず、タイトルバーが描画されないまま信号機ボタンの上にページの見出しが重なっていました。そこで `shellCall` は**通信段階の失敗**のときだけ Tauri の IPC（`bridge::shell_action`）へ退避します。IPC はネットワーク要求ではないので混在コンテンツの対象外で、同じ `handle_shell_action` に届き、キーの検証も同じです（HTTP エラーはアクション自身の答えなので再実行しません）。リモートページに許すコマンドは `capabilities/remote-shell.json` の `allow-shell-action` だけで、キーが無ければ何も動きません。
 
-  ドラッグとダブルクリックの最大化は、macOS では OS のタイトルバーが持つためブリッジを使いません。
+  ドラッグとダブルクリックの最大化は、macOS でもページの帯からブリッジ（`window/start-drag` / `window/toggle-maximize`）で行います。ネイティブタイトルバーは上端 28pt だけを占め、その下に置いた帯はページの要素だからです（理由は次の「ウィンドウ操作の見た目」）。
 
 - **ウィンドウ操作の見た目はプラットフォームの作法に従う**  
-  macOS は `tauri.macos.conf.json` で `decorations: true` + `titleBarStyle: "overlay"` にし、**OS 自身の信号機ボタン**を透明なタイトルバー越しに使います（見た目・hover・配置はウィンドウサーバーが持ち、ページが描いた複製は一致しません）。ページ側の帯は信号機の右から始め（`.titlebar.titled` の左余白）、`TitleBar` は閉じる・最小化・最大化のボタンを描きません。Windows / Linux は従来どおり `decorations: false` のフレームレスで、ページが右端に四角いボタンを描き、移動は `window/start-drag` で行います。どちらかはシェルが `state` の `platform` で答えます（ページはリモートのサーバーに配信され得るため、自分の環境からは判定できません）。
+  macOS は `tauri.macos.conf.json` で `decorations: true` + `titleBarStyle: "overlay"` にし、**OS 自身の信号機ボタン**を透明なタイトルバー越しに使います（見た目・hover・配置はウィンドウサーバーが持ち、ページが描いた複製は一致しません）。ただし Overlay のタイトルバーはページの上に重なり、**その高さ（28pt）の中のページ要素はクリックを受け取れません**。そこで `.app.macos` が同じ高さの上余白を取り、帯はその下から始めます（余白は透明なタイトルバー越しにページの背景が見え、1 本の帯として読めます）。`TitleBar` は閉じる・最小化・最大化のボタンを描かず、帯のドラッグとダブルクリックだけをブリッジへ送ります。ネイティブバーの高さそのものにも `.macos-titlebar-drag` を置きます（信号機ボタンの左 78px は空ける）。これが無いと、タブ帯より上の「信号機と同じ高さ」にはページの要素が無く、掴んでも何も起きません。Windows / Linux は従来どおり `decorations: false` のフレームレスで、ページが右端に四角いボタンを描き、移動は `window/start-drag` で行います。どちらかはシェルが `state` の `platform` で答えます（ページはリモートのサーバーに配信され得るため、自分の環境からは判定できません）。
 
 - **状態をどこに置くか**  
   判断は 3 つだけです。

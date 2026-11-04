@@ -27,7 +27,7 @@ git status
 
 - **独自スキームにしない**: WKWebView（macOS）は http(s) のページから独自スキームを fetch させず、`lumisca://` だった頃は macOS でタイトルバーごと描画されませんでした。CSP の `connect-src` に `http://127.0.0.1:*` を足すのを忘れないでください（`packages/server/render.ts`）。
 - **HTTPS のページは IPC に退避する**: WebKit は HTTPS のページから loopback への fetch を混在コンテンツとして遮断します（`127.0.0.1` も `localhost` も対象）。リモートのサーバーは通常 https なので、`shellCall` は fetch の**通信段階の失敗**だけ Tauri IPC の `shell_action` に切り替えます。処理は `handle_shell_action` の 1 本で、リモートページに許すコマンドは `capabilities/remote-shell.json` の `allow-shell-action` だけです。HTTP エラーを IPC で再実行しないでください（アクションが二重に走ります）。
-- **macOS のウィンドウ操作は OS のもの**: `tauri.macos.conf.json` で `decorations: true` + `titleBarStyle: "overlay"` にし、信号機ボタンはネイティブのものを使います。ページは帯を信号機の右から始め、閉じる／最小化／最大化のボタンを描きません。Windows / Linux はフレームレスのまま、ページが右端に描きます。どちらかは `state` の `platform` が答えます。
+- **macOS のウィンドウ操作は OS のもの**: `tauri.macos.conf.json` で `decorations: true` + `titleBarStyle: "overlay"` にし、信号機ボタンはネイティブのものを使います。透明なネイティブタイトルバーはページの上に 28pt 重なり、その中のページ要素はクリックを受け取れないため、ページの帯は `.app.macos` の上余白でその下から始めます。さらに、その上余白そのものにも `.macos-titlebar-drag` を置き、信号機と同じ高さでも掴めるようにします（信号機ボタンの左 78px は空けます）。閉じる／最小化／最大化のボタンは描かず、帯と上余白のドラッグ／ダブルクリックはブリッジ（`window/start-drag` / `window/toggle-maximize`）へ送ります。Windows / Linux はフレームレスのまま、ページが右端に描きます。どちらかは `state` の `platform` が答えます。
 
 ## 2. 自動アップデート
 

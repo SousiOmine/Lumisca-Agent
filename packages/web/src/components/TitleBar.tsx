@@ -1,4 +1,9 @@
-import { type MouseEvent, type ReactNode, useState } from "preact/compat";
+import {
+  type MouseEvent,
+  type ReactNode,
+  useRef,
+  useState,
+} from "preact/compat";
 import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
 import { type ShellState, shellState, windowApi } from "../shell.ts";
 import { useVisibleInterval } from "../hooks/useVisibleInterval.ts";
@@ -40,10 +45,12 @@ interface TitleBarProps {
  *   `titleBarStyle: "overlay"` in tauri.macos.conf.json). The traffic
  *   lights are the native ones, inset into the transparent title bar, and
  *   the window server owns their look, hover and placement — a copy drawn
- *   by the page could not match them. The strip therefore starts to the
- *   right of them (`--traffic-inset`, see chrome.css) and the empty area
- *   is left to the system for dragging and double-click zooming, so this
- *   component does not route those through the bridge there.
+ *   by the page could not match them. The native bar covers the top 28
+ *   points, so the page's strip starts below it (`.app.macos` in
+ *   chrome.css) rather than underneath the traffic lights, where its
+ *   buttons would not receive clicks. The strip is still the window's
+ *   toolbar: dragging it moves the window through the bridge, and a double
+ *   click zooms it.
  * - Windows and Linux are undecorated (`decorations: false`), so the page
  *   draws square minimize / maximize / close buttons at the right edge and
  *   moves the window through the bridge (`window/start-drag`).
@@ -89,28 +96,60 @@ export function TitleBar({
 
   const nativeControls = state.platform === "macos";
 
-  /** Tabs, the app menu, the connection picker (its popover extends below
+  /** Tabs, the app menu, the connection picker (their popovers extend below
    * the strip) and the window buttons must stay clickable, not drag. */
   const isInteractive = (e: MouseEvent<HTMLDivElement>) =>
-    (e.target as HTMLElement).closest("button, .tab, .connection-picker") !==
-      null;
+    (e.target as HTMLElement).closest(
+      "button, .tab, .app-menu, .connection-picker",
+    ) !== null;
+
+  /** Where the second press of a macOS double click landed. The first press
+   *  starts a drag, so the zoom is decided on the release (see onMouseUp). */
+  const doubleClickAt = useRef<{ x: number; y: number } | null>(null);
 
   const onMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    // The native title bar already moves and zooms the window.
-    if (nativeControls || e.button !== 0 || isInteractive(e)) return;
+    if (e.button !== 0 || isInteractive(e)) return;
+    // macOS: the strip is below the native title bar, but it is still the
+    // window's toolbar. A drag here goes through the bridge like Windows
+    // and Linux; a double click is the system's zoom gesture, so remember
+    // its position instead of starting a second drag on the second press.
+    if (nativeControls && e.detail === 2) {
+      doubleClickAt.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
     e.preventDefault();
     windowApi.startDrag().catch(() => {});
   };
 
+  const onMouseUp = (e: MouseEvent<HTMLDivElement>) => {
+    if (nativeControls && e.button === 0 && e.detail === 2) {
+      const start = doubleClickAt.current;
+      doubleClickAt.current = null;
+      // The system cancels the zoom when the pointer moved between the two
+      // presses; do the same so a sloppy double click does not resize.
+      if (
+        start !== null && !isInteractive(e) &&
+        Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) <= 4
+      ) {
+        windowApi.toggleMaximize().catch(() => {});
+      }
+      return;
+    }
+    doubleClickAt.current = null;
+  };
+
   const onDblClick = (e: MouseEvent<HTMLDivElement>) => {
+    // macOS zooms on mouseup (the first press starts a drag); the other
+    // platforms do not have the native title bar to consume the drag.
     if (nativeControls || isInteractive(e)) return;
     windowApi.toggleMaximize().catch(() => {});
   };
 
   return (
     <div
-      className={`titlebar${nativeControls ? " titled" : ""}`}
+      className="titlebar"
       onMouseDown={onMouseDown}
+      onMouseUp={onMouseUp}
       onDblClick={onDblClick}
     >
       {children}

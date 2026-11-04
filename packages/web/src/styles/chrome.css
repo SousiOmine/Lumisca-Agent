@@ -24,13 +24,39 @@
 }
 
 /* macOS: the OS keeps its title bar (tauri.macos.conf.json sets
- * decorations + titleBarStyle overlay), and the traffic lights sit in this
- * strip's top-left corner. The tabs start to the right of them, and the
- * strip keeps no background of its own so the window's own material shows
- * through the transparent title bar. */
-.titlebar.titled {
-  padding-left: 78px;
-  background: transparent;
+ * decorations + titleBarStyle overlay). The transparent native bar overlays
+ * the page and owns the top 28 points, so the page's chrome starts below it
+ * instead of underneath the traffic lights — a control placed there does
+ * not receive clicks. The strip still paints the canvas, so the native bar
+ * (which shows this inset) and the strip read as one surface.
+ *
+ * The value is the standard macOS title bar height. The window has no
+ * toolbar, which is what would make it taller. */
+.app.macos {
+  --titlebar-inset: 28px;
+  padding-top: var(--titlebar-inset);
+}
+
+/* The mode-selection screen has no title bar strip; its menu is fixed to
+ * the window corner, so it needs the same inset explicitly. */
+.app.macos .app-menu-standalone {
+  top: calc(10px + var(--titlebar-inset));
+}
+
+/* The drag handle inside the native bar's height. The page is inset below
+ * the bar, so this strip has no content of its own (the traffic lights are
+ * native and sit in the left 78px, which this must not cover). Without it,
+ * grabbing the window at the traffic-light height does nothing: the bar is
+ * transparent, and the page underneath has nothing to start a drag. */
+.macos-titlebar-drag {
+  position: fixed;
+  top: 0;
+  left: 78px;
+  right: 0;
+  height: var(--titlebar-inset);
+  z-index: 45;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* The tab bar inside the title bar drops its own chrome (background and

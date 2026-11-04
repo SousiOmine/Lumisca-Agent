@@ -75,6 +75,10 @@
   --app-inset: 12px;
 
   --tab-height: 40px;
+  /* Room for a title bar the OS draws over the page. Non-zero only in the
+   * macOS desktop window, whose transparent native title bar overlays the
+   * page (see `.app.macos` in chrome.css). */
+  --titlebar-inset: 0px;
   /* Height of the app root. The token is the browser's dynamic viewport
    * height; on touch devices useAppHeight.ts overwrites the variable with
    * the visualViewport height while the software keyboard is open, so the

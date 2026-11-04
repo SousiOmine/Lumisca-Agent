@@ -19,6 +19,7 @@ import { useNarrowViewport } from "./hooks/useMediaQuery.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
 import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
+import { useShellPlatform } from "./hooks/useShellPlatform.ts";
 import { quit } from "./shell.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
 import { useTabs } from "./hooks/useTabs.ts";
@@ -27,6 +28,7 @@ import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
 import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { CloseTabsDialog } from "./components/CloseTabsDialog.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
+import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
 import { AppMenu } from "./components/AppMenu.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
@@ -87,6 +89,13 @@ export function App({ initialData }: AppProps): ReactElement {
     error: modeError,
     setMode,
   } = useAppMode();
+  // macOS overlays the native title bar on the page, so the page's chrome
+  // has to start below it (see `.app.macos` in styles/chrome.css). The
+  // platform is the shell's answer, not this page's environment: a remote
+  // server is displayed in the same window.
+  const shellPlatform = useShellPlatform();
+  const macos = shellPlatform === "macos";
+  const appClass = macos ? "app macos" : "app";
   const {
     workspaces,
     loadError,
@@ -287,7 +296,8 @@ export function App({ initialData }: AppProps): ReactElement {
   // on the same server is never dragged into it.
   if (mode === null) {
     return (
-      <div className="app">
+      <div className={appClass}>
+        {macos && <MacosTitleBarDrag />}
         <AppMenu
           onNew={openDraftTab}
           onOpenRecent={openRecent}
@@ -318,7 +328,8 @@ export function App({ initialData }: AppProps): ReactElement {
   }
 
   return (
-    <div className="app">
+    <div className={appClass}>
+      {macos && <MacosTitleBarDrag />}
       {
         /* The desktop window is undecorated; the title bar strip holds the
        * tab bar, the app menu and the window controls (in a plain browser
