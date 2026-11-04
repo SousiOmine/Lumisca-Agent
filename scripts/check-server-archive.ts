@@ -146,19 +146,21 @@ try {
 // exactly that on Windows).
 if (extracted !== undefined) {
   try {
+    // Every staged file, `relative/from/the/stage` (the stella machine's
+    // container files ship as a directory tree: `stella-container/` plus the
+    // `helper/` the image installs). The archive lists them individually, so
+    // the walk has to descend as far as the tree does — a depth written here
+    // would silently stop checking a file that was added below it.
     const stagedFiles: string[] = [];
-    for await (const entry of Deno.readDir(options.stage)) {
-      if (entry.isFile) stagedFiles.push(entry.name);
-      // The stella machine's container files ship as one directory; the
-      // archive lists them individually (`<dir>/<file>`).
-      else if (entry.isDirectory) {
-        for await (
-          const file of Deno.readDir(join(options.stage, entry.name))
-        ) {
-          if (file.isFile) stagedFiles.push(`${entry.name}/${file.name}`);
+    const walk = async (dir: string, prefix: string): Promise<void> => {
+      for await (const entry of Deno.readDir(dir)) {
+        if (entry.isFile) stagedFiles.push(`${prefix}${entry.name}`);
+        else if (entry.isDirectory) {
+          await walk(join(dir, entry.name), `${prefix}${entry.name}/`);
         }
       }
-    }
+    };
+    await walk(options.stage, "");
     const missing = stagedFiles.filter((name) => !extracted.includes(name));
     check(
       "the archive carries every staged file",

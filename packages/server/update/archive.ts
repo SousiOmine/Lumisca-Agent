@@ -59,9 +59,11 @@ const MAX_ENTRY_BYTES = 4 * 1024 * 1024 * 1024;
 const PACKAGE_COMPONENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** How many components a package entry may carry below its top-level
- * directory: a file at the package root (`assets.json`) or one directory
- * deep (`stella-container/Containerfile`). */
-const MAX_PACKAGE_DEPTH = 2;
+ * directory: a file at the package root (`assets.json`), one directory deep
+ * (`stella-container/Containerfile`), or two
+ * (`stella-container/helper/a11y.py` — the accessibility helper the stella
+ * machine's image installs). */
+const MAX_PACKAGE_DEPTH = 3;
 
 /**
  * The path a package entry installs as, relative to the install directory,
@@ -71,9 +73,9 @@ const MAX_PACKAGE_DEPTH = 2;
  * top-level directory (`lumisca-server-<platform>/`, whose name carries no
  * version on purpose: the workflow explains why), so that directory is
  * stripped here and the rest is the installed path. Inside it, files sit at
- * the root (the binary and the assets it serves) or in the one directory the
+ * the root (the binary and the assets it serves) or in the directory the
  * layout defines (`stella-container/`, which holds the stella machine's
- * Containerfile and entry script).
+ * Containerfile, entry script and the `helper/` the image installs).
  *
  * Everything else — absolute paths, `..`, drive letters, deeper nesting,
  * directory entries, names with separators or leading dots — is rejected.

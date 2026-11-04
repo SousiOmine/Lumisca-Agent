@@ -187,10 +187,24 @@ const port = freePort();
 const base = `http://127.0.0.1:${port}`;
 const workDir = await Deno.makeTempDir({ prefix: "lumisca-smoke-" });
 
+/** Copy a directory tree (the stella machine's container files: the
+ * Containerfile, the entry script, and the `helper/` the image installs).
+ * A depth written here would silently drop the files below it, so it
+ * descends as far as the tree does. */
+async function copyTree(from: string, to: string): Promise<void> {
+  await Deno.mkdir(to, { recursive: true });
+  for await (const entry of Deno.readDir(from)) {
+    const source = join(from, entry.name);
+    const target = join(to, entry.name);
+    if (entry.isDirectory) await copyTree(source, target);
+    else if (entry.isFile) await Deno.copyFile(source, target);
+  }
+}
+
 /** Copy the package (binary + the entries the release layout defines, see
  * installedFileNames) out of the build directory, so the started server
  * cannot replace the artifacts this run is checking. An entry may be a
- * directory (the stella machine's container files) and is copied whole.
+ * directory tree (the stella machine's container files) and is copied whole.
  * Returns the copied binary's path. */
 async function copyPackage(source: string, targetDir: string): Promise<string> {
   await Deno.mkdir(targetDir, { recursive: true });
@@ -206,11 +220,7 @@ async function copyPackage(source: string, targetDir: string): Promise<string> {
       continue;
     }
     if (info.isDirectory) {
-      await Deno.mkdir(to, { recursive: true });
-      for await (const file of Deno.readDir(from)) {
-        if (!file.isFile) continue;
-        await Deno.copyFile(join(from, file.name), join(to, file.name));
-      }
+      await copyTree(from, to);
     } else {
       await Deno.copyFile(from, to);
     }
