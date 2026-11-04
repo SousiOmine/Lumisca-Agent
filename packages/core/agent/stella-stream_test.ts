@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import type { AgentMessage } from "../ai/types.ts";
+import { NO_RESPONSE } from "./silent-reply.ts";
 import { stellaEntryOf, stellaEventsOf } from "./stella-stream.ts";
 
 function user(text: string, timestamp = 1): AgentMessage {
@@ -42,26 +43,47 @@ Deno.test("stellaEntryOf: the user's words are the user's entry", () => {
   assertEquals(stellaEntryOf(user("", 6)), null);
 });
 
-Deno.test("stellaEntryOf: the agent's own text is never a conversation entry", () => {
-  // This is the whole point of the projection: a model asked anything writes
-  // something, and that text is its working notes. Showing it made every
-  // turn a paragraph whether or not there was anything to report.
+Deno.test("stellaEntryOf: the agent's text is the conversation's message", () => {
+  // The default is to speak. A run that has nothing to say writes the
+  // sentinel (silent-reply.ts) — silence is the deliberate act, so a forgotten
+  // decision produces a message rather than an unanswered question.
   const prose = fauxAssistantMessage("直しました。", {
     timestamp: 7,
   }) as AgentMessage;
-  assertEquals(stellaEntryOf(prose), null);
-  // ...and so is a turn that only ran a tool.
+  const entry = stellaEntryOf(prose);
+  assertEquals(entry?.role, "assistant");
+  assertEquals(entry?.text, "直しました。");
+  assertEquals(entry?.timestamp, 7);
+});
+
+Deno.test("stellaEntryOf: the sentinel is how a run stays silent", () => {
+  const silent = fauxAssistantMessage(NO_RESPONSE, {
+    timestamp: 7,
+  }) as AgentMessage;
+  assertEquals(stellaEntryOf(silent), null);
+  // Repeated (a model re-emitting it per tool batch) is still silence.
+  const repeated = fauxAssistantMessage(
+    `${NO_RESPONSE}${NO_RESPONSE}`,
+    { timestamp: 8 },
+  ) as AgentMessage;
+  assertEquals(stellaEntryOf(repeated), null);
+  // A sentinel with prose around it is an ANSWER, not silence: dropping it
+  // would lose what the agent actually said.
+  const mixed = fauxAssistantMessage(
+    `${NO_RESPONSE} 直しました。`,
+    { timestamp: 9 },
+  ) as AgentMessage;
+  const entry = stellaEntryOf(mixed);
+  assertEquals(entry?.text, "直しました。");
+});
+
+Deno.test("stellaEntryOf: a turn that only ran a tool says nothing", () => {
+  // No text at all: the agent has not spoken yet, and a tool call is the
+  // model's record of its work, not a message.
   const toolOnly = fauxAssistantMessage([
     fauxToolCall("bash", { command: "ls" }),
   ], { timestamp: 8 }) as AgentMessage;
   assertEquals(stellaEntryOf(toolOnly), null);
-  // Even one that wrote a long answer: the words the user reads came from
-  // send_chat, not from here.
-  const long = fauxAssistantMessage(
-    "これは長い説明です。".repeat(50),
-    { timestamp: 9 },
-  ) as AgentMessage;
-  assertEquals(stellaEntryOf(long), null);
 });
 
 Deno.test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
@@ -196,16 +218,28 @@ Deno.test("stellaEntryOf: the tools send_chat replaced show nothing", () => {
       isError: false,
       timestamp: 20,
     } as AgentMessage,
-    fauxAssistantMessage([
-      { type: "text", text: "確認します。" },
-      fauxToolCall("chat_ui", {
-        markup: '<Card title="確認"><Text>進めますか。</Text></Card>',
-      }),
-    ], { timestamp: 21 }) as AgentMessage,
   ];
+  // The old TOOL results stay out of the conversation: they are the record of
+  // a rule that no longer exists.
   for (const message of old) {
     assertEquals(stellaEntryOf(message), null, message.role);
   }
+});
+
+Deno.test("stellaEntryOf: an old chat_ui call shows its words, not its card", () => {
+  // The assistant message that made the old call wrote a sentence first. That
+  // sentence is a message under the current rule (the agent's text is the
+  // conversation's), while the card it attached is not: a card only arrives
+  // through send_chat now.
+  const old = fauxAssistantMessage([
+    { type: "text", text: "確認します。" },
+    fauxToolCall("chat_ui", {
+      markup: '<Card title="確認"><Text>進めますか。</Text></Card>',
+    }),
+  ], { timestamp: 21 }) as AgentMessage;
+  const entry = stellaEntryOf(old);
+  assertEquals(entry?.text, "確認します。");
+  assertEquals(entry?.card, null);
 });
 
 Deno.test("stellaEntryOf: the model's own rows are never conversation entries", () => {

@@ -39,6 +39,7 @@
  */
 import type { AgentMessage } from "../ai/types.ts";
 import { chatMessageOfDetails } from "../shared/chat-message.ts";
+import { assistantTextVerdict } from "./silent-reply.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type {
@@ -114,10 +115,23 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
         timestamp: message.timestamp,
       };
     }
-    case "assistant":
-      // Its text is the model's working notes, not the conversation's (see
-      // the module comment). What it sent arrives as the tool result below.
-      return null;
+    case "assistant": {
+      // The agent's text IS the conversation's message (see the module
+      // comment). A run that has nothing to say writes the sentinel instead
+      // (silent-reply.ts), which is the one text that does not become an
+      // entry — the mistake this shape protects against is an answer that
+      // never arrives, so silence has to be asked for explicitly.
+      const verdict = assistantTextVerdict(textOf(message));
+      if (verdict.kind !== "message") return null;
+      return {
+        role: "assistant",
+        text: verdict.text,
+        card: null,
+        attachments: [],
+        files: [],
+        timestamp: message.timestamp,
+      };
+    }
     case "toolResult": {
       // Only what the agent SENT is the conversation's; every other tool
       // result is the model's record of its work.

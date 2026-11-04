@@ -1222,23 +1222,15 @@ Deno.test("stella agents: the preview is the newest entry, not the newest row", 
   }
 });
 
-Deno.test("stella prompt: send_chat is the only way to reach the user", async () => {
-  // The rule the model has to follow, in the prompt: everything it writes
-  // without send_chat stays invisible. The wording matters — the earlier
-  // version described the model's own text as "working notes", which reads
-  // as a permission to think out loud rather than as an instruction to send.
+Deno.test("stella prompt: the reply is the message, silence is asked for", async () => {
+  // The rule the model has to follow. It is the opposite of the rule this
+  // prompt used to carry: the agent's own text IS what the user reads, and a
+  // run that wants to say nothing writes the sentinel. A forgotten decision
+  // therefore produces a message rather than an unanswered question.
   const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
   const prompt = buildStellaSystemPrompt({ tools: ["read", "send_chat"] });
-  assert(
-    prompt.includes("you MUST use the send_chat tool"),
-    prompt,
-  );
-  assert(
-    prompt.includes("anything you write without it is\nnot shown to them"),
-    prompt,
-  );
-  assert(
-    prompt.includes("send it explicitly with\nsend_chat"),
-    prompt,
-  );
+  assert(prompt.includes("Your reply IS your message"), prompt);
+  assert(prompt.includes("write exactly NO_RESPONSE"), prompt);
+  // …and the tool is described as the second channel, not the first.
+  assert(prompt.includes("Never put the final answer there"), prompt);
 });

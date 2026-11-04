@@ -236,20 +236,20 @@ Deno.test("history_search: tool calls and their output are not history", async (
       timestamp: localDay("2026-10-01", 11),
     } as AgentMessage);
 
-    // The model's own text is its working notes: the conversation does not
-    // show it, so it is not history either. What the agent SENT is.
+    // The agent's text IS the conversation's, so it is history and the
+    // search finds it.
     const calls = await run(tool, { query: "tests" });
-    assert(calls.includes("No message"), calls);
+    assert(calls.includes("Running the tests now."), calls);
 
-    // The arguments and the output are not searchable at all.
+    // What the model does rather than says stays out: the arguments it passed
+    // and the output it read are the record of its work, not a message.
     const args = await run(tool, { query: "secret-token" });
     assert(args.includes("No message"), args);
     const output = await run(tool, { query: "BEGIN" });
     assert(output.includes("No message"), output);
-    // Nor does the listing show a tool result row: nothing of this exchange
-    // was ever sent to the user.
+    // The listing shows the words it wrote, and no tool row for them.
     const all = await run(tool);
-    assert(all.includes("No messages have been saved"), all);
+    assert(all.includes("Running the tests now."), all);
   } finally {
     db.close();
   }
