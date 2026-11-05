@@ -108,14 +108,6 @@ export function AgentEditDialog(
         return (
           <>
             <h2>{t("chat.stella.agents.editTitle", { name: agent.name })}</h2>
-            <Field label={t("chat.stella.agents.name")}>
-              <input
-                type="text"
-                value={name}
-                onInput={(event) => setName(event.currentTarget.value)}
-                autoFocus
-              />
-            </Field>
             <div className="agent-icon-field">
               <span className="agent-icon-caption">
                 {t("chat.stella.agents.icon")}
@@ -183,6 +175,14 @@ export function AgentEditDialog(
                 </div>
               </div>
             </div>
+            <Field label={t("chat.stella.agents.name")}>
+              <input
+                type="text"
+                value={name}
+                onInput={(event) => setName(event.currentTarget.value)}
+                autoFocus
+              />
+            </Field>
             {error !== null && (
               <p className="error-text" role="alert">{error}</p>
             )}
