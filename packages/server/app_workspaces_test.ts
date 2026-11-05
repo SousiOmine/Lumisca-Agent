@@ -117,15 +117,17 @@ Deno.test("skills API lists the workspace catalog and the chat subset", async ()
     });
     const ws = await create.json();
 
-    // A workspace skill fixture: the only source of skills in a test core
-    // (global discovery is disabled, and no browser backend is attached, so
-    // the built-in web-browser skill is gated out).
+    // A workspace skill fixture. Global discovery is disabled and no
+    // browser backend is attached, so the only built-in skill a main agent
+    // gets is the MCP guide (the tools it teaches are always available).
     const skillDir = join(root, ".agents", "skills", "demo");
     await Deno.mkdir(skillDir, { recursive: true });
     await Deno.writeTextFile(
       join(skillDir, "SKILL.md"),
       "---\nname: demo\ndescription: Demo skill.\n---\n\nDo the demo thing.\n",
     );
+    const mcpGuide = core.listSkills().find((s) => s.name === "mcp-servers");
+    assert(mcpGuide !== undefined, "the MCP guide must be listed");
 
     const forWorkspace = await json(
       base,
@@ -134,13 +136,15 @@ Deno.test("skills API lists the workspace catalog and the chat subset", async ()
     assertEquals(forWorkspace.status, 200);
     assertEquals((await forWorkspace.json()).skills, [
       { name: "demo", description: "Demo skill." },
+      mcpGuide,
     ]);
 
-    // Without a workspaceId the endpoint answers for a chat session, which
-    // sees no workspace skill (the same contract as POST /sessions).
+    // Without a workspaceId the endpoint answers for a chat session: no
+    // workspace skill, but the same built-ins (the same contract as
+    // POST /sessions).
     const chat = await json(base, "/api/skills");
     assertEquals(chat.status, 200);
-    assertEquals((await chat.json()).skills, []);
+    assertEquals((await chat.json()).skills, [mcpGuide]);
 
     // An unknown workspace is a 404, never a fallback to the chat list.
     const unknown = await json(base, "/api/skills?workspaceId=nope");

@@ -14,27 +14,39 @@ export interface McpServerConfigLike {
   enabled: boolean;
 }
 
+/** One entry of a `mcpServers` object: the config fields that are written,
+ * in the order they are written. Serializing a whole list and adding one
+ * server to an existing document (the agent's mcp_add, see mcp/service.ts)
+ * both go through here, so an entry is written one way only. */
+export function mcpServerEntry(
+  server: McpServerConfigLike,
+): Record<string, unknown> {
+  const entry: Record<string, unknown> = {};
+  if (server.type === "stdio") {
+    entry.command = server.command;
+    if (server.args.length > 0) entry.args = server.args;
+  } else {
+    entry.url = server.url;
+    if (Object.keys(server.headers).length > 0) {
+      entry.headers = server.headers;
+    }
+  }
+  if (Object.keys(server.env).length > 0) entry.env = server.env;
+  if (server.cwd !== undefined) entry.cwd = server.cwd;
+  if (!server.enabled) entry.enabled = false;
+  return entry;
+}
+
 /** Serialize a list of MCP server configs into `.mcp.json` text (the
  * app-level config the settings UI PUTs and the workspace file format).
  * Shared by the core (serializeMcpConfig) and the web settings UI so the
  * format can never drift between them. */
 export function serializeMcpServers(servers: McpServerConfigLike[]): string {
-  const mcpServers: Record<string, unknown> = {};
+  // A null-prototype map, so a server literally named "__proto__" becomes an
+  // entry instead of setting the object's prototype (and vanishing).
+  const mcpServers: Record<string, unknown> = Object.create(null);
   for (const server of servers) {
-    const entry: Record<string, unknown> = {};
-    if (server.type === "stdio") {
-      entry.command = server.command;
-      if (server.args.length > 0) entry.args = server.args;
-    } else {
-      entry.url = server.url;
-      if (Object.keys(server.headers).length > 0) {
-        entry.headers = server.headers;
-      }
-    }
-    if (Object.keys(server.env).length > 0) entry.env = server.env;
-    if (server.cwd !== undefined) entry.cwd = server.cwd;
-    if (!server.enabled) entry.enabled = false;
-    mcpServers[server.name] = entry;
+    mcpServers[server.name] = mcpServerEntry(server);
   }
   return JSON.stringify({ mcpServers }, null, 2) + "\n";
 }

@@ -103,6 +103,15 @@ export const TOOL_ROUTINE_UPDATE = "routine_update";
 export const TOOL_ROUTINE_DELETE = "routine_delete";
 export const TOOL_ROUTINE_RUN = "routine_run";
 
+/** Manage the app-level MCP server config (`mcp_add` / `mcp_remove` /
+ * `mcp_list`) — the list Settings → MCP servers shows, which every
+ * workspace and every session uses. Discoverable rather than preloaded (a
+ * conversation that never touches the config pays nothing for them), and
+ * main-only: the config outlives a sub-agent's run. */
+export const TOOL_MCP_ADD = "mcp_add";
+export const TOOL_MCP_REMOVE = "mcp_remove";
+export const TOOL_MCP_LIST = "mcp_list";
+
 /** Search this conversation's saved history, including the turns a
  * compaction checkpoint replaced (so they are no longer in the model's
  * context). Preloaded: a session that was condensed needs to know it can

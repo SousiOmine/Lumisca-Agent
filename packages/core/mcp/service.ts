@@ -15,7 +15,7 @@ import {
   type McpServerConfig,
   parseMcpConfig,
 } from "./config.ts";
-import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
+import { APP_MCP_SETTINGS_KEY, mcpServerEntry } from "../shared/mod.ts";
 import type { McpServerStatus } from "./status.ts";
 import { probeMcpServer } from "./client.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
@@ -147,6 +147,73 @@ export class McpService {
       this.deps.settings.set(APP_MCP_SETTINGS_KEY, text);
     });
     return this.getAppMcpInfo();
+  }
+
+  /** The app-level `mcpServers` object as stored, validated first so a
+   * broken stored config fails with the reader's message instead of a bare
+   * JSON syntax error. */
+  private appServersDocument(): Record<string, unknown> {
+    const raw = this.deps.settings.get(APP_MCP_SETTINGS_KEY);
+    if (raw === undefined) return {};
+    this.validateConfig(raw, APP_MCP_SOURCE);
+    const document = JSON.parse(raw) as {
+      mcpServers: Record<string, unknown>;
+    };
+    return document.mcpServers;
+  }
+
+  /** Write the app-level `mcpServers` object: setAppMcpConfig validates and
+   * applies it, so an added server is stored and reaches open sessions in
+   * the same turn. */
+  private writeAppServers(servers: Record<string, unknown>): McpInfo {
+    return this.setAppMcpConfig(
+      JSON.stringify({ mcpServers: servers }, null, 2) + "\n",
+    );
+  }
+
+  /**
+   * Add one server to the app-level config (the list Settings → MCP
+   * servers shows) and bring every open session onto it.
+   *
+   * The stored document is edited as JSON instead of being re-serialized
+   * from the parsed config: parsing expands `${VAR}` references, so a
+   * round trip would write the expanded value of another server's secret
+   * into the settings file.
+   */
+  addAppServer(server: McpServerConfig): McpInfo {
+    const servers = this.appServersDocument();
+    if (Object.hasOwn(servers, server.name)) {
+      throw new CoreError(
+        `An MCP server named "${server.name}" is already configured. ` +
+          "Remove it first with mcp_remove, or choose another name.",
+        "conflict",
+      );
+    }
+    // defineProperty rather than an assignment: a server literally named
+    // "__proto__" must become an entry, not set the document's prototype
+    // (which would drop it from the written JSON).
+    Object.defineProperty(servers, server.name, {
+      value: mcpServerEntry(server),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+    return this.writeAppServers(servers);
+  }
+
+  /** Remove one server from the app-level config by name, and bring every
+   * open session onto the new list (its tools stop being discoverable). */
+  removeAppServer(name: string): McpInfo {
+    const servers = this.appServersDocument();
+    if (!Object.hasOwn(servers, name)) {
+      throw new CoreError(
+        `No MCP server named "${name}" is configured. Use mcp_list to see ` +
+          "the servers in the app-level config.",
+        "not_found",
+      );
+    }
+    delete servers[name];
+    return this.writeAppServers(servers);
   }
 
   /** The workspace's own `.mcp.json` with live statuses from the

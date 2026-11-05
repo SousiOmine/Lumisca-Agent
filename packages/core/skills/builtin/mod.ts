@@ -5,6 +5,7 @@ import { desktopAppsSkill } from "./desktop-apps.ts";
 import { agentCreateSkill } from "./agent-create.ts";
 import { codingAgentsSkill } from "./coding-agents.ts";
 import { identitySkill } from "./identity.ts";
+import { mcpServersSkill } from "./mcp-servers.ts";
 
 /**
  * App-embedded skills: shipped with the application itself, always
@@ -44,6 +45,12 @@ export interface BuiltinContext {
    * `task` tool, and a session that cannot start one must not be pointed at
    * it. */
   subagents: boolean;
+  /** Whether this session's main agent may change the app-level MCP server
+   * config (`mcp_add` / `mcp_remove` / `mcp_list`). The mcp-servers skill is
+   * included only when true: those tools are main-only — the config
+   * outlives a sub-agent's run — so a sub-agent must not be told to look
+   * for them. Absent → not advertised. */
+  mcpAdmin?: boolean;
 }
 
 /** The app-embedded skill set for a session context. */
@@ -56,6 +63,7 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
     // them the default over reading coordinates off a picture.
     ...(context.stella === true ? [desktopAppsSkill()] : []),
     ...(context.stella === true ? [agentCreateSkill(), identitySkill()] : []),
+    ...(context.mcpAdmin === true ? [mcpServersSkill()] : []),
     ...(context.subagents ? [codingAgentsSkill()] : []),
   ];
 }

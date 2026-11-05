@@ -53,6 +53,10 @@ export function sessionSkills(
     /** Whether this session can start coding sub-agents (see the
      * coding-agents skill). */
     subagents?: boolean;
+    /** Whether the session's main agent may change the app-level MCP
+     * config (see the mcp-servers skill and mcp/manage-tools.ts). Omitted
+     * for sub-agents, whose tool search cannot reach those tools. */
+    mcpAdmin?: boolean;
     globalDirs?: string[];
   } = {},
 ): SkillDef[] {
@@ -63,6 +67,7 @@ export function sessionSkills(
       browser: options.browserAvailable === true,
       computer: options.computerAvailable === true,
       subagents: options.subagents === true,
+      mcpAdmin: options.mcpAdmin === true,
     }),
     globalDirs: options.globalDirs,
   });

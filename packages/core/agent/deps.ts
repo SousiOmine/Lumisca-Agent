@@ -10,6 +10,7 @@ import type { BackgroundProcessManager } from "../tools/background.ts";
 import type { TodoHub } from "../tools/todo.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
 import type { McpConfig } from "../mcp/config.ts";
+import type { McpAdmin } from "../mcp/manage-tools.ts";
 import type { McpOAuthStore } from "../mcp/oauth.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import type { SessionToolRegistries } from "../tools/registries.ts";
@@ -121,6 +122,11 @@ export interface AgentRuntime {
   /** Merged MCP config (app-level + workspace .mcp.json + plugins) for a
    * workspace, with collected config errors. */
   loadMergedMcp(workspace: Workspace): { config: McpConfig; errors: string[] };
+  /** The app-level MCP config the agent may change through `mcp_add` /
+   * `mcp_remove` / `mcp_list` (see mcp/manage-tools.ts). Omitted only where
+   * the pool is built by hand without one (tests): the session then simply
+   * has no administration tools. */
+  mcpAdmin?: () => McpAdmin;
   /** Where MCP OAuth grants live: a session's connections use (and refresh)
    * the tokens the settings sign-in stored. Absent in tests that build the
    * pool by hand and never sign in. */

@@ -439,6 +439,11 @@ export class LumiscaCore {
       // the pool references the service, the service references the pool
       // via the injected applyMcpConfigChange / agentMcpStatus below.
       loadMergedMcp: (workspace) => this.mcp.loadMergedConfig(workspace),
+      // The agent's own MCP administration (mcp_add / mcp_remove /
+      // mcp_list) goes through the same service the settings routes use, so
+      // a change made from a conversation is applied exactly like one made
+      // in Settings → MCP servers.
+      mcpAdmin: () => this.mcp,
       requireWorkspace: (id) => this.requireWorkspace(id),
       emit: (event) => this.emit(event),
       browser: () => this.browserBackend,

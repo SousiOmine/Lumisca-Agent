@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { CoreError, errorMessage } from "../errors.ts";
 import {
   loadMcpConfig,
@@ -14,7 +14,10 @@ import { createMcpTools, sanitizeServerName } from "./tools.ts";
 import { McpService } from "./service.ts";
 import { McpCallTimeoutError, probeMcpServer } from "./client.ts";
 import { startFakeMcpServer } from "./fake-http.ts";
-import { createInMemorySettingsRepo } from "../settings/repo.ts";
+import {
+  createInMemorySettingsRepo,
+  type SettingsRepo,
+} from "../settings/repo.ts";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import type { Workspace } from "../types/workspace.ts";
 
@@ -777,4 +780,137 @@ Deno.test("testServer reports a 401 as needing a sign-in", async () => {
   } finally {
     await server.close();
   }
+});
+
+// --- app-level single-server edits (the agent's mcp_add / mcp_remove) ------
+
+/** An McpService whose config writes land in an in-memory settings store,
+ * applying each change immediately (the pool's callback is what applies them
+ * in a core). */
+function makeAppEditService(apply?: () => void): {
+  service: McpService;
+  settings: SettingsRepo;
+} {
+  const settings = createInMemorySettingsRepo();
+  const service = new McpService({
+    settings,
+    listSessions: () => [],
+    agentMcpStatus: () => null,
+    requireWorkspace: () => {
+      throw new Error("not used");
+    },
+    applyMcpConfigChange: (_sessions, mutate) => {
+      apply?.();
+      mutate();
+    },
+    refreshSessionMcp: () => {},
+  });
+  return { service, settings };
+}
+
+function stdioServer(name: string, command = "npx"): McpServerConfig {
+  return {
+    name,
+    type: "stdio",
+    command,
+    args: [],
+    env: {},
+    headers: {},
+    enabled: true,
+  };
+}
+
+Deno.test("addAppServer appends without expanding the other servers' env", () => {
+  const { service, settings } = makeAppEditService();
+  Deno.env.set("LUMISCA_ADD_TEST_TOKEN", "secret-value");
+  try {
+    settings.set(
+      APP_MCP_SETTINGS_KEY,
+      JSON.stringify({
+        mcpServers: {
+          existing: {
+            command: "x",
+            env: { TOKEN: "${LUMISCA_ADD_TEST_TOKEN}" },
+          },
+        },
+      }),
+    );
+    const info = service.addAppServer(stdioServer("added"));
+    assertEquals(info.servers.map((s) => s.name), ["existing", "added"]);
+    const stored = settings.get(APP_MCP_SETTINGS_KEY)!;
+    // The reference stays a reference: parsing expands it to the value, and
+    // writing that back would put the secret in the settings file.
+    assert(stored.includes("${LUMISCA_ADD_TEST_TOKEN}"), stored);
+    assert(!stored.includes("secret-value"), stored);
+    assert(stored.includes('"added"'), stored);
+    // The runtime view still expands it.
+    assertEquals(info.servers[0]!.env.TOKEN, "secret-value");
+  } finally {
+    Deno.env.delete("LUMISCA_ADD_TEST_TOKEN");
+  }
+});
+
+Deno.test("addAppServer refuses a taken name and writes nothing", () => {
+  const { service, settings } = makeAppEditService();
+  settings.set(
+    APP_MCP_SETTINGS_KEY,
+    JSON.stringify({ mcpServers: { dup: { command: "x" } } }),
+  );
+  const before = settings.get(APP_MCP_SETTINGS_KEY);
+  const error = assertThrows(
+    () => service.addAppServer(stdioServer("dup")),
+    CoreError,
+  );
+  assertEquals(error.kind, "conflict");
+  assertEquals(settings.get(APP_MCP_SETTINGS_KEY), before);
+});
+
+Deno.test("addAppServer applies the change to every open session", () => {
+  let applied = 0;
+  const { service } = makeAppEditService(() => applied++);
+  service.addAppServer(stdioServer("added"));
+  assertEquals(applied, 1);
+});
+
+Deno.test("addAppServer refuses to edit a stored config it cannot parse", () => {
+  const { service, settings } = makeAppEditService();
+  settings.set(APP_MCP_SETTINGS_KEY, "not json");
+  const error = assertThrows(
+    () => service.addAppServer(stdioServer("added")),
+    CoreError,
+  );
+  assert(error.message.includes("is not valid JSON"), error.message);
+  assertEquals(settings.get(APP_MCP_SETTINGS_KEY), "not json");
+});
+
+Deno.test("removeAppServer drops one server and keeps the rest", () => {
+  const { service, settings } = makeAppEditService();
+  settings.set(
+    APP_MCP_SETTINGS_KEY,
+    JSON.stringify({
+      mcpServers: {
+        a: { command: "x" },
+        b: { url: "https://example.com/mcp" },
+      },
+    }),
+  );
+  const info = service.removeAppServer("b");
+  assertEquals(info.servers.map((s) => s.name), ["a"]);
+  const stored = settings.get(APP_MCP_SETTINGS_KEY)!;
+  assert(!stored.includes('"b"'), stored);
+  assert(stored.includes('"a"'), stored);
+});
+
+Deno.test("removeAppServer refuses a name that is not configured", () => {
+  const { service, settings } = makeAppEditService();
+  settings.set(
+    APP_MCP_SETTINGS_KEY,
+    JSON.stringify({ mcpServers: { a: { command: "x" } } }),
+  );
+  const error = assertThrows(
+    () => service.removeAppServer("nope"),
+    CoreError,
+  );
+  assertEquals(error.kind, "not_found");
+  assert(settings.get(APP_MCP_SETTINGS_KEY)!.includes('"a"'));
 });

@@ -60,6 +60,11 @@ export interface ToolFactoryOptions {
    * feature). Gates the built-in computer-use skill the same way.
    * Omitted/undefined → the skill is not advertised. */
   computerAvailable?: boolean;
+  /** Whether this session's main agent holds the MCP administration tools
+   * (`mcp_add` / `mcp_remove` / `mcp_list`, seeded by the session pool).
+   * Gates the built-in mcp-servers skill the same way: a session that cannot
+   * run them must not be pointed at them. Omitted → not advertised. */
+  mcpAdmin?: boolean;
   /** Where `chat_attach` keeps the bytes it sends (the session's store and
    * id). Omitted → the tool is not built: without a store there is nowhere
    * for a file to go, and the card would link nothing. Code mode only: a
@@ -97,6 +102,7 @@ export function createCodingTools(
   const skills = sessionSkills(workspace.folders, {
     browserAvailable: options.browserAvailable,
     computerAvailable: options.computerAvailable,
+    mcpAdmin: options.mcpAdmin,
   });
   // Each row: the tool(s), or nothing when the option it needs is absent.
   const rows: Array<Tool | Tool[] | undefined> = [
@@ -260,6 +266,9 @@ export function createChatTools(
       skills: sessionSkills([], {
         browserAvailable: options.browserAvailable,
         computerAvailable: options.computerAvailable,
+        // A chat session can add an MCP server too: the config is
+        // app-level, so it needs no workspace.
+        mcpAdmin: options.mcpAdmin,
       }),
     }),
     options.ask !== undefined ? createAskTool(options.ask) : undefined,

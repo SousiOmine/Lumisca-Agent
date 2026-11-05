@@ -14,6 +14,7 @@ import {
   promptSession,
   removeDirRetry,
   setup,
+  toolText,
 } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are
@@ -607,6 +608,126 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
     );
   } finally {
     core.close();
+  }
+});
+
+Deno.test("the agent adds and removes an MCP server with its own tools", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const root = await makeRealTempDir("lumisca-core-");
+  const fakeServer = join(
+    import.meta.dirname!,
+    "..",
+    "..",
+    "scripts",
+    "fake-mcp-server.ts",
+  );
+  const ws = await core.createWorkspace("ws", [root]);
+  try {
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const agent = core.getAgent(session.id)!;
+    await waitForSearchTools(agent);
+    const call = agent.agent.state.tools.find((t) => t.name === TOOL_CALL)!;
+    const search = agent.agent.state.tools.find((t) => t.name === TOOL_SEARCH)!;
+
+    // The request's flow is skill → tool_search → tool_call: the admin
+    // tools are findable, and never part of the agent's own tool set.
+    const found = toolText(
+      await search.execute("search", { query: "mcp" }, undefined),
+    );
+    for (const name of ["mcp_add", "mcp_remove", "mcp_list"]) {
+      assert(found.includes(name), found);
+      assertEquals(
+        agent.agent.state.tools.some((t) => t.name === name),
+        false,
+        `${name} must stay out of the agent's own tool set`,
+      );
+    }
+
+    // A slow answer keeps the session streaming while the tools run: the
+    // config change reaches a running session in place (no rebuild), which
+    // is the situation an agent calls them in.
+    faux.setResponses([
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return fauxAssistantMessage("slow reply");
+      },
+    ]);
+    core.startPrompt(session.id, "go");
+    while (!agent.isStreaming) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const added = toolText(
+      await call.execute("add", {
+        name: "mcp_add",
+        args: {
+          name: "fake",
+          command: Deno.execPath(),
+          args: ["run", fakeServer],
+        },
+      }, undefined),
+    );
+    // The connection test ran (the fake server's tools are named), and the
+    // server is in the app-level config.
+    assert(added.includes("echo"), added);
+    assertEquals(core.getAppMcpInfo().servers.map((s) => s.name), ["fake"]);
+    assertEquals(
+      core.getAgent(session.id),
+      agent,
+      "the run's agent must survive the config change",
+    );
+
+    // The new server's tools reach the running session's registry.
+    let listing = "";
+    for (let i = 0; i < 100; i++) {
+      listing = await searchListing(agent);
+      if (listing.includes("mcp__fake__echo")) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert(listing.includes("mcp__fake__echo"), listing);
+
+    // Removing it takes the tools away again, in the same run.
+    const removed = toolText(
+      await call.execute("remove", {
+        name: "mcp_remove",
+        args: { name: "fake" },
+      }, undefined),
+    );
+    assert(removed.includes('"fake"'), removed);
+    assertEquals(core.getAppMcpInfo().servers, []);
+    assertEquals(
+      (await searchListing(agent)).includes("mcp__fake__echo"),
+      false,
+    );
+
+    while (agent.isStreaming) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    // The guide the flow starts from is in this session's catalog (the
+    // composer's palette and the agent's skill tool list the same set).
+    const palette = core.listSkills(ws.id).map((skill) => skill.name);
+    assert(palette.includes("mcp-servers"), palette.join(", "));
+    const catalog = agent.messages.find(
+      (m) => m.role === "context" && m.provider === "skills",
+    );
+    assert(catalog !== undefined && catalog.role === "context");
+    assert(catalog.body.includes("- mcp-servers:"), catalog.body);
+  } finally {
+    core.close();
+    // The MCP server process may hold the directory briefly on Windows.
+    for (let i = 0; i < 20; i++) {
+      try {
+        await removeDirRetry(root);
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
   }
 });
 

@@ -240,6 +240,10 @@ export class StellaMachine {
         // A conversation can hand coding work to sub-agents (they run in
         // the same machine through the same exec seam).
         subagents: true,
+        // The app-level MCP config is shared by every mode, and a stella
+        // session's main agent changes it like any other (the tools live in
+        // its main registry).
+        mcpAdmin: true,
       }),
       ...(this.globalSkillDirs !== undefined
         ? { globalDirs: this.globalSkillDirs }

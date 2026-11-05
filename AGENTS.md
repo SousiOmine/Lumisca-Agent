@@ -179,7 +179,16 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
 - **名前はプロンプトに入りません**: システムプロンプトの冒頭は全会話共通の `You are a helpful assistant.` に `role` を続けたもので、`name` は含みません（`packages/core/tools/system-prompt.ts`）。名前は行とヘッダーのラベルであり、いつでも変えられる表示情報だからです。プロンプトはセッションのスナップショットなので、変えても既存の会話は書き換えません（その会話ではモデルが旧名を名乗ることがあります）。
 - **スキル一覧の出どころ**: `<available_skills>` を公開する provider（`packages/core/skills/catalog.ts`）は、セッションごとの解決関数を受け取ります。stella ではマシン内の `.agents/skills` とホストのグローバル／組み込みを返すので、一覧と `skill` ツールが読める集合が一致します。組み込みスキルは `BuiltinContext.stella` で `identity` / `agent-create` を加えます（`packages/core/skills/builtin/mod.ts`）。
 
-## 8. 開発用スクリプト
+## 8. MCP サーバーの管理（会話から）
+
+エージェントは `mcp_add` / `mcp_remove` / `mcp_list` で、設定画面の「MCPサーバー」と同じ**アプリ全体の設定**を変更できます（`packages/core/mcp/manage-tools.ts`）。ワークスペースの `.mcp.json` とプラグインが持つサーバーはこのツールの対象外です（同名ならワークスペース側が優先されます）。
+
+- **探索経路**: 3 つはプリロードせず main レジストリに置き、`tool_search` → `tool_call` で呼びます。sub-agent には渡しません（設定は sub-agent の実行より長く生きます）。組み込みスキル `mcp-servers`（`packages/core/skills/builtin/mcp-servers.ts`）が経路と判断を教え、`BuiltinContext.mcpAdmin` が真のセッションにだけ出します（sub-agent を死路へ案内しないため）。
+- **接続テスト**: `mcp_add` は設定画面の「追加」と同じく、接続してツール一覧を取るまで 1 行も保存しません（30 秒）。401 はサインイン要求として保存し、ユーザーに設定画面でのサインインを促します。初回のパッケージ取得が 30 秒を超える場合は `verify: false` でテストを省けます。
+- **保存先の書き換え**: `McpService.addAppServer` / `removeAppServer` は保存済み JSON の該当エントリだけを差し替えます。パース済みの設定を丸ごと書き戻すと、他のサーバーの `env` の `${VAR}` が展開後の値で確定してしまうためです。
+- **適用**: 保存は `setAppMcpConfig` を通るので、開いているセッションは idle なら再構築、実行中なら MCP の差し替えで追従します（`SessionPool.applyMcpConfigChange`）。追加したサーバーのツールは同じ実行の `tool_search` から見えます（接続が終わってから）。
+
+## 9. 開発用スクリプト
 
 手元での確認に使うスクリプトは `deno task` から実行します。
 

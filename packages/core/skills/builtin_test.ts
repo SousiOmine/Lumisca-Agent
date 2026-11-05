@@ -332,3 +332,51 @@ Deno.test("a session without a sub-agent hub is not pointed at one", () => {
   });
   assertEquals(skills.some((skill) => skill.name === "coding-agents"), false);
 });
+
+Deno.test("builtinSkills advertises the MCP guide only where the tools are", async () => {
+  const skills = builtinSkills({
+    browser: false,
+    computer: false,
+    subagents: false,
+    mcpAdmin: true,
+  });
+  const skill = skills.find((s) => s.name === "mcp-servers");
+  assert(
+    skill !== undefined,
+    "a main agent that can change the MCP config must find the guide",
+  );
+  assert(skill!.description.includes("tool_search"), skill!.description);
+  assertEquals(skill!.source, "builtin");
+  assertEquals(skill!.path, undefined);
+
+  const body = await loadSkillContent(skill!);
+  // The flow the feature is built around: read the guide → find the tools
+  // → call them.
+  for (
+    const tool of [
+      "mcp_add",
+      "mcp_remove",
+      "mcp_list",
+      "tool_search",
+      "tool_call",
+    ]
+  ) {
+    assert(body.includes(tool), `the guide does not mention ${tool}`);
+  }
+  // What the agent has to be able to tell the user: which list the tools
+  // edit, and that a failed connection test changes nothing.
+  assert(body.includes("Settings → MCP servers"), body);
+  assert(body.includes("saves nothing"), body);
+  // The sign-in a saved HTTP server may need is the user's step, not the
+  // agent's.
+  assert(body.includes("sign in"), body);
+
+  // A sub-agent's tool search cannot reach the admin tools, so its catalog
+  // must not name the guide.
+  assertEquals(
+    builtinSkills({ browser: false, computer: false, subagents: true }).some(
+      (s) => s.name === "mcp-servers",
+    ),
+    false,
+  );
+});

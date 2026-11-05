@@ -294,6 +294,8 @@ export class SessionCatalog {
     return sessionSkills(folders, {
       browserAvailable: this.deps.browserAvailable(),
       computerAvailable: this.deps.computerAvailable(),
+      // The palette lists what this workspace's main agent can load.
+      mcpAdmin: true,
       globalDirs: this.deps.globalSkillDirs,
     }).map(skillInfo);
   }

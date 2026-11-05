@@ -16,6 +16,11 @@ import { AskHub } from "../tools/ask.ts";
 import { TodoHub } from "../tools/todo.ts";
 import { TaskHub } from "../tools/task-hub.ts";
 import type { McpConfig } from "../mcp/config.ts";
+import {
+  createMcpAdminTools,
+  MCP_ADMIN_TOOL_NAMES,
+  type McpAdmin,
+} from "../mcp/manage-tools.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { SessionToolRegistries } from "../tools/registries.ts";
@@ -123,6 +128,10 @@ interface SessionWhere {
   computerAvailable: boolean;
   /** The user's web-search provider, when one is configured. */
   webSearch: SearchProvider | undefined;
+  /** The app-level MCP config this agent may change, or undefined when the
+   * session has no administration tools (a pool built by hand without the
+   * service). Gates both the tools and the guide that teaches them. */
+  mcpAdmin: McpAdmin | undefined;
 }
 
 /** The per-session hubs one open agent is wired to. All but the ask hub
@@ -376,6 +385,9 @@ export class AgentFactory {
       // hold it, so a rebuild picks up a changed default) and undefined when
       // the user has not configured one; the tools are then simply absent.
       webSearch: this.deps.webSearch?.(),
+      // The MCP administration surface. A core always has one; a pool built
+      // by hand without it simply gets neither the tools nor the guide.
+      mcpAdmin: this.deps.mcpAdmin?.(),
     };
   }
 
@@ -414,6 +426,15 @@ export class AgentFactory {
     registries.removeShared(PDF_TOOL_NAMES);
     if (!where.chatOnly) {
       registries.addShared(createPdfTools({ files: where.backends.files }));
+    }
+    // The app-level MCP server config is shared by every workspace and
+    // outlives this conversation, so it belongs to the session's main agent
+    // alone: a sub-agent must not add a server that keeps running after its
+    // run ends. Discovered through tool_search rather than preloaded — most
+    // conversations never touch the config.
+    registries.main.removeTools(MCP_ADMIN_TOOL_NAMES);
+    if (where.mcpAdmin !== undefined) {
+      registries.addMainOnly(createMcpAdminTools(where.mcpAdmin));
     }
     // Routines and the conversation's own agent belong to a stella
     // conversation only, and to its MAIN agent alone: a sub-agent must not
@@ -577,6 +598,7 @@ export class AgentFactory {
         safety: this.deps.commandSafety,
         browserAvailable,
         computerAvailable: where.computerAvailable,
+        mcpAdmin: where.mcpAdmin !== undefined,
         webSearch: where.webSearch,
       });
     }
@@ -588,6 +610,7 @@ export class AgentFactory {
       safety: this.deps.commandSafety,
       browserAvailable,
       computerAvailable: where.computerAvailable,
+      mcpAdmin: where.mcpAdmin !== undefined,
       attach: { store: this.deps.attachments, sessionId: session.id },
       visuals: { store: this.deps.visuals, sessionId: session.id },
       backends,
@@ -658,6 +681,9 @@ export class AgentFactory {
               computerAvailable,
               // A chat session has no tool hub, so it cannot start one.
               subagents: !chat,
+              // This catalog is the main agent's: it holds the MCP
+              // administration tools when the session has them.
+              mcpAdmin: where.mcpAdmin !== undefined,
               globalDirs: this.deps.globalSkillDirs,
             }),
       }),
