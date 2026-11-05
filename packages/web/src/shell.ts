@@ -62,6 +62,13 @@ const key = globalThis.__LUMISCA_TOKEN__;
 /** Tauri's IPC `invoke`, or undefined in a plain browser. */
 const invoke = globalThis.__TAURI_INTERNALS__?.invoke;
 
+/** Whether this page runs in the desktop shell's window (the shell injected
+ * a bridge origin or Tauri's IPC). False in a plain browser and in the
+ * browser lab; the value is fixed at page load. */
+export function inDesktopShell(): boolean {
+  return BRIDGE !== undefined || invoke !== undefined;
+}
+
 /** Run one action over Tauri's IPC (`bridge::shell_action`). This is the
  * same action handler the loopback bridge calls, with the same key gate; the
  * only difference is the road to the shell. */

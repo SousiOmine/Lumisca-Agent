@@ -1,15 +1,22 @@
 import { dirname, join, relative } from "node:path";
 import { contentEtag } from "./app-file-headers.ts";
 import { bundleClient } from "./bundle.ts";
-import { webClientEntry, webFaviconPath, webStylesPath } from "./paths.ts";
+import { PWA_ICON_FILES } from "./manifest.ts";
+import {
+  webClientEntry,
+  webFaviconPath,
+  webPwaIconDir,
+  webServiceWorkerPath,
+  webStylesPath,
+} from "./paths.ts";
 
 /**
  * The frontend assets a server can serve: the bundled client (the entry chunk
- * and the chunks its dynamic imports fetch), the styles, and the favicon
- * (binary assets base64-encoded so the manifest is text). This module is the
- * single owner of those assets — both the pre-build script
- * (scripts/build-server.ts) and the runtime Assets class use it, so the
- * packaged and dev asset sources cannot drift.
+ * and the chunks its dynamic imports fetch), the styles, the favicon, the
+ * PWA icons and the service worker (binary assets base64-encoded so the
+ * manifest is text). This module is the single owner of those assets — both
+ * the pre-build script (scripts/build-server.ts) and the runtime Assets class
+ * use it, so the packaged and dev asset sources cannot drift.
  */
 
 /** One file of the client build. */
@@ -28,6 +35,13 @@ export interface AssetsManifest {
   client: Record<string, AssetFile>;
   "styles.css": string;
   "favicon.png": string;
+  /** The PWA icons, keyed by the name their `/pwa/*` URL carries. Base64 for
+   * the same reason as the favicon: the manifest is text. */
+  pwaIcons: Record<string, string>;
+  /** The service worker script, served at `/sw.js`. A worker has to be
+   * fetched from the server on every update check, so it travels with the
+   * build rather than being generated from a template in the binary. */
+  "sw.js": string;
 }
 
 /** Resolve the styles entry (`styles.css`) into a single stylesheet.
@@ -103,6 +117,16 @@ function clientBytesOf(client: Record<string, AssetFile>): number {
   return bytes;
 }
 
+/** Base64 of a binary asset, chunked so any icon size stays within the
+ * call-stack limits of spread + String.fromCharCode. */
+function base64Of(bytes: Uint8Array): string {
+  let encoded = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    encoded += btoa(String.fromCharCode(...bytes.subarray(i, i + 0x8000)));
+  }
+  return encoded;
+}
+
 /** Bundle the client and read the static assets into a manifest. This is
  * the only producer of embedded assets; the runtime Assets class serves
  * either these or the repository sources. */
@@ -113,20 +137,23 @@ export async function buildAssetsManifest(
   try {
     const client = await bundleClientFiles(repoRoot, outdir);
     const css = await bundleStylesCss(webStylesPath(repoRoot));
-    const faviconBytes = await Deno.readFile(webFaviconPath(repoRoot));
-    // Chunked so any icon size stays within the call-stack limits of
-    // spread + String.fromCharCode.
-    let faviconB64 = "";
-    for (let i = 0; i < faviconBytes.length; i += 0x8000) {
-      faviconB64 += btoa(
-        String.fromCharCode(...faviconBytes.subarray(i, i + 0x8000)),
+    const favicon = base64Of(await Deno.readFile(webFaviconPath(repoRoot)));
+    const pwaIcons: Record<string, string> = {};
+    for (const name of PWA_ICON_FILES) {
+      pwaIcons[name] = base64Of(
+        await Deno.readFile(join(webPwaIconDir(repoRoot), name)),
       );
     }
+    const serviceWorker = await Deno.readTextFile(
+      webServiceWorkerPath(repoRoot),
+    );
     return {
       manifest: {
         client,
         "styles.css": css,
-        "favicon.png": faviconB64,
+        "favicon.png": favicon,
+        pwaIcons,
+        "sw.js": serviceWorker,
       },
       clientBytes: clientBytesOf(client),
     };
@@ -147,6 +174,8 @@ export class Assets {
   private clientPromise: Promise<Record<string, AssetFile>> | null = null;
   private cssCache: string | null = null;
   private faviconCache: Uint8Array | null = null;
+  private readonly pwaIconCache = new Map<string, Uint8Array>();
+  private serviceWorkerCache: string | null = null;
   /** Memoized embedded manifest (undefined = not read yet, or the last read
    * failed and the next request may try again). */
   private manifestCache: AssetsManifest | undefined = undefined;
@@ -267,6 +296,44 @@ export class Assets {
     return this.faviconCache;
   }
 
+  /** One PWA icon by the name its `/pwa/*` URL carries, or undefined when
+   * this build has no such file. `PWA_ICON_FILES` is the whole authority —
+   * the same list the packaging writes — so an unknown (or path-like) name
+   * never reaches the file system. */
+  async getPwaIcon(name: string): Promise<Uint8Array | undefined> {
+    if (!PWA_ICON_FILES.includes(name)) return undefined;
+    const cached = this.pwaIconCache.get(name);
+    if (cached !== undefined) return cached;
+    const bytes = await this.source(
+      () => Deno.readFile(join(webPwaIconDir(this.repoRoot), name)),
+      (manifest) => {
+        const encoded = manifest.pwaIcons[name];
+        return encoded === undefined
+          ? undefined
+          : Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+      },
+      `PWA icon not found in the build: ${name}`,
+    );
+    // A failed read throws above and is retried on the next request, which
+    // is why only a resolved value is memoized.
+    this.pwaIconCache.set(name, bytes);
+    return bytes;
+  }
+
+  /** The service worker script. A worker is fetched by the browser itself
+   * (outside any page's cache policy), so its body has to come from this
+   * build; nothing about it is per-request. */
+  async getServiceWorker(): Promise<string> {
+    if (this.serviceWorkerCache === null) {
+      this.serviceWorkerCache = await this.source(
+        () => Deno.readTextFile(webServiceWorkerPath(this.repoRoot)),
+        (manifest) => manifest["sw.js"],
+        "sw.js not found and no embedded assets",
+      );
+    }
+    return this.serviceWorkerCache;
+  }
+
   /**
    * Resolve one asset from this checkout, or from the packaged manifest when
    * there is no checkout to build from.
@@ -277,8 +344,8 @@ export class Assets {
    * them to forget the retry-after-failure rule. What differs is only where
    * the asset comes from: this is that half.
    *
-   * `readEmbedded` gets the whole manifest because the three assets are read
-   * from different keys (a client map, a stylesheet string, a base64 icon);
+   * `readEmbedded` gets the whole manifest because the assets are read from
+   * different keys (a client map, a stylesheet string, a base64 icon);
    * a missing entry is the caller's own failure message.
    */
   private async source<T>(

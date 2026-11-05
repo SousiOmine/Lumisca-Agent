@@ -27,6 +27,8 @@
  * - `./misc.ts` — errorMessage, InitialData, decode/parse/format helpers,
  * - `./digest.ts` — FNV-1a change-detection digests and canonical JSON,
  * - `./loopback.ts` — loopback host detection and URL host spellings,
+ * - `./theme-colors.ts` — the canvas colour of each theme (the manifest's
+ *   `theme_color`),
  * - `./web-search.ts` — the web-search setting's wire shape,
  * - `./routine.ts` — routine schedules, their limits and the next-run rule,
  * - `./ui-markup/` — the card markup a `send_chat` call carries,
@@ -54,6 +56,7 @@ export * from "./wire.ts";
 export * from "./misc.ts";
 export * from "./digest.ts";
 export * from "./loopback.ts";
+export * from "./theme-colors.ts";
 export * from "./heartbeat.ts";
 export * from "./ws-batch.ts";
 export * from "./web-search.ts";

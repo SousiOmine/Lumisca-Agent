@@ -1,4 +1,5 @@
 import { assertEquals } from "@std/assert";
+import { THEME_COLORS } from "@lumisca/core/shared";
 
 /**
  * Guards for the design tokens (styles/tokens.css). Both bugs these catch are
@@ -743,4 +744,27 @@ Deno.test("the model picker's panel is the size it measured", async () => {
     true,
     "the sheet must keep its definite height",
   );
+});
+
+/** The canvas colour a theme's block declares (`--bg`), or undefined when
+ * the block or the token is missing. */
+function canvasColor(css: string, theme: "dark" | "light"): string | undefined {
+  const block = css.match(
+    new RegExp(`html\\[data-theme="${theme}"\\]\\s*\\{([\\s\\S]*?)\\}`),
+  )?.[1];
+  return block?.match(/--bg:\s*([^;]+);/)?.[1]?.trim();
+}
+
+Deno.test("the manifest's theme colours are the themes' --bg", async () => {
+  // The server answers the Web App Manifest's `theme_color` and the page's
+  // `theme-color` from THEME_COLORS — it cannot read this stylesheet — so
+  // the two have to name the same colours. A mismatch paints the splash
+  // screen and the installed app's status bar in a colour the app never
+  // shows.
+  const css = await Deno.readTextFile(
+    new URL("./styles/tokens.css", import.meta.url),
+  );
+  for (const theme of ["dark", "light"] as const) {
+    assertEquals(canvasColor(css, theme), THEME_COLORS[theme], theme);
+  }
 });

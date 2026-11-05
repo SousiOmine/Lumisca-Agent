@@ -8,8 +8,10 @@ Deno.test("packaged assets use the startup-captured manifest path", async () => 
   const root = await Deno.makeTempDir();
   const manifestPath = join(root, "assets.json");
   const favicon = new Uint8Array([0, 1, 2, 255]);
+  const icon = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7, 8]);
   const appJs = "console.log('packaged');";
   const chunk = "export const lazy = 1;";
+  const worker = "self.addEventListener('fetch', () => {});";
   const manifest: AssetsManifest = {
     client: {
       "app.js": { body: appJs, etag: contentEtag(appJs) },
@@ -17,6 +19,8 @@ Deno.test("packaged assets use the startup-captured manifest path", async () => 
     },
     "styles.css": "body { color: white; }",
     "favicon.png": btoa(String.fromCharCode(...favicon)),
+    pwaIcons: { "icon-192.png": btoa(String.fromCharCode(...icon)) },
+    "sw.js": worker,
   };
   await Deno.writeTextFile(manifestPath, JSON.stringify(manifest));
 
@@ -34,6 +38,14 @@ Deno.test("packaged assets use the startup-captured manifest path", async () => 
     assertEquals(await assets.getClientFile("constructor"), undefined);
     assertEquals(await assets.getCss(), manifest["styles.css"]);
     assertEquals(await assets.getFavicon(), favicon);
+    assertEquals(await assets.getPwaIcon("icon-192.png"), icon);
+    // A name outside the build's list is an unknown URL (the route answers
+    // 404), while a listed icon the package lacks is a broken build and
+    // fails loudly, like a missing favicon.
+    assertEquals(await assets.getPwaIcon("icon-1024.png"), undefined);
+    assertEquals(await assets.getPwaIcon("../favicon.png"), undefined);
+    await assertRejects(() => assets.getPwaIcon("icon-512.png"));
+    assertEquals(await assets.getServiceWorker(), worker);
   } finally {
     await removeDirRetry(root);
   }

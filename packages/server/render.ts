@@ -2,12 +2,14 @@
  * The HTML documents served by the app. `renderHtmlDocument` is the app
  * itself: a static shell. The Preact app is rendered entirely client-side,
  * so the shell only carries the language and the theme (the first paint is
- * already in both — no flash), the inlined styles, and two scripts: the
- * externalized initial data + auth token (inline scripts are banned by the
- * page CSP), and the bundled client app. `renderTokenRequiredPage` is what
- * an unauthenticated browser lands on instead (the token guard's 401).
+ * already in both — no flash), the inlined styles, the install surface of
+ * the PWA (the manifest link, the theme colour and the iOS icon), and two
+ * scripts: the externalized initial data + auth token (inline scripts are
+ * banned by the page CSP), and the bundled client app.
+ * `renderTokenRequiredPage` is what an unauthenticated browser lands on
+ * instead (the token guard's 401).
  */
-import { type Locale, translate } from "@lumisca/core/shared";
+import { type Locale, THEME_COLORS, translate } from "@lumisca/core/shared";
 
 /**
  * Content-Security-Policy for the page. Inline scripts are banned, so
@@ -30,6 +32,12 @@ import { type Locale, translate } from "@lumisca/core/shared";
  * http(s) page. Loopback is `potentially trustworthy`, so a page served
  * over https may still call it. In a plain browser nothing listens there
  * and the bridge is unused.
+ *
+ * `manifest-src` and `worker-src` are the PWA surface: the document links
+ * the web app manifest (`/manifest.webmanifest`) and the client registers
+ * the service worker (`/sw.js`) on https pages. Both would inherit
+ * `default-src` here; naming them keeps a future tightening of the default
+ * from silently making the app uninstallable.
  */
 export function pageCsp(pageHost: string | undefined): string {
   // The fallback branch has no host to name, so it covers loopback only:
@@ -43,6 +51,8 @@ export function pageCsp(pageHost: string | undefined): string {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: http:",
+    "manifest-src 'self'",
+    "worker-src 'self'",
     wsSrc,
     "font-src 'self' data:",
     "object-src 'none'",
@@ -82,7 +92,7 @@ export function renderHtmlDocument(
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta http-equiv="Content-Security-Policy" content="${
     pageCsp(
@@ -90,6 +100,15 @@ export function renderHtmlDocument(
     )
   }" />
     <title>Lumisca Agent</title>
+    <!-- The page's own canvas colour: the browser paints its chrome (the
+         address bar, an installed app's system bars) with it, and useTheme
+         keeps it in step when the reader switches theme. -->
+    <meta name="theme-color" content="${THEME_COLORS[theme]}" />
+    <!-- Installable as a PWA. The manifest is generated per request, so its
+         theme colour and language are this document's own; the icons are the
+         desktop app's artwork. iOS reads the touch icon from this link. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
     <link rel="icon" href="/favicon.png" />
     <style>${css}</style>
   </head>
@@ -125,7 +144,12 @@ function escapeHtml(text: string): string {
  * the page carries its own minimal styling. It is served before the app
  * loads, so its text comes from the catalogue with the language the server
  * resolved for that request (see app.ts); it still names no host, port or
- * token. */
+ * token.
+ *
+ * The form is the same visit without an address bar. An installed PWA has no
+ * URL field, so a browser whose cookie was cleared (or that rejected one)
+ * could not present the token any other way; submitting it goes to
+ * `/?token=…`, which the guard turns into the cookie. */
 export function renderTokenRequiredPage(language: Locale): string {
   return `<!doctype html>
 <html lang="${language}">
@@ -152,6 +176,25 @@ export function renderTokenRequiredPage(language: Locale): string {
         padding: 2px 6px; border-radius: 4px;
       }
       p.note { opacity: 0.75; font-size: 14px; }
+      form {
+        display: flex; flex-direction: column; gap: 8px;
+        align-items: flex-start; margin: 20px 0 8px;
+      }
+      label { font-size: 14px; opacity: 0.85; }
+      input {
+        /* 16px: a smaller field makes iOS Safari zoom the page when it takes
+           focus, and the layout would stay zoomed. */
+        font: inherit; font-size: 16px;
+        padding: 8px 10px; min-width: min(320px, 100%);
+        border: 1px solid rgba(127, 127, 127, 0.5); border-radius: 6px;
+        background: rgba(127, 127, 127, 0.12); color: inherit;
+      }
+      button {
+        font: inherit; padding: 8px 14px;
+        border: none; border-radius: 6px;
+        background: rgba(127, 127, 127, 0.35); color: inherit;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -164,6 +207,22 @@ export function renderTokenRequiredPage(language: Locale): string {
       <pre><code>${
     escapeHtml(translate(language, "common.tokenRequired.example"))
   }</code></pre>
+      <form method="get" action="/">
+        <label for="token">${
+    escapeHtml(translate(language, "common.tokenRequired.formLabel"))
+  }</label>
+        <input
+          id="token"
+          name="token"
+          type="password"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+        <button type="submit">${
+    escapeHtml(translate(language, "common.tokenRequired.submit"))
+  }</button>
+      </form>
       <p class="note">
         ${escapeHtml(translate(language, "common.tokenRequired.note"))}
       </p>

@@ -38,6 +38,13 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      // The manifest is generated per request by the app server (theme and
+      // language come from its settings), so the dev page asks the same
+      // server for it: the two shells reference the same URL.
+      "/manifest.webmanifest": {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       "/ws": {
         target: apiTarget,
         changeOrigin: true,

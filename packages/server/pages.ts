@@ -15,7 +15,13 @@ import type { InitialData } from "@lumisca/core/shared";
 import type { AssetFile, Assets } from "./assets.ts";
 import { safePageHost } from "./security.ts";
 import { renderHtmlDocument } from "./render.ts";
-import { appFileHeaders, bytesEtag, etagMatches } from "./app-file-headers.ts";
+import { renderManifest } from "./manifest.ts";
+import {
+  appFileHeaders,
+  bytesEtag,
+  contentEtag,
+  etagMatches,
+} from "./app-file-headers.ts";
 
 /** Theme preference from the core settings ("system" when unset/unknown).
  * The client resolves "system" via prefers-color-scheme; the shell falls back
@@ -127,6 +133,30 @@ export function registerPages(
     return c.body(body, 200, headers);
   };
 
+  /** Answer a PNG with a validator, or 304 when the client already has it.
+   * The favicon and the PWA icons share this: all are on the token-free
+   * list (a browser may ask for them on any page, and the install pipeline
+   * asks without a cookie), and all change only with a release. */
+  const servePng = (c: Context, png: Uint8Array): Response => {
+    const etag = bytesEtag(png);
+    const headers = {
+      "content-type": "image/png",
+      ...appFileHeaders("revalidate", etag),
+    };
+    if (etagMatches(c.req.header("if-none-match"), etag)) {
+      // A 304 keeps the validator and the policy (the browser reuses its
+      // copy), and carries no body.
+      return c.body(null, 304, headers);
+    }
+    // `c.body` wants a body whose buffer is an ArrayBuffer; the bytes
+    // come from the bundle and are copied exactly as they are.
+    return c.newResponse(
+      new Uint8Array(png).buffer as ArrayBuffer,
+      200,
+      headers,
+    );
+  };
+
   /** The client build: the entry chunk the page loads (`app.js`) and the
    * chunks its dynamic imports fetch later (`@novnc/novnc` for the stella
    * screen, `motion/mini`). The name is looked up in the manifest, never
@@ -158,25 +188,65 @@ export function registerPages(
     } catch {
       return c.text("not found", 404);
     }
-    // The favicon is the one app file that used to answer with a bare
-    // content-type: no validator and no policy, so every page load fetched
-    // it again (and it is on the token-free list, so a browser may ask for
-    // it on any page). It changes only with a release, which rebuilds the
-    // bundle: revalidate like the other app files.
-    const etag = bytesEtag(png);
-    const headers = {
-      "content-type": "image/png",
-      ...appFileHeaders("revalidate", etag),
-    };
-    if (etagMatches(c.req.header("if-none-match"), etag)) {
-      return c.body(null, 304, headers);
+    // Revalidated like every other app file: it changes only with a release,
+    // which rebuilds the bundle.
+    return servePng(c, png);
+  });
+
+  /** The web app manifest: what makes this page installable. Built per
+   * request so the install screen matches the theme the page starts in and
+   * the language this browser asked for (see manifest.ts).
+   *
+   * The PWA surface below — this, its icons and the service worker — is on
+   * security.ts's token-free list: a browser's install pipeline fetches them
+   * by itself, and none of them carries a secret. */
+  app.get("/manifest.webmanifest", (c) => {
+    const body = renderManifest({
+      theme: resolvedThemeOf(core),
+      language: languageForRequest(core, c),
+    });
+    return serveRevalidatable(
+      c,
+      body,
+      "application/manifest+json",
+      contentEtag(body),
+    );
+  });
+
+  /** The icons the manifest names, plus the one iOS reads from the page's
+   * `<link>`. The name is looked up in the build's own list, never joined to
+   * a path, so a path-like or unknown name is not this build's file. */
+  app.get("/pwa/:name", async (c) => {
+    let png: Uint8Array | undefined;
+    try {
+      png = await assets.getPwaIcon(c.req.param("name"));
+    } catch (error) {
+      return c.text(`PWA icon unavailable: ${errorMessage(error)}`, 500);
     }
-    // `c.body` wants a body whose buffer is an ArrayBuffer; the bytes
-    // come from the bundle and are copied exactly as they are.
-    return c.newResponse(
-      new Uint8Array(png).buffer as ArrayBuffer,
-      200,
-      headers,
+    if (png === undefined) return c.text("Not found", 404);
+    return servePng(c, png);
+  });
+
+  /** The service worker. A worker is fetched by the browser itself, outside
+   * any page's cache policy, so it is answered from this build (packaged
+   * builds carry it in assets.json). The revalidate policy is what makes the
+   * browser check this file on every load: a changed byte here is the whole
+   * update mechanism of the worker. */
+  app.get("/sw.js", async (c) => {
+    let body: string;
+    try {
+      body = await assets.getServiceWorker();
+    } catch (error) {
+      return c.text(
+        `Service worker unavailable: ${errorMessage(error)}`,
+        500,
+      );
+    }
+    return serveRevalidatable(
+      c,
+      body,
+      "application/javascript; charset=utf-8",
+      contentEtag(body),
     );
   });
 

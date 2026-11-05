@@ -233,7 +233,13 @@
     max-width: none;
     height: 100dvh;
     max-height: 100dvh;
-    padding: 16px;
+    /* A full-screen dialog reaches the screen's edges, so it takes the same
+     * safe-area insets the app does (layout.css): its close button and its
+     * last row would otherwise sit under the notch and the home indicator. */
+    padding-block: calc(16px + env(safe-area-inset-top, 0px))
+      calc(16px + env(safe-area-inset-bottom, 0px));
+    padding-inline: calc(16px + env(safe-area-inset-left, 0px))
+      calc(16px + env(safe-area-inset-right, 0px));
     border: none;
     border-radius: 0;
     box-shadow: none;

@@ -3,6 +3,7 @@ import { createRoot } from "preact/compat/client";
 import { DEFAULT_LOCALE } from "@lumisca/core/shared";
 import { App } from "./App.tsx";
 import { initLocale, t } from "./i18n.ts";
+import { registerServiceWorker } from "./pwa.ts";
 import type { InitialData } from "./types.ts";
 
 declare global {
@@ -23,6 +24,11 @@ if (location.search.includes("token=")) {
 // reads it from the store, and the server already resolved it (the stored
 // setting, else the browser's Accept-Language — see server/app.ts).
 initLocale(globalThis.__INITIAL_DATA__?.language ?? DEFAULT_LOCALE);
+
+// Register the PWA's service worker where it belongs (https, outside the
+// desktop shell). Fire and forget: the registration is asynchronous, adds
+// nothing the app waits for, and reports its own failures (see pwa.ts).
+registerServiceWorker();
 
 /**
  * The last net under the app: a throw in a component's render unmounts the

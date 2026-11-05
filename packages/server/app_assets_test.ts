@@ -1,7 +1,7 @@
 import { fauxProvider } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "@lumisca/core";
-import { LANGUAGE_KEY } from "@lumisca/core/shared";
+import { LANGUAGE_KEY, THEME_COLORS } from "@lumisca/core/shared";
 import { createApp, startServer } from "./app.ts";
 
 export function json(
@@ -327,6 +327,104 @@ Deno.test("the app's files are compressed and revalidated", async () => {
         `${path} is cacheable`,
       );
     }
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("the PWA surface is installable and never secret", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  try {
+    const base = `http://127.0.0.1:${server.addr.port}`;
+    // The manifest is generated per request: it reports the theme colour
+    // this page starts in (dark is the default) and is valid JSON.
+    const manifestRes = await fetch(`${base}/manifest.webmanifest`);
+    assertEquals(manifestRes.status, 200);
+    assertEquals(
+      manifestRes.headers.get("content-type"),
+      "application/manifest+json",
+    );
+    const manifest = await manifestRes.json() as {
+      start_url?: string;
+      display?: string;
+      theme_color?: string;
+      icons?: { src: string; sizes: string }[];
+    };
+    assertEquals(manifest.start_url, "/");
+    assertEquals(manifest.display, "standalone");
+    assertEquals(manifest.theme_color, THEME_COLORS.dark);
+    assertEquals(manifest.icons?.length, 3);
+
+    // Each icon it names is a real PNG at the size the manifest claims: a
+    // browser decodes them and reports the app as not installable on a
+    // mismatch.
+    for (const icon of manifest.icons ?? []) {
+      const response = await fetch(`${base}${icon.src}`);
+      assertEquals(response.status, 200, icon.src);
+      assertEquals(response.headers.get("content-type"), "image/png");
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      assertEquals(
+        [...bytes.subarray(0, 8)],
+        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+        icon.src,
+      );
+      // The PNG header carries width and height big-endian at 16..24.
+      const view = new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        bytes.byteLength,
+      );
+      assertEquals(`${view.getUint32(16)}x${view.getUint32(20)}`, icon.sizes);
+    }
+
+    // Revalidated like the favicon: an unguarded file is asked for on every
+    // page load, and it changes only with a release.
+    const first = await fetch(`${base}/pwa/icon-192.png`);
+    const etag = first.headers.get("etag");
+    assert(etag !== null, "a PWA icon must carry a validator");
+    const revalidated = await fetch(`${base}/pwa/icon-192.png`, {
+      headers: { "if-none-match": etag },
+    });
+    assertEquals(revalidated.status, 304);
+
+    // iOS reads the touch icon from the page's <link>, so it is served too.
+    assertEquals(
+      (await fetch(`${base}/pwa/apple-touch-icon.png`)).status,
+      200,
+    );
+    // Anything else under /pwa/ is not a file of this build, and must not
+    // fall through to the app shell.
+    const unknown = await fetch(`${base}/pwa/icon-1024.png`);
+    assertEquals(unknown.status, 404);
+    assertEquals(
+      unknown.headers.get("content-type"),
+      "text/plain; charset=UTF-8",
+    );
+
+    // The service worker is a standalone script (not a module: Safari
+    // refuses module workers) with a fetch handler, which is what Chromium
+    // checks before it offers the install prompt. It must never carry the
+    // token — it is on the token-free list.
+    const sw = await fetch(`${base}/sw.js`);
+    assertEquals(sw.status, 200);
+    assertEquals(
+      sw.headers.get("content-type"),
+      "application/javascript; charset=utf-8",
+    );
+    const swBody = await sw.text();
+    assertEquals(swBody.includes('addEventListener("fetch"'), true);
+    assertEquals(swBody.includes("__LUMISCA_TOKEN__"), false);
+    // `initial-data.js` carries the token, so the worker names it only to
+    // exclude it.
+    assertEquals(swBody.includes("initial-data.js"), true);
+
+    // The page points at all of it.
+    const html = await (await fetch(`${base}/`)).text();
+    assertEquals(html.includes('rel="manifest"'), true);
+    assertEquals(html.includes("/pwa/apple-touch-icon.png"), true);
   } finally {
     server.shutdown();
     core.close();

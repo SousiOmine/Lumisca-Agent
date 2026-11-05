@@ -50,9 +50,16 @@ function hostnameOf(host: string | undefined): string {
   }
 }
 
-/** Paths the token guard lets through: the app's bundle and icon (no
- * secret in them) and the MCP OAuth callback. `/assets/initial-data.js`
- * carries the token itself and is deliberately absent.
+/** Paths the token guard lets through: the app's bundle and icons, the PWA
+ * surface (manifest, its icons and the service worker) and the MCP OAuth
+ * callback. None of them carries a secret. `/assets/initial-data.js` does,
+ * and is deliberately absent.
+ *
+ * The PWA files are exempt because the browser fetches them on its own: the
+ * manifest and the icons from the install pipeline (Chromium's installability
+ * check, Safari's "Add to Home Screen"), the worker from the registration
+ * step. This server's cookie cannot be assumed to travel on those requests,
+ * and a 401 there simply makes the app uninstallable.
  *
  * `/styles.css` used to be on this list for a route that served the
  * stylesheet as its own file. The page inlines the CSS into its `<style>`
@@ -60,7 +67,12 @@ function hostnameOf(host: string | undefined): string {
  * route and this exemption are gone. */
 function unguardedPath(path: string): boolean {
   return path === "/assets/app.js" ||
-    path === "/favicon.png" || path === MCP_OAUTH_CALLBACK_PATH;
+    path === "/favicon.png" || path === MCP_OAUTH_CALLBACK_PATH ||
+    path === "/manifest.webmanifest" || path === "/sw.js" ||
+    // Every `/pwa/` file is a committed icon: the route there serves only
+    // the names in `PWA_ICON_FILES`, so the prefix cannot expose anything
+    // else.
+    path.startsWith("/pwa/");
 }
 
 /** Origins allowed to read cross-origin responses (the Tauri WebView). */
@@ -163,12 +175,13 @@ export function installSecurityMiddleware(
   // shell and a first-time browser open the UI), or the cookie the browser
   // keeps after such a visit (auth-cookie.ts).
   //
-  // Two kinds of path skip the guard: the app's own bundle and icon (which
-  // carry no secret, so the page can load them without a token query), and
-  // the MCP OAuth callback (the browser coming back from the authorization
-  // server may not be the one the app is open in, and it carries only the
-  // `state` of a sign-in this server started). `/assets/initial-data.js` is
-  // NOT public: it carries the token itself.
+  // Three kinds of path skip the guard: the app's own bundle and icons and
+  // the PWA surface (manifest, icons, service worker — they carry no secret,
+  // and the page and the browser's install pipeline must load them without a
+  // token query), and the MCP OAuth callback (the browser coming back from
+  // the authorization server may not be the one the app is open in, and it
+  // carries only the `state` of a sign-in this server started).
+  // `/assets/initial-data.js` is NOT public: it carries the token itself.
   if (options.token) {
     const token = options.token;
     app.use("*", async (c, next) => {

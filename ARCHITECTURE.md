@@ -408,6 +408,9 @@ stella の会話でエージェントの発言になるのは 2 つです。**�
 - **認証 Cookie（`auth-cookie.ts`）**  
   ブラウザからのアクセス時に認証トークンを Cookie に保持します。ポート番号ごとに Cookie 名を分離し（`lumisca_token_<ポート>`）、同一ホスト上で複数インスタンスが稼働する場合の競合を防ぎます。
 
+- **PWA としてのインストール（`manifest.ts`、`pages.ts`、`web/public/sw.js`）**  
+  ページは https（`tailscale serve` など）越しに PWA としてインストールできます。Web App Manifest はファイルとして置かず、リクエストごとに生成します。`theme_color` はそのページの第一描画のテーマ、`lang` と `description` はそのリクエストの言語で、インストール画面とスプラッシュがアプリの見た目と一致するためです。manifest・アイコン（`/pwa/*`）・Service Worker（`/sw.js`）は token ガードの対象外にしています。ブラウザのインストール処理がこれらを Cookie 無しで取得し、401 はそのままインストール不可になるためで、どれにも秘密は載せません（`start_url` に token を入れない）。アイコンは `assets.json` に base64 で埋め込むので、配布アーカイブの形は変わりません。Service Worker は Chrome のインストールプロンプト（`beforeinstallprompt`）を出すためだけに存在し、https のページでのみ登録します（デスクトップの `http://127.0.0.1` は secure context なので、スキームの判定がそのまま除外になります）。キャッシュするのはクライアントの静的ファイルだけで、network-first（リリース直後に古い束を配らない）、ページ（token を持ち `no-store`）と `/api` には触りません。
+
 - **アセット配信（`routes/visuals.ts`, `routes/attachments.ts`）**  
   セッションで共有された画像ファイル（`visual:` 参照）と、エージェントがユーザーへ送ったファイル（`send_chat` の添付・code mode の `chat_attach`）を配信します。後者は表示名を `Content-Disposition` に載せ、画像は `inline`、それ以外は `attachment` として返します。対象のセッションが存在することを先に確かめるので、名前だけでセッションの有無を探ることはできません。`visuals` の SVG 配信時には `Content-Security-Policy: default-src 'none'; sandbox` を付与し、意図しないスクリプトの実行を防止します。
 

@@ -12,6 +12,14 @@
    * the composer stays visible. The token default (`100dvh`) is what
    * browsers without visualViewport keep. */
   height: var(--app-height);
+  /* The safe area. The page asks for `viewport-fit=cover` (server/render.ts,
+   * index.html), so it paints under the notch, the Dynamic Island and the
+   * home indicator — which is what an installed app does — and this inset
+   * lifts the UI back out of them. Zero in a browser tab and in the desktop
+   * window, where there is nothing to avoid; the macOS desktop inset
+   * (chrome.css, `.app.macos`) replaces the top value there. */
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
 
 /* Everything below the title bar (update banner, chat, new-session

@@ -120,6 +120,25 @@ export const common = {
     en:
       "Check your server configuration for the token value. This screen also appears when the browser rejects cookies.",
   },
+  /** The way back in when the app runs without an address bar: an installed
+   * PWA has no URL field, so a browser that lost its cookie cannot present
+   * the token as `?token=` any other way. Submitting the form is that visit. */
+  "common.tokenRequired.formLabel": {
+    ja: "トークンを入力",
+    en: "Enter the token",
+  },
+  "common.tokenRequired.submit": {
+    ja: "このブラウザに保存",
+    en: "Save it in this browser",
+  },
+
+  // --- web app manifest (server/manifest.ts) --------------------------------
+  /** The manifest's `description`, which the browser's install dialog shows
+   * under the app's name. */
+  "common.pwa.description": {
+    ja: "自分のマシンで動くコーディングエージェント",
+    en: "A coding agent that runs on your own machine",
+  },
 
   // --- MCP OAuth callback page (server/render.ts) ---------------------------
   /** The page the browser lands on after the authorization server redirects

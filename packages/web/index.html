@@ -12,9 +12,17 @@
          and not the other is a difference nobody looks for here. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <title>Lumisca Agent</title>
+    <!-- This shell has no server-side theme (the dev server is not this
+         app's server), so the dark canvas is the initial value and useTheme
+         rewrites it as soon as the app renders. Everything else below is the
+         same install surface packages/server/render.ts writes; the manifest
+         itself is proxied to the app server (see vite.config.ts). -->
+    <meta name="theme-color" content="#0c0c11" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
     <link rel="icon" href="/favicon.png" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>

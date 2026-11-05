@@ -714,6 +714,10 @@
     max-height: var(--mp-sheet-space);
     border-radius: var(--radius) var(--radius) 0 0;
     border-bottom: none;
+    /* The sheet sits on the screen's own bottom edge: keep its last row out
+     * from under the home indicator (layout.css carries the same inset for
+     * the app's own frame). */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   /* The thinking rail joins the model screen under the list (the `.stacked`

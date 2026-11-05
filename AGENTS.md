@@ -220,3 +220,15 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
 - **カタログはエージェント単位（stella）**: `StellaMachine` のキャッシュは `agentId` ごとで、`primeStellaSkills(agentId)` が会話を開く前に読みます。`/home/agent/.agents/skills` は共通なので全エージェントに出ます。
 - **ガイドの広告条件**: ファイルツールを持つセッションだけ（chat には出さない）。stella では共通フォルダのパスをマシン側のものにして渡します（`BuiltinContext.skillAuthoring`）。
 - **テストの隔離**: `LumiscaCore.forTesting` は `appSkillDirs: []` を渡します。ディレクトリを配線するときは `globalSkillDirs` と同じく core → pool → toolsets / task-hub へ通してください（渡し忘れると、ツールの一覧だけが開発機のフォルダを見ます）。
+
+## 12. PWA（インストール）
+
+https（`tailscale serve` など）で開いた端末から、ページを PWA としてインストールできます。理由は `ARCHITECTURE.md` の「PWA としてのインストール」にあります。ここには触り方だけを書きます。
+
+- **manifest はリクエストごとに生成**します（`packages/server/manifest.ts`）。`theme_color`/`background_color` はそのページの第一描画のテーマ色で、`@lumisca/core/shared` の `THEME_COLORS` と `tokens.css` の `--bg` が一致することを `styles_test.ts` が検査します。**`start_url` に token を入れないでください**（manifest は token ガードの対象外です）。
+- **token ガードの対象外は `/manifest.webmanifest`・`/pwa/*`・`/sw.js`**（`security.ts` の `unguardedPath`）。ブラウザのインストール処理が Cookie 無しで取りに来るためです。ここに秘密を持つファイルを足さないでください。
+- **アイコンは `packages/web/public/pwa/` の PNG を `assets.json` に base64 で埋め込みます**（`PWA_ICON_FILES`、`scripts/build-server.ts` はそのまま）。配布物の形（`installedFileNames`）は変わりません。**宣言する `sizes` は実ファイルの寸法と一致させてください**（`app_assets_test.ts` が PNG ヘッダを読んで照合します）。`icon-maskable-512.png` は Android の円形マスクで切られないよう、内容を 70% に縮めて中央に置いています。
+- **Service Worker は https のページでのみ登録します**（`packages/web/src/pwa.ts`）。デスクトップの WebView は `http://127.0.0.1` という secure context なので、スキームの判定がそのまま「デスクトップでは登録しない」になります。キャッシュは `/assets/*.js`（`initial-data.js` は除く）・`/pwa/*`・`/favicon.png`・manifest だけで、network-first。**ページ・`/api`・`/ws` には触りません**（ページは token を持ち `no-store`）。
+- **`public/sw.js` のキャッシュ方針を変えたら `CACHE_NAME` を上げてください**。新しい worker の activate が古いキャッシュを消します。`/sw.js` は `max-age=0, must-revalidate` で配るので、更新は次回の読み込みで拾われます。
+- **standalone の余白**: viewport は `viewport-fit=cover` で、余白は `env(safe-area-inset-*)` で戻します（`layout.css` の `.app`、全画面 `.modal`、`.mp-popover`）。`packages/server/render.ts` と `packages/web/index.html` の viewport は揃えたままにしてください。iOS のステータスバー色はテーマに追従できないため、`apple-mobile-web-app-status-bar-style` は書いていません。
+- **確認**: `deno task test` の `app_assets_test.ts`（manifest の内容・アイコンの寸法・`/sw.js`・404）と `app_security_test.ts`（無認証で 200）が通ること。実機は Chrome の DevTools → Application → Manifest で、インストール可能性の警告が出ないことを見ます。

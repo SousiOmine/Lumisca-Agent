@@ -174,6 +174,18 @@ Deno.test("token auth guards the API, websocket and page", async () => {
       script.includes('window.__LUMISCA_TOKEN__ = "secret-token"'),
       true,
     );
+
+    // The PWA surface is on the token-free list: a browser's install
+    // pipeline asks for it without this server's cookie, and a 401 there
+    // makes the app uninstallable rather than protected.
+    for (
+      const path of ["/manifest.webmanifest", "/sw.js", "/pwa/icon-192.png"]
+    ) {
+      const response = await app.fetch(
+        new Request(`http://127.0.0.1:8000${path}`, { headers: HOST }),
+      );
+      assertEquals(response.status, 200, path);
+    }
   } finally {
     core.close();
   }

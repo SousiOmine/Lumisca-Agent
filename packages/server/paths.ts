@@ -23,6 +23,20 @@ export function webFaviconPath(repoRoot: string): string {
   return join(repoRoot, "packages", "web", "public", "favicon.png");
 }
 
+/** The PWA icons' source directory (`/pwa/<name>` URLs). They are committed
+ * PNGs beside the favicon; a packaged build carries them inside
+ * `assets.json` like every other asset. */
+export function webPwaIconDir(repoRoot: string): string {
+  return join(repoRoot, "packages", "web", "public", "pwa");
+}
+
+/** The service worker script served at `/sw.js`. It has to be a file of the
+ * site's own root scope (a worker's default scope is its URL's directory),
+ * and it is a plain script, not a module: Safari refuses module workers. */
+export function webServiceWorkerPath(repoRoot: string): string {
+  return join(repoRoot, "packages", "web", "public", "sw.js");
+}
+
 /**
  * Where the stella machine's container files live (the `stella-container`
  * directory holding the Containerfile and entry.sh).
