@@ -149,15 +149,18 @@
  * pane's `overflow: hidden` (the composer sits at its bottom edge, and a taller
  * panel used to be cut off there) and the cards' transform, which would
  * otherwise become the containing block. One of top/bottom is always `auto` —
- * a panel opened upward is anchored at its bottom, so content shorter than the
- * room still hugs the trigger. */
+ * a panel opened upward is anchored at its bottom, so the panel stays next to
+ * the trigger. Width and height are both the size measured for this opening,
+ * never the content's: sized by its contents, the panel shrank when the chosen
+ * provider had fewer models, and anchored at its bottom it pulled every row
+ * down with it. What does not fit scrolls in the pane that owns it. */
 .mp-popover {
   position: fixed;
   top: var(--mp-top);
   bottom: var(--mp-bottom);
   left: var(--mp-left);
   width: var(--mp-width);
-  max-height: var(--mp-space);
+  height: var(--mp-space);
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -174,8 +177,8 @@
 
 /* ---- model picker: cascading three-pane layout --------------------------- */
 
-/* The panel's height is the measured room (never more): the model list is the
- * part that scrolls, and the panes keep their own headers in view. */
+/* The panel's height is the measured room (see `.mp-popover`): the model list
+ * is the part that scrolls, and the panes keep their own headers in view. */
 .model-picker {
   display: flex;
   min-height: 0;
@@ -698,11 +701,9 @@
   .mp-popover {
     /* A phone gets a sheet on the visible bottom edge: the measured position
      * (above or below the composer) means nothing when the panel covers the
-     * screen. The height is definite on purpose — with only a `max-height` the
-     * column's items keep their content sizes and the model list is the one
-     * that loses the shrink (it is by far the tallest), so the sheet collapsed
-     * to a header, a search field and half a row. A definite height lets the
-     * list take the remainder and scroll inside it. `--mp-sheet-space` already
+     * screen. Its height is the band the visible area leaves (with a phone-sized
+     * cap), not the room measured above the trigger: every layout takes a
+     * definite height, and this one is simply taller. `--mp-sheet-space` already
      * excludes the window's bar and the software keyboard. */
     top: auto;
     bottom: var(--mp-view-bottom);

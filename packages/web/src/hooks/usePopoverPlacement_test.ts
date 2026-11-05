@@ -44,8 +44,8 @@ Deno.test("fitPopover: a roomy window gets the preferred size above the trigger"
   // Anchored at the trigger's left edge, a gap above it.
   assertEquals(result.left, 215);
   assertEquals(result.bottom, LAYOUT_HEIGHT - composerSwitch.top + 6);
-  // Opening upward is anchored at the bottom: `top` must stay unset so a
-  // shorter content still hugs the trigger.
+  // Opening upward is anchored at its bottom: `top` must stay unset, so the
+  // panel keeps its gap to the trigger whatever height it takes.
   assertEquals(result.top, null);
 });
 

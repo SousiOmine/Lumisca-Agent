@@ -82,21 +82,22 @@ export interface PopoverFit {
   /** Fixed `left` (client coordinates). */
   left: number;
   /** Fixed `top`; `null` when the popover opens above its anchor — it is
-   * anchored at the bottom then, so content shorter than the room still hugs
-   * the trigger. */
+   * anchored at its bottom then, so the panel stays next to the trigger. */
   top: number | null;
   /** Fixed `bottom`; `null` when the popover opens below its anchor. */
   bottom: number | null;
   /** Width the popover takes (never wider than the visible area allows). */
   width: number;
-  /** The most height the popover may take; shorter content stays shorter. */
+  /** The height the popover takes: the room on the chosen side, capped at the
+   * preferred size. The panel fills it and scrolls what does not fit, so its
+   * size never follows its contents. */
   height: number;
 }
 
 /**
  * Place the popover on `prefer`, shrinking it to the room that is actually
- * there and moving to the other side when the preferred one cannot hold its
- * contents. It also keeps the popover inside the viewport horizontally:
+ * there and moving to the other side when the preferred one is too short for
+ * one. It also keeps the popover inside the viewport horizontally:
  * anchored at the trigger's left edge it would otherwise run off the right
  * edge of a narrow window.
  */
@@ -220,8 +221,8 @@ const round = (value: number) => `${Math.round(value)}px`;
 export interface PopoverPlacement {
   style: PopoverStyle;
   panes: boolean;
-  /** The most height the panel may take, in pixels. The picker drops its
-   * optional parts (the thinking rail) when even that is tiny. */
+  /** The height the panel takes, in pixels. The picker drops its optional
+   * parts (the thinking rail) when even that is tiny. */
   height: number;
 }
 
