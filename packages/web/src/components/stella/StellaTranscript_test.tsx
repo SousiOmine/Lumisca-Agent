@@ -316,3 +316,26 @@ Deno.test("StellaTranscript: a conversation with nothing said yet says so", () =
   const running = render({ running: true });
   assertEquals(running.includes("まだメッセージがありません"), false);
 });
+
+Deno.test("StellaTranscript: an answer's code scrolls inside the message", () => {
+  // The body must carry the shared `.msg-body` as well as stella's own class:
+  // chat.css holds the message body's language there — including
+  // `.msg-body pre { overflow-x: auto }`, which is what keeps a long line
+  // inside its code block. Without the class the <pre> had no scroller of its
+  // own: one long line stretched the column, and the whole transcript could
+  // be dragged sideways, which is a broken layout rather than a wide answer.
+  // (The reader's own bubble already carried the class.)
+  const html = render({
+    entries: [
+      {
+        role: "assistant",
+        text: "```ts\nconst veryLongIdentifierName = 1;\n```",
+        card: null,
+        attachments: [],
+        files: [],
+        timestamp: Date.now(),
+      },
+    ],
+  });
+  assertStringIncludes(html, 'class="stella-msg-body msg-body markdown"');
+});

@@ -818,7 +818,17 @@
 }
 
 @media (max-width: 900px) {
+  /* The two columns stop fitting side by side, so the shell stacks: the
+   * list on top (its own scroll, at most 30vh), the conversation below, the
+   * machine's screen under that.
+   *
+   * The shell's direction is what makes the rest of this block true. With
+   * the row kept, the sidebar's `width: 100%` took the whole row: the
+   * conversation was squeezed to the 2px of its border and the row ended up
+   * a few pixels wider than the window — a horizontal scroll in stella
+   * only, because code mode has no column beside its chat. */
   .stella-shell {
+    flex-direction: column;
     padding: 8px;
   }
 

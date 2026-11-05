@@ -684,3 +684,29 @@ Deno.test("the columns trade width in one movement", async () => {
     "the conversation must follow in the same duration",
   );
 });
+
+Deno.test("stella's list and conversation stack before they stop fitting", async () => {
+  // The tablet block gives the sidebar the full width of the shell. With the
+  // shell still a row that width was the whole row: the conversation was
+  // squeezed to the 2px of its border and the row ended up a few pixels wider
+  // than the window — a horizontal scroll in stella only, since code mode has
+  // no column beside its chat. The shell's direction is what makes the block
+  // work, so it is the part worth pinning.
+  const css = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const shell = cssRules(css).find((rule) =>
+    rule.selector === ".stella-shell" &&
+    rule.media?.includes("max-width: 900px") === true
+  );
+  assertEquals(
+    shell !== undefined,
+    true,
+    ".stella-shell must be tuned at the tablet width",
+  );
+  assertEquals(
+    /flex-direction:\s*column/.test(shell!.body),
+    true,
+    "the list and the conversation must stack, not share a row",
+  );
+});

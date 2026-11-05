@@ -224,7 +224,16 @@ function AgentBubble({
         )}
       </div>
       <div className="stella-msg-main">
-        <div className="stella-msg-body markdown">
+        {
+          /* `msg-body` as well as stella's own class: the body's shared
+           * language (code blocks, inline code, paragraph rhythm) is written
+           * once, in chat.css, keyed on that class — the same one the user's
+           * bubble and every code-mode body carry. Without it a `<pre>` is
+           * an unstyled element with `overflow-x: visible`, so one long line
+           * stretched the column and made the whole transcript scroll
+           * sideways instead of the code block scrolling inside itself. */
+        }
+        <div className="stella-msg-body msg-body markdown">
           {entry.text && (
             <MarkdownBlock text={entry.text} visualBase={visualBase} />
           )}
