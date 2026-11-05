@@ -26,6 +26,12 @@ export interface SessionRepo {
   ): SessionRecord;
   get(id: string): SessionRecord | undefined;
   list(workspaceId?: string): SessionRecord[];
+  /** Every row, stella conversations included. For work that must reach a
+   * conversation the user never sees in a list — an MCP sign-in reconnecting
+   * the sessions that use the server, which stella's own conversation needs
+   * as much as any other. `list()` stays the UI's list: stella has no
+   * session, so it must not appear there. */
+  listEvery(workspaceId?: string): SessionRecord[];
   /** stella mode's single conversation row, or undefined before the first
    * one is created. Never part of `list()`: stella has no session list. */
   /** The conversation belonging to one stella agent, if it has been started. */
@@ -111,6 +117,13 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
   const listByWorkspaceStmt = db.db.prepare(
     "SELECT * FROM sessions WHERE workspace_id = ? AND stella = 0 ORDER BY updated_at DESC",
   );
+  // Everything, stella included (see SessionRepo.listEvery).
+  const listEveryStmt = db.db.prepare(
+    "SELECT * FROM sessions ORDER BY updated_at DESC",
+  );
+  const listEveryByWorkspaceStmt = db.db.prepare(
+    "SELECT * FROM sessions WHERE workspace_id = ? ORDER BY updated_at DESC",
+  );
   const deleteStmt = db.db.prepare("DELETE FROM sessions WHERE id = ?");
   const touchStmt = db.db.prepare(
     "UPDATE sessions SET updated_at = ? WHERE id = ?",
@@ -191,6 +204,13 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
 
     list(workspaceId?: string): SessionRecord[] {
       const rows = (workspaceId ? listByWorkspaceStmt : listStmt).all(
+        ...(workspaceId ? [workspaceId] : []),
+      ) as unknown as SessionRow[];
+      return rows.map(toSession);
+    },
+
+    listEvery(workspaceId?: string): SessionRecord[] {
+      const rows = (workspaceId ? listEveryByWorkspaceStmt : listEveryStmt).all(
         ...(workspaceId ? [workspaceId] : []),
       ) as unknown as SessionRow[];
       return rows.map(toSession);

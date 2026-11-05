@@ -476,7 +476,10 @@ export class LumiscaCore {
     this.mcp = overrides.mcp ?? new McpService({
       settings: this.settings,
       oauth: this.mcpOAuth,
-      listSessions: (workspaceId) => this.sessions.list(workspaceId),
+      // Every session, stella's conversation included: a sign-in must
+      // reconnect the conversation the user is talking to, and stella has one
+      // row that `list()` hides because it is not a session in the UI.
+      listSessions: (workspaceId) => this.sessions.listEvery(workspaceId),
       agentMcpStatus: (sessionId) =>
         this.pool.get(sessionId)?.getMcpStatus() ?? null,
       requireWorkspace: (id) => this.requireWorkspace(id),
