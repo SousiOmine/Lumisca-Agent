@@ -17,6 +17,7 @@ import type { AgentEvent, AgentMessage, StreamFn } from "../ai/types.ts";
 import type { Api, Model } from "../ai/types.ts";
 import type { AgentTool } from "../ai/types.ts";
 import { ContextCompactor } from "../ai/context-compaction.ts";
+import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 import { toLlmMessages } from "../types/notification.ts";
@@ -80,6 +81,7 @@ export function createSubagentAgent(
     tools: () => agent.state.tools,
     streamFn: init.streamFn,
     sessionId: init.id,
+    style: WORK_COMPACTION_STYLE,
     ...(hooks.compactionPolicy !== undefined
       ? { policy: hooks.compactionPolicy }
       : {}),

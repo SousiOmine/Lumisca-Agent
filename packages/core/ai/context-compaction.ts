@@ -65,11 +65,8 @@ export {
   type TranscriptUnit,
   transcriptUnits,
 } from "./compaction-span.ts";
-import {
-  CHECKPOINT_PREAMBLE,
-  CHECKPOINT_SUMMARY_TAG,
-  SUMMARIZATION_SYSTEM_PROMPT,
-} from "./compaction-prompts.ts";
+import { CHECKPOINT_SUMMARY_TAG } from "./compaction-prompts.ts";
+import type { CompactionStyle } from "./compaction-style.ts";
 import {
   type CompactionBudgets,
   type CompactionPolicy,
@@ -133,6 +130,10 @@ export interface ContextCompactorOptions {
   /** The conversation id of the summarization call (session-affinity
    * gateways require it on every request). */
   sessionId: string;
+  /** What the summary is made of and what it is asked to be: a code
+   * session's work log, or a stella conversation's record (see
+   * ai/compaction-style.ts and agent/stella-compaction.ts). */
+  style: CompactionStyle;
   /** The language of the checkpoint's head line — the language the
    * session's agent was built with (see SessionAgentOptions.language). The
    * summary itself is model output and already follows the session's
@@ -301,7 +302,8 @@ export class ContextCompactor {
   }
 
   /** Condense one useful span even below the pressure threshold (the manual
-   * `/compact` path). Returns null when no safe span exists. */
+   * `/compact` path, and the idle check). Returns null when no safe span
+   * exists. */
   async compactNow(
     messages: AgentMessage[],
     options: {
@@ -313,6 +315,11 @@ export class ContextCompactor {
        * started, a rewind truncated it), and the span selected here no
        * longer describes it. Omitted → the checkpoint is always committed. */
       canCommit?: () => boolean;
+      /** Retention override for this one call: the newest this many tokens
+       * stay verbatim instead of the policy's share of the window. The idle
+       * check passes an absolute count because its trigger is absolute (see
+       * SessionAgentOptions.idleCompaction). Omitted → the policy's share. */
+      keepRecentTokens?: number;
     } = {},
   ): Promise<CompactionResult | null> {
     if (this.running) return null;
@@ -322,6 +329,7 @@ export class ContextCompactor {
       false,
       options.instructions,
       options.canCommit,
+      options.keepRecentTokens,
     );
   }
 
@@ -332,27 +340,33 @@ export class ContextCompactor {
     force: boolean,
     instructions?: string,
     canCommit?: () => boolean,
+    keepRecentTokens?: number,
   ): Promise<CompactionResult | null> {
     const budgets = this.budgets();
     if (budgets === undefined) return null;
+    // The retention is the only budget this call may replace: the window,
+    // the threshold and the summary's output cap stay the model's.
+    const retention = keepRecentTokens === undefined
+      ? budgets
+      : { ...budgets, keepRecentTokens };
     const span = selectCompactionSpan(
       messages,
       contextStart(messages),
-      budgets,
+      retention,
       force,
     );
     if (span === null) return null;
     const head = messages.slice(span.start, span.cutIndex);
-    // A previous checkpoint is not replayed as a message: its summary is
-    // merged into the new one (pi's UPDATE_SUMMARIZATION_PROMPT).
+    // The checkpoint at the head's start is not replayed as a message: its
+    // summary travels to the summarizer separately (the style decides how —
+    // see CompactionStyle.prompt).
     const previous = head[0]?.role === "checkpoint"
       ? checkpointSummaryText(head[0])
       : undefined;
-    const source = previous === undefined ? head : head.slice(1);
     this.running = true;
     let summary: string;
     try {
-      summary = await this.summarize(source, previous, instructions, budgets);
+      summary = await this.summarize(head, previous, instructions, budgets);
     } catch (error) {
       // Nothing was rewritten: the transcript keeps the history it had, and
       // the run continues with it.
@@ -388,6 +402,7 @@ export class ContextCompactor {
       head.length,
       span.headTokens,
       trimmed,
+      this.options.style.preamble,
       this.options.language ?? DEFAULT_LOCALE,
     );
     // A summary that does not shrink the view would make the request
@@ -417,12 +432,13 @@ export class ContextCompactor {
   }
 
   /**
-   * Write the summary for one head: the head is serialized to text (tool
-   * results truncated) and sent with a dedicated summarization system
-   * prompt, so the model summarizes instead of continuing the conversation.
-   * The session's own system prompt and tools are deliberately not part of
-   * the request: the head already sits near the window, and the auxiliary
-   * request must leave room for its own output (pi does the same).
+   * Write the summary for one head: the style serializes it (a code session
+   * keeps the tool output, a stella conversation keeps only what it said) and
+   * supplies the instruction and the system prompt, so the model summarizes
+   * instead of continuing the conversation. The session's own system prompt
+   * and tools are deliberately not part of the request: the head already sits
+   * near the window, and the auxiliary request must leave room for its own
+   * output (pi does the same).
    */
   private async summarize(
     head: readonly AgentMessage[],
@@ -430,15 +446,19 @@ export class ContextCompactor {
     instructions: string | undefined,
     budgets: CompactionBudgets,
   ): Promise<string> {
+    const focus = instructions?.trim();
+    let skeleton = this.options.style.prompt(previous);
+    if (focus !== undefined && focus.length > 0) {
+      skeleton += `\n\nAdditional focus: ${focus}`;
+    }
     const prompt = buildSummarizationPrompt(
-      head,
-      previous,
-      instructions,
+      this.options.style.serialize(head, previous),
+      skeleton,
       budgets,
       this.options.sessionId,
     );
     const request = {
-      systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+      systemPrompt: this.options.style.systemPrompt,
       messages: [{
         role: "user",
         content: [{ type: "text", text: prompt }],
@@ -452,19 +472,20 @@ export class ContextCompactor {
       "compaction summarization failed",
       {
         sessionId: this.options.sessionId,
-        maxOutputTokens: budgets.summaryMaxTokens,
+        maxOutputTokens: this.options.style.maxTokens(budgets),
       },
     );
   }
 }
 
-/** Build the checkpoint message: the preamble, the framed summary, and the
- * head line the UI shows. The title never reaches the model — the body
- * carries the model-facing text. */
+/** Build the checkpoint message: the style's preamble, the framed summary,
+ * and the head line the UI shows. The title never reaches the model — the
+ * body carries the model-facing text. */
 export function checkpointMessage(
   summarizedCount: number,
   summarizedTokens: number,
   summary: string,
+  preamble: string,
   language: Locale = DEFAULT_LOCALE,
 ): CheckpointMessage {
   return {
@@ -474,13 +495,14 @@ export function checkpointMessage(
       tokens: formatTokenCount(summarizedTokens),
     }),
     body:
-      `${CHECKPOINT_PREAMBLE}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n${summary}\n</${CHECKPOINT_SUMMARY_TAG}>`,
+      `${preamble}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n${summary}\n</${CHECKPOINT_SUMMARY_TAG}>`,
     timestamp: Date.now(),
   };
 }
 
 /** The summary text of a checkpoint (the body minus the preamble and the
- * framing tags), used as `<previous-summary>` on the next compaction. */
+ * framing tags), which the next compaction carries forward as the previous
+ * summary or record. */
 export function checkpointSummaryText(message: AgentMessage): string {
   const body = (message as { body?: unknown }).body;
   if (typeof body !== "string") return "";

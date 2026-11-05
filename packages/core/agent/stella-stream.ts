@@ -9,33 +9,29 @@
  * - {@link stellaEventsOf} turns one `ClientEvent` into the conversation
  *   events it implies (or none).
  *
- * The rule they share: **the conversation is the user's words and what the
- * agent SENT with `send_chat`.** Everything else stays in the model's history
- * and out of the conversation:
+ * The rule they share: **the conversation is the user's messages and the
+ * agent's replies.** A reply is the assistant message's text; `send_chat`
+ * adds what the agent sends alongside it (cards, files, progress messages).
+ * Everything else stays in the model's history and out of the conversation:
  *
- * - the agent's own text. A model asked anything has to write something; that
- *   text is its working notes — how it thinks out loud, what it just ran,
- *   what it is about to do. Showing it made every turn a paragraph whether or
- *   not there was anything to say, and a routine that found nothing still
- *   reported that it had found nothing. So the text is not part of the
- *   conversation, and a turn that sends nothing leaves the screen as it was.
+ * - tool calls and their results, except the `send_chat` result that carries
+ *   what the agent sent;
  * - everything that exists to steer the model — the date, the skill catalog,
  *   the identity, the on-demand-tools note (all `context` messages);
- * - everything that records HOW the work went — tool calls, tool results,
- *   notifications, compaction checkpoints.
+ * - everything that records HOW the work went — notifications and compaction
+ *   checkpoints.
  *
- * A `send_chat` RESULT is therefore the one tool result that becomes an
- * entry: it carries the words, the card and the files the agent chose to
- * send (in its `details`; see shared/chat-message.ts). Nothing else does —
- * `chat_attach` and `chat_ui` used to, and a conversation that predates
- * `send_chat` therefore keeps only its user's side. That is deliberate: the
- * old rows are the record of a rule that no longer exists, and a projection
- * that still honoured them would keep two ways of deciding what a
- * conversation shows.
+ * The assistant's text is the reply because the model cannot be relied on to
+ * remember to call a tool: an agent that forgot `send_chat` left the user
+ * waiting for an answer that never came. The prompt asks for `NO_RESPONSE`
+ * when a turn should say nothing (see silent-reply.ts), so silence is
+ * explicit rather than the default failure.
  *
- * There is no streaming either. The agent's text is not shown, so there is
- * nothing to watch being written; a message arrives whole, when the tool
- * returns.
+ * A `send_chat` RESULT is therefore not merged into the assistant message
+ * that called it: the two are separate messages in the transcript, and
+ * merging would make the projection depend on what came before it (an event
+ * replayed out of order, or a reload that starts mid-conversation, would put
+ * the message in the wrong place).
  */
 import type { AgentMessage } from "../ai/types.ts";
 import { chatMessageOfDetails } from "../shared/chat-message.ts";
@@ -75,9 +71,8 @@ function textOf(message: ContentMessage): string {
  * `mode` never occurs; it is accepted because the projection is written
  * against the transcript's actual type).
  *
- * An assistant message is ALWAYS model-only: its text is the agent's working
- * notes, and what the user reads is the `send_chat` call it made, which
- * arrives as that call's result (below).
+ * An assistant message is the agent's reply: its text is what the user
+ * reads, unless the turn wrote only the silence sentinel (silent-reply.ts).
  *
  * A `send_chat` result is kept as its own entry rather than merged into the
  * assistant message that called it, because the two are separate messages in

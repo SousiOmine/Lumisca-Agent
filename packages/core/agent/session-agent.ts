@@ -59,11 +59,30 @@ import {
   ContextCompactor,
   contextStart,
 } from "../ai/context-compaction.ts";
+import type { CompactionStyle } from "../ai/compaction-style.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
 const log = createLogger("session-agent");
+
+/** When and how much an idle conversation is condensed (see
+ * SessionAgentOptions.idleCompaction and compactAfterIdle).
+ *
+ * The retention is an absolute count, not the policy's share of the window:
+ * the trigger is absolute, and a share that exceeds it (20% of a 1M window
+ * is 200k) would leave the span selector with nothing to cut, turning the
+ * check into a no-op on exactly the models whose requests cost the most. */
+export interface IdleCompaction {
+  /** Silence since the newest message that arms the check. */
+  afterMs: number;
+  /** Only condense when the projected context is at least this large: a
+   * short conversation has nothing worth a summarization call. */
+  minTokens: number;
+  /** The newest this many tokens stay verbatim. Must stay below
+   * `minTokens`, or the check can never free anything. */
+  keepTokens: number;
+}
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -136,12 +155,15 @@ export interface SessionAgentOptions {
    * applies without rebuilding the agent; omitted → the compactor's
    * defaults. */
   compactionPolicy?: () => CompactionPolicyInput;
-  /** How long this session's conversation may sit idle (no LLM call) before
-   * its history is condensed even below the pressure threshold (see
+  /** What a compaction's summary is made of and what it is asked to be (see
+   * ai/compaction-style.ts). stella sessions use the conversation record
+   * (agent/stella-compaction.ts); every other session the work log. */
+  compactionStyle: CompactionStyle;
+  /** The rule that condenses this conversation while it sits idle (see
    * compactAfterIdle). Omitted → the history is condensed only when a
    * request would approach the window. stella's conversations are the ones
    * that live for weeks, so they are the ones that set it. */
-  idleCompactionMs?: number;
+  idleCompaction?: IdleCompaction;
   /** Whether rows behind a compaction checkpoint lose their payload once the
    * checkpoint covers them (see session/prune.ts).
    *
@@ -243,12 +265,12 @@ export class SessionAgent {
   private titleGenerated = false;
   /** The routine whose run is in flight (see runningRoutineId). */
   private activeRoutineId: string | null = null;
-  /** The effective idle-compaction period of this conversation (see
-   * SessionAgentOptions.idleCompactionMs); 0 → the idle path is off. The
+  /** The idle-compaction rule of this conversation (see
+   * SessionAgentOptions.idleCompaction); null → the idle path is off. The
    * constructor's option is the only input, and the value is what decides
    * whether a timer exists at all, so it is readable rather than inferred
    * from the timer. */
-  readonly idleCompactionMs: number;
+  readonly idleCompaction: IdleCompaction | null;
   /** Whether rows behind a checkpoint lose their payload (see
    * SessionAgentOptions.pruneCondensed and session/prune.ts). */
   private readonly pruneCondensed: boolean;
@@ -355,6 +377,7 @@ export class SessionAgent {
       tools: () => this.agent.state.tools,
       streamFn: options.streamFn,
       sessionId: options.sessionId,
+      style: options.compactionStyle,
       language: this.language,
       ...(options.compactionPolicy !== undefined
         ? { policy: options.compactionPolicy }
@@ -387,7 +410,19 @@ export class SessionAgent {
       },
     });
     this.contextProviders = options.contextProviders ?? [];
-    this.idleCompactionMs = options.idleCompactionMs ?? 0;
+    this.idleCompaction = options.idleCompaction ?? null;
+    // A retention at or above the floor leaves the span selector with
+    // nothing to cut: the check would fire after every silence and free
+    // nothing. Refuse the pair instead of running it.
+    if (
+      this.idleCompaction !== null && this.idleCompaction.minTokens > 0 &&
+      this.idleCompaction.keepTokens >= this.idleCompaction.minTokens
+    ) {
+      throw new Error(
+        `idle compaction: keepTokens (${this.idleCompaction.keepTokens}) ` +
+          `must stay below minTokens (${this.idleCompaction.minTokens})`,
+      );
+    }
     this.pruneCondensed = options.pruneCondensed === true;
     this.onFreedBytes = options.onFreedBytes;
     // Reopening a conversation is the repair point for a process that died
@@ -1303,7 +1338,7 @@ export class SessionAgent {
     return result ?? undefined;
   }
 
-  /** (Re)arm the idle compaction (see SessionAgentOptions.idleCompactionMs).
+  /** (Re)arm the idle compaction (see SessionAgentOptions.idleCompaction).
    * Called when the agent is built and whenever a run ends, so the timer
    * always measures the gap since the newest LLM call — a conversation in
    * use is never condensed behind the user's back, and one that was left
@@ -1318,18 +1353,19 @@ export class SessionAgent {
    * until the conversation is used.
    *
    * The timer does not hold the process open: a server that shuts down (or
-   * a test that finishes) must not wait three hours for it. */
+   * a test that finishes) must not wait for it. */
   private armIdleCompaction(): void {
     this.disarmIdleCompaction();
-    if (this.closed || this.idleCompactionMs <= 0) return;
+    const rule = this.idleCompaction;
+    if (this.closed || rule === null) return;
     const newest = this.agent.state.messages.at(-1)?.timestamp;
     if (newest === undefined) return;
     const timer = setTimeout(
       () => {
         this.idleTimer = null;
-        void this.compactAfterIdle();
+        void this.compactAfterIdle(rule);
       },
-      Math.max(0, newest + this.idleCompactionMs - Date.now()),
+      Math.max(0, newest + rule.afterMs - Date.now()),
     );
     Deno.unrefTimer(timer);
     this.idleTimer = timer;
@@ -1342,41 +1378,43 @@ export class SessionAgent {
   }
 
   /** The idle timer fired: condense the history even below the pressure
-   * threshold.
+   * threshold, once the projection is large enough to be worth it.
    *
    * This is the counterpart of the pressure check: a conversation picked up
-   * again after hours pays for its whole history as input on the next
+   * again after a silence pays for its whole history as input on the next
    * request, and a history near the window would have its checkpoint spliced
    * in while the user waits. Condensing during the silence avoids both.
    *
-   * The check runs below the threshold (the manual `/compact` path), not as
-   * the forced one: nothing was rejected, so the newest work stays verbatim
-   * (selectCompactionSpan keeps the retained tail). A history that needs no
-   * condensing (a short conversation, or one already condensed) costs no
-   * request — the span selector refuses a head that holds nothing but an
-   * earlier checkpoint — and the timer is not re-armed, so it is asked once
-   * per silence.
+   * The rule's floor keeps short conversations out of it: below `minTokens`
+   * a summarization call saves nothing worth having, so the check returns
+   * without asking the model. Above it the check runs below the pressure
+   * threshold (the manual `/compact` path), not as the forced one: nothing
+   * was rejected, so the newest work stays verbatim — `keepTokens` of it,
+   * an absolute count because the trigger is absolute (see IdleCompaction).
+   * A history that needs no condensing costs no request — the span selector
+   * refuses a head that holds nothing but an earlier checkpoint — and the
+   * timer is not re-armed, so it is asked once per silence.
    *
    * A run that started meanwhile owns the transcript: it cancelled this
    * timer at its start, and this path re-checks. Its own end arms a new one.
    */
-  private async compactAfterIdle(): Promise<void> {
+  private async compactAfterIdle(rule: IdleCompaction): Promise<void> {
     if (this.closed || this.isStreaming) return;
+    const messages = this.agent.state.messages;
+    if (this.compactor.measure(messages) < rule.minTokens) return;
     // The summarization call takes a while, and the conversation can be
     // picked up in the middle of it: the checkpoint may only land on the
     // transcript this check selected.
-    const length = this.agent.state.messages.length;
-    const newest = this.agent.state.messages.at(-1)?.timestamp;
+    const length = messages.length;
+    const newest = messages.at(-1)?.timestamp;
     try {
-      const result = await this.compactor.compactNow(
-        this.agent.state.messages,
-        {
-          canCommit: () =>
-            !this.closed && !this.isStreaming &&
-            this.agent.state.messages.length === length &&
-            this.agent.state.messages.at(-1)?.timestamp === newest,
-        },
-      );
+      const result = await this.compactor.compactNow(messages, {
+        keepRecentTokens: rule.keepTokens,
+        canCommit: () =>
+          !this.closed && !this.isStreaming &&
+          this.agent.state.messages.length === length &&
+          this.agent.state.messages.at(-1)?.timestamp === newest,
+      });
       if (result !== null) this.republishContextsAfter(result);
     } catch (error) {
       // A failed idle compaction leaves the transcript as it was; the

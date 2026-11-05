@@ -23,6 +23,7 @@ import {
   transcriptUnits,
   UPDATE_SUMMARIZATION_PROMPT,
 } from "./context-compaction.ts";
+import { WORK_COMPACTION_STYLE } from "./compaction-style.ts";
 
 /** A model with a wide window: the summarization request then has room for
  * the whole head, so a test can assert on the request as it was built. */
@@ -144,6 +145,7 @@ function compactorFor(
     }],
     streamFn,
     sessionId: "s1",
+    style: WORK_COMPACTION_STYLE,
     ...(options.policy !== undefined ? { policy: () => options.policy! } : {}),
     insert: (index, message) => {
       inserts.push({ index, message });
@@ -488,6 +490,7 @@ Deno.test("compactIfNeeded leaves the transcript untouched when summarization fa
     tools: () => [],
     streamFn: failingStreamFn,
     sessionId: "s1",
+    style: WORK_COMPACTION_STYLE,
     policy: () => ({ reservePercent: 20, keepRecentPercent: 1 }),
     insert: (index, message) => inserts.push({ index, message }),
   });

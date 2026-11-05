@@ -14,6 +14,7 @@ import { AskHub } from "../tools/ask.ts";
 import type { ClientEvent } from "../types/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { SessionAgent } from "./session-agent.ts";
+import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 
 function fakeModel(): Model<Api> {
   return { id: "test", name: "test" } as unknown as Model<Api>;
@@ -96,6 +97,7 @@ function makeGoalAgent(
     model: fakeModel(),
     tools: [],
     streamFn,
+    compactionStyle: WORK_COMPACTION_STYLE,
     messageRepo: {
       append: (_sessionId, message) => ({
         id: "id",

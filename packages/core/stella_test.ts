@@ -1126,13 +1126,17 @@ Deno.test("stella conversation: only stella sessions condense an idle history", 
   const { core, session } = await stellaConversation("Idle");
   try {
     const agent = core.getAgent(session.id)!;
-    assertEquals(agent.idleCompactionMs, 3 * 60 * 60 * 1000);
+    assertEquals(agent.idleCompaction, {
+      afterMs: 30 * 60 * 1000,
+      minTokens: 50_000,
+      keepTokens: 20_000,
+    });
 
     // Every other session keeps the pressure check alone.
     await withTempDir("lumisca-idle-", async (root) => {
       const workspace = await core.createWorkspace("ws", [root]);
       const plain = await core.createSession({ workspaceId: workspace.id });
-      assertEquals(core.getAgent(plain.id)!.idleCompactionMs, 0);
+      assertEquals(core.getAgent(plain.id)!.idleCompaction, null);
     });
   } finally {
     await core.close();

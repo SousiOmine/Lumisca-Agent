@@ -28,13 +28,9 @@ import { requireIntegerInRange } from "../tools/validate.ts";
  * model. This tool reads the conversation back.
  *
  * **What it searches is what the conversation shows**, and that is the whole
- * rule: the user's words, and what the agent SENT with `send_chat` (its text,
- * cards and files). The entries are exactly the ones a client draws (see
- * agent/stella-stream.ts's `stellaEntryOf`). The agent's OWN text is not
- * among them — it is the model's working notes and the conversation never
- * shows it — but the model does not lose it: it is in the call the agent made
- * (until a checkpoint replaces that span), and the `send_chat` row itself
- * keeps the words it sent.
+ * rule: the user's messages and the agent's replies (its text, and what it
+ * sent with `send_chat`: cards and files). The entries are exactly the ones
+ * a client draws (see agent/stella-stream.ts's `stellaEntryOf`).
  *
  * Tool calls, tool results, context publications, notifications and
  * checkpoints are the model's machinery — the conversation does not show
@@ -132,14 +128,14 @@ export function createHistorySearchTool(
       "Search your earlier conversation with the user, including turns that " +
       "were condensed away and are no longer in your context. What is " +
       "searched is what the conversation shows: the user's messages and " +
-      "yours. Tool calls and their output are not part of it. Each " +
-      "space-separated word is matched literally and case-insensitively, and " +
-      "a message is returned only when every word appears in it. `from` and " +
-      "`to` bound the period by date (YYYY-MM-DD, local time, both " +
-      "inclusive); omit the query to list what happened in it. Returns the " +
-      `newest matching messages (default ${DEFAULT_HISTORY_LIMIT}, max ` +
-      `${MAX_HISTORY_LIMIT}); a result that would be too long is cut and ` +
-      "says so.",
+      "yours. Tool calls and their output are not part of it. Each result " +
+      "is headed with its local date and time. Each space-separated word is " +
+      "matched literally and case-insensitively, and a message is returned " +
+      "only when every word appears in it. `from` and `to` bound the period " +
+      "by date (YYYY-MM-DD, local time, both inclusive); omit the query to " +
+      "list what happened in it. Returns the newest matching messages " +
+      `(default ${DEFAULT_HISTORY_LIMIT}, max ${MAX_HISTORY_LIMIT}); a ` +
+      "result that would be too long is cut and says so.",
     parameters: historySchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       const limit = requireIntegerInRange(
@@ -226,15 +222,12 @@ function noMatchText(scope: string, period: string): string {
 }
 
 /**
- * The text of one entry, for both searching and showing, or undefined for an
- * entry that carries no words at all (a prompt that was an image alone is
- * still a turn, and is described rather than dropped).
- *
- * A message that carried only a card or only files has no text to search; it
- * is described by what it carried so the conversation's shape stays visible
- * in a listing.
+ * The text of one entry, for both searching and showing. An entry that
+ * carries no words at all is described by what it carried (a prompt that was
+ * an image alone is still a turn, and a card is still something the agent
+ * sent), so a listing never drops a message the conversation shows.
  */
-function entryText(entry: StellaEntry): string {
+export function stellaEntryText(entry: StellaEntry): string {
   if (entry.text.trim().length > 0) return entry.text;
   const images = entry.files.filter((file) => file.image).length;
   if (images > 0) return `(${images} attached image(s), no text)`;
@@ -261,7 +254,7 @@ function searchableText(entry: StellaEntry): string {
  * to the length allowed and marked when it was cut. */
 function formatEntry(entry: StellaEntry): string {
   const { text: body, truncated } = truncateHead(
-    entryText(entry),
+    stellaEntryText(entry),
     MAX_MESSAGE_CHARS,
   );
   return `[${formatTime(entry.timestamp)}] ${entry.role}\n${body}${

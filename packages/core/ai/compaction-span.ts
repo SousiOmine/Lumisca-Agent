@@ -16,10 +16,6 @@ import {
 } from "../shared/token-estimate.ts";
 import { toLlmMessages } from "../types/notification.ts";
 import type { CompactionBudgets } from "./compaction-policy.ts";
-import {
-  SUMMARIZATION_PROMPT,
-  UPDATE_SUMMARIZATION_PROMPT,
-} from "./compaction-prompts.ts";
 
 const log = createLogger("compaction");
 
@@ -121,7 +117,7 @@ function serializeMessage(message: Message): string | undefined {
 }
 
 /** Serialize the head, one part per message (empty messages are skipped). */
-function serializeHead(head: readonly AgentMessage[]): string[] {
+export function serializeHead(head: readonly AgentMessage[]): string[] {
   const parts: string[] = [];
   for (const message of toLlmMessages([...head])) {
     const part = serializeMessage(message);
@@ -131,34 +127,21 @@ function serializeHead(head: readonly AgentMessage[]): string[] {
 }
 
 /**
- * Build the summarization prompt: the serialized head inside
- * `<conversation>` tags, the previous summary (when there is one), and the
- * instruction. The oldest parts are dropped when the request would not
- * leave room for the summary itself — pi relies on its overflow retry here,
- * but the late threshold means the head routinely sits near the window, so
- * the request is trimmed instead of failing.
+ * Build the summarization prompt from the serialized head: the conversation
+ * inside `<conversation>` tags, then the skeleton (the previous record, the
+ * instruction and any focus). The oldest parts are dropped when the request
+ * would not leave room for the summary itself — pi relies on its overflow
+ * retry here, but the late threshold means the head routinely sits near the
+ * window, so the request is trimmed instead of failing.
  */
 export function buildSummarizationPrompt(
-  head: readonly AgentMessage[],
-  previous: string | undefined,
-  instructions: string | undefined,
+  parts: readonly string[],
+  skeleton: string,
   budgets: CompactionBudgets,
   sessionId: string,
 ): string {
-  const instruction = previous === undefined
-    ? SUMMARIZATION_PROMPT
-    : UPDATE_SUMMARIZATION_PROMPT;
-  const focus = instructions?.trim();
-  let skeleton = previous === undefined
-    ? ""
-    : `<previous-summary>\n${previous}\n</previous-summary>\n\n`;
-  skeleton += instruction;
-  if (focus !== undefined && focus.length > 0) {
-    skeleton += `\n\nAdditional focus: ${focus}`;
-  }
   const budget = budgets.contextWindow - CONTEXT_SAFETY_TOKENS -
     MIN_SUMMARY_TOKENS - estimateTextTokens(skeleton);
-  const parts = serializeHead(head);
   let total = parts.reduce((sum, part) => sum + estimateTextTokens(part), 0);
   let from = 0;
   while (from < parts.length - 1 && total > budget) {

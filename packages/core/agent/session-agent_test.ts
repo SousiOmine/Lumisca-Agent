@@ -21,6 +21,7 @@ import type { NotificationMessage } from "../ai/types.ts";
 import { MAX_EMPTY_RESPONSE_RETRIES } from "../ai/retry-policy.ts";
 import { SessionAgent } from "./session-agent.ts";
 import type { SessionAgentOptions } from "./session-agent.ts";
+import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
 
 /** A tool that succeeds immediately; a tool call keeps the loop going, so
@@ -63,9 +64,9 @@ function makeAgent(
     /** A background-process manager double whose exit listener the test
      * fires (see fakeBackgroundManager). */
     backgroundManager?: SessionAgentOptions["backgroundManager"];
-    /** Idle-compaction period (see SessionAgentOptions.idleCompactionMs);
-     * tests shorten it so the timer fires without waiting three hours. */
-    idleCompactionMs?: number;
+    /** The idle-compaction rule (see SessionAgentOptions.idleCompaction);
+     * tests shorten the period so the timer fires without waiting. */
+    idleCompaction?: SessionAgentOptions["idleCompaction"];
     /** History to open the agent with (a conversation that already has one:
      * the idle timer measures the gap since its newest message). */
     messages?: AgentMessage[];
@@ -77,6 +78,7 @@ function makeAgent(
     model: extra.model ?? { id: "test", name: "test" } as unknown as Model<Api>,
     tools,
     streamFn,
+    compactionStyle: WORK_COMPACTION_STYLE,
     messageRepo: {
       append: (_sessionId, message) => ({
         id: "id",
@@ -949,6 +951,7 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
     model: smallWindowModel(),
     tools: [bigTool],
     streamFn,
+    compactionStyle: WORK_COMPACTION_STYLE,
     messageRepo: repo,
     onEvent: () => {},
     askHub: new AskHub("s1", () => {}),
@@ -1106,6 +1109,7 @@ Deno.test("compactNow condenses on demand and reports the outcome", async () => 
     tools: [bigTool],
     messages,
     streamFn,
+    compactionStyle: WORK_COMPACTION_STYLE,
     messageRepo: {
       append: (_sessionId, message) => ({
         id: "id",
@@ -1236,6 +1240,7 @@ Deno.test("a compaction republishes the context its checkpoint left behind", asy
     tools: [bigTool],
     messages,
     streamFn,
+    compactionStyle: WORK_COMPACTION_STYLE,
     messageRepo: {
       append: (_sessionId, message) => ({
         id: "id",
@@ -1521,7 +1526,7 @@ Deno.test("a prompt delivered while idle starts its own run unstamped", async ()
   assertEquals(events.filter((e) => e.type === "agent_start").length, 2);
 });
 
-// ---- idle compaction (see SessionAgentOptions.idleCompactionMs) ------------
+// ---- idle compaction (see SessionAgentOptions.idleCompaction) -------------
 
 /** Two large tool turns and no run: a history the pressure threshold would
  * leave alone, so only the idle timer can condense it. */
@@ -1560,7 +1565,7 @@ Deno.test("a silent conversation is condensed without waiting for pressure", asy
     compactionPolicy: () => TEST_COMPACTION_POLICY,
     // The history is stamped in the past (timestamps 1-3), so the gap has
     // already elapsed the moment the agent is built.
-    idleCompactionMs: 60_000,
+    idleCompaction: { afterMs: 60_000, minTokens: 500, keepTokens: 80 },
   });
   await waitFor(
     () => agent.messages.some((m) => m.role === "checkpoint"),
@@ -1592,7 +1597,7 @@ Deno.test("a run cancels the pending idle compaction", async () => {
     compactionPolicy: () => TEST_COMPACTION_POLICY,
     // Re-armed from the run's own messages, so it stays in the future while
     // the assertions run.
-    idleCompactionMs: 60_000,
+    idleCompaction: { afterMs: 60_000, minTokens: 500, keepTokens: 80 },
   });
   await agent.prompt("go");
   await agent.waitForIdle();
@@ -1618,7 +1623,7 @@ Deno.test("the idle compaction leaves a conversation with nothing to condense al
       fauxAssistantMessage([fauxText("hello")]),
     ],
     compactionPolicy: () => TEST_COMPACTION_POLICY,
-    idleCompactionMs: 60_000,
+    idleCompaction: { afterMs: 60_000, minTokens: 0, keepTokens: 80 },
   });
   // Give the (already elapsed) timer a chance to fire.
   await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1628,6 +1633,51 @@ Deno.test("the idle compaction leaves a conversation with nothing to condense al
     agent.messages.some((m) => m.role === "checkpoint"),
     false,
   );
+});
+
+Deno.test("an idle conversation below the rule's floor is left alone", async () => {
+  // The rule condenses only once the projection is large enough to be worth
+  // a summarization call. Below the floor the check returns without asking
+  // the model: no request, no checkpoint.
+  const { streamFn, calls } = deltaStreamSequence([]);
+  const agent = makeAgent(streamFn, [], () => {}, {
+    model: smallWindowModel(),
+    messages: idleHistory(),
+    // A reservation this small puts the pressure threshold (3,960) above the
+    // history, so only the idle check could condense it.
+    compactionPolicy: () => ({ reservePercent: 1, keepRecentPercent: 2 }),
+    idleCompaction: { afterMs: 60_000, minTokens: 3_000, keepTokens: 80 },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  agent.close();
+  assertEquals(calls(), 0);
+  assertEquals(
+    agent.messages.some((m) => m.role === "checkpoint"),
+    false,
+  );
+});
+
+Deno.test("the idle compaction keeps the rule's tail, not the window's share", async () => {
+  // The policy keeps 90% of the window (3,600 of 4,000), more than this
+  // history holds: the span selector would refuse to cut anything. The
+  // rule's absolute 80-token tail is what makes the check do work — the
+  // same reason the idle rule is absolute on a large window, where the
+  // policy's share would exceed the trigger.
+  const { streamFn, calls } = deltaStreamSequence([
+    summaryResponse("## Summary\n- condensed"),
+  ]);
+  const agent = makeAgent(streamFn, [bigTool], () => {}, {
+    model: smallWindowModel(),
+    messages: idleHistory(),
+    compactionPolicy: () => ({ reservePercent: 37, keepRecentPercent: 90 }),
+    idleCompaction: { afterMs: 60_000, minTokens: 500, keepTokens: 80 },
+  });
+  await waitFor(
+    () => agent.messages.some((m) => m.role === "checkpoint"),
+    "the idle compaction to insert its checkpoint",
+  );
+  agent.close();
+  assertEquals(calls(), 1);
 });
 
 Deno.test("a prompt's file notice reaches the model, not the transcript", async () => {

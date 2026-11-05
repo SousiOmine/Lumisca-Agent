@@ -27,6 +27,8 @@ import { createModelProvider } from "./model-context.ts";
 import { createMcpToolsProvider } from "../mcp/context.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import type { SessionAgent } from "./session-agent.ts";
+import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
+import { STELLA_COMPACTION_STYLE } from "./stella-compaction.ts";
 import {
   BROWSER_TOOL_NAMES,
   createBrowserToolsFrom,
@@ -69,23 +71,27 @@ const ROUTINE_TOOL_NAMES = [
  * stella's, added to that session's main registry when it is. */
 const STELLA_AGENT_TOOL_NAMES = [TOOL_IDENTITY, TOOL_AGENT_CREATE];
 
-/** How long a stella conversation may sit with no LLM call before its
- * history is condensed below the pressure threshold (see
- * SessionAgentOptions.idleCompactionMs).
+/** The rule that condenses a stella conversation while it sits idle (see
+ * SessionAgentOptions.idleCompaction).
  *
- * Every other session is a working session the user opens and closes; a
- * stella conversation is one that lives for weeks, so it is reopened after
- * hours or days of silence. Its first request of the day would otherwise
- * pay for the whole history as input, and once the history is near the
- * window the pressure check has to splice a checkpoint in while the user
- * waits for the answer. Condensing during the silence avoids both: the
- * next run starts from a summary the same way a compacted session does.
+ * A stella conversation lives for weeks and is reopened after hours or days
+ * of silence. Without this, the first request after the silence pays for
+ * the whole history as input, and a history near the window would have its
+ * checkpoint spliced in while the user waits for the answer.
  *
- * Three hours, like Terasuma's: long enough that a user who steps away
- * mid-conversation keeps their verbatim history (a checkpoint is never
- * comfortable to read after), short enough that "tomorrow morning" is
- * always condensed before the first prompt. */
-const STELLA_IDLE_COMPACTION_MS = 3 * 60 * 60 * 1000;
+ * Half an hour of silence is short enough that the conversation is
+ * condensed before the user comes back, and long enough that stepping away
+ * mid-conversation does not cost the verbatim history. The 50k floor keeps
+ * short conversations out of it: a summarization call over a few thousand
+ * tokens saves nothing worth having. The 20k tail is absolute rather than
+ * the policy's share of the window — the trigger is absolute, and 20% of a
+ * 1M window (200k) would exceed it, leaving the span selector with nothing
+ * to cut on exactly the models whose requests cost the most. */
+const STELLA_IDLE_COMPACTION = {
+  afterMs: 30 * 60 * 1000,
+  minTokens: 50_000,
+  keepTokens: 20_000,
+} as const;
 
 /** Module logger (debug-gated): attachment rebuilds are the first thing
  * to check when MCP tools misbehave. */
@@ -225,9 +231,14 @@ export class AgentFactory {
       fastModel: this.deps.getFastModel(),
       language: this.deps.getLanguage(),
       compactionPolicy: () => this.deps.getCompactionPolicy(),
+      // A stella conversation remembers the conversation (the record the
+      // search can fill in); every other session remembers the work.
+      compactionStyle: where.stella !== undefined
+        ? STELLA_COMPACTION_STYLE
+        : WORK_COMPACTION_STYLE,
       ...(where.stella !== undefined
         ? {
-          idleCompactionMs: STELLA_IDLE_COMPACTION_MS,
+          idleCompaction: STELLA_IDLE_COMPACTION,
           // A stella conversation is the only one whose transcript outlives
           // every window it crosses: what its checkpoints summarized is work
           // nothing reads again (see session/prune.ts).
