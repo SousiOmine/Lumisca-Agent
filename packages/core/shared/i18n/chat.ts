@@ -203,10 +203,8 @@ export const chat = {
   },
   "chat.modeSelect.code.title": { ja: "code mode", en: "code mode" },
   "chat.modeSelect.code.description": {
-    ja:
-      "ワークスペースのコードを読み取り・編集するエージェント。セッションをタブで並べて管理し、このマシンのファイルとシェルを直接利用します。",
-    en:
-      "A coding agent for your workspaces. Sessions live in tabs, and it uses this machine's files and shell directly.",
+    ja: "マシンのファイルとシェルを使用して開発",
+    en: "Develop with this machine's files and shell",
   },
   "chat.modeSelect.stella.title": { ja: "stella mode", en: "stella mode" },
   /** The title bar's label for a stella conversation. Not the mode's name:
