@@ -61,7 +61,9 @@ export interface McpServiceDeps {
   applyMcpConfigChange(sessions: SessionInfo[], mutate: () => void): void;
   /** Rebuild the sessions' MCP attachments from scratch (fresh connections
    * and tool discovery), for a change no config write expresses — a
-   * completed OAuth sign-in. Also refuses while streaming. */
+   * completed OAuth sign-in. A streaming session is reconnected in place
+   * rather than refused: the sign-in is what unblocks it. See
+   * SessionPool.refreshMcp. */
   refreshSessionMcp(sessions: SessionInfo[]): void;
   /** Where OAuth grants are kept. Injected so the session connections read
    * the very store this service's sign-in writes (see mcp/oauth.ts);
@@ -453,8 +455,9 @@ export class McpService {
 
   /** Reconnect the sessions whose merged config uses `serverUrl`, so the
    * grant this sign-in just stored reaches them without an unrelated config
-   * edit (see McpServiceDeps.refreshSessionMcp). A session that is running
-   * cannot be rebuilt; it picks the grant up at its next rebuild. */
+   * edit (see McpServiceDeps.refreshSessionMcp). A running session is not
+   * refused: the pool reconnects it in place, so the conversation the user
+   * signed in for does not have to be restarted to reach the server. */
   private refreshSessionsUsing(serverUrl: string): void {
     const sessions: SessionInfo[] = [];
     for (const session of this.deps.listSessions()) {
@@ -470,11 +473,10 @@ export class McpService {
       if (usesServer) sessions.push(session);
     }
     if (sessions.length === 0) return;
-    try {
-      this.deps.refreshSessionMcp(sessions);
-    } catch {
-      // Streaming sessions refuse the rebuild (conflict); the grant is
-      // stored either way and applies the next time they are rebuilt.
-    }
+    // No catch: the pool reconnects a running session in place instead of
+    // refusing it, so a throw here is a real failure (a closed workspace, a
+    // broken config) and swallowing it would leave the user signed in with
+    // no server that can answer.
+    this.deps.refreshSessionMcp(sessions);
   }
 }

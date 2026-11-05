@@ -20,6 +20,8 @@ interface TeardownLog {
   /** In-place MCP reconnects (a config change applied to a running
    * session, which may not be rebuilt). */
   mcpRefreshed: number;
+  /** Those reconnects that also reloaded the credentials (a sign-in). */
+  mcpCredentials: number;
 }
 
 function log(): TeardownLog {
@@ -29,6 +31,7 @@ function log(): TeardownLog {
     backgroundKilled: 0,
     mcpClosed: 0,
     mcpRefreshed: 0,
+    mcpCredentials: 0,
   };
 }
 
@@ -117,8 +120,10 @@ function makePool(options: { streaming?: boolean } = {}): {
       _workspace: Workspace,
       _resources: SessionResources,
       _isCurrentAttachment: unknown,
+      options: { reloadCredentials?: boolean } = {},
     ): void {
       teardown.mcpRefreshed++;
+      if (options.reloadCredentials === true) teardown.mcpCredentials++;
     },
   } as unknown as AgentFactory;
   return { pool: new SessionPool(deps, factory), teardown };
@@ -255,6 +260,51 @@ Deno.test("pool.applyMcpConfigChange leaves closed sessions alone", () => {
   assertEquals(mutated, true);
   assertEquals(teardown.agentClosed, 0);
   assertEquals(teardown.mcpRefreshed, 0);
+});
+
+Deno.test("pool.refreshMcp reconnects a streaming session in place", () => {
+  // The user signs in from Settings while the conversation that needs the
+  // server is still working. Refusing the whole batch would leave that
+  // conversation on the attachment whose connection already got its 401,
+  // and nothing rebuilds it afterwards: the same turn keeps running.
+  const { pool, teardown } = makePool({ streaming: true });
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  pool.refreshMcp([session]);
+  assertEquals(teardown.agentClosed, 0, "a running agent is never replaced");
+  assertEquals(teardown.mcpRefreshed, 1, "its servers are reconnected");
+  // The config did not change — only the grant did — so the reconnect has to
+  // be told to read the credentials again, or the fresh manager would skip
+  // the very server the sign-in unblocked.
+  assertEquals(teardown.mcpCredentials, 1);
+});
+
+Deno.test("pool.refreshMcp rebuilds an idle session", () => {
+  const { pool, teardown } = makePool();
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  pool.refreshMcp([session]);
+  assertEquals(teardown.agentClosed, 1);
+  assertEquals(teardown.mcpRefreshed, 0);
+});
+
+Deno.test("pool.refreshMcp reconnects the running ones and rebuilds the rest", () => {
+  // One sign-in touches every session that uses the server, and they are not
+  // all in the same state: a refusal by one must not cost the others.
+  const { pool, teardown } = makePool({ streaming: true });
+  const streaming = sessionInfo("live");
+  pool.open(streaming, WORKSPACE, []);
+
+  const idlePool = makePool();
+  idlePool.pool.open(sessionInfo("idle"), WORKSPACE, []);
+  // Same batch, both pools observe their own session.
+  pool.refreshMcp([streaming]);
+  idlePool.pool.refreshMcp([sessionInfo("idle")]);
+  assertEquals(teardown.agentClosed, 0);
+  assertEquals(teardown.mcpRefreshed, 1);
+  assertEquals(idlePool.teardown.agentClosed, 1);
 });
 
 Deno.test("pool.setThinkingLevel ignores a closed session", () => {

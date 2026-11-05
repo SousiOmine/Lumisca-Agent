@@ -5,6 +5,9 @@ import { McpManager } from "./manager.ts";
 import { McpOAuthStore } from "./oauth.ts";
 import { McpService } from "./service.ts";
 import { startFakeAuthServer, startFakeMcpServer } from "./fake-http.ts";
+import { APP_MCP_SETTINGS_KEY } from "../shared/settings-keys.ts";
+import type { SessionInfo } from "../types/session.ts";
+import type { Workspace } from "../types/workspace.ts";
 
 /** The callback path of a server reached at its own origin — the shape the
  * route builds (see routes/mcp.ts). */
@@ -95,6 +98,63 @@ Deno.test("OAuth: the sign-in grants what the next connection uses", async () =>
       mcp.requests.at(-1)!.headers.authorization,
       "Bearer access-token-1",
     );
+  } finally {
+    await mcp.close();
+    await auth.close();
+  }
+});
+
+Deno.test("OAuth: finishing a sign-in reconnects the sessions using it", async () => {
+  // The sign-in changes no config, so nothing else would ever tell a session
+  // that already got its 401 to connect again. completeAuth must reach every
+  // session whose merged config names the server — including one that is
+  // mid-run, which the pool reconnects in place instead of refusing.
+  const auth = startFakeAuthServer();
+  const mcp = startFakeMcpServer({
+    token: "access-token-1",
+    authorizationServerUrl: auth.url,
+  });
+  const settings = createInMemorySettingsRepo();
+  const workspace: Workspace = {
+    id: "w",
+    name: "w",
+    folders: ["/tmp"],
+    createdAt: 0,
+    chat: false,
+  };
+  const session = {
+    id: "s1",
+    workspaceId: "w",
+    name: "s1",
+    modelProvider: "faux",
+    modelId: "m",
+    createdAt: 0,
+    updatedAt: 0,
+  } as SessionInfo;
+  const refreshed: string[][] = [];
+  const service = new McpService({
+    settings,
+    listSessions: () => [session],
+    agentMcpStatus: () => null,
+    requireWorkspace: () => workspace,
+    applyMcpConfigChange: (_sessions, mutate) => mutate(),
+    refreshSessionMcp: (sessions) => {
+      refreshed.push(sessions.map((s) => s.id));
+    },
+  });
+  const body = serverBody(mcp.url);
+  // The app-level config key the merged config reads (shared/settings-keys).
+  settings.set(
+    APP_MCP_SETTINGS_KEY,
+    JSON.stringify({ mcpServers: { probe: { url: mcp.url } } }),
+  );
+  try {
+    const started = await service.startAuth(body, REDIRECT_URI);
+    const state = new URL(started.authorizationUrl!).searchParams.get("state")!;
+    assertEquals(refreshed, [], "nothing to refresh before the flow finishes");
+    const done = await service.completeAuth({ state, code: "test-code" });
+    assertEquals(done?.status, "done");
+    assertEquals(refreshed, [["s1"]]);
   } finally {
     await mcp.close();
     await auth.close();

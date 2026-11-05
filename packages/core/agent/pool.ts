@@ -215,16 +215,19 @@ export class SessionPool {
   }
 
   /** Hand one streaming session its current MCP config without touching its
-   * agent (see AgentFactory.refreshMcp). */
+   * agent (see AgentFactory.refreshMcp). `reloadCredentials` is for a
+   * sign-in: the config did not change, only the tokens did. */
   private refreshMcpInPlace(
     session: SessionInfo,
     resources: SessionResources,
+    options: { reloadCredentials?: boolean } = {},
   ): void {
     this.factory.refreshMcp(
       session,
       this.deps.requireWorkspace(session.workspaceId),
       resources,
       (attachment) => this.sessions.get(session.id)?.mcp === attachment,
+      options,
     );
   }
 
@@ -232,15 +235,25 @@ export class SessionPool {
    * manager reconnects every server and re-discovers its tools. Needed when
    * what changed is not the config but the credentials — an interactive
    * OAuth sign-in, which an attachment reused across agent rebuilds (and
-   * its already-failed connections) would never see. Streaming sessions
-   * refuse the rebuild, like every other agent replacement. */
+   * its already-failed connections) would never see.
+   *
+   * A streaming session cannot be rebuilt (see rebuild) and is passed over
+   * instead of failing the call: the user signs in from Settings while the
+   * conversation that needs the server is still working, so refusing the
+   * whole batch would leave that conversation on the attachment whose
+   * connections already failed, with no later event to retry it. It gets
+   * the grant in place through the same path a config edit uses
+   * (refreshMcpInPlace) — a new manager, a new discovery, the run's own tool
+   * set untouched — so the servers it can discover follow the sign-in
+   * without waiting for a rebuild that may never come. */
   refreshMcp(sessions: SessionInfo[]): void {
-    for (const session of sessions) {
-      this.assertNotStreaming(session.id);
-    }
     for (const session of sessions) {
       const resources = this.sessions.get(session.id);
       if (resources?.agent === undefined) continue;
+      if (resources.agent.isStreaming) {
+        this.refreshMcpInPlace(session, resources, { reloadCredentials: true });
+        continue;
+      }
       const previous = resources.mcp;
       // Dropping the attachment makes the factory build a new one (with a
       // fresh manager); the registries follow it, since a rebuild builds

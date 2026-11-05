@@ -775,14 +775,20 @@ export class AgentFactory {
     workspace: Workspace,
     resources: SessionResources,
     isCurrentAttachment: (attachment: McpAttachment) => boolean,
+    options: { reloadCredentials?: boolean } = {},
   ): void {
     const agent = resources.agent;
     if (agent === undefined) return;
     const merged = this.deps.loadMergedMcp(workspace);
     const previous = resources.mcp;
-    // An unchanged config is no reason to respawn every server process.
+    // An unchanged config is no reason to respawn every server process —
+    // unless what changed is the credentials. A sign-in leaves the config
+    // byte-for-byte the same, and the connection that already got its 401
+    // (and was dropped) is the whole reason to reload: skipping it would
+    // keep the session on a manager that never sees the new grant.
     if (
-      previous !== undefined && sameMcpConfig(previous.config, merged.config)
+      options.reloadCredentials !== true && previous !== undefined &&
+      sameMcpConfig(previous.config, merged.config)
     ) {
       return;
     }
