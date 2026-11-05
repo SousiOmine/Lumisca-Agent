@@ -111,11 +111,20 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       };
     }
     case "assistant": {
-      // The agent's text IS the conversation's message (see the module
-      // comment). A run that has nothing to say writes the sentinel instead
-      // (silent-reply.ts), which is the one text that does not become an
-      // entry — the mistake this shape protects against is an answer that
-      // never arrives, so silence has to be asked for explicitly.
+      // Only the FINAL text of a run is the conversation's message. A message
+      // that ends in a tool call is the agent narrating its way to the next
+      // step ("checking the file", "now the tests") — it is the model
+      // thinking out loud with a tool attached, and a run that runs ten tools
+      // writes ten of these. Showing them buried the answer under its own
+      // working notes.
+      //
+      // The distinction is structural, not stylistic: `stopReason` is the
+      // provider's own word for why the turn ended, so "the model stopped
+      // talking to use a tool" needs no guessing at the text. A run that says
+      // nothing but narrates and then calls `send_chat` still reaches the user
+      // — that is what the tool is for — and a run that ends without either
+      // is caught by the sentinel rule below.
+      if (message.stopReason === "toolUse") return null;
       const verdict = assistantTextVerdict(textOf(message));
       if (verdict.kind !== "message") return null;
       return {

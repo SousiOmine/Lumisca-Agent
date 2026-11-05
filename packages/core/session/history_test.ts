@@ -236,20 +236,21 @@ Deno.test("history_search: tool calls and their output are not history", async (
       timestamp: localDay("2026-10-01", 11),
     } as AgentMessage);
 
-    // The agent's text IS the conversation's, so it is history and the
-    // search finds it.
+    // Text written before a tool call is narration, not a message (see
+    // stella-stream.ts): this turn's message ended in a tool call, so none of
+    // it reached the conversation and none of it is history.
     const calls = await run(tool, { query: "tests" });
-    assert(calls.includes("Running the tests now."), calls);
+    assert(calls.includes("No message"), calls);
 
-    // What the model does rather than says stays out: the arguments it passed
-    // and the output it read are the record of its work, not a message.
+    // What the model does rather than says stays out too: the arguments it
+    // passed and the output it read are the record of its work.
     const args = await run(tool, { query: "secret-token" });
     assert(args.includes("No message"), args);
     const output = await run(tool, { query: "BEGIN" });
     assert(output.includes("No message"), output);
-    // The listing shows the words it wrote, and no tool row for them.
+    // Nothing of this exchange was ever said to the user.
     const all = await run(tool);
-    assert(all.includes("Running the tests now."), all);
+    assert(all.includes("No messages have been saved"), all);
   } finally {
     db.close();
   }

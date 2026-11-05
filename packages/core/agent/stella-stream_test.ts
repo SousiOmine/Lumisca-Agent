@@ -77,6 +77,34 @@ Deno.test("stellaEntryOf: the sentinel is how a run stays silent", () => {
   assertEquals(entry?.text, "直しました。");
 });
 
+Deno.test("stellaEntryOf: narration before a tool is not a message", () => {
+  // A message that ends in a tool call is the model thinking out loud with a
+  // tool attached. A run that runs ten tools writes ten of these, and showing
+  // them buries the answer under its own working notes.
+  const narration = fauxAssistantMessage(
+    "ファイルを確認します。",
+    { stopReason: "toolUse", timestamp: 7 },
+  ) as AgentMessage;
+  assertEquals(stellaEntryOf(narration), null);
+  // With a tool call in the same message it is still narration, not an answer.
+  const withCall = fauxAssistantMessage([
+    { type: "text", text: "テストを実行します。" },
+    fauxToolCall("bash", { command: "deno task test" }),
+  ], { stopReason: "toolUse", timestamp: 8 }) as AgentMessage;
+  assertEquals(stellaEntryOf(withCall), null);
+});
+
+Deno.test("stellaEntryOf: the final text of a run is the message", () => {
+  // What the model says when it STOPS (no tool call) is its answer.
+  const final = fauxAssistantMessage(
+    "直しました。テストも通っています。",
+    { stopReason: "stop", timestamp: 9 },
+  ) as AgentMessage;
+  const entry = stellaEntryOf(final);
+  assertEquals(entry?.role, "assistant");
+  assertEquals(entry?.text, "直しました。テストも通っています。");
+});
+
 Deno.test("stellaEntryOf: a turn that only ran a tool says nothing", () => {
   // No text at all: the agent has not spoken yet, and a tool call is the
   // model's record of its work, not a message.

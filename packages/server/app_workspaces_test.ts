@@ -1102,9 +1102,11 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
     for (const event of events) {
       assertEquals("sessionId" in event, false, String(event.type));
     }
-    // The entries are what was said: the prompt, then the agent's own text —
-    // the reply IS the message — and then what it sent with send_chat.
-    // There is still no delta frame: a message arrives whole.
+    // The entries are what was said: the prompt, what the agent sent with
+    // send_chat, and the text of its FINAL turn. The first turn's text
+    // ("作業メモを書いてから送る。") ended in a tool call, so it is narration —
+    // the working notes the run thinks out loud — and never becomes an
+    // entry. There is still no delta frame: a message arrives whole.
     const entries = events.filter((e) => e.type === "entry").map((e) =>
       e.entry as { role: string; text: string }
     );
@@ -1112,7 +1114,6 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
     assertEquals(entries[0]?.text, "こんにちは");
     const answers = entries.filter((entry) => entry.role === "assistant");
     assertEquals(answers.map((entry) => entry.text), [
-      "作業メモを書いてから送る。",
       "はい、承知しました。",
       "送り終えた。",
     ]);
