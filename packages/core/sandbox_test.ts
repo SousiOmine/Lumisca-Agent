@@ -217,3 +217,65 @@ Deno.test("sandbox rejects workspace folders that do not exist", async () => {
   const r = await Sandbox.resolveFolder("Z:\\definitely\\not\\here\\lumisca");
   assertEquals(r.ok, false);
 });
+
+Deno.test("sandbox: an extra root is reachable by absolute path, not by name", async () => {
+  const root = await tempDir("lumisca-sb-");
+  // The shared skills folder, outside the workspace and named like a folder
+  // a repository could have.
+  const sharedParent = await tempDir("lumisca-shared-");
+  const shared = join(sharedParent, "skills");
+  await Deno.mkdir(join(shared, "release-notes"), { recursive: true });
+  try {
+    const sandbox = new Sandbox([root], { extraRoots: [shared] });
+    // `roots` still means the workspace folders only: the first one is where
+    // oversized tool output is spilled, and a repo folder called `skills`
+    // must not become ambiguous.
+    assertEquals(sandbox.roots.map(real), [real(root)]);
+
+    const abs = await sandbox.resolve(
+      join(shared, "release-notes", "SKILL.md"),
+    );
+    assertEquals(abs.ok, true);
+    if (abs.ok) {
+      assertEquals(abs.path, join(real(shared), "release-notes", "SKILL.md"));
+    }
+
+    // A relative path cannot name an extra root.
+    const rel = await sandbox.resolve("skills/release-notes/SKILL.md");
+    assertEquals(rel.ok, false);
+
+    // ...and a path outside every root is still refused.
+    const outside = await sandbox.resolve(
+      join(shared, "..", "elsewhere", "SKILL.md"),
+    );
+    assertEquals(outside.ok, false);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(sharedParent, { recursive: true });
+  }
+});
+
+Deno.test("sandbox: a workspace folder named like the extra root stays unambiguous", async () => {
+  // A repository whose workspace folder is called `skills`, next to a
+  // shared folder of the same name: the relative path must mean the
+  // workspace folder (the extra root never takes part in name matching).
+  const parent = await tempDir("lumisca-sb-");
+  const workspaceSkills = join(parent, "skills");
+  await Deno.mkdir(join(workspaceSkills, "mine"), { recursive: true });
+  const sharedParent = await tempDir("lumisca-shared-");
+  const shared = join(sharedParent, "skills");
+  try {
+    const sandbox = new Sandbox([workspaceSkills], { extraRoots: [shared] });
+    const rel = await sandbox.resolve("skills/mine/SKILL.md");
+    assertEquals(rel.ok, true);
+    if (rel.ok) {
+      assertEquals(
+        rel.path,
+        join(real(workspaceSkills), "mine", "SKILL.md"),
+      );
+    }
+  } finally {
+    await Deno.remove(parent, { recursive: true });
+    await Deno.remove(sharedParent, { recursive: true });
+  }
+});

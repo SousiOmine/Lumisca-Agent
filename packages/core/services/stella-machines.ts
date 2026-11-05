@@ -16,7 +16,7 @@ import type { Workspace } from "../types/workspace.ts";
 import type { Locale } from "../shared/mod.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { HandoverHub } from "../vm/handover.ts";
-import { VM_WORKDIR, vmAgentDir } from "../vm/contract.ts";
+import { vmAgentDir } from "../vm/contract.ts";
 import { VmFileBackend } from "../vm/fs.ts";
 import {
   VmBackgroundSpawner,
@@ -67,16 +67,18 @@ function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
  * the machine side.
  */
 export class StellaMachines {
-  /** The skill catalog already read, with the machine that read it and when.
-   * Opening a conversation re-reads it only when this is cold or older than
-   * {@link STELLA_SKILLS_TTL_MS}: the read crosses into the machine
+  /** The catalog read of each agent, with the machine that read it and when.
+   * Keyed by agent id: a stella agent's own skills live in its folder, so
+   * every agent has its own list (only the machine-wide folder is shared).
+   * Opening a conversation re-reads a list only when it is cold or older
+   * than {@link STELLA_SKILLS_TTL_MS}: the read crosses into the machine
    * (`podman exec`), and a conversation opened from a phone over a slow link
    * must not wait for a list that has not changed. */
-  private skillsCache: {
+  private skillsCache = new Map<string, {
     machine: VmManager | undefined;
     at: number;
     pending: Promise<void> | undefined;
-  } = { machine: undefined, at: 0, pending: undefined };
+  }>();
 
   constructor(
     private readonly deps: {
@@ -177,7 +179,7 @@ export class StellaMachines {
     // not exist (`podman exec --workdir`). In sequence they were two round
     // trips the user waited for.
     await Promise.all([
-      this.primeStellaSkills(),
+      this.primeStellaSkills(agent.id),
       this.deps.machine.ensureAgentDir(agent.id),
     ]);
     this.deps.agents.touch(agent.id);
@@ -282,14 +284,6 @@ export class StellaMachines {
     const exec = this.deps.machine.exec();
     const execBytes = this.deps.machine.execBytes();
     if (exec === undefined || execBytes === undefined) return undefined;
-    const skills = (): SkillDef[] => this.deps.machine.skills();
-    // The agent's working folder: relative paths and bash start here, the
-    // way a workspace folder does in code mode. It is a default place, not a
-    // boundary — the file backend's root is the machine's home, so one agent
-    // can reach another's folder when the user asks (see vm/fs.ts).
-    const cwd = session.agentId === undefined
-      ? VM_WORKDIR
-      : vmAgentDir(session.agentId);
     // The identity belongs to the AGENT row, not to the session, and a stella
     // session always has one (the conversation is created FOR an agent). A
     // session without one would have nowhere to keep the text, so it fails
@@ -301,6 +295,16 @@ export class StellaMachines {
         "invalid",
       );
     }
+    // The agent's own skill catalog: its folder holds the skills it wrote,
+    // and the machine-wide folder is merged in (see vm/skills.ts). Read
+    // through a getter for the same reason the factory asks for one — the
+    // catalog is re-read when the conversation is opened.
+    const skills = (): SkillDef[] => this.deps.machine.skills(agentId);
+    // The agent's working folder: relative paths and bash start here, the
+    // way a workspace folder does in code mode. It is a default place, not a
+    // boundary — the file backend's root is the machine's home, so one agent
+    // can reach another's folder when the user asks (see vm/fs.ts).
+    const cwd = vmAgentDir(agentId);
     const identity: IdentityTarget = {
       read: () => this.deps.agents.get(agentId)?.identity ?? "",
       write: (content) => this.deps.agents.writeIdentity(agentId, content),
@@ -311,7 +315,7 @@ export class StellaMachines {
       runner: new VmCommandRunnerImpl(exec),
       backgroundSpawner: new VmBackgroundSpawner(exec),
       skills,
-      refreshSkills: () => this.deps.machine.refreshSkills(),
+      refreshSkills: () => this.deps.machine.refreshSkills(agentId),
       screenTools: [
         ...createVmTools({ screen: createVmScreen({ exec, execBytes }) }),
         createVmLaunchTool({ exec }),
@@ -352,19 +356,19 @@ export class StellaMachines {
     };
   }
 
-  /** Re-read the stella skill catalog. Awaited before a stella session
+  /** Re-read one stella agent's skill catalog. Awaited before its session
    * opens, so the agent's skill tool starts with a current list. */
-  async refreshStellaSkills(): Promise<void> {
-    await this.deps.machine.refreshSkills();
-    this.skillsCache = {
+  async refreshStellaSkills(agentId: string): Promise<void> {
+    await this.deps.machine.refreshSkills(agentId);
+    this.skillsCache.set(agentId, {
       machine: this.deps.machine.get(),
       at: Date.now(),
       pending: undefined,
-    };
+    });
   }
 
   /**
-   * Make the stella skill catalog current enough to open a conversation.
+   * Make one agent's skill catalog current enough to open its conversation.
    *
    * The catalog lives inside the machine, so reading it costs a `podman
    * exec` (and, on a self-hosted server reached over a phone, whatever the
@@ -373,31 +377,27 @@ export class StellaMachines {
    * picked up by the next open after the window, not by the open that is
    * already five calls deep into a cold start.
    *
-   * Concurrent opens share one read, so two clients cannot queue two
-   * `podman exec`s for the same list.
+   * Concurrent opens of the same agent share one read, so two clients cannot
+   * queue two `podman exec`s for the same list. Another agent has another
+   * folder, hence another entry.
    */
-  private async primeStellaSkills(): Promise<void> {
+  private async primeStellaSkills(agentId: string): Promise<void> {
     const machine = this.deps.machine.get();
-    if (this.skillsCache.machine !== machine) {
+    let cache = this.skillsCache.get(agentId);
+    if (cache === undefined || cache.machine !== machine) {
       // A replaced machine means a replaced catalog; nothing to reuse.
-      this.skillsCache = {
-        machine,
-        at: 0,
-        pending: undefined,
-      };
+      cache = { machine, at: 0, pending: undefined };
+      this.skillsCache.set(agentId, cache);
     }
-    if (this.skillsCache.pending !== undefined) {
-      await this.skillsCache.pending;
+    if (cache.pending !== undefined) {
+      await cache.pending;
       return;
     }
-    if (
-      this.skillsCache.at !== 0 &&
-      Date.now() - this.skillsCache.at < STELLA_SKILLS_TTL_MS
-    ) {
+    if (cache.at !== 0 && Date.now() - cache.at < STELLA_SKILLS_TTL_MS) {
       return;
     }
-    const pending = this.refreshStellaSkills();
-    this.skillsCache.pending = pending;
+    const pending = this.refreshStellaSkills(agentId);
+    cache.pending = pending;
     await pending;
   }
 }

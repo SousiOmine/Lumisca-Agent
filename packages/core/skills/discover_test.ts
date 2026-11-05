@@ -182,6 +182,60 @@ Deno.test("workspace skills shadow global skills of the same name", async () => 
   }
 });
 
+Deno.test("shared skills shadow global ones but not workspace ones", async () => {
+  const root = await fixture();
+  const shared = await makeRealTempDir("lumisca-shared-");
+  const global = await makeRealTempDir("lumisca-global-");
+  try {
+    // The same name in all three places, plus one that exists only in the
+    // shared folder.
+    for (
+      const [dir, description] of [
+        [shared, "Shared alpha."],
+        [global, "Global alpha."],
+      ] as const
+    ) {
+      await Deno.mkdir(join(dir, "alpha"), { recursive: true });
+      await Deno.writeTextFile(
+        join(dir, "alpha", "SKILL.md"),
+        `---\nname: alpha\ndescription: ${description}\n---\n`,
+      );
+    }
+    await Deno.mkdir(join(shared, "shared-only"), { recursive: true });
+    await Deno.writeTextFile(
+      join(shared, "shared-only", "SKILL.md"),
+      "---\nname: shared-only\ndescription: Only shared.\n---\n",
+    );
+
+    const skills = discoverSkills([root], {
+      globalDirs: [global],
+      appDirs: [shared],
+    });
+    // A workspace skill wins over both; the shared folder wins over the
+    // user's global one.
+    assertEquals(
+      skills.find((s) => s.name === "alpha")?.source,
+      "workspace",
+    );
+    const only = skills.find((s) => s.name === "shared-only");
+    assertEquals(only?.source, "app");
+    assertEquals(only?.path, join(shared, "shared-only", "SKILL.md"));
+
+    // Without the workspace skill, the shared one is what wins the name.
+    const withoutWorkspace = discoverSkills([], {
+      globalDirs: [global],
+      appDirs: [shared],
+    });
+    const alpha = withoutWorkspace.find((s) => s.name === "alpha");
+    assertEquals(alpha?.source, "app");
+    assertEquals(alpha?.description, "Shared alpha.");
+  } finally {
+    await removeDirRetry(root);
+    await removeDirRetry(shared);
+    await removeDirRetry(global);
+  }
+});
+
 Deno.test("discoverSkills dedupes skills reachable from overlapping folders", async () => {
   const root = await fixture();
   try {

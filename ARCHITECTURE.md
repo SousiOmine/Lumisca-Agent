@@ -286,7 +286,10 @@ stella の会話でエージェントが何かを伝える手段は `send_chat` 
   入力欄のスラッシュメニューから、ワークスペースで利用可能なスキルを検索して選択できます。選択したスキルは通常のユーザープロンプトとして送信されます。
 
 - **スキルの一覧はどこから来るか**  
-  一覧（`<available_skills>`）はシステムプロンプトではなく context メッセージとして公開し、`skills/catalog.ts` の provider がセッションごとの解決関数を呼びます。ワークスペースのセッションは `.agents/skills` を、stella のセッションはマシン内の `/home/agent/.agents/skills` とホストのグローバル／組み込みスキルを返します（`vm/skills.ts`）。provider が自前でディスカバリしないのは、**一覧に載る集合と `skill` ツールが読める集合を一致させる**ためです。
+  一覧（`<available_skills>`）はシステムプロンプトではなく context メッセージとして公開し、`skills/catalog.ts` の provider がセッションごとの解決関数を呼びます。code mode のセッションはワークスペースの `.agents/skills`、プラグイン、**Lumisca 用スキルフォルダ**（`<config home>/lumisca-agent/skills`）、`~/.agents/skills`、組み込みの順に返し、stella のセッションは自分の作業フォルダの `.agents/skills`、マシン共通の `/home/agent/.agents/skills`、ホストのグローバル、組み込みの順に返します（`vm/skills.ts`）。共通フォルダはモードごとに別で、code mode と stella は互いの共通スキルを見ません。provider が自前でディスカバリしないのは、**一覧に載る集合と `skill` ツールが読める集合を一致させる**ためです。`skill` ツールは一覧を呼び出しごとに引き直すので、セッション中に書いたスキルも同じ run で読めます。
+
+- **スキルは会話から書く**  
+  スキル作成用のツールはありません。スキルはフォルダと `SKILL.md` なので、エージェントは `read` / `write` / `edit` / `list_dir` で書き、削除だけ `bash` の `rm` で行います（`skills/builtin/skill-authoring.ts` が置き場所と frontmatter の規則を教え、ファイルツールを持つセッションにだけ広告します）。code mode では Lumisca 用スキルフォルダがファイルツールの追加ルートになります（`Sandbox` の `extraRoots`）。追加ルートはフォルダ名による相対パス解決に参加しないので、リポジトリに `skills/` があっても曖昧にならず、ツール出力の退避先（`roots[0]`）もワークスペースのままです。`~/.agents/skills` はツールからは触れません（ユーザーのもの）。stella ではエージェントのフォルダもマシン共通フォルダも VM のホーム内なので、既存の許可範囲のまま書けます。反映は code mode なら次の run、stella なら会話を開き直したときです。
 
 - **フォルダー選択 UI**  
   デスクトップ環境でローカルサーバーに接続している場合のみ OS ネイティブのフォルダー選択ダイアログを使用します。それ以外の環境（ブラウザ接続やリモートピア）では、アプリ内のフォルダーブラウザー（`FolderBrowser`）を使用します。

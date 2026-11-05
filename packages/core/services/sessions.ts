@@ -134,8 +134,10 @@ export class SessionCatalog {
       browserAvailable(): boolean;
       computerAvailable(): boolean;
       globalSkillDirs: string[] | undefined;
-      /** Every session's stella skill catalog as last read. */
-      stellaSkills(): SkillDef[];
+      /** The mode's shared skills folders (see SessionPoolDeps). */
+      appSkillDirs: string[] | undefined;
+      /** One stella agent's skill catalog as last read. */
+      stellaSkills(agentId: string): SkillDef[];
     },
   ) {}
 
@@ -296,14 +298,23 @@ export class SessionCatalog {
       computerAvailable: this.deps.computerAvailable(),
       // The palette lists what this workspace's main agent can load.
       mcpAdmin: true,
-      globalDirs: this.deps.globalSkillDirs,
+      // A workspace session is a coding session (it has the file tools the
+      // guide teaches); the folder-less chat subset does not.
+      skillAuthoring: workspaceId !== undefined,
+      ...(this.deps.appSkillDirs !== undefined
+        ? { appSkillDirs: this.deps.appSkillDirs }
+        : {}),
+      ...(this.deps.globalSkillDirs !== undefined
+        ? { globalDirs: this.deps.globalSkillDirs }
+        : {}),
     }).map(skillInfo);
   }
 
-  /** The stella conversation's skill catalog: what its agent can actually
-   * load (the machine's own skills, the user's global set, the built-ins). */
-  listStellaSkills(): SkillInfo[] {
-    return this.deps.stellaSkills().map(skillInfo);
+  /** One stella conversation's skill catalog: what its agent can actually
+   * load (its own skills, the machine's shared folder, the user's global
+   * set, the built-ins). */
+  listStellaSkills(agentId: string): SkillInfo[] {
+    return this.deps.stellaSkills(agentId).map(skillInfo);
   }
 
   /** The file one of a session's published visuals names. */

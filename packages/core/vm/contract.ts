@@ -111,9 +111,19 @@ export const VM_CONTAINER_DIR_NAME = "stella-container";
 /** The Containerfile's file name inside that directory. */
 export const VM_CONTAINERFILE_NAME = "Containerfile";
 
-/** Where stella's published skills live inside the VM (the Agent Skills
- * convention, so a skill the agent writes is one it can also read). */
+/** The machine-wide skills folder inside the VM: every stella agent reads
+ * it, so a skill several agents need lives here. The user's own skill files
+ * are not here (the host is not mounted), which keeps the folder safe to
+ * edit from inside the machine. */
 export const VM_SKILLS_DIR = `${VM_WORKDIR}/.agents/skills`;
+
+/** The skills folder of one stella agent: the Agent Skills convention
+ * (`.agents/skills`) inside its working folder, so its skills are files in
+ * the place its shell already works and no two agents share a catalog by
+ * accident. */
+export function vmAgentSkillsDir(agentId: string): string {
+  return `${vmAgentDir(agentId)}/.agents/skills`;
+}
 
 /** The session bus `entry.sh` starts, at a fixed path.
  *

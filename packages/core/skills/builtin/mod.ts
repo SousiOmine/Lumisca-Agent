@@ -6,6 +6,7 @@ import { agentCreateSkill } from "./agent-create.ts";
 import { codingAgentsSkill } from "./coding-agents.ts";
 import { identitySkill } from "./identity.ts";
 import { mcpServersSkill } from "./mcp-servers.ts";
+import { skillAuthoringSkill } from "./skill-authoring.ts";
 
 /**
  * App-embedded skills: shipped with the application itself, always
@@ -51,6 +52,15 @@ export interface BuiltinContext {
    * outlives a sub-agent's run — so a sub-agent must not be told to look
    * for them. Absent → not advertised. */
   mcpAdmin?: boolean;
+  /** Where this session may write skills. Present only when it has the file
+   * tools to do it (a chat session does not): the skill-authoring guide is
+   * otherwise a pointer at tools the session cannot run. `sharedDir` is the
+   * folder every agent of this mode reads (the Lumisca skills folder on the
+   * host, or the stella machine's own), so the guide can name it; absent
+   * when the installation has no such folder. */
+  skillAuthoring?: {
+    sharedDir?: string;
+  };
 }
 
 /** The app-embedded skill set for a session context. */
@@ -64,6 +74,16 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
     ...(context.stella === true ? [desktopAppsSkill()] : []),
     ...(context.stella === true ? [agentCreateSkill(), identitySkill()] : []),
     ...(context.mcpAdmin === true ? [mcpServersSkill()] : []),
+    // Skills are written with the file tools, so the guide follows them: no
+    // file tools (a chat session) → nothing to teach about writing files.
+    ...(context.skillAuthoring !== undefined
+      ? [skillAuthoringSkill({
+        ...(context.skillAuthoring.sharedDir !== undefined
+          ? { sharedDir: context.skillAuthoring.sharedDir }
+          : {}),
+        stella: context.stella === true,
+      })]
+      : []),
     ...(context.subagents ? [codingAgentsSkill()] : []),
   ];
 }

@@ -4,6 +4,8 @@ import { createSkillTool } from "../skills/tool.ts";
 import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";
 import { discoverSkills, type SkillDef } from "../skills/discover.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
+import { createCodingTools } from "./toolsets.ts";
+import { sessionSkills } from "./tool-pieces.ts";
 
 async function makeTool(): Promise<
   { root: string; skills: SkillDef[]; tool: ReturnType<typeof createSkillTool> }
@@ -21,7 +23,7 @@ async function makeTool(): Promise<
     "# Reference\nDetails.\n",
   );
   const skills = discoverSkills([root], { globalDirs: [] });
-  return { root, skills, tool: createSkillTool({ skills }) };
+  return { root, skills, tool: createSkillTool({ skills: () => skills }) };
 }
 
 Deno.test("skill tool loads SKILL.md content for a known skill", async () => {
@@ -95,7 +97,7 @@ Deno.test("skill tool rejects follow-up reads that escape the skill directory", 
 
 function makeBuiltinTool(browser: boolean) {
   return createSkillTool({
-    skills: builtinSkills({ browser, computer: false, subagents: false }),
+    skills: () => builtinSkills({ browser, computer: false, subagents: false }),
   });
 }
 
@@ -135,4 +137,105 @@ Deno.test("skill tool hides built-in skills when their capability is absent", as
     Error,
     'Unknown skill "web-browser"',
   );
+});
+
+// --- skills written during the session ---------------------------------------
+
+Deno.test("skill tool resolves the catalog on every call", async () => {
+  const root = await makeRealTempDir("lumisca-skill-tool-");
+  try {
+    const tool = createSkillTool({
+      skills: () => discoverSkills([root], { globalDirs: [], appDirs: [] }),
+    });
+    // Nothing on disk yet: the name is unknown...
+    await assertRejects(
+      () =>
+        Promise.resolve().then(() =>
+          tool.execute("1", { name: "fresh" }, undefined)
+        ),
+      Error,
+      'Unknown skill "fresh"',
+    );
+    // ...and after the file is written (the flow the skill-authoring guide
+    // teaches: write SKILL.md), the same tool object can load it. A tool that
+    // kept the array it was built with would answer "unknown" here while the
+    // catalog already listed the skill.
+    const dir = join(root, ".agents", "skills", "fresh");
+    await Deno.mkdir(dir, { recursive: true });
+    await Deno.writeTextFile(
+      join(dir, "SKILL.md"),
+      "---\nname: fresh\ndescription: Written during the session.\n---\n\n# Fresh\n",
+    );
+    const result = await tool.execute("2", { name: "fresh" }, undefined);
+    assert(toolText(result).includes("# Fresh"));
+    assertEquals(result.details?.dir, dir);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("coding tools reach the shared skills folder and the catalog lists it", async () => {
+  const root = await makeRealTempDir("lumisca-skill-shared-");
+  const shared = await makeRealTempDir("lumisca-skill-app-");
+  try {
+    const workspace = {
+      id: "w",
+      name: "project",
+      folders: [root],
+      createdAt: 0,
+      chat: false,
+    };
+    const tools = createCodingTools(workspace, {
+      appSkillDirs: [shared],
+      globalSkillDirs: [],
+    });
+    const write = tools.find((tool) => tool.name === "write");
+    assert(write !== undefined, "the coding set has write");
+    const skillFile = join(shared, "release-notes", "SKILL.md");
+    await write!.execute(
+      "1",
+      {
+        path: skillFile,
+        content:
+          "---\nname: release-notes\ndescription: Write release notes.\n---\n\n# Release notes\n",
+      },
+      undefined,
+    );
+    // The write landed outside the workspace: the shared folder is an extra
+    // sandbox root.
+    assert((await Deno.stat(skillFile)).isFile);
+
+    // ...and the session's discovery (the same call the catalog provider and
+    // the skill tool make) lists and loads it.
+    const skills = sessionSkills([root], {
+      appSkillDirs: [shared],
+      globalDirs: [],
+      skillAuthoring: true,
+    });
+    const sharedSkill = skills.find((s) => s.name === "release-notes");
+    assert(
+      sharedSkill !== undefined,
+      JSON.stringify(skills.map((s) => s.name)),
+    );
+    assertEquals(sharedSkill!.source, "app");
+    assertEquals(sharedSkill!.path, skillFile);
+    // A session with file tools is also given the guide that taught this.
+    assert(skills.some((s) => s.name === "skill-authoring"));
+
+    // A path outside the workspace and the shared folder is still refused.
+    const outside = tools.find((tool) => tool.name === "read");
+    await assertRejects(
+      () =>
+        outside!.execute(
+          "2",
+          { path: join(shared, "..", "elsewhere.txt") },
+          undefined,
+        ),
+      Error,
+      "outside the workspace",
+    );
+  } finally {
+    await removeDirRetry(root);
+    await removeDirRetry(shared);
+  }
 });

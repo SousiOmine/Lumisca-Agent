@@ -84,6 +84,14 @@ export interface ToolFactoryOptions {
    * are not built: without a configured provider there is nothing to search
    * with, and a tool that can only fail is not worth showing the model. */
   webSearch?: SearchProvider;
+  /** The mode's shared skills folders (see `appSkillDirs`): discovered into
+   * the skill catalog and, on the host, added as an extra sandbox root so
+   * the agent can write a skill every agent shares. Omitted → resolved from
+   * the environment. */
+  appSkillDirs?: string[];
+  /** Override for the user's global skills directory (~/.agents/skills).
+   * Tests pass a fixture so they never read the developer's own skills. */
+  globalSkillDirs?: string[];
 }
 
 /** Build the standard coding tool set, sandboxed to a workspace.
@@ -97,13 +105,26 @@ export function createCodingTools(
   workspace: Workspace,
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
-  const backends = options.backends ?? hostBackends(workspace);
+  const backends = options.backends ??
+    hostBackends(workspace, { appSkillDirs: options.appSkillDirs });
   const { files, runner } = backends;
-  const skills = sessionSkills(workspace.folders, {
-    browserAvailable: options.browserAvailable,
-    computerAvailable: options.computerAvailable,
-    mcpAdmin: options.mcpAdmin,
-  });
+  // Resolved per call, not once: a skill this agent writes during the run
+  // (see the skill-authoring guide) must be loadable by the very next call,
+  // and the catalog provider re-discovers on every turn.
+  const skills = () =>
+    sessionSkills(workspace.folders, {
+      browserAvailable: options.browserAvailable,
+      computerAvailable: options.computerAvailable,
+      mcpAdmin: options.mcpAdmin,
+      // The coding set has the file tools the guide teaches.
+      skillAuthoring: true,
+      ...(options.appSkillDirs !== undefined
+        ? { appSkillDirs: options.appSkillDirs }
+        : {}),
+      ...(options.globalSkillDirs !== undefined
+        ? { globalDirs: options.globalSkillDirs }
+        : {}),
+    });
   // Each row: the tool(s), or nothing when the option it needs is absent.
   const rows: Array<Tool | Tool[] | undefined> = [
     fileTools(files),
@@ -194,8 +215,9 @@ export function createStellaTools(options: {
    * start here when the model omits `cwd`. */
   cwd?: string;
   /** Skills discovered for this session (vm/skills.ts), already merged with
-   * the built-ins the session is entitled to. */
-  skills: SkillDef[];
+   * the built-ins the session is entitled to. A getter: the catalog is
+   * re-read when the conversation is opened, and the tool follows it. */
+  skills: () => SkillDef[];
   /** The machine's screen tools (`vm_screenshot` / `vm_act` / `vm_ask_user`)
    * and semantic tools (`vm_find` / `vm_do` / `vm_wait`), preloaded. */
   screen: Tool[];
@@ -261,15 +283,24 @@ export function createChatTools(
     options.webSearch !== undefined
       ? createWebSearchTools(options.webSearch)
       : undefined,
-    // Only global skills apply (no workspace folders to discover from).
+    // Only the shared and global skills apply (no workspace folders to
+    // discover from). No skill-authoring guide either: this set has no
+    // `write` to write a skill with.
     createSkillTool({
-      skills: sessionSkills([], {
-        browserAvailable: options.browserAvailable,
-        computerAvailable: options.computerAvailable,
-        // A chat session can add an MCP server too: the config is
-        // app-level, so it needs no workspace.
-        mcpAdmin: options.mcpAdmin,
-      }),
+      skills: () =>
+        sessionSkills([], {
+          browserAvailable: options.browserAvailable,
+          computerAvailable: options.computerAvailable,
+          // A chat session can add an MCP server too: the config is
+          // app-level, so it needs no workspace.
+          mcpAdmin: options.mcpAdmin,
+          ...(options.appSkillDirs !== undefined
+            ? { appSkillDirs: options.appSkillDirs }
+            : {}),
+          ...(options.globalSkillDirs !== undefined
+            ? { globalDirs: options.globalSkillDirs }
+            : {}),
+        }),
     }),
     options.ask !== undefined ? createAskTool(options.ask) : undefined,
     options.todo !== undefined ? createTodoTool(options.todo) : undefined,

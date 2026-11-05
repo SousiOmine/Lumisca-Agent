@@ -380,3 +380,66 @@ Deno.test("builtinSkills advertises the MCP guide only where the tools are", asy
     false,
   );
 });
+
+Deno.test("builtinSkills advertises the skill guide only where skills can be written", async () => {
+  // A coding session has the file tools the guide teaches.
+  const coding = builtinSkills({
+    browser: false,
+    computer: false,
+    subagents: false,
+    skillAuthoring: { sharedDir: "/home/u/.config/lumisca-agent/skills" },
+  });
+  const skill = coding.find((s) => s.name === "skill-authoring");
+  assert(skill !== undefined, "a session with file tools must find the guide");
+  assertEquals(skill!.source, "builtin");
+  assertEquals(skill!.path, undefined);
+
+  const body = await loadSkillContent(skill!);
+  // Where a skill goes, in both scopes, and how it is written.
+  assert(body.includes("/home/u/.config/lumisca-agent/skills"), body);
+  assert(body.includes(".agents/skills"), body);
+  for (const tool of ["write", "edit", "list_dir", "bash"]) {
+    assert(body.includes(tool), `the guide does not mention ${tool}`);
+  }
+  // The rules discovery enforces, which the agent cannot see otherwise.
+  assert(body.includes("equal the folder name"), body);
+  assert(body.includes("1024"), body);
+
+  // Without a shared folder the guide still teaches the session's own folder,
+  // and says there is no shared one instead of naming a path that does not
+  // exist.
+  const noShared = builtinSkills({
+    browser: false,
+    computer: false,
+    subagents: false,
+    skillAuthoring: {},
+  });
+  const noSharedBody = await loadSkillContent(
+    noShared.find((s) => s.name === "skill-authoring")!,
+  );
+  assert(noSharedBody.includes("has none"), noSharedBody);
+
+  // A stella session writes into its machine: the shared folder is the
+  // machine's, not the host's.
+  const stella = builtinSkills({
+    browser: false,
+    computer: false,
+    stella: true,
+    subagents: false,
+    skillAuthoring: { sharedDir: "/home/agent/.agents/skills" },
+  });
+  const stellaBody = await loadSkillContent(
+    stella.find((s) => s.name === "skill-authoring")!,
+  );
+  assert(stellaBody.includes("/home/agent/.agents/skills"), stellaBody);
+  assert(stellaBody.includes("working folder"), stellaBody);
+  assert(stellaBody.includes("read-only"), stellaBody);
+
+  // A chat session has no `write`: the guide would point at a dead tool.
+  assertEquals(
+    builtinSkills({ browser: false, computer: false, subagents: false }).some(
+      (s) => s.name === "skill-authoring",
+    ),
+    false,
+  );
+});

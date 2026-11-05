@@ -128,6 +128,12 @@ Deno.test("skills API lists the workspace catalog and the chat subset", async ()
     );
     const mcpGuide = core.listSkills().find((s) => s.name === "mcp-servers");
     assert(mcpGuide !== undefined, "the MCP guide must be listed");
+    // A workspace session has file tools, so its palette also offers the
+    // guide that teaches writing a skill.
+    const skillGuide = core.listSkills(ws.id).find((s) =>
+      s.name === "skill-authoring"
+    );
+    assert(skillGuide !== undefined, "the skill guide must be listed");
 
     const forWorkspace = await json(
       base,
@@ -137,6 +143,7 @@ Deno.test("skills API lists the workspace catalog and the chat subset", async ()
     assertEquals((await forWorkspace.json()).skills, [
       { name: "demo", description: "Demo skill." },
       mcpGuide,
+      skillGuide,
     ]);
 
     // Without a workspaceId the endpoint answers for a chat session: no

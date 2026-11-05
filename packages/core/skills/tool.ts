@@ -29,13 +29,18 @@ const skillSchema: SchemaObject<{
 
 /** Load a skill's instructions on demand. The session skill catalog lists
  * name + description; the full SKILL.md (and optionally one file from the
- * skill directory) is read when the agent actually uses the skill. */
+ * skill directory) is read when the agent actually uses the skill.
+ *
+ * The set is a getter, not a fixed array: a session can gain a skill while
+ * it runs (the agent writes one into its workspace or the shared folder —
+ * see the skill-authoring guide), and the catalog provider publishes that
+ * change on the next turn. A snapshot would leave the two disagreeing: the
+ * model would read a name in the catalog and get "unknown skill" from the
+ * tool. Resolving per call costs one directory scan (the same discovery the
+ * catalog runs) and is what keeps the list and the tool the same set. */
 export function createSkillTool(
-  ctx: { skills: SkillDef[] },
+  ctx: { skills: () => SkillDef[] },
 ): Tool<typeof skillSchema> {
-  const byName = new Map(ctx.skills.map((s) => [s.name, s]));
-  const names = ctx.skills.map((s) => s.name);
-  const known = names.length === 0 ? "(none)" : names.join(", ");
   return {
     name: TOOL_SKILL,
     label: "Skill",
@@ -50,8 +55,12 @@ export function createSkillTool(
       "with its description.",
     parameters: skillSchema,
     execute: async (_id, params): Promise<ToolResult> => {
-      const skill = byName.get(params.name);
+      const skills = ctx.skills();
+      const skill = skills.find((candidate) => candidate.name === params.name);
       if (skill === undefined) {
+        const known = skills.length === 0
+          ? "(none)"
+          : skills.map((candidate) => candidate.name).join(", ");
         throw new Error(
           `Unknown skill "${params.name}". Available skills: ${known}`,
         );

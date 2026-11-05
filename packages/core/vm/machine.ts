@@ -13,7 +13,7 @@ import type { StellaStatus } from "../shared/wire.ts";
 import { discoverVmSkills } from "./skills.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
 import type { SkillDef } from "../skills/discover.ts";
-import { vmAgentDir } from "./contract.ts";
+import { VM_SKILLS_DIR, vmAgentDir } from "./contract.ts";
 
 /** Everything the stella machine holds between calls: the manager, the exec
  * seams built over it, the cached availability verdict and the skill catalog.
@@ -27,8 +27,10 @@ export class StellaMachine {
    * replaced (never carried across a detach, so a removed machine cannot be
    * reached through a stale reference). */
   #seams: { vm: VmManager; exec: VmExec; execBytes: VmExecBytes } | undefined;
-  /** The skill catalog, refreshed before each open. */
-  #skills: SkillDef[] = [];
+  /** The skill catalogs, one per stella agent (keyed by agent id), refreshed
+   * before each open. A catalog is per agent because an agent's own skills
+   * live in its folder: only the machine-wide folder is shared. */
+  #skills = new Map<string, SkillDef[]>();
   /** The in-flight start, shared by callers that race on a cold machine. */
   #starting: Promise<void> | undefined;
 
@@ -46,7 +48,7 @@ export class StellaMachine {
     // been built since, or podman removed) and the exec seams.
     this.#verdict = undefined;
     this.#seams = undefined;
-    this.#skills = [];
+    this.#skills.clear();
   }
 
   get(): VmManager | undefined {
@@ -214,22 +216,25 @@ export class StellaMachine {
     });
   }
 
-  /** Re-read the skill catalog: the machine's own skills plus the user's
-   * global and built-in set. Awaited before a stella session opens. */
-  async refreshSkills(): Promise<void> {
-    this.#skills = await this.#readSkills();
+  /** Re-read one agent's skill catalog: the agent's own skills, the
+   * machine's shared folder, and the user's global and built-in set.
+   * Awaited before a stella session opens. */
+  async refreshSkills(agentId: string): Promise<void> {
+    this.#skills.set(agentId, await this.#readSkills(agentId));
   }
 
-  /** The catalog as last read (the factory builds tools synchronously). */
-  skills(): SkillDef[] {
-    return this.#skills;
+  /** One agent's catalog as last read (the factory builds tools
+   * synchronously). Empty until the agent's first refresh. */
+  skills(agentId: string): SkillDef[] {
+    return this.#skills.get(agentId) ?? [];
   }
 
-  #readSkills(): Promise<SkillDef[]> {
+  #readSkills(agentId: string): Promise<SkillDef[]> {
     const exec = this.exec();
     if (exec === undefined) return Promise.resolve([]);
     return discoverVmSkills({
       exec,
+      agentId,
       builtinSkills: builtinSkills({
         // The machine has its own browser and no host computer surface.
         browser: false,
@@ -244,6 +249,9 @@ export class StellaMachine {
         // session's main agent changes it like any other (the tools live in
         // its main registry).
         mcpAdmin: true,
+        // The machine has file tools, so the agent can write skills: its own
+        // in its working folder, shared ones in the machine-wide folder.
+        skillAuthoring: { sharedDir: VM_SKILLS_DIR },
       }),
       ...(this.globalSkillDirs !== undefined
         ? { globalDirs: this.globalSkillDirs }

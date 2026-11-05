@@ -174,6 +174,11 @@ export interface AgentRuntime {
    * LumiscaCore.forTesting passes an empty list, so a test's skill catalog
    * is built from its own fixture only. */
   globalSkillDirs?: string[];
+  /** The mode's shared skills folders (see `appSkillDirs`): the Lumisca
+   * skills folder, which the file tools may also write to. Resolved once by
+   * the core; `forTesting` passes an empty list so a test never reads the
+   * machine's own shared folder. */
+  appSkillDirs?: string[];
 }
 
 /** Everything the pool needs to build and manage agents, injected by

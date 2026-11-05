@@ -352,7 +352,7 @@ export class AgentFactory {
     }
     const backends: ToolBackends = stella !== undefined
       ? { files: stella.files, runner: stella.runner }
-      : hostBackends(workspace);
+      : hostBackends(workspace, { appSkillDirs: this.deps.appSkillDirs });
     // A stella conversation row lives in the folder-less chat workspace (it
     // has no folders of its own — its files are in the machine), but it is
     // NOT a chat session: it has a shell, background commands and
@@ -536,6 +536,22 @@ export class AgentFactory {
           safety: this.deps.commandSafety,
           language: this.deps.getLanguage(),
           compactionPolicy: () => this.deps.getCompactionPolicy(),
+          // The same skill directories the main agent discovers from: a
+          // sub-agent must not read a different catalog (and, in a test,
+          // must not fall back to the developer's own home).
+          ...((this.deps.appSkillDirs !== undefined ||
+              this.deps.globalSkillDirs !== undefined)
+            ? {
+              skillDirs: {
+                ...(this.deps.appSkillDirs !== undefined
+                  ? { appSkillDirs: this.deps.appSkillDirs }
+                  : {}),
+                ...(this.deps.globalSkillDirs !== undefined
+                  ? { globalSkillDirs: this.deps.globalSkillDirs }
+                  : {}),
+              },
+            }
+            : {}),
           emit: (event: ClientEvent) => this.deps.emit(event),
         });
         resources.tasks = tasks;
@@ -579,7 +595,10 @@ export class AgentFactory {
       return createStellaTools({
         backends,
         cwd: stella.cwd,
-        skills: stella.skills(),
+        // A getter: the machine re-reads the catalog when a conversation is
+        // opened, and the tool has to follow it (a skill the agent wrote is
+        // loadable afterwards).
+        skills: () => stella.skills(),
         screen: [...stella.screenTools, ...stella.semanticTools],
         sendChat: {
           store: this.deps.attachments,
@@ -600,6 +619,14 @@ export class AgentFactory {
         computerAvailable: where.computerAvailable,
         mcpAdmin: where.mcpAdmin !== undefined,
         webSearch: where.webSearch,
+        // A chat session has no file tools: no skill-authoring guide, but
+        // the shared and global skills are still loadable.
+        ...(this.deps.appSkillDirs !== undefined
+          ? { appSkillDirs: this.deps.appSkillDirs }
+          : {}),
+        ...(this.deps.globalSkillDirs !== undefined
+          ? { globalSkillDirs: this.deps.globalSkillDirs }
+          : {}),
       });
     }
     return createCodingTools(workspace, {
@@ -615,6 +642,12 @@ export class AgentFactory {
       visuals: { store: this.deps.visuals, sessionId: session.id },
       backends,
       webSearch: where.webSearch,
+      ...(this.deps.appSkillDirs !== undefined
+        ? { appSkillDirs: this.deps.appSkillDirs }
+        : {}),
+      ...(this.deps.globalSkillDirs !== undefined
+        ? { globalSkillDirs: this.deps.globalSkillDirs }
+        : {}),
     });
   }
 
@@ -684,7 +717,14 @@ export class AgentFactory {
               // This catalog is the main agent's: it holds the MCP
               // administration tools when the session has them.
               mcpAdmin: where.mcpAdmin !== undefined,
-              globalDirs: this.deps.globalSkillDirs,
+              // Only a session with file tools can write a skill.
+              skillAuthoring: !chat,
+              ...(this.deps.appSkillDirs !== undefined
+                ? { appSkillDirs: this.deps.appSkillDirs }
+                : {}),
+              ...(this.deps.globalSkillDirs !== undefined
+                ? { globalDirs: this.deps.globalSkillDirs }
+                : {}),
             }),
       }),
       createInstructionsProvider({

@@ -13,7 +13,7 @@ import {
   createInMemorySettingsRepo,
   type SettingsRepo,
 } from "./settings/repo.ts";
-import { resolveSettingsPath } from "./settings/path.ts";
+import { appSkillDirs, resolveSettingsPath } from "./settings/path.ts";
 import {
   type ConnectionEntry,
   parseConnections,
@@ -237,6 +237,11 @@ export class LumiscaCore {
    * empty list so a fixture's skill catalog never depends on the machine
    * the tests run on. */
   private readonly globalSkillDirs: string[] | undefined;
+  /** The mode's shared skills folders (the Lumisca skills folder, see
+   * settings/path.ts). Resolved once here so the catalog, the file tools'
+   * sandbox and the guide's text name the same folder; empty when this
+   * machine has no config home, and for a test (which passes []). */
+  private readonly appSkillDirs: string[];
   private readonly listeners = new Set<(event: ClientEvent) => void>();
   /** Per-session count of the events this core has emitted; see
    * getSessionRevision. Entries are dropped with their session. */
@@ -288,6 +293,10 @@ export class LumiscaCore {
        * db/vacuum.ts). Omitted by an in-memory core. */
       dbPath?: string;
       globalSkillDirs?: string[];
+      /** The mode's shared skills folders; default resolved from `env` (the
+       * Lumisca skills folder). Tests pass [] so they never read the
+       * machine's own folder. */
+      appSkillDirs?: string[];
       /** Environment the model layer reads (custom providers, ambient API
        * keys). Defaults to the real process environment; tests pass their
        * own so they never mutate the process-global one. */
@@ -305,6 +314,9 @@ export class LumiscaCore {
     } = {},
   ) {
     this.globalSkillDirs = overrides.globalSkillDirs;
+    const sharedSkillDirs = overrides.appSkillDirs ??
+      appSkillDirs(overrides.env);
+    this.appSkillDirs = sharedSkillDirs;
     this.stella = new StellaMachine(
       overrides.globalSkillDirs,
       overrides.stellaRun,
@@ -459,6 +471,7 @@ export class LumiscaCore {
           : { role: agent.role, id: agentId };
       },
       globalSkillDirs: this.globalSkillDirs,
+      appSkillDirs: this.appSkillDirs,
     });
     this.mcp = overrides.mcp ?? new McpService({
       settings: this.settings,
@@ -564,7 +577,8 @@ export class LumiscaCore {
       browserAvailable: () => this.browserBackend !== undefined,
       computerAvailable: () => this.computerHostForSession() !== undefined,
       globalSkillDirs: this.globalSkillDirs,
-      stellaSkills: () => this.stella.skills(),
+      appSkillDirs: this.appSkillDirs,
+      stellaSkills: (agentId) => this.stella.skills(agentId),
     });
   }
 
@@ -632,6 +646,9 @@ export class LumiscaCore {
       createInMemorySettingsRepo(),
       {
         globalSkillDirs: [],
+        // No shared skills folder either: a test's catalog must come from
+        // its own fixture, never from the machine running it.
+        appSkillDirs: [],
         env,
         ...(stellaRun !== undefined ? { stellaRun } : {}),
       },
@@ -1213,8 +1230,10 @@ export class LumiscaCore {
     return this.services.stellaMachines.getStellaStatus();
   }
 
-  refreshStellaSkills(): Promise<void> {
-    return this.services.stellaMachines.refreshStellaSkills();
+  /** Re-read one stella agent's skill catalog (its own folder plus the
+   * machine's shared one). */
+  refreshStellaSkills(agentId: string): Promise<void> {
+    return this.services.stellaMachines.refreshStellaSkills(agentId);
   }
 
   /** The runtime a stella session's tools run on (see StellaMachines). */
@@ -1356,9 +1375,11 @@ export class LumiscaCore {
     return this.services.sessions.listSkills(workspaceId);
   }
 
-  /** The stella conversation's skill catalog. */
-  listStellaSkills(): SkillInfo[] {
-    return this.services.sessions.listStellaSkills();
+  /** The stella conversation's skill catalog. Per conversation: a stella
+   * agent's own skills live in its folder inside the machine, so two agents
+   * do not share a catalog (only the machine-wide folder is common). */
+  listStellaSkills(agentId: string): SkillInfo[] {
+    return this.services.sessions.listStellaSkills(agentId);
   }
 
   getGoal(id: string): GoalInfo | undefined {

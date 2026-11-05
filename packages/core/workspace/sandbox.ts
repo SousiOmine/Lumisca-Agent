@@ -14,14 +14,30 @@ export type ResolvedPath =
   | { ok: true; path: string }
   | { ok: false; reason: string };
 
+/** Options of a {@link Sandbox}. */
+export interface SandboxOptions {
+  /** Additional folders a path may resolve inside, WITHOUT taking part in
+   * folder-name matching (an absolute path is the only way to name them).
+   *
+   * They exist for places a session may work in besides its workspace
+   * folders — today the Lumisca skills folder, which the file tools reach so
+   * the agent can write a skill every agent shares. Keeping them out of
+   * `roots` matters twice: a workspace folder that happens to be called
+   * `skills` cannot make a relative path ambiguous, and the first root (the
+   * spill location of oversized tool output) stays a real workspace folder.
+   */
+  extraRoots?: string[];
+}
+
 /**
  * Restricts file access to a set of workspace folders.
  *
  * Paths are resolved against the workspace by name: a relative path must
  * start with the name of one of the workspace folders (e.g. `Aaa/README.md`
  * for a workspace containing the folder `Aaa`), and an absolute path must
- * fall inside one of them. Nothing else is accepted — there is no working
- * directory fallback.
+ * fall inside one of them (or one of the extra roots, see
+ * {@link SandboxOptions.extraRoots}). Nothing else is accepted — there is no
+ * working directory fallback.
  *
  * Resolved paths are normalized syntactically, then resolved through
  * symlinks (via realpath on existing ancestors) so that symlink escapes are
@@ -42,8 +58,10 @@ export class Sandbox {
    * registration order.
    */
   readonly roots: string[];
+  /** Additional containment roots (see {@link SandboxOptions.extraRoots}). */
+  readonly #extraRoots: string[];
 
-  constructor(folders: string[]) {
+  constructor(folders: string[], options: SandboxOptions = {}) {
     this.roots = folders
       .map((f) => {
         const abs = isAbsolute(f)
@@ -61,6 +79,14 @@ export class Sandbox {
         const pb = normalizeCase(toPosix(b));
         return pa < pb ? -1 : pa > pb ? 1 : 0;
       });
+    this.#extraRoots = (options.extraRoots ?? []).map((root) => {
+      const abs = normalize(root);
+      try {
+        return realpathSync(abs);
+      } catch {
+        return abs;
+      }
+    });
   }
 
   /** Resolve a user/model-supplied path against the sandbox. */
@@ -77,6 +103,13 @@ export class Sandbox {
     if (!canonical.ok) return canonical;
 
     for (const root of this.roots) {
+      if (isWithin(root, canonical.path)) {
+        return { ok: true, path: canonical.path };
+      }
+    }
+    // Extra roots are containment-only: they are never matched by folder
+    // name, so a model must address them by absolute path.
+    for (const root of this.#extraRoots) {
       if (isWithin(root, canonical.path)) {
         return { ok: true, path: canonical.path };
       }

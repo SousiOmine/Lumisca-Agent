@@ -5,6 +5,7 @@ import {
   readIfExists,
   resolveGlobalDirs as resolveGlobalDirsBase,
 } from "../fs.ts";
+import { appSkillDirs as resolveAppSkillDirs } from "../settings/path.ts";
 import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 import { parseSkillFrontmatter } from "./frontmatter.ts";
 
@@ -18,7 +19,15 @@ export const MAX_AVAILABLE_SKILLS_BYTES = 16 * 1024;
 /** Cap for a single skill file (SKILL.md or a follow-up read). */
 export const MAX_SKILL_FILE_BYTES = 64 * 1024;
 
-export type SkillSource = "workspace" | "plugin" | "global" | "builtin";
+export type SkillSource =
+  | "workspace"
+  | "plugin"
+  /** The shared folder of this mode (see `appSkillDirs`): the Lumisca
+   * skills folder on this machine, or the stella machine's own shared
+   * folder. Skills the agent writes for every agent live here. */
+  | "app"
+  | "global"
+  | "builtin";
 
 export interface SkillDef {
   name: string;
@@ -62,10 +71,15 @@ export interface DiscoverOptions {
    * Used by tests to avoid touching the real home directory. */
   globalDirs?: string[];
   /** Skills contributed by discovered agent plugins. They slot in after
-   * workspace skills and before global ones: a workspace skill shadows a
-   * plugin skill of the same name, and a plugin skill shadows a global
-   * one. */
+   * workspace skills and before the shared folder: a workspace skill
+   * shadows a plugin skill of the same name, and a plugin skill shadows a
+   * shared or global one. */
   pluginSkills?: SkillDef[];
+  /** The shared skills folders of this mode (see `appSkillDirs`).
+   * They are scanned after plugin skills and before the user's global
+   * folder: a project skill shadows a shared one, and a shared one shadows
+   * a global one. Defaults to the resolved Lumisca skills folder. */
+  appDirs?: string[];
   /** App-embedded skills (see skills/builtin). Appended after global
    * skills, so any user skill of the same name — workspace, plugin or
    * global — shadows a built-in one. Callers decide which built-ins apply
@@ -77,11 +91,12 @@ export interface DiscoverOptions {
 /** Discover skills for a set of workspace folders. For each folder the
  * repository root is located (via `.git`), then every `.agents/skills`
  * directory from the root down to the folder is scanned (root first, like
- * project memory). Plugin skills (if given) are merged next, then global
- * skills (~/.agents/skills) are appended after, so a workspace skill
- * always shadows a plugin skill, and a plugin skill shadows a global one
- * of the same name. Built-in skills (if given) are appended last — any
- * user skill shadows them. */
+ * project memory). Plugin skills (if given) are merged next, then the mode's
+ * shared folders (the Lumisca skills folder — see `appSkillDirs`),
+ * then global skills (~/.agents/skills), so a workspace skill always shadows
+ * a plugin skill, which shadows a shared one, which shadows a global one of
+ * the same name. Built-in skills (if given) are appended last — any user
+ * skill shadows them. */
 export function discoverSkills(
   folders: string[],
   options: DiscoverOptions = {},
@@ -101,6 +116,9 @@ export function discoverSkills(
   }
   for (const skill of options.pluginSkills ?? []) {
     if (!byName.has(skill.name)) byName.set(skill.name, skill);
+  }
+  for (const dir of options.appDirs ?? resolveAppSkillDirs()) {
+    scanSkillsDir(dir, "app", byName, seenPaths);
   }
   for (const dir of resolveGlobalDirs(options.globalDirs)) {
     scanSkillsDir(dir, "global", byName, seenPaths);

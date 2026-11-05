@@ -74,6 +74,41 @@ const PARENT_ALIASES = ["parent", "main"] as const;
  * best-effort miss, not a session failure. */
 const log = createLogger("task");
 
+/** The skill directories a sub-agent's catalog is built from (see
+ * `sessionSkills`): the mode's shared folder and the user's global one.
+ * Taken from the core so a sub-agent's catalog is the main agent's catalog
+ * minus the guides it must not advertise — not a discovery of its own that
+ * could disagree (and, in a test, would read the developer's home). */
+interface SubagentSkillDirs {
+  appSkillDirs?: string[];
+  globalSkillDirs?: string[];
+}
+
+/** The skill tool of a sub-agent: same discovery as the main agent, without
+ * the skill-authoring guide (a sub-agent is a worker; its parent writes the
+ * skills) and resolved per call so a skill that appeared mid-session is
+ * loadable. */
+function subagentSkillTool(
+  workspace: Workspace,
+  browserAvailable: boolean,
+  computerAvailable: boolean,
+  dirs: SubagentSkillDirs,
+): Tool {
+  return createSkillTool({
+    skills: () =>
+      sessionSkills(workspace.folders, {
+        browserAvailable,
+        computerAvailable,
+        ...(dirs.appSkillDirs !== undefined
+          ? { appSkillDirs: dirs.appSkillDirs }
+          : {}),
+        ...(dirs.globalSkillDirs !== undefined
+          ? { globalDirs: dirs.globalSkillDirs }
+          : {}),
+      }),
+  });
+}
+
 /** Read-only investigation tools of the `explore` sub-agent. */
 function exploreTools(
   workspace: Workspace,
@@ -81,15 +116,16 @@ function exploreTools(
   safety: CommandSafety | undefined,
   browserAvailable: boolean,
   computerAvailable: boolean,
+  dirs: SubagentSkillDirs,
 ): Tool[] {
   return [
     ...readOnlyInvestigationTools(backends.files, backends.runner, safety),
-    createSkillTool({
-      skills: sessionSkills(workspace.folders, {
-        browserAvailable,
-        computerAvailable,
-      }),
-    }),
+    subagentSkillTool(
+      workspace,
+      browserAvailable,
+      computerAvailable,
+      dirs,
+    ),
   ];
 }
 
@@ -114,6 +150,7 @@ function generalTools(
   browserAvailable: boolean,
   computerAvailable: boolean,
   webSearch: SearchProvider | undefined,
+  dirs: SubagentSkillDirs,
 ): Tool[] {
   return [
     ...fileTools(backends.files),
@@ -124,12 +161,12 @@ function generalTools(
     }),
     ...(evalTool ? [createEvalTool({ safety })] : []),
     ...(webSearch === undefined ? [] : createWebSearchTools(webSearch)),
-    createSkillTool({
-      skills: sessionSkills(workspace.folders, {
-        browserAvailable,
-        computerAvailable,
-      }),
-    }),
+    subagentSkillTool(
+      workspace,
+      browserAvailable,
+      computerAvailable,
+      dirs,
+    ),
   ];
 }
 
@@ -182,6 +219,10 @@ export interface TaskHubOptions {
   /** Sleep before a retry backoff (injectable for tests, like
    * SessionAgent's rateLimitRetrySleep). Defaults to the real timer. */
   backoffSleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** The skill directories sub-agents discover from (see
+   * SubagentSkillDirs). Taken from the core's resolved values so a
+   * sub-agent's catalog matches the main agent's in tests too. */
+  skillDirs?: SubagentSkillDirs;
   emit: (event: ClientEvent) => void;
 }
 
@@ -238,6 +279,9 @@ export class TaskHub {
    * gates above). A `general` sub-agent searches the web exactly like the
    * main agent does; omitted → no web tools in its set. */
   private webSearch: SearchProvider | undefined;
+  /** The skill directories sub-agents discover from (fixed for the core's
+   * lifetime, so it is a constructor value rather than a per-open setter). */
+  private readonly skillDirs: SubagentSkillDirs;
   /** The session's tool registry (set by the pool on every open): holds
    * every discoverable tool (MCP tools, browser-lab tools, future
    * extensions) whose definitions stay out of the LLM context. General
@@ -259,6 +303,7 @@ export class TaskHub {
     this.language = options.language ?? DEFAULT_LOCALE;
     this.compactionPolicy = options.compactionPolicy;
     this.backoffSleep = options.backoffSleep ?? sleepAbortable;
+    this.skillDirs = options.skillDirs ?? {};
     this.emit = options.emit;
   }
 
@@ -429,6 +474,7 @@ export class TaskHub {
           this.browserAvailable,
           this.computerAvailable,
           this.webSearch,
+          this.skillDirs,
         )
         : exploreTools(
           runtime.workspace,
@@ -436,6 +482,7 @@ export class TaskHub {
           this.safety,
           this.browserAvailable,
           this.computerAvailable,
+          this.skillDirs,
         )),
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),

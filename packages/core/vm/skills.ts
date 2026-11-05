@@ -1,48 +1,62 @@
 /**
- * The stella machine's skill catalog.
+ * The stella machine's skill catalogs.
  *
- * Two kinds of skills reach a stella session:
+ * Three kinds of skills reach a stella session:
  *
- * - **The app's own** — the built-in ones, plus whatever the host user keeps
- *   in `~/.agents/skills`. Reading those from the host is deliberate: they are
- *   the user's standing instructions, not files in the machine, and an agent
- *   that ignored them would not be the same assistant the user configured.
- * - **The machine's** — `<home>/.agents/skills` inside the VM, so a skill the
- *   agent writes while working is one it can also load. This is the only part
- *   that has to cross the boundary, and it does so through the session's exec
- *   seam.
+ * - **The agent's own** — `<its working folder>/.agents/skills` inside the
+ *   VM, so a skill the agent writes while working is one it can also load,
+ *   and two agents never share a catalog by accident.
+ * - **The machine's shared** — `/home/agent/.agents/skills`, read by every
+ *   conversation on the machine. A skill that is not about one agent's work
+ *   lives here, and the agent writes it with the same file tools.
+ * - **The app's and the user's** — the built-ins, plus whatever the host user
+ *   keeps in `~/.agents/skills`. Reading those from the host is deliberate:
+ *   they are the user's standing instructions, not files in the machine, and
+ *   an agent that ignored them would not be the same assistant the user
+ *   configured. They are read-only to the machine (the host is not mounted).
  *
- * Precedence follows the host's rule: a machine skill shadows a global one of
- * the same name, and any user skill shadows a built-in.
+ * Precedence follows the host's rule: the agent's own skill shadows the
+ * machine's shared one of the same name, which shadows a host-global one,
+ * which shadows a built-in.
  */
 import { posix } from "node:path";
 import type { SkillDef } from "../skills/discover.ts";
 import { discoverSkills, MAX_SKILL_FILE_BYTES } from "../skills/discover.ts";
 import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
 import type { VmExec } from "./container.ts";
-import { VM_SKILLS_DIR } from "./contract.ts";
+import { VM_SKILLS_DIR, vmAgentSkillsDir } from "./contract.ts";
 
 /** A skill read never takes longer than this. */
 const SKILL_READ_TIMEOUT_MS = 30_000;
 
 /**
- * Skills found in the machine's `.agents/skills`, plus the built-ins and
- * host-global skills a session without a workspace would get.
+ * The catalog of one stella agent: its own skills, the machine's shared
+ * folder, and the built-ins and host-global skills a session without a
+ * workspace would get.
  *
- * Asynchronous because the machine's directory is listed over `podman exec`;
+ * Asynchronous because the machine's folders are listed over `podman exec`;
  * the host-global part is the same discovery every chat session uses, so a
  * user's standing skills behave identically in both modes.
  */
 export async function discoverVmSkills(options: {
   exec: VmExec;
+  /** The agent whose own skills folder is read. */
+  agentId: string;
   /** Built-in skills for this session (browser / computer variants). */
   builtinSkills: SkillDef[];
   /** Global skills directories to scan instead of the real home (tests). */
   globalDirs?: string[];
 }): Promise<SkillDef[]> {
-  const vmSkills = await scanVmSkillsDir(options.exec, VM_SKILLS_DIR);
-  // Host-global skills first (they are the user's standing configuration),
-  // then the machine's own, so a machine skill wins a name collision.
+  // Two folders, one round trip each; the agent's own is scanned at the same
+  // time as the shared one rather than after it.
+  const [agentSkills, sharedSkills] = await Promise.all([
+    scanVmSkillsDir(options.exec, vmAgentSkillsDir(options.agentId)),
+    scanVmSkillsDir(options.exec, VM_SKILLS_DIR, "app"),
+  ]);
+  // Host-global skills and the built-ins first (they are the user's standing
+  // configuration and the app's fallback), then the machine's shared folder,
+  // then the agent's own: each layer overwrites a name it shares with the
+  // one below.
   const hostGlobal = discoverSkills([], {
     builtinSkills: options.builtinSkills,
     ...(options.globalDirs !== undefined
@@ -53,20 +67,20 @@ export async function discoverVmSkills(options: {
   for (const skill of hostGlobal) {
     if (!byName.has(skill.name)) byName.set(skill.name, skill);
   }
-  for (const skill of vmSkills) {
-    byName.set(skill.name, skill);
-  }
+  for (const skill of sharedSkills) byName.set(skill.name, skill);
+  for (const skill of agentSkills) byName.set(skill.name, skill);
   return [...byName.values()];
 }
 
 /**
- * Read the machine's skills directory. Each skill is a directory holding a
- * `SKILL.md` whose frontmatter names it (the same rule the host applies: the
- * name must match the directory, otherwise it is not loadable).
+ * Read a skills directory inside the machine. Each skill is a directory
+ * holding a `SKILL.md` whose frontmatter names it (the same rule the host
+ * applies: the name must match the directory, otherwise it is not loadable).
  */
 export async function scanVmSkillsDir(
   exec: VmExec,
   dir: string,
+  source: SkillDef["source"] = "workspace",
 ): Promise<SkillDef[]> {
   // One call lists the candidate directories and their SKILL.md bodies,
   // separated by a marker line, so a catalog read costs one round trip rather
@@ -111,7 +125,7 @@ export async function scanVmSkillsDir(
       description: meta.description,
       path: `${skillDir}/SKILL.md`,
       dir: skillDir,
-      source: "workspace",
+      source,
       read: (relativePath) =>
         readVmSkillFile(exec, skillDir, dirName, relativePath),
     });

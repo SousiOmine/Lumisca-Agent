@@ -208,3 +208,15 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
 - **座標を持つ 2 つのスクリーンショット**（`computer_screenshot` / `vm_screenshot`）も同じ規則で縮めます。縮小は縦横同じ倍率で、結果の文に**画面の寸法と倍率**を必ず書きます（`computer_screenshot` は `screen = round(image / scale)`、`vm_screenshot` は「画像の位置 × 倍率」）。倍率を書かないと、モデルが画像から読んだ位置とクリック先がずれます。
 - **プロンプト添付**は `packages/server/routes/session-requests.ts` の `preparePromptImages` を通します。code mode はメッセージに、stella はマシンに書くため、2 つのルートの両方から呼びます。
 - **原ファイルとユーザーへ送るファイルは触りません**。`chat_attach` / `send_chat` / `visual` はセッションのアセット置き場（4 MiB 上限）にそのままのバイト列を書きます。
+
+## 11. スキルの作成・書き換え
+
+スキルは会話から作れます。作成用のツールはありません。スキルはフォルダと `SKILL.md` なので、`read` / `write` / `edit` / `list_dir` で書き（削除だけ `bash` の `rm`）、書き方は組み込みスキル `skill-authoring` が教えます。
+
+- **置き場所は 4 つ**: ワークスペースの `.agents/skills`（プロジェクトのもの。自由に編集できる）、Lumisca 用フォルダ（`<config home>/lumisca-agent/skills`。code mode の全エージェントが読む）、`~/.agents/skills`（ユーザーのもの。エージェントからは読むだけ）、組み込み。
+- **stella は別**: エージェント自身の `/home/agent/agents/<agent id>/.agents/skills` と、マシン共通の `/home/agent/.agents/skills`。ホストの Lumisca 用フォルダは読みません（共通フォルダはモードごとに別）。
+- **Lumisca 用フォルダはファイルツールの追加ルート**: `Sandbox` の `extraRoots` に入り、絶対パスでだけ届きます。フォルダ名による相対パス解決には参加しないので、リポジトリに `skills/` があっても曖昧になりません。ツール出力の退避先に使う `roots[0]` はワークスペースのままです。
+- **`skill` ツールは一覧を毎回引き直す**: カタログ provider と同じディスカバリを呼ぶので、書いたスキルを同じ run で読めます。固定配列に戻すと「一覧には出るが `Unknown skill`」になります。
+- **カタログはエージェント単位（stella）**: `StellaMachine` のキャッシュは `agentId` ごとで、`primeStellaSkills(agentId)` が会話を開く前に読みます。`/home/agent/.agents/skills` は共通なので全エージェントに出ます。
+- **ガイドの広告条件**: ファイルツールを持つセッションだけ（chat には出さない）。stella では共通フォルダのパスをマシン側のものにして渡します（`BuiltinContext.skillAuthoring`）。
+- **テストの隔離**: `LumiscaCore.forTesting` は `appSkillDirs: []` を渡します。ディレクトリを配線するときは `globalSkillDirs` と同じく core → pool → toolsets / task-hub へ通してください（渡し忘れると、ツールの一覧だけが開発機のフォルダを見ます）。

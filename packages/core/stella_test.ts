@@ -444,7 +444,7 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   };
   const tools = createStellaTools({
     backends: hostBackends(workspace),
-    skills: [],
+    skills: () => [],
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ entries: () => [] }),
     sendChat: {
@@ -524,7 +524,7 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
       createdAt: 0,
       chat: true,
     }),
-    skills: [],
+    skills: () => [],
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ entries: () => [] }),
     sendChat: {
@@ -1065,7 +1065,7 @@ Deno.test("stella conversation: a skill in the machine reaches the published cat
     const session = await core.getOrCreateStellaSession(agent.id);
 
     // The skill tool can load it...
-    const skills = core.listStellaSkills();
+    const skills = core.listStellaSkills(agent.id);
     assert(
       skills.some((skill) => skill.name === "vm-notes"),
       JSON.stringify(skills),
@@ -1089,6 +1089,99 @@ Deno.test("stella conversation: a skill in the machine reaches the published cat
     await core.close();
   }
 });
+
+Deno.test("stella conversation: two agents do not share their own skills", async () => {
+  const faux = fauxProvider();
+  // The machine answers per directory: each agent's own folder and the
+  // machine-wide folder hold different lists, which is what makes a
+  // per-agent catalog observable here.
+  const byDir = new Map<string, Array<{ name: string; description: string }>>();
+  const core = LumiscaCore.forTesting(
+    [faux.provider],
+    () => ({}),
+    {
+      run: (command: readonly string[]) => {
+        const stdout = command.join(" ").includes(".agents/skills")
+          ? listingOf(byDir.get(command[command.length - 1] ?? "") ?? [])
+          : "";
+        return Promise.resolve({
+          exitCode: 0,
+          stdout,
+          stderr: "",
+          truncated: false,
+          timedOut: false,
+        });
+      },
+      runBytes: () =>
+        Promise.resolve({
+          exitCode: 0,
+          stdout: new Uint8Array(),
+          stderr: "",
+          truncated: false,
+          timedOut: false,
+        }),
+    },
+  );
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  core.setStellaVm(fakeVm(RUNNING));
+  try {
+    const first = core.createStellaAgent({ name: "First", role: "One." });
+    const second = core.createStellaAgent({ name: "Second", role: "Two." });
+    byDir.set(`/home/agent/agents/${first.id}/.agents/skills`, [{
+      name: "only-for-first",
+      description: "First's own skill.",
+    }]);
+    byDir.set("/home/agent/.agents/skills", [{
+      name: "for-everyone",
+      description: "The machine-wide skill.",
+    }]);
+
+    const sessionA = await core.getOrCreateStellaSession(first.id);
+    await core.getOrCreateStellaSession(second.id);
+
+    const namesA = core.listStellaSkills(first.id).map((s) => s.name);
+    const namesB = core.listStellaSkills(second.id).map((s) => s.name);
+    // Each agent sees its own skill and the machine-wide one...
+    assert(namesA.includes("only-for-first"), JSON.stringify(namesA));
+    assert(namesA.includes("for-everyone"), JSON.stringify(namesA));
+    assert(namesB.includes("for-everyone"), JSON.stringify(namesB));
+    // ...and not the other agent's.
+    assertEquals(
+      namesB.includes("only-for-first"),
+      false,
+      JSON.stringify(namesB),
+    );
+    // The machine has file tools, so the guide that teaches writing a skill
+    // is advertised (unlike a chat session, which cannot write one).
+    assert(namesA.includes("skill-authoring"), JSON.stringify(namesA));
+
+    // The catalog the model reads is the same per-agent list.
+    faux.setResponses([fauxAssistantMessage("ok")]);
+    await promptSession(core, sessionA.id, "what can you do?");
+    const published = core.getAgent(sessionA.id)!.messages.find((message) =>
+      message.role === "context" && message.provider === "skills"
+    );
+    assert(published !== undefined, "the skill catalog must be published");
+    if (published.role !== "context") throw new Error("unreachable");
+    assert(published.body.includes("only-for-first"), published.body);
+    assert(published.body.includes("for-everyone"), published.body);
+  } finally {
+    await core.close();
+  }
+});
+
+/** The listing of one skills folder as `scanVmSkillsDir` asks for it. */
+function listingOf(
+  skills: Array<{ name: string; description: string }>,
+): string {
+  return skills
+    .map((skill) =>
+      `\n__SKILL__${skill.name}\n---\nname: ${skill.name}\n` +
+      `description: ${skill.description}\n---\n\nBody.\n`
+    )
+    .join("");
+}
 
 Deno.test("stella agents: an unnamed agent gets a free default name", async () => {
   const core = await stellaCore(RUNNING);
