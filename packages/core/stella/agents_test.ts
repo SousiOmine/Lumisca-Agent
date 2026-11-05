@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import {
   createAgentRepo,
@@ -343,7 +344,13 @@ async function agentToolFixture(
   path: (name: string) => string;
   cleanup: () => Promise<void>;
 }> {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-agent-create-" });
+  // Realpath'd: the sandbox resolves its roots through realpath (which is
+  // what makes a symlinked or 8.3-short temp path — Windows `RUNNER~1`,
+  // macOS `/var` → `/private/var` — compare equal to the path a tool
+  // reports), so `path()` must hand out the same canonical form.
+  const root = realpathSync(
+    await Deno.makeTempDir({ prefix: "lumisca-agent-create-" }),
+  );
   for (const [name, data] of Object.entries(options.files ?? {})) {
     if (typeof data === "string") {
       await Deno.writeTextFile(join(root, name), data);
