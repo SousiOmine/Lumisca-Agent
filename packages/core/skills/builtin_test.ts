@@ -70,6 +70,9 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
   assert(agentGuide.includes("agent_create"));
   assert(agentGuide.includes("tool_search"));
   assert(agentGuide.includes("send_chat"));
+  // A long role can be a file: the guide is what teaches the tool's second
+  // argument, because the tool itself is only found through tool_search.
+  assert(agentGuide.includes("role_file"));
 
   const identityGuide = await loadSkillContent(identity);
   assert(identityGuide.includes("identity"));

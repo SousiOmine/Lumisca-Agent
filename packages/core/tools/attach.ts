@@ -7,7 +7,7 @@ import {
 } from "../shared/mod.ts";
 import type { SessionAttachmentStore } from "../session/attachments.ts";
 import type { FileBackend } from "./file-backend.ts";
-import { requireExistingFile } from "./resolve.ts";
+import { requireExistingFileWithSize } from "./resolve.ts";
 import {
   array,
   object,
@@ -77,9 +77,8 @@ export async function attachFiles(
 
   for (const requested of paths) {
     signal?.throwIfAborted();
-    const path = await requireExistingFile(files, requested);
-    const stat = await files.stat(path);
-    if ((stat?.size ?? 0) > MAX_ATTACHMENT_BYTES) {
+    const { path, size } = await requireExistingFileWithSize(files, requested);
+    if (size > MAX_ATTACHMENT_BYTES) {
       throw new Error(
         `${requested} is larger than ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} ` +
           "MiB; send it in a form that fits",

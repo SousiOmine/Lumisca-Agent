@@ -1,4 +1,5 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { join } from "node:path";
 import {
   createAgentRepo,
   DEFAULT_AGENT_NAME,
@@ -6,10 +7,13 @@ import {
   MAX_AGENT_NAME_CHARS,
   MAX_AGENT_ROLE_CHARS,
   normalizeAgentInput,
+  type StellaAgent,
 } from "./agents.ts";
 import { createAgentCreateTool } from "./tools.ts";
 import { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
+import { HostFileBackend } from "../tools/host/files.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 
 /**
  * stella's agents: the counterparts a user talks to.
@@ -324,13 +328,36 @@ Deno.test("agents: a patch for a missing agent fails instead of being lost", () 
 
 // --- the creation tool ------------------------------------------------------
 
-Deno.test("agent_create: creates through the core's own entry point", async () => {
+/** A creation tool over a real file backend: `files` are written into its
+ * root, so a `role_file` goes through the same resolve → stat → read path
+ * the tool uses in a session, and every agent it creates is recorded. */
+async function agentToolFixture(
+  options: {
+    files?: Record<string, string | Uint8Array>;
+    /** Replaces the core's create, for the tests about its own rules. */
+    create?: (input: { name: string; role: string }) => StellaAgent;
+  } = {},
+): Promise<{
+  tool: ReturnType<typeof createAgentCreateTool>;
+  created: Array<{ name: string; role: string }>;
+  path: (name: string) => string;
+  cleanup: () => Promise<void>;
+}> {
+  const root = await Deno.makeTempDir({ prefix: "lumisca-agent-create-" });
+  for (const [name, data] of Object.entries(options.files ?? {})) {
+    if (typeof data === "string") {
+      await Deno.writeTextFile(join(root, name), data);
+    } else {
+      await Deno.writeFile(join(root, name), data);
+    }
+  }
   const created: Array<{ name: string; role: string }> = [];
   const tool = createAgentCreateTool({
-    create: (input) => {
+    files: new HostFileBackend(new Sandbox([root])),
+    create: options.create ?? ((input) => {
       created.push(input);
       return {
-        id: "a1",
+        id: `a${created.length}`,
         name: input.name,
         role: input.role,
         identity: "",
@@ -338,27 +365,208 @@ Deno.test("agent_create: creates through the core's own entry point", async () =
         createdAt: 0,
         updatedAt: 0,
       };
+    }),
+  });
+  return {
+    tool,
+    created,
+    path: (name) => join(root, name),
+    cleanup: () => Deno.remove(root, { recursive: true }),
+  };
+}
+
+Deno.test("agent_create: creates through the core's own entry point", async () => {
+  const test = await agentToolFixture();
+  try {
+    const result = await test.tool.execute(
+      "1",
+      { name: "Researcher", role: "Read papers and summarize." },
+      undefined,
+    );
+    assertEquals(test.created, [{
+      name: "Researcher",
+      role: "Read papers and summarize.",
+    }]);
+    const text = result.content[0];
+    assert(text?.type === "text");
+    assert(text.text.includes('"Researcher"'), text.text);
+    // The tool says what the user must do next: the sidebar, not this
+    // conversation.
+    assert(text.text.includes("sidebar"), text.text);
+  } finally {
+    await test.cleanup();
+  }
+});
+
+Deno.test("agent_create: the role is read from a file in the machine", async () => {
+  const brief = "# Researcher\n\nRead papers and summarize them.\n";
+  const test = await agentToolFixture({ files: { "brief.md": brief } });
+  try {
+    const result = await test.tool.execute(
+      "1",
+      { name: "Researcher", role_file: test.path("brief.md") },
+      undefined,
+    );
+    // The file's text is what the core receives: the model never has to
+    // write the brief out again.
+    assertEquals(test.created, [{ name: "Researcher", role: brief }]);
+    const text = result.content[0];
+    assert(text?.type === "text");
+    // The result names the file that was read (the role itself is stored on
+    // the agent; the file is not kept anywhere).
+    assert(text.text.includes(test.path("brief.md")), text.text);
+  } finally {
+    await test.cleanup();
+  }
+});
+
+Deno.test("agent_create: role and role_file are alternatives, not a pair", async () => {
+  const test = await agentToolFixture({
+    files: { "role.md": "From the file." },
+  });
+  try {
+    const both = await assertRejects(
+      () =>
+        test.tool.execute(
+          "1",
+          { name: "Both", role: "Inline.", role_file: test.path("role.md") },
+          undefined,
+        ),
+      CoreError,
+    );
+    assertEquals(both.kind, "invalid");
+    const neither = await assertRejects(
+      () => test.tool.execute("1", { name: "Neither" }, undefined),
+      CoreError,
+    );
+    assertEquals(neither.kind, "invalid");
+    // Neither attempt created an agent.
+    assertEquals(test.created, []);
+    // A model fills a field it chose not to use with null. That is "not
+    // sent": the file is used, and the null does not become the role.
+    const nulled = await test.tool.execute(
+      "1",
+      { name: "Nulled", role: null, role_file: test.path("role.md") } as never,
+      undefined,
+    );
+    assertEquals(test.created, [{ name: "Nulled", role: "From the file." }]);
+    const text = nulled.content[0];
+    assert(text?.type === "text");
+    // A null alone is still nothing to create from.
+    const onlyNull = await assertRejects(
+      () =>
+        test.tool.execute(
+          "1",
+          { name: "Nulled", role: null } as never,
+          undefined,
+        ),
+      CoreError,
+    );
+    assertEquals(onlyNull.kind, "invalid");
+  } finally {
+    await test.cleanup();
+  }
+});
+
+Deno.test("agent_create: a role file that cannot be used is refused", async () => {
+  const test = await agentToolFixture({
+    files: {
+      // Whitespace is not a role: the file was meant to hold instructions.
+      "empty.md": " \n\t\n",
+      // "Grüße" in Latin-1: not UTF-8, and a lenient decode would store
+      // mojibake as the agent's instructions.
+      "latin1.md": new Uint8Array([0x47, 0x72, 0xfc, 0xdf, 0x65]),
+      "huge.md": "x".repeat(MAX_AGENT_ROLE_CHARS * 4 + 1),
     },
   });
-  const result = await tool.execute(
-    "1",
-    { name: "Researcher", role: "Read papers and summarize." },
-    undefined,
-  );
-  assertEquals(created, [{
-    name: "Researcher",
-    role: "Read papers and summarize.",
-  }]);
-  const text = result.content[0];
-  assert(text?.type === "text");
-  assert(text.text.includes('"Researcher"'), text.text);
-  // The tool says what the user must do next: the sidebar, not this
-  // conversation.
-  assert(text.text.includes("sidebar"), text.text);
+  try {
+    const missing = await assertRejects(
+      () =>
+        test.tool.execute(
+          "1",
+          { name: "A", role_file: test.path("gone.md") },
+          undefined,
+        ),
+      CoreError,
+      "gone.md",
+    );
+    assertEquals(missing.kind, "not_found");
+    await assertRejects(
+      () =>
+        test.tool.execute(
+          "1",
+          { name: "A", role_file: test.path(".") },
+          undefined,
+        ),
+      CoreError,
+      "directory",
+    );
+    await assertRejects(
+      () =>
+        test.tool.execute(
+          "1",
+          { name: "A", role_file: test.path("empty.md") },
+          undefined,
+        ),
+      CoreError,
+      "empty",
+    );
+    await assertRejects(
+      () =>
+        test.tool.execute(
+          "1",
+          { name: "A", role_file: test.path("latin1.md") },
+          undefined,
+        ),
+      CoreError,
+      "UTF-8",
+    );
+    // Over the byte bound: refused before it is transferred, and the
+    // character limit is what the message names.
+    await assertRejects(
+      () =>
+        test.tool.execute(
+          "1",
+          { name: "A", role_file: test.path("huge.md") },
+          undefined,
+        ),
+      CoreError,
+      "characters",
+    );
+    assertEquals(test.created, []);
+  } finally {
+    await test.cleanup();
+  }
+});
+
+Deno.test("agent_create: a role file is held to the same character limit", async () => {
+  const test = await agentToolFixture({
+    files: { "long.md": "x".repeat(MAX_AGENT_ROLE_CHARS + 1) },
+    // The core's own validation: the tool keeps no second copy of the limit,
+    // so a file cannot slip past the rule an inline role obeys.
+    create: (input) => {
+      normalizeAgentInput(input);
+      throw new Error("an over-long role must not reach the row");
+    },
+  });
+  try {
+    await assertRejects(
+      () =>
+        test.tool.execute(
+          "1",
+          { name: "Long", role_file: test.path("long.md") },
+          undefined,
+        ),
+      CoreError,
+      "at most",
+    );
+  } finally {
+    await test.cleanup();
+  }
 });
 
 Deno.test("agent_create: a taken name surfaces the core's conflict", async () => {
-  const tool = createAgentCreateTool({
+  const test = await agentToolFixture({
     create: () => {
       throw new CoreError(
         'An agent named "Aide" already exists. Choose another name.',
@@ -366,12 +574,13 @@ Deno.test("agent_create: a taken name surfaces the core's conflict", async () =>
       );
     },
   });
-  let error: unknown;
   try {
-    await tool.execute("1", { name: "Aide", role: "r" }, undefined);
-  } catch (failure) {
-    error = failure;
+    const error = await assertRejects(
+      () => test.tool.execute("1", { name: "Aide", role: "r" }, undefined),
+      CoreError,
+    );
+    assertEquals(error.kind, "conflict");
+  } finally {
+    await test.cleanup();
   }
-  assert(error instanceof CoreError, String(error));
-  assertEquals(error.kind, "conflict");
 });

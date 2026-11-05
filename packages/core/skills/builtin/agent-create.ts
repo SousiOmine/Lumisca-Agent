@@ -48,17 +48,33 @@ Ask for two things with send_chat, in one call whose card is one <Form>:
 - Name: the label in the sidebar, up to 60 characters.
 - Role: what the agent is responsible for and how it works, in one or two
   sentences — it becomes the new agent's system prompt, so it is the whole
-  of its instructions from the first turn.
+  of its instructions from the first turn. If the role is long and already
+  exists as a file, it can be passed as a file instead (see below).
 - The form is the question. Do not repeat the same questions in your text.
 
 The answer arrives as a message with "label: value" lines. Use those values
 as written; do not paraphrase, shorten or translate them.
 
+## When the role is a file
+
+A role can be long: a brief, a style guide, a full job description. If it
+already exists as a file in the machine, pass its path as role_file instead
+of copying the text into role. That covers an attachment the user sent (its
+path is in the message), a file you wrote earlier, and a file you downloaded
+or cloned.
+
+- Send either role or role_file, never both and never neither.
+- role_file is read as UTF-8 and trimmed. The tool refuses a file that is
+  empty, that is not UTF-8 text, or that is over 20,000 characters.
+- The text is stored with the agent when it is created. Editing the file
+  afterwards does not change an agent that already exists.
+
 ## Create it
 
 1. tool_search with the query "agent create" to get the arguments of
    agent_create.
-2. tool_call with name "agent_create" and those arguments: name and role.
+2. tool_call with name "agent_create" and those arguments: name, and either
+   role (the text) or role_file (a file holding it).
 3. If it fails because the name is taken, ask the user for another name. Do
    not retry the same values.
 
@@ -88,7 +104,8 @@ export function agentCreateSkill(): SkillDef {
       "Creating another agent (a counterpart with its own name, role and " +
       "conversation): when a job needs a separate one, asking the user for " +
       "the name and role in a card, and creating it with agent_create — a " +
-      "tool that is not preloaded, so find it with tool_search first.",
+      "tool that is not preloaded, so find it with tool_search first. A long " +
+      "role can be a text file in the machine instead of inline text.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

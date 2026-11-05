@@ -305,13 +305,17 @@ export class StellaMachines {
     // boundary — the file backend's root is the machine's home, so one agent
     // can reach another's folder when the user asks (see vm/fs.ts).
     const cwd = vmAgentDir(agentId);
+    // One backend for the whole runtime: the file tools and `agent_create`
+    // resolve paths the same way, so a role file is exactly a file this
+    // agent may read.
+    const files = new VmFileBackend(exec, { cwd });
     const identity: IdentityTarget = {
       read: () => this.deps.agents.get(agentId)?.identity ?? "",
       write: (content) => this.deps.agents.writeIdentity(agentId, content),
     };
     return {
       cwd,
-      files: new VmFileBackend(exec, { cwd }),
+      files,
       runner: new VmCommandRunnerImpl(exec),
       backgroundSpawner: new VmBackgroundSpawner(exec),
       skills,
@@ -331,8 +335,11 @@ export class StellaMachines {
         agentId: session.agentId ?? "",
       }),
       // The tool goes through the same entry point as the API, so the
-      // duplicate-name rule is enforced once.
+      // duplicate-name rule is enforced once. It reads a `role_file` through
+      // the session's own backend, so a role file is a file the agent could
+      // have read itself.
       agentTool: createAgentCreateTool({
+        files,
         create: (input) => this.deps.createStellaAgent(input),
       }),
       // The history of THIS conversation: each stella agent has its own
