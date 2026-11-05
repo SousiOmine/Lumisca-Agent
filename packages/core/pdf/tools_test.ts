@@ -20,6 +20,7 @@ import {
 import {
   makeRealTempDir,
   MINI_PNG,
+  noisyPng,
   removeDirRetry,
   toolText,
 } from "../test-utils.ts";
@@ -102,6 +103,45 @@ Deno.test("pdf tool renders requested pages as image blocks", async () => {
       totalPages: 2,
       dpi: DEFAULT_PDF_DPI,
     });
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("pdf tool stores a page at the model's budget", async () => {
+  const { root, folder } = await fixture();
+  try {
+    const page = await noisyPng(1800, 1200);
+    const tool = createPdfTools({
+      files: new HostFileBackend(new Sandbox([root])),
+      renderer: {
+        render: (_source, requested) =>
+          Promise.resolve({
+            totalPages: requested.length,
+            pages: requested.map((number) => ({
+              page: number,
+              png: page,
+              width: 1800,
+              height: 1200,
+            })),
+          }),
+      },
+    })[0]!;
+    const result = await tool.execute("id", {
+      path: `${folder}/doc.pdf`,
+      pages: [1],
+    });
+    const images = result.content.filter((c) => c.type === "image");
+    assertEquals(images.length, 1);
+    const decoded = Uint8Array.from(
+      atob(images[0]!.data),
+      (c) => c.charCodeAt(0),
+    );
+    // The transcript keeps the smaller copy, and the line says what it was
+    // made from so a reader can tell it from the rendered page.
+    assert(decoded.byteLength < page.byteLength);
+    const text = toolText(result);
+    assert(text.includes("downscaled from 1800x1200"), `line: ${text}`);
   } finally {
     await removeDirRetry(root);
   }

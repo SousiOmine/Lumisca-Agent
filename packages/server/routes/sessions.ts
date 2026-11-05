@@ -17,7 +17,11 @@ import type {
   WindowQuery,
 } from "@lumisca/core";
 import { AppError, parseBody, parseWindowQuery } from "./util.ts";
-import { parsePromptBody, type PromptBody } from "./session-requests.ts";
+import {
+  parsePromptBody,
+  preparePromptImages,
+  type PromptBody,
+} from "./session-requests.ts";
 import { conversationRoutes } from "./conversation.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -343,6 +347,9 @@ export function sessionRoutes(core: SessionApi): Hono {
     const { text, images, files, mode } = parsePromptBody(body ?? {});
     const id = c.req.param("id");
     requireSession(id);
+    // The pictures live in the message, so they are bounded before the
+    // message is built (see preparePromptImages).
+    const bounded = await preparePromptImages(images);
     // The uploads are written into the machine before the run starts, so a
     // prompt whose file could not be stored never reaches the model; that is
     // the one part of this call that is awaited. After it, the run is
@@ -350,7 +357,7 @@ export function sessionRoutes(core: SessionApi): Hono {
     const saved = files === undefined
       ? undefined
       : await core.savePromptUploads(id, files);
-    core.startPrompt(id, text, images, mode, saved);
+    core.startPrompt(id, text, bounded, mode, saved);
     return c.json({ ok: true });
   });
 

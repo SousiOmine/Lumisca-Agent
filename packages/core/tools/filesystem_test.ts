@@ -10,6 +10,7 @@ import {
 import {
   makeRealTempDir,
   MINI_PNG,
+  noisyPng,
   removeDirRetry,
   toolText,
 } from "../test-utils.ts";
@@ -56,6 +57,36 @@ Deno.test("read passes raster images to the model as image blocks", async () => 
     // A text note keeps the image visible in text-only UIs.
     const text = toolText(result);
     assert(text.includes("[image: pic.png"), `note missing: ${text}`);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("read stores a bounded copy of a large image", async () => {
+  const root = await makeRealTempDir("lumisca-read-big-");
+  const folder = basename(root);
+  try {
+    const png = await noisyPng(1800, 1200);
+    await Deno.writeFile(join(root, "big.png"), png);
+    const result = await makeRead(root).execute("id", {
+      path: `${folder}/big.png`,
+    });
+    const images = result.content.filter((c) => c.type === "image");
+    assertEquals(images.length, 1);
+    const image = images[0]!;
+    const decoded = Uint8Array.from(atob(image.data), (c) => c.charCodeAt(0));
+    assert(
+      decoded.byteLength < png.byteLength,
+      `stored copy must be smaller (${decoded.byteLength} vs ${png.byteLength})`,
+    );
+    assertEquals(
+      image.mimeType,
+      decoded[0] === 0x89 ? "image/png" : "image/jpeg",
+    );
+    // The note describes the copy the model reads, and says what it was
+    // made from: the file on disk still has all 1800x1200 pixels.
+    const text = toolText(result);
+    assert(text.includes("downscaled from 1800×1200"), `note: ${text}`);
   } finally {
     await removeDirRetry(root);
   }

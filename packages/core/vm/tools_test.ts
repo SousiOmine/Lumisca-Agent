@@ -1,4 +1,7 @@
 import { assert, assertEquals } from "@std/assert";
+import { loadImage } from "@napi-rs/canvas";
+import { base64ToBytes } from "../base64.ts";
+import { noisyPng } from "../test-utils.ts";
 import { scanVmSkillsDir } from "./skills.ts";
 import { createVmTools } from "./tools.ts";
 import { createVmScreen, scrollNotches } from "./screen.ts";
@@ -115,7 +118,7 @@ Deno.test("vm skills: a missing skills directory yields an empty catalog", async
 
 const enclosing = (overrides: {
   exec?: ReturnType<typeof exec>;
-  bytes?: string;
+  bytes?: string | Uint8Array;
 } = {}) => {
   const scripted = overrides.exec ?? exec([]);
   const screen = createVmScreen({
@@ -126,7 +129,11 @@ const enclosing = (overrides: {
     ): Promise<VmCommandBytesResult> =>
       Promise.resolve({
         exitCode: 0,
-        stdout: new TextEncoder().encode(overrides.bytes ?? "png"),
+        stdout: overrides.bytes === undefined
+          ? new TextEncoder().encode("png")
+          : typeof overrides.bytes === "string"
+          ? new TextEncoder().encode(overrides.bytes)
+          : overrides.bytes,
         stderr: "",
         truncated: false,
         timedOut: false,
@@ -147,6 +154,67 @@ Deno.test("vm tools: the screenshot reports the 1:1 coordinate contract", async 
   assert(
     text.text.includes(`${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT}`),
     text.text,
+  );
+});
+
+Deno.test("vm tools: the stored screenshot keeps its shape and names the screen", async () => {
+  const png = await noisyPng(VM_SCREEN_WIDTH, VM_SCREEN_HEIGHT);
+  const { tools } = enclosing({ bytes: png });
+  const screenshot = tools[0];
+  assert(screenshot !== undefined);
+  const result = await screenshot.execute("1", {}, undefined);
+  const images = result.content.filter((item) => item.type === "image");
+  assertEquals(images.length, 1);
+  const stored = await loadImage(base64ToBytes(images[0]!.data));
+  // Bounded copy, same shape: a position read off it stays convertible with
+  // one factor.
+  assert(stored.width <= VM_SCREEN_WIDTH);
+  assert(
+    Math.abs(
+      stored.width / stored.height - VM_SCREEN_WIDTH / VM_SCREEN_HEIGHT,
+    ) < 0.01,
+    `aspect ratio: ${stored.width}x${stored.height}`,
+  );
+  const text = result.content[0];
+  assert(text?.type === "text");
+  assert(
+    text.text.includes(
+      `The screen is ${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT} pixels`,
+    ),
+    text.text,
+  );
+  // The two sizes are named apart: the screen is always the contract size.
+  assertEquals(result.details["screen"], {
+    width: VM_SCREEN_WIDTH,
+    height: VM_SCREEN_HEIGHT,
+  });
+  assertEquals(result.details["image"], {
+    width: stored.width,
+    height: stored.height,
+  });
+});
+
+Deno.test("vm tools: a shrunk copy states the screen-to-image factor", async () => {
+  // The store shrinks a capture over its byte budget. The VM screen is
+  // 1280x800 today, so this hands the tool a bigger frame to exercise the
+  // branch that has to explain the ratio.
+  const png = await noisyPng(2000, 1250);
+  const { tools } = enclosing({ bytes: png });
+  const screenshot = tools[0]!;
+  const result = await screenshot.execute("1", {}, undefined);
+  const images = result.content.filter((item) => item.type === "image");
+  const stored = await loadImage(base64ToBytes(images[0]!.data));
+  assert(stored.width < 2000, `the copy must shrink: ${stored.width}`);
+  assert(
+    Math.abs(stored.width / stored.height - 2000 / 1250) < 0.01,
+    `aspect ratio: ${stored.width}x${stored.height}`,
+  );
+  const text = result.content[0];
+  assert(text?.type === "text");
+  const factor = VM_SCREEN_WIDTH / stored.width;
+  assert(
+    text.text.includes(`by ${factor.toFixed(3)}`),
+    `factor ${factor.toFixed(3)} missing: ${text.text}`,
   );
 });
 

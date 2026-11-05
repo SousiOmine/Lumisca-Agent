@@ -123,6 +123,46 @@ export const MINI_PNG: Uint8Array = new Uint8Array([
   0x82,
 ]);
 
+/**
+ * A PNG of `width` x `height` filled with noise: the fixture for the tests
+ * that need an image over a byte budget. Noise is what makes a picture big
+ * (a solid colour compresses to nothing). `alpha` below 255 makes it
+ * transparent.
+ *
+ * The canvas module is imported here rather than at the top of this file:
+ * most suites never need an image, and Skia is a native library (see
+ * media/preview.ts for why that matters).
+ */
+export async function noisyPng(
+  width: number,
+  height: number,
+  alpha = 255,
+): Promise<Uint8Array> {
+  const { createCanvas } = await import("@napi-rs/canvas");
+  const canvas = createCanvas(width, height);
+  const context = canvas.getContext("2d");
+  const image = context.createImageData(width, height);
+  // A seeded xorshift: the same picture every run, and no repeating motif
+  // for the PNG encoder to find.
+  let seed = 0x2545f491;
+  const next = (): number => {
+    seed ^= seed << 13;
+    seed >>>= 0;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    seed >>>= 0;
+    return seed & 0xff;
+  };
+  for (let i = 0; i < image.data.length; i += 4) {
+    image.data[i] = next();
+    image.data[i + 1] = next();
+    image.data[i + 2] = next();
+    image.data[i + 3] = alpha;
+  }
+  context.putImageData(image, 0, 0);
+  return new Uint8Array(canvas.toBuffer("image/png"));
+}
+
 /** Minimal content shape of a tool result; accepts both `{type: string}`
  * and narrower `{type: "text" | "image"}` variants. */
 export interface ToolResultLike {

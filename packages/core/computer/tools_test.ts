@@ -223,6 +223,78 @@ Deno.test("screenshot scales to max_dimension and reports the exact scale", asyn
   assert(text.includes("round(image / 0.500) + (0, 0)"), text);
 });
 
+/** A host whose frames are noise. The uniform fill above encodes to a few
+ * hundred bytes; the point here is a capture over the transcript's byte
+ * budget. */
+class NoisyHost extends FakeHost {
+  constructor(width: number, height: number) {
+    super();
+    this.displayList = [{
+      index: 0,
+      primary: true,
+      bounds: { x: 0, y: 0, width, height },
+    }];
+  }
+
+  override capture(region: Rect): Promise<RawCapture> {
+    const pixels = new Uint8Array(region.width * region.height * 4);
+    let seed = 0x2545f491;
+    for (let i = 0; i < pixels.length; i += 4) {
+      seed ^= seed << 13;
+      seed >>>= 0;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      seed >>>= 0;
+      pixels[i] = seed & 0xff;
+      pixels[i + 1] = (seed >>> 8) & 0xff;
+      pixels[i + 2] = (seed >>> 16) & 0xff;
+      pixels[i + 3] = 0xff;
+    }
+    return Promise.resolve({
+      screen: region,
+      pixels,
+      width: region.width,
+      height: region.height,
+    });
+  }
+}
+
+Deno.test("screenshot maps a resized copy back to the screen", async () => {
+  // A 4K-sized display captured 1:1: the transcript copy is bounded, so the
+  // picture comes back smaller than the screen.
+  const host = new NoisyHost(3000, 2000);
+  const family = tools(host);
+  const shot = await family.screenshot.execute("id", {
+    max_dimension: 4096,
+  });
+  const scale = shot.details["scale"] as number;
+  const image = shot.details["image"] as { width: number; height: number };
+  assert(scale < 1, `the copy must be resized for this test (scale ${scale})`);
+  assert(image.width <= 1568 && image.width < 3000);
+  assert(
+    Math.abs(image.width / image.height - 3000 / 2000) < 0.01,
+    `aspect ratio: ${image.width}x${image.height}`,
+  );
+  const text = toolText(shot);
+  assert(text.includes(`image ${image.width}×${image.height}`), text);
+  assert(text.includes(`round(image / ${scale.toFixed(3)})`), text);
+  const images = shot.content.filter((block) => block.type === "image");
+  assertEquals(images[0]!.mimeType, "image/jpeg");
+
+  // A position read off the copy lands on the screen pixel it shows (within
+  // the pixel the two roundings can cost).
+  const screen = { x: 1000, y: 700 };
+  await family.act.execute("id", {
+    action: "click",
+    x: Math.round(screen.x * scale),
+    y: Math.round(screen.y * scale),
+  });
+  const click = host.actions.at(-1)!;
+  assert(click.kind === "click", `unexpected action ${click.kind}`);
+  assert(Math.abs(click.x - screen.x) <= 1, `x: ${click.x}`);
+  assert(Math.abs(click.y - screen.y) <= 1, `y: ${click.y}`);
+});
+
 Deno.test("screenshot resolves a display index", async () => {
   const host = new FakeHost();
   const result = await tools(host).screenshot.execute("id", { display: 1 });

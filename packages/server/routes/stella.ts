@@ -28,7 +28,11 @@ import {
   parseWindowQuery,
   requireNonEmptyString,
 } from "./util.ts";
-import { parsePromptBody, type PromptBody } from "./session-requests.ts";
+import {
+  parsePromptBody,
+  preparePromptImages,
+  type PromptBody,
+} from "./session-requests.ts";
 import { conversationRoutes } from "./conversation.ts";
 import { createEventStream } from "./ws-stream.ts";
 
@@ -377,12 +381,15 @@ export function stellaRoutes(core: StellaApi): Hono {
     // the model is told their paths. A picture kept as a byte block in the
     // message would put it in the database for the life of the conversation,
     // and a conversation lives for years (see ai/types.ts UserMessage.files).
+    // The copy written into the machine gets the same bound as a stored one
+    // (see preparePromptImages).
+    const bounded = await preparePromptImages(images);
     const attachments = [
       ...(files ?? []).map((file) => ({
         name: file.name,
         bytes: file.bytes,
       })),
-      ...(images ?? []).map((image, index) => ({
+      ...(bounded ?? []).map((image, index) => ({
         name: imageName(index, image.mimeType),
         bytes: base64ToBytes(image.data),
       })),

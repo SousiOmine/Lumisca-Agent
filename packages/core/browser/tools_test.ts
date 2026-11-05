@@ -1,4 +1,4 @@
-import { removeDirRetry } from "../test-utils.ts";
+import { noisyPng, removeDirRetry, toolText } from "../test-utils.ts";
 import { assert, assertEquals, assertMatch } from "@std/assert";
 import {
   BROWSER_TOOL_NAMES,
@@ -6,6 +6,7 @@ import {
   createBrowserToolsFrom,
   formatSnapshot,
 } from "./tools.ts";
+import { base64ToBytes, bytesToBase64 } from "../base64.ts";
 import { createChatTools, createCodingTools } from "../tools/mod.ts";
 import { ToolRegistry } from "../tools/registry.ts";
 import type { Workspace } from "../types/workspace.ts";
@@ -434,6 +435,33 @@ Deno.test("browser_screenshot returns the image as ToolResult content", async ()
     shot.execute("2", { format: "gif" }, undefined)
   );
   assertMatch(bad.message, /format must be one of png, jpeg/);
+});
+
+Deno.test("browser_screenshot keeps a bounded copy of a large capture", async () => {
+  const png = await noisyPng(2000, 1500);
+  const backend = new FakeBackend({
+    screenshot: {
+      mimeType: "image/png",
+      data: bytesToBase64(png),
+      width: 2000,
+      height: 1500,
+    },
+  });
+  const shot = createBrowserTools(backend).find((t) =>
+    t.name === TOOL_BROWSER_SCREENSHOT
+  )!;
+  const result = await shot.execute("1", {}, undefined);
+  const images = result.content.filter((c) => c.type === "image");
+  assertEquals(images.length, 1);
+  const decoded = base64ToBytes(images[0]!.data);
+  assert(decoded.byteLength < png.byteLength);
+  assertEquals(
+    images[0]!.mimeType,
+    decoded[0] === 0x89 ? "image/png" : "image/jpeg",
+  );
+  // The line names the copy the model reads, and what it was made from.
+  const text = toolText(result);
+  assert(text.includes("downscaled from 2000×1500"), `line: ${text}`);
 });
 
 Deno.test("browser_close is forwarded and backend.close is called", async () => {

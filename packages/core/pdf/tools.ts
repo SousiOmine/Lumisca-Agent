@@ -22,6 +22,7 @@ import { findCanvasIcuDataFile } from "./icu-data.ts";
 import { getDocumentProxy, renderPageAsImage } from "unpdf";
 import { errorMessage } from "../errors.ts";
 import { bytesToBase64 } from "../base64.ts";
+import { prepareStoredImage } from "../media/stored-image.ts";
 import type { FileBackend } from "../tools/file-backend.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
 import {
@@ -245,7 +246,8 @@ function createPdfReadPagesTool(
       "pixels). Use for scanned PDFs, page layout, figures, tables, or " +
       "any page where text extraction loses information. Takes a " +
       "workspace PDF path and 1-based page numbers, and returns one " +
-      "image per page plus the total page count.",
+      "image per page plus the total page count. A page is stored at most " +
+      "1568 px on its long edge, so a higher dpi adds nothing past that.",
     parameters: pdfReadPagesSchema,
     execute: async (_id, params, signal) => {
       const dpi = requireIntegerInRange(
@@ -309,13 +311,23 @@ function createPdfReadPagesTool(
         }
       > = [];
       for (const page of rendered) {
+        // A rendered page is a transcript image like any other: it is kept
+        // at the model's budget (see media/stored-image.ts), which is why a
+        // dpi above that budget sharpens nothing.
+        const stored = await prepareStoredImage(page.png, "image/png");
+        const width = stored.size?.width ?? page.width;
+        const height = stored.size?.height ?? page.height;
+        const scaled = stored.downscaledFrom === undefined
+          ? ""
+          : `, downscaled from ${page.width}x${page.height}`;
         lines.push(
-          `[image: ${base} p.${page.page} (${page.png.length} bytes, ${page.width}x${page.height})]`,
+          `[image: ${base} p.${page.page} (${stored.bytes.byteLength} bytes, ` +
+            `${width}x${height}${scaled})]`,
         );
         content.push({
           type: "image",
-          data: bytesToBase64(page.png),
-          mimeType: "image/png",
+          data: bytesToBase64(stored.bytes),
+          mimeType: stored.mimeType,
         });
       }
       return {

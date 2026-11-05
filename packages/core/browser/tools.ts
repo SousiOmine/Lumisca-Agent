@@ -33,6 +33,8 @@ import {
 } from "./types.ts";
 import { requireAllowedUrl } from "./policy.ts";
 import { CoreError } from "../errors.ts";
+import { base64ToBytes, bytesToBase64 } from "../base64.ts";
+import { prepareStoredImage } from "../media/stored-image.ts";
 import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 import {
   requireInteger,
@@ -618,8 +620,9 @@ function createBrowserScreenshotTool(
     label: "Browser Screenshot",
     description:
       "Capture the browser view as an image (PNG or JPEG) and return it " +
-      "as an image result. The image covers the active viewport at 1:1 " +
-      "(1 CSS px = 1 image px), whatever size the window is shown at.",
+      "as an image result. The image covers the active viewport; a " +
+      "viewport larger than 1568 px on a side is scaled down before it is " +
+      "sent.",
     parameters: screenshotSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const format = requireOneOf(
@@ -634,22 +637,38 @@ function createBrowserScreenshotTool(
         { format, ...(quality !== undefined ? { quality } : {}) },
         signal,
       );
-      const size = image.width !== undefined && image.height !== undefined
-        ? ` (${image.width}×${image.height})`
+      // The transcript keeps a bounded copy (see media/stored-image.ts);
+      // the capture itself is whatever the browser rendered.
+      const stored = await prepareStoredImage(
+        base64ToBytes(image.data),
+        image.mimeType,
+      );
+      const width = stored.size?.width ?? image.width;
+      const height = stored.size?.height ?? image.height;
+      const scaled = stored.downscaledFrom === undefined
+        ? ""
+        : `, downscaled from ${stored.downscaledFrom.width}×` +
+          `${stored.downscaledFrom.height}`;
+      const size = width !== undefined && height !== undefined
+        ? ` (${width}×${height}${scaled})`
         : "";
       return {
         content: [
           {
             type: "text",
-            text: `Screenshot${size} (${image.mimeType}).`,
+            text: `Screenshot${size} (${stored.mimeType}).`,
           },
-          { type: "image", data: image.data, mimeType: image.mimeType },
+          {
+            type: "image",
+            data: bytesToBase64(stored.bytes),
+            mimeType: stored.mimeType,
+          },
         ],
         details: {
-          mimeType: image.mimeType,
-          width: image.width,
-          height: image.height,
-          bytes: image.data.length,
+          mimeType: stored.mimeType,
+          width,
+          height,
+          bytes: stored.bytes.byteLength,
         },
       };
     },

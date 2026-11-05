@@ -22,6 +22,7 @@
  */
 import { CoreError } from "../errors.ts";
 import { bytesToBase64 } from "../base64.ts";
+import { prepareStoredImage } from "../media/stored-image.ts";
 import {
   TOOL_COMPUTER_ACT,
   TOOL_COMPUTER_LIST_WINDOWS,
@@ -227,11 +228,11 @@ function createScreenshotTool(
     description:
       "Capture this machine's screen as an image the model can see. " +
       "Captures a whole display by default (display index, default: the " +
-      "primary) or an explicit region in screen pixels. The image is scaled " +
-      "to fit max_dimension and the result states the exact mapping between " +
-      "image pixels and screen pixels; computer_act then takes coordinates " +
-      "in THAT image's pixels. Take a fresh screenshot after the screen " +
-      "changed. The machine is the one the server runs on.",
+      "primary) or an explicit region in screen pixels. The image may be " +
+      "scaled (aspect ratio kept); the result always states the exact " +
+      "mapping between image pixels and screen pixels, and computer_act " +
+      "takes coordinates in THAT image's pixels. Take a fresh screenshot " +
+      "after the screen changed. The machine is the one the server runs on.",
     parameters: screenshotSchema,
     execute: async (_id, params): Promise<ToolResult> => {
       const host = requireHost(options.resolveHost);
@@ -245,7 +246,16 @@ function createScreenshotTool(
       const { region, display } = resolveCaptureRegion(params, displays);
       const raw = await host.capture(region);
       const encoded = encodeCapture(raw, maxDimension);
-      const view: CaptureView = { screen: raw.screen, scale: encoded.scale };
+      // The transcript keeps a bounded copy (see media/stored-image.ts). A
+      // smaller copy is still a map of the same screen, so one ratio on both
+      // axes is all it takes: `scale` is image pixels per screen pixel, and
+      // multiplying it by the copy's own ratio keeps
+      // `screen = round(image / scale)` exact for the picture the model sees.
+      const stored = await prepareStoredImage(encoded.png, "image/png");
+      const width = stored.size?.width ?? encoded.width;
+      const height = stored.size?.height ?? encoded.height;
+      const scale = encoded.scale * (width / encoded.width);
+      const view: CaptureView = { screen: raw.screen, scale };
       state.view = view;
       const cursor = host.cursor();
 
@@ -260,8 +270,8 @@ function createScreenshotTool(
         ? " The pointer position is not reported on this platform."
         : ` Cursor at screen (${cursor.x}, ${cursor.y}).`;
       const text = [
-        `${header}; image ${encoded.width}×${encoded.height} ` +
-        `(scale ${encoded.scale.toFixed(3)}).${pointer}`,
+        `${header}; image ${width}×${height} ` +
+        `(scale ${scale.toFixed(3)}).${pointer}`,
         `Displays: ${
           displays.map((entry) =>
             describeDisplay(entry) +
@@ -278,17 +288,17 @@ function createScreenshotTool(
           { type: "text", text },
           {
             type: "image",
-            data: bytesToBase64(encoded.png),
-            mimeType: "image/png",
+            data: bytesToBase64(stored.bytes),
+            mimeType: stored.mimeType,
           },
         ],
         details: {
           ...(display !== undefined ? { display: display.index } : {}),
           screen: region,
-          image: { width: encoded.width, height: encoded.height },
-          scale: encoded.scale,
+          image: { width, height },
+          scale,
           ...(cursor !== undefined ? { cursor } : {}),
-          bytes: encoded.png.length,
+          bytes: stored.bytes.byteLength,
         },
       };
     },

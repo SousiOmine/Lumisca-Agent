@@ -199,3 +199,12 @@ stella mode は、podman コンテナを仮想マシンとして与え、その�
 - `deno task probe:stella`: stella mode がこのマシンで使えるかを確認します。`--start` を付けるとイメージのビルド・起動・画面撮影・停止まで通します（初回は数分かかります）。
 
 いずれも手動操作用で、CI からは実行しません。引数の詳細は各スクリプトの先頭コメントにあります。
+
+## 10. 画像の保存
+
+エージェントが読み込んだ画像と、プロンプトに添付された画像は、トランスクリプト（DB）に画像ブロックとして残ります。保存する前に `packages/core/media/stored-image.ts` の `prepareStoredImage` を通してください（長辺 1568px・1 MiB に収め、まだ重ければ JPEG 化します）。
+
+- **画像を返すツールは、画像ブロックを作る前にこの関数を通す**。注記には縮小後の寸法と容量を書きます（`read` の `[image: …]`、`pdf_read_pages` の頁の行、`browser_screenshot` の 1 行目）。ツールが名乗る数値と実際に保存された画像が食い違うと、モデルは別のものを見ていることになります。
+- **座標を持つ 2 つのスクリーンショット**（`computer_screenshot` / `vm_screenshot`）も同じ規則で縮めます。縮小は縦横同じ倍率で、結果の文に**画面の寸法と倍率**を必ず書きます（`computer_screenshot` は `screen = round(image / scale)`、`vm_screenshot` は「画像の位置 × 倍率」）。倍率を書かないと、モデルが画像から読んだ位置とクリック先がずれます。
+- **プロンプト添付**は `packages/server/routes/session-requests.ts` の `preparePromptImages` を通します。code mode はメッセージに、stella はマシンに書くため、2 つのルートの両方から呼びます。
+- **原ファイルとユーザーへ送るファイルは触りません**。`chat_attach` / `send_chat` / `visual` はセッションのアセット置き場（4 MiB 上限）にそのままのバイト列を書きます。

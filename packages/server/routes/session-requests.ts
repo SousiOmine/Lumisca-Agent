@@ -8,6 +8,8 @@
  * narrower parser had become.
  */
 import { base64ToBytes } from "@lumisca/core";
+import { bytesToBase64 } from "../../core/base64.ts";
+import { prepareStoredImage } from "../../core/media/stored-image.ts";
 import {
   MAX_PROMPT_FILE_BASE64_LENGTH,
   MAX_PROMPT_FILES,
@@ -191,6 +193,45 @@ export function parsePromptBody(body: PromptBody): {
     files: files.length > 0 ? files : undefined,
     mode,
   };
+}
+
+/**
+ * The images a prompt carries, as the transcript will keep them.
+ *
+ * A picture attached to a prompt is a byte block in the message, and the
+ * message is the database: a phone photo is 15 MB of bytes (20 MB of base64)
+ * and one prompt may carry eight of them. The model cannot use more than its
+ * own budget anyway (see core/media/stored-image.ts), so the copy that is
+ * stored is bounded to it. stella takes the same pictures, but writes them
+ * into the machine instead of the message — bounding them here keeps that
+ * copy small too.
+ *
+ * Both prompt surfaces call this after `parsePromptBody`, so a size limit
+ * cannot apply to one of them. A payload that is not base64 is a 400: the
+ * message stores bytes, and there is nothing to store for text that is not
+ * bytes.
+ */
+export async function preparePromptImages(
+  images: readonly ImageContent[] | undefined,
+): Promise<ImageContent[] | undefined> {
+  if (images === undefined || images.length === 0) return undefined;
+  const prepared: ImageContent[] = [];
+  for (const image of images) {
+    const stored = await prepareStoredImage(
+      decodeBase64Payload(image.data, "image"),
+      image.mimeType,
+    );
+    prepared.push(
+      stored.changed
+        ? {
+          type: "image",
+          data: bytesToBase64(stored.bytes),
+          mimeType: stored.mimeType,
+        }
+        : image,
+    );
+  }
+  return prepared;
 }
 
 /** The slice of the core these routes need (interface segregation). */

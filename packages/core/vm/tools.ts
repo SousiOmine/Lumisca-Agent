@@ -14,6 +14,7 @@
  * that does not know it can look would never try.
  */
 import { bytesToBase64 } from "../base64.ts";
+import { prepareStoredImage } from "../media/stored-image.ts";
 import { CoreError } from "../errors.ts";
 import {
   abortError,
@@ -59,9 +60,10 @@ const screenshotSchema = object({});
 const actSchema = object({
   action: string(
     'The action: "move" | "click" | "drag" | "scroll" | "type" | "key" | ' +
-      '"wait". Mouse actions take x/y in the pixels of the most recent ' +
-      "vm_screenshot (the image is 1:1 with the screen, so a position read " +
-      "off it is used as-is).",
+      '"wait". Mouse actions take x/y in screen pixels ' +
+      `(${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT}); a vm_screenshot may be ` +
+      "scaled, so multiply a position read off it by the factor that " +
+      "result states.",
   ),
   x: optional(integer("Target x in screen pixels (move / click / scroll)")),
   y: optional(integer("Target y in screen pixels (move / click / scroll)")),
@@ -101,6 +103,21 @@ export function createVmTools(options: VmToolsOptions): Tool[] {
   ];
 }
 
+/** The picture against the screen it shows. A copy the store scaled down is
+ * still a map of the same screen, so the text carries the factor: the model
+ * reads positions off the picture, and `vm_act` takes screen pixels. */
+function describeScreenshot(width: number, height: number): string {
+  const screen = `The screen is ${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT} pixels`;
+  if (width === VM_SCREEN_WIDTH && height === VM_SCREEN_HEIGHT) {
+    return `${screen}; this image is 1:1 with it, so a position read off ` +
+      "the image is a screen pixel as-is.";
+  }
+  const factor = VM_SCREEN_WIDTH / width;
+  return `${screen}; this image is ${width}x${height}, so multiply a ` +
+    `position read off the image by ${factor.toFixed(3)} to get the screen ` +
+    "pixel vm_act takes.";
+}
+
 function createScreenshotTool(
   { screen }: VmToolsOptions,
 ): Tool<typeof screenshotSchema> {
@@ -116,17 +133,29 @@ function createScreenshotTool(
     parameters: screenshotSchema,
     execute: async (_id, _params, signal): Promise<ToolResult> => {
       const png = await screen.screenshot(signal);
+      // The transcript keeps a bounded copy (see media/stored-image.ts). A
+      // smaller copy is still a picture of the same screen — the aspect
+      // ratio is kept, and the text below is what turns a position read off
+      // it into the screen pixel vm_act takes.
+      const stored = await prepareStoredImage(png, "image/png");
+      const width = stored.size?.width ?? VM_SCREEN_WIDTH;
+      const height = stored.size?.height ?? VM_SCREEN_HEIGHT;
       return {
         content: [
+          { type: "text", text: describeScreenshot(width, height) },
           {
-            type: "text",
-            text:
-              `The screen is ${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT} pixels ` +
-              "(1:1 with vm_act's coordinates).",
+            type: "image",
+            data: bytesToBase64(stored.bytes),
+            mimeType: stored.mimeType,
           },
-          { type: "image", data: bytesToBase64(png), mimeType: "image/png" },
         ],
-        details: { width: VM_SCREEN_WIDTH, height: VM_SCREEN_HEIGHT },
+        // The screen and the copy are two sizes now that the copy can be
+        // scaled; naming them apart keeps a reader from taking one for the
+        // other (computer_screenshot reports the same pair).
+        details: {
+          screen: { width: VM_SCREEN_WIDTH, height: VM_SCREEN_HEIGHT },
+          image: { width, height },
+        },
       };
     },
   };
@@ -139,9 +168,10 @@ function createActTool({ screen }: VmToolsOptions): Tool<typeof actSchema> {
     description:
       `Operate the machine's screen: move the pointer, click, drag, scroll, ` +
       `type text, press a key, or wait for the screen to settle. Positions ` +
-      `are screen pixels (${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT}), read off ` +
-      "the most recent vm_screenshot. Take a screenshot afterwards to see " +
-      "the result — this tool never reports what the screen looks like.",
+      `are screen pixels (${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT}); a ` +
+      "position read off a scaled vm_screenshot is multiplied by the factor " +
+      "that result states. Take a screenshot afterwards to see the result — " +
+      "this tool never reports what the screen looks like.",
     parameters: actSchema,
     async execute(_id, params, signal): Promise<ToolResult> {
       const action = params.action.trim();

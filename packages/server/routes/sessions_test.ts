@@ -1,5 +1,7 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
-import { parsePromptBody } from "./session-requests.ts";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { base64ToBytes, bytesToBase64 } from "../../core/base64.ts";
+import { MINI_PNG, noisyPng } from "@lumisca/core/test-utils";
+import { parsePromptBody, preparePromptImages } from "./session-requests.ts";
 import { AppError } from "./util.ts";
 
 Deno.test("parsePromptBody passes text-only prompts through", () => {
@@ -145,4 +147,48 @@ Deno.test("parsePromptBody: a malformed file is a 400, not a crash", () => {
     () => parsePromptBody({ text: "x", files: [{ data: "aGVsbG8=" }] }),
     AppError,
   );
+});
+
+Deno.test("preparePromptImages: a picture inside the budget is passed through", async () => {
+  const image = {
+    type: "image" as const,
+    data: bytesToBase64(MINI_PNG),
+    mimeType: "image/png",
+  };
+  assertEquals(await preparePromptImages([image]), [image]);
+});
+
+Deno.test("preparePromptImages: a heavy picture is bounded before it is stored", async () => {
+  const png = await noisyPng(1800, 1200);
+  const prepared = await preparePromptImages([{
+    type: "image",
+    data: bytesToBase64(png),
+    mimeType: "image/png",
+  }]);
+  assertEquals(prepared?.length, 1);
+  const stored = prepared![0]!;
+  assert(
+    stored.data.length < bytesToBase64(png).length,
+    "the stored base64 must be smaller than the attachment",
+  );
+  // The content type follows the bytes: an opaque picture over budget is
+  // stored as the JPEG it became.
+  const decoded = base64ToBytes(stored.data);
+  assertEquals(
+    stored.mimeType,
+    decoded[0] === 0x89 ? "image/png" : "image/jpeg",
+  );
+});
+
+Deno.test("preparePromptImages: no pictures stay no pictures", async () => {
+  assertEquals(await preparePromptImages(undefined), undefined);
+  assertEquals(await preparePromptImages([]), undefined);
+});
+
+Deno.test("preparePromptImages: a payload that is not base64 is a 400", async () => {
+  const error = await assertRejects(() =>
+    preparePromptImages([{ type: "image", data: "%%%", mimeType: "image/png" }])
+  );
+  assert(error instanceof AppError, "must be an AppError");
+  assertEquals((error as AppError).status, 400);
 });

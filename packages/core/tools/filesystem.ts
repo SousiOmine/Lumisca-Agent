@@ -11,6 +11,7 @@ import {
 import { object, string, type Tool } from "./schema.ts";
 import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 import { bytesToBase64 } from "../base64.ts";
+import { prepareStoredImage, type StoredImage } from "../media/stored-image.ts";
 import type { FsToolContext } from "./context.ts";
 import type { BackendDirEntry, LineRange } from "./file-backend.ts";
 import { requireExistingFile, requireResolved } from "./resolve.ts";
@@ -26,6 +27,22 @@ function fileInfoLine(entry: BackendDirEntry): string {
   if (entry.isDirectory) return `${entry.name}/`;
   if (entry.isSymlink) return `${entry.name} -> (symlink)`;
   return `${entry.name}`;
+}
+
+/** The text note under a read image: it keeps the picture visible to a
+ * text-only UI, and it is what tells the model which picture it is looking
+ * at. When the transcript kept a smaller copy than the file (see
+ * media/stored-image.ts) the note says so — the file and the picture then
+ * differ, and the agent has to know which one it is reasoning about. */
+function imageNote(name: string, bytes: number, stored: StoredImage): string {
+  const size = stored.size;
+  if (size === undefined) return `[image: ${name} (${bytes} bytes)]`;
+  const scaled = stored.downscaledFrom === undefined
+    ? ""
+    : ` (downscaled from ${stored.downscaledFrom.width}×` +
+      `${stored.downscaledFrom.height})`;
+  return `[image: ${name} — ${size.width}×${size.height}${scaled}, ` +
+    `${stored.bytes.byteLength} bytes]`;
 }
 
 /** Resolve a path, throwing the rejection reason (the wording every tool
@@ -163,13 +180,19 @@ export function createReadFileTool(
       if (mimeType !== undefined && size <= MAX_IMAGE_BYTES) {
         const { bytes } = await files.readHead(filePath, size);
         const name = filePath.split(/[\\/]/).pop() ?? filePath;
+        // The transcript keeps a bounded copy of the picture (see
+        // media/stored-image.ts); the file itself is untouched.
+        const stored = await prepareStoredImage(bytes, mimeType);
         return {
           content: [
-            { type: "text", text: `[image: ${name} (${bytes.length} bytes)]` },
+            {
+              type: "text",
+              text: imageNote(name, bytes.length, stored),
+            },
             {
               type: "image",
-              data: bytesToBase64(bytes),
-              mimeType,
+              data: bytesToBase64(stored.bytes),
+              mimeType: stored.mimeType,
             },
           ],
           details: { path: filePath, size },

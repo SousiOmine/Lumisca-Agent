@@ -11,7 +11,8 @@ import { LumiscaCore, type TodoPhase } from "@lumisca/core";
 import { disposeServer, startServer } from "./app.ts";
 import { conversationOf, json, setup } from "./test-utils.ts";
 
-import { removeDirRetry } from "@lumisca/core/test-utils";
+import { noisyPng, removeDirRetry } from "@lumisca/core/test-utils";
+import { bytesToBase64 } from "../core/base64.ts";
 
 Deno.test("session prompt roundtrip via API", async () => {
   const { core, server, faux, base } = await setup();
@@ -71,6 +72,67 @@ Deno.test("session prompt roundtrip via API", async () => {
 
     await removeDirRetry(root);
   } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
+Deno.test("prompt API stores a bounded copy of an attached picture", async () => {
+  const { core, server, faux, base } = await setup();
+  const root = await Deno.makeTempDir({ prefix: "lumisca-srv-img-" });
+  try {
+    const ws = await (await json(base, "/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name: "ws", folders: [root] }),
+    })).json();
+    faux.setResponses([fauxAssistantMessage("I see it.")]);
+    const session = await (await json(base, "/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        workspaceId: ws.id,
+        modelProvider: faux.provider.id,
+        modelId: faux.getModel().id,
+        name: "img-test",
+      }),
+    })).json();
+
+    // A phone-sized picture: the attachment is what the router stores today,
+    // so this is the shape that fills the database.
+    const png = await noisyPng(1800, 1200);
+    const promptRes = await json(base, `/api/sessions/${session.id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({
+        text: "what is this?",
+        images: [{ data: bytesToBase64(png), mimeType: "image/png" }],
+      }),
+    });
+    assertEquals(promptRes.status, 200);
+
+    // The run is fire-and-forget: poll until the turn's picture is in the
+    // transcript the API serves.
+    let stored: { data: string; mimeType: string } | undefined;
+    for (let attempt = 0; attempt < 50 && stored === undefined; attempt++) {
+      const snapshot = await (await json(
+        base,
+        `/api/sessions/${session.id}/messages`,
+      )).json();
+      const user = (snapshot.messages as Array<{
+        role: string;
+        content: Array<{ type: string; data?: string; mimeType?: string }>;
+      }>).find((message) => message.role === "user");
+      stored = user?.content.find((block) =>
+        block.type === "image" && typeof block.data === "string"
+      ) as { data: string; mimeType: string } | undefined;
+      if (stored === undefined) await new Promise((r) => setTimeout(r, 100));
+    }
+    assert(stored !== undefined, "the turn's picture never reached the API");
+    assert(
+      stored.data.length < bytesToBase64(png).length,
+      `the stored picture must be the bounded copy ` +
+        `(${stored.data.length} vs ${bytesToBase64(png).length})`,
+    );
+  } finally {
+    await removeDirRetry(root);
     server.shutdown();
     core.close();
   }
