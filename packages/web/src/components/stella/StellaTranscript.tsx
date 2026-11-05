@@ -15,10 +15,11 @@ import { type MessageAuthor, StellaMessage } from "./StellaMessage.tsx";
  *
  * There is no turn header, no work log, no tool row and no streaming reply,
  * because none of them is ever sent (see the server's stella-stream
- * projection): the agent's own text is its working notes, and a message
- * appears whole when the agent sends one. A run with nothing to report
- * therefore shows only the typing dots, then nothing — this component cannot
- * accidentally draw a paragraph the agent did not address to the user.
+ * projection): a message appears whole when its turn ends — the agent's
+ * final text, or what it sent with `send_chat`. A run that says nothing (its
+ * turn wrote the silence sentinel) therefore shows only the typing dots,
+ * then nothing — this component cannot accidentally draw the agent's
+ * narration.
  */
 export function StellaTranscript({
   conversation,

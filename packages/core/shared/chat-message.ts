@@ -2,10 +2,10 @@
  * What a `send_chat` call sent, as the conversation draws it.
  *
  * The tool carries three things and they reach the user together: the words,
- * a card, and files. Everything a stella conversation shows of the agent is
- * one of these — the agent's own text is not shown at all (see
- * agent/stella-stream.ts) — so this is the shape the projection reads and
- * the shape a client draws.
+ * a card, and files. A stella conversation shows them beside the agent's own
+ * reply (the final text of its turn; see agent/stella-stream.ts), so this is
+ * the shape the projection reads for what a call sent, and the shape a
+ * client draws.
  *
  * The values live in the tool result's `details`, never in its `content`:
  * `content` is what the MODEL reads on its next turn, and repeating the

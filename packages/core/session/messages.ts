@@ -23,7 +23,7 @@ export interface MessageWindow {
  *
  * A page is a count of SCREEN units, and the two surfaces' units are the
  * same rows only in code mode. A stella conversation draws what the
- * conversation shows — its prompts and what the agent sent (see
+ * conversation shows — its prompts, the agent's replies and what it sent (see
  * agent/stella-stream.ts) — and none of the tool traffic between them. A page
  * that counted raw rows filled up on rows nobody sees: the newest page then
  * projected to zero entries and answered `older: null`, which reads as "an
@@ -43,13 +43,25 @@ export type TranscriptRows = "all" | "conversation";
  * The rows a conversation can draw, as SQL — the single definition of
  * `TranscriptRows: "conversation"`. It names what `agent/stella-stream.ts`
  * projects to an entry: a prompt (`user`; `mode` is code-mode-only but
- * projected the same way) and the result of a successful `send_chat`.
+ * projected the same way), the agent's reply (an assistant message that did
+ * not end in a tool call) and the result of a successful `send_chat`.
  *
- * The tool name is read through `COALESCE` because the store holds two
- * envelopes: rows this build wrote (`{ v, message }`) and rows from before the
- * version stamp (a bare message). `decodeStoredMessage` reads both, so a
- * filter that only understood one would leave a conversation's last message
- * invisible while the conversation itself showed it.
+ * An assistant row qualifies unless its `stopReason` is `"toolUse"`: a turn
+ * that stopped to call a tool is the agent narrating its way to the next
+ * step, and the projection drops it (see stellaEntryOf). The filter and the
+ * projection must agree on which assistant rows can be shown. They did not:
+ * the projection made the agent's final text a conversation entry while this
+ * filter still selected only prompts and `send_chat` results, so a reply was
+ * on screen until the next snapshot (a reload, a reconnect, a window opened
+ * again) and then gone while the prompts remained. The filter is still a
+ * SUPERSET: a row whose text is only the silence sentinel passes it and the
+ * projection drops it.
+ *
+ * The tool name and the stop reason are read through `COALESCE` because the
+ * store holds two envelopes: rows this build wrote (`{ v, message }`) and rows
+ * from before the version stamp (a bare message). `decodeStoredMessage` reads
+ * both, so a filter that only understood one would leave a conversation's
+ * last message invisible while the conversation itself showed it.
  *
  * A page and the sidebar's preview both read this constant, so the two cannot
  * disagree about what a conversation shows.
@@ -57,6 +69,13 @@ export type TranscriptRows = "all" | "conversation";
 export const CONVERSATION_ROWS_SQL = `
         (
           role IN ('user', 'mode')
+          OR (
+            role = 'assistant'
+            AND COALESCE(
+              json_extract(content, '$.message.stopReason'),
+              json_extract(content, '$.stopReason')
+            ) IS NOT 'toolUse'
+          )
           OR (
             role = 'toolResult'
             AND COALESCE(

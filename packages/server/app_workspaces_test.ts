@@ -1157,14 +1157,18 @@ Deno.test("stella API: a row carries what its conversation last said", async () 
     assertEquals(initial.agents[0]?.preview, null);
 
     // Speak in it, then read the list: the second line is what the agent
-    // SENT (the conversation's projection, not the model's notes).
+    // SENT (the conversation's projection, not the model's notes). The
+    // second turn has nothing to add and writes the silence sentinel, so the
+    // message above it stays the newest entry.
     const agentId = initial.agents[0]!.id;
     const session = await core.getOrCreateStellaSession(agentId);
     faux.setResponses([
       fauxAssistantMessage([
         fauxToolCall("send_chat", { text: "直しました。" }, "call-1"),
       ], { stopReason: "toolUse" }),
-      fauxAssistantMessage("送りました。"),
+      // The sentinel's spelling is the model-facing contract documented in
+      // the core's agent/silent-reply.ts.
+      fauxAssistantMessage("NO_RESPONSE"),
     ]);
     await promptSession(core, session.id, "直して");
     const listed = await json(base, "/api/stella/agents");

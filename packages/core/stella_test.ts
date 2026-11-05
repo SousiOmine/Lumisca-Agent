@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
+import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import { LumiscaCore } from "./core.ts";
 import type { VmManager, VmStatus } from "./vm/container.ts";
 import { createStellaTools } from "./tools/toolsets.ts";
@@ -10,6 +11,8 @@ import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
 import { TaskHub } from "./tools/task-hub.ts";
 import type { StreamFn } from "./ai/types.ts";
+import type { WindowPage } from "./session/transcript-window.ts";
+import type { StellaEntry } from "./types/stella-conversation.ts";
 import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
 import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
@@ -672,24 +675,17 @@ Deno.test("stella conversation: history_search is preloaded and reads its own ro
   }
 });
 
-Deno.test("stella conversation: a run that sends nothing leaves nothing on screen", async () => {
-  // The reason `send_chat` exists. A model asked anything writes something —
-  // it is how it thinks — and a routine that checks a log and finds nothing
-  // has nothing to report. Before, that turn pushed a paragraph at the user;
-  // now the conversation gains only the user's prompt, and the run's own text
-  // stays in the model's history.
+Deno.test("stella conversation: a run that says nothing leaves nothing on screen", async () => {
+  // Silence is the deliberate act. The default is that a turn's text is the
+  // reply (see the next test), so a run that has nothing to add writes the
+  // sentinel instead of relying on a forgotten `send_chat` to hide it.
   const { faux, core, session } = await stellaConversation("Quiet");
   try {
-    faux.setResponses([
-      fauxAssistantMessage(
-        "確認しました。問題はありません。とくに報告することはないので、" +
-          "このまま終わります。",
-      ),
-    ]);
+    faux.setResponses([fauxAssistantMessage(NO_RESPONSE)]);
     await promptSession(core, session.id, "定期チェックを実行して");
 
     const page = core.readStellaConversation(session.id, {})!;
-    // The prompt is there; the agent's own text is not.
+    // The prompt is there; the sentinel is not a message.
     assertEquals(page.items.map((entry) => entry.role), ["user"]);
     assertEquals(page.items[0]?.text, "定期チェックを実行して");
 
@@ -701,6 +697,41 @@ Deno.test("stella conversation: a run that sends nothing leaves nothing on scree
       ),
       "the agent's own turn stays in its history",
     );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: the agent's reply is what the store serves", async () => {
+  // The regression this pins: the live stream projected the assistant's text
+  // (see stella-stream.ts), but the store's conversation scope still selected
+  // only prompts and `send_chat` results. A reply was on screen until the next
+  // snapshot — a reload, a reconnect, a window opened again — and then gone,
+  // while the prompts remained. The stream and the store must draw the same
+  // conversation.
+  const { faux, core, session, agent } = await stellaConversation("Answerer");
+  try {
+    faux.setResponses([fauxAssistantMessage("了解しました。進めます。")]);
+    await promptSession(core, session.id, "お願いします");
+
+    // The newest window of the conversation, as a client re-opening it reads.
+    const page = core.readStellaConversation(session.id, {})!;
+    assertEquals(
+      page.items.map((entry) => [entry.role, entry.text]),
+      [
+        ["user", "お願いします"],
+        ["assistant", "了解しました。進めます。"],
+      ],
+    );
+
+    // The sidebar's second line is the same projection: the newest thing the
+    // conversation shows is the reply, not the prompt before it.
+    const row = core.listStellaAgentSummaries().find((item) =>
+      item.id === agent.id
+    );
+    assertEquals(row?.preview?.kind, "text");
+    if (row?.preview?.kind !== "text") throw new Error("unreachable");
+    assertEquals(row.preview.text, "了解しました。進めます。");
   } finally {
     await core.close();
   }
@@ -719,8 +750,8 @@ Deno.test("stella conversation: what send_chat sends is the conversation", async
           card: markup,
         }, "call-1"),
       ], { stopReason: "toolUse" }),
-      // A second turn that has nothing to add.
-      fauxAssistantMessage("これで終わり。"),
+      // A second turn that has nothing to add: silence, spelled out.
+      fauxAssistantMessage(NO_RESPONSE),
     ]);
     await promptSession(core, session.id, "直して");
 
@@ -779,14 +810,19 @@ Deno.test("stella conversation: a tool-heavy run still shows the conversation", 
     await promptSession(core, session.id, "詳しく");
 
     const page = core.readStellaConversation(session.id, {})!;
-    // Both prompts are in the newest window: the page counts entries, so the
-    // tool rows between them cannot crowd the conversation out of it.
-    assertEquals(page.items.map((entry) => entry.role), ["user", "user"]);
+    // Both exchanges are in the newest window — the page counts entries, so
+    // the 25 tool rows between them cannot crowd the conversation out of it.
     assertEquals(
-      page.items.map((entry) => entry.text),
-      ["調べて", "詳しく"],
+      page.items.map((entry) => [entry.role, entry.text]),
+      [
+        ["user", "調べて"],
+        ["assistant", "まず調べます。"],
+        ["user", "詳しく"],
+        ["assistant", "done"],
+      ],
     );
-    // The beginning of the conversation is still behind it, so it is named.
+    // The conversation's beginning is not behind the window, so the walk
+    // ends here.
     assertEquals(page.older, null);
   } finally {
     await core.close();
@@ -814,32 +850,38 @@ Deno.test("stella conversation: a long conversation pages back by entries", asyn
       await promptSession(core, session.id, `prompt ${i}`);
     }
 
-    const newest = core.readStellaConversation(session.id, { limit: 2 })!;
-    assertEquals(newest.items.map((entry) => entry.text), [
-      "prompt 2",
-      "message 2",
-    ]);
-    assert(newest.older !== null, "the conversation has history before it");
-
-    const older = core.readStellaConversation(session.id, {
-      limit: 2,
-      older: newest.older,
-    })!;
-    assertEquals(older.items.map((entry) => entry.text), [
-      "prompt 1",
-      "message 1",
-    ]);
-
-    const oldest = core.readStellaConversation(session.id, {
-      limit: 2,
-      older: older.older,
-    })!;
-    assertEquals(oldest.items.map((entry) => entry.text), [
+    // Walk back the way a reader does: each page names the one before it,
+    // and the pages together are the conversation, in order and without a
+    // repeat or a skip. A turn holds three entries (the prompt, what was
+    // sent, and the final reply), so a page of two cuts inside a turn.
+    const collected: string[] = [];
+    let older: string | null = null;
+    for (let pages = 0; pages < 20; pages++) {
+      const page: WindowPage<StellaEntry> = core.readStellaConversation(
+        session.id,
+        {
+          limit: 2,
+          ...(older === null ? {} : { older }),
+        },
+      )!;
+      assert(page.items.length <= 2, `page ${pages} exceeded its size`);
+      collected.unshift(...page.items.map((entry) => entry.text));
+      older = page.older;
+      if (older === null) break;
+    }
+    // Read in entries, the walk ends exactly at the conversation's beginning.
+    assertEquals(older, null);
+    assertEquals(collected, [
       "prompt 0",
       "message 0",
+      "sent",
+      "prompt 1",
+      "message 1",
+      "sent",
+      "prompt 2",
+      "message 2",
+      "sent",
     ]);
-    // Read in entries, the walk ends exactly at the conversation's beginning.
-    assertEquals(oldest.older, null);
   } finally {
     await core.close();
   }
@@ -1281,15 +1323,16 @@ Deno.test("stella agents: a row says what its conversation last said", async () 
           text: "3件の不具合を直しました。",
         }, "call-1"),
       ], { stopReason: "toolUse" }),
-      fauxAssistantMessage("送りました。"),
+      fauxAssistantMessage(NO_RESPONSE),
     ]);
     await promptSession(core, session.id, "直して");
 
     const rows = core.listStellaAgentSummaries();
     const row = rows.find((item) => item.id === agent.id);
     assert(row !== undefined, "the agent must be in the list");
-    // The newest thing the conversation shows: what the agent SENT, not the
-    // prompt before it and not its own working notes.
+    // The newest thing the conversation shows: what the agent SENT. The
+    // second turn has nothing to add and says so with the sentinel, so it
+    // does not become a preview of its own.
     assertEquals(row.preview, {
       kind: "text",
       text: "3件の不具合を直しました。",
@@ -1312,8 +1355,8 @@ Deno.test("stella agents: a row says what its conversation last said", async () 
 });
 
 Deno.test("stella agents: the preview is the newest entry, not the newest row", async () => {
-  // The row the store returns newest is a tool result the conversation never
-  // shows; the entry before it is what the sidebar must say.
+  // The newest rows are tool traffic and a silent turn — none of which the
+  // conversation shows; the entry before them is what the sidebar must say.
   const { faux, core, agent, session } = await stellaConversation("Aide");
   try {
     faux.setResponses([
@@ -1323,7 +1366,7 @@ Deno.test("stella agents: the preview is the newest entry, not the newest row", 
       fauxAssistantMessage([
         fauxToolCall("bash", { command: "echo hi" }, "call-2"),
       ], { stopReason: "toolUse" }),
-      fauxAssistantMessage("終わり。"),
+      fauxAssistantMessage(NO_RESPONSE),
     ]);
     await promptSession(core, session.id, "やって");
 

@@ -1,18 +1,17 @@
 /**
- * `send_chat`: the one way a stella conversation's agent says anything.
+ * `send_chat`: what a stella conversation's agent sends BESIDE its reply.
  *
- * stella's agent is a model, and a model asked anything produces text. That
- * text is the model's working notes — it is how it thinks out loud, how it
- * reports a tool it just ran, how it explains what it is about to do — and
- * showing it made every turn a paragraph whether or not there was anything to
- * say. A routine that checks a log and finds nothing still pushed a "nothing
- * to report" message at the user.
+ * The assistant's final text is already the reply (see
+ * agent/stella-stream.ts): a model asked anything produces text, and a turn
+ * that ends without a tool call is that answer. So this tool carries what a
+ * reply cannot — a card, files, or a progress message while a long turn is
+ * still running — and a turn that has nothing to add writes `NO_RESPONSE`
+ * instead.
  *
- * So the conversation shows what the agent SENT, and this tool is the only
- * way to send. A turn with nothing to report calls nothing and leaves the
- * screen as it was — the run ends, the typing indicator stops, and that is
- * the whole result. It is the same decision Terasuma makes with
- * `isDisplayPart`, moved to the server so a client never has to filter.
+ * It used to be the only way to speak, and a forgotten call left the user
+ * waiting for an answer that never came. The default is now the other way
+ * round: forgetting this call still says something, and silence is the
+ * deliberate act.
  *
  * The three things a message can carry are one call because they are one act:
  * the words, a card, and files. Splitting them (as `chat_ui` and

@@ -20,10 +20,10 @@ import type {
  * is blocking the run — so this store holds exactly that, and its reducer can
  * be read in one sitting.
  *
- * There is no streaming text. The agent's own words are its working notes and
- * never reach this store; a message arrives whole, when the agent sends one.
- * The run's presence is `running` alone (the transcript draws its typing
- * dots from it).
+ * There is no streaming text. A message arrives whole when its turn ends —
+ * the agent's final text, or what it sent with `send_chat` — so there is no
+ * half-written reply to hold. The run's presence is `running` alone (the
+ * transcript draws its typing dots from it).
  *
  * The reducer is pure so the event handling can be tested without a socket,
  * a browser or a server: the hook that owns the connection only calls
@@ -197,9 +197,8 @@ export function applyStellaEvent(
       return state.running ? { ...state, running: false } : null;
     case "entry": {
       const entries = upsertEntry(state.entries, event.entry);
-      // A message arrives whole (the agent's own text is not shown, so there
-      // is nothing being streamed), so an unchanged list means nothing to
-      // re-render.
+      // A message arrives whole (nothing is streamed), so an unchanged list
+      // means nothing to re-render.
       return entries === state.entries ? null : { ...state, entries };
     }
     case "questions":

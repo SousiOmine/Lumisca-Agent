@@ -216,10 +216,11 @@ function handoverOf(handover: StellaHandover | null): StellaHandover | null {
  * checkpoints, federation) or belongs to the transcript the conversation does
  * not show.
  *
- * `message_delta` is model-only by design, not by oversight: the agent's text
- * never reaches the conversation, so a delta has nothing to add to it. The
- * transport keeps forwarding deltas for code mode; this projection drops
- * them.
+ * `message_delta` is model-only by design, not by oversight: a turn's text
+ * arrives whole when the turn ends (its final text is the reply), so a delta
+ * has nothing to add to the conversation — it would only show half-written
+ * words that may never be sent. The transport keeps forwarding deltas for
+ * code mode; this projection drops them.
  *
  * The event's `sessionId` is dropped: a conversation stream is bound to one
  * conversation, so carrying the id would only invite clients to route it.

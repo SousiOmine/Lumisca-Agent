@@ -468,11 +468,11 @@ export function stellaRoutes(core: StellaApi): Hono {
         // session (code mode's tabs run at the same time).
         accept: (event) => "sessionId" in event && event.sessionId === id,
         revOf: () => core.getSessionRevision(id),
-        // No delta channel: this conversation has no streaming text. The
-        // agent's own words are its working notes and never reach the
-        // screen — a message appears whole when it is sent (`send_chat`) —
-        // so a `message_delta` has nothing to add and the projection drops
-        // it with every other model-only event.
+        // No delta channel: this conversation has no streaming text. A
+        // message appears whole when its turn ends (the agent's final text,
+        // or what it sent with `send_chat`), so a `message_delta` has
+        // nothing to add and the projection drops it with every other
+        // model-only event.
         project: (event, rev) =>
           stellaEventsOf(event).map((projected) => ({ ...projected, rev })),
       });

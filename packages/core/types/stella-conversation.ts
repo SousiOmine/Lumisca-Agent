@@ -2,17 +2,18 @@
  * What a client of a stella conversation receives.
  *
  * A stella conversation is a chat with a counterpart: the user's words and
- * what the agent SENT it, nothing about how the work was done. The model's
- * history is a different thing — it carries the agent's own text (its working
- * notes), context publications, tool calls and results, notifications and
- * compaction checkpoints, and no client reads it — so the two are separate
- * types on separate endpoints (`/api/stella/conversations/:agentId`), instead
- * of one transcript that every viewer filters for itself.
+ * the agent's replies (the final text of a turn, and what `send_chat` sent
+ * with it), nothing about how the work was done. The model's history is a
+ * different thing — it also carries the agent's narration, context
+ * publications, tool calls and results, notifications and compaction
+ * checkpoints — so the two are separate types on separate endpoints
+ * (`/api/stella/conversations/:agentId`), instead of one transcript that
+ * every viewer filters for itself.
  *
  * The split is what keeps the mode's promise (a conversation, not a work
  * log) from depending on a client remembering to hide rows. A client that
  * never receives a `Date: …` publication cannot show it — and one that never
- * receives the agent's prose cannot leak it into a conversation the agent
+ * receives a turn's narration cannot leak it into a conversation the agent
  * was not addressing.
  */
 import type { AskQuestion } from "../shared/interaction.ts";
@@ -20,14 +21,13 @@ import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
 
 /** One thing the user or the agent said, as the conversation shows it.
  *
- * **An agent's entry is a message it SENT (`send_chat`), never its own
- * words.** A model asked anything has to produce text; that text is its
- * working notes, and showing it meant a run with nothing to report — a
- * routine that found nothing, a turn that only ran a command — still pushed
- * a paragraph at the user. So the projection drops the agent's text and keeps
- * what the tool handed over: the words it chose to send, the card and the
- * files. A turn that sends nothing leaves nothing on screen, which is the
- * point. */
+ * **An agent's entry is a reply: the text of its final turn, and what
+ * `send_chat` sent alongside it (the words, the card, the files).** A model
+ * asked anything has to produce text, and a turn that ends without a tool
+ * call is that answer — the default, so a forgotten `send_chat` cannot leave
+ * the user waiting. A turn that stopped to call a tool is narration, not an
+ * entry, and neither is the silence sentinel (`NO_RESPONSE`); see
+ * agent/stella-stream.ts. */
 export interface StellaEntry {
   /** `user` is the person talking; `assistant` is the agent. There is no
    * other role in a conversation (stella has no modes, no notifications). */
@@ -110,10 +110,10 @@ export interface StellaConversationSnapshot {
  * none of those surfaces. A `null` result from the projection means the
  * model-only event ends here.
  *
- * There is no streaming event either. A message arrives whole, when the
- * agent sends it (`send_chat`): the agent's own text is not shown, so there
- * is no reply to watch being written — the run shows itself with the typing
- * indicator until something is sent. */
+ * There is no streaming event either. A message arrives whole when its turn
+ * ends: the agent's final text is the reply, so there is nothing to watch
+ * being written — the run shows itself with the typing indicator until the
+ * answer is finished. */
 export type StellaEvent =
   | { type: "agent_start" }
   | { type: "agent_end" }

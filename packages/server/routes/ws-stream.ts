@@ -13,7 +13,7 @@
  *   batch is flushed, because the order is what tells the client which
  *   message a tool result belongs to. A stream that has no streaming text
  *   supplies no channel and builds no batcher at all (a stella conversation:
- *   its agent's own text is not what it says),
+ *   its messages arrive when a turn ends, not as they are typed),
  * - a heartbeat proves an idle socket is alive (silence cannot be told apart
  *   from a socket a NAT or a sleeping page dropped),
  * - `onClose` settles all three (the interval, the batch, the subscription)
@@ -63,8 +63,8 @@ export interface EventStreamOptions {
     rev: number | undefined,
   ) => Record<string, unknown>[];
   /** The batch channel of a streaming delta. Omitted → this stream has no
-   * streaming text at all (a stella conversation: its agent's text is not
-   * what it says), so no batcher is built and every event goes through
+   * streaming text at all (a stella conversation: a message arrives when its
+   * turn ends), so no batcher is built and every event goes through
    * `project` — where the delta is dropped like any other model-only
    * event. */
   delta?: {
@@ -135,7 +135,7 @@ export function createEventStream(
         if (event.type === "message_delta" && batcher !== undefined && delta) {
           // Only a stream with a channel batches text; `project` decides
           // what a delta is worth to the others (stella's projection drops
-          // it — its agent's text is not the conversation).
+          // it — a reply arrives whole when its turn ends).
           if (rev === undefined) return;
           batcher.delta(delta.key(event), event.delta, rev);
           return;

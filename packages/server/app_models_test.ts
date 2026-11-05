@@ -224,14 +224,15 @@ Deno.test("settings API never exposes credentials", async () => {
   }
 });
 
-Deno.test("stella API: the conversation carries what the agent sent, never the model's context", async () => {
+Deno.test("stella API: the conversation carries the conversation, never the model's context", async () => {
   // Two rules in one endpoint. The reported symptom was `Date: …` and
   // `On-demand tools` rows in stella's chat: they are `context`
   // publications — the model's history — and the conversation must not serve
   // them, while the session endpoint (code mode) keeps serving them for its
-  // own transcript. The second rule is what the mode is for now: the agent's
-  // OWN text is its working notes, so only what it SENT with `send_chat`
-  // reaches the screen.
+  // own transcript. The second rule is what the mode is for now: a turn that
+  // stopped to use a tool is narration and stays in the model's history,
+  // while the final turn's text is the agent's reply and reaches the screen
+  // together with what it SENT with `send_chat`.
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -296,27 +297,27 @@ Deno.test("stella API: the conversation carries what the agent sent, never the m
       entries: Array<{ role: string; text: string; card: string | null }>;
       running: boolean;
     };
-    // The user's prompt and the one message the agent sent, in order, and
-    // nothing else — the model's own prose is not on the screen.
+    // The user's prompt, what the agent sent, then the final turn's reply —
+    // in order. The narration turn (the one that called send_chat) and the
+    // model's context publications are not on the screen.
     assertEquals(snapshot.entries[0]?.role, "user");
     assertEquals(snapshot.entries[0]?.text, "bash で一覧を出して");
     const answers = snapshot.entries.filter((entry) =>
       entry.role === "assistant"
     );
-    assertEquals(answers.map((entry) => entry.text), ["一覧を出しました。"]);
+    assertEquals(answers.map((entry) => entry.text), [
+      "一覧を出しました。",
+      "まだ書くことはある。",
+    ]);
     for (const entry of snapshot.entries) {
       assertEquals(entry.role === "user" || entry.role === "assistant", true);
       // The model's context publications (date, on-demand tools) are not
       // entries; nor are tool results or notifications.
       assertEquals(entry.text.startsWith("Date:"), false, entry.text);
       assertEquals(entry.text.startsWith("On-demand tools"), false, entry.text);
-      // Nor is the model's own working notes: only what it sent.
+      // Nor is the model's narration: it is the working notes of a turn that
+      // went on to call a tool, not a reply.
       assertEquals(entry.text.includes("作業メモ"), false, entry.text);
-      assertEquals(
-        entry.text.includes("まだ書くことはある"),
-        false,
-        entry.text,
-      );
     }
 
     // The code-mode session endpoint still serves the whole transcript
@@ -330,8 +331,9 @@ Deno.test("stella API: the conversation carries what the agent sent, never the m
       true,
       "the model's context stays in the session transcript",
     );
-    // The agent's own text is still in the transcript too: it is the model's
-    // working notes, kept for the model, never sent to a conversation.
+    // The agent's own rows stay in the transcript too: the store and the
+    // session endpoint keep the model's whole history, and a conversation
+    // projects its replies out of it.
     const assistant = await (await json(
       base,
       `/api/sessions/${sessionId}/messages`,

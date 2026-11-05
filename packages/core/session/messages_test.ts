@@ -586,8 +586,9 @@ Deno.test("messages: newestConversationRows reads only what a conversation shows
   try {
     createSession(db, "s1");
     const repo = createMessageRepo(db);
-    // Transcript order: prompt, the agent's turn, its tool traffic, the
-    // message it SENT, a failed send, what the user said next.
+    // Transcript order: prompt, a turn that narrated its way into a tool
+    // call, the agent's final reply, its tool traffic, the message it SENT,
+    // a failed send, what the user said next.
     repo.append("s1", {
       role: "user",
       content: [{ type: "text", text: "直して" }],
@@ -595,7 +596,17 @@ Deno.test("messages: newestConversationRows reads only what a conversation shows
     } as AgentMessage);
     repo.append("s1", {
       role: "assistant",
-      content: [{ type: "text", text: "作業メモ" }],
+      content: [{ type: "text", text: "まず調べます。" }],
+      api: "openai-completions",
+      provider: "faux",
+      model: "faux-1",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      stopReason: "toolUse",
+      timestamp: 105,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "assistant",
+      content: [{ type: "text", text: "直しました。" }],
       api: "openai-completions",
       provider: "faux",
       model: "faux-1",
@@ -634,12 +645,12 @@ Deno.test("messages: newestConversationRows reads only what a conversation shows
     } as AgentMessage);
 
     const rows = repo.newestConversationRows("s1", 10);
-    // Newest first, and only the two prompts plus the successful send: the
-    // agent's own text, a tool's output and a failed send are not things the
-    // conversation shows.
+    // Newest first, and only the two prompts, the turn's final reply and the
+    // successful send: the narration before a tool call, a tool's output and
+    // a failed send are not things the conversation shows.
     assertEquals(
       rows.map((row) => [row.role, row.timestamp]),
-      [["user", 150], ["toolResult", 130], ["user", 100]],
+      [["user", 150], ["toolResult", 130], ["assistant", 110], ["user", 100]],
     );
 
     // The limit bounds the read (it is a payload bound, not a scan).
@@ -655,7 +666,7 @@ Deno.test("messages: newestConversationRows reads only what a conversation shows
       content: [{ type: "text", text: "other" }],
       timestamp: 900,
     } as AgentMessage);
-    assertEquals(repo.newestConversationRows("s1", 10).length, 3);
+    assertEquals(repo.newestConversationRows("s1", 10).length, 4);
   } finally {
     db.close();
   }
@@ -665,11 +676,13 @@ Deno.test("messages: newestConversationRows also reads pre-stamped rows", () => 
   // The store holds two envelopes, and decodeStoredMessage reads both. A
   // filter that understood only the current one would leave an older
   // conversation's last message invisible in the sidebar while the
-  // conversation itself showed it.
+  // conversation itself showed it. The assistant row is here because its
+  // stopReason decides whether it is a reply or narration, and that field
+  // has to be read through the same two paths.
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
-    const legacy: AgentMessage = {
+    const legacySend: AgentMessage = {
       role: "toolResult",
       toolCallId: "call-1",
       toolName: "send_chat",
@@ -677,22 +690,50 @@ Deno.test("messages: newestConversationRows also reads pre-stamped rows", () => 
       isError: false,
       timestamp: 100,
     };
-    db.db.prepare(
+    const legacyReply: AgentMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: "直しました。" }],
+      api: "openai-completions",
+      provider: "faux",
+      model: "faux-1",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      stopReason: "stop",
+      timestamp: 110,
+    };
+    const legacyNarration: AgentMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: "これから直します。" }],
+      api: "openai-completions",
+      provider: "faux",
+      model: "faux-1",
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      stopReason: "toolUse",
+      timestamp: 120,
+    };
+    const insert = db.db.prepare(
       "INSERT INTO messages (id, session_id, role, content, timestamp) " +
         "VALUES (?, ?, ?, ?, ?)",
-    ).run(
-      "legacy-1",
-      "s1",
-      "toolResult",
-      JSON.stringify(legacy),
-      legacy.timestamp,
     );
+    for (
+      const [id, message] of [
+        ["legacy-1", legacySend],
+        ["legacy-2", legacyReply],
+        ["legacy-3", legacyNarration],
+      ] as const
+    ) {
+      insert.run(
+        id,
+        "s1",
+        message.role,
+        JSON.stringify(message),
+        message.timestamp,
+      );
+    }
     const repo = createMessageRepo(db);
-    // It comes back from the query AND decodes to the same message, so the
-    // projection can read it.
+    // Each comes back from the query AND decodes to the same message, so the
+    // projection can read it. The narration is not a conversation row.
     const rows = repo.newestConversationRows("s1", 4);
-    assertEquals(rows.length, 1);
-    assertEquals(rows[0]!.message, legacy);
+    assertEquals(rows.map((row) => row.message), [legacyReply, legacySend]);
   } finally {
     db.close();
   }

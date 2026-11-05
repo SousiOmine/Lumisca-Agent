@@ -83,11 +83,12 @@ export const TOOL_VM_ASK_USER = "vm_ask_user";
  * the tool rats out paths in prose instead of handing the file over. */
 export const TOOL_CHAT_ATTACH = "chat_attach";
 
-/** The one way a stella conversation's agent says anything to the user: a
- * message (text), a card, and files, in one call. stella's own text is not
- * shown — it is the model's working notes, so a turn with nothing to report
- * can end silently, and nothing reaches the conversation unless it was sent
- * here. Preloaded: an agent that does not know it can speak never does. */
+/** Send something beside the reply: a card, files, and/or progress text in
+ * one call. The final text of a stella turn is already the agent's reply
+ * (see agent/stella-stream.ts), so this tool carries what a reply cannot — a
+ * card, a file, or a few words while a longer turn is still running. A turn
+ * with nothing to add writes NO_RESPONSE. Preloaded: an agent that does not
+ * know it can send a card or a file never does. */
 export const TOOL_SEND_CHAT = "send_chat";
 
 /** Create another stella agent (a separate agent with its own name, role and

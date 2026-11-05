@@ -175,8 +175,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", webSearchRoutes(core));
   app.route("/api", sessionRoutes(core));
   // stella mode's own surface. It takes no delta-flush option: a
-  // conversation has no streaming text (its agent's own words never reach
-  // the screen), so there is no batch to time.
+  // conversation has no streaming text (a message arrives when its turn
+  // ends), so there is no batch to time.
   app.route("/api", stellaRoutes(core));
   // An agent's picture and a prompt's uploaded file: raw bytes, same prefix.
   app.route("/api", stellaAssetRoutes(core));

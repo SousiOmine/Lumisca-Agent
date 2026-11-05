@@ -10,10 +10,9 @@
  *
  * What the line may show is exactly what the conversation shows, and that is
  * the whole rule: the entry a client draws (see the core's
- * agent/stella-stream.ts) — the user's words and what the agent SENT. The
- * agent's own text is its working notes and is not part of a conversation,
- * so it cannot be a preview of one; tool calls, their output and the context
- * publications the model runs on are not part of it either. The server
+ * agent/stella-stream.ts) — the user's words and the agent's reply (its final
+ * text, and what `send_chat` sent with it). Its narration, tool calls, their
+ * output and the context publications the model runs on are not part of it. The server
  * projects the newest row through that same function, so the list cannot
  * show something the conversation would not (the same reason
  * `history_search` projects its results rather than reading rows).

@@ -39,10 +39,11 @@ export interface MessageAuthor {
  * make one answer look like several.
  *
  * What a stella bubble can hold is what the server sends (see the core's
- * stella-stream projection): the text the agent sent, the card it sent with
- * it, and the files. There is no work log and no tool row to draw, because
- * none ever arrives — and the agent's own words are not sent either, so a
- * bubble is always something the agent chose to say.
+ * stella-stream projection): the agent's reply (its text), the card it sent
+ * with it, and the files. There is no work log and no tool row to draw,
+ * because none ever arrives — a turn's narration is dropped by the same
+ * projection, so a bubble is always something the agent addressed to the
+ * user.
  */
 export function StellaMessage({
   entry,
