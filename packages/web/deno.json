@@ -1,6 +1,6 @@
 {
   "name": "@lumisca/web",
-  "version": "0.10.12",
+  "version": "0.10.13",
   "exports": {
     ".": "./src/App.tsx"
   },
