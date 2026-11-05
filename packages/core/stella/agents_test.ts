@@ -136,6 +136,23 @@ Deno.test("agents: an over-long name or role is refused, never truncated", () =>
   }
 });
 
+Deno.test("agents: a long role is accepted — the limit is a brief, not a label", () => {
+  const { db, repo } = setup();
+  try {
+    // A role is the agent's system prompt. 20,000 characters is a full brief
+    // (job, tone, what to check, when to ask), and it has to survive the round
+    // trip intact: truncated on write means an agent that quietly works from
+    // half its instructions.
+    const role = "x".repeat(MAX_AGENT_ROLE_CHARS);
+    const created = repo.create({ name: "Long", role });
+    assertEquals(created.role, role);
+    assertEquals(repo.get(created.id)?.role, role);
+    assertEquals(created.role.length, 20_000);
+  } finally {
+    db.close();
+  }
+});
+
 Deno.test("agents: normalizeAgentInput trims both fields", () => {
   assertEquals(normalizeAgentInput({ name: " A ", role: " B " }), {
     name: "A",

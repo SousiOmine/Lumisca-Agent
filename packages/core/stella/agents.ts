@@ -59,10 +59,12 @@ export interface StellaAgent extends StellaAgentSummaryBase {
   updatedAt: number;
 }
 
-/** The longest accepted name / role. A prompt section is not a document:
- * these are shown in a sidebar row and read on every turn. */
+/** The longest accepted name / role. The name is a sidebar row; the role is
+ * the agent's system prompt, and a system prompt may be a full brief — the
+ * job, the tone, what to check and when to ask — so its limit is set by what
+ * a model can read on every turn, not by what fits on a line. */
 export const MAX_AGENT_NAME_CHARS = 60;
-export const MAX_AGENT_ROLE_CHARS = 2_000;
+export const MAX_AGENT_ROLE_CHARS = 20_000;
 /** What an unnamed agent is called. The name is the sidebar's label, so it
  * cannot be empty — but choosing it is not a decision worth blocking the
  * user on: an agent can be made first and named later, or never. */
