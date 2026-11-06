@@ -29,6 +29,7 @@ import {
   TOOL_EVAL,
   TOOL_LIST_DIR,
   TOOL_READ,
+  TOOL_SEND_CHAT,
   TOOL_SEND_MESSAGE,
   TOOL_SKILL,
   TOOL_TASK,
@@ -249,6 +250,30 @@ Deno.test("a bullet rides on its tool, and never names one that is absent", () =
   );
 });
 
+Deno.test("the send_chat bullet rides on the tool, and only in stella", () => {
+  // What the tool's description cannot say from inside one call: that the
+  // wait itself is the problem. The bullet must appear with the tool and
+  // disappear without it.
+  const withTool = renderPromptSections(STELLA_PROMPT_SECTIONS, [
+    TOOL_SEND_CHAT,
+  ]);
+  assert(withTool.includes("send_chat"), withTool);
+  assert(withTool.includes("before the work is done"), withTool);
+  assertEquals(
+    renderPromptSections(STELLA_PROMPT_SECTIONS, [TOOL_READ])
+      .includes("send_chat"),
+    false,
+    "without the tool there is no bullet about it",
+  );
+  // Code mode has no send_chat (its tools are createCodingTools), so it is
+  // never told about one.
+  assertEquals(
+    renderPromptSections(CODING_PROMPT_SECTIONS, [TOOL_SEND_CHAT])
+      .includes("send_chat"),
+    false,
+  );
+});
+
 Deno.test("the web-search bullet follows the pair it is about", () => {
   // A session without a configured provider has no web tools, and must not be
   // told to search: the bullet names only tools that are there.
@@ -313,6 +338,7 @@ Deno.test("one bullet per section: no section packs unrelated rules together", (
     const section of [
       ...CODING_PROMPT_SECTIONS,
       ...CHAT_PROMPT_SECTIONS,
+      ...STELLA_PROMPT_SECTIONS,
       ...EXPLORE_SUBAGENT_SECTIONS,
       ...GENERAL_SUBAGENT_SECTIONS,
     ]

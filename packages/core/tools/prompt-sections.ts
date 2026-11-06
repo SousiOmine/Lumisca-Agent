@@ -7,6 +7,7 @@ import {
   TOOL_EVAL,
   TOOL_LIST_DIR,
   TOOL_READ,
+  TOOL_SEND_CHAT,
   TOOL_SEND_MESSAGE,
   TOOL_SKILL,
   TOOL_TASK,
@@ -297,6 +298,25 @@ const VM_ASK_USER_SECTION: PromptSection = {
     "written\n  into the transcript.",
 };
 
+/** When the user should hear from the agent before the reply.
+ *
+ * The tool's description states the contract of one call (send before long
+ * work, what to put in it, one call is one message), and repeating that here
+ * would cost every request and drift from it. What a description cannot say
+ * — it describes a call, not a run — is that the wait itself is the
+ * problem: a run that says nothing until it ends reads as a hang, however
+ * well the note it finally sends is written. One line, because that is the
+ * whole of the guidance. */
+const SEND_CHAT_SECTION: PromptSection = {
+  name: "tool:send_chat",
+  order: ORDER.tool + 158,
+  requires: [TOOL_SEND_CHAT],
+  text:
+    "- send_chat is how the user hears from you before the work is done: a " +
+    "short note\n  before a long task, and another when it turns, keeps them " +
+    "from waiting blind.",
+};
+
 const TASK_SECTION: PromptSection = {
   name: "tool:task",
   order: ORDER.tool + 130,
@@ -446,16 +466,17 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
  * neither a visual nor a chat_attach bullet: `send_chat` is this
  * conversation's only channel, and it carries files itself. */
 export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
-  // The per-tool sections are deliberately absent: a tool's own description
-  // already says what it does and when to reach for it, so repeating it here
-  // only costs every request (and drifts from the description it copies).
-  // What is left is what no tool can carry — how to choose BETWEEN tools,
-  // and the rules that hold across calls.
+  // Per-tool sections are mostly absent: a tool's own description already
+  // says what it does and when to reach for it, so repeating it here only
+  // costs every request (and drifts from the description it copies). What is
+  // left is what no tool can carry — how to choose BETWEEN tools, the rules
+  // that hold across calls, and the one habit the user waits on (send_chat).
   VM_FIND_SECTION,
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
   VM_LAUNCH_SECTION,
   VM_ASK_USER_SECTION,
+  SEND_CHAT_SECTION,
   NOTIFICATION_SECTION,
   SUBAGENT_MESSAGE_SECTION,
   QUALITY_SECTION,
