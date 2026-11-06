@@ -152,7 +152,11 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
   HTTPS のページから loopback への fetch も、WebKit では混在コンテンツとして遮断されます（`127.0.0.1` も `localhost` も同じです）。そこで `shellCall` は通信段階の失敗のときだけ Tauri の IPC（`bridge::shell_action`）へ退避します。IPC はネットワーク要求ではないので混在コンテンツの対象外で、同じ `handle_shell_action` に届きます。HTTP エラーはアクション自身の答えなので再実行しません。リモートページに許すコマンドは `capabilities/remote-shell.json` の `allow-shell-action` だけです。
 
 - **ウィンドウ操作の見た目はプラットフォームの作法に従う**  
-  macOS は `tauri.macos.conf.json` で `decorations: true` + `titleBarStyle: "overlay"` にし、OS 自身の信号機ボタンを使います。見た目・hover・配置はウィンドウサーバーが持ち、ページが描いた複製は一致しません。ただし Overlay のタイトルバーはページの上に重なり、その高さ（28pt）の中のページ要素はクリックを受け取れません。そこで `.app.macos` が同じ高さの上余白を取り、帯はその下から始めます。`TitleBar` は閉じる・最小化・最大化のボタンを描かず、帯のドラッグとダブルクリックだけをブリッジへ送ります。ネイティブバーの高さにも `.macos-titlebar-drag` を置きます（信号機の左 78px は空けます）。Windows / Linux は `decorations: false` のフレームレスで、ページが右端にボタンを描きます。どちらかはシェルが `state` の `platform` で答えます。
+  macOS は `tauri.macos.conf.json` で `decorations: true` + `titleBarStyle: "overlay"` にし、OS 自身の信号機ボタンを使います。見た目・hover・配置はウィンドウサーバーが持ち、ページが描いた複製は一致しません。ただし Overlay のタイトルバーはページの上に重なり、その高さ（28pt）の中のページ要素はクリックを受け取れません。そこで `.app.macos` が同じ高さの上余白を取り、帯はその下から始めます。`TitleBar` は閉じる・最小化・最大化のボタンを描かず、帯のドラッグとダブルクリックだけをブリッジへ送ります。ネイティブバーの高さにも `.macos-titlebar-drag` を置きます（信号機の左 78px は空けます）。Windows / Linux は `decorations: false` のフレームレスで、ページが右端にボタンを描きます。
+
+  どちらかをページへ渡すのは、ブリッジの origin と同じ初期化スクリプトです（`__LUMISCA_PLATFORM__`、`bridge_server.rs` の `main_window_initialization_script`）。`state` には載せません。OS はウィンドウの事実であり、ページはそれとは別のマシンに配信され得るため、ページの環境からは答えられない一方で、ブリッジの応答は待てないからです。ウィンドウ操作の描画を応答に依存させると、応答が 1 度でも失敗した時点で帯ごと消え、`decorations: false` の窓は閉じることも動かすこともできなくなります。帯を描くかどうかは `inDesktopShell()`（初期化スクリプトが仕込まれたか）だけで決め、`state` は最大化アイコンと接続先の名前だけに使います。
+
+  モード選択画面（`App.tsx` の `mode === null`）も同じ帯を持ちます。モードの保存先は `localStorage` でオリジンごとなので、リモートのサーバーは初回に必ずこの画面から始まります。帯を省くと、接続した直後の窓だけボタンが無い状態になります。
 
 - **状態の置き場所と共有**  
   画面をまたいで同じ値を読むものは、モジュールスコープのストアに置きます（`i18n.ts` の言語、`modelCatalog.ts` のモデルカタログ、`useSavedPrompts.ts` の保存プロンプト）。1 つの画面の中だけで完結する状態は `useState` に置きます。そのどちらでもない場合は props で渡し、深さは 2 階層までを目安にします。保存・コピー・非同期 effect の後始末はフックを共有し（`hooks/useSave.ts`、`hooks/useAsync.ts`）、表示部品も `Field`、`BackHeader`、`CollapsiblePanel`、`confirmAction` を再利用します。

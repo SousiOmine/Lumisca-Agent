@@ -5,7 +5,13 @@ import {
   useState,
 } from "preact/compat";
 import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
-import { type ShellState, shellState, windowApi } from "../shell.ts";
+import {
+  inDesktopShell,
+  shellPlatform,
+  type ShellState,
+  shellState,
+  windowApi,
+} from "../shell.ts";
 import { useVisibleInterval } from "../hooks/useVisibleInterval.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
@@ -72,8 +78,7 @@ export function TitleBar({
 
   // One read at a time, re-armed by the effect below: a fetch that is still
   // in flight must not stack a second one behind it. The whole state is
-  // kept (not just the maximized flag): the picker names the server from
-  // it, and the platform decides which controls to draw.
+  // kept (not just the maximized flag): the picker names the server from it.
   const [pollMs, setPollMs] = useState(POLL_MS);
   useVisibleInterval(() => {
     void shellState.read().then(
@@ -82,19 +87,24 @@ export function TitleBar({
         setPollMs(POLL_MS);
       },
       () => {
-        setState(null);
-        // Back off when the bridge is absent (a plain browser): it cannot
-        // come up later in this page.
+        // The bridge refused or did not answer: the strip stays where it is
+        // (the controls are the window's only way out) and the poll backs
+        // off. Dropping the state here would take the buttons and the drag
+        // handle down with it — an unclosable, unmovable window.
         setPollMs(IDLE_POLL_MS);
       },
     );
   }, pollMs);
 
-  // Plain browser: no shell bridge, so no window chrome — the tab bar
-  // renders on its own with its default (full bar) styles.
-  if (state === null) return <>{children}</>;
+  // A plain browser has no shell, so no window chrome: the tab bar renders
+  // on its own with its default (full bar) styles. The decision is the
+  // build's, not an answer of the bridge — see `inDesktopShell`.
+  if (!inDesktopShell()) return <>{children}</>;
 
-  const nativeControls = state.platform === "macos";
+  const nativeControls = shellPlatform === "macos";
+  // Until the bridge answers, the window is drawn restored; the answer only
+  // swaps the glyph.
+  const maximized = state?.maximized === true;
 
   /** Tabs, the app menu, the connection picker (their popovers extend below
    * the strip) and the window buttons must stay clickable, not drag. */
@@ -185,16 +195,14 @@ export function TitleBar({
               type="button"
               className="titlebar-btn"
               onClick={() => windowApi.toggleMaximize()}
-              title={state.maximized
+              title={maximized
                 ? t("chrome.titleBar.restore")
                 : t("chrome.titleBar.maximize")}
-              aria-label={state.maximized
+              aria-label={maximized
                 ? t("chrome.titleBar.restore")
                 : t("chrome.titleBar.maximize")}
             >
-              {state.maximized
-                ? <IconCopy size={13} />
-                : <IconSquare size={12} />}
+              {maximized ? <IconCopy size={13} /> : <IconSquare size={12} />}
             </button>
             <button
               type="button"

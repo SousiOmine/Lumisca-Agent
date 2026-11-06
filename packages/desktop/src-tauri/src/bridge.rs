@@ -51,13 +51,6 @@ struct ConnectionState {
     saved: bool,
     /// Whether the main window is maximized (custom title bar icon).
     maximized: bool,
-    /// The OS the shell runs on ("macos", "windows", "linux"). The page
-    /// draws its window controls after the platform's own convention
-    /// (macOS puts round controls on the left, the others square glyphs on
-    /// the right), and it cannot infer that from its own environment: the
-    /// page is served by a possibly remote machine, so its user agent says
-    /// nothing about the window it is displayed in.
-    platform: String,
 }
 
 /// Current display's auth token (the bridge key).
@@ -189,7 +182,6 @@ pub(crate) fn handle_shell_action(
                 error: startup.error.clone(),
                 saved,
                 maximized,
-                platform: crate::bridge_server::platform_name().to_string(),
             };
             bridge_json(StatusCode::OK, serde_json::to_value(state).unwrap())
         }

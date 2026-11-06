@@ -26,11 +26,10 @@ export interface ShellState {
   name: string | null;
   /** Whether the main window is maximized (custom title bar icon). */
   maximized: boolean;
-  /** The OS the shell runs on. The page is served by a possibly remote
-   * machine, so its own environment says nothing about the window it is
-   * displayed in: the window controls follow this value. */
-  platform: "macos" | "windows" | "linux";
 }
+
+/** The OS hosting the desktop window. */
+export type ShellPlatform = "macos" | "windows" | "linux";
 
 declare global {
   /** Embedded by the server when LUMISCA_TOKEN auth is enabled (also
@@ -41,6 +40,11 @@ declare global {
    * injected as the main window's initialization script. Absent in a plain
    * browser and in the browser lab. */
   var __LUMISCA_BRIDGE__: string | undefined;
+  /** The OS the shell runs on, injected by the same initialization script as
+   * the bridge origin. The page cannot answer this itself: it may be served
+   * by a remote machine, so its own environment says nothing about the
+   * window it is displayed in. Absent in a plain browser. */
+  var __LUMISCA_PLATFORM__: ShellPlatform | undefined;
   /** Tauri's IPC, injected into every page of the desktop window. It is the
    * fallback road to the same shell actions when the loopback bridge cannot
    * be fetched (see `shellCall`). Absent in a plain browser. */
@@ -53,6 +57,9 @@ declare global {
 
 /** Bridge base URL, or undefined outside the desktop shell. */
 const BRIDGE = globalThis.__LUMISCA_BRIDGE__;
+
+/** The OS hosting the desktop window, or undefined in a plain browser. */
+export const shellPlatform = globalThis.__LUMISCA_PLATFORM__;
 
 /** Auth token of the currently connected server. The shell bridge only
  * answers requests carrying it as `key`, so only the page served by that

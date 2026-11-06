@@ -39,9 +39,10 @@ minBtn.addEventListener("click", () => windowAction("minimize"));
 maxBtn.addEventListener("click", () => windowAction("toggle-maximize"));
 closeBtn.addEventListener("click", () => windowAction("close"));
 
-/** Whether the OS draws the window chrome (macOS). Set from the bridge
- * state once the shell answers; false until then (Windows and Linux draw
- * their own controls). */
+/** Whether the OS draws the window chrome (macOS). The shell injects the
+ * answer with the bridge origin (see main_window_initialization_script):
+ * the page is the app's own splash when this runs, and Windows and Linux
+ * draw their own controls. */
 let nativeChrome = false;
 
 /** macOS keeps the OS title bar (tauri.macos.conf.json), so the native
@@ -56,6 +57,8 @@ function applyPlatform(platform) {
     control.hidden = true;
   }
 }
+
+applyPlatform(globalThis.__LUMISCA_PLATFORM__);
 
 // Drag the window from anywhere on the title bar except the buttons;
 // double-click toggles maximize. On macOS the system title bar already
@@ -84,7 +87,6 @@ async function poll() {
     // and the shell is about to navigate: keep waiting.
     if (res.ok && body) {
       setMaximized(!!body.maximized);
-      applyPlatform(body.platform);
       savedRemote = !!body.saved;
       if (body.status === "error") {
         // The local server itself failed to start. A remembered remote

@@ -68,6 +68,15 @@
   background: transparent;
 }
 
+/* The strip's empty left side on a screen with nothing to tab through (the
+ * mode selection): it is the drag handle, so it takes the room the tab bar
+ * would have. Scoped to the strip — in a plain browser the bar is not drawn,
+ * and the same element would otherwise grow inside the app's column. */
+.titlebar .titlebar-blank {
+  flex: 1;
+  min-width: 0;
+}
+
 .titlebar-controls {
   display: flex;
   align-items: stretch;

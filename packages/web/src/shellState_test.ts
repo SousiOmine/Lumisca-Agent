@@ -22,7 +22,6 @@ const SHELL_STATE = {
   url: null,
   name: null,
   maximized: false,
-  platform: "linux",
 };
 
 /** Run `body` with `fetch` replaced by a stub answering SHELL_STATE. */

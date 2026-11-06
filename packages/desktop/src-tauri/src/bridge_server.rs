@@ -172,15 +172,23 @@ fn write_response(stream: &mut TcpStream, status: u16, reason: &str, body: &[u8]
     let _ = stream.flush();
 }
 
-/// The script a window starts every page with: where the bridge is. It must
-/// be an initialization script (not an inline script in the page), because
-/// the page is served by the server and its CSP bans inline scripts, and
-/// because every navigation of this window — the splash, the local server,
-/// a remote server — has to receive it.
+/// The script a window starts every page with: where the bridge is, and which
+/// OS draws the window. It must be an initialization script (not an inline
+/// script in the page), because the page is served by the server and its CSP
+/// bans inline scripts, and because every navigation of this window — the
+/// splash, the local server, a remote server — has to receive it.
+///
+/// The platform is a fact about the window, not about the page: the page may
+/// be served by a remote machine, so its own environment answers nothing. It
+/// travels here rather than in the bridge's `state` because the window
+/// controls have to be drawn before (and even without) a bridge answer: a
+/// title bar that waited for one disappeared entirely whenever the bridge
+/// refused a call.
 pub(crate) fn main_window_initialization_script(origin: &str) -> String {
     format!(
-        "window.__LUMISCA_BRIDGE__ = {};",
-        serde_json::to_string(&format!("{origin}/shell")).unwrap_or_default()
+        "window.__LUMISCA_BRIDGE__ = {}; window.__LUMISCA_PLATFORM__ = {};",
+        serde_json::to_string(&format!("{origin}/shell")).unwrap_or_default(),
+        serde_json::to_string(platform_name()).unwrap_or_default()
     )
 }
 
@@ -194,5 +202,25 @@ pub(crate) fn platform_name() -> &'static str {
         "windows"
     } else {
         "linux"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The script carries both facts the page reads before it renders: the
+    /// bridge's origin and the OS. The window controls are drawn from the
+    /// second one alone, so a script that dropped it would leave the page
+    /// unable to tell macOS (native traffic lights) from Windows and Linux
+    /// (drawn buttons) — and the title bar would draw the wrong chrome.
+    #[test]
+    fn the_initialization_script_names_the_bridge_and_the_platform() {
+        let script = main_window_initialization_script("http://127.0.0.1:1234");
+        assert!(script.contains(r#"window.__LUMISCA_BRIDGE__ = "http://127.0.0.1:1234/shell";"#));
+        assert!(script.contains(&format!(
+            r#"window.__LUMISCA_PLATFORM__ = "{}";"#,
+            platform_name()
+        )));
     }
 }

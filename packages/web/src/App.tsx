@@ -19,8 +19,7 @@ import { useNarrowViewport } from "./hooks/useMediaQuery.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
 import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
-import { useShellPlatform } from "./hooks/useShellPlatform.ts";
-import { quit } from "./shell.ts";
+import { inDesktopShell, quit, shellPlatform } from "./shell.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
 import { useTabs } from "./hooks/useTabs.ts";
 import { useTabClose } from "./hooks/useTabClose.ts";
@@ -93,11 +92,15 @@ export function App({ initialData }: AppProps): ReactElement {
   } = useAppMode();
   // macOS overlays the native title bar on the page, so the page's chrome
   // has to start below it (see `.app.macos` in styles/chrome.css). The
-  // platform is the shell's answer, not this page's environment: a remote
-  // server is displayed in the same window.
-  const shellPlatform = useShellPlatform();
+  // platform is the shell's answer, injected with the bridge origin: a
+  // remote server is displayed in the same window.
   const macos = shellPlatform === "macos";
   const appClass = macos ? "app macos" : "app";
+  // Whether this page runs inside the desktop shell's window. The title bar
+  // is drawn from this, not from an answer of the bridge: a window whose
+  // controls vanished because one bridge call failed cannot be closed or
+  // moved, which is the whole point of the controls.
+  const desktop = inDesktopShell();
   const {
     workspaces,
     loadError,
@@ -305,31 +308,58 @@ export function App({ initialData }: AppProps): ReactElement {
     return (
       <div className={appClass}>
         {macos && <MacosTitleBarDrag />}
-        <AppMenu
+        {
+          /* The selection screen is the first thing a new origin shows, and
+         * a remote server is a new origin (the mode is stored per client,
+         * per origin). The window is undecorated there, so this screen has
+         * to carry the same chrome as the app: without it a connected
+         * window had no way to be moved, maximized or closed. */
+        }
+        <TitleBar
           onNew={openDraftTab}
           onOpenRecent={openRecent}
           onOpenSettings={openSettings}
           onQuit={quit}
           onSwitchMode={openModeSelect}
-          isDesktop={update.source === "shell"}
-          buttonClass="app-menu-standalone"
-        />
-        {machineStatus === null
-          ? (
-            <div className="mode-select-loading">
-              {modeError === null
-                ? t("common.loading")
-                : t("common.serverUnreachable", { error: modeError })}
-            </div>
-          )
-          : (
-            <ModeGate
-              status={machineStatus}
-              mode={mode}
-              error={modeError}
-              choose={setMode}
-            />
-          )}
+          onManageConnections={openServers}
+          tabs={false}
+        >
+          <div className="titlebar-blank" />
+        </TitleBar>
+        {
+          /* A plain browser has no title bar, so the menu stays where the
+         * tab bar would put it: this screen is the only way into settings
+         * and the mode switch before a mode exists. */
+        }
+        {!desktop && (
+          <AppMenu
+            onNew={openDraftTab}
+            onOpenRecent={openRecent}
+            onOpenSettings={openSettings}
+            onQuit={quit}
+            onSwitchMode={openModeSelect}
+            isDesktop={false}
+            buttonClass="app-menu-standalone"
+          />
+        )}
+        <div className="app-body">
+          {machineStatus === null
+            ? (
+              <div className="mode-select-loading">
+                {modeError === null
+                  ? t("common.loading")
+                  : t("common.serverUnreachable", { error: modeError })}
+              </div>
+            )
+            : (
+              <ModeGate
+                status={machineStatus}
+                mode={mode}
+                error={modeError}
+                choose={setMode}
+              />
+            )}
+        </div>
       </div>
     );
   }
@@ -383,7 +413,7 @@ export function App({ initialData }: AppProps): ReactElement {
                * has, so the menu (settings, mode switch, session history)
                * has to stay reachable from here. */
               }
-              {update.source !== "shell" && (
+              {!desktop && (
                 <div className="tabbar-actions">
                   <AppMenu
                     onNew={openDraftTab}
@@ -409,7 +439,7 @@ export function App({ initialData }: AppProps): ReactElement {
               onNew={openDraftTab}
               onOpenRecent={openRecent}
               onOpenSettings={openSettings}
-              isDesktop={update.source === "shell"}
+              isDesktop={desktop}
               onQuit={quit}
               onSwitchMode={openModeSelect}
             />
