@@ -27,7 +27,9 @@ export const SHUTDOWN_GRACE_MS = 5_000;
 
 export type ShutdownSignal = "SIGINT" | "SIGTERM";
 
-/** Exit code a signal asks for. */
+/** The exit code the shell would report: 130 for an interrupt, and 0 for
+ * SIGTERM because a supervisor's restart policy (`Restart=always`) treats a
+ * clean stop as a restart, not a failure. */
 export function exitCodeForSignal(signal: ShutdownSignal): number {
   return signal === "SIGINT" ? 130 : 0;
 }

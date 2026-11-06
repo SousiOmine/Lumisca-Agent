@@ -30,7 +30,6 @@ import { stellaEntryOf } from "./stella-stream.ts";
  * this is the backstop, not the target. */
 export const STELLA_RECORD_MAX_TOKENS = 4_000;
 
-/** System prompt of the record call. */
 export const STELLA_RECORD_SYSTEM_PROMPT =
   "You maintain the long-term record of a conversation between a user and " +
   "an assistant. The record is the conversation's current state, not a " +

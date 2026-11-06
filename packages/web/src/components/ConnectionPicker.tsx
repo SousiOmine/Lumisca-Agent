@@ -28,9 +28,9 @@ interface ConnectionPickerProps {
  * The registry lives in the server's database and is shared, but *which* of
  * the entries the window displays is the shell's state: it survives
  * navigation (the page is reloaded onto the chosen server) and a restart.
- * Before this control the answer was only visible inside settings → 接続先
- * サーバー, one dialog deeper than the question — a page served by a remote
- * machine looks exactly like the local one.
+ * Without this control the answer is only inside settings → 接続先サーバー,
+ * one dialog deeper than the question — a page served by a remote machine
+ * looks exactly like the local one.
  *
  * It lives in the desktop title bar in the corner every desktop window keeps
  * its "where am I" affordance, beside the app menu. In a plain browser there
@@ -42,11 +42,8 @@ interface ConnectionPickerProps {
  * the settings dialog reaches this popover without a re-fetch. The shell's
  * answer is read once: it is fixed for the lifetime of the page — switching
  * servers navigates the window and loads a new page — so it is not polled
- * here; the title bar already polls it and hands it over through `state`
- * when it changes. It is
- * lifetime of the page — switching servers navigates the window and loads
- * a new page — so it is not polled here; the title bar already polls it and
- * hands it over through `state` when it changes.
+ * here; the title bar polls it and hands it over through `state` when it
+ * changes.
  *
  * The displayed name is the shell's: the registry of a REMOTE page is that
  * server's registry, which usually has no entry for itself, so matching the

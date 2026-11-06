@@ -15,15 +15,6 @@ export function json(
   });
 }
 
-/** The transcript without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools) a session publishes ahead of the
- * first user message of a run. Those are not part of a turn, so the tests
- * that count or position turns count this array. */
-
-/** The transcript without the dynamic-context publications (skill catalog,
- * instructions, date, on-demand tools) a session publishes ahead of the
- * first user message of a run. Those are not part of a turn, so the tests
- * that count or position turns count this array. */
 Deno.test("unknown static assets return 404, not the HTML shell", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);

@@ -14,7 +14,7 @@ export interface Shell {
 let cached: Shell | undefined;
 
 /**
- * The shell used to run bash tool commands. On Windows the priority is:
+ * The shell that runs bash tool commands. On Windows the priority is:
  * pwsh (PowerShell 7) → powershell.exe (Windows PowerShell, ships with
  * every Windows) → Git Bash → %COMSPEC% (cmd.exe). PowerShell is preferred
  * because its command-line parser unescapes the `\"` sequences Deno emits

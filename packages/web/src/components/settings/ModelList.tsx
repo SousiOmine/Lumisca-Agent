@@ -64,7 +64,6 @@ export function ModelList() {
     setExpanded((prev) => ({ ...prev, [providerId]: !prev[providerId] }));
   };
 
-  // Filter by search query
   const filtered = useMemo(() => {
     if (!search.trim()) return providerModels;
     const q = search.trim().toLowerCase();

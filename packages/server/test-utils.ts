@@ -23,11 +23,11 @@ export interface AppHarness {
 }
 
 /**
- * Start an app on an ephemeral port with a faux provider, the way every
- * `app_*_test.ts` did before this module existed.
+ * Start an app on an ephemeral port with a faux provider — the shape every
+ * `app_*_test.ts` suite runs.
  *
- * The caller owns the teardown (the suite has a test per file that closes in
- * `finally`, matching what each file used to write inline):
+ * The caller owns the teardown: nothing here closes the server or the core,
+ * so a suite reads the same in its happy path and its failure path.
  *
  *   const { core, server, base } = setup();
  *   try { … } finally { disposeServer(server); server.shutdown(); await core.close(); }

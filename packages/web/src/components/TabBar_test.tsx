@@ -61,8 +61,7 @@ Deno.test("TabBar renders each tab's label, tooltip and active state", () => {
   assertEquals(html.match(/class="tab active"/g)?.length, 1);
   // The icons are tabler's, server-rendered: a package that stopped emitting
   // its `<svg class="tabler-icon">` markup (a Deno/Preact upgrade is the
-  // usual cause) would leave the strip with blank buttons. This is the check
-  // that a standalone "icons render in Deno" smoke test used to make.
+  // usual cause) would leave the strip with blank buttons.
   assertStringIncludes(html, 'class="tabler-icon');
 });
 

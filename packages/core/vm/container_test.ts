@@ -968,8 +968,9 @@ Deno.test("status: a second fresh read does not ask about the image again", asyn
 });
 
 Deno.test("status: concurrent reads share one round of podman calls", async () => {
-  // The status poll, an open and the screen's port lookup can overlap. Each
-  // used to run its own podman calls; now they wait for the same read.
+  // The status poll, an open and the screen's port lookup can overlap. One
+  // read has to serve all of them: a podman spawn per caller multiplies the
+  // cost of a page that only wants to know whether the machine is up.
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   try {

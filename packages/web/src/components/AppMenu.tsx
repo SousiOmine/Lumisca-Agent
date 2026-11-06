@@ -88,7 +88,6 @@ export function AppMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Close on outside click.
   useClickOutside(menuRef, () => setOpen(false), open);
 
   return (

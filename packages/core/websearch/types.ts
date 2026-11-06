@@ -18,7 +18,6 @@ export type FetchLike = (
 export type { WebSearchProviderId } from "../shared/web-search.ts";
 import type { WebSearchProviderId } from "../shared/web-search.ts";
 
-/** One search request. */
 export interface SearchRequest {
   query: string;
   /** How many results to return; 1 or more (each provider clamps it too). */
@@ -27,7 +26,6 @@ export interface SearchRequest {
   signal?: AbortSignal;
 }
 
-/** One search result. */
 export interface SearchResult {
   title: string;
   url: string;
@@ -41,7 +39,6 @@ export interface SearchResponse {
   results: SearchResult[];
 }
 
-/** One page fetch. */
 export interface FetchRequest {
   url: string;
   /** Characters to return at most. Omitted → the default. */

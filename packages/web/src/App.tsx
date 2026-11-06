@@ -133,10 +133,8 @@ export function App({ initialData }: AppProps): ReactElement {
   } = useTabs(setViews, seedRevision, resyncPanels, forgetRevisions);
   // Closing a tab closes its session, which stops the run (and the
   // session's background commands and sub-agents). A close that would do
-  // that to a running tab therefore asks first (CloseTabsDialog); the
-  // Closing a tab closes its session, which stops the run (and the
-  // session's background commands and sub-agents). A close that would do
-  // that to a running tab therefore asks first (see useTabClose).
+  // that to a running tab therefore asks first (CloseTabsDialog, via
+  // useTabClose).
   const tabClose = useTabClose({ views, closeTabs });
   const { request: requestClose, resolve: resolveClose } = tabClose;
   const pendingClose = tabClose.pending;

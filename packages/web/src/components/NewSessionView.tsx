@@ -241,7 +241,6 @@ export function NewSessionView(
 
   const selectedWorkspace = selectable.find((w) => w.id === workspaceId);
 
-  // Build the slash commands list including the /skill and /prompt submenus.
   // In chat mode only skills, actions and saved prompts are shown (agent
   // modes need a workspace).
   const isChat = selectedWorkspace?.chat ?? false;

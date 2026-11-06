@@ -89,9 +89,6 @@ export interface PageRules<T> {
   maxPageItems?: number;
 }
 
-/**
- * Read one page of a session's transcript.
- */
 export function readTranscriptPage<T>(
   repo: MessageRepo,
   sessionId: string,

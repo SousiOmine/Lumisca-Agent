@@ -43,7 +43,6 @@ export function WorkspacePicker({
   const selectable = [...(chat ? [chat] : []), ...workspaces];
   const selected = selectable.find((w) => w.id === value);
 
-  // Close on outside click and Escape.
   useClickOutside(rootRef, () => setOpen(false), open);
 
   return (

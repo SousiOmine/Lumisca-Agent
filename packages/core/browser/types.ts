@@ -235,7 +235,6 @@ export interface BrowserBackend {
 
 // --- size limits (shared with the hosts) -----------------------------------
 
-/** Max elements in one snapshot. */
 export const MAX_SNAPSHOT_ELEMENTS = 300;
 /** Max characters of the digest text of a snapshot. */
 export const MAX_PAGE_TEXT_CHARS = 4096;

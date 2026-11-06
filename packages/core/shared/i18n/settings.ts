@@ -767,8 +767,8 @@ export const settings = {
     ja: "ブラウザでツールを認証",
     en: "Authorize tools in your browser",
   },
-  /** ウィンドウを開けない WebView（デスクトップアプリ）向けの回避策:
-   * 認証 URL をコピーして、ユーザー自身のブラウザで開いてもらいます。 */
+  /** For WebViews that cannot open a window (the desktop app): the user
+   * copies the sign-in URL and opens it in their own browser. */
   "settings.mcp.authCopyUrl": {
     ja: "認証 URL をコピー",
     en: "Copy the sign-in URL",

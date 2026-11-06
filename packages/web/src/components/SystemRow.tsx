@@ -12,7 +12,6 @@ import type { NotificationKind, NotificationStatus } from "../types.ts";
 import { useExpandableRow } from "../hooks/useExpandableRow.ts";
 import { useT } from "../i18n.ts";
 
-/** Icon for a notification kind. */
 export function notificationKindIcon(kind: NotificationKind) {
   switch (kind) {
     case "background":

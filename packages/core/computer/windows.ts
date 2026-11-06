@@ -102,7 +102,6 @@ const SM_XVIRTUALSCREEN = 76;
 const SM_YVIRTUALSCREEN = 77;
 const SM_CXVIRTUALSCREEN = 78;
 const SM_CYVIRTUALSCREEN = 79;
-/** MONITORINFOF_PRIMARY. */
 const MONITORINFOF_PRIMARY = 1;
 /** VK codes of the modifier keys (VK_LWIN for the Windows key). */
 const VK_SHIFT = 0x10;

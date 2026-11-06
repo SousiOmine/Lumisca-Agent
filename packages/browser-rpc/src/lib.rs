@@ -60,5 +60,4 @@ pub mod error_codes {
 
 /// The token header name; mirror packages/core/browser/types.ts.
 pub const TOKEN_HEADER: &str = "x-lumisca-browser-token";
-/// The RPC path.
 pub const RPC_PATH: &str = "/rpc";

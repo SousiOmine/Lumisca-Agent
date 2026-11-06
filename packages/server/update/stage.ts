@@ -50,7 +50,6 @@ export function stagingDir(installDir: string): string {
   return join(installDir, STAGING_DIR_NAME);
 }
 
-/** Path of the staged archive for a format. */
 export function stagedArchivePath(
   installDir: string,
   format: ArchiveFormat,
@@ -152,7 +151,6 @@ export async function clearStagedPackage(installDir: string): Promise<void> {
   await Deno.remove(join(dir, STAGED_METADATA_FILE)).catch(() => {});
 }
 
-/** Progress of a running download. */
 export interface DownloadProgress {
   /** Bytes written so far. */
   received: number;

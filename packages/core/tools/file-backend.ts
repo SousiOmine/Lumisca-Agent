@@ -87,7 +87,6 @@ export interface LineRange {
   to: number;
 }
 
-/** The result of a ranged read. */
 export interface RangeReadResult {
   /** The requested lines, in range order. */
   lines: string[];

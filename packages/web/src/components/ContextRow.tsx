@@ -2,7 +2,6 @@ import { IconFileText, IconSparkles, IconUser } from "@tabler/icons-preact";
 import type { ContextMessage } from "../types.ts";
 import { SystemRow } from "./SystemRow.tsx";
 
-/** Icon for a context provider. */
 function providerIcon(provider: string) {
   switch (provider) {
     case "instructions":

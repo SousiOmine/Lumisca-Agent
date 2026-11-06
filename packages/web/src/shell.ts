@@ -172,40 +172,37 @@ export async function pickFolder(): Promise<string | null> {
  * can fill are optional, and `hooks/useUpdateStatus.ts` reports which one
  * answered. */
 export interface UpdateStatus {
-  /** 自動アップデートが有効か (設定の永続値)。 */
   autoUpdate: boolean;
-  /** 更新チェック実行中。 */
   checking: boolean;
-  /** 新しいバージョンが存在する。 */
   available: boolean;
-  /** 最新バージョン (確認済みのときのみ)。 */
+  /** The newest version a check has found. */
   latestVersion: string | null;
-  /** ダウンロード実行中。 */
   downloading: boolean;
-  /** ダウンロード進捗 0..1 (総サイズ不明時は null)。 */
+  /** 0..1 while the total size is known; null until then. */
   progress: number | null;
   downloaded: number | null;
   total: number | null;
-  /** ダウンロード完了・インストール待ち。 */
   ready: boolean;
   error: string | null;
-  /** 現在実行中のアプリバージョン。 */
+  /** What the running process reports. After an update the files on disk are
+   * newer: that is `appliedVersion` + `restartPending`. */
   currentVersion: string;
-  /** サーバー単体のアップデーターのみ: この構成で自己更新できるか。 */
+  /** Standalone updater only: whether this install can update itself. */
   supported?: boolean;
-  /** サーバー単体のアップデーターのみ: できない理由 (supported が false のとき)。 */
+  /** Standalone updater only: why not, when `supported` is false. */
   unsupportedReason?: string | null;
-  /** サーバー単体のアップデーターのみ: 適用済みのファイルが実行中プロセス
-   * と異なるバージョンか (再起動で有効になる)。 */
+  /** Standalone updater only: the files on disk already hold a different
+   * version, and the running process keeps the old one until it restarts. */
   restartPending?: boolean;
-  /** サーバー単体のアップデーターのみ: 適用済みバージョン。 */
+  /** Standalone updater only: the version on disk. */
   appliedVersion?: string | null;
-  /** サーバー単体のアップデーターのみ: 再起動の可否 ("none" は監視側に任せる、
-   * "supervisor" は監視プロセス (systemd) が新しいバイナリを起動する)。 */
+  /** Standalone updater only: who restarts into it (see
+   * packages/server/update/service.ts `#performRestart`). "none" leaves the
+   * restart to the operator, so the banner must not offer one. */
   restartMode?: "self" | "none" | "supervisor";
-  /** サーバー単体のアップデーターのみ: 適用後に自動で再起動するか。 */
+  /** Standalone updater only: whether to restart once the update applies. */
   autoRestart?: boolean;
-  /** サーバー単体のアップデーターのみ: 再起動処理中 (この応答の後に落ちる)。 */
+  /** Standalone updater only: the process exits after this response. */
   restarting?: boolean;
 }
 

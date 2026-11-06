@@ -14,7 +14,6 @@ export type ResolvedPath =
   | { ok: true; path: string }
   | { ok: false; reason: string };
 
-/** Options of a {@link Sandbox}. */
 export interface SandboxOptions {
   /** Additional folders a path may resolve inside, WITHOUT taking part in
    * folder-name matching (an absolute path is the only way to name them).

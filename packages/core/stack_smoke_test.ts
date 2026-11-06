@@ -9,10 +9,10 @@ import { assertEquals } from "@std/assert";
  * The agent and model-registry scenarios live in their own suites
  * (ai/agent_test.ts, agent/session-agent_test.ts,
  * models/extra-providers_test.ts) — not duplicated here. The tabler icons
- * used to have a case here too; the components that draw them
- * (components/TabBar_test.tsx) render them through the same
- * preact-render-to-string path and assert the `<svg class="tabler-icon">`
- * markup, so a broken icon package fails there first.
+ * are covered where they are drawn (components/TabBar_test.tsx): that suite
+ * renders them through the same preact-render-to-string path and asserts the
+ * `<svg class="tabler-icon">` markup, so a broken icon package fails there
+ * first.
  */
 
 Deno.test("node:sqlite works in Deno", () => {

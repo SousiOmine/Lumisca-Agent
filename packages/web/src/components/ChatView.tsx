@@ -156,7 +156,6 @@ export function ChatView(
   );
   const providerUnconfigured = sessionProvider?.configured === false;
 
-  // Build the slash commands list including the /skill and /prompt submenus.
   // In chat mode only skills, actions and saved prompts are shown (agent
   // modes need a workspace). The translator is a dependency: the menu text
   // follows the app language.

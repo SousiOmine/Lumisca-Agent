@@ -90,7 +90,6 @@ export function parsePromptBody(body: PromptBody): {
   files?: { name: string; bytes: Uint8Array }[];
   mode?: ModePrompt;
 } {
-  // Parse optional mode metadata.
   let mode: ModePrompt | undefined;
   if (body.mode !== undefined) {
     if (typeof body.mode !== "object" || body.mode === null) {

@@ -46,8 +46,9 @@ export function WorkspaceModal(
     const added = !folders.includes(path);
     if (added) {
       setFolders((prev) => (prev.includes(path) ? prev : [...prev, path]));
-      // 新規作成で名前が未入力のとき、最初のフォルダ名をワークスペース名に
-      // 代入する（名前欄は後から編集可能）。
+      // Fill in the name a new workspace would otherwise need typed by hand,
+      // from the folder just picked. The field stays editable, and an
+      // existing workspace keeps the name it already has.
       if (!editing && !name.trim()) {
         const base = path.split(/[\\/]/).filter(Boolean).at(-1);
         if (base) setName(base);
