@@ -1,6 +1,6 @@
 {
   "name": "@lumisca/core",
-  "version": "0.10.14",
+  "version": "0.10.15",
   "exports": {
     ".": "./mod.ts",
     "./bytes": "./bytes.ts",
