@@ -153,7 +153,7 @@ Deno.test("tools block file access outside the workspace", async () => {
 Deno.test("model switch and workspace update are refused while streaming", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
-  const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
+  const extra = await makeRealTempDir("lumisca-extra-");
 
   const session = await core.createSession({
     workspaceId: ws.id,
@@ -198,7 +198,7 @@ Deno.test("renaming a workspace does not touch the prompt; changing folders does
   // edit and leave it alone (no write, no cache break) for a rename.
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
-  const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
+  const extra = await makeRealTempDir("lumisca-extra-");
   try {
     const session = await core.createSession({
       workspaceId: ws.id,

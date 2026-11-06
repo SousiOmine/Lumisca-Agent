@@ -46,7 +46,7 @@ export async function makeWorkspace(
 ): Promise<
   { ws: Awaited<ReturnType<LumiscaCore["createWorkspace"]>>; root: string }
 > {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
+  const root = await makeRealTempDir("lumisca-core-");
   const ws = await core.createWorkspace(name, [root]);
   return { ws, root };
 }
