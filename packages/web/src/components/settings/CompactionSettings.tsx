@@ -168,7 +168,6 @@ export function CompactionSettings() {
     <SettingsSection title={t("settings.compaction.title")}>
       <SettingRow
         label={t("settings.compaction.enabled")}
-        description={t("settings.compaction.enabledDesc")}
       >
         <Toggle
           checked={enabled}

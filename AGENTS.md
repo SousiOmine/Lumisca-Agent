@@ -109,7 +109,7 @@ Deno は公開から 24 時間以内のバージョンを既定では導入し�
 
 属するかは、サーバーがその値で何をするかで決めます。`/prompt` は code mode のコンポーザにしかなく、computer use はこのマシンの画面を動かし、ルーチンは stella の会話にしかありません。
 
-- **カテゴリは 1 枚のページ**（`settings/SettingsPage.tsx`）。見出し（名前と、何を決めるかの 1 行）と本文を分け、本文だけをスクロールさせます。中から開く画面は 1 段低い `settings/SettingsSubHeader.tsx` を持ち、`modal-header` を重ねません。900px 以下では一覧とページを 1 枚ずつ出します（`.settings-body[data-view]`）。
+- **カテゴリは 1 枚のページ**（`settings/SettingsPage.tsx`）。見出し（名前）と本文を分け、本文だけをスクロールさせます。中から開く画面は 1 段低い `settings/SettingsSubHeader.tsx` を持ち、`modal-header` を重ねません。900px 以下では一覧とページを 1 枚ずつ出します（`.settings-body[data-view]`）。
 - **プロバイダーは 1 画面に 2 種類**を同じ部品（`settings/SettingsSection.tsx` と `settings/ProviderRow.tsx`）で並べます。AI プロバイダーと Web 検索を分けると、検索側を見落とします。ページ名がそのまま節名になる画面では節の見出しを省きます。
 - **選択肢は `components/Select.tsx`**。ネイティブの `<select>` は OS の見た目で描かれ、説明行も現在値のチェックも持てません。
 - **設定の行は面を塗らない**。`SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。

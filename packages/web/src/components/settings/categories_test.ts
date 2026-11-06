@@ -2,12 +2,13 @@ import { assertEquals } from "@std/assert";
 import type { AppMode } from "@lumisca/core/shared";
 import {
   type CommonSettingsCategory,
+  initialView,
   modeLabelKey,
   navGroups,
   type SettingsNavEntry,
 } from "./categories.ts";
 
-/** A minimal entry (the model only needs identity, scope and labels). */
+/** A minimal entry (the model only needs identity, scope and a label). */
 function entry(
   id: SettingsNavEntry["id"],
   scope: SettingsNavEntry["scope"],
@@ -16,7 +17,6 @@ function entry(
     id,
     scope,
     labelKey: "common.settings",
-    descriptionKey: "common.settings",
   };
 }
 
@@ -115,4 +115,31 @@ Deno.test("the shared categories the dialog can be opened on are a subset", () =
       `shared categories must be listed in ${mode}`,
     );
   }
+});
+
+Deno.test("initialView: a named category opens its page at any width", () => {
+  // The caller sent the reader somewhere (the model picker opens プロバイダー):
+  // landing on the list would make them ask for it a second time.
+  assertEquals(initialView("providers", true), {
+    category: "providers",
+    showPage: true,
+  });
+  assertEquals(initialView("servers", false), {
+    category: "servers",
+    showPage: true,
+  });
+});
+
+Deno.test("initialView: no category means the list only when stepped", () => {
+  // The app menu opens the settings as such. Beside the page the navigation
+  // lists every category already; in the stepped layout the page would hide
+  // that list, which is the only way to reach another category.
+  assertEquals(initialView(null, false), {
+    category: "general",
+    showPage: true,
+  });
+  assertEquals(initialView(null, true), {
+    category: "general",
+    showPage: false,
+  });
 });

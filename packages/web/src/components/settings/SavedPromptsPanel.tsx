@@ -94,8 +94,6 @@ export function SavedPromptsPanel() {
         </button>
       }
     >
-      <p className="settings-note">{t("settings.prompts.description")}</p>
-
       {(actionError ?? loadError) !== null && (
         <p className="error-text" role="alert">
           {actionError ??

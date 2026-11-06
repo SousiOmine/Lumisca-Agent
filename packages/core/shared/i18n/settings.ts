@@ -37,62 +37,6 @@ export const settings = {
       'These are the {mode} settings. Preferences that only work in one mode sit under "{mode} only".',
   },
 
-  // --- page descriptions (one line per category) -----------------------------
-  // Every category opens with its name and one sentence saying what it
-  // decides, so a reader never lands on a page of switches with no idea what
-  // they govern. The sections inside a category describe themselves.
-  "settings.category.general": {
-    ja: "表示言語、アプリの更新、通知の扱い。",
-    en: "Display language, app updates and notifications.",
-  },
-  "settings.category.appearance": {
-    ja: "配色（テーマ）。",
-    en: "The colour scheme.",
-  },
-  "settings.category.providers": {
-    ja: "エージェントが使う AI と Web 検索のサービス、およびそのキー。",
-    en: "The AI and web-search services the agent uses, and their keys.",
-  },
-  "settings.category.models": {
-    ja: "セッションが使うモデルと、文脈が長くなったときの扱い。",
-    en: "The models a session runs on, and what happens as the context grows.",
-  },
-  "settings.category.mcp": {
-    ja:
-      "エージェントに外部ツールを足す MCP サーバー。ワークスペースごとの定義は各フォルダーの .mcp.json にあります。",
-    en:
-      "MCP servers add external tools to the agent. A workspace's own definitions live in its .mcp.json.",
-  },
-  "settings.category.personalize": {
-    ja: "このマシンで動くすべてのエージェントが従う指示（AGENTS.md の 1 つ）。",
-    en:
-      "Instructions every agent on this machine follows (one of the AGENTS.md files).",
-  },
-  "settings.category.security": {
-    ja: "エージェントに何を実行させるか、その確認の仕方。",
-    en: "What the agent may run, and how that is checked.",
-  },
-  "settings.category.servers": {
-    ja:
-      "このサーバーが登録している接続先。表示中のサーバーはタイトルバーで切り替えます。",
-    en:
-      "The servers this one has registered. The server you are viewing is switched in the title bar.",
-  },
-  "settings.category.prompts": {
-    ja: "入力欄で /prompt と打つと呼び出せる定型文。",
-    en: "Snippets you can recall by typing /prompt in the composer.",
-  },
-  "settings.category.computerUse": {
-    ja:
-      "エージェントがこのマシンの画面を見て、マウスとキーボードを操作します。",
-    en:
-      "The agent looks at this machine's screen and drives its mouse and keyboard.",
-  },
-  "settings.category.routines": {
-    ja: "エージェントの会話が、決まった時刻に自分から動く依頼。",
-    en: "Requests an agent's conversation runs on a schedule of its own.",
-  },
-
   // --- appearance panel -----------------------------------------------------
   "settings.appearance.theme.label": { ja: "テーマ設定", en: "Theme" },
   "settings.appearance.theme.light": { ja: "ライト", en: "Light" },
@@ -112,12 +56,6 @@ export const settings = {
   "settings.language.description": {
     ja: "画面の表示言語と、新しいセッションが回答する言語を切り替えます。",
     en: "Switch the display language and the language new sessions answer in.",
-  },
-  "settings.language.note": {
-    ja:
-      "変更は新しいセッションから反映されます。開始済みのセッションは、開始時の言語のまま継続されます。",
-    en:
-      "The change applies to new sessions. Sessions already started keep the language they began in.",
   },
   "settings.language.option.ja": { ja: "日本語", en: "Japanese" },
   "settings.language.option.en": { ja: "English", en: "English" },
@@ -278,11 +216,6 @@ export const settings = {
   },
 
   // --- saved prompts (their own category) -----------------------------------
-  "settings.prompts.description": {
-    ja: "入力欄で /prompt と打つと一覧が出ます。選ぶと本文が入力欄に入ります。",
-    en:
-      "Type /prompt in the composer to list them; picking one inserts its text.",
-  },
   "settings.prompts.loadFailed": {
     ja: "プロンプトを読み込めませんでした: {error}",
     en: "Could not load prompts: {error}",
@@ -628,11 +561,6 @@ export const settings = {
   "settings.compaction.enabled": {
     ja: "自動圧縮",
     en: "Automatic compaction",
-  },
-  "settings.compaction.enabledDesc": {
-    ja: "上限に近づいたら履歴を要約します。履歴自体は消えません。",
-    en:
-      "Summarizes the history as it approaches the limit. Nothing is deleted.",
   },
   "settings.compaction.reservePercent": {
     ja: "予約（ウィンドウ比 %）",

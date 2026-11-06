@@ -54,16 +54,13 @@ export type CommonSettingsCategory =
 /** What a category applies to: both modes, or exactly one of them. */
 export type SettingsScope = "common" | AppMode;
 
-/** One navigation entry: its identity, who it applies to, and its labels
- * (catalogue keys, so the navigation follows the app language). */
+/** One navigation entry: its identity, who it applies to, and its label (a
+ * catalogue key, so the navigation follows the app language). */
 export interface SettingsNavEntry {
   id: SettingsCategory;
   scope: SettingsScope;
   /** The navigation label. */
   labelKey: MessageKey;
-  /** One line saying what the category decides. The page prints it under
-   * its title, and the stepped (phone) index prints it under the label. */
-  descriptionKey: MessageKey;
 }
 
 /** The entries of one group of the navigation. */
@@ -101,4 +98,22 @@ export function modeLabelKey(mode: AppMode): MessageKey {
   return mode === "code"
     ? "chat.modeSelect.code.title"
     : "chat.modeSelect.stella.title";
+}
+
+/**
+ * Which screen the dialog shows when it opens.
+ *
+ * A caller that names a category (the model picker opens プロバイダー, the
+ * connection picker 接続先サーバー) gets that page at any width: it is where
+ * the reader was sent. Opened without one — the app menu — the dialog lands
+ * on 一般 where the navigation sits beside the page, and on the category list
+ * in the stepped layout, where the page would otherwise hide the very list
+ * that is the only way to another category.
+ */
+export function initialView(
+  category: CommonSettingsCategory | null,
+  stepped: boolean,
+): { category: SettingsCategory; showPage: boolean } {
+  if (category !== null) return { category, showPage: true };
+  return { category: "general", showPage: !stepped };
 }

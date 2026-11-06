@@ -147,10 +147,13 @@ export function App({ initialData }: AppProps): ReactElement {
   // switch (keyed below), so the draft lives here and is fed back into
   // the view when its tab is shown again. Closing a tab discards it.
   const { drafts, updateDraft, clearDraft } = useDrafts(tabs);
-  // Which page the settings dialog opens on. Every caller opens a category
-  // both modes have (the model picker opens プロバイダー, the app menu 一般,
-  // the connection picker 接続先サーバー), so the type keeps a mode-only page
-  // out of a prop the dialog could not honour.
+  // Whether the settings dialog is open, and which page it opens on. A named
+  // category is always one both modes have (the model picker opens
+  // プロバイダー, the connection picker 接続先サーバー), so the type keeps a
+  // mode-only page out of a prop the dialog could not honour. `null` is the
+  // app menu's "just open the settings": the dialog then starts on 一般 where
+  // both columns fit, and on the category list where they do not.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState<
     CommonSettingsCategory | null
   >(null);
@@ -160,7 +163,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // one cheap request.
   const [settingsVersion, setSettingsVersion] = useState(0);
   const closeSettings = () => {
-    setSettingsCategory(null);
+    setSettingsOpen(false);
     setSettingsVersion((version) => version + 1);
   };
   // Background agent-event notifications (desktop only): the event hook
@@ -170,8 +173,9 @@ export function App({ initialData }: AppProps): ReactElement {
   // PWA notifications of this device (Web Push). Read only while the settings
   // dialog is open: the page has no other use for the state, and asking the
   // browser for it on every start would be a permission-adjacent read nobody
-  // asked for.
-  const push = usePush(settingsCategory === "general");
+  // asked for. The dialog owns which category it shows, so this is the whole
+  // dialog rather than 一般 alone.
+  const push = usePush(settingsOpen);
   const [showRecent, setShowRecent] = useState(false);
   // The mode-selection screen, reopened from the app menu (the first-run
   // screen is driven by the stored mode instead; this is the "switch" path).
@@ -254,12 +258,20 @@ export function App({ initialData }: AppProps): ReactElement {
   );
   const openRecent = useCallback(() => setShowRecent(true), []);
   const closeRecent = useCallback(() => setShowRecent(false), []);
-  const openSettings = useCallback(() => setSettingsCategory("general"), []);
-  const openProviders = useCallback(
-    () => setSettingsCategory("providers"),
-    [],
-  );
-  const openServers = useCallback(() => setSettingsCategory("servers"), []);
+  // Every opener is a stable callback with a fixed argument: the tab bar and
+  // the app menu compare their props by value.
+  const openSettings = useCallback(() => {
+    setSettingsCategory(null);
+    setSettingsOpen(true);
+  }, []);
+  const openProviders = useCallback(() => {
+    setSettingsCategory("providers");
+    setSettingsOpen(true);
+  }, []);
+  const openServers = useCallback(() => {
+    setSettingsCategory("servers");
+    setSettingsOpen(true);
+  }, []);
   const closePendingClose = tabClose.cancel;
   // The mode-selection screen, opened from the app menu ("switch mode") and
   // closed from its own modal. Both are plain setters with a fixed argument,
@@ -550,7 +562,7 @@ export function App({ initialData }: AppProps): ReactElement {
             />
           )}
       </div>
-      {settingsCategory !== null && (
+      {settingsOpen && (
         <SettingsModal
           theme={theme}
           themeError={themeError}

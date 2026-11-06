@@ -40,6 +40,7 @@ import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import {
   type CommonSettingsCategory,
+  initialView,
   modeLabelKey,
   navGroups,
   type SettingsCategory,
@@ -72,8 +73,9 @@ interface SettingsModalProps {
   push: PushControls;
   /** The category the dialog opens on. Only a shared one: the caller does not
    * know which mode this client shows, and a page of the other mode would
-   * open empty. */
-  initialCategory: CommonSettingsCategory;
+   * open empty. `null` opens without picking one: 一般 where both columns
+   * fit, the category list where they do not. */
+  initialCategory: CommonSettingsCategory | null;
   /** The routines of the active stella agent (empty in code mode, which has
    * no agent), plus which agent they belong to. */
   routines: ReturnType<typeof useRoutines>;
@@ -140,7 +142,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "general",
     scope: "common",
     labelKey: "settings.nav.general",
-    descriptionKey: "settings.category.general",
     icon: <IconSettings size={18} />,
     render: ({ props }) => (
       <GeneralPanel
@@ -166,7 +167,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "appearance",
     scope: "common",
     labelKey: "settings.nav.appearance",
-    descriptionKey: "settings.category.appearance",
     icon: <IconPalette size={18} />,
     render: ({ props }) => (
       <AppearancePanel
@@ -180,7 +180,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "providers",
     scope: "common",
     labelKey: "settings.nav.providers",
-    descriptionKey: "settings.category.providers",
     icon: <IconPlugConnected size={18} />,
     render: ({ providersView, setProvidersView, userProviders }) => {
       switch (providersView.kind) {
@@ -279,7 +278,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "models",
     scope: "common",
     labelKey: "settings.nav.models",
-    descriptionKey: "settings.category.models",
     icon: <IconBrain size={18} />,
     render: ({ openCategory }) => (
       <>
@@ -295,7 +293,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "mcp",
     scope: "common",
     labelKey: "settings.nav.mcp",
-    descriptionKey: "settings.category.mcp",
     icon: <IconServer size={18} />,
     render: () => <McpList />,
   },
@@ -303,7 +300,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "personalize",
     scope: "common",
     labelKey: "settings.nav.personalize",
-    descriptionKey: "settings.category.personalize",
     icon: <IconUser size={18} />,
     render: () => <PersonalizePanel />,
   },
@@ -311,7 +307,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "servers",
     scope: "common",
     labelKey: "settings.nav.servers",
-    descriptionKey: "settings.category.servers",
     icon: <IconWorld size={18} />,
     render: () => <ConnectionList />,
   },
@@ -319,7 +314,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "security",
     scope: "common",
     labelKey: "settings.nav.security",
-    descriptionKey: "settings.category.security",
     icon: <IconShield size={18} />,
     // The command check guards every bash / eval call, so both modes have it.
     // Computer use is the other half of "what may the agent do", but it is
@@ -331,7 +325,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "computerUse",
     scope: "code",
     labelKey: "settings.nav.computerUse",
-    descriptionKey: "settings.category.computerUse",
     icon: <IconPointer size={18} />,
     render: () => <ComputerUsePanel />,
   },
@@ -339,7 +332,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "prompts",
     scope: "code",
     labelKey: "settings.nav.prompts",
-    descriptionKey: "settings.category.prompts",
     icon: <IconBookmark size={18} />,
     render: () => <SavedPromptsPanel />,
   },
@@ -349,7 +341,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     // The panel's own heading names the category: one wording for one thing,
     // in the navigation and on the page.
     labelKey: "panels.routine.title",
-    descriptionKey: "settings.category.routines",
     icon: <IconRepeat size={18} />,
     // Routines schedule requests on a stella agent's conversation; code mode
     // has no such conversation to schedule anything on.
@@ -382,14 +373,13 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
  * but drew every visible entry in one flat list, where a shared preference and
  * the mode's own were indistinguishable.)
  *
- * A category is a page: its title and one line of explanation stay at the top
- * while the body scrolls (SettingsPage). A long category used to scroll its
- * own title away, and nothing on screen said which category the reader was in.
+ * A category is a page: its title stays at the top while the body scrolls
+ * (SettingsPage). A long category used to scroll its own title away, and
+ * nothing on screen said which category the reader was in.
  *
  * Narrow windows get one screen at a time — the category list, then the picked
  * page with a back button. The horizontal strip of ten labels this replaces
- * clipped every label and had no room for the line that says what a category
- * decides.
+ * clipped every label.
  */
 export function SettingsModal({
   theme,
@@ -410,11 +400,12 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const t = useT();
   const stepped = useMediaQuery(COMPACT_QUERY);
-  /** In the stepped layout: whether the page (rather than the list) is shown.
-   * It starts on the page the dialog was asked for, the same screen every
-   * width opens on. */
-  const [showPage, setShowPage] = useState(true);
-  const [category, setCategory] = useState<SettingsCategory>(initialCategory);
+  /** Read once, at mount: a resize must not throw the reader out of the page
+   * they opened or opened from the list themselves. */
+  const [start] = useState(() => initialView(initialCategory, stepped));
+  const [category, setCategory] = useState<SettingsCategory>(start.category);
+  /** In the stepped layout: whether the page (rather than the list) is shown. */
+  const [showPage, setShowPage] = useState(start.showPage);
   const [providersView, setProvidersView] = useState<ProvidersView>({
     kind: "list",
   });
@@ -510,18 +501,8 @@ export function SettingsModal({
                         onClick={() => openCategory(navEntry.id)}
                       >
                         {item.icon}
-                        <span className="settings-nav-text">
-                          <span className="settings-nav-label">
-                            {t(navEntry.labelKey)}
-                          </span>
-                          {
-                            /* Drawn by the compact layout only (settings.css): the
-                          page header prints the same line where both are on
-                          screen at once. */
-                          }
-                          <span className="settings-nav-desc">
-                            {t(navEntry.descriptionKey)}
-                          </span>
+                        <span className="settings-nav-label">
+                          {t(navEntry.labelKey)}
                         </span>
                       </button>
                     );
@@ -533,9 +514,6 @@ export function SettingsModal({
             <div className="settings-content">
               <SettingsPage
                 title={t(entry?.labelKey ?? "common.settings")}
-                description={entry === undefined
-                  ? undefined
-                  : t(entry.descriptionKey)}
                 onBack={stepped ? () => setShowPage(false) : undefined}
               >
                 {entry?.render(panels)}

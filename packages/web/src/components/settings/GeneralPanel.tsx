@@ -42,7 +42,7 @@ const LANGUAGE_OPTION_KEYS: Record<Locale, MessageKey> = {
 /** The app language, a general preference like the notification toggle.
  * The choice applies to the UI immediately and to the system prompt of
  * sessions created after it (the server reads the same setting); sessions
- * already started keep the language they began in, so the row says so. */
+ * already started keep the language they began in. */
 function LanguageItem(
   { language, error, onLanguageChange }: {
     language: Locale;
@@ -67,7 +67,6 @@ function LanguageItem(
           onChange={onLanguageChange}
         />
       </SettingRow>
-      <p className="settings-note">{t("settings.language.note")}</p>
       {error && (
         <p className="error-text" role="alert">
           {t("settings.language.saveFailed", { error })}
