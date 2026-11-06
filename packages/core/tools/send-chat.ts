@@ -83,13 +83,24 @@ export interface SendChatOptions extends ChatAttachTarget {
 export type SendChatTarget = ChatAttachTarget;
 
 /**
- * The description is sent with every request of every stella turn, so it
- * states the contract of one call and nothing that changes: no counts that
- * differ per session, no examples that would have to be edited.
+ * The description is sent with every request of every turn, so it states the
+ * contract of one call and nothing that changes: no counts that differ per
+ * session, no examples that would have to be edited.
+ *
+ * The first line is the one that changes behaviour, and it is ordered rather
+ * than conditioned. "Send a note while long work is running" (what this used
+ * to say) leaves the model to decide when a wait has become long, and the
+ * decision it makes is "after I have something to say" — which is the end of
+ * the run, and the message the user gets instead of an answer during it. A
+ * reader who watches forty minutes of tool rows has been told nothing, and
+ * cannot tell a working agent from a stuck one. So the instruction is to
+ * speak FIRST, and it names what makes the work long (reading, building,
+ * testing, waiting) so the decision does not depend on a feeling about time.
  */
 const DESCRIPTION = [
-  "Send the user a card, a file, or a progress note while long work is still running.",
-  "Your reply is already the message the user reads; this is for what a reply cannot carry.",
+  "Send the user a note BEFORE starting work that will take more than a moment — reading many files, a build, tests, a search, or anything you expect to run for a while — saying what you are about to do and what you are looking for.",
+  "Until you do, the conversation shows only a timer and tool names: the user cannot see your plan, cannot tell progress from a hang, and cannot correct your direction before you have spent the time.",
+  "Send another when the picture changes (what you found, that the approach is wrong, that the work is longer than you said). Your reply at the end is still the answer.",
   "One call is one message: the words (text), a card (card), and files (paths), in any combination; at least one of the three is required.",
   "A run with nothing to report replies with exactly NO_RESPONSE (see the system prompt).",
 ].join(" ");

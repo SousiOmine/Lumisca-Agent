@@ -195,3 +195,41 @@ Deno.test("send_chat: too many files in one call is refused", async () => {
     await test.cleanup();
   }
 });
+
+Deno.test("send_chat: the description tells the model to speak before long work", async () => {
+  // The description is the only place that reaches the model about WHEN to
+  // send: the system prompt does not repeat it (see STELLA_PROMPT_SECTIONS).
+  // The old wording ("while long work is still running") left the decision to
+  // the model's own sense of timing, and what it decided was to wait until it
+  // had something to report — at which point the reply itself was the report,
+  // and a reader sat through the whole run with nothing but a timer.
+  const test = await fixture();
+  try {
+    assertDescription(test.tool.description ?? "");
+  } finally {
+    await test.cleanup();
+  }
+});
+
+/** The contract of the text the model reads, kept beside the fixture so a
+ * rewrite of the description has to keep saying these things. */
+function assertDescription(description: string): void {
+  // The order is the whole point: the note comes before the work, not after.
+  assert(
+    description.includes("BEFORE starting work"),
+    `the description must say when, not just what: ${description}`,
+  );
+  // and it has to name what makes work long, so the call does not depend on
+  // the model's feeling about elapsed time.
+  for (const cue of ["reading many files", "a build", "tests", "a search"]) {
+    assert(
+      description.includes(cue),
+      `missing the cue "${cue}": ${description}`,
+    );
+  }
+  // Why it matters: the user sees only tool names until the model speaks.
+  assert(
+    description.includes("only a timer and tool names"),
+    description,
+  );
+}
