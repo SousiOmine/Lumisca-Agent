@@ -921,6 +921,33 @@
   }
 }
 
+/* ---- phone ---------------------------------------------------------------- */
+
+/* A phone reads the body one step larger and the bubble gets the room the
+ * larger text needs, so a long message does not turn into a wall of lines.
+ * The gaps grow by the same small amount, which keeps the rhythm between a
+ * question and its answer. This block sits after the touch one: a phone is
+ * also a coarse pointer, and the actions under a message must keep the
+ * roomier padding written here. */
+@media (max-width: 600px) {
+  .msg-body {
+    font-size: 15px;
+  }
+
+  .msg.user {
+    padding: 13px 18px;
+  }
+
+  .chat-column {
+    gap: 20px;
+  }
+
+  .msg-action-btn {
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+}
+
 /* --- chat: UI cards (the chat_ui tool) ------------------------------------ */
 
 /* A card is the reply's structure: a table, a flow, a question. It is drawn

@@ -568,3 +568,32 @@
     width: 40px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* The strip of tabs and window controls, held in the same hand as the rest
+ * of a phone's screen: the tab grows to a fingertip's height and its label
+ * by one step. The close disc follows the tab, and the window buttons keep
+ * the width the touch block gave them (that block sizes for the pointer;
+ * this one is what the width asks for). */
+@media (max-width: 600px) {
+  .tab {
+    min-width: 92px;
+    padding: 0 6px 0 10px;
+    font-size: 13px;
+  }
+
+  .tab .tab-close {
+    width: 32px;
+    height: 32px;
+  }
+
+  .tab-new {
+    width: 36px;
+    height: 36px;
+  }
+
+  .titlebar-btn {
+    width: 42px;
+  }
+}

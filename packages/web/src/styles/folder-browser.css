@@ -273,3 +273,19 @@
     padding: 6px 8px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* The browser is a grid of names a thumb picks from. The rows grow to a
+ * fingertip's height and the names by the one step the app's text gains. */
+@media (max-width: 600px) {
+  .folder-browser-row {
+    padding: 12px 10px;
+    font-size: 14px;
+  }
+
+  .folder-browser-crumb {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+}

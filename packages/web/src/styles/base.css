@@ -220,3 +220,41 @@ select:focus:not(:focus-visible) {
     height: 40px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* The shared controls grow for a phone's width, not for its pointer: a
+ * narrow window is read at the same distance and held in the same hand, and
+ * the two conditions must not be mixed (a phone is also a coarse pointer,
+ * so the block below is the one that wins there — it sits after the touch
+ * block, and an equal-specificity rule written later takes the value).
+ *
+ * The growth is deliberately small: one step on the text (the body is 14px,
+ * a phone reads 15px), and a capsule a fingertip can land on without the
+ * row of controls growing taller than the transcript. `min-height` rather
+ * than `height` leaves a button with a longer label free to grow. */
+@media (max-width: 600px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+    padding: 10px 14px;
+  }
+
+  .btn {
+    min-height: 40px;
+    padding: 9px 16px;
+    font-size: 14px;
+  }
+
+  .btn.small {
+    min-height: 36px;
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+}

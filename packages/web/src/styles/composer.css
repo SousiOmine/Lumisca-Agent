@@ -535,3 +535,34 @@
     height: 24px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* The controls a message is written and sent with. The two icon buttons are
+ * squares whose width is their size (composer.css, the shape rule above), so
+ * a phone widens them to the fingertip target and the glyph stays centred.
+ * The field takes 16px for the same reason it does on a touch device, and
+ * the capsule gains the padding the larger field and buttons need. */
+@media (max-width: 600px) {
+  .input-composer {
+    padding: 12px 14px 10px;
+  }
+
+  .input-box,
+  .input-box.large {
+    font-size: 16px;
+    padding: 4px 6px;
+  }
+
+  .input-actions .btn:not(.btn-with-label) {
+    width: 40px;
+  }
+
+  .input-actions {
+    gap: 10px;
+  }
+
+  .input-composer .model-switch {
+    padding: 7px 12px;
+  }
+}

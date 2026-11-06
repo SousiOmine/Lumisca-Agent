@@ -521,3 +521,30 @@
     padding: 8px 12px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* The ask card's options are the card's whole purpose, so on a phone they
+ * take the room of a row a fingertip lands on and the one text step the
+ * body gains elsewhere. The card itself keeps to the composer's width. */
+@media (max-width: 600px) {
+  .question-card {
+    padding: 14px 16px;
+    gap: 14px;
+  }
+
+  .question-option {
+    padding: 11px 13px;
+    font-size: 14px;
+  }
+
+  .question-option-mark {
+    font-size: 13px;
+  }
+
+  .goal-cancel {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}

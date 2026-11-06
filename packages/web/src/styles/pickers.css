@@ -401,3 +401,38 @@
     padding: 10px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* The lists a phone opens are scanned and tapped with one thumb: the rows
+ * grow to a fingertip and their two text steps grow by one. The row's
+ * actions keep their own square (the touch block sizes them for the pointer;
+ * this is the width the list is read at). */
+@media (max-width: 600px) {
+  .recent-item,
+  .workspace-option {
+    padding: 12px 10px;
+  }
+
+  .recent-item-name {
+    font-size: 14px;
+  }
+
+  .recent-item-meta {
+    font-size: 12.5px;
+  }
+
+  .workspace-picker-trigger {
+    padding: 12px;
+  }
+
+  .workspace-option-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .workspace-option-actions .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+}

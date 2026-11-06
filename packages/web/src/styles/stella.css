@@ -1096,3 +1096,48 @@
     height: 32px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* The list and the conversation, at the size a phone reads them. The agent's
+ * two lines and the answer's body each gain the same single step the code
+ * chat's body gains, so switching modes does not change the reading size;
+ * the controls a thumb reaches for keep a fingertip's square. */
+@media (max-width: 600px) {
+  .stella-agent-name {
+    padding: 12px 10px;
+    font-size: 15px;
+  }
+
+  .stella-agent-meta {
+    font-size: 12.5px;
+  }
+
+  .stella-sidebar-header {
+    padding: 12px 10px 10px;
+    font-size: 13px;
+  }
+
+  .stella-msg .stella-msg-body {
+    font-size: 15px;
+  }
+
+  .stella-column {
+    gap: 14px;
+  }
+
+  .stella-back {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stella-screen-toggle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .stella-agent-menu {
+    width: 34px;
+    height: 34px;
+  }
+}

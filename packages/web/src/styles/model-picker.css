@@ -758,3 +758,30 @@
     padding: 8px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* The picker's three columns are chosen with a thumb on a phone, so every
+ * row grows to a fingertip and its two text steps grow by one. The sheet is
+ * taller than the desktop panel (see the phone block above), which leaves
+ * room for the larger rows. */
+@media (max-width: 600px) {
+  .mp-model,
+  .mp-provider,
+  .mp-manage {
+    padding: 12px 10px;
+    font-size: 14px;
+  }
+
+  .mp-model-meta {
+    font-size: 12.5px;
+  }
+
+  .mp-provider-name {
+    font-size: 14px;
+  }
+
+  .mp-header-title {
+    font-size: 14px;
+  }
+}

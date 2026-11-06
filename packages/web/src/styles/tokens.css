@@ -41,12 +41,20 @@
  *   600px  phone: one column; full-screen modals; the progress rows above
  *                the composer keep to a smaller height cap; the floating
  *                chat pane gives up its margin and lands edge to edge
- *                (--app-inset).
+ *                (--app-inset); text takes one step up and the controls a
+ *                thumb uses grow to a fingertip.
  *
  * Touch ergonomics follow the input device, not the width
  * (`@media (hover: none), (pointer: coarse)`): hover-only affordances stay
  * visible, tap targets grow, and text controls use 16px so iOS Safari does
  * not zoom the page when one takes focus.
+ *
+ * The two blocks answer different questions — how a narrow screen is read,
+ * how a finger touches — and a phone is both. Equal specificity means the
+ * later rule wins, so a sheet's phone rules are written AFTER its touch
+ * rules (styles_test.ts checks the order). A phone-sized window on a desktop
+ * is read as a phone; that is intended, and it is why the growth is one
+ * step rather than a designed-for-touch-only size.
  * ------------------------------------------------------------------------ */
 
 /* ---- shared tokens (theme independent) ---------------------------------- */

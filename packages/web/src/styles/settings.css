@@ -1313,3 +1313,45 @@ button.provider-row-body:hover .provider-row-chevron {
     padding: 9px 12px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* Settings on a phone: the label and its explanation are read at arm's
+ * length, and the rows are what the thumb scrolls past and taps. The rows
+ * grow by a few pixels and the two text steps grow by one, which keeps a
+ * whole category within reach of a scroll or two. */
+@media (max-width: 600px) {
+  .update-item {
+    padding: 14px 2px;
+  }
+
+  .update-label {
+    font-size: 14px;
+  }
+
+  .update-desc {
+    font-size: 13px;
+  }
+
+  .setting-card {
+    padding: 12px 2px;
+  }
+
+  .settings-nav-item {
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .select-trigger,
+  .select-option {
+    font-size: 14px;
+  }
+
+  .select-trigger {
+    padding: 10px 12px;
+  }
+
+  .select-option {
+    padding: 10px 10px;
+  }
+}

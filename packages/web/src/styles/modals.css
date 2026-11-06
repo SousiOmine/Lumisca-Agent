@@ -259,3 +259,32 @@
     padding: 10px 8px;
   }
 }
+
+/* ---- phone ---------------------------------------------------------------- */
+
+/* A full-screen dialog on a phone: the header's actions are the only way out
+ * of a screen that fills the display, and the list rows are what the thumb
+ * taps. The title gains the one step the rest of the app's text gains. */
+@media (max-width: 600px) {
+  .modal h2 {
+    font-size: 17px;
+  }
+
+  .modal-header {
+    gap: 12px;
+  }
+
+  .modal-header .btn {
+    min-height: 40px;
+    padding: 9px 14px;
+    font-size: 14px;
+  }
+
+  .model-item {
+    padding: 12px 10px;
+  }
+
+  .error-text {
+    font-size: 13px;
+  }
+}

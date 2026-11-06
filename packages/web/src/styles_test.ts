@@ -198,6 +198,50 @@ Deno.test("width breakpoints are the documented two", async () => {
   );
 });
 
+/** The `@media` preludes of a sheet, in source order (one entry per rule, so
+ * a block with several selectors repeats several times). */
+function mediaOrder(css: string): string[] {
+  return cssRules(css)
+    .map((rule) => rule.media)
+    .filter((media): media is string => media !== null);
+}
+
+Deno.test("a phone's rules win over a touch device's", async () => {
+  // A phone is both narrow and a coarse pointer, so both blocks apply. The
+  // cascade decides with equal specificity: the later rule wins. The phone
+  // rules therefore have to be the LAST of the two in every sheet they share
+  // with the touch rules — otherwise the touch value silently replaces the
+  // larger one written for the phone, and the ergonomics tuning does nothing
+  // exactly where it was meant to be used (chat.css's message actions did).
+  //
+  // A sheet may open one phone block early (the one that restructures the
+  // layout) and write the ergonomics in a second block at the end; the check
+  // is about the two sets, not about a single block each.
+  const offenders: string[] = [];
+  for await (const [name, css] of styleSheets()) {
+    const order = mediaOrder(css);
+    const lastOf = (needle: string): number => {
+      for (let i = order.length - 1; i >= 0; i--) {
+        if (order[i]!.includes(needle)) return i;
+      }
+      return -1;
+    };
+    const lastPhone = lastOf("max-width: 600px");
+    const lastTouch = lastOf("hover: none");
+    if (lastPhone === -1 || lastTouch === -1) continue;
+    if (lastPhone < lastTouch) {
+      offenders.push(
+        `${name}: the last phone block is above the last touch block`,
+      );
+    }
+  }
+  assertEquals(
+    offenders.sort(),
+    [],
+    "the phone rules would be overridden by the touch rules",
+  );
+});
+
 Deno.test("hover-only affordances stay visible on touch", async () => {
   // A touch screen never fires :hover, so anything a hover rule reveals
   // (opacity 0 / visibility hidden at rest) is unreachable there unless a
