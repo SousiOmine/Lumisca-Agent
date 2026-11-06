@@ -15,7 +15,10 @@
  * since, and, when compaction spliced a checkpoint into the history, one in
  * the middle. Items are ordered by the transcript, so the window anchors on
  * the items with the same identity, and anything new goes in front of the
- * anchor it precedes; anything after the last anchor extends the end.
+ * anchor it precedes; anything after the last anchor extends the end. The two
+ * sides can still disagree on an item's place — a prompt steered into a
+ * running turn is held where it was typed but stored after the turn it joined
+ * — and an item the view already holds then keeps the view's position.
  *
  * A window that shares nothing means the client fell more than a page
  * behind (or was never in step): it is replaced wholesale. Keeping the old
@@ -82,6 +85,11 @@ export function mergeNewestWindow<T>(
       pending.push(item);
       continue;
     }
+    // An item the view holds earlier than the window places it (see above)
+    // has already been written out; walking back to its anchor would emit
+    // every row in between a second time — the duplicated turn a steered
+    // prompt would otherwise leave behind.
+    if (anchor < cursor) continue;
     while (cursor < anchor) {
       merged.push(existing[cursor]!);
       cursor++;

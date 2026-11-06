@@ -117,6 +117,20 @@ Deno.test("merge: a repeated resync does not grow the history", () => {
   assertEquals(twice.items.length, once.items.length);
 });
 
+Deno.test("merge: an item the view holds earlier is not written twice", () => {
+  // A prompt steered into a running turn is announced when it is typed and
+  // stored after the turn it joined, so the view holds it above rows the
+  // transcript puts before it. Anchoring on it would walk the cursor
+  // backwards; the merge must keep the view's position and emit each row
+  // once, including the one that arrived after the reordered region.
+  const merged = mergeNewestWindow(
+    window(["p", "a", "t", "b"]),
+    window(["a", "t", "p", "b", "c"]),
+    { ...rules, multiAnchor: true },
+  );
+  assertEquals(merged.items.map((i) => i.key), ["p", "a", "t", "b", "c"]);
+});
+
 Deno.test("prepend: a page goes in front, and a known page ends the walk", () => {
   const first = prependOlderWindow(
     window(["3", "4"]),

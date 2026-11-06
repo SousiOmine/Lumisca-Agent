@@ -708,6 +708,40 @@ Deno.test("events: applySnapshot merges panels and respects tombstones", () => {
   assertEquals(sameTodoPlan(applied.todos, TODOS), true);
 });
 
+Deno.test("events: a steered prompt reordered by the transcript is not duplicated", () => {
+  // A prompt typed while the agent was running is announced at once, but the
+  // transcript stores it after the turn it joined. The view holds it above
+  // that turn; a resync must keep one copy of each row, not draw the turn
+  // twice (the regression: the prompt and the reply it steered into
+  // appeared once more after the original).
+  const prompt = message("user", 2, "keep going");
+  const reply = message("assistant", 3, "ok");
+  const result = {
+    role: "toolResult",
+    toolCallId: "c1",
+    toolName: "write",
+    content: [{ type: "text", text: "Wrote a.ts" }],
+    isError: false,
+    timestamp: 4,
+  } as AgentMessage;
+  const v = view({ messages: [prompt, reply, result], older: "before-prompt" });
+  const applied = applySnapshot(v, {
+    snapshot: snapshot({
+      messages: [reply, result, prompt],
+      older: "before-reply",
+      rev: 2,
+    }),
+  }, undefined);
+
+  assertEquals(applied.messages.map(messageKey), [
+    messageKey(prompt),
+    messageKey(reply),
+    messageKey(result),
+  ]);
+  // The view's front survived, so its cursor still names it.
+  assertEquals(applied.older, "before-prompt");
+});
+
 Deno.test("events: two pending asks coexist and resolve independently", () => {
   let v = view();
   v = applyEvent(
