@@ -1,5 +1,4 @@
 import type { Workspace } from "../types/workspace.ts";
-import type { Locale } from "../shared/mod.ts";
 /** The machine's home, the folder its agents work in, and the account the
  * tools run as.
  *
@@ -11,34 +10,20 @@ import type { Locale } from "../shared/mod.ts";
 const VM_WORKDIR = "/home/agent";
 const VM_USER = "agent";
 
-/** How a session's system prompt is built: the workspace framing for a
- * coding session, or the folder-less framing of a chat session. */
-export interface SystemPromptOptions {
-  /** The session's preloaded tool names: the guidelines render only the
-   * sections whose tools the session actually has (see prompt-sections). */
-  tools?: readonly string[];
-  /** The language selected when the session started: the agent answers in
-   * it for the session's whole life (see tools/language.ts). Omitted →
-   * the default language (tests and callers without a setting). */
-  language?: Locale;
-}
-
 /**
- * System prompt of a coding session: who the agent is, the workspace it may
- * touch, the machine it runs on, and the guidelines that apply to the tools
- * it actually has. Project memory (AGENTS.md) and the machine-level personal
+ * System prompt of a coding session: who the agent is and the workspace it
+ * may touch. Project memory (AGENTS.md) and the machine-level personal
  * instructions are NOT part of this prompt: they are published as context
- * messages (see ai/context-providers), so an edit reaches an open session
- * and the prompt itself stays stable.
+ * messages (see ai/context-providers), so an edit reaches an open session.
+ *
+ * Nothing that varies while a session lives is an argument here — not the
+ * tool set, not the reply language (both are context messages). That is not
+ * a simplification: a session re-derives its prompt on every open and
+ * rewrites it only when the string differs (see
+ * AgentFactory.ensureSystemPrompt), which needs unchanged inputs to produce
+ * an identical string.
  */
-export function buildSystemPrompt(
-  workspace: Workspace,
-  // Accepted and unused: the prompt no longer varies with anything in here
-  // (the reply language is a context message now, see agent/language-context
-  // .ts). Callers still pass the session's options, and removing the
-  // parameter would only move that fact to every call site.
-  _options: SystemPromptOptions = {},
-): string {
+export function buildSystemPrompt(workspace: Workspace): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
   return `You are Lumisca, a coding agent that works inside a workspace.
 
@@ -55,23 +40,26 @@ ${folders}
  * the working directory is, that nothing outside it is reachable) because
  * that is the model's whole world: a session whose prompt still talked about
  * workspaces and folder pickers would have it looking for things that are not
- * there. Everything else — the tools, the guidelines — is the coding set,
- * since the work inside the machine is coding work.
+ * there. The tools themselves are not named here — their descriptions carry
+ * their contracts, and a prompt that listed them would change whenever the
+ * set did.
  */
 export function buildStellaSystemPrompt(
-  options: SystemPromptOptions & {
+  options: {
     /** The role this agent was created with (in the user's words), or absent
      * for an agent without one. This is what makes one stella conversation
      * different from another, so it belongs in the prompt rather than in a
      * first message.
      *
      * The agent's NAME is deliberately not here: it labels a sidebar row and
-     * a header, and the user can change it at any time. A prompt snapshot is
-     * written once per session, so a name in it would either freeze the old
-     * one (the agent introducing itself under a name the user already
-     * replaced) or force a rewrite — which costs the provider's cached prefix
-     * on every rename. The model is a helpful assistant; who it is to the
-     * USER is the label on the row, not something it needs to know. */
+     * a header, and the user can change it at any time. The prompt is
+     * re-derived on every open and rewritten only when it differs (see
+     * AgentFactory.ensureSystemPrompt), so a name in it would either freeze
+     * the old one (the agent introducing itself under a name the user
+     * already replaced) or force a rewrite — which costs the provider's
+     * cached prefix on every rename. The model is a helpful assistant; who
+     * it is to the USER is the label on the row, not something it needs to
+     * know. */
     agent?: { role: string };
     /** The session's working folder inside the machine (relative paths and
      * bash start there). Omitted → the machine's home, which is what a
@@ -103,13 +91,10 @@ card, a file, or a progress note.
 /**
  * System prompt of a chat session ("simple chat" without a workspace): no
  * workspace folders, no file/shell surface — the chat tool set is
- * ask / todo / skills / MCP. Sections whose tools are absent are pruned by
- * their `requires`, so the prompt never mentions a tool the session lacks.
+ * ask / todo / skills / MCP. The prompt names no tool, so it does not vary
+ * with the set.
  */
-export function buildChatSystemPrompt(
-  // Same as buildSystemPrompt: the chat prompt no longer varies either.
-  _options: SystemPromptOptions = {},
-): string {
+export function buildChatSystemPrompt(): string {
   return `You are Lumisca, a helpful AI assistant. You have no file, shell or
 sub-agent tools: you cannot read, write or run anything. Images can be
 attached to prompts.

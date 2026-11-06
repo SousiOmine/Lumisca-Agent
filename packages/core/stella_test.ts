@@ -1381,13 +1381,36 @@ Deno.test("stella agents: the preview is the newest entry, not the newest row", 
   }
 });
 
+Deno.test("stella prompt: a conversation from an older release is re-derived", async () => {
+  // A stella conversation lives for years, so its prompt cannot be a
+  // creation-time snapshot: a release that changes buildStellaSystemPrompt
+  // (or the agent's role, which is snapshot there) must reach the
+  // conversation that already exists. The stored value is overwritten
+  // directly, which is what an older build leaves behind.
+  const { core, session } = await stellaConversation("Legacy");
+  try {
+    const current = core.getAgent(session.id)!.agent.state.systemPrompt;
+    assert(current.includes("Your reply is the message"), current);
+
+    core.closeSession(session.id);
+    core.db.db
+      .prepare("UPDATE sessions SET system_prompt = ? WHERE id = ?")
+      .run("You talk with the user through send_chat.", session.id);
+
+    await core.openSession(session.id);
+    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, current);
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("stella prompt: the reply is the message, silence is asked for", async () => {
   // The rule the model has to follow. It is the opposite of the rule this
   // prompt used to carry: the agent's own text IS what the user reads, and a
   // run that wants to say nothing writes the sentinel. A forgotten decision
   // therefore produces a message rather than an unanswered question.
   const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
-  const prompt = buildStellaSystemPrompt({ tools: ["read", "send_chat"] });
+  const prompt = buildStellaSystemPrompt({ agent: { role: "調べもの" } });
   assert(prompt.includes("Your reply is the message"), prompt);
   assert(prompt.includes("replies with exactly NO_RESPONSE"), prompt);
   // …and the tool is described as the second channel, not the first.

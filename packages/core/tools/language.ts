@@ -1,10 +1,12 @@
 /**
- * The output-language rule of the system prompt.
+ * Language names and the output-language rule.
  *
- * A session answers in the language that was selected when it started: the
- * prompt is generated (and snapshotted) at session creation, so the rule is
- * part of that snapshot and never follows later setting changes — a session
- * keeps speaking the language it began in (see core.ts getLanguage).
+ * The rule lives in a context message, not in the system prompt (see
+ * agent/language-context.ts): the language is a setting, so a session that
+ * is switched to another language answers in it from the next run without
+ * rewriting the prompt — which would cost the provider's cached prefix. What
+ * stays here is the vocabulary both sides need, so the setting and the rule
+ * cannot name a language differently.
  *
  * The rule is written in ENGLISH for every language, like the rest of the
  * prompt (the guidelines, the tool descriptions, the mode prompts): the
@@ -35,9 +37,10 @@ export function outputLanguageBullet(language: Locale): string {
     "the user's message, tool output, files or web pages.";
 }
 
-/** The output-language section of a system prompt (coding, chat and
- * sub-agent prompts alike: a sub-agent's report is read by its parent and
- * shown to the user). */
+/** The output-language section of a sub-agent's prompt (the main session's
+ * rule travels as a context message): a sub-agent's report is read by its
+ * parent and shown to the user, so it must come back in the session's
+ * language. */
 export function outputLanguageSection(language: Locale): PromptSection {
   return {
     name: "output-language",

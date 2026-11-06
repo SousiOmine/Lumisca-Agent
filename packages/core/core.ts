@@ -412,11 +412,9 @@ export class LumiscaCore {
       recordFreedBytes: (bytes) => {
         this.freedBytes += bytes;
       },
-      buildGeneratedPrompt: (workspace, model, tools, stella) =>
+      buildGeneratedPrompt: (workspace, stella) =>
         this.buildGeneratedPrompt(
           workspace,
-          model,
-          tools,
           stella === undefined ? false : { role: stella.role, id: stella.id },
         ),
       personalInstructions: () => {
@@ -1722,47 +1720,41 @@ export class LumiscaCore {
     return this.workspaces.require(id);
   }
 
-  /** The generated system prompt for a workspace: who the agent is, the
-   * folders it may touch, the machine it runs on, and the guidelines of the
-   * tools it has. Chat workspaces (folder-less, "simple chat") get the chat
-   * variant instead — no workspace framing, matching their tool set.
-   * `model` fills in the environment section's model line; `tools` are the
-   * session's preloaded tool names, which decide which guideline sections
-   * render. Workspace instructions (AGENTS.md) and the machine-level
-   * personal instructions are NOT part of this string: they are published
-   * as dynamic context messages (see ai/context-providers), so an edit
-   * reaches a session that is already open. */
+  /** The generated system prompt for a workspace: who the agent is and the
+   * folders it may touch. Chat workspaces (folder-less, "simple chat") get
+   * the chat variant instead — no workspace framing, matching their tool
+   * set. Workspace instructions (AGENTS.md) and the machine-level personal
+   * instructions are NOT part of this string: they are published as dynamic
+   * context messages (see ai/context-providers), so an edit reaches a
+   * session that is already open.
+   *
+   * Everything that varies while a session lives is outside this function
+   * for the same reason: a session open can re-derive the prompt and
+   * compare it against the stored one only if unchanged inputs give an
+   * identical string. */
   private buildGeneratedPrompt(
     workspace: Workspace,
-    _model?: { provider: string; modelId: string },
-    tools: readonly string[] = [],
     stella: boolean | { role: string; id: string } = false,
   ): string {
-    // The language is resolved once, here: the prompt is snapshotted with
-    // the session, so the session keeps the language it started in even
-    // after the setting changes (see tools/language.ts).
-    const language = this.getLanguage();
-    // `model` is accepted (and ignored) so the call sites stay about the
-    // session, not about what the prompt happens to contain: which model the
-    // session runs on is published as a context message instead (see
-    // agent/model-context.ts), because a session can be switched to another
-    // model while this snapshot never changes.
+    // Neither the language nor the model is read here: both are published as
+    // context messages (agent/language-context.ts, agent/model-context.ts),
+    // because both can change while the session lives. That is also what
+    // keeps this string stable across opens — which is what lets
+    // ensureSystemPrompt compare it against the stored value.
     // stella's conversation row shares the folder-less chat workspace, but
     // its prompt is the machine's: a chat prompt would tell it it cannot
     // run anything, which is the opposite of what it can do.
     if (stella !== false) {
-      return buildStellaSystemPrompt({
-        tools,
-        language,
-        ...(stella === true ? {} : {
+      return buildStellaSystemPrompt(
+        stella === true ? {} : {
           agent: { role: stella.role },
           workdir: vmAgentDir(stella.id),
-        }),
-      });
+        },
+      );
     }
     return workspace.chat
-      ? buildChatSystemPrompt({ tools, language })
-      : buildSystemPrompt(workspace, { tools, language });
+      ? buildChatSystemPrompt()
+      : buildSystemPrompt(workspace);
   }
 
   /** Resolve the model for a new session: explicit choice, else the

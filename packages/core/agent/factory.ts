@@ -182,11 +182,7 @@ export class AgentFactory {
     this.seedDiscoverableTools(where, registries);
     const hubs = this.buildHubs(session, where, resources, mcp);
     const tools = this.buildToolSet(session, workspace, where, hubs);
-    const systemPrompt = this.ensureSystemPrompt(
-      session,
-      workspace,
-      tools,
-    );
+    const systemPrompt = this.ensureSystemPrompt(session, workspace);
     const contextProviders = this.buildContextProviders(
       workspace,
       where,
@@ -652,26 +648,27 @@ export class AgentFactory {
   }
 
   /**
-   * The session's system prompt: generated once, from the tool set the
-   * session actually has (its guidelines are keyed on the preloaded tools —
-   * see tools/prompt-sections.ts), then persisted as a snapshot. The prompt
-   * is the session's identity, never a mirror of the files on disk
-   * (workspace instructions are dynamic context instead).
+   * The session's system prompt, re-derived from what the prompt is a
+   * function of: the mode, the workspace folders, and a stella agent's role
+   * and working folder. Persisted, but not frozen: a stored value that no
+   * longer matches what this build generates is replaced.
+   *
+   * Re-deriving on every open is what makes a folder edit and a prompt
+   * change in a new release reach a session that already exists. The
+   * generation is deterministic in those inputs — no date, no model, no
+   * setting — so a session nothing happened to regenerates the same string
+   * and pays nothing: the write and the cache break happen only when the
+   * prompt actually differs.
+   *
+   * Workspace instructions (AGENTS.md) and personalization stay out of it:
+   * they are dynamic context, published as transcript messages.
    */
   private ensureSystemPrompt(
     session: SessionInfo,
     workspace: Workspace,
-    tools: readonly Tool[],
   ): string {
-    const existing = session.systemPrompt;
-    if (existing !== undefined) return existing;
     const generated = this.deps.buildGeneratedPrompt(
       workspace,
-      {
-        provider: session.modelProvider,
-        modelId: session.modelId,
-      },
-      tools.map((tool) => tool.name),
       // A stella session's prompt is the machine's plus the role this agent
       // works from; the persona comes from the agent registry, through the
       // pool. A session without an agent id still says the machine's part —
@@ -681,7 +678,9 @@ export class AgentFactory {
           { role: "", id: session.agentId ?? "" })
         : undefined,
     );
-    this.deps.updateSystemPrompt(session.id, generated);
+    if (generated !== session.systemPrompt) {
+      this.deps.updateSystemPrompt(session.id, generated);
+    }
     return generated;
   }
 

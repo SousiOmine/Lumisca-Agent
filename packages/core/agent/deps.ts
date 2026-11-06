@@ -70,22 +70,21 @@ export interface SessionPersistence {
   requestShapeRepo: RequestShapeRepo;
   /** Persist a new session title and notify clients. */
   renameSession(id: string, name: string): void;
-  /** Full generated system prompt for a workspace; used once per session,
-   * the first time it is opened (the stored snapshot is reused
-   * afterwards). `model` fills in the environment section, `tools` are the
-   * session's preloaded tool names — the guidelines render only the
-   * sections whose tools the session has. */
+  /** Full generated system prompt for a workspace, re-derived every time a
+   * session is opened (a stored value that differs is replaced). What it is
+   * a function of is the mode, the workspace folders and a stella agent's
+   * role — nothing that changes while a session lives, so an unchanged
+   * session regenerates the same string. */
   buildGeneratedPrompt(
     workspace: Workspace,
-    model?: { provider: string; modelId: string },
-    tools?: readonly string[],
     /** A stella agent's persona (its prompt is the machine's, plus the role
      * it works from), or undefined for every other session. `id` is what
      * names the session's working folder. The name is deliberately absent: it
      * is the label the user can change, and the model does not need it. */
     stella?: { role: string; id: string },
   ): string;
-  /** Persist a rebuilt system prompt (legacy-session migration). */
+  /** Store the session's current system prompt (see
+   * AgentFactory.ensureSystemPrompt: written only when it changed). */
   updateSystemPrompt(id: string, systemPrompt: string): void;
   /** The machine-level AGENTS.md (path + current content), or undefined
    * when none is configured: published as dynamic context together with

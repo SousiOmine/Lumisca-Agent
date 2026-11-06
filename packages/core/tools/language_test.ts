@@ -40,29 +40,30 @@ Deno.test("the system prompt carries no guidelines at all", () => {
   // description already says, and the output-language rule is published as a
   // context message now (agent/language-context.ts), because it is a setting
   // that can change while the session lives.
-  const prompt = buildSystemPrompt(workspace, {
-    tools: TOOLS,
-    language: "en",
-  });
+  const prompt = buildSystemPrompt(workspace);
   assertEquals(prompt.split("\n").filter((line) => line.startsWith("- ")), []);
   assertEquals(prompt.includes("- Prioritize correctness."), false);
   assertEquals(prompt.includes("Write every reply in"), false);
 });
 
-Deno.test("buildSystemPrompt: the prompt is the same whatever the language", () => {
-  // The prompt is a snapshot and the language is a setting: keeping the rule
-  // here froze the language at session creation (see language-context.ts for
-  // where it lives now). The option is still accepted so callers do not have
-  // to know, but it changes nothing.
-  const ja = buildSystemPrompt(workspace, { tools: [], language: "ja" });
-  const en = buildSystemPrompt(workspace, { tools: [], language: "en" });
-  assertEquals(ja, en);
-  assertEquals(ja.includes("Write every reply in"), false);
+Deno.test("buildSystemPrompt: nothing that varies with the session is in it", () => {
+  // The prompt is re-derived on every open and compared against the stored
+  // value (see AgentFactory.ensureSystemPrompt), so it may only carry what
+  // describes where the session works. The language is a setting and the
+  // tool set changes with the extras: both travel as context messages.
+  const prompt = buildSystemPrompt(workspace);
+  assertEquals(prompt.includes("Write every reply in"), false);
+  // No tool name either — the prompt would go stale the moment a backend
+  // detached or a server was added.
+  for (const name of TOOLS) {
+    assertEquals(prompt.includes(name), false, `${name} must not be named`);
+  }
 });
 
-Deno.test("buildChatSystemPrompt: no rule in the prompt either", () => {
-  const prompt = buildChatSystemPrompt({ tools: [], language: "ja" });
+Deno.test("buildChatSystemPrompt: no rule and no tool name in the prompt either", () => {
+  const prompt = buildChatSystemPrompt();
   assertEquals(prompt.includes("Write every reply in"), false);
+  assertEquals(prompt.includes("available_skills"), false);
 });
 
 Deno.test("subagentSystemPrompt: reports come back in the session language", () => {

@@ -7,8 +7,12 @@ export interface SessionInfo {
   name: string;
   modelProvider: string;
   modelId: string;
-  /** The session's system prompt, snapshotted at creation (workspace
-   * AGENTS.md + environment + personalization included). */
+  /** The session's system prompt, as last generated (see
+   * AgentFactory.ensureSystemPrompt). It is a stored derivation of the
+   * mode, the workspace folders and a stella agent's role, not a frozen
+   * snapshot: it is re-derived on every open and replaced when the result
+   * differs, so a folder edit or a changed prompt in a new release reaches
+   * a session that already exists. */
   systemPrompt?: string;
   createdAt: number;
   updatedAt: number;

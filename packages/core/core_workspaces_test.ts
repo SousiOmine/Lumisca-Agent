@@ -192,6 +192,81 @@ Deno.test("model switch and workspace update are refused while streaming", async
   await removeDirRetry(extra);
 });
 
+Deno.test("renaming a workspace does not touch the prompt; changing folders does", async () => {
+  // The prompt is a function of the folders, not of the workspace's name:
+  // re-deriving it on every open must therefore rewrite it for a folder
+  // edit and leave it alone (no write, no cache break) for a rename.
+  const { core, providerId, modelId } = setup();
+  const { ws, root } = await makeWorkspace(core);
+  const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
+  try {
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const first = core.getAgent(session.id)!.agent.state.systemPrompt;
+    assert(first.includes(root), "the prompt must list the workspace folder");
+
+    await core.updateWorkspace(ws.id, { name: "renamed" });
+    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, first);
+
+    // The rebuild a folder edit triggers reaches the prompt, not only the
+    // tools: a session opened before the edit must stop naming a folder the
+    // workspace no longer has.
+    await core.updateWorkspace(ws.id, { folders: [root, extra] });
+    const updated = core.getAgent(session.id)!.agent.state.systemPrompt;
+    assert(updated.includes(extra), updated);
+    assertEquals(updated.includes(root), true);
+
+    // The row kept what the session runs on: reopening is the same prompt.
+    core.closeSession(session.id);
+    await core.openSession(session.id);
+    assertEquals(
+      core.getAgent(session.id)!.agent.state.systemPrompt,
+      updated,
+    );
+  } finally {
+    core.close();
+    await removeDirRetry(root);
+    await removeDirRetry(extra);
+  }
+});
+
+Deno.test("a prompt stored by an older build is replaced when the session opens", async () => {
+  // The prompt is a derivation, not a frozen snapshot: a session created
+  // before a release that changed the prompt must pick the new text up, or
+  // it would keep running the old instructions for as long as it exists.
+  // The stored value is overwritten directly, which is what an older build
+  // leaves behind.
+  const { core, providerId, modelId } = setup();
+  const { ws, root } = await makeWorkspace(core);
+  try {
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const current = core.getAgent(session.id)!.agent.state.systemPrompt;
+    core.closeSession(session.id);
+    core.db.db
+      .prepare("UPDATE sessions SET system_prompt = ? WHERE id = ?")
+      .run("You are an assistant from an older release.", session.id);
+
+    await core.openSession(session.id);
+    const reopened = core.getAgent(session.id)!;
+    assertEquals(reopened.agent.state.systemPrompt, current);
+    assertEquals(
+      (core.getSession(session.id) as { systemPrompt?: string }).systemPrompt,
+      current,
+      "the repaired prompt must be written back, not only used in memory",
+    );
+  } finally {
+    core.close();
+    await removeDirRetry(root);
+  }
+});
+
 Deno.test("workspaces require at least one folder", async () => {
   const { core } = setup();
   await assertRejects(

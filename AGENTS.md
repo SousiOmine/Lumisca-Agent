@@ -176,7 +176,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 - **1 つのダイアログで変える**（`packages/web/src/components/stella/AgentEditDialog.tsx`）。`PATCH /api/stella/agents/:id` に `{ name?, icon? }` を送り、`icon` 省略は変更なし、`null` は頭文字、`{data, mimeType}` は差し替えです。名前を先に検証する（空名・長すぎる名前は 400、重複名は 409）ので、弾かれたときに画像は書かれません。
 - **並びは動かさない**: 改名も差し替えも `updated_at` を触りません。「最後に話した順」のままです。
-- **`role` は編集できない**: 作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。名前もプロンプトには入りません（`packages/core/tools/system-prompt.ts`）。
+- **`role` は編集できない**: 作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。名前もプロンプトには入りません（`packages/core/tools/system-prompt.ts`）。プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/factory.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。
 - **アイコン**: 保存先は DB 隣の `.lumisca-agent-icons/<agent id>/`（`packages/core/stella/icons.ts`）。未設定なら名前の頭文字を `agent id` から導いた色の上に描きます（`packages/core/shared/agent-avatar.ts`）。PNG / JPEG / GIF / WebP / BMP の 512 KiB までで、SVG は置けません。
 
 ## 8. MCP サーバーの管理（会話から）

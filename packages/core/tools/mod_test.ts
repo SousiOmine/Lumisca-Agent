@@ -99,13 +99,14 @@ Deno.test("sessionSkills advertises the computer-use skill only when the machine
 
 // --- prompt contents ---------------------------------------------------------
 
-Deno.test("coding prompt carries the workspace and the tool guidance it has", () => {
-  const prompt = buildSystemPrompt(workspace, { tools: CODING_TOOLS });
+Deno.test("coding prompt carries the workspace and nothing that drifts", () => {
+  const prompt = buildSystemPrompt(workspace);
   assert(prompt.includes("You are Lumisca, a coding agent"));
   assert(prompt.includes("The workspace contains these folders"));
-  // The prompt does NOT restate the tools: each tool's description carries
-  // its own contract, and the prompt repeats only the output-language rule
-  // (see system-prompt.ts).
+  // No guidelines and no tool names: the prompt does not restate the tools
+  // (their descriptions carry their own contract) and must not name one,
+  // because the tool set changes with the extras while the prompt has to
+  // regenerate identically for an unchanged session.
   assertEquals(prompt.includes("Guidelines:\n- Use"), false);
   // The machine's specs are not in the prompt: they are stable, cheap to
   // probe from a command, and every line of the prompt is paid for on every
@@ -118,29 +119,23 @@ Deno.test("coding prompt carries the workspace and the tool guidance it has", ()
   assertEquals(prompt.includes("web-browser"), false);
 });
 
-Deno.test("coding prompt never mentions a tool the session does not have", () => {
-  const prompt = buildSystemPrompt(workspace, { tools: [TOOL_READ] });
-  for (
-    const absent of [
-      "async_bash",
-      "`eval`",
-      "[Task ...]",
-      "todo tool",
-      "send_message",
-    ]
-  ) {
+Deno.test("coding prompt never mentions a tool", () => {
+  // The set is not an input any more: a prompt that named the tools would
+  // change whenever a backend detached or an MCP server was added, and the
+  // session would rewrite its head on an event that has nothing to do with
+  // the instructions.
+  const prompt = buildSystemPrompt(workspace);
+  for (const name of CODING_TOOLS) {
     assertEquals(
-      prompt.includes(absent),
+      prompt.includes(name),
       false,
-      `${absent} must not be mentioned without its tool`,
+      `${name} must not be named in the prompt`,
     );
   }
 });
 
-Deno.test("chat prompt lists only the chat guidelines", () => {
-  const prompt = buildChatSystemPrompt({
-    tools: [TOOL_ASK, TOOL_TODO, TOOL_SKILL],
-  });
+Deno.test("chat prompt is the folder-less framing alone", () => {
+  const prompt = buildChatSystemPrompt();
   assert(prompt.includes("You are Lumisca, a helpful AI assistant."));
   // No guidelines at all: the per-tool guidance is the tools' own
   // descriptions, and the reply language is a context message now.
