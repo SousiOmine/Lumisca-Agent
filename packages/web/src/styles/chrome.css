@@ -102,14 +102,9 @@
   color: #ffffff;
 }
 
-/* stella mode's strip: the mode's name, and (in a plain browser, where the
- * title bar renders no controls) the app menu at the right edge. */
-.stella-titlebar-text {
-  align-self: center;
-  padding: 0 4px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
+/* stella mode's strip: the open conversation (see StellaTitleBarHeader), and
+ * (in a plain browser, where the title bar renders no controls) the app menu
+ * at the right edge. */
 
 /* ---- connection picker (which server this window shows) ------------------ */
 

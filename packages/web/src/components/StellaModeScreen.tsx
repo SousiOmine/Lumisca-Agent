@@ -44,6 +44,11 @@ export interface StellaModeScreenProps {
   onFilesChange: (files: PendingFile[]) => void;
   onAgentChanged: (agent: StellaAgent) => void;
   onOpenSettings: () => void;
+  /** Whether the reader wants the machine's screen open. Owned by the App
+   * because the toggle that flips it lives in the title bar, which is drawn
+   * above this screen (see App.tsx). */
+  screenOpen: boolean;
+  onScreenOpenChange: (open: boolean) => void;
 }
 
 export function StellaModeScreen({
@@ -59,6 +64,8 @@ export function StellaModeScreen({
   onFilesChange,
   onAgentChanged,
   onOpenSettings,
+  screenOpen,
+  onScreenOpenChange,
 }: StellaModeScreenProps) {
   const conversation = stella.conversation;
   return (
@@ -79,12 +86,13 @@ export function StellaModeScreen({
       />
       <StellaView
         agent={agent}
-        onAgentChanged={onAgentChanged}
         conversation={conversation}
         sessionId={stella.sessionId}
         conversationError={stella.error}
         loading={stella.loading}
         status={status}
+        screenOpen={screenOpen}
+        onScreenOpenChange={onScreenOpenChange}
         input={input}
         onInputChange={onInputChange}
         images={images}
@@ -102,7 +110,6 @@ export function StellaModeScreen({
         onFinishHandover={(note, toolCallId) =>
           stella.finishHandover(note, toolCallId)}
         onOpenSettings={onOpenSettings}
-        onBack={narrow ? stella.clearSelection : undefined}
       />
     </div>
   );

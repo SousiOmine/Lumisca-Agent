@@ -393,29 +393,61 @@
   overflow: hidden;
 }
 
-/* The conversation's title is the agent's name and nothing else: a subtitle
- * or a state line would be a second thing to read on every visit. The two
- * exceptions are the first-run build (a wait that must be explained) and an
- * error (which must be visible). */
-.stella-header {
+/* stella mode's strip inside the title bar: the conversation's own header,
+ * and — in a plain browser, where the title bar draws no controls — the app
+ * menu at the right edge. It takes the tab bar's place, so it takes its
+ * height and its canvas paint too: the chrome must not grow for a mode that
+ * has fewer things in it than code mode, and a strip that lost the bar's
+ * height would be a row of controls with no row.
+ *
+ * The height is the bar's own rather than `100%` because a plain browser has
+ * no `.titlebar` around this (TitleBar renders only its children there), so
+ * there is no height to inherit from. */
+.stella-titlebar-strip {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  height: var(--tab-height);
+  background: var(--bg);
+}
+
+/* The conversation's title, in the window's title bar: the agent's name and
+ * nothing else. A subtitle or a state line there would be a second thing to
+ * read on every visit. The two exceptions are the first-run build (a wait
+ * that must be explained) and an error (which must be visible).
+ *
+ * The row is the tab bar's, so it takes the same height and does not grow
+ * the window chrome. `min-width: 0` lets the name ellipsize instead of
+ * pushing the app menu and the window buttons off the strip: an agent named
+ * after a paragraph is still an agent the reader has to be able to see. */
+.stella-titlebar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 16px 6px;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
 }
 
-.stella-header h1 {
+.stella-titlebar-name {
+  min-width: 0;
   margin: 0;
-  font-size: 14px;
+  overflow: hidden;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* The agent's face in the header doubles as the control that changes it: the
- * picture is where the user looks when they want the agent to look
- * different, so no separate "edit icon" button sits beside it. */
-.stella-header-avatar {
+/* The face doubles as the control that changes it: the picture is where the
+ * user looks when they want the agent to look different, so no separate "edit
+ * icon" button sits beside it. Smaller here than in a sidebar row — the title
+ * bar is one line tall, and a face that fills it would be the tallest thing
+ * in the window. */
+.stella-titlebar-avatar {
   flex: none;
   display: flex;
   padding: 0;
@@ -425,11 +457,11 @@
   cursor: pointer;
 }
 
-.stella-header-avatar:hover {
+.stella-titlebar-avatar:hover {
   box-shadow: 0 0 0 2px var(--border-strong);
 }
 
-.stella-header-avatar:focus-visible {
+.stella-titlebar-avatar:focus-visible {
   outline: 2px solid var(--border-strong);
   outline-offset: 2px;
 }
@@ -538,7 +570,7 @@
   color: var(--text-dim);
 }
 
-/* The screen's show/hide control, at the header's right edge.
+/* The screen's show/hide control, at the title bar header's right edge.
  *
  * The pane it drives is this view's second column, so the control sits on the
  * boundary between the two and reads as "the panel on the right". The `on`
@@ -552,6 +584,9 @@
   justify-content: center;
   width: 28px;
   height: 28px;
+  /* The header is a flex row in the title bar; `auto` pushes the toggle to
+   * the far end of the conversation's own group, just left of the app menu
+   * and the window buttons. */
   margin-left: auto;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);

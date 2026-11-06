@@ -41,6 +41,8 @@ import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 import { ModeGate, ModeGateDialog } from "./components/ModeGate.tsx";
 import { StellaModeScreen } from "./components/StellaModeScreen.tsx";
+import { StellaTitleBarHeader } from "./components/stella/StellaTitleBarHeader.tsx";
+import { AgentEditDialog } from "./components/stella/AgentEditDialog.tsx";
 import { useAppMode } from "./hooks/useAppMode.ts";
 import { useStella } from "./hooks/useStella.ts";
 import { useRoutines } from "./hooks/useRoutines.ts";
@@ -286,6 +288,13 @@ export function App({ initialData }: AppProps): ReactElement {
   // switches at, so the layout and the navigation cannot disagree.
   const narrow = useNarrowViewport();
   const stellaAgent = stella.agents.find((a) => a.id === stella.activeAgentId);
+  // The screen pane's switch and the edit dialog are opened from the title
+  // bar, which this App draws (see StellaTitleBarHeader): their state is
+  // here, above both the bar and the conversation it names.
+  const [stellaScreenOpen, setStellaScreenOpen] = useState(false);
+  const [editingStellaAgent, setEditingStellaAgent] = useState(false);
+  const stellaHandedOver = stella.conversation?.handover !== null &&
+    stella.conversation?.handover !== undefined;
   // The settings dialog's routine list: the active agent's routines
   // (code mode has no agent, so the list stays empty and says so).
   const routines = useRoutines(stellaActive ? stella.activeAgentId : null);
@@ -346,14 +355,30 @@ export function App({ initialData }: AppProps): ReactElement {
       >
         {stellaActive
           // stella mode has no tab strip: one conversation is the whole
-          // surface, and an empty strip beside it would suggest otherwise.
-          // The bar chrome is reused so the strip looks the same in a plain
-          // browser (where the title bar renders no wrapper) as on desktop.
+          // surface, so the strip names that conversation instead of listing
+          // sessions. See StellaTitleBarHeader: the agent's face and name are
+          // here because they were a second strip inside the sheet, saying
+          // the same thing one line lower.
           ? (
-            <div className="tabbar stella-titlebar-label">
-              <span className="stella-titlebar-text">
-                {t("chat.stella.titleBarLabel")}
-              </span>
+            <div className="stella-titlebar-strip">
+              <StellaTitleBarHeader
+                agent={stellaAgent ?? null}
+                machineRunning={machineStatus?.state === "running"}
+                label={t(
+                  narrow && stella.activeAgentId === null
+                    ? "chat.stella.agents.title"
+                    : "chat.stella.titleBarLabel",
+                )}
+                onBack={narrow && stella.activeAgentId !== null
+                  ? stella.clearSelection
+                  : undefined}
+                onEditAgent={() => setEditingStellaAgent(true)}
+                onToggleScreen={machineStatus?.state === "running" &&
+                    !stellaHandedOver
+                  ? () => setStellaScreenOpen((open) => !open)
+                  : undefined}
+                screenOpen={stellaScreenOpen}
+              />
               {
                 /* On desktop the app menu lives in the title bar's controls; in
                * a plain browser this strip is the only chrome stella mode
@@ -422,6 +447,8 @@ export function App({ initialData }: AppProps): ReactElement {
               onFilesChange={(files) => updateDraft(draftKey, { files })}
               onAgentChanged={stella.replaceAgent}
               onOpenSettings={openProviders}
+              screenOpen={stellaScreenOpen}
+              onScreenOpenChange={setStellaScreenOpen}
             />
           )
           : activeView
@@ -520,6 +547,16 @@ export function App({ initialData }: AppProps): ReactElement {
           onCancel={closePendingClose}
           onStopAndClose={() => resolveClose(false)}
           onKeepRunning={() => resolveClose(true)}
+        />
+      )}
+      {stellaActive && stellaAgent !== undefined && editingStellaAgent && (
+        <AgentEditDialog
+          agent={stellaAgent}
+          onChanged={(updated) => {
+            stella.replaceAgent(updated);
+            setEditingStellaAgent(false);
+          }}
+          onClose={() => setEditingStellaAgent(false)}
         />
       )}
       {showModeSelect && (

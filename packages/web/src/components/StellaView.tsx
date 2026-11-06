@@ -1,9 +1,4 @@
-import {
-  IconArrowLeft,
-  IconDeviceDesktop,
-  IconDeviceDesktopOff,
-  IconSend,
-} from "@tabler/icons-preact";
+import { IconSend } from "@tabler/icons-preact";
 import { useState } from "preact/compat";
 import {
   sessionAttachmentBase,
@@ -14,28 +9,23 @@ import { useT } from "../i18n.ts";
 import type {
   PendingFile,
   PendingImage,
-  StellaAgent,
   StellaAgentSummary,
   StellaStatus,
 } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
-import { AgentAvatar } from "./stella/AgentAvatar.tsx";
-import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
 import { usePresence } from "../hooks/usePresence.ts";
 import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 import type { StellaConversationState } from "../stella-state.ts";
 
 interface StellaViewProps {
-  /** The agent whose conversation this is (the sidebar picks it). Its name is
-   * the conversation's title and its avatar opens the edit dialog; its
-   * absence (first run, before an agent exists) is why the composer is
-   * disabled. */
+  /** The agent whose conversation this is (the sidebar picks it). Its name
+   * and face are the title bar's, not this view's (see
+   * StellaTitleBarHeader); what this view needs it for is the agent's own
+   * asset base and the placeholder, and its absence (first run, before an
+   * agent exists) is why the composer is disabled. */
   agent: StellaAgentSummary | null;
-  /** The agent row the server answered after an edit, so the App can replace
-   * it without re-reading the list. */
-  onAgentChanged: (agent: StellaAgent) => void;
   /** The conversation, or null while there is nothing to show yet. */
   conversation: StellaConversationState | null;
   /** The conversation's session id, for the asset base of `visual:` images.
@@ -54,6 +44,12 @@ interface StellaViewProps {
    * one wait the user sees); `state` decides whether the screen pane can
    * connect. null while the first read is in flight. */
   status: StellaStatus | null;
+  /** Whether the reader wants the machine's screen open. Owned by the caller
+   * because the control that flips it lives in the title bar, above this
+   * view (see StellaTitleBarHeader): a pane whose switch is in another
+   * component cannot keep that switch's state here. */
+  screenOpen: boolean;
+  onScreenOpenChange: (open: boolean) => void;
   /** Unsent composer text, owned by the App so it survives a remount. */
   input: string;
   onInputChange: (value: string) => void;
@@ -83,12 +79,6 @@ interface StellaViewProps {
   /** The user finished at the screen (the `vm_ask_user` hand-over). */
   onFinishHandover: (note: string, toolCallId: string) => Promise<void>;
   onOpenSettings: () => void;
-  /** Return to the list of agents. Present only at phone widths, where the
-   * list and the conversation are two screens instead of two columns; the
-   * header then draws a back button. Omitted on a wide screen, where the
-   * list is already beside the conversation and a back button would point
-   * at something the reader can see. */
-  onBack?: () => void;
 }
 
 /**
@@ -117,12 +107,13 @@ interface StellaViewProps {
 export function StellaView(
   {
     agent,
-    onAgentChanged,
     conversation,
     sessionId,
     conversationError,
     loading,
     status,
+    screenOpen,
+    onScreenOpenChange,
     input,
     onInputChange,
     images,
@@ -137,18 +128,12 @@ export function StellaView(
     loadingOlder,
     onFinishHandover,
     onOpenSettings,
-    onBack,
   }: StellaViewProps,
 ) {
   const t = useT();
   // The transcript owns the scroll element (see TranscriptScrollOptions.
   // pinToken): this view only records that a submit happened.
   const [pinToken, setPinToken] = useState(0);
-  // Picking a picture or renaming the agent is a decision about the agent, so
-  // the control sits on the agent's own face in the header rather than only
-  // in a menu: it is where the user looks when they want that agent to look
-  // or be called something else.
-  const [editingAgent, setEditingAgent] = useState(false);
   const visualBase = sessionVisualBase("", sessionId ?? "");
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const uploadBase = stellaUploadBase(agent?.id ?? "");
@@ -156,14 +141,6 @@ export function StellaView(
   // The screen is the user's while the agent waits for them: the pane turns
   // interactive and a bar above it says what to do and offers "done".
   const handover = conversation?.handover ?? null;
-  // The machine's screen is a panel the user opens and closes, like a side
-  // panel: it starts closed — the conversation is what the mode is for, and a
-  // pane that opens itself takes that width before the user asks for it (it
-  // also holds a VNC connection from the first render). The header's toggle
-  // opens and closes it, the user's choice stays put after that, and sending a
-  // message never reopens it: a pane that comes back on its own makes the
-  // button untrustworthy.
-  const [screenOpen, setScreenOpen] = useState(false);
   // A hand-over is the agent stopping and asking the user to act ON the
   // screen. Showing it is not a convenience but the only way to continue the
   // run, so that one case overrides the user's choice — and taking the screen
@@ -204,91 +181,6 @@ export function StellaView(
   return (
     <div className="stella">
       <div className="stella-main">
-        {agent !== null && (
-          <header className="stella-header">
-            {
-              /* A phone shows one screen at a time (the list, then the
-             * conversation), so the way back has to be a control on the
-             * conversation rather than a column that is simply not there.
-             * Hidden at wide widths, where the list is beside it. */
-            }
-            {onBack !== undefined && (
-              <button
-                type="button"
-                className="stella-back"
-                onClick={onBack}
-                title={t("chat.stella.backToList")}
-                aria-label={t("chat.stella.backToList")}
-              >
-                <IconArrowLeft size={18} />
-              </button>
-            )}
-            <button
-              type="button"
-              className="stella-header-avatar"
-              onClick={() => setEditingAgent(true)}
-              title={t("chat.stella.agents.edit")}
-              aria-label={t("chat.stella.agents.edit")}
-            >
-              <AgentAvatar
-                agentId={agent.id}
-                name={agent.name}
-                icon={agent.icon}
-                size={28}
-              />
-            </button>
-            <h1>{agent.name}</h1>
-            {status?.starting === true && (
-              <span className="stella-note" role="status">
-                {t("chat.stella.machine.starting")}
-              </span>
-            )}
-            {status !== null && status.state !== "running" &&
-              !status.starting &&
-              status.reason !== "" && (
-              <span className="stella-note error-text" role="alert">
-                {status.reason}
-              </span>
-            )}
-            {
-              /* The screen toggle sits at the header's right edge, opposite
-             * the agent it belongs to: the pane it shows and hides is the
-             * second column of this view, so the control lives on the edge
-             * between the two. Hidden while the machine cannot show a picture
-             * at all — a disabled toggle would promise a pane that will not
-             * appear — and while a hand-over is waiting for the user, because
-             * then the pane cannot be dismissed either.
-             *
-             * The icon is the monitor itself (crossed out while the pane is
-             * closed), not an eye: this button is about the machine's screen,
-             * and a monitor says that without the eye's other meanings
-             * (watch, preview, privacy). The label and tooltip say what the
-             * next click does; the icon says what the pane is doing now. */
-            }
-            {machineRunning && !handedOver && (
-              <button
-                type="button"
-                className={`stella-screen-toggle${showScreen ? " on" : ""}`}
-                onClick={() => setScreenOpen((open) => !open)}
-                aria-pressed={showScreen}
-                title={t(
-                  showScreen
-                    ? "chat.stella.machine.hideScreen"
-                    : "chat.stella.machine.showScreen",
-                )}
-                aria-label={t(
-                  showScreen
-                    ? "chat.stella.machine.hideScreen"
-                    : "chat.stella.machine.showScreen",
-                )}
-              >
-                {showScreen
-                  ? <IconDeviceDesktop size={15} />
-                  : <IconDeviceDesktopOff size={15} />}
-              </button>
-            )}
-          </header>
-        )}
         {conversationError !== null
           ? (
             <div className="chat-scroll">
@@ -308,6 +200,24 @@ export function StellaView(
                 <p className="stella-loading" role="status">
                   {loading ? t("chat.stella.loading") : t("chat.stella.empty")}
                 </p>
+                {
+                  /* The first-run build is the one wait this mode cannot
+                   * hide. It lives here rather than in the title bar: it is
+                   * a sentence, and the title bar is one line of a name. */
+                }
+                {status?.starting === true && (
+                  <p className="stella-loading" role="status">
+                    {t("chat.stella.machine.starting")}
+                  </p>
+                )}
+                {
+                  /* A failure explains why nothing works, so it must be
+                   * visible even while the conversation is empty. */
+                }
+                {status !== null && status.state !== "running" &&
+                  !status.starting && status.reason !== "" && (
+                  <p className="error-text" role="alert">{status.reason}</p>
+                )}
               </div>
             </div>
           )
@@ -376,19 +286,9 @@ export function StellaView(
           // The pane's own × means the same thing as the header's toggle. A
           // hand-over is the one state where leaving is not the user's call
           // (the run is blocked on this pane), so there is no × at all.
-          onClose={handedOver ? undefined : () => setScreenOpen(false)}
+          onClose={handedOver ? undefined : () => onScreenOpenChange(false)}
           exiting={pane.exiting}
           onExitDone={pane.done}
-        />
-      )}
-      {agent !== null && editingAgent && (
-        <AgentEditDialog
-          agent={agent}
-          onChanged={(updated) => {
-            onAgentChanged(updated);
-            setEditingAgent(false);
-          }}
-          onClose={() => setEditingAgent(false)}
         />
       )}
     </div>

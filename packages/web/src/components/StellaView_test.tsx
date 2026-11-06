@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../i18n.ts";
@@ -35,22 +35,23 @@ function render(
   overrides: {
     status?: StellaStatus;
     conversation?: Partial<StellaConversationState> | null;
-    /** The phone-only back button (see StellaViewProps.onBack). */
-    onBack?: () => void;
     loading?: boolean;
+    /** The reader's choice for the screen pane (see StellaViewProps). */
+    screenOpen?: boolean;
   } = {},
 ): string {
   initLocale("ja");
   return renderToString(
     createElement(StellaView, {
       agent,
-      onAgentChanged: () => {},
       conversation: overrides.conversation === null
         ? null
         : { ...emptyStellaState("Aide"), ...overrides.conversation },
       sessionId: "s1",
       conversationError: null,
       status: overrides.status ?? status(),
+      screenOpen: overrides.screenOpen ?? false,
+      onScreenOpenChange: () => {},
       input: "",
       onInputChange: () => {},
       loading: overrides.loading ?? false,
@@ -66,40 +67,32 @@ function render(
       loadingOlder: false,
       onFinishHandover: () => Promise.resolve(),
       onOpenSettings: () => {},
-      ...(overrides.onBack === undefined ? {} : { onBack: overrides.onBack }),
     }),
   );
 }
 
-/** The toggle's opening tag, or "" when it is not drawn. The attributes come
- * out in render order (not source order), so the tag is located by the class
- * it carries. */
-function toggleTag(html: string): string {
-  const at = html.indexOf("stella-screen-toggle");
-  if (at < 0) return "";
-  const start = html.lastIndexOf("<button", at);
-  return html.slice(start, html.indexOf(">", at) + 1);
-}
-
-Deno.test("StellaView: the screen pane starts closed", () => {
-  const html = render();
-  // Nothing of the pane is drawn before the user asks for it: no column, and
-  // with it no VNC connection (StellaPane connects on mount).
-  assertEquals(html.includes("stella-pane"), false);
-  const tag = toggleTag(html);
-  assert(tag !== "", "the toggle is missing while the machine runs");
-  // Closed reads as "not pressed" *and* as the crossed-out monitor; the
-  // label says what the next click does.
-  assertStringIncludes(tag, 'aria-pressed="false"');
-  assertStringIncludes(tag, 'title="画面を表示"');
-  assert(!tag.includes(" on "), `closed must not carry .on: ${tag}`);
+Deno.test("StellaView: the pane opens only when the machine can show it", () => {
+  // Nothing of the pane is drawn before the reader asks for it: no column,
+  // and with it no VNC connection (StellaPane connects on mount).
+  assertEquals(render().includes("stella-pane"), false);
+  // The choice is the caller's, so opening it has to be enough to draw it.
   assertStringIncludes(
-    html,
-    'class="tabler-icon tabler-icon-device-desktop-off"',
+    render({ screenOpen: true }),
+    "stella-pane",
+  );
+  // A machine that is not running has no picture to show, whatever the
+  // reader asked for: the toggle is not drawn in that state (see
+  // StellaTitleBarHeader), and a pane here would be an empty rectangle.
+  assertEquals(
+    render({
+      screenOpen: true,
+      status: status({ state: "stopped", vncPort: null }),
+    }).includes("stella-pane"),
+    false,
   );
 });
 
-Deno.test("StellaView: a hand-over opens the pane and hides the toggle", () => {
+Deno.test("StellaView: a hand-over draws the pane whatever the caller chose", () => {
   const html = render({
     conversation: {
       handover: {
@@ -112,24 +105,6 @@ Deno.test("StellaView: a hand-over opens the pane and hides the toggle", () => {
   // The run is blocked on this pane, so it is drawn regardless of the user's
   // choice, and there is nothing to close it into.
   assertStringIncludes(html, "stella-pane");
-  assertEquals(toggleTag(html), "");
-});
-
-Deno.test("StellaView: no toggle while the machine cannot show a screen", () => {
-  const html = render({ status: status({ state: "stopped", vncPort: null }) });
-  assertEquals(html.includes("stella-pane"), false);
-  assertEquals(toggleTag(html), "");
-});
-
-Deno.test("StellaView: the back button appears only when the caller gives one", () => {
-  // A phone has one screen at a time, so the way back to the list is a
-  // control on the conversation. A wide window has the list beside it, and
-  // a back button there would point at something already visible — which is
-  // why its absence is decided by the caller, not by CSS.
-  assertEquals(render().includes("stella-back"), false);
-  const narrow = render({ onBack: () => {} });
-  assertStringIncludes(narrow, "stella-back");
-  assertStringIncludes(narrow, "エージェント一覧に戻る");
 });
 
 Deno.test("StellaView: a failed send leaves the conversation on screen", () => {
