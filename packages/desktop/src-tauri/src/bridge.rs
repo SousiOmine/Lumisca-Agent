@@ -54,6 +54,15 @@ struct ConnectionState {
 }
 
 /// Current display's auth token (the bridge key).
+///
+/// Empty is no token: a server started without `LUMISCA_TOKEN` injects no
+/// `__LUMISCA_TOKEN__` into its page (see `packages/server/render.ts`), so
+/// the page cannot present one. Returning `Some("")` here made the gate
+/// compare its `None` against `Some("")`, refuse every action with 401, and
+/// — because the title bar draws the window controls only from that
+/// answer — leave a remote window with no minimise, maximise, close or drag
+/// at all. The server normalises the same way (`startupEnv.LUMISCA_TOKEN ||
+/// undefined`); the shell has to agree with it.
 fn current_connection_token(app: &AppHandle) -> Option<String> {
     let state = app.state::<AppState>();
     let remote = state
@@ -61,11 +70,25 @@ fn current_connection_token(app: &AppHandle) -> Option<String> {
         .lock_recover()
         .as_ref()
         .map(|conn| conn.token.clone());
-    if remote.is_some() {
-        return remote;
-    }
     let local = state.local.lock_recover().as_ref().map(|l| l.token.clone());
-    local
+    bridge_key(remote, local)
+}
+
+/// The key the gate checks against, from the tokens the shell holds.
+///
+/// The displayed server's token wins: while a remote server is shown, the
+/// local server's token must not open the window to that page. An empty
+/// token is no token — the server draws the same line for `LUMISCA_TOKEN`
+/// (`startupEnv.LUMISCA_TOKEN || undefined`, packages/server/mod.ts), and
+/// the two sides decide independently whether a page carries a key. A server
+/// without one injects none into its page (`packages/server/render.ts`), so
+/// the page cannot present one; treating "" as a key refused every action
+/// with 401 and left the window with no title bar at all.
+///
+/// Pure, so the rule is testable without an `AppHandle`.
+fn bridge_key(remote: Option<String>, local: Option<String>) -> Option<String> {
+    let token = if remote.is_some() { remote } else { local };
+    token.filter(|token| !token.is_empty())
 }
 
 fn bridge_json(status: StatusCode, value: serde_json::Value) -> BridgeReply {
@@ -74,6 +97,27 @@ fn bridge_json(status: StatusCode, value: serde_json::Value) -> BridgeReply {
 
 fn bridge_error(status: StatusCode, message: &str) -> BridgeReply {
     bridge_json(status, serde_json::json!({ "error": message }))
+}
+
+/// Whether this request may drive the shell.
+///
+/// `current` is the displayed server's token, already normalised so that an
+/// empty one reads as "none" (see [`current_connection_token`]). A server
+/// without a token leaves the gate open — it has nothing to check against,
+/// and its own API is equally open. With one, the request must present it.
+///
+/// Split out from [`handle_shell_action`] so the rule can be stated as a
+/// test without an `AppHandle`: the failure it prevents (a tokenless remote
+/// window losing its whole title bar) is exactly the kind a test has to be
+/// able to pin down.
+fn key_gate(current: Option<&str>, supplied: Option<&str>) -> Result<(), BridgeReply> {
+    let Some(current) = current else {
+        return Ok(());
+    };
+    if supplied == Some(current) {
+        return Ok(());
+    }
+    Err(bridge_error(StatusCode::UNAUTHORIZED, "invalid key"))
 }
 
 /// Turn the loopback bridge's HTTP answer into the IPC command's result:
@@ -138,11 +182,11 @@ pub(crate) fn handle_shell_action(
     // displayed yet — the splash page, or a failed startup — there is no
     // token either, so the gate is open and the splash can drive the
     // window controls. Once a token exists, every action requires it.
-    if let Some(current) = current_connection_token(app) {
-        let supplied = params.get("key").copied();
-        if supplied != Some(current.as_str()) {
-            return bridge_error(StatusCode::UNAUTHORIZED, "invalid key");
-        }
+    if let Err(reply) = key_gate(
+        current_connection_token(app).as_deref(),
+        params.get("key").copied(),
+    ) {
+        return reply;
     }
 
     let get = |name: &str| params.get(name).map(|value| value.to_string());
@@ -410,6 +454,55 @@ mod tests {
             br#"{"error":"invalid key"}"#.to_vec(),
         );
         assert_eq!(bridge_reply_to_result(reply).unwrap_err(), "invalid key");
+    }
+
+    #[test]
+    fn a_tokenless_server_leaves_the_gate_open() {
+        // The bug this pins down: a remote server started without
+        // LUMISCA_TOKEN injects no token into its page, so the page sends no
+        // `key`. When the shell still considered "" a token, the gate
+        // compared its `None` against `Some("")`, answered 401 to every
+        // action, and the title bar — which draws the window controls from
+        // the `state` answer — rendered nothing: no minimise, maximise,
+        // close or drag.
+        //
+        // The normalisation is part of the rule, so it is tested here: an
+        // empty stored token has to arrive at the gate as None, which is
+        // what `current_connection_token` now does. Testing `key_gate` with
+        // a hand-written `None` would pass either way and prove nothing.
+        // A remote server with no token, remembered as "": the key the gate
+        // compares against must be None, not Some("").
+        let key = bridge_key(Some(String::new()), Some("local-token".into()));
+        assert_eq!(key, None);
+        assert!(key_gate(key.as_deref(), None).is_ok());
+        // A page that happens to send an empty key is the same case.
+        assert!(key_gate(None, Some("")).is_ok());
+    }
+
+    #[test]
+    fn the_displayed_servers_token_wins_over_the_other() {
+        // While a remote server is shown, the local server's token must not
+        // open the window to that page — and the other way round.
+        assert_eq!(
+            bridge_key(Some("remote".into()), Some("local".into())),
+            Some("remote".into())
+        );
+        assert_eq!(bridge_key(None, Some("local".into())), Some("local".into()));
+    }
+
+    #[test]
+    fn a_tokened_server_requires_its_own_key() {
+        // The gate still does its job: only the displayed server's page may
+        // drive the window.
+        assert!(key_gate(Some("secret"), Some("secret")).is_ok());
+        assert_eq!(
+            key_gate(Some("secret"), None).unwrap_err().0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            key_gate(Some("secret"), Some("other")).unwrap_err().0,
+            StatusCode::UNAUTHORIZED
+        );
     }
 
     #[test]
