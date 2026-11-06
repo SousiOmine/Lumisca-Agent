@@ -28,6 +28,12 @@ import {
   type FetchLike,
 } from "./websearch/mod.ts";
 import { WebSearchService } from "./websearch/service.ts";
+import { PushSubscriptions } from "./notify/subscriptions.ts";
+import type { VapidKeys } from "./notify/vapid.ts";
+import type {
+  PushSubscriptionKeys,
+  PushSubscriptionRecord,
+} from "./shared/push.ts";
 import type {
   ProviderAuthType,
   WebSearchSettingsView,
@@ -181,6 +187,7 @@ export class LumiscaCore {
   private readonly workspaces: WorkspaceService;
   private readonly personalization: PersonalizationService;
   private readonly savedPrompts: SavedPromptsService;
+  private readonly push: PushSubscriptions;
   private readonly sessions: SessionRepo;
   private readonly stellaAgents: AgentRepo;
   /** Routines (scheduled requests) and the scheduler that fires them. The
@@ -330,6 +337,7 @@ export class LumiscaCore {
       new PersonalizationService(this.settings);
     this.savedPrompts = overrides.savedPrompts ??
       new SavedPromptsService(this.settings);
+    this.push = new PushSubscriptions(this.settings);
     this.sessions = overrides.sessions ?? createSessionRepo(db);
     this.stellaAgents = overrides.stellaAgents ?? createAgentRepo(db);
     this.routines = overrides.routines ?? createRoutineRepo(db);
@@ -1147,6 +1155,39 @@ export class LumiscaCore {
   /** Delete a saved prompt by id. Throws when the id does not exist. */
   deleteSavedPrompt(id: string): void {
     this.savedPrompts.delete(id);
+  }
+
+  // --- Web Push (PWA notifications) ----------------------------------------
+  // The store is the settings file (see shared/settings-keys.ts): a
+  // subscription belongs to this installation, like the connection registry,
+  // and neither is a transcript row that has to survive a rewind.
+
+  /** The stored push subscriptions, oldest first. */
+  listPushSubscriptions(): PushSubscriptionRecord[] {
+    return this.push.list();
+  }
+
+  /** Store one subscription. Re-subscribing the same endpoint replaces its
+   * keys instead of adding a second row. */
+  addPushSubscription(
+    input: { endpoint: string; keys: PushSubscriptionKeys },
+  ): PushSubscriptionRecord {
+    return this.push.add(input);
+  }
+
+  /** Forget one endpoint; false when it was not stored. */
+  removePushSubscription(endpoint: string): boolean {
+    return this.push.remove(endpoint);
+  }
+
+  /** Forget the endpoints a push service reported gone. */
+  forgetPushSubscriptions(endpoints: readonly string[]): void {
+    this.push.removeEndpoints(endpoints);
+  }
+
+  /** The VAPID pair used to sign push messages, created on first use. */
+  pushVapidKeys(): Promise<VapidKeys> {
+    return this.push.vapidKeys();
   }
 
   // --- stella agents (delegated to StellaAgentBook) -------------------------

@@ -412,6 +412,26 @@ Deno.test("the PWA surface is installable and never secret", async () => {
     // exclude it.
     assertEquals(swBody.includes("initial-data.js"), true);
 
+    // The push surface: a message becomes a notification, a click focuses an
+    // existing window, and a replaced subscription is re-registered. Without
+    // the first the channel delivers nothing; without the last the app stops
+    // notifying a device whose browser rotated its subscription.
+    for (
+      const listener of [
+        'addEventListener("push"',
+        'addEventListener("notificationclick"',
+        'addEventListener("pushsubscriptionchange"',
+      ]
+    ) {
+      assertEquals(swBody.includes(listener), true, listener);
+    }
+    // A notification is suppressed while the app is on screen, and that
+    // decision is the worker's alone (see public/sw.js).
+    assertEquals(swBody.includes("visibilityState"), true);
+    // The worker is on the token-free list, so it must never leak the token it
+    // would need to reach an authenticated route.
+    assertEquals(swBody.includes("__LUMISCA_TOKEN__"), false);
+
     // The page points at all of it.
     const html = await (await fetch(`${base}/`)).text();
     assertEquals(html.includes('rel="manifest"'), true);

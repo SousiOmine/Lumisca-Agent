@@ -276,3 +276,16 @@ function parseStoredJson<T>(raw: string | undefined | null): T | undefined {
 /** Theme preference stored in settings; "system" follows the OS color
  * scheme. The resolved "light"|"dark" scheme is applied on the client. */
 export type ThemeSetting = "light" | "dark" | "system";
+
+/** Settings-table key holding the VAPID key pair Web Push signs with, as
+ * JSON of the private JWK (the public half derives from it). It is a secret:
+ * whoever holds it can send notifications that appear to come from this app
+ * to every subscription stored beside it. Created on the first read of the
+ * key endpoint, never at startup — a user who never enables notifications
+ * has no secret written for them. */
+export const PUSH_VAPID_KEY = "push_vapid";
+
+/** Settings-table key holding the Web Push subscriptions (JSON array, see
+ * shared/push.ts). An endpoint is a capability to notify that device, so the
+ * generic settings surface neither reads nor writes this key. */
+export const PUSH_SUBSCRIPTIONS_KEY = "push_subscriptions";

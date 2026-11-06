@@ -225,6 +225,37 @@ export const settings = {
     ja: "バックグラウンド通知",
     en: "Background notifications",
   },
+  /** Web Push: agent events delivered to an installed PWA through the
+   * browser's push service, so they arrive with the app closed. */
+  "settings.general.pushNotifications": {
+    ja: "PWA 通知",
+    en: "PWA notifications",
+  },
+  "settings.general.pushNotificationsDesc": {
+    ja:
+      "インストールした PWA に、実行完了・質問・エラーを OS の通知で届けます。アプリを閉じていても届きます。iPhone / iPad ではホーム画面に追加した PWA でだけ使えます。",
+    en:
+      "Deliver completion, question and error alerts to the installed PWA through your OS, even with the app closed. On iPhone / iPad this works only in a PWA added to the home screen.",
+  },
+  "settings.general.pushDenied": {
+    ja:
+      "このサイトの通知がブラウザでブロックされています。ブラウザのサイト設定から許可してください。",
+    en:
+      "Notifications are blocked for this site. Allow them in your browser's site settings.",
+  },
+  "settings.general.pushUnsupported": {
+    ja: "このブラウザでは PWA 通知を使えません",
+    en: "This browser cannot use PWA notifications",
+  },
+  "settings.general.pushFailed": {
+    ja: "通知を有効にできませんでした: {error}",
+    en: "Could not enable notifications: {error}",
+  },
+  "settings.general.pushTest": { ja: "テスト通知を送る", en: "Send a test" },
+  "settings.general.pushTestSent": {
+    ja: "テスト通知を送信しました",
+    en: "Test notification sent",
+  },
 
   // --- personalize panel ----------------------------------------------------
   "settings.personalize.customInstructions": {

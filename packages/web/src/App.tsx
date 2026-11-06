@@ -44,6 +44,7 @@ import { StellaTitleBarHeader } from "./components/stella/StellaTitleBarHeader.t
 import { AgentEditDialog } from "./components/stella/AgentEditDialog.tsx";
 import { useAppMode } from "./hooks/useAppMode.ts";
 import { useStella } from "./hooks/useStella.ts";
+import { usePush } from "./hooks/usePush.ts";
 import { useRoutines } from "./hooks/useRoutines.ts";
 
 export interface AppProps {
@@ -166,6 +167,11 @@ export function App({ initialData }: AppProps): ReactElement {
   // reads the persisted value directly, so this state only drives the
   // settings toggle.
   const [notifyEnabled, setNotifyEnabledState] = useState(isNotifyEnabled);
+  // PWA notifications of this device (Web Push). Read only while the settings
+  // dialog is open: the page has no other use for the state, and asking the
+  // browser for it on every start would be a permission-adjacent read nobody
+  // asked for.
+  const push = usePush(settingsCategory === "general");
   const [showRecent, setShowRecent] = useState(false);
   // The mode-selection screen, reopened from the app menu (the first-run
   // screen is driven by the stored mode instead; this is the "switch" path).
@@ -555,6 +561,7 @@ export function App({ initialData }: AppProps): ReactElement {
           update={update}
           notifyEnabled={notifyEnabled}
           onNotifyEnabledChange={handleNotifyEnabledChange}
+          push={push}
           initialCategory={settingsCategory}
           routines={routines}
           routineAgent={routineAgentName}

@@ -231,3 +231,17 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
 - **`public/sw.js` のキャッシュ方針を変えたら `CACHE_NAME` を上げてください**。`/sw.js` は `max-age=0, must-revalidate` で配ります。
 - **standalone の余白**: viewport は `viewport-fit=cover`、余白は `env(safe-area-inset-*)` で戻します（`layout.css` の `.app`、全画面 `.modal`、`.mp-popover`）。`packages/server/render.ts` と `packages/web/index.html` の viewport は揃えたままにしてください。
 - **確認**: `app_assets_test.ts` と `app_security_test.ts` が通ること。実機は Chrome の DevTools → Application → Manifest で、警告が出ないことを見ます。
+
+### 通知（Web Push）
+
+インストールした PWA に、実行完了・質問・エラーを OS 通知で届けます（`packages/server/push.ts`、`packages/core/notify/`）。
+
+- **可視判定は Service Worker が持つ**（`public/sw.js` の `push`）。`clients.matchAll({ type: "window", includeUncontrolled: true })` に `visibilityState === "visible"` の窓があれば何も出しません。サーバー側に presence を持たせると、複数端末のフォーカスを当てる必要が出て必ずずれます。
+- **暗号は WebCrypto だけで書く**（`packages/core/notify/web-push.ts`）。VAPID の ES256、RFC 8291 の AES128GCM、HKDF の 2 段です。依存は増やさないでください。本文は必ず `0x02` 区切りで終わらせます（無いとブラウザがレコードを終端できず、黙って捨てます）。往復は `packages/core/notify/web-push_test.ts` がブラウザ側の手順で復号して確かめます。
+- **鍵と購読は settings.jsonc**（`push_vapid` / `push_subscriptions`）。DB マイグレーションはありません。両方とも `settings/guard.ts` の `protectedKeyReason` で汎用設定 API から遮断しています。
+- **鍵は初回の `GET /api/notify/key` で作る**。通知を使わない利用者に秘密鍵を書かないためです。保存済みの鍵対が公開側と食い違ったら**作り直さず失敗**させてください（作り直すと既存の購読が全部無効になり、ブラウザは通知を黙って捨てます）。
+- **404 / 410 の購読は削除**、それ以外の失敗（429、通信断）は残します（`push.ts` の `forgetPushSubscriptions`）。
+- **このサーバーのイベントだけ**送ります。中継しているピアのイベントは対象外で、購読はこのオリジンの端末のものです。
+- **`pushsubscriptionchange` は当てにしない**。Chromium も発火しないことがあり、Safari は実装していません。ページを開いたときに購読を 1 回 POST し直す経路（`packages/web/src/hooks/usePush.ts`）を消さないでください。
+- **`public/sw.js` は素の script** なので、ページの `push.ts` を import できません。base64url の復号だけが 2 か所にあります。
+- **設定行は `pushSupported()` のときだけ**出します（`https` かつデスクトップシェル外かつ Push API あり）。デスクトップの `http://127.0.0.1` と `deno task dev` は対象外で、そこは従来どおり Tauri の通知が担当します。iOS はホーム画面の PWA でだけ動きます。

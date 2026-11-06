@@ -22,6 +22,8 @@ import { settingRoutes } from "./routes/settings.ts";
 import { mcpRoutes } from "./routes/mcp.ts";
 import { webSearchRoutes } from "./routes/web-search.ts";
 import { connectionRoutes } from "./routes/connections.ts";
+import { notifyRoutes } from "./routes/notify.ts";
+import { createPushNotifier } from "./push.ts";
 import { federationRoutes } from "./routes/federation.ts";
 import { type UpdateApi, updateRoutes } from "./routes/update.ts";
 import { FederationClient } from "./federation.ts";
@@ -80,6 +82,9 @@ export interface AppOptions {
    * whole reply arrives in a frame or two without waiting out the display
    * interval; production never sets it. */
   deltaFlushMs?: number;
+  /** Transport of the PWA notifications (Web Push). Tests inject a fake push
+   * service; production leaves it unset, which uses the process's `fetch`. */
+  pushFetch?: typeof fetch;
 }
 
 /** Cleanup hooks per app instance, reached via disposeServer. */
@@ -117,6 +122,15 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     );
   if (!options.fed) fed.start();
 
+  // PWA notifications: the notifier subscribes to the core's events as soon
+  // as it exists, so it is created here (beside the federation client) and
+  // released by this app's disposer. The routes below only add and remove
+  // subscriptions; what reaches a device is decided in push.ts.
+  const push = createPushNotifier({
+    core,
+    ...(options.pushFetch === undefined ? {} : { fetch: options.pushFetch }),
+  });
+
   // Host guard, token, CORS, and the WS Origin check.
   installSecurityMiddleware(app, options, (c) => languageForRequest(core, c));
 
@@ -145,6 +159,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   appDisposers.set(app, () => {
     fed.close();
+    push.dispose();
   });
 
   // `now` proves the event loop itself is alive (not just the listener
@@ -204,6 +219,17 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
   app.route("/api", connectionRoutes(core, () => fed.restart()));
+  app.route(
+    "/api",
+    notifyRoutes({
+      listPushSubscriptions: () => core.listPushSubscriptions(),
+      addPushSubscription: (input) => core.addPushSubscription(input),
+      removePushSubscription: (endpoint) =>
+        core.removePushSubscription(endpoint),
+      pushVapidKeys: () => core.pushVapidKeys(),
+      sendPushTest: () => push.sendTest(),
+    }),
+  );
   app.route("/api", federationRoutes(fed));
   // Auto-update of the standalone server (absent in development, where the
   // routes are not registered at all and the UI gets a 404 → no controls).

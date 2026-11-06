@@ -227,6 +227,12 @@ export const common = {
     en: '"{name}" has a question{detail}',
   },
   "notify.questionDetail": { ja: "：{gist}", en: ": {gist}" },
+  /** A run that stopped with an error (Web Push; the desktop shell shows the
+   * same sentence for its own notifications). */
+  "notify.sessionError": {
+    ja: "「{name}」でエラーが発生しました",
+    en: '"{name}" stopped with an error',
+  },
   /** Reasoning-effort level names (the composer's badge, the model picker's
    * slider and the model-preference rows). The ids stay the wire values
    * (core/shared/providers.ts), only the labels are translated. */

@@ -11,6 +11,8 @@ import {
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   LANGUAGE_KEY,
+  PUSH_SUBSCRIPTIONS_KEY,
+  PUSH_VAPID_KEY,
   SAVED_PROMPTS_KEY,
   THEME_KEY,
   UPDATE_AUTO_KEY,
@@ -47,6 +49,14 @@ export function protectedKeyReason(key: string): string | undefined {
   if (key === CONNECTIONS_KEY) {
     // The connection registry contains server tokens.
     return "connection registry cannot be accessed through this endpoint";
+  }
+  if (key === PUSH_VAPID_KEY) {
+    // The VAPID private key signs every notification this app sends.
+    return "push credentials cannot be accessed through this endpoint";
+  }
+  if (key === PUSH_SUBSCRIPTIONS_KEY) {
+    // A subscription endpoint is a capability to notify a device.
+    return "push subscriptions cannot be accessed through this endpoint";
   }
   return undefined;
 }

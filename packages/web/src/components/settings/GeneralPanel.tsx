@@ -1,5 +1,6 @@
 import type { UpdateStatus } from "../../shell.ts";
 import type { UpdateSource } from "../../hooks/useUpdateStatus.ts";
+import type { PushControls } from "../../hooks/usePush.ts";
 import { LOCALES, type MessageKey } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
@@ -27,6 +28,8 @@ interface GeneralPanelProps {
   /** Background agent-event notifications (desktop only). */
   notifyEnabled: boolean;
   onNotifyEnabledChange: (enabled: boolean) => void;
+  /** PWA notifications of the same events (Web Push), for this device. */
+  push: PushControls;
 }
 
 /** Selector labels in each language's own name where it differs: a reader
@@ -80,6 +83,64 @@ function formatBytes(bytes: number | null): string {
   return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB`;
 }
 
+/** The same events, delivered to an installed PWA through the browser's push
+ * service. A separate row from the desktop toggle because it is a separate
+ * channel to a separate device: the desktop shell notifies the window the app
+ * runs in, this one notifies every phone and laptop the app was installed on.
+ *
+ * The row disappears where the channel cannot exist (an insecure origin, the
+ * desktop shell's loopback page, a browser without the Push API) and says why
+ * where it exists but was refused. */
+function PushNotificationsItem({ push }: { push: PushControls }) {
+  const t = useT();
+  if (push.state === "unsupported") {
+    return (
+      <SettingRow label={t("settings.general.pushNotifications")}>
+        <span className="update-desc">
+          {t("settings.general.pushUnsupported")}
+        </span>
+      </SettingRow>
+    );
+  }
+  return (
+    <>
+      <SettingRow
+        label={t("settings.general.pushNotifications")}
+        description={t("settings.general.pushNotificationsDesc")}
+      >
+        <Toggle
+          checked={push.state === "on"}
+          disabled={push.state === "busy" || push.state === "denied"}
+          onChange={push.toggle}
+          label={t("settings.general.pushNotifications")}
+        />
+      </SettingRow>
+      {push.state === "denied" && (
+        <p className="settings-note" role="alert">
+          {t("settings.general.pushDenied")}
+        </p>
+      )}
+      {push.state === "on" && (
+        <div className="update-status-row">
+          <span className="update-status-text">
+            {push.tested ? t("settings.general.pushTestSent") : ""}
+          </span>
+          <div className="update-actions">
+            <button type="button" className="btn small" onClick={push.sendTest}>
+              {t("settings.general.pushTest")}
+            </button>
+          </div>
+        </div>
+      )}
+      {push.error !== null && (
+        <p className="error-text" role="alert">
+          {t("settings.general.pushFailed", { error: push.error })}
+        </p>
+      )}
+    </>
+  );
+}
+
 /** Settings → General: the app preferences (language, notifications) and
  * the auto-update controls.
  *
@@ -104,6 +165,7 @@ export function GeneralPanel(
     onRestart,
     notifyEnabled,
     onNotifyEnabledChange,
+    push,
   }: GeneralPanelProps,
 ) {
   const t = useT();
@@ -343,6 +405,8 @@ export function GeneralPanel(
           />
         </SettingRow>
       )}
+
+      <PushNotificationsItem push={push} />
     </div>
   );
 }

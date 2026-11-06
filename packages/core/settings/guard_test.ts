@@ -3,6 +3,10 @@ import { filterExposedSettings, protectedKeyReason } from "./guard.ts";
 import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
 import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import { APP_MCP_SETTINGS_KEY, CONNECTIONS_KEY } from "../shared/mod.ts";
+import {
+  PUSH_SUBSCRIPTIONS_KEY,
+  PUSH_VAPID_KEY,
+} from "../shared/settings-keys.ts";
 
 Deno.test("the settings guard hides every credential category", () => {
   for (
@@ -12,6 +16,9 @@ Deno.test("the settings guard hides every credential category", () => {
       `${MCP_OAUTH_KEY_PREFIX}https://agent.example/mcp`,
       APP_MCP_SETTINGS_KEY,
       CONNECTIONS_KEY,
+      // Web Push: the signing key, and the endpoints that can be notified.
+      PUSH_VAPID_KEY,
+      PUSH_SUBSCRIPTIONS_KEY,
     ]
   ) {
     assertEquals(

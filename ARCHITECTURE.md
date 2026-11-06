@@ -278,6 +278,11 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
 - **PWA としてのインストール（`manifest.ts`、`pages.ts`、`web/public/sw.js`）**  
   ページは https（`tailscale serve` など）越しに PWA としてインストールできます。Web App Manifest はファイルとして置かず、リクエストごとに生成します。`theme_color` はそのページの第一描画のテーマ、`lang` と `description` はそのリクエストの言語です。インストール画面とスプラッシュがアプリの見た目と一致するためです。manifest、アイコン（`/pwa/*`）、Service Worker（`/sw.js`）は token ガードの対象外です。ブラウザのインストール処理がこれらを Cookie 無しで取得し、401 はそのままインストール不可になるためで、どれにも秘密は載せません（`start_url` に token を入れません）。アイコンは `assets.json` に base64 で埋め込むので、配布アーカイブの形は変わりません。Service Worker は Chrome のインストールプロンプト（`beforeinstallprompt`）を出すためだけに存在し、https のページでのみ登録します（デスクトップの `http://127.0.0.1` は secure context なので、スキームの判定がそのまま除外になります）。キャッシュするのはクライアントの静的ファイルだけで、network-first です。ページ（token を持ち `no-store`）と `/api` には触りません。
 
+- **PWA への通知（Web Push / `notify/`、`routes/notify.ts`、`push.ts`）**  
+  インストールした PWA には、実行完了・質問・エラーを Web Push で届けます。デスクトップシェルの通知と同じ 4 種類のイベントを、同じ文面（`notify.*` のカタログ）で送ります。購読と VAPID 鍵対は設定ファイルに置き、DB には書きません。どちらもこのインストールに属する値で、転写の行ではないためです。秘密鍵は初回の公開鍵要求で作ります。通知を使わない利用者に秘密を書かないためです。
+
+  送るかどうかを決めるのは Service Worker です。サーバーが「ページは前面か」を判断しようとすると、端末ごとのフォーカスを常時把握する必要があり、2 台開いた時点で必ず間違えます。worker は可視の窓があるかをその場で読み、あれば何もしません。この判定をサーバーへ移すと、見ている最中にも通知が出ます。逆に、アプリを閉じている端末へ届けるには worker が起きている必要があるので、暗号化と送信はサーバーに置きます。暗号（VAPID 署名、RFC 8291 の本文暗号化）は WebCrypto だけで実装し、依存は増やしていません。プロトコルの細部（`0x02` の区切り、鍵対を勝手に作り直さないこと、410 で購読を消すこと、`pushsubscriptionchange` を当てにしないこと）は `AGENTS.md` にあります。
+
 - **アセット配信と Web 検索 API（`routes/visuals.ts`, `routes/attachments.ts`, `routes/web-search.ts`）**  
   アセット配信は、セッションで共有された画像（`visual:` 参照）と、エージェントがユーザーへ送ったファイルを返します。後者は表示名を `Content-Disposition` に載せ、画像は `inline`、それ以外は `attachment` として返します。対象のセッションが存在することを先に確かめるので、名前だけでセッションの有無を探ることはできません。`visuals` の SVG 配信時には `Content-Security-Policy: default-src 'none'; sandbox` を付けます。Web 検索 API は `GET /web-search`、`POST /web-search/providers`、`PUT/DELETE /web-search/providers/:id`、`PUT /web-search/default`（`null` で解除）、`POST /web-search/test` を提供します。変更系はすべて変更後の全体を返します。接続確認の失敗は HTTP 200 のまま `ok: false` と理由を返します（誤ったキーは利用者が直す結果であって、壊れたリクエストではないためです）。
 

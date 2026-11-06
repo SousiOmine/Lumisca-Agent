@@ -46,6 +46,7 @@ import {
   type SettingsNavEntry,
 } from "./settings/categories.ts";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
+import type { PushControls } from "../hooks/usePush.ts";
 import type { Locale, ThemeSetting } from "../types.ts";
 
 export type {
@@ -67,6 +68,8 @@ interface SettingsModalProps {
   /** Background agent-event notifications (desktop only). */
   notifyEnabled: boolean;
   onNotifyEnabledChange: (enabled: boolean) => void;
+  /** PWA notifications (Web Push) of this device. */
+  push: PushControls;
   /** The category the dialog opens on. Only a shared one: the caller does not
    * know which mode this client shows, and a page of the other mode would
    * open empty. */
@@ -155,6 +158,7 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
         onRestart={props.update.restart}
         notifyEnabled={props.notifyEnabled}
         onNotifyEnabledChange={props.onNotifyEnabledChange}
+        push={props.push}
       />
     ),
   },
@@ -397,6 +401,7 @@ export function SettingsModal({
   update,
   notifyEnabled,
   onNotifyEnabledChange,
+  push,
   initialCategory,
   routines,
   routineAgent,
@@ -437,6 +442,7 @@ export function SettingsModal({
       update,
       notifyEnabled,
       onNotifyEnabledChange,
+      push,
       initialCategory,
       routines,
       routineAgent,

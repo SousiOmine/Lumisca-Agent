@@ -15,6 +15,12 @@ export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
 export { vacuumOnStartup } from "./db/vacuum.ts";
 export { createVmManager } from "./vm/container.ts";
+export type {
+  PushSubscriptionKeys,
+  PushSubscriptionRecord,
+} from "./shared/push.ts";
+export { type PushMessage, sendPush } from "./notify/web-push.ts";
+export type { VapidKeys } from "./notify/vapid.ts";
 export type { StellaAvailability } from "./vm/availability.ts";
 export { VM_CONTAINER_DIR_NAME } from "./vm/contract.ts";
 export { CoreError, errorMessage } from "./errors.ts";
