@@ -768,3 +768,65 @@ Deno.test("the manifest's theme colours are the themes' --bg", async () => {
     assertEquals(canvasColor(css, theme), THEME_COLORS[theme], theme);
   }
 });
+
+/** The declarations of one rule (the last one for a selector wins, matching
+ * the cascade for the repeated selectors these checks look at). */
+function declarations(
+  rules: CssRule[],
+  selector: string,
+): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const rule of rules) {
+    if (rule.selector !== selector || rule.media !== null) continue;
+    for (const match of rule.body.matchAll(/([a-z-]+)\s*:\s*([^;]+);/g)) {
+      found.set(match[1] ?? "", (match[2] ?? "").trim());
+    }
+  }
+  return found;
+}
+
+Deno.test("the window controls keep the right edge of the title bar", async () => {
+  // Regression: stella mode's strip inside the title bar claimed the whole
+  // width (`width: 100%` + `flex: none`), so the controls beside it started
+  // past the window's right edge. A remote window (`decorations: false`)
+  // then had no button to close, maximize or minimize it — while the strip
+  // still dragged, which is why the report was "the buttons disappear but
+  // the window still moves".
+  //
+  // The strip is a column child in a plain browser (nothing to share a row
+  // with), so its width belongs to that case; inside the bar it has to be
+  // the flexible child, exactly like the tab bar.
+  const chrome = await Deno.readTextFile(
+    new URL("./styles/chrome.css", import.meta.url),
+  );
+  const stella = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const controls = declarations(cssRules(chrome), ".titlebar-controls");
+  assertEquals(
+    controls.get("flex"),
+    "none",
+    "the controls must not shrink; a wide sibling has to give way",
+  );
+
+  const inBar = declarations(
+    cssRules(stella),
+    ".titlebar .stella-titlebar-strip",
+  );
+  assertEquals(
+    inBar.get("flex"),
+    "1",
+    "inside the title bar the stella strip must take the room left over",
+  );
+  assertEquals(
+    inBar.get("width"),
+    "auto",
+    "inside the title bar the strip must not claim the whole width",
+  );
+
+  // The tab bar is the same contract, and the one the strip was copied
+  // from: if this rule ever stops being the pattern, the check above should
+  // be read again rather than silently kept.
+  const tabbar = declarations(cssRules(chrome), ".titlebar .tabbar");
+  assertEquals(tabbar.get("flex"), "1");
+});

@@ -77,9 +77,14 @@
   min-width: 0;
 }
 
+/* The controls never shrink: the window is undecorated, so these buttons are
+ * its only way to be closed, maximized or minimized. A sibling that claims
+ * the whole width (the stella strip once did) must lose the space instead —
+ * dropping a button off the right edge leaves no way out of the window. */
 .titlebar-controls {
   display: flex;
   align-items: stretch;
+  flex: none;
   height: 100%;
   margin-left: auto;
 }

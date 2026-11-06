@@ -413,6 +413,19 @@
   background: var(--bg);
 }
 
+/* In the desktop window the strip shares its row with the controls at the
+ * right edge, so there it takes the tab bar's contract (`.titlebar .tabbar`,
+ * chrome.css): one flexible child that may shrink. The `width: 100%` above is
+ * for the plain browser, where the strip is a column child of `.app` and has
+ * no row to share. Inside the bar that width measured the whole bar and
+ * pushed the controls past the right edge — the window (`decorations:
+ * false`) then had nothing left to close it with, while the strip itself
+ * still dragged. */
+.titlebar .stella-titlebar-strip {
+  flex: 1;
+  width: auto;
+}
+
 /* The conversation's title, in the window's title bar: the agent's name and
  * nothing else. A subtitle or a state line there would be a second thing to
  * read on every visit. The two exceptions are the first-run build (a wait
