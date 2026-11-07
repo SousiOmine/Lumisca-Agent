@@ -327,22 +327,19 @@ export function StellaSidebar(
                   )}
                 </span>
                 {
-                  /* What was said last, or — while this agent is working —
-                   * that it is working. A fresh agent has said nothing, so
-                   * its row is one line, exactly like a message app's row for
-                   * someone you have not talked to yet. */
+                  /* What was said last. It stays while the agent works: a
+                   * row that replaced the message with "working" took away
+                   * the one thing the reader was looking at, and the dot
+                   * beside the row already says that work is happening. A
+                   * fresh agent has said nothing, so its row is one line,
+                   * exactly like a message app's row for someone you have
+                   * not talked to yet. */
                 }
-                {agent.id === activeId && running
-                  ? (
-                    <span className="stella-agent-meta stella-agent-activity">
-                      {t("chat.stella.working")}
-                    </span>
-                  )
-                  : agent.preview !== null && (
-                    <span className="stella-agent-meta">
-                      {previewTextOf(agent.preview, t)}
-                    </span>
-                  )}
+                {agent.preview !== null && (
+                  <span className="stella-agent-meta">
+                    {previewTextOf(agent.preview, t)}
+                  </span>
+                )}
               </span>
               {
                 /* A dot on the agent that is working right now, so the list

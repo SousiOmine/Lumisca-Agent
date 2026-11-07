@@ -306,13 +306,9 @@
   font-weight: 600;
 }
 
-/* The active agent that is working now: the second line says so in words
- * where the message would be, and a dot marks it — the words are what the
- * reader understands, the dot is what the eye catches while scanning. */
-.stella-agent-activity {
-  color: var(--text-dim);
-}
-
+/* The active agent that is working now: a dot marks the row, and the second
+ * line keeps showing what was said last — replacing it with "作業中…" took
+ * away the thing the reader was looking at. */
 .stella-agent-dot {
   flex: none;
   width: 7px;

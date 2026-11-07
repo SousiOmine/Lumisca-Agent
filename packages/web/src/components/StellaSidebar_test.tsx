@@ -98,12 +98,22 @@ Deno.test("StellaSidebar: the time is the message's, not the last visit", () => 
   assertStringIncludes(time[0], new Date(AT).toISOString());
 });
 
-Deno.test("StellaSidebar: the working row says so instead of the message", () => {
+Deno.test("StellaSidebar: the working row keeps the message", () => {
+  // The regression this pins: a working row replaced the last message with
+  // "作業中…", so the one thing the reader was looking at disappeared for as
+  // long as the agent worked. The dot says that work is happening; the line
+  // keeps saying what was said.
   const html = render(undefined, true);
-  assertStringIncludes(html, "作業中…");
-  // The message is replaced, not repeated: one line says what is happening
-  // now, and the dot marks the row for the eye.
-  assertEquals(html.includes("3件の不具合を直しました。"), false);
+  assertStringIncludes(html, "3件の不具合を直しました。");
+  assertEquals(html.includes("作業中…"), false);
+  assertStringIncludes(html, "stella-agent-dot");
+});
+
+Deno.test("StellaSidebar: a working row that has said nothing yet stays one line", () => {
+  // Nothing was said, so the dot is the only thing to say about the work: an
+  // empty second line would be a blank row that claims a message.
+  const html = render([agent("a1")], true);
+  assertEquals(html.includes("stella-agent-meta"), false);
   assertStringIncludes(html, "stella-agent-dot");
 });
 
