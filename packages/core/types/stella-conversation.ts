@@ -18,6 +18,7 @@
  */
 import type { AskQuestion } from "../shared/interaction.ts";
 import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
+import type { ThinkingLevel } from "../shared/providers.ts";
 
 /** One thing the user or the agent said, as the conversation shows it.
  *
@@ -100,6 +101,17 @@ export interface StellaConversationSnapshot {
    * truth; reading it here keeps a reopened conversation honest even when the
    * app default has changed since. */
   model: { provider: string; modelId: string };
+  /** The thinking level the conversation's model runs at, and the levels it
+   * supports. The composer's model line shows a strength rail beside the
+   * model when there is more than one level, the same as code mode's: a
+   * stella conversation is where a long, multi-step request is most likely
+   * to need one.
+   *
+   * The level belongs to the MODEL (the settings store keys it by provider
+   * and model), so this is not the conversation's state — it is what the
+   * model's row says right now, read through the session's model. */
+  thinkingLevel?: ThinkingLevel;
+  thinkingLevels?: ThinkingLevel[];
   /** The conversation's revision at the moment of this snapshot, so a
    * later `GET …/revision` can tell whether anything was missed. */
   rev: number;

@@ -8,6 +8,7 @@ import {
 import { api } from "../api.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { describeError, useT } from "../i18n.ts";
+import { setModelThinkingLevel } from "../providers.ts";
 import {
   applyStellaEvent,
   prependOlderEntries,
@@ -23,6 +24,7 @@ import type {
   PendingImage,
   StellaAgent,
   StellaAgentSummary,
+  ThinkingLevel,
 } from "../types.ts";
 
 /** How often the agent list is re-read while the page is visible.
@@ -89,6 +91,9 @@ export type StellaHook = {
   rewind: (timestamp: number) => Promise<void>;
   /** Switch the conversation's model (refused while a run is active). */
   setModel: (provider: string, modelId: string) => Promise<void>;
+  /** Set the thinking strength of the conversation's model (persisted per
+   * model, so it applies to every conversation on the same model). */
+  setThinkingLevel: (level: ThinkingLevel) => Promise<void>;
   finishHandover: (note: string, toolCallId: string) => Promise<void>;
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
@@ -437,6 +442,30 @@ export function useStella(
     [requireAgent],
   );
 
+  /** Set the conversation's model thinking strength. The level is the
+   * MODEL's, not the conversation's, so this is the same call the settings
+   * panel makes; the snapshot's next read carries the new value back. The
+   * local state is updated at once, so the rail moves with the click. */
+  const setThinkingLevel = useCallback(
+    async (level: ThinkingLevel) => {
+      const model = conversation?.model;
+      if (model === null || model === undefined) return;
+      const stored = await setModelThinkingLevel(
+        "",
+        model.provider,
+        model.modelId,
+        level,
+      );
+      setConversation((current) =>
+        current === null || current.thinking === null ? current : {
+          ...current,
+          thinking: { ...current.thinking, level: stored },
+        }
+      );
+    },
+    [conversation?.model],
+  );
+
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
   const loadOlder = useCallback((): boolean => {
@@ -491,6 +520,7 @@ export function useStella(
     answer,
     rewind,
     setModel,
+    setThinkingLevel,
     finishHandover,
     error,
     loading,

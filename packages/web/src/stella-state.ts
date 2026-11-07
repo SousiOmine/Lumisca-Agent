@@ -9,6 +9,7 @@ import type {
   StellaEvent,
   StellaHandover,
   StellaQuestion,
+  ThinkingLevel,
 } from "./types.ts";
 
 /**
@@ -52,6 +53,14 @@ export interface StellaConversationState {
   /** The model the conversation runs on (the session row's choice), shown in
    * the composer's model line. Null before the first snapshot arrives. */
   model: { provider: string; modelId: string } | null;
+  /** The thinking strength the conversation's model runs at, and the levels
+   * it supports. Read from the model's own settings row: it is not the
+   * conversation's state, and a change made in the settings panel applies
+   * here too. Null before the first snapshot arrives. */
+  thinking: {
+    level: ThinkingLevel;
+    levels: ThinkingLevel[];
+  } | null;
 }
 
 /**
@@ -89,6 +98,10 @@ export function stellaStateOf(
     ...(snapshot.error !== undefined ? { error: snapshot.error } : {}),
     agentName: snapshot.agentName,
     model: snapshot.model,
+    thinking: {
+      level: snapshot.thinkingLevel ?? "off",
+      levels: snapshot.thinkingLevels ?? [],
+    },
   };
 }
 
@@ -269,8 +282,8 @@ function sameHandover(
 }
 
 /** An empty conversation (the sidebar can be shown before one is open). The
- * model is unknown until a snapshot arrives; the picker stays hidden while it
- * is `null`. */
+ * model, and with it the thinking strength, is unknown until a snapshot
+ * arrives; the picker stays hidden while it is `null`. */
 export function emptyStellaState(agentName: string): StellaConversationState {
   return {
     entries: [],
@@ -281,5 +294,6 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     handover: null,
     agentName,
     model: null,
+    thinking: null,
   };
 }

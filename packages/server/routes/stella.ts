@@ -13,7 +13,11 @@ import type {
   StellaQuestion,
   WindowQuery,
 } from "@lumisca/core";
-import type { StellaAvailability, StellaStatus } from "@lumisca/core/shared";
+import type {
+  StellaAvailability,
+  StellaStatus,
+  ThinkingLevel,
+} from "@lumisca/core/shared";
 import { base64ToBytes, stellaEventsOf } from "@lumisca/core";
 import {
   AGENT_ICON_FORMATS,
@@ -85,6 +89,12 @@ export interface StellaApi {
   getPendingHandover(sessionId: string): StellaHandover | null;
   getSessionLastError(sessionId: string): string | undefined;
   getSession(sessionId: string): SessionInfo | undefined;
+  /** The thinking level the conversation's model runs at, and the levels it
+   * supports (the model's own settings row, read through the session). The
+   * composer shows its strength rail from this. */
+  getThinkingState(
+    sessionId: string,
+  ): { thinkingLevel: ThinkingLevel; thinkingLevels: ThinkingLevel[] };
   getAgent(sessionId: string): { isStreaming: boolean } | undefined;
   getStellaAgent(id: string): StellaAgent | undefined;
   openSession(sessionId: string): SessionInfo;
@@ -541,6 +551,10 @@ export function stellaRoutes(core: StellaApi): Hono {
       // session row is the source of truth, so it travels with the snapshot
       // rather than being guessed from the app default.
       model: { provider: session.modelProvider, modelId: session.modelId },
+      // The model's thinking strength, beside the model for the same reason:
+      // the composer shows both from one line, and a stella request that
+      // takes many steps is where the choice matters most.
+      ...core.getThinkingState(session.id),
       rev: core.getSessionRevision(session.id),
     };
   }

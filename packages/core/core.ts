@@ -1365,6 +1365,29 @@ export class LumiscaCore {
     return this.services.sessions.getSession(id);
   }
 
+  /** The thinking level a session's model runs at, and the levels that model
+   * supports. The level belongs to the model (the settings store keys it by
+   * provider and model), not to the session, so it is read through the
+   * session's current model every time: switching models in the picker
+   * changes both halves. */
+  getThinkingState(
+    sessionId: string,
+  ): { thinkingLevel: ThinkingLevel; thinkingLevels: ThinkingLevel[] } {
+    const session = this.getSession(sessionId);
+    if (session === undefined) {
+      throw new CoreError(`Session not found: ${sessionId}`, "not_found");
+    }
+    const model = this.models.getSessionModel(
+      session.modelProvider,
+      session.modelId,
+    );
+    return this.models.thinkingState(
+      session.modelProvider,
+      session.modelId,
+      model,
+    );
+  }
+
   /** The file one of a session's published visuals names. */
   resolveSessionVisual(
     sessionId: string,

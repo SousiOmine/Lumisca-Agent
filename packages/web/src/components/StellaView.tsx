@@ -11,6 +11,7 @@ import type {
   PendingImage,
   StellaAgentSummary,
   StellaStatus,
+  ThinkingLevel,
 } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
@@ -71,6 +72,9 @@ interface StellaViewProps {
   onRewind: (timestamp: number) => Promise<void>;
   /** Switch the conversation's model (refused while a run is active). */
   onModelChange: (provider: string, modelId: string) => Promise<void>;
+  /** Set the thinking strength of the conversation's model. The level
+   * belongs to the model, so the same setter code mode uses applies here. */
+  onThinkingLevelChange: (level: ThinkingLevel) => void;
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
   onLoadOlder: () => boolean;
@@ -124,6 +128,7 @@ export function StellaView(
     onAbort,
     onRewind,
     onModelChange,
+    onThinkingLevelChange,
     onLoadOlder,
     loadingOlder,
     onFinishHandover,
@@ -250,6 +255,12 @@ export function StellaView(
                 provider,
                 modelId,
               )}
+            // The strength rail beside the model: a stella request that
+            // takes many steps is where the choice matters most, and a
+            // conversation stuck on "off" had no way to change it.
+            thinkingLevel={conversation?.thinking?.level}
+            thinkingLevels={conversation?.thinking?.levels}
+            onThinkingLevelChange={onThinkingLevelChange}
             // The model line is the way out of a conversation stuck on a
             // model that was retired or whose provider went away: without
             // it, deleting the agent (and the whole conversation with it)

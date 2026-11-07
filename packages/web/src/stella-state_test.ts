@@ -1,5 +1,5 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
-import type { StellaEvent } from "./types.ts";
+import type { StellaEvent, ThinkingLevel } from "./types.ts";
 import {
   applyStellaEvent,
   emptyStellaState,
@@ -24,6 +24,8 @@ function state(
   return { ...emptyStellaState("Aide"), ...overrides };
 }
 
+const thinkingLevel: ThinkingLevel = "high";
+
 Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
   const snapshot = {
     entries: [entry("user", "こんにちは", 1)],
@@ -35,6 +37,8 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     agentName: "Aide",
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },
+    thinkingLevel,
+    thinkingLevels: ["off", "low", "high"] as ThinkingLevel[],
     rev: 3,
   };
   assertEquals(stellaStateOf(snapshot), {
@@ -49,7 +53,25 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     error: "last failure",
     agentName: "Aide",
     model: { provider: "faux", modelId: "model" },
+    thinking: { level: "high", levels: ["off", "low", "high"] },
   });
+});
+
+Deno.test("stellaStateOf: a model without thinking levels shows no rail", () => {
+  // The rail is drawn only when the model has a choice to offer; a snapshot
+  // from a server that predates the field must not invent one.
+  const snapshot = {
+    entries: [],
+    older: null,
+    running: false,
+    questions: [],
+    handover: null,
+    agentName: "Aide",
+    sessionId: "s1",
+    model: { provider: "faux", modelId: "model" },
+    rev: 1,
+  };
+  assertEquals(stellaStateOf(snapshot).thinking, { level: "off", levels: [] });
 });
 
 Deno.test("applyStellaEvent: an entry is appended", () => {

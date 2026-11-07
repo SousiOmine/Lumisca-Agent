@@ -63,6 +63,7 @@ function render(
       onAbort: () => {},
       onRewind: () => Promise.resolve(),
       onModelChange: () => Promise.resolve(),
+      onThinkingLevelChange: () => {},
       onLoadOlder: () => false,
       loadingOlder: false,
       onFinishHandover: () => Promise.resolve(),

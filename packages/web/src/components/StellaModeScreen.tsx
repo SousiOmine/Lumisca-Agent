@@ -111,6 +111,7 @@ export function StellaModeScreen({
         onRewind={(timestamp) => stella.rewind(timestamp)}
         onModelChange={(provider, modelId) =>
           stella.setModel(provider, modelId)}
+        onThinkingLevelChange={(level) => void stella.setThinkingLevel(level)}
         onLoadOlder={stella.loadOlder}
         loadingOlder={stella.loadingOlder}
         onFinishHandover={(note, toolCallId) =>
