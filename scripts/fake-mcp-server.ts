@@ -2,7 +2,7 @@
 // speaks newline-delimited JSON-RPC 2.0 with a fixed tool set:
 //   echo  — echoes its `text` argument
 //   fail  — returns an isError result
-//   slow  — replies after 2 seconds (abort tests)
+//   slow  — replies after 1 second (abort and timeout tests)
 //   crash — exits the process (crash/respawn tests)
 //   image — returns an image content block
 // Run with: deno run scripts/fake-mcp-server.ts  (no permission flags needed)
@@ -70,7 +70,7 @@ for await (const chunk of Deno.stdin.readable) {
           },
           {
             name: "slow",
-            description: "Replies after 2s",
+            description: "Replies after 1s",
             inputSchema: { type: "object" },
           },
           {
@@ -104,7 +104,7 @@ for await (const chunk of Deno.stdin.readable) {
           isError: true,
         });
       } else if (toolName === "slow") {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
         respond(message.id as number, {
           content: [{ type: "text", text: "slow done" }],
         });

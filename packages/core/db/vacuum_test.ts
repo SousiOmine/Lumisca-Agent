@@ -9,15 +9,21 @@ import {
 } from "./vacuum.ts";
 
 /** A database file with a table and `rows` blob rows, so the file has a
- * real size to reclaim. */
+ * real size to reclaim.
+ *
+ * One transaction for the whole insert: at 4 KiB per row and 200 rows, an
+ * autocommit per row spends seconds on fsync (`sqlite` flushes the WAL on
+ * every commit), and this fixture is built by four cases here. */
 function makeDatabase(path: string, rows: number): void {
   const db = new DatabaseSync(path);
   try {
     db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, blob BLOB)");
+    db.exec("BEGIN");
     const insert = db.prepare("INSERT INTO t (blob) VALUES (?)");
     for (let i = 0; i < rows; i++) {
       insert.run(new Uint8Array(4096));
     }
+    db.exec("COMMIT");
   } finally {
     db.close();
   }

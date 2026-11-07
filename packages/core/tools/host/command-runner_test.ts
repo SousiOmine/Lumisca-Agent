@@ -14,14 +14,17 @@ function workspace(): string {
 Deno.test("command runner: a capped stream keeps its tail, not its head", async () => {
   const root = workspace();
   try {
+    // ~60 KiB, where this held ~600 KB: the assertion is about which end
+    // survives a 64-character cap, and every byte goes through the platform
+    // shell to get there (the same 600 KB took 9s on Windows, 0.7s here).
     await Deno.writeTextFile(
       join(root, "big.txt"),
-      `START-OF-OUTPUT\n${"filler line\n".repeat(50_000)}END-OF-OUTPUT\n`,
+      `START-OF-OUTPUT\n${"filler line\n".repeat(5_000)}END-OF-OUTPUT\n`,
     );
     const result = await new HostCommandRunner().run("cat big.txt", {
       cwd: root,
       timeoutSec: 30,
-      // Far below the ~600 KB the file holds: the runner must cut it.
+      // Far below the ~60 KB the file holds: the runner must cut it.
       maxOutputChars: 64,
     });
     assertEquals(result.stdoutTruncated, true);

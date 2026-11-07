@@ -286,9 +286,9 @@ Deno.test("a call that never answers fails at its time limit and is not retried"
   const manager = makeManager(cwd);
   try {
     const tools = await createMcpTools(manager);
-    // The fixture's slow tool answers after 2 s; this bound cuts it short.
-    // A retried call would take another 2 s (two full waits), so the
-    // elapsed time is what proves no reconnect-and-resend happened.
+    // The fixture's slow tool answers after a second; this bound cuts it
+    // short, and a call that waited for the answer instead of its own bound
+    // would take at least that long.
     const started = performance.now();
     let error: unknown;
     try {
@@ -305,7 +305,7 @@ Deno.test("a call that never answers fails at its time limit and is not retried"
       errorMessage(error).includes("did not answer within 0.3s"),
       `message: ${errorMessage(error)}`,
     );
-    assert(elapsed < 1500, `call took ${Math.round(elapsed)}ms`);
+    assert(elapsed < 800, `call took ${Math.round(elapsed)}ms`);
 
     // The server stays connected: the next call is answered from the same
     // processes, not from a fresh (slow) startup.

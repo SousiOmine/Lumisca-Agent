@@ -341,10 +341,17 @@ Deno.test("bash tool runs normally when the check approves", async () => {
 const BIG_HEAD = "START-OF-OUTPUT";
 const BIG_TAIL = "END-OF-OUTPUT";
 
-/** ~240 KiB with a marker at each end: far past MAX_TOOL_OUTPUT, so only the
- * tail reaches the model and the head survives in the spill alone. */
+/** ~96 KiB with a marker at each end: past MAX_TOOL_OUTPUT, so only the tail
+ * reaches the model and the head survives in the spill alone.
+ *
+ * The margin is one and a half times the cap. Every byte here is carried
+ * through the platform shell, and the 240 KiB this used to hold made the
+ * pruning case (twenty runs) the slowest test on Windows by far (43s of a
+ * 119s suite; 0.14s on Linux, so the cost is the shell's pipe path, not the
+ * assertions). What they assert is which end survives the 64 KiB cut, which
+ * a 96 KiB stream answers the same way. */
 function bigOutput(): string {
-  return `${BIG_HEAD}\n${"filler line\n".repeat(20_000)}${BIG_TAIL}\n`;
+  return `${BIG_HEAD}\n${"filler line\n".repeat(8_000)}${BIG_TAIL}\n`;
 }
 
 /** The spill path of a truncation note (`…; full output: <path> — <how>]`). */

@@ -8,6 +8,15 @@ on:
     branches: [master]
   pull_request:
 
+# A newer run supersedes the older one: the commit it was checking can no
+# longer be the tip, and the whole matrix costs ~5 minutes. Nothing is
+# published from a CI run (release.yml builds the artifacts), so a cancelled
+# run leaves nothing behind. Pull requests are grouped per branch, so a
+# force-push supersedes its own run and not the one on the base branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     strategy:
@@ -79,9 +88,16 @@ jobs:
     # handling, RPC round-trips, URL policy, probe extraction) — run it so
     # a regression cannot slip through. The desktop shell is its only
     # consumer since the CLI browser host was removed.
+    #
+    # Its dependencies are serde, serde_json and url (plus their transitive
+    # icu/idna crates): no GTK, no WebKit, and no `cfg(target_os)` in its
+    # sources. That is why it needs neither the desktop's system packages
+    # (installing them cost 21s of a 31s Linux job) nor three operating
+    # systems; Windows stays because the desktop shell's own build checks
+    # platform code there, and this crate compiles into that shell.
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -94,14 +110,6 @@ jobs:
         with:
           workspaces: |
             packages/browser-rpc
-
-      - name: Install Linux system dependencies (webkit2gtk)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev
 
       - name: Format check (browser-rpc)
         run: cargo fmt --check --manifest-path packages/browser-rpc/Cargo.toml
@@ -134,8 +142,14 @@ jobs:
           deno-version: v2.x
           cache: true
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: packages/desktop/package-lock.json
+
       - name: Install npm dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - uses: dtolnay/rust-toolchain@stable
         with:
