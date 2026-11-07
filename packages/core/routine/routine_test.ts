@@ -448,6 +448,36 @@ Deno.test("routine tools: the per-agent limit is enforced", async () => {
   }
 });
 
+/** A runner whose `run` settles at once: a watch test asserts that a run was
+ * STARTED, and the blocking double above (which holds the run open so a test
+ * can stop it) would keep the scheduler's promise pending past close() —
+ * close() does not interrupt a run, so the test would never finish. */
+function promptRunner(
+  options: {
+    check?: Awaited<ReturnType<RoutineRunner["check"]>>;
+  } = {},
+): RoutineRunner & { started: string[]; checks: string[] } {
+  const started: string[] = [];
+  const checks: string[] = [];
+  return {
+    started,
+    checks,
+    isRunning: () => false,
+    run: (agentId, prompt, routine) => {
+      started.push(`${agentId}:${routine.name}:${prompt}`);
+      return Promise.resolve({ failure: null });
+    },
+    stop: () => {},
+    check: () => {
+      checks.push("checked");
+      return Promise.resolve(
+        options.check ??
+          { kind: "same", state: { kind: "file", mtimeMs: 1, hash: null } },
+      );
+    },
+  };
+}
+
 Deno.test("scheduler: a watch schedule checks instead of running", async () => {
   // The whole economy of the trigger: a due watch runs its CHECK, and a
   // check that saw nothing starts no run (and so no model call).
@@ -467,7 +497,7 @@ Deno.test("scheduler: a watch schedule checks instead of running", async () => {
     // Make it due now.
     const id = routines.listOf(AGENT)[0]!.id;
     routines.update(id, { nextRunAt: before - 1_000 });
-    const fake = runner();
+    const fake = promptRunner();
     const scheduler = createRoutineScheduler({
       repo: routines,
       runner: fake,
@@ -542,7 +572,7 @@ Deno.test("scheduler: a check that could not answer does not fire the run", asyn
       },
     });
     routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
-    const fake = runner({ check: { kind: "error", problem: "offline" } });
+    const fake = promptRunner({ check: { kind: "error", problem: "offline" } });
     const scheduler = createRoutineScheduler({
       repo: routines,
       runner: fake,
