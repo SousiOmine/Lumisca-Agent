@@ -7,7 +7,7 @@ import {
   fauxToolCall,
   type StreamRequest,
 } from "@lumisca/core";
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { CoreError, LumiscaCore } from "./mod.ts";
 
 import {
