@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { HostFileBackend } from "./host/files.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
@@ -61,7 +61,7 @@ Deno.test("older spills are dropped once the bound is reached", async () => {
     for (let i = 0; i < MAX_SPILL_FILES + 4; i++) {
       const path = await spiller.save("stdout", `run ${i}\n`);
       assert(path !== undefined, `spill ${i} was not written`);
-      names.push(path.slice(path.lastIndexOf("/") + 1));
+      names.push(basename(path));
     }
     const kept = new Set(Deno.readDirSync(dir).map((entry) => entry.name));
     assertEquals(kept.size, MAX_SPILL_FILES);
@@ -107,7 +107,9 @@ Deno.test("an existing file at the target name is not overwritten", async () => 
     // already there — a leftover from a killed process that drew the same
     // tag — is a collision, and the caller gets the plain note instead of
     // another session's spill being clobbered.
-    const tag = first.slice(first.lastIndexOf("/") + 1).split("-")[0]!;
+    // `basename`, not a split on "/": a Windows spill path is separated by
+    // a backslash, and the name is all that is wanted.
+    const tag = basename(first).split("-")[0]!;
     const next = join(dir, `${tag}-2-stdout.txt`);
     await Deno.writeTextFile(next, "someone else\n");
     assertEquals(await spiller.save("stdout", "second\n"), undefined);
