@@ -511,10 +511,14 @@ export class AgentFactory {
     // rebuild (which closes the old agent first) starts with a clean slate.
     const ask = new AskHub(session.id, (event) => this.deps.emit(event));
     // The plan is the session's progress, not the agent's, so it survives a
-    // rebuild. A stella conversation has no progress panel, so the plan
-    // would have no reader.
+    // rebuild. A stella conversation has no progress panel to render it, but
+    // the plan is not FOR the panel: it is how a run remembers what the user
+    // asked for in a request that has more than one part. Without it, the
+    // list of outstanding requests lives only in the history, which a long
+    // conversation condenses away — and a run then stops after the first
+    // request it finished.
     let todo = resources.todos;
-    if (todo === undefined && where.stella === undefined) {
+    if (todo === undefined) {
       todo = new TodoHub(session.id, (event) => this.deps.emit(event));
       resources.todos = todo;
     }

@@ -166,9 +166,17 @@ const TODO_SECTION: PromptSection = {
   name: "tool:todo",
   order: ORDER.tool + 100,
   requires: [TOOL_TODO],
-  text: "- Keep the todo list current as you go: mark each task `completed` " +
-    "the moment\n  it is done — do not batch completions. Skip the list for " +
-    "a single trivial step.",
+  // The trigger is the NUMBER of requests, not how hard each one feels: a
+  // model left to judge "is this trivial?" answers differently from one turn
+  // to the next, and a run that skipped the list has nowhere to keep the
+  // requests it has not done yet — so it stops after the first one.
+  text:
+    "- When the user asks for more than one thing, put every request on the " +
+    "todo\n  list before you start, and keep it current: mark a task " +
+    "`completed` the\n  moment it is done — do not batch completions. " +
+    "Finish the whole list before\n  you reply; a request left `pending` " +
+    "is a request you did not do. Skip the\n  list only when the request " +
+    "is a single step.",
 };
 
 const SKILL_SECTION: PromptSection = {
