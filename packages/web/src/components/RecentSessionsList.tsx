@@ -21,7 +21,13 @@ interface RecentSessionsListProps {
 
 /** The closed-session list shared by the "セッション履歴" modal and the
  * "最近使ったセッション" section of the new-session screen. Clicking a row
- * reopens that session in a tab. */
+ * reopens that session in a tab.
+ *
+ * The list refreshes on its own while it is on screen, so a failed refresh
+ * is an ordinary event here rather than the end of the list: the rows the
+ * reader was about to click stay, and the failure is stated above them. The
+ * empty state is only drawn when the last read succeeded — "履歴はありません"
+ * over a server that did not answer would be a claim about the server. */
 export function RecentSessionsList({
   items,
   loading,
@@ -39,61 +45,62 @@ export function RecentSessionsList({
     limit,
   );
 
-  if (error) {
-    return (
-      <div className="recent-error">
-        <span className="error-text">{error}</span>
-        {onReload && (
-          <button
-            type="button"
-            className="btn small"
-            onClick={onReload}
-            title={t("common.reload")}
-          >
-            <IconRefresh size={13} />
-            {t("common.reload")}
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  if (loading && items.length === 0) {
-    return <div className="recent-empty">{t("common.loading")}</div>;
-  }
+  const failure = error === undefined ? null : (
+    <div className="recent-error">
+      <span className="error-text">{error}</span>
+      {onReload && (
+        <button
+          type="button"
+          className="btn small"
+          onClick={onReload}
+          title={t("common.reload")}
+        >
+          <IconRefresh size={13} />
+          {t("common.reload")}
+        </button>
+      )}
+    </div>
+  );
 
   if (visible.length === 0) {
+    if (failure !== null) return failure;
+    if (loading) {
+      return <div className="recent-empty">{t("common.loading")}</div>;
+    }
     return <div className="recent-empty">{t("panels.recent.empty")}</div>;
   }
 
   return (
-    <div className={bare ? "recent-list bare" : "recent-list"}>
-      {visible.map(({ key, info, peerId, peerName }) => {
-        const name = info.name || t("panels.recent.untitled");
-        return (
-          <button
-            key={key}
-            type="button"
-            className="recent-item"
-            onClick={() => onSelect(key)}
-            title={t("panels.recent.openTab", { name })}
-          >
-            <span className="recent-item-body">
-              <span className="recent-item-name">{name}</span>
-              {peerId !== "" && (
-                <span className="recent-item-meta">
-                  <span className="recent-item-peer">
-                    {peerName || peerId}
+    <>
+      {failure}
+      <div className={bare ? "recent-list bare" : "recent-list"}>
+        {visible.map(({ key, info, peerId, peerName }) => {
+          const name = info.name || t("panels.recent.untitled");
+          return (
+            <button
+              key={key}
+              type="button"
+              className="recent-item"
+              onClick={() => onSelect(key)}
+              title={t("panels.recent.openTab", { name })}
+            >
+              <span className="recent-item-body">
+                <span className="recent-item-name">{name}</span>
+                {peerId !== "" && (
+                  <span className="recent-item-meta">
+                    <span className="recent-item-peer">
+                      {peerName || peerId}
+                    </span>
                   </span>
-                </span>
-              )}
-            </span>
-            <span className="recent-item-time">
-              {formatRelativeTime(info.updatedAt, locale)}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+                )}
+              </span>
+              <span className="recent-item-time">
+                {formatRelativeTime(info.updatedAt, locale)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }

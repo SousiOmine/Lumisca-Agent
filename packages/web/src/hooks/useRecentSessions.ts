@@ -1,9 +1,25 @@
-import { useCallback, useEffect, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { api, fed } from "../api.ts";
 import type { PeerStatus, SessionInfo } from "../types.ts";
-import { errorText } from "../providers.ts";
 import { peerLabel } from "../peers.ts";
 import { tabKey } from "../tabs.ts";
+import { describeError, useT } from "../i18n.ts";
+import { useVisibleInterval } from "./useVisibleInterval.ts";
+
+/** How often the list is re-read while a surface showing it is visible.
+ *
+ * The list says what this server and its peers last wrote, and all of it
+ * changes without this page: another window, another device, a routine, or a
+ * session created on a peer. None of those is an event this page receives,
+ * and the relative times in the rows ("3分前") move on their own clock as
+ * well, so re-reading is the only way the list stays true.
+ *
+ * 30s is the interval the other lists use (a stella agent's rows, the
+ * revision probe), and it is as fast as the row times need: they are shown
+ * in minutes. Shorter would multiply the cost of the peer probe, which asks
+ * every registered peer `/api/health` (3s each, see routes/federation.ts)
+ * before their session lists are read. */
+const RECENT_REFRESH_MS = 30_000;
 
 /** One row of the recent-sessions list: the tab key plus the data shown in
  * the row (the peer that owns the session, "" = this server). */
@@ -15,8 +31,20 @@ export interface RecentSessionItem {
 }
 
 /** Recent sessions across this server and every reachable federated peer,
- * newest first. Shared by the session list modal (AppMenu) and the recent
- * sessions section of the new-session screen. */
+ * newest first, kept current while a surface shows them. Shared by the
+ * session list modal (AppMenu) and the recent sessions section of the
+ * new-session screen.
+ *
+ * Each instance owns its own read: the two surfaces can be on screen at
+ * once (the modal covers the draft screen), and a read is cheap enough that
+ * sharing it through a store would buy nothing but a second lifetime to
+ * manage.
+ *
+ * `error` is the last failure and is cleared only by a successful read, so
+ * one bad tick does not replace the rows with an error line: the rows the
+ * reader can act on stay, with the failure stated above them. `loading`
+ * covers the first read only — from then on the list has something to show,
+ * and flipping it per refresh would only repaint the same rows. */
 export function useRecentSessions(): {
   items: RecentSessionItem[];
   loading: boolean;
@@ -26,11 +54,20 @@ export function useRecentSessions(): {
   const [items, setItems] = useState<RecentSessionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [nonce, setNonce] = useState(0);
+  /** Failures are described in the language the list is read in when they
+   * happen (the state holds a string, not a failure object), and the read is
+   * re-created when the language changes so a later tick speaks the new one. */
+  const t = useT();
+  /** A read is in flight. Ticks and presses that arrive meanwhile are
+   * dropped rather than queued: the answer on its way was asked for less
+   * than one interval ago, and letting a second read race it would let the
+   * older answer win (a slow peer's list arriving after a newer one). */
+  const inFlight = useRef(false);
+  const disposed = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
+    if (inFlight.current) return;
+    inFlight.current = true;
     try {
       // Peer reachability comes from the federation's peer probe;
       // unreachable peers contribute no sessions. A peer that fails its own
@@ -47,6 +84,7 @@ export function useRecentSessions(): {
           () => [] as PeerStatus[],
         ),
       ]);
+      if (disposed.current) return;
       // This server's rows are shown as soon as they arrive: a peer's list
       // is a second, optional round trip, and while it is in flight the list
       // is still usable (the remote rows are added a moment later).
@@ -76,6 +114,7 @@ export function useRecentSessions(): {
           );
         }),
       );
+      if (disposed.current) return;
       const merged: RecentSessionItem[] = [
         ...localItems,
         ...remote.flatMap(({ peerId, peerName, list }) =>
@@ -83,20 +122,36 @@ export function useRecentSessions(): {
         ),
       ].sort((a, b) => b.info.updatedAt - a.info.updatedAt);
       setItems(merged);
-    } catch (e) {
-      // This server itself could not be reached; the list is unusable.
-      setError(errorText(e));
+      setError(undefined);
+    } catch (failure) {
+      // This server itself could not be reached; what the list holds is the
+      // last answer, which the surface shows under this line.
+      if (!disposed.current) setError(describeError(failure, t));
     } finally {
-      setLoading(false);
+      inFlight.current = false;
+      if (!disposed.current) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
+    disposed.current = false;
     void load();
-  }, [load, nonce]);
+    return () => {
+      disposed.current = true;
+    };
+  }, [load]);
 
-  /** Re-fetch (the list is stale once a session is closed or deleted). */
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
+  // Nothing runs while the page is hidden (see useVisibleInterval), and
+  // coming back to it reads at once: the list the reader returns to is the
+  // one they left, and the answer is one request away.
+  useVisibleInterval(() => void load(), RECENT_REFRESH_MS, {
+    immediate: false,
+  });
+
+  /** Re-fetch now (the button beside a failed read). */
+  const reload = useCallback(() => {
+    void load();
+  }, [load]);
 
   return { items, loading, error, reload };
 }
