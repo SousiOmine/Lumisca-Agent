@@ -128,6 +128,7 @@ import {
   type RoutineScheduler,
 } from "./routine/scheduler.ts";
 import { HandoverHub, type PendingHandover } from "./vm/handover.ts";
+import { parseWatchState, runWatch } from "./vm/watch.ts";
 import { vmAgentDir } from "./vm/contract.ts";
 import type { PromptFileRef, Routine } from "./shared/mod.ts";
 import type { SkillInfo } from "./skills/discover.ts";
@@ -808,6 +809,45 @@ export class LumiscaCore {
         // stop button.
         if (agent.runningRoutineId() !== routineId) return;
         agent.abort();
+      },
+      check: async (agentId, source) => {
+        const session = this.sessions.getByAgent(agentId);
+        if (session === undefined) {
+          return {
+            kind: "unsupported",
+            problem:
+              "This agent has no conversation, so its checks have nowhere to run",
+          };
+        }
+        // The check runs inside the machine, in the agent's own folder: the
+        // file it stats and the command it runs are that agent's (see
+        // vm/watch.ts). A machine that is not up cannot answer, and saying so
+        // is better than treating every answer as "nothing changed".
+        const stella = this.stellaRuntimeFor(session);
+        if (stella === undefined) {
+          return {
+            kind: "unsupported",
+            problem:
+              "The machine for this agent is not running, so its checks cannot run",
+          };
+        }
+        const routine = this.routines.listOf(agentId).find((candidate) =>
+          candidate.schedule.kind === "watch" &&
+          candidate.schedule.source === source
+        );
+        const previous = routine?.watchState === undefined
+          ? undefined
+          : parseWatchState(routine.watchState);
+        const outcome = await runWatch(source, previous, {
+          runner: stella.runner,
+          workdir: stella.cwd,
+        });
+        if (outcome.problem !== undefined && outcome.state === null) {
+          return { kind: "error", problem: outcome.problem };
+        }
+        return outcome.changed
+          ? { kind: "changed", state: outcome.state }
+          : { kind: "same", state: outcome.state };
       },
     };
   }

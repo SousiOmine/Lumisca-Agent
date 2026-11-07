@@ -23,7 +23,66 @@
 export type RoutineSchedule =
   | { kind: "daily"; time: string }
   | { kind: "weekly"; days: number[]; time: string }
-  | { kind: "every"; minutes: number };
+  | { kind: "every"; minutes: number }
+  | { kind: "watch"; everyMinutes: number; source: WatchSource };
+
+/** What a `watch` routine looks at between runs.
+ *
+ * Every source is answered by the SERVER, never by the model: a step that
+ * needs an inference call costs the same whether anything changed or not, so
+ * a check the server cannot decide is not a watch — it is a schedule. That is
+ * the whole point of this trigger, and the reason the three shapes below are
+ * deliberately dumb.
+ *
+ * One consequence is that a watch reads only what the machine can see:
+ * an HTTP response, a file, a command's exit status and output. Reading a
+ * page, judging a sentence or summarising a feed are things the RUN does once
+ * the check fires — not things the check does to decide whether to fire. */
+export type WatchSource =
+  | {
+    kind: "http";
+    url: string;
+    /** Default GET. HEAD is refused for a body watch: there is no body. */
+    method?: "GET";
+    /** What counts as "changed". The first check only records a baseline:
+     * nothing has been compared yet, so nothing can differ. */
+    expect: {
+      /** The status the check compares. A different status is a change. */
+      status?: number;
+      /** The body must contain this; absence is a change. */
+      includes?: string;
+      /** SHA-256 of the body; a different digest is a change. */
+      hash?: boolean;
+    };
+  }
+  | {
+    kind: "file";
+    path: string;
+    /** What to compare. `mtime` is the cheaper one; `hash` notices an
+     * edit that kept the timestamp. */
+    compare: "mtime" | "hash";
+  }
+  | {
+    kind: "command";
+    /** Run through the same shell the agent uses, in its working folder:
+     * a check the user could type into its terminal. */
+    command: string;
+    /** What counts as a change. At least one is required. */
+    expect: {
+      /** The exit status the check compares. */
+      exitCode?: number;
+      /** The stdout must contain this; absence is a change. */
+      includes?: string;
+    };
+  };
+
+/** Shortest `watch` interval. A check makes no inference call, so it can be
+ * frequent — but it still touches the machine or the network, and a routine
+ * that fires every minute spends the agent's time on nothing. Five minutes is
+ * the same floor `every` uses. */
+export const MIN_WATCH_MINUTES = 5;
+/** Longest `watch` interval (24 hours). */
+export const MAX_WATCH_MINUTES = 1_440;
 
 /** How the last run ended. `running` is never stored — it is read from the
  * scheduler's memory — but the view type carries it so the UI has one
@@ -77,6 +136,16 @@ export function parseSchedule(value: unknown): RoutineSchedule | null {
       ? { kind: "every", minutes }
       : null;
   }
+  if (kind === "watch") {
+    // The validator owns the rules (one wording for one check), so reading a
+    // stored value is the same question asked in the opposite direction.
+    if (watchProblem(raw) !== null) return null;
+    return {
+      kind: "watch",
+      everyMinutes: raw.everyMinutes as number,
+      source: raw.source as WatchSource,
+    };
+  }
   return null;
 }
 
@@ -123,9 +192,92 @@ export function scheduleProblem(value: unknown): string | null {
         ? null
         : `minutes must be a whole number from ${MIN_EVERY_MINUTES} to ` +
           `${MAX_EVERY_MINUTES}`;
+    case "watch":
+      return watchProblem(raw);
     default:
-      return 'kind must be "daily", "weekly" or "every"';
+      return 'kind must be "daily", "weekly", "every" or "watch"';
   }
+}
+
+/** Why a stored `watch` schedule cannot be used, or null. The message goes to
+ * the model (it built the value), so it names the shape that works. */
+function watchProblem(raw: Record<string, unknown>): string | null {
+  const everyMinutes = raw.everyMinutes;
+  if (
+    typeof everyMinutes !== "number" || !Number.isInteger(everyMinutes) ||
+    everyMinutes < MIN_WATCH_MINUTES || everyMinutes > MAX_WATCH_MINUTES
+  ) {
+    return `everyMinutes must be a whole number from ${MIN_WATCH_MINUTES} ` +
+      `to ${MAX_WATCH_MINUTES}`;
+  }
+  const source = raw.source;
+  if (typeof source !== "object" || source === null) {
+    return 'source must be an object: {"kind":"http","url":...}, ' +
+      '{"kind":"file","path":...} or {"kind":"command","command":...}';
+  }
+  const watch = source as Record<string, unknown>;
+  switch (watch.kind) {
+    case "http": {
+      if (typeof watch.url !== "string" || !/^https?:\/\//.test(watch.url)) {
+        return "url must be an http:// or https:// address";
+      }
+      if (watch.method !== undefined && watch.method !== "GET") {
+        return 'method must be "GET" (it is the only one a watch makes)';
+      }
+      return expectProblem(
+        watch.expect,
+        [
+          "status",
+          "includes",
+          "hash",
+        ],
+        'expect must name what counts as a change: {"status":200}, ' +
+          '{"includes":"..."} or {"hash":true}',
+      );
+    }
+    case "file":
+      if (typeof watch.path !== "string" || watch.path.trim() === "") {
+        return "path must be the file to watch";
+      }
+      return watch.compare === "mtime" || watch.compare === "hash"
+        ? null
+        : 'compare must be "mtime" or "hash"';
+    case "command": {
+      if (
+        typeof watch.command !== "string" || watch.command.trim() === ""
+      ) {
+        return "command must be the command to run";
+      }
+      return expectProblem(
+        watch.expect,
+        ["exitCode", "includes"],
+        'expect must name what counts as a change: {"exitCode":0} or ' +
+          '{"includes":"..."}',
+      );
+    }
+    default:
+      return 'source.kind must be "http", "file" or "command"';
+  }
+}
+
+/** A watch's `expect` must be an object with at least one of `allowed`, and
+ * nothing else: a field the checker does not read would be a rule the user
+ * wrote and the server silently ignored. */
+function expectProblem(
+  value: unknown,
+  allowed: readonly string[],
+  message: string,
+): string | null {
+  if (typeof value !== "object" || value === null) return message;
+  const expect = value as Record<string, unknown>;
+  const named = Object.keys(expect).filter((key) => expect[key] !== undefined);
+  if (named.length === 0) return message;
+  const unknown = named.find((key) => !allowed.includes(key));
+  if (unknown !== undefined) {
+    return `expect.${unknown} is not something a watch can compare; ` +
+      `use ${allowed.join(", ")}`;
+  }
+  return null;
 }
 
 /** The day of the week in the same numbering the schedules use
@@ -182,6 +334,11 @@ export function nextRunAt(schedule: RoutineSchedule, from: number): number {
     }
     case "every":
       return from + schedule.minutes * 60_000;
+    case "watch":
+      // The CHECK runs on this cadence; whether a run follows is decided by
+      // what the check saw (see vm/watch.ts). The interval is the same
+      // elapsed-time arithmetic as `every`.
+      return from + schedule.everyMinutes * 60_000;
   }
 }
 
@@ -200,6 +357,10 @@ export interface Routine {
   lastStatus: RoutineStatus | null;
   /** Why the last run failed, or how it was stopped. */
   lastDetail: string | null;
+  /** The last `watch` check's observation, as stored (see vm/watch.ts);
+   * undefined for a routine that watches nothing, or one that has not been
+   * checked since it was saved. Schedule routines never carry one. */
+  watchState?: unknown;
   createdAt: number;
   updatedAt: number;
 }

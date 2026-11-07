@@ -28,6 +28,7 @@ import { nextRunAt } from "../shared/routine.ts";
 import type { RoutineRepo } from "./repo.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { sleep } from "../shared/misc.ts";
+import type { WatchSource } from "../shared/routine.ts";
 
 /** How often the scheduler looks for due routines. A minute's granularity
  * would be enough for the schedules it supports, but the tick also drives
@@ -59,7 +60,20 @@ export interface RoutineRunner {
   /** Stop the run this routine started. A run the user started in the same
    * conversation is left alone. */
   stop(agentId: string, routineId: string): void;
+  /** Run a `watch` routine's check and say whether anything changed. No
+   * inference call happens here — that is the point (see vm/watch.ts). A
+   * routine that is not a watch, or a source this host cannot read, answers
+   * `unsupported`. */
+  check(agentId: string, source: WatchSource): Promise<WatchCheck>;
 }
+
+/** What one check answered. `state` is what to store for the next check;
+ * undefined leaves the stored state alone (nothing was observed). */
+export type WatchCheck =
+  | { kind: "changed"; state: unknown }
+  | { kind: "same"; state: unknown }
+  | { kind: "unsupported"; problem: string }
+  | { kind: "error"; state?: unknown; problem: string };
 
 /** How a started run ended. */
 export interface RoutineRunOutcome {
@@ -130,8 +144,61 @@ export function createRoutineScheduler(
       }
       const current = repo.get(routine.id);
       if (current === undefined) continue;
+      // A watch schedule is a CHECK cadence, not a run cadence: the run
+      // happens only when the check says something changed. Advancing
+      // next_run_at above is still right — it is when to look again.
+      if (current.schedule.kind === "watch") {
+        void checkOnce(current);
+        continue;
+      }
       void run(current);
     }
+  }
+
+  /** One look at a watch routine: check, record what was seen, and start a
+   * run only if the answer is "changed".
+   *
+   * The check is not counted as a run (see isRunning), so the settings list
+   * keeps saying what the last RUN did while the checks go on underneath. A
+   * failed check is recorded in the routine's detail and is not a change: a
+   * machine that is down must not fire the routine. */
+  async function checkOnce(routine: Routine): Promise<void> {
+    if (routine.schedule.kind !== "watch") return;
+    const id = routine.id;
+    let outcome: WatchCheck;
+    try {
+      outcome = await runner.check(routine.agentId, routine.schedule.source);
+    } catch (error) {
+      outcome = { kind: "error", problem: errorMessage(error) };
+    }
+    const at = now();
+    const next = nextRunAt(routine.schedule, at);
+    if (outcome.kind === "unsupported") {
+      // Nothing will ever be observed here: say so on the row instead of
+      // retrying every few minutes for ever.
+      record(id, { status: "error", detail: outcome.problem });
+      return;
+    }
+    try {
+      repo.recordWatch(
+        id,
+        outcome.state === undefined ? routine.watchState : outcome.state,
+        next,
+      );
+    } catch (error) {
+      log(`routine ${id}: could not record the check (${errorMessage(error)})`);
+    }
+    if (outcome.kind === "error") {
+      // The observation failed; keep the previous baseline (the check never
+      // saw a new value) so the next successful one still compares.
+      record(id, { status: "error", detail: outcome.problem });
+      return;
+    }
+    if (outcome.kind === "same") return;
+    // Changed: run it. The row's next check was already advanced above.
+    const current = repo.get(id);
+    if (current === undefined) return;
+    void run(current);
   }
 
   /** Start one run of `routine`, waiting for a free conversation. */

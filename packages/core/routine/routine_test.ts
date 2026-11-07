@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createRoutineRepo, type RoutineRepo } from "./repo.ts";
 import { createRoutineScheduler, type RoutineRunner } from "./scheduler.ts";
@@ -34,19 +34,26 @@ function repo(): { repo: RoutineRepo; close: () => void } {
 
 /** A runner that records what it was asked to do. */
 function runner(
-  options: { busy?: boolean; failure?: string | null } = {},
+  options: {
+    busy?: boolean;
+    failure?: string | null;
+    check?: Awaited<ReturnType<RoutineRunner["check"]>>;
+  } = {},
 ): RoutineRunner & {
   started: string[];
   stopped: string[];
+  checks: string[];
   release: () => void;
 } {
   const started: string[] = [];
   const stopped: string[] = [];
+  const checks: string[] = [];
   const busy = options.busy === true;
   let release: () => void = () => {};
   return {
     started,
     stopped,
+    checks,
     release: () => release(),
     isRunning: () => busy,
     run: async (agentId, prompt, routine) => {
@@ -58,6 +65,13 @@ function runner(
     },
     stop: () => {
       stopped.push("stop");
+    },
+    check: () => {
+      checks.push("checked");
+      return Promise.resolve(
+        options.check ??
+          { kind: "same", state: { kind: "file", mtimeMs: 1, hash: null } },
+      );
     },
   };
 }
@@ -429,6 +443,118 @@ Deno.test("routine tools: the per-agent limit is enforced", async () => {
       Error,
       "maximum",
     );
+  } finally {
+    close();
+  }
+});
+
+Deno.test("scheduler: a watch schedule checks instead of running", async () => {
+  // The whole economy of the trigger: a due watch runs its CHECK, and a
+  // check that saw nothing starts no run (and so no model call).
+  const { repo: routines, close } = repo();
+  try {
+    const before = Date.now();
+    routines.create({
+      agentId: AGENT,
+      name: "Watch the log",
+      prompt: "Summarise what appeared in the log",
+      schedule: {
+        kind: "watch",
+        everyMinutes: 5,
+        source: { kind: "file", path: "app.log", compare: "mtime" },
+      },
+    });
+    // Make it due now.
+    const id = routines.listOf(AGENT)[0]!.id;
+    routines.update(id, { nextRunAt: before - 1_000 });
+    const fake = runner();
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      tickMs: 10_000,
+      catchUpDelayMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    scheduler.close();
+
+    assertEquals(fake.checks.length, 1);
+    // Nothing changed, so nothing ran.
+    assertEquals(fake.started, []);
+    // The check advanced the schedule, as a run would have.
+    assert(routines.get(id)!.nextRunAt! > before);
+  } finally {
+    close();
+  }
+});
+
+Deno.test("scheduler: a watch that saw a change starts the run", async () => {
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Watch the log",
+      prompt: "Summarise what appeared in the log",
+      schedule: {
+        kind: "watch",
+        everyMinutes: 5,
+        source: { kind: "file", path: "app.log", compare: "mtime" },
+      },
+    });
+    routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
+    const fake = runner({
+      check: {
+        kind: "changed",
+        state: { kind: "file", mtimeMs: 2, hash: null },
+      },
+    });
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      tickMs: 10_000,
+      catchUpDelayMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    scheduler.close();
+
+    assertEquals(fake.checks.length, 1);
+    assertEquals(fake.started.length, 1);
+    assert(fake.started[0]!.includes("Summarise what appeared in the log"));
+  } finally {
+    close();
+  }
+});
+
+Deno.test("scheduler: a check that could not answer does not fire the run", async () => {
+  // A machine that is down or a URL that timed out observed nothing: firing
+  // the routine for it turns every transient failure into a run.
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Watch the log",
+      prompt: "p",
+      schedule: {
+        kind: "watch",
+        everyMinutes: 5,
+        source: { kind: "file", path: "app.log", compare: "mtime" },
+      },
+    });
+    routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
+    const fake = runner({ check: { kind: "error", problem: "offline" } });
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      tickMs: 10_000,
+      catchUpDelayMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    scheduler.close();
+
+    assertEquals(fake.started, []);
+    assertEquals(routines.get(created.id)!.lastStatus, "error");
   } finally {
     close();
   }

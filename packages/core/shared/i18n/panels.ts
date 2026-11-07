@@ -96,6 +96,34 @@ export const panels = {
     ja: "{minutes} 分ごと",
     en: "Every {minutes} minutes",
   },
+  "panels.routine.schedule.watch": {
+    ja: "{minutes} 分ごとに確認し、{what} が変わったら実行",
+    en: "Check every {minutes} minutes, run when {what} changes",
+  },
+  "panels.routine.watch.http": {
+    ja: "{url}（{condition}）",
+    en: "{url} ({condition})",
+  },
+  "panels.routine.watch.file": {
+    ja: "{path}（{condition}）",
+    en: "{path} ({condition})",
+  },
+  "panels.routine.watch.command": {
+    ja: "{command}（{condition}）",
+    en: "{command} ({condition})",
+  },
+  "panels.routine.watch.status": {
+    ja: "状態コード {status}",
+    en: "status {status}",
+  },
+  "panels.routine.watch.bodyChanged": { ja: "本文", en: "the body" },
+  "panels.routine.watch.modified": { ja: "更新時刻", en: "the timestamp" },
+  "panels.routine.watch.content": { ja: "内容", en: "the content" },
+  "panels.routine.watch.exit": { ja: "終了コード {code}", en: "exit {code}" },
+  "panels.routine.watch.contains": {
+    ja: "{text} を含むこと",
+    en: "it contains {text}",
+  },
   "panels.routine.weekday.1": { ja: "月", en: "Mon" },
   "panels.routine.weekday.2": { ja: "火", en: "Tue" },
   "panels.routine.weekday.3": { ja: "水", en: "Wed" },

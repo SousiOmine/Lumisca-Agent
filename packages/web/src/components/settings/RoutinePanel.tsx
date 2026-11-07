@@ -70,6 +70,56 @@ export function scheduleLabel(schedule: RoutineSchedule, t: Translate): string {
       return t("panels.routine.schedule.every", {
         minutes: String(schedule.minutes),
       });
+    case "watch":
+      return t("panels.routine.schedule.watch", {
+        minutes: String(schedule.everyMinutes),
+        what: watchSourceLabel(schedule.source, t),
+      });
+  }
+}
+
+/** What a watch reads, in the list's words. The condition is part of it: a
+ * routine that fires when a page's body changes and one that fires when its
+ * status changes are different routines. */
+export function watchSourceLabel(
+  source: Extract<RoutineSchedule, { kind: "watch" }>["source"],
+  t: Translate,
+): string {
+  switch (source.kind) {
+    case "http": {
+      const condition = source.expect.status !== undefined
+        ? t("panels.routine.watch.status", {
+          status: String(source.expect.status),
+        })
+        : source.expect.hash === true
+        ? t("panels.routine.watch.bodyChanged")
+        : t("panels.routine.watch.contains", {
+          text: JSON.stringify(source.expect.includes ?? ""),
+        });
+      return t("panels.routine.watch.http", { url: source.url, condition });
+    }
+    case "file": {
+      const condition = source.compare === "hash"
+        ? t("panels.routine.watch.content")
+        : t("panels.routine.watch.modified");
+      return t("panels.routine.watch.file", {
+        path: source.path,
+        condition,
+      });
+    }
+    case "command": {
+      const condition = source.expect.exitCode !== undefined
+        ? t("panels.routine.watch.exit", {
+          code: String(source.expect.exitCode),
+        })
+        : t("panels.routine.watch.contains", {
+          text: JSON.stringify(source.expect.includes ?? ""),
+        });
+      return t("panels.routine.watch.command", {
+        command: source.command,
+        condition,
+      });
+    }
   }
 }
 

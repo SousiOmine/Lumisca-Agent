@@ -45,11 +45,18 @@ import type { RoutineRepo } from "./repo.ts";
 import type { RoutineScheduler } from "./scheduler.ts";
 
 /** Description of the schedule argument, shared by the two tools that take
- * one: the three accepted shapes. */
+ * one: the four accepted shapes. */
 const SCHEDULE_DESCRIPTION = '{"kind":"daily","time":"08:30"}, ' +
-  '{"kind":"weekly","days":[1,5],"time":"18:00"} (1 = Monday), or ' +
-  '{"kind":"every","minutes":30}. A JSON string of the same object is ' +
-  "accepted too";
+  '{"kind":"weekly","days":[1,5],"time":"18:00"} (1 = Monday), ' +
+  '{"kind":"every","minutes":30}, or {"kind":"watch","everyMinutes":10,' +
+  '"source":{...}}. A watch runs only when its source changed: ' +
+  '{"kind":"http","url":"https://...","expect":{"status":200}} or ' +
+  '{"expect":{"includes":"..."}} or {"expect":{"hash":true}}, ' +
+  '{"kind":"file","path":"app.log","compare":"mtime"} (or "hash"), or ' +
+  '{"kind":"command","command":"...","expect":{"exitCode":0}} (or ' +
+  '{"includes":"..."}). A watch is checked by the server without asking ' +
+  "the model, so it costs nothing when nothing changed. A JSON string of " +
+  "the same object is accepted too";
 
 /** The schedule argument: an object whose shape
  * {@link usableSchedule} checks (it owns the wording, so one validator
@@ -83,11 +90,55 @@ function describeRoutine(routine: Routine, running: boolean): string {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/** What a watch looks at, in the words the model reads back. The condition
+ * is part of it: "the file changed" and "the file contains X" are different
+ * routines. */
+export function watchSourceText(
+  source: Extract<RoutineSchedule, { kind: "watch" }>["source"],
+): string {
+  switch (source.kind) {
+    case "http": {
+      const parts = [
+        source.expect.status === undefined
+          ? null
+          : `status ${source.expect.status}`,
+        source.expect.includes === undefined
+          ? null
+          : `body contains ${JSON.stringify(source.expect.includes)}`,
+        source.expect.hash === true ? "body changed" : null,
+      ].filter((part) => part !== null);
+      return `${source.url} (${parts.join(", ")})`;
+    }
+    case "file":
+      return `${source.path} (${
+        source.compare === "hash" ? "content changed" : "modified"
+      })`;
+    case "command": {
+      const parts = [
+        source.expect.exitCode === undefined
+          ? null
+          : `exit ${source.expect.exitCode}`,
+        source.expect.includes === undefined
+          ? null
+          : `output contains ${JSON.stringify(source.expect.includes)}`,
+      ].filter((part) => part !== null);
+      return `${JSON.stringify(source.command)} (${parts.join(", ")})`;
+    }
+  }
+}
+
 /** The schedule in words: "daily at 08:30", "weekly on Mon, Fri at 18:00",
  * "every 30 minutes". The model reads this, so it is short and unambiguous
  * (and never a locale-dependent date format). */
 export function scheduleText(schedule: RoutineSchedule): string {
   switch (schedule.kind) {
+    case "watch": {
+      // What is watched matters more than the cadence: "every 5 minutes"
+      // says nothing about what the routine is for.
+      return `watch ${
+        watchSourceText(schedule.source)
+      }, every ${schedule.everyMinutes} min`;
+    }
     case "daily":
       return `daily at ${schedule.time}`;
     case "weekly": {

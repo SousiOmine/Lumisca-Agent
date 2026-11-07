@@ -34,6 +34,7 @@ interface RoutineRow {
   last_run_at: number | null;
   last_status: string | null;
   last_detail: string | null;
+  watch_state: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -66,9 +67,22 @@ function toRoutine(row: RoutineRow): Routine {
     lastRunAt: row.last_run_at,
     lastStatus: statusOf(row.last_status),
     lastDetail: readable ? row.last_detail : UNREADABLE_DETAIL,
+    ...(row.watch_state === null || row.watch_state === undefined
+      ? {}
+      : { watchState: parseJsonOrUndefined(row.watch_state) }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** A JSON cell that may be absent or unreadable: an unreadable one reads as
+ * "no value", which is what makes the next check a baseline. */
+function parseJsonOrUndefined(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function statusOf(value: string | null): RoutineStatus | null {
@@ -116,11 +130,14 @@ export interface RoutineRepo {
   due(at: number): Routine[];
   /** Record how a run ended and when the next one is. */
   recordRun(id: string, result: RoutineRunResult): void;
+  /** Record what a `watch` check observed, and when the next check is. The
+   * run's status is untouched: a check is not a run. */
+  recordWatch(id: string, state: unknown, nextRunAt: number): void;
 }
 
 const COLUMNS =
   "id, agent_id, name, prompt, schedule, enabled, next_run_at, last_run_at, " +
-  "last_status, last_detail, created_at, updated_at";
+  "last_status, last_detail, watch_state, created_at, updated_at";
 
 export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
   const listStmt = db.db.prepare(
@@ -137,7 +154,7 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
     `SELECT ${COLUMNS} FROM routines WHERE agent_id = ? AND name = ?`,
   );
   const insertStmt = db.db.prepare(
-    `INSERT INTO routines (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO routines (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const updateStmt = db.db.prepare(
     `UPDATE routines SET name = ?, prompt = ?, schedule = ?, enabled = ?,
@@ -155,6 +172,9 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
     `UPDATE routines SET last_run_at = ?, last_status = ?, last_detail = ?,
        next_run_at = ?
      WHERE id = ?`,
+  );
+  const watchStmt = db.db.prepare(
+    `UPDATE routines SET watch_state = ?, next_run_at = ? WHERE id = ?`,
   );
 
   const rowOf = (id: string): RoutineRow | undefined =>
@@ -201,6 +221,7 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
         JSON.stringify(input.schedule),
         1,
         next,
+        null,
         null,
         null,
         null,
@@ -275,6 +296,14 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
         result.lastStatus,
         result.lastDetail,
         result.nextRunAt,
+        id,
+      );
+    },
+
+    recordWatch(id: string, state: unknown, next: number): void {
+      watchStmt.run(
+        state === undefined ? null : JSON.stringify(state),
+        next,
         id,
       );
     },

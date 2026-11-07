@@ -275,6 +275,12 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
       CREATE INDEX IF NOT EXISTS idx_messages_checkpoint
         ON messages(session_id) WHERE role = 'checkpoint';
     `),
+  // A `watch` routine's last observation, so the next check has something to
+  // compare against. JSON, like `schedule`: the three sources observe
+  // different things and a column per field would be mostly null. NULL means
+  // "never checked" (or the state was lost), and the next check is a
+  // baseline — it records and does not fire (see vm/watch.ts).
+  (db) => addColumnIfMissing(db, "routines", "watch_state", "TEXT"),
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration
