@@ -23,6 +23,8 @@ import { SessionAgent } from "./session-agent.ts";
 import type { SessionAgentOptions } from "./session-agent.ts";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
+import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
+import { NO_RESPONSE } from "./silent-reply.ts";
 
 /** A tool that succeeds immediately; a tool call keeps the loop going, so
  * a vacant response after a tool call exercises the counter reset. */
@@ -1750,4 +1752,72 @@ Deno.test("a prompt that is only files still reaches the model", async () => {
   };
   // Nothing to show, and the run happened anyway.
   assertEquals(user.content[0]!.text, "");
+});
+
+Deno.test("runRoutine: the silence guidance travels in modelContent, not the bubble", async () => {
+  const agent = makeAgent(streamSequence([fauxAssistantMessage("all good")]));
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  const stored = agent.messages.find((m) => m.role === "user") as
+    | {
+      content: string | Array<{ type: string; text?: string }>;
+      modelContent?: string;
+    }
+    | undefined;
+  assert(stored !== undefined);
+  // The bubble: exactly what the routine says.
+  assertEquals(contentText(stored.content), "check the deploy");
+  // The model: the routine's instruction plus the guidance the user never
+  // reads. `modelContent` is what toLlmMessages sends instead of `content`.
+  const modelContent = stored.modelContent ?? "";
+  assert(modelContent.startsWith("check the deploy"));
+  assert(modelContent.includes(ROUTINE_SILENCE_GUIDANCE));
+  assert(!contentText(stored.content).includes("NO_RESPONSE"));
+});
+
+Deno.test("runRoutine: carries the routine's name on the message", async () => {
+  const agent = makeAgent(streamSequence([fauxAssistantMessage("done")]));
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+  const stored = agent.messages.find((m) => m.role === "user") as
+    | { routine?: string }
+    | undefined;
+  assertEquals(stored?.routine, "check");
+});
+
+Deno.test("runRoutine: a silent run leaves no row in the conversation", async () => {
+  const agent = makeAgent(streamSequence([fauxAssistantMessage(NO_RESPONSE)]));
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  const messages = agent.messages;
+  assertEquals(messages.length, 0);
+});
+
+Deno.test("runRoutine: a reporting run stays", async () => {
+  const agent = makeAgent(
+    streamSequence([fauxAssistantMessage("The deploy failed")]),
+  );
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  const messages = agent.messages;
+  assertEquals(messages.length, 2);
+  assertEquals(messages[0]?.role, "user");
+  assertEquals(messages[1]?.role, "assistant");
+});
+
+Deno.test("runRoutine: a run that narrates through tools and then stays silent leaves no row", async () => {
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([
+        fauxThinking("checking"),
+        fauxToolCall("mock_tool", {}),
+      ]),
+      fauxAssistantMessage(NO_RESPONSE),
+    ]),
+    [mockTool],
+  );
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  // The narration and the tool results are the model's record, and the
+  // sentinel is silence: the conversation is back to what it was.
+  assertEquals(agent.messages.length, 0);
 });

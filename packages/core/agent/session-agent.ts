@@ -39,7 +39,6 @@ import type { AskAnswer } from "../shared/mod.ts";
 import {
   DEFAULT_LOCALE,
   type Locale,
-  promptFileNotice,
   textWithFileNotice,
   translate,
 } from "../shared/mod.ts";
@@ -67,10 +66,35 @@ import {
 } from "../ai/context-compaction.ts";
 import type { CompactionStyle } from "../ai/compaction-style.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
+import { assistantTextVerdict } from "./silent-reply.ts";
+import { contentText } from "../shared/content.ts";
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
 const log = createLogger("session-agent");
+
+/** The text of a message's content blocks, joined (what the conversation
+ * shows for it). */
+function textOfMessage(message: { content: unknown }): string {
+  const content = message.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return contentText(content as Array<{ type: string; text?: string }>);
+}
+
+/** `text` with `part` after it, separated by a blank line; undefined when
+ * there is nothing to append (so a message without a model-only part keeps
+ * `modelContent` unset and its content is its identity). */
+function withTrailingPart(
+  text: string,
+  part: string | undefined,
+): string | undefined {
+  if (part === undefined || part.length === 0) {
+    return text.length === 0 ? undefined : text;
+  }
+  return text.length === 0 ? part : `${text}\n\n${part}`;
+}
 
 /** When and how much an idle conversation is condensed (see
  * SessionAgentOptions.idleCompaction and compactAfterIdle).
@@ -609,6 +633,9 @@ export class SessionAgent {
       announced?: AgentMessage;
       /** Files the user attached to this prompt (already in the machine). */
       files?: PromptFileRef[];
+      /** Text only the MODEL reads, after the prompt (see
+       * `buildUserMessage`'s `modelOnly`). */
+      modelOnly?: string;
     } = {},
   ): Promise<{ failure: string | null }> {
     if (!this.mcp.done) await this.mcp.waitReady();
@@ -643,6 +670,7 @@ export class SessionAgent {
           steered,
           options.routine?.name,
           options.files,
+          options.modelOnly,
         ));
     if (options.announced === undefined) this.announceMessage(message);
     if (options.mode !== undefined) this.startGoalIfNeeded(options.mode);
@@ -651,6 +679,12 @@ export class SessionAgent {
       this.activeRoutineId = options.routine.id;
     }
     let failure: string | null = null;
+    // Where the routine's own prompt will sit: the view's length now, since
+    // `prompt` appends it and everything the run produces follows it. A
+    // silent routine's run is removed from there (see below).
+    const promptIndex = options.routine === undefined
+      ? undefined
+      : this.agent.state.messages.length;
     try {
       await this.agent.prompt(message);
     } catch (error) {
@@ -662,6 +696,21 @@ export class SessionAgent {
       });
     } finally {
       this.activeRoutineId = null;
+    }
+    // A routine that found nothing to report must leave the conversation
+    // exactly as it found it. The model says so with the silence sentinel
+    // (silent-reply.ts), which the projection already refuses to draw — but
+    // the ROW would still be there, and every later turn would pay for it:
+    // the routine's prompt, and an assistant reply whose whole content is
+    // "NO_RESPONSE". Silence is therefore spelled as an absence, not as a
+    // hidden message. Nothing is removed when the run failed or wrote
+    // anything else.
+    if (
+      options.routine !== undefined && failure === null &&
+      promptIndex !== undefined &&
+      this.runWasSilent(promptIndex)
+    ) {
+      this.dropRunFrom(promptIndex);
     }
     await this.resumeAfterErrorRun();
     if (options.runGoalLoop !== false) await this.maybeRunGoalLoop();
@@ -693,12 +742,83 @@ export class SessionAgent {
    * sees which routine spoke. The failure is ALSO returned, not only emitted:
    * the run's failure belongs on the routine's row (the settings list shows
    * it), while the transcript keeps its own error row from the normal path.
+   *
+   * The silence guidance goes in `modelOnly`: it tells the model that this
+   * run may end without saying anything (see routine-guidance.ts), and the
+   * user reading the transcript sees the routine's own instruction, not that
+   * sentence about the run.
    */
   async runRoutine(
     text: string,
     routine: { id: string; name: string },
   ): Promise<{ failure: string | null }> {
-    return await this.runPrompt(text, undefined, { routine });
+    return await this.runPrompt(text, undefined, {
+      routine,
+      modelOnly: ROUTINE_SILENCE_GUIDANCE,
+    });
+  }
+
+  /** Whether the run whose prompt sits at `from` said nothing: every message
+   * after it that carries prose is the silence sentinel, and no `send_chat`
+   * went out. Read from the view the run produced, so a run that narrated
+   * its way through tools and then stayed silent still counts — its
+   * narration is tool-call traffic, which the conversation does not show
+   * either.
+   *
+   * The prompt at `from` is the user row this run was asked with, and it is
+   * skipped: it is what is about to be removed, not something the run said.
+   * Prose after it means the routine reported something, and an error row
+   * means it failed: both leave the run in the transcript. */
+  private runWasSilent(from: number): boolean {
+    const messages = this.agent.state.messages;
+    if (from < 0 || messages.length <= from + 1) return false;
+    for (let i = from + 1; i < messages.length; i++) {
+      const message = messages[i];
+      if (message === undefined) continue;
+      if (message.role === "assistant") {
+        if (message.stopReason === "toolUse") continue;
+        const verdict = assistantTextVerdict(textOfMessage(message));
+        if (verdict.kind === "message") return false;
+        continue;
+      }
+      if (
+        message.role === "notification" || message.role === "context" ||
+        message.role === "checkpoint"
+      ) {
+        continue;
+      }
+      if (message.role === "toolResult") {
+        // A send_chat that went out is the routine speaking, whatever the
+        // assistant's own text says.
+        if (message.toolName === TOOL_SEND_CHAT && !message.isError) {
+          return false;
+        }
+        continue;
+      }
+      // A user row after the prompt is a steer the user sent mid-run: that
+      // is a conversation, so nothing is removed.
+      if (message.role === "user") return false;
+    }
+    return true;
+  }
+
+  /** Remove the transcript rows from whole-transcript position `from` on —
+   * a silent routine's prompt and what it produced — and tell clients which
+   * ones went away, so a window that already drew them drops them. */
+  private dropRunFrom(from: number): void {
+    const messages = this.agent.state.messages;
+    const storePosition = this.transcript.baseIndex + from;
+    messages.splice(from);
+    this.transcript.forgetFrom(messages, from);
+    const removed = this.transcript.truncateFrom(storePosition);
+    this.rebaseContexts(messages);
+    if (removed.length > 0) {
+      this.emit({
+        type: "messages_truncated",
+        sessionId: this.sessionId,
+        removed,
+      });
+    }
   }
 
   /** The routine whose run is in flight, or null for any other run. The
@@ -818,6 +938,10 @@ export class SessionAgent {
     steered?: boolean,
     routine?: string,
     files?: PromptFileRef[],
+    /** Text only the MODEL reads, appended after the visible text (and after
+     * the file notice). Undefined → nothing is added. See
+     * `UserMessage.modelContent`. */
+    modelOnly?: string,
   ): AgentMessage {
     const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
     if (images !== undefined && images.length > 0) content.push(...images);
@@ -825,13 +949,19 @@ export class SessionAgent {
     // conversation draws under the bubble. Their paths are addressed to the
     // MODEL, so they travel as `modelContent` and never reach the screen: the
     // user wrote a sentence, and the sentence is what they should see.
-    const notice = promptFileNotice(files ?? []);
+    //
+    // A routine's silence guidance belongs there for the same reason: it is
+    // addressed to the model, and a bubble that told the user "if there is
+    // nothing to report, stay silent" is prose about the run rather than the
+    // run's instruction.
+    const modelContent = withTrailingPart(
+      textWithFileNotice(text, files ?? []),
+      modelOnly,
+    );
     return {
       role: "user",
       content,
-      ...(notice.length > 0
-        ? { modelContent: textWithFileNotice(text, files!) }
-        : {}),
+      ...(modelContent !== undefined ? { modelContent } : {}),
       ...(steered === true ? { steered } : {}),
       ...(routine !== undefined && routine !== "" ? { routine } : {}),
       ...(files !== undefined && files.length > 0 ? { files } : {}),

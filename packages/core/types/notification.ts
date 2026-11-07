@@ -96,7 +96,18 @@ export function toLlmMessages(messages: AgentMessage[]): Message[] {
       if (modelContent === undefined) {
         out.push(message);
       } else {
-        out.push({ ...message, content: modelContent });
+        // `modelContent` replaces the TEXT, not the message: a prompt that
+        // carried pictures keeps them, so what the model sees is the words it
+        // was written for followed by the same images.
+        const images = Array.isArray(message.content)
+          ? message.content.filter((block) => block.type === "image")
+          : [];
+        out.push({
+          ...message,
+          content: images.length === 0
+            ? modelContent
+            : [{ type: "text", text: modelContent }, ...images],
+        });
       }
       continue;
     }

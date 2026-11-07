@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import type {
   AgentMessage,
   ImageContent,
@@ -189,4 +189,27 @@ Deno.test("toLlmMessages: a prompt without modelContent is sent unchanged", () =
   ];
   const out = toLlmMessages(messages);
   assertEquals(out[0], messages[0]);
+});
+
+Deno.test("toLlmMessages: modelContent replaces the text and keeps the pictures", () => {
+  const image = {
+    type: "image" as const,
+    data: "aGk=",
+    mimeType: "image/png",
+  };
+  const messages: AgentMessage[] = [
+    {
+      role: "user",
+      content: [{ type: "text", text: "what is this?" }, image],
+      modelContent: "what is this?\n\n[a hint only the model reads]",
+      timestamp: 1,
+    },
+  ];
+  const out = toLlmMessages(messages);
+  const content = out[0]!.content;
+  assert(Array.isArray(content));
+  assertEquals(content, [
+    { type: "text", text: "what is this?\n\n[a hint only the model reads]" },
+    image,
+  ]);
 });
