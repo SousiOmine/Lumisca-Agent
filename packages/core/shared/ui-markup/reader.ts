@@ -42,11 +42,18 @@ export const BLOCK_TAGS = [
   "List",
   "Table",
   "Flow",
+  "Metric",
   "Choice",
   "Form",
+  "Stack",
+  "Columns",
+  "Grid",
+  "Repeat",
+  "If",
 ] as const;
 export const ALL_TAGS = [
   "Card",
+  "Data",
   ...BLOCK_TAGS,
   "Item",
   "Row",
@@ -131,9 +138,27 @@ class MarkupReader {
       kind: "element",
       name,
       attrs,
-      children: this.readChildren(name, depth, at),
+      children: name === "Data"
+        ? this.readRawData(at)
+        : this.readChildren(name, depth, at),
       at,
     };
+  }
+
+  /**
+   * The body of `<Data>`: everything up to `</Data>`, untouched.
+   *
+   * The body is JSON, and a JSON string may hold `<` or `&`; reading it as
+   * markup would refuse ordinary text ("a < b") and turn entities inside
+   * strings into characters the model did not write. The one shape a card
+   * cannot carry is the literal `</Data>`.
+   */
+  private readRawData(at: number): RawChild[] {
+    const textAt = this.index;
+    const end = this.source.indexOf("</Data>", this.index);
+    if (end === -1) this.bad("tag <Data> is not closed with </Data>", at);
+    this.index = end + "</Data>".length;
+    return [{ kind: "text", text: this.source.slice(textAt, end), at: textAt }];
   }
 
   private readChildren(name: string, depth: number, at: number): RawChild[] {

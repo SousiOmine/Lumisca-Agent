@@ -11,6 +11,8 @@ import {
 import type {
   UiBlock,
   UiChoiceBlock,
+  UiCondition,
+  UiData,
   UiField,
   UiFieldType,
   UiFlowBlock,
@@ -18,7 +20,11 @@ import type {
   UiFlowNode,
   UiFlowShape,
   UiFormBlock,
+  UiGap,
+  UiGridBlock,
+  UiLayoutBlock,
   UiListBlock,
+  UiMetricBlock,
   UiOption,
   UiParseResult,
   UiTableBlock,
@@ -27,57 +33,185 @@ import type {
 
 /** Rearrange the tree of tags into the grammar's card. */
 
+/** What a content string may read while it is being checked.
+ *
+ * `items` is the array of the enclosing `<Repeat>` (null outside one): a
+ * `$item.x` reference is only a value once an item is known, so it is read
+ * against every item the card repeats over. A field missing from one item is
+ * refused here rather than drawn as an empty line. */
+type Scope = {
+  readonly data: UiData;
+  readonly items: readonly unknown[] | null;
+};
+
 function buildView(root: RawElement): UiView {
   if (root.name !== "Card") {
     fail(root.at, `the root must be <Card>, not <${root.name}>`);
   }
-
   checkAttributes(root, ["title"]);
-  const title = stringAttribute(root, "title", UI_MARKUP_LIMITS.titleChars);
 
-  const nodes = elementChildren(root, BLOCK_TAGS);
+  const children = elementChildren(root, ["Data", ...BLOCK_TAGS]);
+  const dataNodes = children.filter((child) => child.name === "Data");
+  if (dataNodes.length > 1) {
+    fail(dataNodes[1]!.at, "a card carries at most one <Data>");
+  }
+  const dataNode = dataNodes[0];
+  if (dataNode !== undefined) {
+    const firstBlock = children.find((child) => child.name !== "Data");
+    if (firstBlock !== undefined && firstBlock.at < dataNode.at) {
+      fail(dataNode.at, "write <Data> before the blocks that read it");
+    }
+  }
+
+  const data = dataNode === undefined ? {} : buildData(dataNode);
+  const scope: Scope = { data, items: null };
+  const title = contentAttribute(
+    root,
+    "title",
+    UI_MARKUP_LIMITS.titleChars,
+    scope,
+  );
+
+  const nodes = children.filter((child) => child.name !== "Data");
   if (nodes.length === 0) fail(root.at, "<Card> needs at least one block");
-  if (nodes.length > UI_MARKUP_LIMITS.blocks) {
+
+  const blocks = nodes.map((node) => buildBlock(node, scope));
+  const written = countBlocks(blocks);
+  if (written > UI_MARKUP_LIMITS.blocks) {
     fail(
       root.at,
-      `<Card> has ${nodes.length} blocks; the limit is ${UI_MARKUP_LIMITS.blocks}`,
+      `<Card> has ${written} blocks; the limit is ${UI_MARKUP_LIMITS.blocks}`,
+    );
+  }
+  const expanded = expandedBlocks(blocks, data);
+  if (expanded > UI_MARKUP_LIMITS.expandedBlocks) {
+    fail(
+      root.at,
+      `the repeats expand to ${expanded} blocks; the limit is ` +
+        `${UI_MARKUP_LIMITS.expandedBlocks} (send fewer items)`,
     );
   }
 
-  const blocks = nodes.map(buildBlock);
-  const interactive =
-    blocks.filter((block) => block.type === "choice" || block.type === "form")
-      .length;
+  const interactive = interactiveCount(blocks);
   if (interactive > 1) {
     fail(root.at, "a card can have at most one <Choice> or <Form>");
   }
 
-  return { title, blocks };
+  return { title, data, blocks };
 }
 
-function buildBlock(node: RawElement): UiBlock {
+/** The JSON of `<Data>`. Everything the model put there is read here once, so
+ * paths, repeats and conditions are checked against real values rather than
+ * against a promise. */
+function buildData(node: RawElement): UiData {
+  checkAttributes(node, []);
+
+  const raw = node.children
+    .map((child) => child.kind === "text" ? child.text : "")
+    .join("")
+    .trim();
+  if (raw.length === 0) {
+    fail(
+      node.at,
+      '<Data> is empty; it needs one JSON object, e.g. {"items":[]}',
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    fail(node.at, `<Data> is not valid JSON: ${reason}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    fail(node.at, '<Data> must be a JSON object, e.g. {"items":[…]}');
+  }
+
+  checkKeys(parsed as Record<string, unknown>, node.at, "");
+  return parsed as UiData;
+}
+
+/** Keys are written by the model and read back by path; a key that Object
+ * would answer for ("__proto__") is refused so a path can never leave the
+ * data the card carried. */
+function checkKeys(
+  value: Record<string, unknown>,
+  at: number,
+  prefix: string,
+): void {
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      fail(at, `the data key "${key}" is reserved`);
+    }
+    if (key.length > UI_MARKUP_LIMITS.dataKeyChars) {
+      fail(
+        at,
+        `the data key "${key}" is ${key.length} characters; the limit is ` +
+          `${UI_MARKUP_LIMITS.dataKeyChars}`,
+      );
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(key)) {
+      fail(
+        at,
+        `the data key "${key}" must use letters, digits, "_" or "-" ` +
+          "(a path is written with dots)",
+      );
+    }
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        if (typeof item === "object" && item !== null && !Array.isArray(item)) {
+          checkKeys(item as Record<string, unknown>, at, `${prefix}${key}.`);
+        }
+      }
+    } else if (typeof child === "object" && child !== null) {
+      checkKeys(child as Record<string, unknown>, at, `${prefix}${key}.`);
+    }
+  }
+}
+
+function buildBlock(node: RawElement, scope: Scope): UiBlock {
   switch (node.name) {
     case "Text":
       checkAttributes(node, []);
       return {
         type: "text",
-        text: textContent(node, UI_MARKUP_LIMITS.textChars, "the text"),
+        text: contentText(
+          node,
+          UI_MARKUP_LIMITS.textChars,
+          "the text",
+          scope,
+        ),
       };
 
     case "List":
-      return buildList(node);
+      return buildList(node, scope);
 
     case "Table":
-      return buildTable(node);
+      return buildTable(node, scope);
 
     case "Flow":
-      return buildFlow(node);
+      return buildFlow(node, scope);
+
+    case "Metric":
+      return buildMetric(node, scope);
 
     case "Choice":
-      return buildChoice(node);
+      return buildChoice(node, scope);
 
     case "Form":
-      return buildForm(node);
+      return buildForm(node, scope);
+
+    case "Stack":
+    case "Columns":
+    case "Grid":
+      return buildLayout(node, scope);
+
+    case "Repeat":
+      return buildRepeat(node, scope);
+
+    case "If":
+      return buildIf(node, scope);
 
     default:
       fail(
@@ -87,12 +221,181 @@ function buildBlock(node: RawElement): UiBlock {
   }
 }
 
-function buildList(node: RawElement): UiListBlock {
+function buildMetric(node: RawElement, scope: Scope): UiMetricBlock {
+  checkAttributes(node, ["label", "value", "unit", "hint"]);
+  noContent(node);
+
+  return {
+    type: "metric",
+    label: requiredContentAttribute(
+      node,
+      "label",
+      UI_MARKUP_LIMITS.metricLabelChars,
+      scope,
+    ),
+    value: requiredContentAttribute(
+      node,
+      "value",
+      UI_MARKUP_LIMITS.metricValueChars,
+      scope,
+    ),
+    unit: contentAttribute(
+      node,
+      "unit",
+      UI_MARKUP_LIMITS.metricUnitChars,
+      scope,
+    ),
+    hint: contentAttribute(
+      node,
+      "hint",
+      UI_MARKUP_LIMITS.metricHintChars,
+      scope,
+    ),
+  };
+}
+
+function buildLayout(node: RawElement, scope: Scope): UiLayoutBlock {
+  if (node.name === "Grid") {
+    checkAttributes(node, ["columns"]);
+    const columns = numberAttribute(node, "columns") ?? 2;
+    if (columns < 1 || columns > UI_MARKUP_LIMITS.gridColumns) {
+      fail(
+        node.at,
+        `columns is ${columns}; it must be 1 to ${UI_MARKUP_LIMITS.gridColumns}`,
+      );
+    }
+    const blocks = layoutChildren(node, scope);
+    const grid: UiGridBlock<UiBlock> = { type: "grid", columns, blocks };
+    return grid;
+  }
+
+  checkAttributes(node, ["gap"]);
+  const gap = gapAttribute(node);
+  const blocks = layoutChildren(node, scope);
+  return node.name === "Stack"
+    ? { type: "stack", gap, blocks }
+    : { type: "columns", gap, blocks };
+}
+
+function layoutChildren(node: RawElement, scope: Scope): UiBlock[] {
+  const blocks = elementChildren(node, BLOCK_TAGS)
+    .map((child) => buildBlock(child, scope));
+  if (blocks.length === 0) {
+    fail(node.at, `<${node.name}> needs at least one block`);
+  }
+  if (blocks.length > UI_MARKUP_LIMITS.blocks) {
+    fail(
+      node.at,
+      `<${node.name}> has ${blocks.length} blocks; the limit is ` +
+        `${UI_MARKUP_LIMITS.blocks}`,
+    );
+  }
+  return blocks;
+}
+
+function buildRepeat(node: RawElement, scope: Scope): UiBlock {
+  checkAttributes(node, ["over"]);
+  if (scope.items !== null) {
+    fail(node.at, "a <Repeat> cannot sit inside another <Repeat>");
+  }
+
+  const over = requiredAttribute(
+    node,
+    "over",
+    UI_MARKUP_LIMITS.dataPathChars,
+  );
+  checkPath(over, node.at);
+
+  const value = valueAt(scope.data, over);
+  if (!value.found) {
+    fail(node.at, `<Repeat over="${over}"> names no field of <Data>`);
+  }
+  if (!Array.isArray(value.value)) {
+    fail(node.at, `<Repeat over="${over}"> must name an array in <Data>`);
+  }
+  const items = value.value as readonly unknown[];
+  if (items.length > UI_MARKUP_LIMITS.repeatItems) {
+    fail(
+      node.at,
+      `"${over}" has ${items.length} items; the limit is ` +
+        `${UI_MARKUP_LIMITS.repeatItems}`,
+    );
+  }
+
+  const inner: Scope = { data: scope.data, items };
+  const blocks = elementChildren(node, BLOCK_TAGS)
+    .map((child) => buildBlock(child, inner));
+  if (blocks.length === 0) fail(node.at, "<Repeat> needs at least one block");
+  return { type: "repeat", over, blocks };
+}
+
+function buildIf(node: RawElement, scope: Scope): UiBlock {
+  checkAttributes(node, ["test", "eq", "ne"]);
+  const test = requiredAttribute(node, "test", UI_MARKUP_LIMITS.dataPathChars);
+  const eq = stringAttribute(node, "eq", UI_MARKUP_LIMITS.optionLabelChars);
+  const ne = stringAttribute(node, "ne", UI_MARKUP_LIMITS.optionLabelChars);
+  if ((eq === null) === (ne === null)) {
+    fail(node.at, '<If> needs exactly one of "eq" and "ne"');
+  }
+
+  const field = itemReference(test, node.at, scope);
+  assertFieldOnItems(field, node.at, scope);
+
+  const blocks = elementChildren(node, BLOCK_TAGS)
+    .map((child) => buildBlock(child, scope));
+  if (blocks.length === 0) fail(node.at, "<If> needs at least one block");
+
+  const condition: UiCondition = { field, eq, ne };
+  return { type: "if", condition, blocks };
+}
+
+/** `<If test>` names a field of the repeated item, and nothing else: a
+ * condition on the card's own data would have been decided before the card
+ * was written. */
+function itemReference(test: string, at: number, scope: Scope): string {
+  if (scope.items === null) {
+    fail(at, "<If> can only sit inside a <Repeat>");
+  }
+  const match = /^\$item(?:\.([A-Za-z0-9_.-]+))?$/.exec(test);
+  if (match === null) {
+    fail(
+      at,
+      `<If test="${test}"> must name a field of the item, e.g. ` +
+        "$item.status",
+    );
+  }
+  const field = match[1];
+  if (field === undefined) {
+    fail(at, "<If test> must name a field, e.g. $item.status");
+  }
+  checkPath(field, at);
+  return field;
+}
+
+function assertFieldOnItems(field: string, at: number, scope: Scope): void {
+  const items = scope.items ?? [];
+  for (const item of items) {
+    const value = valueAt(item, field);
+    if (!value.found) {
+      fail(at, `the repeated items have no field "${field}"`);
+    }
+    if (!isScalar(value.value)) {
+      fail(at, `"${field}" must be text, a number or true/false`);
+    }
+  }
+}
+
+function buildList(node: RawElement, scope: Scope): UiListBlock {
   checkAttributes(node, ["ordered"]);
   const ordered = flagAttribute(node, "ordered");
   const items = elementChildren(node, ["Item"]).map((item) => {
     checkAttributes(item, []);
-    return textContent(item, UI_MARKUP_LIMITS.listItemChars, "a list item");
+    return contentText(
+      item,
+      UI_MARKUP_LIMITS.listItemChars,
+      "a list item",
+      scope,
+    );
   });
 
   if (items.length === 0) fail(node.at, "<List> needs at least one <Item>");
@@ -106,14 +409,19 @@ function buildList(node: RawElement): UiListBlock {
   return { type: "list", ordered, items };
 }
 
-function buildTable(node: RawElement): UiTableBlock {
+function buildTable(node: RawElement, scope: Scope): UiTableBlock {
   checkAttributes(node, []);
 
   const rows = elementChildren(node, ["Row"]).map((row) => {
     checkAttributes(row, []);
     const cells = elementChildren(row, ["Cell"]).map((cell) => {
       checkAttributes(cell, []);
-      return textContent(cell, UI_MARKUP_LIMITS.tableCellChars, "a table cell");
+      return contentText(
+        cell,
+        UI_MARKUP_LIMITS.tableCellChars,
+        "a table cell",
+        scope,
+      );
     });
     return { at: row.at, cells };
   });
@@ -149,7 +457,7 @@ function buildTable(node: RawElement): UiTableBlock {
   return { type: "table", rows: rows.map((row) => row.cells) };
 }
 
-function buildFlow(node: RawElement): UiFlowBlock {
+function buildFlow(node: RawElement, scope: Scope): UiFlowBlock {
   checkAttributes(node, []);
 
   const nodes: UiFlowNode[] = [];
@@ -157,10 +465,10 @@ function buildFlow(node: RawElement): UiFlowBlock {
 
   for (const element of elementChildren(node, ["Node", "Edge"])) {
     if (element.name === "Node") {
-      nodes.push(readFlowNode(element, nodes));
+      nodes.push(readFlowNode(element, nodes, scope));
       continue;
     }
-    edges.push(readFlowEdge(element));
+    edges.push(readFlowEdge(element, scope));
   }
 
   if (nodes.length === 0) fail(node.at, "<Flow> needs at least one <Node>");
@@ -193,6 +501,7 @@ function buildFlow(node: RawElement): UiFlowBlock {
 function readFlowNode(
   node: RawElement,
   nodes: readonly UiFlowNode[],
+  scope: Scope,
 ): UiFlowNode {
   checkAttributes(node, ["id", "shape"]);
 
@@ -205,10 +514,11 @@ function readFlowNode(
   }
 
   const shape = flowShape(node);
-  const label = textContent(
+  const label = contentText(
     node,
     UI_MARKUP_LIMITS.flowLabelChars,
     `the label of node "${id}"`,
+    scope,
   );
   return { id, label, shape };
 }
@@ -225,7 +535,10 @@ function flowShape(node: RawElement): UiFlowShape {
   fail(node.at, `unknown shape "${value}" (use box, round, diamond or pill)`);
 }
 
-function readFlowEdge(node: RawElement): { at: number; edge: UiFlowEdge } {
+function readFlowEdge(
+  node: RawElement,
+  scope: Scope,
+): { at: number; edge: UiFlowEdge } {
   checkAttributes(node, ["from", "to", "label", "dashed"]);
   noContent(node);
 
@@ -233,10 +546,11 @@ function readFlowEdge(node: RawElement): { at: number; edge: UiFlowEdge } {
   const to = requiredAttribute(node, "to", UI_MARKUP_LIMITS.nodeIdChars);
   if (from === to) fail(node.at, "an <Edge> must connect two different nodes");
 
-  const label = stringAttribute(
+  const label = contentAttribute(
     node,
     "label",
     UI_MARKUP_LIMITS.flowEdgeLabelChars,
+    scope,
   );
   return {
     at: node.at,
@@ -244,10 +558,11 @@ function readFlowEdge(node: RawElement): { at: number; edge: UiFlowEdge } {
   };
 }
 
-function buildChoice(node: RawElement): UiChoiceBlock {
-  checkAttributes(node, ["multiple"]);
+function buildChoice(node: RawElement, scope: Scope): UiChoiceBlock {
+  checkAttributes(node, ["multiple", "layout"]);
   const multiple = flagAttribute(node, "multiple");
-  const options = readOptions(node);
+  const layout = choiceLayout(node);
+  const options = readOptions(node, scope);
 
   if (options.length < 2) fail(node.at, "<Choice> needs at least two <Option>");
   if (options.length > UI_MARKUP_LIMITS.options) {
@@ -257,13 +572,27 @@ function buildChoice(node: RawElement): UiChoiceBlock {
     );
   }
 
-  return { type: "choice", multiple, options };
+  return { type: "choice", layout, multiple, options };
 }
 
-function buildForm(node: RawElement): UiFormBlock {
+function choiceLayout(node: RawElement): "list" | "row" {
+  const value = stringAttribute(node, "layout", 20);
+  if (value === null) return "list";
+  if (value === "list" || value === "row") return value;
+  fail(node.at, `unknown layout "${value}" (use list or row)`);
+}
+
+function buildForm(node: RawElement, scope: Scope): UiFormBlock {
   checkAttributes(node, ["submit"]);
-  const submit = stringAttribute(node, "submit", UI_MARKUP_LIMITS.submitChars);
-  const fields = elementChildren(node, ["Field"]).map(readField);
+  const submit = contentAttribute(
+    node,
+    "submit",
+    UI_MARKUP_LIMITS.submitChars,
+    scope,
+  );
+  const fields = elementChildren(node, ["Field"]).map((field) =>
+    readField(field, scope)
+  );
 
   if (fields.length === 0) fail(node.at, "<Form> needs at least one <Field>");
   if (fields.length > UI_MARKUP_LIMITS.fields) {
@@ -276,31 +605,34 @@ function buildForm(node: RawElement): UiFormBlock {
   return { type: "form", submit, fields };
 }
 
-function readField(node: RawElement): UiField {
+function readField(node: RawElement, scope: Scope): UiField {
   checkAttributes(node, ["label", "type", "required", "placeholder"]);
 
-  const label = requiredAttribute(
+  const label = requiredContentAttribute(
     node,
     "label",
     UI_MARKUP_LIMITS.fieldLabelChars,
+    scope,
   );
   const type = fieldType(node);
   const required = flagAttribute(node, "required");
-  const placeholder = stringAttribute(
+  const placeholder = contentAttribute(
     node,
     "placeholder",
     UI_MARKUP_LIMITS.placeholderChars,
+    scope,
   );
 
   if (type === "select") {
-    const options = readOptions(node);
+    const options = readOptions(node, scope);
     if (options.length === 0) {
       fail(node.at, '<Field type="select"> needs at least one <Option>');
     }
     if (options.length > UI_MARKUP_LIMITS.selectOptions) {
       fail(
         node.at,
-        `<Field> has ${options.length} options; the limit is ${UI_MARKUP_LIMITS.selectOptions}`,
+        `<Field> has ${options.length} options; the limit is ` +
+          `${UI_MARKUP_LIMITS.selectOptions}`,
       );
     }
     return { label, type, required, placeholder, options };
@@ -325,23 +657,214 @@ function fieldType(node: RawElement): UiFieldType {
   );
 }
 
-function readOptions(node: RawElement): UiOption[] {
+function readOptions(node: RawElement, scope: Scope): UiOption[] {
   return elementChildren(node, ["Option"]).map((option) => {
     checkAttributes(option, ["description"]);
     return {
-      label: textContent(
+      label: contentText(
         option,
         UI_MARKUP_LIMITS.optionLabelChars,
         "an option label",
+        scope,
       ),
-      description: stringAttribute(
+      description: contentAttribute(
         option,
         "description",
         UI_MARKUP_LIMITS.optionDescriptionChars,
+        scope,
       ),
     };
   });
 }
+
+function gapAttribute(node: RawElement): UiGap {
+  const value = stringAttribute(node, "gap", 20);
+  if (value === null) return "m";
+  if (value === "s" || value === "m" || value === "l") return value;
+  fail(node.at, `unknown gap "${value}" (use s, m or l)`);
+}
+
+function numberAttribute(node: RawElement, name: string): number | null {
+  const value = stringAttribute(node, name, 20);
+  if (value === null) return null;
+  if (!/^[0-9]+$/.test(value)) {
+    fail(node.at, `attribute "${name}" of <${node.name}> must be a number`);
+  }
+  return Number(value);
+}
+
+// --- blocks and their bounds ------------------------------------------------
+
+/** Every block written, containers and binds included. */
+function countBlocks(blocks: readonly UiBlock[]): number {
+  let total = 0;
+  for (const block of blocks) {
+    total += 1;
+    if (block.type === "stack" || block.type === "columns") {
+      total += countBlocks(block.blocks);
+    } else if (block.type === "grid") {
+      total += countBlocks(block.blocks);
+    } else if (block.type === "repeat" || block.type === "if") {
+      total += countBlocks(block.blocks);
+    }
+  }
+  return total;
+}
+
+/** The blocks the screen draws once the repeats are expanded.
+ *
+ * An `<If>` is counted as drawn: whether it is depends on an item, and the
+ * bound has to hold for every item the card could carry. */
+function expandedBlocks(
+  blocks: readonly UiBlock[],
+  data: UiData,
+): number {
+  let total = 0;
+  for (const block of blocks) {
+    if (block.type === "repeat") {
+      const value = valueAt(data, block.over);
+      const items = Array.isArray(value.value) ? value.value.length : 0;
+      total += items * expandedBlocks(block.blocks, data);
+      continue;
+    }
+    if (block.type === "stack" || block.type === "columns") {
+      total += 1 + expandedBlocks(block.blocks, data);
+      continue;
+    }
+    if (block.type === "grid") {
+      total += 1 + expandedBlocks(block.blocks, data);
+      continue;
+    }
+    if (block.type === "if") {
+      total += expandedBlocks(block.blocks, data);
+      continue;
+    }
+    total += 1;
+  }
+  return total;
+}
+
+function interactiveCount(blocks: readonly UiBlock[]): number {
+  let total = 0;
+  for (const block of blocks) {
+    if (block.type === "choice" || block.type === "form") {
+      total += 1;
+      continue;
+    }
+    if (
+      block.type === "stack" || block.type === "columns" ||
+      block.type === "grid" || block.type === "repeat" || block.type === "if"
+    ) {
+      total += interactiveCount(block.blocks);
+    }
+  }
+  return total;
+}
+
+// --- references -------------------------------------------------------------
+
+/** A path into the card's data: dotted keys, no brackets. */
+function checkPath(path: string, at: number): void {
+  if (!/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(path)) {
+    fail(
+      at,
+      `"${path}" is not a data path (write it as keys joined by dots)`,
+    );
+  }
+  if (path.length > UI_MARKUP_LIMITS.dataPathChars) {
+    fail(at, `the path "${path}" is too long`);
+  }
+}
+
+/**
+ * Check the references a content string carries.
+ *
+ * Everything is checked against the values the card carried: `$data.x` must
+ * exist in `<Data>`, `$item.x` must exist on every item of the enclosing
+ * repeat, and `$index` must have a repeat to count. What is written but not
+ * known is a mistake the model can fix now, instead of a blank line the
+ * reader cannot explain.
+ */
+function checkReferences(value: string, at: number, scope: Scope): void {
+  let index = 0;
+  while (index < value.length) {
+    const dollar = value.indexOf("$", index);
+    if (dollar < 0) return;
+
+    const rest = value.slice(dollar);
+    if (rest.startsWith("$$")) {
+      index = dollar + 2;
+      continue;
+    }
+
+    const match = /^\$(item|index|data)((?:\.[A-Za-z0-9_-]+)*)/.exec(rest);
+    const after = rest[match?.[0].length ?? 0] ?? "";
+    if (match === null || /[A-Za-z0-9_-]/.test(after)) {
+      fail(
+        at,
+        `"${rest.slice(0, 24)}" is not a reference ` +
+          '(use $item, $item.field, $data.field or $index; write $$ for "$")',
+      );
+    }
+
+    const kind = match[1] ?? "";
+    const path = (match[2] ?? "").replace(/^\./, "");
+
+    if (kind === "index") {
+      if (scope.items === null) {
+        fail(at, "$index can only be used inside a <Repeat>");
+      }
+    } else if (kind === "item") {
+      if (scope.items === null) {
+        fail(at, "$item can only be used inside a <Repeat>");
+      }
+      // An empty path is the item itself; assertFieldOnItems checks it is a
+      // value the screen can print, on every item.
+      assertFieldOnItems(path, at, scope);
+    } else {
+      if (path.length === 0) {
+        fail(at, "$data needs a field, e.g. $data.total");
+      }
+      const value = valueAt(scope.data, path);
+      if (!value.found) {
+        fail(at, `$data.${path} names no field of <Data>`);
+      }
+      if (!isScalar(value.value)) {
+        fail(at, `$data.${path} must be text, a number or true/false`);
+      }
+    }
+
+    index = dollar + (match?.[0].length ?? 1);
+  }
+}
+
+/** Resolve a dotted path in the card's data. Only own keys are read, so a
+ * path can never reach an object the card did not carry. */
+export function valueAt(
+  root: unknown,
+  path: string,
+): { found: boolean; value: unknown } {
+  if (path.length === 0) return { found: true, value: root };
+
+  let current = root;
+  for (const key of path.split(".")) {
+    if (
+      typeof current !== "object" || current === null || Array.isArray(current)
+    ) {
+      return { found: false, value: undefined };
+    }
+    if (!Object.hasOwn(current, key)) return { found: false, value: undefined };
+    current = (current as Record<string, unknown>)[key];
+  }
+  return { found: true, value: current };
+}
+
+function isScalar(value: unknown): boolean {
+  return typeof value === "string" || typeof value === "number" ||
+    typeof value === "boolean";
+}
+
+// --- attributes -------------------------------------------------------------
 
 /** Check the attributes the tag accepts. */
 function checkAttributes(node: RawElement, allowed: readonly string[]): void {
@@ -386,6 +909,46 @@ function stringAttribute(
   return value;
 }
 
+/** A value-carrying attribute whose text may read the card's data. */
+function contentAttribute(
+  node: RawElement,
+  name: string,
+  maxChars: number,
+  scope: Scope,
+): string | null {
+  const value = stringAttribute(node, name, maxChars);
+  if (value === null) return null;
+  const attribute = node.attrs.find((entry) => entry.name === name);
+  checkReferences(value, attribute?.at ?? node.at, scope);
+  return value;
+}
+
+/** A value-carrying attribute that must be written. */
+function requiredAttribute(
+  node: RawElement,
+  name: string,
+  maxChars: number,
+): string {
+  const value = stringAttribute(node, name, maxChars);
+  if (value === null) {
+    fail(node.at, `<${node.name}> needs the attribute "${name}"`);
+  }
+  return value;
+}
+
+function requiredContentAttribute(
+  node: RawElement,
+  name: string,
+  maxChars: number,
+  scope: Scope,
+): string {
+  const value = contentAttribute(node, name, maxChars, scope);
+  if (value === null) {
+    fail(node.at, `<${node.name}> needs the attribute "${name}"`);
+  }
+  return value;
+}
+
 /** A value-less boolean attribute. */
 function flagAttribute(node: RawElement, name: string): boolean {
   const attribute = node.attrs.find((entry) => entry.name === name);
@@ -397,19 +960,6 @@ function flagAttribute(node: RawElement, name: string): boolean {
     );
   }
   return true;
-}
-
-/** An attribute that must be written with a value. */
-function requiredAttribute(
-  node: RawElement,
-  name: string,
-  maxChars: number,
-): string {
-  const value = stringAttribute(node, name, maxChars);
-  if (value === null) {
-    fail(node.at, `<${node.name}> needs the attribute "${name}"`);
-  }
-  return value;
 }
 
 /** Take out only the text inside the tag. A mixed-in element is refused at its
@@ -434,6 +984,18 @@ function textContent(node: RawElement, maxChars: number, what: string): string {
       `${what} is ${text.length} characters; the limit is ${maxChars}`,
     );
   }
+  return text;
+}
+
+/** Text that may read the card's data. */
+function contentText(
+  node: RawElement,
+  maxChars: number,
+  what: string,
+  scope: Scope,
+): string {
+  const text = textContent(node, maxChars, what);
+  checkReferences(text, node.at, scope);
   return text;
 }
 

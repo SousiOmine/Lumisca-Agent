@@ -1,9 +1,12 @@
 import { assertEquals, assertMatch, assertStringIncludes } from "@std/assert";
 import {
+  CARD_HELP,
   interactiveBlock,
   parseUiMarkup,
+  resolveUiView,
   type UiView,
 } from "./ui-markup/index.ts";
+import { BLOCK_TAGS } from "./ui-markup/reader.ts";
 
 /**
  * Reading the UI markup.
@@ -62,6 +65,7 @@ Deno.test("parseUiMarkup reads a card's blocks in the order written", () => {
     },
     {
       type: "choice",
+      layout: "list",
       multiple: true,
       options: [
         { label: "スモーク", description: "短い確認" },
@@ -253,12 +257,12 @@ Deno.test("parseUiMarkup refuses comments", () => {
   );
 });
 
-Deno.test("parseUiMarkup nests at most four levels deep", () => {
+Deno.test("parseUiMarkup nests at most six levels deep", () => {
   assertStringIncludes(
     problemOf(
-      "<Card><Text><Text><Text><Text>x</Text></Text></Text></Text></Card>",
+      "<Card><Text><Text><Text><Text><Text><Text>x</Text></Text></Text></Text></Text></Text></Card>",
     ),
-    "nested deeper than 4 levels",
+    "nested deeper than 6 levels",
   );
 });
 
@@ -353,4 +357,269 @@ Deno.test("parseUiMarkup limits the length of the whole markup", () => {
 Deno.test("parseUiMarkup reports an error with a line and column", () => {
   const problem = problemOf("<Card>\n  <Text>a</Text>\n  <Nope />\n</Card>");
   assertMatch(problem, /^line 3, column 3:/);
+});
+
+// --- layouts, data and binds ------------------------------------------------
+
+function resolvedOf(markup: string) {
+  return resolveUiView(viewOf(markup));
+}
+
+Deno.test("parseUiMarkup reads a metric and the layouts", () => {
+  const view = viewOf(`<Card>
+      <Stack gap="s">
+        <Columns gap="l">
+          <Metric label="本番" value="81" unit="%" hint="+3.2%" />
+          <Grid columns="2"><Text>a</Text><Text>b</Text></Grid>
+        </Columns>
+        <Text>end</Text>
+      </Stack>
+    </Card>`);
+
+  assertEquals(view.blocks, [
+    {
+      type: "stack",
+      gap: "s",
+      blocks: [
+        {
+          type: "columns",
+          gap: "l",
+          blocks: [
+            {
+              type: "metric",
+              label: "本番",
+              value: "81",
+              unit: "%",
+              hint: "+3.2%",
+            },
+            {
+              type: "grid",
+              columns: 2,
+              blocks: [
+                { type: "text", text: "a" },
+                { type: "text", text: "b" },
+              ],
+            },
+          ],
+        },
+        { type: "text", text: "end" },
+      ],
+    },
+  ]);
+});
+
+Deno.test("parseUiMarkup reads <Data> as plain JSON", () => {
+  const view = viewOf(
+    '<Card><Data>{"envs":[{"name":"prod"}],"note":"a < b & c"}</Data><Text>x</Text></Card>',
+  );
+
+  assertEquals(view.data, {
+    envs: [{ name: "prod" }],
+    note: "a < b & c",
+  });
+});
+
+Deno.test("resolveUiView repeats a block once per item", () => {
+  const view = resolvedOf(`<Card>
+      <Data>{"total":2,"envs":[{"name":"prod","load":81},{"name":"stg","load":42}]}</Data>
+      <Columns gap="m">
+        <Repeat over="envs">
+          <Metric label="$item.name" value="$item.load" unit="%" />
+        </Repeat>
+      </Columns>
+      <Text>全 $data.total 件</Text>
+    </Card>`);
+
+  assertEquals(view.blocks, [
+    {
+      type: "columns",
+      gap: "m",
+      blocks: [
+        { type: "metric", label: "prod", value: "81", unit: "%", hint: null },
+        { type: "metric", label: "stg", value: "42", unit: "%", hint: null },
+      ],
+    },
+    { type: "text", text: "全 2 件" },
+  ]);
+});
+
+Deno.test("resolveUiView draws an <If> only for a matching item", () => {
+  const view = resolvedOf(`<Card>
+      <Data>{"envs":[{"name":"prod","load":81},{"name":"stg","load":42}]}</Data>
+      <Repeat over="envs">
+        <If test="$item.load" eq="81"><Text>$item.name</Text></If>
+      </Repeat>
+    </Card>`);
+
+  assertEquals(view.blocks, [{ type: "text", text: "prod" }]);
+});
+
+Deno.test("resolveUiView counts the items and keeps $$ literal", () => {
+  const view = resolvedOf(`<Card>
+      <Data>{"price":100,"items":["a","b"]}</Data>
+      <Repeat over="items"><Text>$index: $item</Text></Repeat>
+      <Text>$$data.price と $data.price</Text>
+    </Card>`);
+
+  assertEquals(view.blocks, [
+    { type: "text", text: "0: a" },
+    { type: "text", text: "1: b" },
+    { type: "text", text: "$data.price と 100" },
+  ]);
+});
+
+Deno.test("interactiveBlock finds a choice inside a layout", () => {
+  const view = viewOf(
+    "<Card><Stack><Choice><Option>a</Option><Option>b</Option></Choice></Stack></Card>",
+  );
+
+  assertEquals(interactiveBlock(view)?.type, "choice");
+});
+
+Deno.test("CARD_HELP names every tag a card may carry", () => {
+  assertStringIncludes(CARD_HELP, "<Card");
+  assertStringIncludes(CARD_HELP, "<Data>");
+  for (const tag of BLOCK_TAGS) {
+    assertStringIncludes(CARD_HELP, tag);
+  }
+});
+
+Deno.test("parseUiMarkup refuses a <Data> that is late, doubled or no object", () => {
+  assertStringIncludes(
+    problemOf('<Card><Text>a</Text><Data>{"a":1}</Data></Card>'),
+    "write <Data> before the blocks",
+  );
+  assertStringIncludes(
+    problemOf(
+      '<Card><Data>{"a":1}</Data><Data>{"b":1}</Data><Text>a</Text></Card>',
+    ),
+    "at most one <Data>",
+  );
+  assertStringIncludes(
+    problemOf("<Card><Data>{a:1}</Data><Text>a</Text></Card>"),
+    "is not valid JSON",
+  );
+  assertStringIncludes(
+    problemOf("<Card><Data>[1,2]</Data><Text>a</Text></Card>"),
+    "must be a JSON object",
+  );
+  assertStringIncludes(
+    problemOf("<Card><Data></Data><Text>a</Text></Card>"),
+    "<Data> is empty",
+  );
+});
+
+Deno.test("parseUiMarkup refuses a data key a path could not read", () => {
+  assertStringIncludes(
+    problemOf('<Card><Data>{"__proto__":{"a":1}}</Data><Text>a</Text></Card>'),
+    'the data key "__proto__" is reserved',
+  );
+  assertStringIncludes(
+    problemOf('<Card><Data>{"a b":1}</Data><Text>a</Text></Card>'),
+    "must use letters, digits",
+  );
+});
+
+Deno.test("parseUiMarkup checks a reference against the data", () => {
+  assertStringIncludes(
+    problemOf("<Card><Text>$data.total</Text></Card>"),
+    "$data.total names no field of <Data>",
+  );
+  assertStringIncludes(
+    problemOf('<Card><Data>{"list":[]}</Data><Text>$data.list</Text></Card>'),
+    "must be text, a number or true/false",
+  );
+  assertStringIncludes(
+    problemOf("<Card><Text>$data</Text></Card>"),
+    "$data needs a field",
+  );
+  assertStringIncludes(
+    problemOf("<Card><Text>$item.name</Text></Card>"),
+    "$item can only be used inside a <Repeat>",
+  );
+  assertStringIncludes(
+    problemOf("<Card><Text>$index</Text></Card>"),
+    "$index can only be used inside a <Repeat>",
+  );
+  assertStringIncludes(
+    problemOf("<Card><Text>$env</Text></Card>"),
+    "is not a reference",
+  );
+});
+
+Deno.test("parseUiMarkup refuses a repeat that does not name an array", () => {
+  assertStringIncludes(
+    problemOf(
+      '<Card><Data>{"n":1}</Data><Repeat over="n"><Text>a</Text></Repeat></Card>',
+    ),
+    "must name an array",
+  );
+  assertStringIncludes(
+    problemOf('<Card><Repeat over="n"><Text>a</Text></Repeat></Card>'),
+    "names no field of <Data>",
+  );
+  assertStringIncludes(
+    problemOf(
+      '<Card><Data>{"bad key":[]}</Data><Repeat over="bad key"><Text>a</Text></Repeat></Card>',
+    ),
+    "must use letters, digits",
+  );
+});
+
+Deno.test("parseUiMarkup refuses a repeat inside a repeat", () => {
+  assertStringIncludes(
+    problemOf(`<Card><Data>{"a":[{"b":[]}]}</Data>
+      <Repeat over="a"><Repeat over="a"><Text>x</Text></Repeat></Repeat>
+    </Card>`),
+    "cannot sit inside another <Repeat>",
+  );
+});
+
+Deno.test("parseUiMarkup checks the field an item is asked for", () => {
+  assertStringIncludes(
+    problemOf(`<Card><Data>{"a":[{"x":1},{"y":2}]}</Data>
+      <Repeat over="a"><Text>$item.x</Text></Repeat>
+    </Card>`),
+    'the repeated items have no field "x"',
+  );
+});
+
+Deno.test("parseUiMarkup bounds the items a repeat expands", () => {
+  const items = Array.from({ length: 101 }, (_, index) => index);
+  const problem = problemOf(
+    `<Card><Data>{"n":${JSON.stringify(items)}}</Data>` +
+      '<Repeat over="n"><Text>$item</Text></Repeat></Card>',
+  );
+
+  assertStringIncludes(problem, "the limit is 100");
+});
+
+Deno.test("parseUiMarkup bounds the blocks a card expands to", () => {
+  const items = Array.from({ length: 100 }, (_, index) => index);
+  const row = "<Text>a</Text>".repeat(5);
+  const problem = problemOf(
+    `<Card><Data>{"n":${JSON.stringify(items)}}</Data>` +
+      `<Repeat over="n"><Stack>${row}</Stack></Repeat></Card>`,
+  );
+
+  assertStringIncludes(problem, "the repeats expand to");
+});
+
+Deno.test("parseUiMarkup keeps <If> to a field of the item", () => {
+  assertStringIncludes(
+    problemOf('<Card><If test="$item.a" eq="1"><Text>x</Text></If></Card>'),
+    "<If> can only sit inside a <Repeat>",
+  );
+  assertStringIncludes(
+    problemOf(`<Card><Data>{"a":[{"x":1}]}</Data>
+      <Repeat over="a"><If test="$item.x"><Text>x</Text></If></Repeat>
+    </Card>`),
+    'needs exactly one of "eq" and "ne"',
+  );
+  assertStringIncludes(
+    problemOf(`<Card><Data>{"a":[{"x":1}]}</Data>
+      <Repeat over="a"><If test="$data.x" eq="1"><Text>x</Text></If></Repeat>
+    </Card>`),
+    "must name a field of the item",
+  );
 });

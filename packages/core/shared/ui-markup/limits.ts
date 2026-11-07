@@ -25,11 +25,33 @@
 export const UI_MARKUP_LIMITS = {
   /** Length of the whole markup, in characters. */
   chars: 20_000,
-  /** Nesting depth of the elements. Card > Form > Field > Option is the
-   * deepest. */
-  depth: 4,
-  /** Blocks one card may hold. */
-  blocks: 20,
+  /** Nesting depth of the elements. Card > Columns > Stack > Repeat > If >
+   * Text is the deepest a card needs; past it the layout is burying content
+   * rather than arranging it, and the client would recurse for nothing. */
+  depth: 6,
+  /** Blocks one card may hold, counting the blocks inside containers. */
+  blocks: 40,
+  /** Blocks one card may draw after the repeats are expanded. A card the
+   * server accepted must not turn into a page's worth of DOM at the client,
+   * and the model cannot tell how large its data is. */
+  expandedBlocks: 400,
+  /** Items one `<Repeat>` may expand. Past this a card is a page, and the
+   * reader would scroll a chat message. */
+  repeatItems: 100,
+  /** Length of a path into the card's data (`envs`, `a.b`). */
+  dataPathChars: 200,
+  /** Key length of one data field; a key is a label the model chose. */
+  dataKeyChars: 60,
+  /** Columns of one `<Grid>`. */
+  gridColumns: 4,
+  /** Length of a metric's label. */
+  metricLabelChars: 200,
+  /** Length of a metric's value: it is one number or a short word. */
+  metricValueChars: 100,
+  /** Length of a metric's unit ("%", "ms", "件"). */
+  metricUnitChars: 16,
+  /** Length of a metric's hint line. */
+  metricHintChars: 200,
   /** Length of one card title. */
   titleChars: 200,
   /** Length of one paragraph. */

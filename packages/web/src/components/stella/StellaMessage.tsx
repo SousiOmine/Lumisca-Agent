@@ -5,7 +5,11 @@ import {
 } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
 import { useMemo } from "preact/compat";
-import { parseUiMarkup, type UiView } from "@lumisca/core/shared";
+import {
+  parseUiMarkup,
+  resolveUiView,
+  type UiResolvedView,
+} from "@lumisca/core/shared";
 import { useLocale, useT } from "../../i18n.ts";
 import { formatClockTime } from "../../format.ts";
 import { useCopy } from "../../hooks/useSave.ts";
@@ -283,9 +287,9 @@ function CardView({
   markup: string;
   onSend: (text: string) => void;
 }) {
-  const view = useMemo<UiView | null>(() => {
+  const view = useMemo<UiResolvedView | null>(() => {
     const parsed = parseUiMarkup(markup);
-    return parsed.ok ? parsed.view : null;
+    return parsed.ok ? resolveUiView(parsed.view) : null;
   }, [markup]);
   return <UiCard view={view} onSend={onSend} />;
 }

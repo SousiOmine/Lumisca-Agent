@@ -24,6 +24,7 @@
 import { CoreError } from "../errors.ts";
 import {
   type AttachmentRef,
+  CARD_HELP,
   type ChatMessage,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_CALL,
@@ -40,21 +41,6 @@ import {
   type Tool,
   type ToolResult,
 } from "./schema.ts";
-
-/**
- * The card language, documented where the model will read it. It has no other
- * reference: `chat_ui`'s description used to carry this text and it is the
- * only place the tags are explained, so it moves here whole.
- */
-const CARD_HELP = [
-  'card is one <Card title="..."> of UI markup with Text, List, Table, Flow, Choice and Form blocks inside it.',
-  "<Text>paragraph</Text>; <List ordered><Item>one</Item></List>; <Table><Row><Cell>head</Cell><Cell>head</Cell></Row></Table> (the first row is the header).",
-  '<Flow><Node id="a" shape="box|round|diamond|pill">Start</Node><Edge from="a" to="b" label="yes" dashed /></Flow>.',
-  '<Choice multiple><Option description="why">Label</Option></Choice>; <Form submit="Send"><Field label="Name" type="text|number|select|checkbox" required placeholder="..."><Option>a choice for select</Option></Field></Form>.',
-  "At most one Choice or Form per card. Write boolean attributes without a value, and attribute values in double quotes.",
-  "Escape <, > and & in text as &lt;, &gt; and &amp;.",
-  "Clicking an option sends its label as the user's next message; the user can click only after your turn ends, so end the turn after showing a question.",
-].join(" ");
 
 const sendChatSchema = object({
   text: optional(string(

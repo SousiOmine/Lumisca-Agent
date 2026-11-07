@@ -1025,6 +1025,108 @@
   vertical-align: top;
 }
 
+/* Layouts. The gap is a scale, not a number, so two cards written by
+ * different models still breathe the same way. */
+.ui-card-stack,
+.ui-card-columns,
+.ui-card-grid {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ui-card-stack {
+  flex-direction: column;
+}
+
+/* Side by side while there is room, one above another when there is not: the
+ * wrap is the card's own width, not the window's (a message is narrower than
+ * the page on every screen). */
+.ui-card-columns {
+  flex-wrap: wrap;
+}
+
+.ui-card-columns > * {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.ui-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ui-card-grid[data-columns="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-card-grid[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ui-card-grid[data-columns="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ui-card-stack[data-gap="s"],
+.ui-card-columns[data-gap="s"],
+.ui-card-grid[data-gap="s"] {
+  gap: 6px;
+}
+
+.ui-card-stack[data-gap="l"],
+.ui-card-columns[data-gap="l"],
+.ui-card-grid[data-gap="l"] {
+  gap: 16px;
+}
+
+.ui-card-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ui-card-metric-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.ui-card-metric-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.ui-card-metric-unit {
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.ui-card-metric-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* A row of buttons: the same choices, drawn where the reader expects an
+ * action instead of a list to read. */
+.ui-card-choice[data-layout="row"] {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.ui-card-choice[data-layout="row"] > .ui-card-option {
+  flex: 0 1 auto;
+}
+
 .ui-card-choice,
 .ui-card-form {
   display: flex;

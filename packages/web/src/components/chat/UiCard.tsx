@@ -1,22 +1,28 @@
 import { useId, useState } from "preact/compat";
 import type {
-  UiBlock,
   UiChoiceBlock,
+  UiColumnsBlock,
   UiField,
   UiFormBlock,
-  UiView,
+  UiGridBlock,
+  UiMetricBlock,
+  UiResolvedBlock,
+  UiResolvedView,
+  UiStackBlock,
 } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
 import { Flowchart } from "./Flowchart.tsx";
 
 /**
- * A card shown in the chat by the `chat_ui` tool: text, a list, a table, a
- * flow chart, or a question with a choice or a form.
+ * A card shown in the chat: text, a list, a table, a flow chart, a metric, a
+ * question with a choice or a form, arranged in stacks, columns and grids.
  *
  * The card is drawn from the tool call's own arguments — nothing about it is
  * stored on the server — so a reload (or a session reopened weeks later)
- * draws the same card. A markup the server accepted but this build cannot
- * read shows the "could not be displayed" note instead of half a card.
+ * draws the same card. What arrives here is the RESOLVED view (the binds of
+ * `parseUiMarkup` expanded by `resolveUiView`), so nothing below knows what a
+ * repeat or a reference is. A markup the server accepted but this build
+ * cannot read shows the "could not be displayed" note instead of half a card.
  *
  * A Choice or Form click is the user's next message, not a tool result: the
  * card ends its turn, and `sendMessage` starts the next one. That is why the
@@ -27,7 +33,7 @@ export function UiCard({
   view,
   onSend,
 }: {
-  view: UiView | null;
+  view: UiResolvedView | null;
   /** Send the card's answer as the user's next message. */
   onSend: (text: string) => void;
 }) {
@@ -53,7 +59,7 @@ function BlockView({
   block,
   onSend,
 }: {
-  block: UiBlock;
+  block: UiResolvedBlock;
   onSend: (text: string) => void;
 }) {
   switch (block.type) {
@@ -69,11 +75,68 @@ function BlockView({
       return <TableBlock rows={block.rows} />;
     case "flow":
       return <Flowchart block={block} />;
+    case "metric":
+      return <MetricBlockView block={block} />;
     case "choice":
       return <ChoiceBlock block={block} onSend={onSend} />;
     case "form":
       return <FormBlockView block={block} onSend={onSend} />;
+    case "stack":
+    case "columns":
+    case "grid":
+      return <LayoutBlock block={block} onSend={onSend} />;
   }
+}
+
+/** A stack, a row of columns or a grid. The class is written out per kind:
+ * the spacing scale and the column count live in the stylesheet, and a name
+ * built by concatenation would be invisible to the dead-rule check in
+ * styles_test.ts. */
+function LayoutBlock({
+  block,
+  onSend,
+}: {
+  block:
+    | UiStackBlock<UiResolvedBlock>
+    | UiColumnsBlock<UiResolvedBlock>
+    | UiGridBlock<UiResolvedBlock>;
+  onSend: (text: string) => void;
+}) {
+  const className = block.type === "stack"
+    ? "ui-card-stack"
+    : block.type === "columns"
+    ? "ui-card-columns"
+    : "ui-card-grid";
+  return (
+    <div
+      className={className}
+      data-gap={block.type === "grid" ? undefined : block.gap}
+      data-columns={block.type === "grid" ? block.columns : undefined}
+    >
+      {block.blocks.map((child, index) => (
+        <BlockView key={index} block={child} onSend={onSend} />
+      ))}
+    </div>
+  );
+}
+
+/** One number with its label, unit and hint. The value is drawn as written:
+ * the model already decided how it should read ("81 %", "1.2 s"). */
+function MetricBlockView({ block }: { block: UiMetricBlock }) {
+  return (
+    <div className="ui-card-metric">
+      <span className="ui-card-metric-label">{block.label}</span>
+      <span className="ui-card-metric-value">
+        {block.value}
+        {block.unit !== null && (
+          <span className="ui-card-metric-unit">{block.unit}</span>
+        )}
+      </span>
+      {block.hint !== null && (
+        <span className="ui-card-metric-hint">{block.hint}</span>
+      )}
+    </div>
+  );
 }
 
 /** The first row is the header; the rest are the body. */
@@ -139,7 +202,11 @@ function ChoiceBlock({
   };
 
   return (
-    <div className="ui-card-choice" role="group">
+    <div
+      className="ui-card-choice"
+      data-layout={block.layout}
+      role="group"
+    >
       {block.multiple && (
         <span className="ui-card-hint">{t("panels.ui.multiple")}</span>
       )}
