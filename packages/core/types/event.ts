@@ -48,6 +48,17 @@ export type ClientEvent =
     toolCallId: string;
     toolName: string;
   }
+  /** A fragment of a card a tool call is writing (`send_chat` in stella,
+   * `chat_attach` in code mode). `delta` is the card text appended since the
+   * previous fragment of the same call, already unescaped from the call's
+   * JSON; the finished message carries the whole card and replaces whatever
+   * a client drew from these. */
+  | {
+    type: "card_delta";
+    sessionId: string;
+    toolCallId: string;
+    delta: string;
+  }
   | { type: "agent_end"; sessionId: string }
   | { type: "session_error"; sessionId: string; message: string }
   /** The transcript was rewound from a user message onward. `removed` is

@@ -350,3 +350,60 @@ function isNameChar(value: string | undefined): boolean {
 function isAttributeChar(value: string | undefined): boolean {
   return value !== undefined && /[A-Za-z0-9-]/.test(value);
 }
+
+/**
+ * The longest prefix of a card that ends at a complete block, with `</Card>`
+ * closed onto it — or null while there is none.
+ *
+ * A model writing a card sends it in fragments, and a client that drew only
+ * finished cards would show nothing until the last one arrived. This finds
+ * what can be drawn now: everything up to the last block that closed, with
+ * the tags still open outside it dropped. `<Data>` is taken whole — the JSON
+ * body is unreadable until it ends, and the blocks that read it follow it.
+ *
+ * A prefix that is not the beginning of a well-formed card (a stray closing
+ * tag, a root that is not `Card`) answers null rather than a guess.
+ */
+export function cardPrefix(source: string): string | null {
+  const stack: string[] = [];
+  let closedAt = -1;
+  let index = 0;
+
+  while (index < source.length) {
+    const open = source.indexOf("<", index);
+    if (open < 0) break;
+    const close = source.indexOf(">", open);
+    if (close < 0) break; // the tag is still being written
+
+    const body = source.slice(open + 1, close);
+    if (body.startsWith("/")) {
+      const name = body.slice(1).trim();
+      if (stack.pop() !== name) return null;
+      index = close + 1;
+      if (stack.length === 1) closedAt = index;
+      continue;
+    }
+
+    const selfClosing = body.endsWith("/");
+    const name = body.replace(/\/$/, "").trim().split(/\s/)[0] ?? "";
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) return null;
+    index = close + 1;
+
+    if (name === "Data" && !selfClosing) {
+      const end = source.indexOf("</Data>", index);
+      if (end < 0) break; // the data is still arriving; nothing after it
+      index = end + "</Data>".length;
+      if (stack.length === 1) closedAt = index;
+      continue;
+    }
+    if (selfClosing) {
+      if (stack.length === 1) closedAt = index;
+      continue;
+    }
+
+    if (stack.length === 0 && name !== "Card") return null;
+    stack.push(name);
+  }
+
+  return closedAt < 0 ? null : `${source.slice(0, closedAt)}</Card>`;
+}

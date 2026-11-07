@@ -6,6 +6,7 @@ import { formatDaySeparator, startOfDay } from "../../format.ts";
 import { RunningIndicator } from "../chat/RunningIndicator.tsx";
 import { entryKey, type StellaConversationState } from "../../stella-state.ts";
 import { AgentAvatar } from "./AgentAvatar.tsx";
+import { CardView } from "../chat/CardView.tsx";
 import { type MessageAuthor, StellaMessage } from "./StellaMessage.tsx";
 
 /**
@@ -133,6 +134,13 @@ export function StellaTranscript({
             </Fragment>
           );
         })}
+        {conversation.liveCard !== null && (
+          <CardView
+            markup={conversation.liveCard.markup}
+            streaming
+            onSend={onSend}
+          />
+        )}
         {conversation.running && (
           <RunningIndicator
             avatar={

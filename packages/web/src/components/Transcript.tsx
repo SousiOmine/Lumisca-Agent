@@ -6,6 +6,7 @@ import type { ComponentChildren } from "preact";
 import type { AgentMessage, SessionView, ToolResultMessage } from "../types.ts";
 import type { ConversationTurnData, UserMessageImage } from "./chat/types.ts";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
+import { CardView } from "./chat/CardView.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
 import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
@@ -25,6 +26,8 @@ interface TranscriptProps {
    * useTranscriptScroll's pinToken). */
   pinToken?: number;
   streamingText: string;
+  /** The card a `chat_attach` call is writing right now, or null. */
+  liveCard: { toolCallId: string; markup: string } | null;
   runningTools: SessionView["runningTools"];
   /** True while a run is active (the last turn then renders as running). */
   running: boolean;
@@ -79,6 +82,7 @@ export function Transcript(
     loadingOlder,
     hasOlder,
     streamingText,
+    liveCard,
     runningTools,
     running,
     agentEndedAt,
@@ -169,6 +173,9 @@ export function Transcript(
             onCardSend={onCardSend}
           />
         ))}
+        {liveCard !== null && (
+          <CardView markup={liveCard.markup} streaming onSend={onCardSend} />
+        )}
         {streamingText.length > 0 && (
           <div className="msg">
             <div className="msg-body markdown">

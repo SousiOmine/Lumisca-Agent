@@ -3,6 +3,7 @@ import {
   CARD_HELP,
   interactiveBlock,
   parseUiMarkup,
+  parseUiMarkupPartial,
   resolveUiView,
   type UiView,
 } from "./ui-markup/index.ts";
@@ -20,6 +21,12 @@ function viewOf(markup: string): UiView {
   const result = parseUiMarkup(markup);
   if (!result.ok) throw new Error(`could not read it: ${result.problem}`);
   return result.view;
+}
+
+function problemOfPartial(markup: string): string {
+  const result = parseUiMarkupPartial(markup);
+  if (result.ok) throw new Error("the markup was accepted");
+  return result.problem;
 }
 
 function problemOf(markup: string): string {
@@ -621,5 +628,51 @@ Deno.test("parseUiMarkup keeps <If> to a field of the item", () => {
       <Repeat over="a"><If test="$data.x" eq="1"><Text>x</Text></If></Repeat>
     </Card>`),
     "must name a field of the item",
+  );
+});
+
+// --- a card that is still being written -------------------------------------
+
+function partialOf(markup: string): UiView {
+  const result = parseUiMarkupPartial(markup);
+  if (!result.ok) throw new Error(`could not read it: ${result.problem}`);
+  return result.view;
+}
+
+Deno.test("parseUiMarkupPartial reads a whole card exactly like the strict parse", () => {
+  const markup = '<Card title="x"><Text>a</Text></Card>';
+
+  assertEquals(parseUiMarkupPartial(markup), parseUiMarkup(markup));
+});
+
+Deno.test("parseUiMarkupPartial draws the blocks that closed so far", () => {
+  const markup =
+    '<Card title="状況"><Text>a</Text><Metric label="b" value="1" /><Tab';
+
+  assertEquals(partialOf(markup).blocks, [
+    { type: "text", text: "a" },
+    { type: "metric", label: "b", value: "1", unit: null, hint: null },
+  ]);
+});
+
+Deno.test("parseUiMarkupPartial reads the data before the blocks that follow it", () => {
+  const markup = `<Card><Data>{"envs":[{"name":"prod"}]}</Data>` +
+    '<Repeat over="envs"><Metric label="$item.name" value="1" /></Repeat>' +
+    "<Text>tail";
+
+  assertEquals(resolveUiView(partialOf(markup)).blocks, [
+    { type: "metric", label: "prod", value: "1", unit: null, hint: null },
+  ]);
+});
+
+Deno.test("parseUiMarkupPartial says nothing until the first block closes", () => {
+  assertStringIncludes(
+    problemOfPartial("<Card><Text>abc"),
+    "tag <Text> is not closed",
+  );
+  assertStringIncludes(problemOfPartial("<Card>"), "is not closed");
+  assertStringIncludes(
+    problemOfPartial('<Card><Data>{"a":'),
+    "tag <Data> is not closed",
   );
 });

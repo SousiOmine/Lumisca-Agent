@@ -628,6 +628,16 @@ export class Agent {
           ? base
           : `${base} (${ev.errorDetail})`;
         if (ev.errorRetryable === true) errorRetryable = true;
+      } else if (event.type === "toolcall_input_delta") {
+        // The call is still being written. Forwarded as it arrives so the
+        // session can show what it already carries; nothing is recorded — the
+        // transcript keeps the call, not its fragments.
+        this.emit({
+          type: "tool_input_delta",
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          delta: event.delta,
+        });
       } else if (event.type === "toolcall_start") {
         // The SDK is executing this tool call: only the start event is
         // emitted here — the SDK runs the tool and a toolcall_result event

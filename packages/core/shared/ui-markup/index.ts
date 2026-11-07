@@ -39,6 +39,6 @@ export type {
   UiTextBlock,
   UiView,
 } from "./types.ts";
-export { parseUiMarkup } from "./build.ts";
+export { parseUiMarkup, parseUiMarkupPartial } from "./build.ts";
 export { resolveUiView } from "./resolve.ts";
 export { CARD_HELP } from "./help.ts";

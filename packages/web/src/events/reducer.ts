@@ -160,9 +160,26 @@ export function applyEvent(
       const pendingQuestions = view.pendingQuestions.filter(
         (q) => q.toolCallId !== event.toolCallId,
       );
-      return pendingQuestions.length === view.pendingQuestions.length
+      // The call is complete, so the card it was writing is final from now
+      // on (it arrives with the tool result).
+      const liveCard = view.liveCard?.toolCallId === event.toolCallId
+        ? null
+        : view.liveCard;
+      return pendingQuestions.length === view.pendingQuestions.length &&
+          liveCard === view.liveCard
         ? { ...view, runningTools }
-        : { ...view, runningTools, pendingQuestions };
+        : { ...view, runningTools, pendingQuestions, liveCard };
+    }
+    case "card_delta": {
+      // A card being written into a tool call: the screen draws what has
+      // arrived (see Transcript), and the tool result replaces it.
+      const markup = view.liveCard?.toolCallId === event.toolCallId
+        ? view.liveCard.markup + event.delta
+        : event.delta;
+      return {
+        ...view,
+        liveCard: { toolCallId: event.toolCallId, markup },
+      };
     }
     case "question": {
       // The agent asked the user a question; show it above the composer.
@@ -352,11 +369,14 @@ export function applyEvent(
       };
     }
     case "agent_end":
-      return view.agentStartedAt === undefined ? null : {
-        ...view,
-        pendingQuestions: [],
-        agentEndedAt: Date.now(),
-      };
+      return view.agentStartedAt === undefined && view.liveCard === null
+        ? null
+        : {
+          ...view,
+          pendingQuestions: [],
+          liveCard: null,
+          agentEndedAt: Date.now(),
+        };
     case "session_renamed":
       // The session title changed (e.g. auto-generated from the first
       // message); the tab shows the new name.

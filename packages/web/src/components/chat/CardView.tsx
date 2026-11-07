@@ -1,6 +1,7 @@
 import { useMemo } from "preact/compat";
 import {
   parseUiMarkup,
+  parseUiMarkupPartial,
   resolveUiView,
   type UiResolvedView,
 } from "@lumisca/core/shared";
@@ -17,14 +18,23 @@ import { UiCard } from "./UiCard.tsx";
 export function CardView({
   markup,
   onSend,
+  streaming = false,
 }: {
   markup: string;
   /** Send the card's answer as the user's next message. */
   onSend: (text: string) => void;
+  /** The markup is still being written: draw the blocks that have closed. A
+   * card with nothing readable yet draws nothing — the "could not be
+   * displayed" note is for a card that is FINISHED and wrong, and mid-stream
+   * it would flash on every send. */
+  streaming?: boolean;
 }) {
   const view = useMemo<UiResolvedView | null>(() => {
-    const parsed = parseUiMarkup(markup);
+    const parsed = streaming
+      ? parseUiMarkupPartial(markup)
+      : parseUiMarkup(markup);
     return parsed.ok ? resolveUiView(parsed.view) : null;
-  }, [markup]);
+  }, [markup, streaming]);
+  if (streaming && view === null) return null;
   return <UiCard view={view} onSend={onSend} />;
 }

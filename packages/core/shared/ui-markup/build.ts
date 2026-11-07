@@ -2,6 +2,7 @@ import { UI_MARKUP_LIMITS } from "./limits.ts";
 import {
   ALL_TAGS,
   BLOCK_TAGS,
+  cardPrefix,
   fail,
   MarkupError,
   parseDocument,
@@ -1100,4 +1101,21 @@ export function parseUiMarkup(source: string): UiParseResult {
       problem: `line ${line}, column ${column}: ${error.message}`,
     };
   }
+}
+
+/**
+ * Read a card that is still being written: the strict parse when it already
+ * is whole, otherwise the blocks that have closed so far.
+ *
+ * This is what the screen draws while the model streams a `send_chat` call.
+ * When nothing is readable yet the strict parse's problem is returned, so a
+ * card that is genuinely wrong still says why once it is complete.
+ */
+export function parseUiMarkupPartial(source: string): UiParseResult {
+  const full = parseUiMarkup(source);
+  if (full.ok) return full;
+  const prefix = cardPrefix(source);
+  if (prefix === null) return full;
+  const partial = parseUiMarkup(prefix);
+  return partial.ok ? partial : full;
 }

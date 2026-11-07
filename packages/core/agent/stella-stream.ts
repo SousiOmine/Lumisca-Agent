@@ -260,6 +260,16 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
       }];
     case "handover_end":
       return [{ type: "handover", handover: null }];
+    case "card_delta":
+      // A card being written. The conversation has no streaming TEXT (a reply
+      // arrives whole), but a card is drawn while the model writes it: it is
+      // presentation, not words, so there is no half-sentence to guard
+      // against.
+      return [{
+        type: "card_delta",
+        toolCallId: event.toolCallId,
+        delta: event.delta,
+      }];
     case "session_error":
       return [{ type: "error", message: event.message }];
     default:

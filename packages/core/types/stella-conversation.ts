@@ -110,15 +110,23 @@ export interface StellaConversationSnapshot {
  * none of those surfaces. A `null` result from the projection means the
  * model-only event ends here.
  *
- * There is no streaming event either. A message arrives whole when its turn
+ * There is no streaming event for TEXT. A message arrives whole when its turn
  * ends: the agent's final text is the reply, so there is nothing to watch
  * being written — the run shows itself with the typing indicator until the
- * answer is finished. */
+ * answer is finished.
+ *
+ * A card is the exception: it is presentation rather than words, so it is
+ * drawn while the model writes it (a long table appearing row by row reads as
+ * progress, not as a half-sentence). The finished `entry` carries the whole
+ * card and replaces what was drawn from the fragments. */
 export type StellaEvent =
   | { type: "agent_start" }
   | { type: "agent_end" }
   /** One finished message (a prompt, or what the agent sent). */
   | { type: "entry"; entry: StellaEntry }
+  /** A fragment of a card being written into a `send_chat` call: the markup
+   * appended since the previous fragment of that call. */
+  | { type: "card_delta"; toolCallId: string; delta: string }
   /** The pending questions changed (asked, answered, or dropped). */
   | { type: "questions"; questions: StellaQuestion[] }
   /** The screen hand-over began or ended (`null`). */

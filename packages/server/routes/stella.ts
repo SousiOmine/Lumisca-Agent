@@ -465,11 +465,24 @@ export function stellaRoutes(core: StellaApi): Hono {
         // session (code mode's tabs run at the same time).
         accept: (event) => "sessionId" in event && event.sessionId === id,
         revOf: () => core.getSessionRevision(id),
-        // No delta channel: this conversation has no streaming text. A
-        // message appears whole when its turn ends (the agent's final text,
-        // or what it sent with `send_chat`), so a `message_delta` has
-        // nothing to add and the projection drops it with every other
-        // model-only event.
+        // No streaming TEXT: a message appears whole when its turn ends (the
+        // agent's final text, or what it sent with `send_chat`), so a
+        // `message_delta` has nothing to add and the projection drops it with
+        // every other model-only event. A card is the exception — it is drawn
+        // while the model writes it — so its fragments are batched like a
+        // reply's text, keyed by the call they belong to.
+        delta: {
+          accepts: (event) =>
+            event.type === "card_delta" && event.sessionId === id,
+          key: (event) => event.type === "card_delta" ? event.toolCallId : "",
+          frame: ({ key, delta, rev, events }) => ({
+            type: "card_delta",
+            toolCallId: key,
+            delta,
+            rev,
+            events,
+          }),
+        },
         project: (event, rev) =>
           stellaEventsOf(event).map((projected) => ({ ...projected, rev })),
       });

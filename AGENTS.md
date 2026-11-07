@@ -177,6 +177,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **相手は常に 1 人以上**: `GET /api/stella/agents` の初回読み出しでスターターを作ります（`LumiscaCore.ensureStellaAgent`）。全員を削除しても次の読み出しで戻ります。応答は `{ agents }` だけで、どの会話を開くかは返しません——それは URL（`/stella/a/<id>`）が答えます。
 - **一覧の行は最新の発言**: 2 行目は会話と同じ射影（`shared/stella-preview.ts` の `previewOf`）、並びも最新メッセージの時刻です。開いていない会話にはストリームが無いので、一覧は 30 秒ごとに読み直します（`useVisibleInterval`）。
 - **話す手段は本文と `send_chat`**: 本文はそのまま返信になり、`send_chat` がカード・ファイル・途中経過を添えます（`packages/core/tools/send-chat.ts`）。黙るターンは `NO_RESPONSE` だけを書きます（`packages/core/agent/silent-reply.ts`）。`text`・`card`・`paths` は 1 回で 1 つのメッセージになり、少なくとも 1 つ必要です。
+- **カードだけは書きながら出る**: モデルが `send_chat` の引数を流している間、`card_delta` が届き、画面は `parseUiMarkupPartial` で閉じたブロックまで描きます。断片の切り出しは `packages/core/ai/tool-args-field.ts`、まとめは stella のイベントストリームの `delta` チャネルです。本文はターンの終わりに一度に届きます。
 - **モデルの切り替え**: `POST /api/stella/conversations/:agentId/model`（`provider` と `modelId` が必須、実行中は 409）。切り替えてもシステムプロンプトは変わりません。モデル名は context メッセージとして公開します（`packages/core/agent/model-context.ts`）。
 - **identity**: `role` とは別に、`identity` ツールで自分の役割と知識を書けます（`stella_agents.identity`、`packages/core/stella/identity.ts`）。context メッセージとして届き、反映は次のターンからです。
 

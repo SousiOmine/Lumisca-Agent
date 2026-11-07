@@ -376,6 +376,7 @@ export function ChatView(
         hasOlder={view.older !== null}
         pinToken={pinToken}
         streamingText={view.streamingText}
+        liveCard={view.liveCard}
         runningTools={view.runningTools}
         running={isRunning}
         agentEndedAt={view.agentEndedAt}

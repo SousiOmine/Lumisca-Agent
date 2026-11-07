@@ -39,6 +39,11 @@ export interface StellaConversationState {
    * conversation's beginning. */
   older: string | null;
   running: boolean;
+  /** The card a `send_chat` call is writing right now, as far as it has
+   * arrived, or null. The run has no streaming TEXT (a reply arrives whole),
+   * but a card is presentation: drawing it while it is written reads as
+   * progress. The finished entry carries the whole card and clears this. */
+  liveCard: { toolCallId: string; markup: string } | null;
   questions: StellaQuestion[];
   handover: StellaHandover | null;
   error?: string;
@@ -75,6 +80,10 @@ export function stellaStateOf(
     // must not lose the reader's way back.
     older: merged.replaced ? snapshot.older : current!.older,
     running: snapshot.running,
+    // A snapshot is the finished conversation; a card being written belongs
+    // to the run that is still going, and a reconnect picks the rest up from
+    // the events that follow.
+    liveCard: null,
     questions: snapshot.questions,
     handover: snapshot.handover,
     ...(snapshot.error !== undefined ? { error: snapshot.error } : {}),
@@ -188,18 +197,31 @@ export function applyStellaEvent(
 ): StellaConversationState | null {
   switch (event.type) {
     case "agent_start":
-      return state.running && state.error === undefined ? null : {
-        ...state,
-        running: true,
-        error: undefined,
-      };
+      return state.running && state.error === undefined &&
+          state.liveCard === null
+        ? null
+        : { ...state, running: true, error: undefined, liveCard: null };
     case "agent_end":
-      return state.running ? { ...state, running: false } : null;
+      return !state.running && state.liveCard === null
+        ? null
+        : { ...state, running: false, liveCard: null };
+    case "card_delta": {
+      const markup = state.liveCard?.toolCallId === event.toolCallId
+        ? state.liveCard.markup + event.delta
+        : event.delta;
+      return {
+        ...state,
+        liveCard: { toolCallId: event.toolCallId, markup },
+      };
+    }
     case "entry": {
       const entries = upsertEntry(state.entries, event.entry);
-      // A message arrives whole (nothing is streamed), so an unchanged list
-      // means nothing to re-render.
-      return entries === state.entries ? null : { ...state, entries };
+      // A message arrives whole, so an unchanged list means nothing to
+      // re-render — unless a card was being drawn, which the finished entry
+      // now replaces.
+      return entries === state.entries && state.liveCard === null
+        ? null
+        : { ...state, entries, liveCard: null };
     }
     case "questions":
       return sameQuestions(event.questions, state.questions) ? null : {
@@ -212,7 +234,7 @@ export function applyStellaEvent(
         handover: event.handover,
       };
     case "error":
-      return { ...state, error: event.message };
+      return { ...state, error: event.message, liveCard: null };
   }
 }
 
@@ -254,6 +276,7 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     entries: [],
     older: null,
     running: false,
+    liveCard: null,
     questions: [],
     handover: null,
     agentName,

@@ -176,6 +176,10 @@ export interface SessionView {
    * report the window's average as the session's. */
   usage: core.ContextUsageSummary;
   streamingText: string;
+  /** The card a `chat_attach` call is writing right now, as far as it has
+   * arrived, or null. A card is drawn while it is written (see card_delta);
+   * the finished tool result carries the whole card and clears it. */
+  liveCard: { toolCallId: string; markup: string } | null;
   runningTools: Map<string, string>; // toolCallId -> toolName
   /** Questions the agent asked (ask tool) that are still waiting for the
    * user's answers; rendered above the composer, cleared when the tool
@@ -233,6 +237,7 @@ export function emptyView(
     older: window.older,
     usage: window.usage,
     streamingText: "",
+    liveCard: null,
     runningTools: new Map(),
     pendingQuestions: [],
     todos: [],

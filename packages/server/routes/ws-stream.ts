@@ -32,6 +32,14 @@ import {
   WS_HEARTBEAT_TYPE,
 } from "@lumisca/core/shared";
 
+/** The text a batched event appends: the reply's words, or a card being
+ * written. */
+function deltaText(event: ClientEvent): string {
+  return event.type === "message_delta" || event.type === "card_delta"
+    ? event.delta
+    : "";
+}
+
 /** The minimal socket surface the stream writes to (Hono's WSContext). */
 interface Socket {
   send(data: string): void;
@@ -63,12 +71,15 @@ export interface EventStreamOptions {
     rev: number | undefined,
   ) => Record<string, unknown>[];
   /** The batch channel of a streaming delta. Omitted → this stream has no
-   * streaming text at all (a stella conversation: a message arrives when its
-   * turn ends), so no batcher is built and every event goes through
-   * `project` — where the delta is dropped like any other model-only
-   * event. */
+   * batched deltas, so no batcher is built and every event goes through
+   * `project`. */
   delta?: {
-    /** The batch channel: which transcript the text belongs to. */
+    /** Which delta events this stream batches. Omitted → `message_delta`
+     * only (the reply being typed). A stella conversation batches
+     * `card_delta` instead: it has no streaming text, but a card is drawn
+     * while the model writes it. */
+    accepts?: (event: ClientEvent) => boolean;
+    /** The batch channel: which transcript (or call) the text belongs to. */
     key: (event: ClientEvent) => string;
     /** How one flushed batch reaches the wire. */
     frame: (batch: DeltaFrame<string, number>) => unknown;
@@ -98,6 +109,11 @@ export function createEventStream(
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let batcher: FrameBatcher<string, number> | undefined;
   let socket: Socket | undefined;
+
+  const batches = (event: ClientEvent): boolean =>
+    options.delta?.accepts === undefined
+      ? event.type === "message_delta"
+      : options.delta.accepts(event);
 
   const write = (payload: unknown): void => {
     // The socket can close between the event and the send (the detach below
@@ -132,12 +148,12 @@ export function createEventStream(
       detach = options.subscribe((event) => {
         if (!options.accept(event)) return;
         const rev = options.revOf(event);
-        if (event.type === "message_delta" && batcher !== undefined && delta) {
+        if (batcher !== undefined && delta !== undefined && batches(event)) {
           // Only a stream with a channel batches text; `project` decides
-          // what a delta is worth to the others (stella's projection drops
-          // it — a reply arrives whole when its turn ends).
+          // what a delta is worth to the others (stella's projection drops a
+          // reply's text — it arrives whole when its turn ends).
           if (rev === undefined) return;
-          batcher.delta(delta.key(event), event.delta, rev);
+          batcher.delta(delta.key(event), deltaText(event), rev);
           return;
         }
         for (const frame of options.project(event, rev)) {

@@ -43,6 +43,7 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     // back through the history before it.
     older: "cursor-1",
     running: true,
+    liveCard: null,
     questions: [],
     handover: null,
     error: "last failure",
@@ -304,4 +305,70 @@ Deno.test("prependOlderEntries: an entry newer than the edge is never added", ()
     "cursor-0",
   );
   assertEquals(current.entries.map((e) => e.text), ["今の依頼"]);
+});
+
+Deno.test("stella: a card being written grows, and the entry replaces it", () => {
+  let current = state({ running: true });
+  current = applyStellaEvent(current, {
+    type: "card_delta",
+    toolCallId: "call-1",
+    delta: "<Card><Text>",
+  })!;
+  current = applyStellaEvent(current, {
+    type: "card_delta",
+    toolCallId: "call-1",
+    delta: "進めますか。</Text></Card>",
+  })!;
+
+  assertEquals(current.liveCard, {
+    toolCallId: "call-1",
+    markup: "<Card><Text>進めますか。</Text></Card>",
+  });
+
+  // The finished message carries the whole card; what was drawn from the
+  // fragments must not stay beside it.
+  current = applyStellaEvent(current, {
+    type: "entry",
+    entry: entry("assistant", "", 5, "<Card><Text>進めますか。</Text></Card>"),
+  })!;
+  assertEquals(current.liveCard, null);
+  assertEquals(current.entries.length, 1);
+});
+
+Deno.test("stella: a card of another call starts over, and the run clears it", () => {
+  let current = state({ running: true });
+  current = applyStellaEvent(current, {
+    type: "card_delta",
+    toolCallId: "call-1",
+    delta: "<Card><Text>a</Text></Card>",
+  })!;
+  current = applyStellaEvent(current, {
+    type: "card_delta",
+    toolCallId: "call-2",
+    delta: "<Card><Text>b",
+  })!;
+  assertEquals(current.liveCard, {
+    toolCallId: "call-2",
+    markup: "<Card><Text>b",
+  });
+
+  current = applyStellaEvent(current, { type: "agent_end" })!;
+  assertEquals(current.liveCard, null);
+  assertEquals(current.running, false);
+});
+
+Deno.test("stella: a snapshot is the finished conversation, so it draws no live card", () => {
+  const snapshot = {
+    entries: [entry("user", "こんにちは", 1)],
+    older: null,
+    running: true,
+    questions: [],
+    handover: null,
+    agentName: "Aide",
+    sessionId: "s1",
+    model: { provider: "faux", modelId: "model" },
+    rev: 3,
+  };
+
+  assertEquals(stellaStateOf(snapshot).liveCard, null);
 });

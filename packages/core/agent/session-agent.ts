@@ -16,10 +16,16 @@ import { createLogger } from "../log.ts";
 import { RetryManager } from "./retry-manager.ts";
 import { GoalRunner } from "./goal-runner.ts";
 import type { ClientEvent } from "../types/event.ts";
+import { ToolArgsField } from "../ai/tool-args-field.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
-import type { PromptFileRef, ThinkingLevel } from "../shared/mod.ts";
+import {
+  type PromptFileRef,
+  type ThinkingLevel,
+  TOOL_CHAT_ATTACH,
+  TOOL_SEND_CHAT,
+} from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { McpAttachmentHost } from "./mcp-host.ts";
 import { Rewinder } from "./rewinder.ts";
@@ -196,6 +202,10 @@ export class SessionAgent {
   /** The rows this session owns in the messages table, and how many leading
    * transcript messages they cover (see transcript.ts). */
   private readonly transcript: TranscriptStore;
+  /** The card each tool call is writing, while its arguments stream (see the
+   * tool_input_delta case). Cleared when the call is complete — the finished
+   * message carries the whole card. */
+  private readonly cardStreams = new Map<string, ToolArgsField>();
   /** The tool names this session was built with (see the `toolNames`
    * accessor). */
   private readonly toolNamesOfSession: string[];
@@ -1156,7 +1166,32 @@ export class SessionAgent {
         this.reportModelError(event.message);
         this.transcript.persist(this.agent.state.messages);
         break;
+      case "tool_input_delta": {
+        // A card is drawn while the model writes it. Only the two tools that
+        // carry one are read, and only the `card` field: the rest of the
+        // arguments (the reply's words, file paths) is not shown until the
+        // call is complete.
+        if (
+          event.toolName !== TOOL_SEND_CHAT &&
+          event.toolName !== TOOL_CHAT_ATTACH
+        ) break;
+        let reader = this.cardStreams.get(event.toolCallId);
+        if (reader === undefined) {
+          reader = new ToolArgsField("card");
+          this.cardStreams.set(event.toolCallId, reader);
+        }
+        const piece = reader.push(event.delta);
+        if (piece === null) break;
+        this.emit({
+          type: "card_delta",
+          sessionId: this.sessionId,
+          toolCallId: event.toolCallId,
+          delta: piece,
+        });
+        break;
+      }
       case "tool_execution_start":
+        this.cardStreams.delete(event.toolCallId);
         this.emit({
           type: "tool_start",
           sessionId: this.sessionId,
@@ -1166,6 +1201,7 @@ export class SessionAgent {
         });
         break;
       case "tool_execution_end":
+        this.cardStreams.delete(event.toolCallId);
         this.emit({
           type: "tool_end",
           sessionId: this.sessionId,
