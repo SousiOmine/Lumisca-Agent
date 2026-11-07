@@ -36,6 +36,7 @@ export function CollapsiblePanel(
 ) {
   const t = useT();
   const [collapsed, setCollapsed] = useState(true);
+  const open = !collapsed;
   return (
     <div className={`${kind}${collapsed ? " collapsed" : ""}`}>
       <button
@@ -44,7 +45,7 @@ export function CollapsiblePanel(
         title={collapsed
           ? t("common.expandPanel")
           : t("panels.common.collapse")}
-        aria-expanded={!collapsed}
+        aria-expanded={open}
         onClick={() => setCollapsed((c) => !c)}
       >
         {icon}
@@ -60,7 +61,16 @@ export function CollapsiblePanel(
           ? <IconChevronDown size={14} />
           : <IconChevronUp size={14} />}
       </button>
-      {!collapsed && <div className={`${kind}-body`}>{children}</div>}
+      {
+        /* Always mounted, with `data-open` carrying the state: a body that
+         * unmounts cannot animate its height, and the collapse is the whole
+         * movement (styles/motion.css, `.collapse`). */
+      }
+      <div className="collapse" data-open={open}>
+        <div className="collapse-inner">
+          <div className={`${kind}-body`}>{children}</div>
+        </div>
+      </div>
     </div>
   );
 }

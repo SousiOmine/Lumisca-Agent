@@ -335,23 +335,32 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
           <span className="tool-line-error">{t("common.error")}</span>
         )}
       </div>
-      {open && (
-        <div className="tool-detail">
-          <div className="tool-detail-args">
-            {JSON.stringify(toolCall.arguments, null, 2)}
-          </div>
-          {result && (
-            <div
-              className={`tool-detail-result${result.isError ? " error" : ""}`}
-            >
-              <pre>{contentText(result.content)}</pre>
-              {contentImages(result.content).length > 0 && (
-                <ContentImages images={contentImages(result.content)} />
-              )}
+      {
+        /* Always mounted, with `data-open` carrying the state: a body that
+         * unmounts cannot animate its height (styles/motion.css,
+         * `.collapse`). */
+      }
+      <div className="collapse below" data-open={open}>
+        <div className="collapse-inner">
+          <div className="tool-detail">
+            <div className="tool-detail-args">
+              {JSON.stringify(toolCall.arguments, null, 2)}
             </div>
-          )}
+            {result && (
+              <div
+                className={`tool-detail-result${
+                  result.isError ? " error" : ""
+                }`}
+              >
+                <pre>{contentText(result.content)}</pre>
+                {contentImages(result.content).length > 0 && (
+                  <ContentImages images={contentImages(result.content)} />
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

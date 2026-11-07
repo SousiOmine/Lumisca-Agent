@@ -601,7 +601,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 /* ---- tool calls (timeline) ---------------------------------------------- */
@@ -701,8 +700,6 @@
   font-family: var(--mono);
   font-size: 12px;
   border-top: 1px solid var(--border);
-  margin-top: 2px;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .tool-detail-args {
@@ -823,8 +820,6 @@
   font-family: var(--mono);
   font-size: 12px;
   border-top: 1px solid var(--border);
-  margin-top: 2px;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out) both;
 }
 
 .notification-detail-body {

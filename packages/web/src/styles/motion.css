@@ -138,3 +138,204 @@
     transform: rotate(360deg);
   }
 }
+
+/* ---- screen transitions --------------------------------------------------
+ *
+ * The two hierarchies the app walks into (screen-transition.ts): stella's
+ * agent list and a conversation, the settings dialog's category list and a
+ * category. On a phone the next screen arrives from the side and the one left
+ * behind steps away, the way a native app's push and pop do; on a wide window
+ * the two cross-fade, because a full-width column travelling sideways is a
+ * lot of motion for a screen whose neighbour was already beside it.
+ *
+ * The whole page is one snapshot. An inner element with a
+ * `view-transition-name` of its own would be captured separately — and a
+ * captured element becomes a containing block, which tears `position: fixed`
+ * out from under the machine's screen pane and every dialog.
+ *
+ * Direction is a fact of the move, not of this sheet: screen-transition.ts
+ * writes it to the root as `data-vt`, and the keyframes read the travel from
+ * `--vt-in` / `--vt-out` (tokens.css). That keeps the animated selectors one
+ * clean pair, which is also what reduced-motion.css has to name.
+ * ------------------------------------------------------------------------- */
+
+@keyframes lum-vt-in {
+  from {
+    transform: translateX(var(--vt-in));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes lum-vt-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--vt-out));
+  }
+}
+
+@keyframes lum-vt-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes lum-vt-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* The gap a slide opens between the two screens is the app's canvas, not
+ * black: the snapshots are opaque only where the screen was. */
+::view-transition {
+  background: var(--bg);
+}
+
+/* `normal`, not the user agent's `plus-lighter`: the two snapshots slide past
+ * each other, and a lightening blend would brighten the band where they
+ * overlap. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation-duration: var(--lum-dur-slow);
+  animation-timing-function: var(--lum-ease-out);
+  animation-fill-mode: both;
+}
+
+::view-transition-old(root) {
+  animation-name: lum-vt-fade-out;
+  /* Which snapshot is on top is the direction's call (see the phone block).
+   * A custom property rather than a selector on the direction: the animated
+   * selectors stay one pair, which is what reduced-motion.css overrides. */
+  z-index: var(--vt-old-z);
+}
+
+::view-transition-new(root) {
+  animation-name: lum-vt-fade-in;
+  z-index: var(--vt-new-z);
+}
+
+@media (max-width: 600px) {
+  /* The two directions, as travel. Pushing, the arriving screen comes in from
+   * the right and the one leaving steps a third of the way after it. Popping,
+   * the screen being left travels all the way out and the list underneath is
+   * simply uncovered — it does not move, because it never went anywhere. */
+  html[data-vt="push"] {
+    --vt-in: 100%;
+    --vt-out: -30%;
+    --vt-old-z: 0;
+    --vt-new-z: 1;
+  }
+
+  /* The newer snapshot paints above the older one, which is right for a push
+   * (it is arriving) and backwards for a pop (the screen leaving has to pass
+   * OVER the one it reveals). */
+  html[data-vt="back"] {
+    --vt-in: 0%;
+    --vt-out: 100%;
+    --vt-old-z: 1;
+    --vt-new-z: 0;
+  }
+
+  ::view-transition-old(root) {
+    animation-name: lum-vt-out;
+  }
+
+  ::view-transition-new(root) {
+    animation-name: lum-vt-in;
+  }
+}
+
+/* ---- disclosure: a row whose body opens and closes ------------------------
+ *
+ * A tool call, a notification, a progress row and a turn's work log all hide
+ * a body behind one line. Opening used to be an entrance and closing was a
+ * removal in the next frame, so the list under the row jumped by the body's
+ * height with nothing to explain it.
+ *
+ * The height is animated as `grid-template-rows: 0fr` ⇄ `1fr`, not as a
+ * measured `height`: a body that streams in grows while it is open, and a
+ * number written from `scrollHeight` would be stale the next frame. `1fr` is
+ * the row's content height, which the browser keeps answering.
+ *
+ * That makes this the one place the sheet moves a size rather than
+ * `opacity`/`transform` (styles/README.md says why that rule exists, and why
+ * this is the exception). `width`/`height` are still never written: the
+ * former sizes the noVNC canvas from its box, and the latter has no answer
+ * for "as tall as the content".
+ *
+ * The body stays mounted, so `.collapse` needs to know which state it is in
+ * (`data-open`, written by the component that owns the state) rather than
+ * inferring it from having children.
+ *
+ * A wrapper + inner pair is required by the technique: `overflow: hidden`
+ * belongs on the inner element, because the grid row's own box cannot clip
+ * what it sizes.
+ * ------------------------------------------------------------------------- */
+
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  /* Closed: the row has no height, and the body's focusable children are out
+   * of the tab order. `visibility`, not `opacity`: a link at opacity 0 is
+   * still reachable with Tab. It carries the same duration as the height, and
+   * a discrete property that starts from `visible` is visible for the whole
+   * transition — so the body stays readable while it folds rather than
+   * vanishing at the first frame. */
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--lum-dur-collapse) var(--lum-ease-in-out),
+    visibility var(--lum-dur-collapse) var(--lum-ease-in-out);
+}
+
+/* The body of a disclosure fades as its height arrives: the height alone
+ * reads as a block being squeezed, and the text inside it would be legible
+ * at half size for the whole movement. The fade is fast (the height is what
+ * carries the movement) and runs the other way on the way out. */
+.collapse > .collapse-inner > * {
+  opacity: 0;
+  transition: opacity var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  /* Opening: visible at once, and the height travels under it. */
+  transition:
+    grid-template-rows var(--lum-dur-collapse) var(--lum-ease-out),
+    visibility var(--lum-dur-collapse) var(--lum-ease-out);
+}
+
+.collapse[data-open="true"] > .collapse-inner > * {
+  opacity: 1;
+  /* Arrives once the row has opened enough to see it. */
+  transition: opacity var(--lum-dur-mid) var(--lum-ease-out)
+    var(--lum-dur-fast);
+}
+
+/* The grid item is this wrapper, not the caller's body: the body keeps its
+ * own `max-height` and `overflow-y` (a progress plan scrolls inside the
+ * row), and a clip on the element that scrolls would turn it into the
+ * row's own clip — the collapse would then have nothing to animate. */
+.collapse > .collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* A disclosure that belongs to the row above it (a tool's arguments and
+ * result, a notification's body) starts one hairline below it. The gap is on
+ * the body, which has no height while closed — on the wrapper it would sit
+ * outside the animated row and stay behind as two pixels of air. */
+.collapse.below > .collapse-inner > * {
+  margin-top: 2px;
+}

@@ -30,6 +30,14 @@ const NO_HISTORY = {
   usage: summarizeContextUsage([]),
 };
 
+/** The work log is always mounted (its height is what collapses), so whether
+ * the turn is folded is `data-open` on its disclosure, not the element's
+ * presence. */
+function assertWorkLog(html: string, open: boolean): void {
+  assertStringIncludes(html, "agent-work-log");
+  assertStringIncludes(html, `data-open="${open}"`);
+}
+
 function user(timestamp: number, steered?: boolean): AgentMessage {
   return {
     role: "user",
@@ -551,13 +559,13 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
   const html = render(restored);
   assertStringIncludes(html, "作業中");
   assertEquals(html.includes("作業完了"), false);
-  assertEquals(html.includes("agent-work-log"), true);
+  assertWorkLog(html, true);
 
   // The same transcript with a stale "not running" answer (what the view
   // held before the snapshot arrived) is the reported symptom.
   const stale = render(emptyView(info, { ...NO_HISTORY, messages }));
   assertStringIncludes(stale, "作業完了");
-  assertEquals(stale.includes("agent-work-log"), false);
+  assertWorkLog(stale, false);
 });
 
 Deno.test("ConversationTurn: a mode prompt renders the images attached to it", () => {

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { parseUrl, urlOf, type UrlState } from "../route.ts";
+import { playScreenTransition, screenMove } from "../screen-transition.ts";
 
 /**
  * The address the app is showing, and how to move to another.
@@ -15,6 +16,10 @@ import { parseUrl, urlOf, type UrlState } from "../route.ts";
  * session or the settings is a place the reader wants to come back to (push),
  * while resolving `/` into a mode's top, or falling back because a session is
  * gone, is not (replace — there is no place to return to).
+ *
+ * Every move also passes through `playScreenTransition`: the addresses alone
+ * decide whether it animates (screen-transition.ts), and a move that is not
+ * one of the two hierarchies simply changes screen at once.
  */
 export interface RouteControls {
   state: UrlState;
@@ -55,9 +60,20 @@ export function useRoute(): RouteControls {
   const [state, setState] = useState<UrlState>(() =>
     parseUrl(location.pathname)
   );
+  // The screen on display, readable from a `popstate` handler without putting
+  // the address in the listener's identity (a listener rebuilt per navigation
+  // would resubscribe on every move). The state is still the source of truth:
+  // this is the copy used to say which way a move went.
+  const shown = useRef(state);
+  shown.current = state;
 
   useEffect(() => {
-    const onPopState = () => setState(parseUrl(location.pathname));
+    const onPopState = () => {
+      const next = parseUrl(location.pathname);
+      playScreenTransition(screenMove(shown.current, next), () => {
+        setState(next);
+      });
+    };
     globalThis.addEventListener("popstate", onPopState);
     return () => globalThis.removeEventListener("popstate", onPopState);
   }, []);
@@ -76,16 +92,21 @@ export function useRoute(): RouteControls {
   // already had: it is the entry the page was loaded on (nothing behind it),
   // and marking it would claim there is a screen to go back to.
   const move = useCallback((next: UrlState, replace: boolean) => {
-    const url = urlOf(next);
-    if (location.pathname !== url) {
-      const target = `${url}${location.search}`;
-      if (replace) {
-        globalThis.history.replaceState(globalThis.history.state, "", target);
-      } else {
-        globalThis.history.pushState({ [APP_ENTRY]: true }, "", target);
+    playScreenTransition(screenMove(shown.current, next), () => {
+      const url = urlOf(next);
+      if (location.pathname !== url) {
+        const target = `${url}${location.search}`;
+        if (replace) {
+          globalThis.history.replaceState(globalThis.history.state, "", target);
+        } else {
+          globalThis.history.pushState({ [APP_ENTRY]: true }, "", target);
+        }
       }
-    }
-    setState(next);
+      // `flushSync` commits this before the transition's second snapshot: the
+      // URL and the screen it names change together, or the snapshot would
+      // hold one without the other.
+      setState(next);
+    });
   }, []);
 
   const push = useCallback((next: UrlState) => move(next, false), [move]);
@@ -93,9 +114,9 @@ export function useRoute(): RouteControls {
 
   const dismiss = useCallback((next: UrlState) => {
     if (canGoBack()) {
+      // `popstate` restores the state from the restored path — and decides
+      // the direction of the move, which is why nothing is set here.
       globalThis.history.back();
-      // The `popstate` listener restores the state from the restored path;
-      // nothing is set here, or the two would race.
       return;
     }
     move(next, true);

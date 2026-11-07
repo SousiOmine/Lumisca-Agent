@@ -123,6 +123,11 @@
   gap: 8px;
 }
 
+/* The body sits inside `.collapse` (whole-row disclosure, motion.css), which
+ * is what animates the height. The border stays here rather than on the
+ * wrapper: the wrapper is the thing being clipped, and its own border would
+ * survive the collapse as a stray hairlines above the row. */
+
 .todo-phase-name {
   font-weight: 600;
   color: var(--text-dim);

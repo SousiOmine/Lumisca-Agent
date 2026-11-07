@@ -78,6 +78,18 @@
     animation-name: lum-fade-only;
   }
 
+  /* A screen transition is travel by construction (the two snapshots cross the
+   * window), so the movement goes and the two screens cross-fade instead — the
+   * same answer the wide-window layout gives everyone. The keyframes are named
+   * by the direction's travel, so the fade ones replace both. */
+  ::view-transition-old(root) {
+    animation-name: lum-vt-fade-out;
+  }
+
+  ::view-transition-new(root) {
+    animation-name: lum-vt-fade-in;
+  }
+
   /* Popovers and dialogs are anchored to something; the scale is what says
    * "this came from here", and it is also what makes a reduced-motion reader
    * dizzy. They open with the fade alone. */
@@ -132,6 +144,16 @@
    * slides is motion like any other, and a reader who asked for less of it
    * wants the space to be there, not to watch it arrive. */ .stella-pane,
   .stella-main {
+    transition: none;
+  }
+
+  /* A disclosure opening or closing: the height IS the movement, and the
+   * body's fade is what is left of it. Without the fade the content would
+   * simply appear and vanish at the row it belongs to, which is the state
+   * this rule exists to keep honest — the same "keep the fade, drop the
+   * travel" answer the rest of this file gives. */
+  .collapse,
+  .collapse > .collapse-inner > * {
     transition: none;
   }
 

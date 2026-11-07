@@ -393,6 +393,15 @@ export function App({ initialData }: AppProps): ReactElement {
   const closeSettings = useCallback(() => {
     router.dismiss({ ...urlRef.current, settings: null });
   }, [router]);
+  /** Back from a category page to the category list (the dialog's own back
+   * button on a narrow window). A pop for the same reason as stella's: the
+   * list is the screen the reader came from, so the button and the browser's
+   * back are one move — and the transition draws the direction from it. The
+   * dialog itself stays open: the address keeps `settings`, only its category
+   * goes. */
+  const backToSettingsList = useCallback(() => {
+    router.dismiss({ ...urlRef.current, settings: { category: null } });
+  }, [router]);
   // Bumped when the settings dialog closes: the draft re-reads the default
   // model there, since registering (or removing) a provider changes what a
   // new session would run on. A dialog without a provider change only costs
@@ -444,9 +453,17 @@ export function App({ initialData }: AppProps): ReactElement {
   /** The conversation the address names, or null for the agent list. */
   const stellaAgentId = url.route.kind === "stella" ? url.route.agentId : null;
   const stella = useStella(stellaActive, stellaAgentId);
+  // Back to the list. A pop, not a push: the list is the screen the reader
+  // came from, so the back button and the browser's back are the same move —
+  // and the same one the transition draws (screen-transition.ts). A list
+  // reached any other way (a link into a conversation) has nothing behind it,
+  // and dismiss then replaces the entry instead.
   const goToStellaList = useCallback(() => {
-    pushUrl({ route: { kind: "stella", agentId: null }, settings: null });
-  }, [pushUrl]);
+    router.dismiss({
+      route: { kind: "stella", agentId: null },
+      settings: null,
+    });
+  }, [router]);
   const goToStellaAgent = useCallback((id: string) => {
     pushUrl({ route: { kind: "stella", agentId: id }, settings: null });
   }, [pushUrl]);
@@ -770,6 +787,7 @@ export function App({ initialData }: AppProps): ReactElement {
           push={push}
           category={settingsRoute.category}
           onOpenCategory={openSettingsAt}
+          onBackToList={backToSettingsList}
           routines={routines}
           routineAgent={routineAgentName}
           mode={mode}

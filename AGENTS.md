@@ -138,6 +138,16 @@ Deno は公開から 24 時間以内のバージョンを既定では導入し�
 - **存在しない画面はモードのトップへ**。消えたセッション・消えたエージェント・知らないカテゴリは、エラー画面ではなく使える画面に倒します（このアプリに 404 ページはありません）。
 - **`/code` の状態は URL のタブだけ**。以前の「開いていたタブをすべて `localStorage` から復元」は廃止しました（URL が同じ問いに答えるため）。タブバーはこのページが開いたセッションの一覧です。
 - **ドラフトはセッションの集合で管理**。`/code` の下書きは、セッションへ移っても消えません（`useDrafts` は `useTabs` の `open` をキーにします）。
+- **画面遷移は階層のある移動だけ**: 遷移するのは stella の一覧 ⇄ 会話と、設定の一覧 ⇄ カテゴリページです。判定は `packages/web/src/screen-transition.ts` の `screenMove` がアドレスの組から決め、`hooks/useRoute.ts` の push / replace / `popstate` が `playScreenTransition` を通します。タブの切り替え、新規セッション画面とセッション、ダイアログの開閉は遷移しません（並列の面であり、階層ではないためです）。向きは `<html data-vt="push|back">` として JS が書き、形は `styles/motion.css` が決めます（600px 以下は横スライド、それ以上はフェード）。
+  - **内側の要素に `view-transition-name` を書かない**: 名前を持つ要素は別スナップショットになり、同時に包含ブロックになります。`position: fixed` のダイアログと仮想マシンの画面ペインが、自分自身ではなくその要素を基準に置かれて壊れます（`styles_test.ts` が固定）。
+  - **`flushSync` が要る**: Preact は描画をマイクロタスクに積むので、遷移のコールバックの中で `flushSync` をしないと、2 枚目のスナップショットが前の画面のままになります。
+  - **戻るは履歴を戻す**: 一覧へ戻る操作（stella の戻る、設定ページの戻る）は `push` ではなく `router.dismiss` です。向きはアドレスの組から決まるので、ボタンとブラウザの戻るが同じ動きになります。設定の `showPage` は廃止し、表示は `category` から導出します（住所が唯一の答え）。
+  - **未対応ブラウザでは動かないだけ**: Safari 18 / Firefox 133 より前にはアニメーションが付きません。画面の移り方は同じです。
+- **開閉する面は `.collapse` を使う**: 進捗の行（`components/Panel.tsx`）、ツール呼び出し（`components/ToolCall.tsx`）、通知行（`components/SystemRow.tsx`）、ターンの作業ログ（`components/chat/ConversationTurn.tsx`）は、本体を**常にマウント**し、`className="collapse" data-open={open}` の内側に `collapse-inner` を挟みます（規則は `styles/motion.css`）。
+  - **`{open && …}` を書かない**: アンマウントした要素は閉じる動きを持てません。開閉は `data-open` 1 か所で表します。
+  - **高さは `grid-template-rows: 0fr ⇄ 1fr`**: 測った `height` を書くと、ストリーミングで伸びる中身に対して次のフレームには古くなります。`1fr` はブラウザが中身から答え続けます。`width` / `height` は今までどおり動かしません。
+  - **`overflow: hidden` は `collapse-inner` に**: 本体の `max-height` / `overflow-y`（進捗の行はその中でスクロールします）を保つためです。`collapse > .collapse-inner > *` がフェードを持つので、内側の面に `opacity` のアニメを足さないでください。
+  - **運動を減らす設定では止める**: `reduced-motion.css` が `.collapse` の `transition` を `none` にします。高さは動きそのものです。
 
 ### リモート接続での応答
 

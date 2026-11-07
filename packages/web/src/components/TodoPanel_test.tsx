@@ -41,10 +41,12 @@ Deno.test("TodoPanel is a one-line row naming the running task", () => {
   assertStringIncludes(html, "進捗");
   // done/total over the whole plan.
   assertStringIncludes(html, "1/3");
-  // The row itself says what is happening; the tasks stay in the collapsed
-  // body (and out of the markup while it is closed).
+  // The row itself says what is happening; the tasks are in the body, which
+  // is mounted but collapsed to no height (styles/motion.css, `.collapse`:
+  // a body that is not in the DOM cannot animate closed).
   assertStringIncludes(html, "原因を特定する");
-  assertEquals(html.includes("todo-panel-body"), false);
+  assertStringIncludes(html, "todo-panel-body");
+  assertStringIncludes(html, 'data-open="false"');
   // Collapsed is the only starting state: the row shares the input area's
   // height with the composer.
   assertStringIncludes(html, "todo-panel collapsed");

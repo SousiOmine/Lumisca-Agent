@@ -73,6 +73,11 @@ interface SettingsModalProps {
   category: SettingsCategory | null;
   /** Move to another category (a navigation: the address names the page). */
   onOpenCategory: (category: SettingsCategory | null) => void;
+  /** Back from a category page to the category list, on the narrow layout
+   * where the two are two screens. A navigation like the one above — the
+   * address says which of the two is showing — so the browser's back and this
+   * button are the same move. */
+  onBackToList: () => void;
   /** The routines of the active stella agent (empty in code mode, which has
    * no agent), plus which agent they belong to. */
   routines: ReturnType<typeof useRoutines>;
@@ -391,6 +396,7 @@ export function SettingsModal({
   push,
   category,
   onOpenCategory,
+  onBackToList,
   routines,
   routineAgent,
   mode,
@@ -398,12 +404,6 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const t = useT();
   const stepped = useMediaQuery(COMPACT_QUERY);
-  // On a narrow window the navigation and the page are two screens: the
-  // dialog opens on the list when the address names no page (the app menu's
-  // way in), and on the page when it names one (a link into a category).
-  // Read once, at mount — a resize must not throw the reader out of the page
-  // they are on.
-  const [showPage, setShowPage] = useState(stepped && category !== null);
   /** The page being shown. Without one in the address this is the dialog's
    * own: 一般 beside the navigation, the first screen of the list. The
    * reader's clicks move it, and move the address with it (openCategory). */
@@ -414,6 +414,13 @@ export function SettingsModal({
   const userProviders = useUserProviders();
   const groups = navGroups(CATEGORIES, mode);
   const entry = CATEGORIES.find((candidate) => candidate.id === shown);
+  // Which of the two screens the narrow layout is showing. On a wide window
+  // both fit, so this is always the page. On a narrow one it is the address's
+  // answer: a page named means the page, no page named means the list that
+  // leads to one. The dialog does not remember it, because it is not the
+  // dialog's to remember — the back button, the browser's back and a link into
+  // a category all have to land on the same screen.
+  const view = stepped && category === null ? "list" : "page";
 
   // The address is the page: a link, a back or a forward moves it, and this
   // follows. It is also where a category change lands, since the click goes
@@ -421,7 +428,6 @@ export function SettingsModal({
   useEffect(() => {
     if (category === null) return;
     setShown(category);
-    setShowPage(true);
     // A category change drops the previous category's own screens (a
     // provider detail does not exist in the MCP list).
     setProvidersView({ kind: "list" });
@@ -432,7 +438,6 @@ export function SettingsModal({
    * screens, which a new category cannot keep. */
   const openCategory = (id: SettingsCategory) => {
     setProvidersView({ kind: "list" });
-    setShowPage(true);
     onOpenCategory(id);
   };
 
@@ -453,6 +458,7 @@ export function SettingsModal({
       push,
       category,
       onOpenCategory,
+      onBackToList,
       routines,
       routineAgent,
       mode,
@@ -464,9 +470,6 @@ export function SettingsModal({
   };
 
   const modeName = t(modeLabelKey(mode));
-  // `list` / `page` are read by the stylesheet: on a narrow window only one of
-  // the two columns exists at a time.
-  const view = stepped && !showPage ? "list" : "page";
 
   return (
     <Modal
@@ -532,7 +535,7 @@ export function SettingsModal({
             <div className="settings-content">
               <SettingsPage
                 title={t(entry?.labelKey ?? "common.settings")}
-                onBack={stepped ? () => setShowPage(false) : undefined}
+                onBack={stepped ? onBackToList : undefined}
               >
                 {entry?.render(panels)}
               </SettingsPage>

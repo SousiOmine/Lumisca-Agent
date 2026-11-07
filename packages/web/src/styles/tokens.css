@@ -148,6 +148,22 @@
   --lum-dur-fast: 120ms;
   --lum-dur-mid: 180ms;
   --lum-dur-slow: 240ms;
+  /* A disclosure opening or closing (motion.css, `.collapse`). Longer than
+   * `--lum-dur-slow` on purpose: the movement is a whole block of content
+   * changing the list's height, and at 240ms it reads as a jump rather than
+   * as the row unfolding. Still under 300ms, like every other UI reply. */
+  --lum-dur-collapse: 260ms;
+
+  /* Where a screen transition's two snapshots travel (motion.css). The
+   * defaults are the wide-window shape: neither moves, and the two cross-fade
+   * instead — a full-width screen sliding sideways is a lot of motion for a
+   * neighbour that was already beside it. The phone block in motion.css gives
+   * each direction its own travel. */
+  --vt-in: 0%;
+  --vt-out: 0%;
+  /* Which snapshot paints on top. The arriving screen does, at every width. */
+  --vt-old-z: 0;
+  --vt-new-z: 1;
 }
 
 /* Phone: the pane is the screen. A floating sheet with a margin around it

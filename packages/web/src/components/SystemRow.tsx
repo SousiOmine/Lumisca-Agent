@@ -76,13 +76,15 @@ export function SystemRow({
           <span className="notification-line-error">{t("common.error")}</span>
         )}
       </div>
-      {open && (
-        <div className="notification-detail">
-          <div className="notification-detail-body">
-            <pre>{body}</pre>
+      <div className="collapse below" data-open={open}>
+        <div className="collapse-inner">
+          <div className="notification-detail">
+            <div className="notification-detail-body">
+              <pre>{body}</pre>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

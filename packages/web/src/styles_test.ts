@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { THEME_COLORS } from "@lumisca/core/shared";
 
 /**
@@ -873,4 +873,167 @@ Deno.test("the window controls keep the right edge of the title bar", async () =
   // be read again rather than silently kept.
   const tabbar = declarations(cssRules(chrome), ".titlebar .tabbar");
   assertEquals(tabbar.get("flex"), "1");
+});
+
+Deno.test("a screen transition slides on a phone and fades elsewhere", async () => {
+  // The two halves of the screen-transition contract (<htmldata-vt> is written
+  // by screen-transition.ts). A direction that reached the wide layout would
+  // slide a full-width column sideways, and a `view-transition-name` on an
+  // inner element would snapshot it separately — which makes it a containing
+  // block and moves `position: fixed` surfaces (every dialog, the machine's
+  // screen) out from under themselves.
+  const motion = await Deno.readTextFile(
+    new URL("./styles/motion.css", import.meta.url),
+  );
+  const rules = cssRules(motion);
+  const named = rules.filter((rule) => /view-transition-name/.test(rule.body));
+  assertEquals(
+    named.map((rule) => `${rule.selector} { view-transition-name }`),
+    [],
+    "a view-transition-name snapshots an inner element apart from the page",
+  );
+
+  // Wide windows fade: the travelling keyframes are the phone's, and the
+  // default pair is the fade.
+  const fade = rules.filter((rule) =>
+    rule.media === null && /animation-name: lum-vt-fade/.test(rule.body)
+  );
+  assertEquals(
+    fade.map((rule) => rule.selector).sort(),
+    ["::view-transition-new(root)", "::view-transition-old(root)"],
+    "the wide layout cross-fades the two screens",
+  );
+  const travel = rules.filter((rule) =>
+    rule.media?.includes("max-width: 600px") === true &&
+    /animation-name: lum-vt-(in|out)/.test(rule.body)
+  );
+  assertEquals(
+    travel.map((rule) => rule.selector).sort(),
+    ["::view-transition-new(root)", "::view-transition-old(root)"],
+    "the slide is the phone's, and both snapshots take part in it",
+  );
+
+  // Both directions have travel to read: a direction without them would
+  // animate from the same place as the other, which reads as a fade with a
+  // jump. Read from the phone block, where the directions live.
+  for (const direction of ["push", "back"]) {
+    const selector = `html[data-vt="${direction}"]`;
+    const bodies = rules
+      .filter((rule) => rule.selector === selector)
+      .map((rule) => rule.body)
+      .join("");
+    for (const name of ["--vt-in", "--vt-out", "--vt-old-z", "--vt-new-z"]) {
+      assert(
+        new RegExp(`${name}\\s*:`).test(bodies),
+        `${selector} must set ${name}`,
+      );
+    }
+  }
+
+  // Reduced motion keeps the fades and drops the travel (the sheet's own
+  // rule: fewer and gentler, not none).
+  const reduced = await Deno.readTextFile(
+    new URL("./styles/reduced-motion.css", import.meta.url),
+  );
+  const overrides = cssRules(reduced).filter((rule) =>
+    rule.media?.includes("prefers-reduced-motion") === true &&
+    rule.selector.startsWith("::view-transition-")
+  );
+  assertEquals(
+    overrides.map((rule) => rule.selector).sort(),
+    ["::view-transition-new(root)", "::view-transition-old(root)"],
+    "a screen transition must cross-fade under reduced motion",
+  );
+});
+
+Deno.test("a disclosure animates its height, and only that", async () => {
+  // The one place the app moves a size (styles/README.md rule 4): a body
+  // that opens has no height to transform, so the row is animated as
+  // `grid-template-rows: 0fr` ⇄ `1fr`. `height`/`width` stay forbidden — the
+  // former has no "as tall as the content" answer and would be a number
+  // written from a measurement that the streaming body invalidates, and the
+  // latter the noVNC canvas reads for its scale.
+  const motion = await Deno.readTextFile(
+    new URL("./styles/motion.css", import.meta.url),
+  );
+  const rules = cssRules(motion);
+  const base = declarations(rules, ".collapse");
+  assertEquals(
+    base.get("grid-template-rows"),
+    "0fr",
+    "a closed disclosure has no height",
+  );
+  assertEquals(
+    base.get("visibility"),
+    "hidden",
+    "a closed body must leave the tab order",
+  );
+  const opened = declarations(rules, '.collapse[data-open="true"]');
+  assertEquals(
+    opened.get("grid-template-rows"),
+    "1fr",
+    "an open disclosure is as tall as its content",
+  );
+
+  // The row's own transition is the height; the body's fade is the only
+  // other thing that moves. No rule measures a size.
+  const rowRules = rules.filter((rule) =>
+    /^\.collapse(\[data-open="true"\])?$/.test(rule.selector)
+  );
+  assertEquals(rowRules.length, 2, "the collapse has one rule per state");
+  for (const rule of rowRules) {
+    const transition = /transition\s*:([^;]+);/.exec(rule.body)?.[1] ?? "";
+    assertEquals(
+      /^\s*grid-template-rows\b/.test(transition.trim()),
+      true,
+      `a disclosure animates its row, not: ${transition}`,
+    );
+  }
+  for (const rule of rules) {
+    const transition = /transition\s*:([^;]+);/.exec(rule.body)?.[1] ?? "";
+    if (!rule.selector.includes("collapse")) continue;
+    assertEquals(
+      /\b(width|height)\b/.test(transition),
+      false,
+      `a disclosure must not animate a size: ${transition}`,
+    );
+  }
+
+  // Reduced motion: the travel goes and the fade stays (rule 6).
+  const reduced = await Deno.readTextFile(
+    new URL("./styles/reduced-motion.css", import.meta.url),
+  );
+  const stopped = cssRules(reduced).filter((rule) =>
+    rule.media?.includes("prefers-reduced-motion") === true &&
+    rule.selector.split(",").some((part) => part.trim() === ".collapse")
+  );
+  assertEquals(
+    stopped.map((rule) => rule.body.trim()),
+    ["transition: none;"],
+    "a disclosure must not travel under reduced motion",
+  );
+});
+
+Deno.test("a disclosure's body is always mounted", async () => {
+  // A body that unmounts cannot animate closed, so `{open && <div>…}` is the
+  // thing this rule forbids. The state travels as `data-open` instead.
+  const sources = [
+    "components/Panel.tsx",
+    "components/ToolCall.tsx",
+    "components/SystemRow.tsx",
+    "components/chat/ConversationTurn.tsx",
+  ];
+  const missing: string[] = [];
+  for (const name of sources) {
+    const source = await Deno.readTextFile(
+      new URL(`./${name}`, import.meta.url),
+    );
+    if (!/className="collapse/.test(source)) {
+      missing.push(`${name}: no collapse`);
+    }
+    if (!/className="collapse-inner"/.test(source)) {
+      missing.push(`${name}: no collapse-inner`);
+    }
+  }
+  assertEquals(missing, [], "disclosures that do not use the shared shape");
 });

@@ -257,27 +257,35 @@ export const ConversationTurn = memo(function ConversationTurn({
           }}
         />
       )}
-      {(fragment || running || expanded) && (
-        <div className="agent-work-log">
-          {workLog.map((message, index) => (
-            <MessageRow
-              key={`${message.timestamp}-${index}`}
-              message={message}
-              toolResults={toolResults}
-              runningTools={runningTools}
-              visualBase={visualBase}
-              onRewind={onRewind}
-            />
-          ))}
-          {finalAssistant && finalToolCalls.length > 0 && (
-            <AssistantTools
-              assistant={finalAssistant}
-              toolResults={toolResults}
-              runningTools={runningTools}
-            />
-          )}
+      {
+        /* Open while running (the reader watches the work) and while a
+         * fragment is drawn (its rows ARE the turn). Both are states the
+         * reader did not toggle, but the row still has a height either way,
+         * so it goes through the same disclosure. */
+      }
+      <div className="collapse" data-open={fragment || running || expanded}>
+        <div className="collapse-inner">
+          <div className="agent-work-log">
+            {workLog.map((message, index) => (
+              <MessageRow
+                key={`${message.timestamp}-${index}`}
+                message={message}
+                toolResults={toolResults}
+                runningTools={runningTools}
+                visualBase={visualBase}
+                onRewind={onRewind}
+              />
+            ))}
+            {finalAssistant && finalToolCalls.length > 0 && (
+              <AssistantTools
+                assistant={finalAssistant}
+                toolResults={toolResults}
+                runningTools={runningTools}
+              />
+            )}
+          </div>
         </div>
-      )}
+      </div>
       {finalAssistant && contentText(finalAssistant.content) && (
         <AssistantText message={finalAssistant} visualBase={visualBase} />
       )}
