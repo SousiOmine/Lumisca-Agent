@@ -247,6 +247,18 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
 - **`LumiscaCore` とエージェント管理**  
   `LumiscaCore` はシステム全体のファサードとコンポジションルートです。コンストラクタで協調動作する各コンポーネントを初期化し、テスト時にはモックへ差し替えられます。エージェント周りは `SessionAgent`（本体）、`RetryManager`（リトライ制御）、`GoalRunner`（ゴール自律実行）、`SessionPool`（ライフサイクル管理）で、`TranscriptStore` がメッセージの永続化とメモリ上の履歴の整合性を持ちます。新規セッションのモデルは「明示指定、直近のモデル、設定済みプロバイダーの最初の有効モデル」の順で決め、設定が済んでいないプロバイダーは自動選択しません。
 
+- **プロバイダーの OAuth ログイン（ChatGPT サブスクリプション / `models/chatgpt/`）**  
+  ChatGPT Plus/Pro などのサブスクリプションで OpenAI のモデルを使えるようにします。プロバイダー id は `openai-codex`、表示名は `ChatGPT` です。認証結果は通常の credential store に `OAuthCredential`（access / refresh / `expiresAt` / `accountId`）として保存します。モデル一覧はアカウントごとに異なるため models.dev にはなく、ログイン時に認証付きで `GET /backend-api/codex/models` を取得して設定（`chatgpt_models`）に保存します。取得に失敗したらログイン自体を失敗させます。モデルの無いプロバイダーは使えず、推測した一覧はプランに無いモデルを並べるためです。
+
+  認証フローは 2 つあり、どちらを使うかはクライアントが `POST /providers/:id/login` の `method` で明示します。サーバーは既定を選びません。
+
+  - **デバイスコード**: `auth.openai.com/codex/device` を開いて確認コードを入力する方式です。ブラウザとサーバーが別マシンでも動きます。ChatGPT のセキュリティ設定でデバイスコードログインを有効にする必要があり、無効なら 404 をその旨のエラーに変えます。
+  - **ブラウザ**: サーバー機の `127.0.0.1:1455`（使用中なら 1457）に一時的なコールバックを受ける方式です。Codex CLI の公開クライアントが許可するリダイレクト先がこの 2 ポートだけなので、ブラウザとサーバーが同じマシンのときしか成立しません。ルートも Origin と Host が loopback のときだけ受け付け、UI はそれ以外でブラウザのボタンを出しません。
+
+  推論リクエストは Responses API を `https://chatgpt.com/backend-api/codex` に向けます。このバックエンドは公式 API ではなく、トップレベルの `instructions` が無い要求を拒否し、会話状態を保存しません。そこで transport は `systemMessageMode: "remove"` と `instructions`（システムプロンプト）と `store: false` を providerOptions で渡します（`ai/stream.ts` の `chatgptProviderOptions`）。`ChatGPT-Account-Id` は credential から導出し、モデルの静的ヘッダーに重ねます（`resolveCredential` の `headers`）。アクセストークンは期限の 60 秒前に更新し、同一プロセス内の同時要求は 1 回の更新を共有します（更新トークンはローテーションされるため、2 回交換すると片方が無効になります）。
+
+  この API は非公開で、仕様変更や利用制限の対象になりえます。壊れたときに直す場所が `models/chatgpt/` と `chatgptProviderOptions` で済むよう、プロトコルの知識をそこに閉じ込めています。
+
 - **コンテキスト圧縮（`ai/context-compaction.ts`）**  
   モデルのコンテキスト上限を超えないよう、履歴を自動で圧縮します。予算はモデルのコンテキスト長を公開された入力上限（models.dev の `limit.input`）まで狭めた値で、しきい値（予算から `reserveTokens` を引いた値）に達したら圧縮します。過去のメッセージは削除せず、区切り位置に `checkpoint` メッセージを挿入し、モデルには最新のチェックポイント以降だけを渡します。
 

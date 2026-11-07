@@ -7,6 +7,7 @@
  */
 
 import type { PromptFileRef } from "../shared/attachments.ts";
+import type { ProviderLoginMethod } from "../shared/providers.ts";
 
 // ---- transport / api -------------------------------------------------------
 
@@ -410,10 +411,7 @@ export interface Provider<TApi extends Api = Api> {
     credential?: Credential;
     env: Record<string, string | undefined>;
     signal?: AbortSignal;
-  }): Promise<
-    | { auth: { apiKey: string }; source?: string }
-    | undefined
-  >;
+  }): Promise<ResolvedAuth | undefined>;
   /** Optional stream function owned by the provider (used by test doubles
    * such as the faux provider to intercept LLM calls). When set, requests
    * for this provider's models route through it instead of the Vercel
@@ -422,6 +420,15 @@ export interface Provider<TApi extends Api = Api> {
 }
 
 export type ProviderHeaders = Record<string, string | null>;
+
+/** What one request needs from a provider's credential. `headers` carries
+ * values derived from the credential itself (the ChatGPT account id, for
+ * one), which the transport merges over the provider's static headers. */
+export interface ResolvedAuth {
+  auth: { apiKey: string };
+  source?: string;
+  headers?: Record<string, string>;
+}
 
 export interface ProviderAuth {
   apiKey?: ApiKeyAuth;
@@ -436,14 +443,14 @@ export interface ApiKeyAuth {
     credential?: Credential;
     env: Record<string, string | undefined>;
     signal?: AbortSignal;
-  }): Promise<
-    | { auth: { apiKey: string }; source?: string }
-    | undefined
-  >;
+  }): Promise<ResolvedAuth | undefined>;
 }
 
 export interface OAuthAuth {
   name: string;
+  /** Sign-in methods the flow can run, in the order the UI offers them.
+   * A provider with more than one has to be told which one to run. */
+  methods: readonly ProviderLoginMethod[];
   login(interaction: AuthInteraction): Promise<Credential>;
 }
 
@@ -461,6 +468,11 @@ export interface OAuthCredential {
   refreshToken?: string;
   /** When the token expires (epoch ms). */
   expiresAt?: number;
+  /** The account the token belongs to, when the provider identifies one.
+   * The ChatGPT backend requires it as the `ChatGPT-Account-Id` header; it
+   * is read from the token's claims at login and carried across refreshes
+   * (a refresh response need not repeat it). */
+  accountId?: string;
 }
 
 export type Credential = ApiKeyCredential | OAuthCredential;
@@ -546,6 +558,10 @@ export interface AuthInteraction {
   prompt(input: AuthPrompt): Promise<string>;
   /** Tell the UI what to do next (open a URL, poll for a device code). */
   notify(input: AuthNotice): void;
+  /** How the sign-in should run, when the client chose a method. The
+   * server never picks one on the flow's behalf: a flow that supports more
+   * than one method refuses to start without it. */
+  method?: ProviderLoginMethod;
   /** Abort the flow (user cancelled). */
   abort?(): void;
   signal: AbortSignal;

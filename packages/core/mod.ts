@@ -105,7 +105,6 @@ export type { McpAuthSnapshot, McpAuthStatus } from "./mcp/oauth-session.ts";
 export { THEME_KEY } from "./settings/repo.ts";
 export { resolveSettingsPath, SETTINGS_DIR_NAME } from "./settings/path.ts";
 export type { ConnectionEntry } from "./settings/connections.ts";
-export { autoAnswerSelect } from "./models/interaction.ts";
 export type {
   UserProviderInput,
   UserProviderSummary,
@@ -133,6 +132,7 @@ export type {
   ProviderAuthType,
   ProviderInfo,
   ProviderLoginEvent,
+  ProviderLoginMethod,
   ProviderLoginPrompt,
   ProviderLoginSnapshot,
   Routine,

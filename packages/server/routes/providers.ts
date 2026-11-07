@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
+import { isLoopbackHost } from "@lumisca/core/shared";
 import type {
   AuthCheck,
   AuthInteraction,
@@ -20,6 +21,7 @@ import {
 } from "./util.ts";
 import { ttlCache } from "../cache.ts";
 import { LoginSessions } from "../login.ts";
+import { hostnameOf } from "../security.ts";
 
 /** Auth checks are cached briefly; invalidated when a key or credential
  * (login/logout) changes. */
@@ -76,6 +78,21 @@ export interface ProviderApi {
   refreshModelCatalog(): Promise<CatalogStatus>;
 }
 
+/** Whether the page that asked lives on this machine: both the request's
+ * Host and the page's Origin are loopback. The browser sign-in finishes at
+ * a callback on the server's own 127.0.0.1, so a page opened elsewhere
+ * cannot receive it. */
+function pageIsLocal(c: Context): boolean {
+  if (!isLoopbackHost(hostnameOf(c.req.header("host")))) return false;
+  const origin = c.req.header("origin");
+  if (origin === undefined) return false;
+  try {
+    return isLoopbackHost(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function providerRoutes(core: ProviderApi): Hono {
   const app = new Hono();
 
@@ -125,6 +142,9 @@ export function providerRoutes(core: ProviderApi): Hono {
           id: p.id,
           name: p.name,
           ...check,
+          ...(p.auth.oauth !== undefined
+            ? { loginMethods: p.auth.oauth.methods }
+            : {}),
           userDefined: core.isUserProvider(p.id),
         };
       }),
@@ -200,17 +220,42 @@ export function providerRoutes(core: ProviderApi): Hono {
 
   // OAuth login sessions (ChatGPT Plus/Pro and other subscription
   // providers). The flow runs server-side; the client polls the session
-  // until it settles and answers any prompt the flow forwards. On Deno only
-  // the device-code method works, which the bridge auto-selects.
+  // until it settles and answers any prompt the flow forwards. The sign-in
+  // method is the client's: no default is chosen here, because the two
+  // methods are not interchangeable (only a page on this machine can finish
+  // the browser flow).
   const loginSessions = new LoginSessions();
 
-  app.post("/providers/:id/login", (c) => {
+  app.post("/providers/:id/login", async (c) => {
     const id = c.req.param("id");
-    if (!core.listProviders().some((p) => p.id === id)) {
+    const provider = core.listProviders().find((p) => p.id === id);
+    if (provider === undefined) {
       throw new AppError(`Provider not found: ${id}`, 404);
     }
-    if (core.getProviderAuthType(id) !== "oauth") {
+    const oauth = provider.auth.oauth;
+    if (oauth === undefined) {
       throw new AppError(`${id} does not support OAuth login`, 400);
+    }
+    const body = await parseBody<{ method?: unknown }>(c);
+    const method = body?.method;
+    if (method !== "browser" && method !== "device_code") {
+      throw new AppError(
+        'method must be "browser" or "device_code"',
+        400,
+      );
+    }
+    if (!oauth.methods.includes(method)) {
+      throw new AppError(
+        `${id} does not support the ${method} login method`,
+        400,
+      );
+    }
+    if (method === "browser" && !pageIsLocal(c)) {
+      throw new AppError(
+        "browser login needs the page to be opened on the server machine; " +
+          "use device_code",
+        400,
+      );
     }
     // Reuse an already-running flow so repeated clicks cannot stack
     // concurrent polls (which OpenAI rate-limits with 429 errors).
@@ -218,6 +263,7 @@ export function providerRoutes(core: ProviderApi): Hono {
     if (active) return c.json({ sessionId: active.sessionId });
     const session = loginSessions.create(
       id,
+      method,
       (interaction) => core.loginProvider(id, "oauth", interaction),
     );
     return c.json({ sessionId: session.sessionId });

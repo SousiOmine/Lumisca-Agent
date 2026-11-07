@@ -3,8 +3,18 @@ import { friendlyLoginError, LoginSession } from "./login.ts";
 import type { AuthInteraction } from "@lumisca/core";
 import type { ProviderLoginSnapshot } from "@lumisca/core";
 
-function create(script: (interaction: AuthInteraction) => Promise<void>) {
-  const session = new LoginSession("openai-codex", script, () => {});
+function create(
+  script: (interaction: AuthInteraction) => Promise<void> | void,
+  method: "browser" | "device_code" = "device_code",
+) {
+  const session = new LoginSession(
+    "openai-codex",
+    method,
+    async (interaction) => {
+      await script(interaction);
+    },
+    () => {},
+  );
   const wait = (status: string, timeoutMs = 2000) => {
     const deadline = Date.now() + timeoutMs;
     return new Promise<void>((resolve, reject) => {
@@ -22,25 +32,19 @@ function create(script: (interaction: AuthInteraction) => Promise<void>) {
   return { session, wait };
 }
 
-Deno.test("LoginSession auto-selects the device-code method and records its event", async () => {
-  const { session, wait } = create(async (interaction) => {
-    const method = await interaction.prompt({
-      type: "select",
-      message: "Select login method:",
-      options: [
-        { id: "browser", label: "Browser login (default)" },
-        { id: "device_code", label: "Device code login (headless)" },
-      ],
-    });
-    assertEquals(method, "device_code");
+Deno.test("LoginSession carries the chosen method to the flow", async () => {
+  let seen: "browser" | "device_code" | undefined;
+  const { session, wait } = create((interaction) => {
+    seen = interaction.method;
     interaction.notify({
       type: "device_code",
       userCode: "ABCD-EFGH",
       verificationUri: "https://auth.openai.com/codex/device",
     });
-  });
+  }, "browser");
   try {
     await wait("done");
+    assertEquals(seen, "browser");
     const snap = session.snapshot();
     assertEquals(snap.status, "done");
     assertEquals(snap.events, [{
@@ -54,12 +58,15 @@ Deno.test("LoginSession auto-selects the device-code method and records its even
   }
 });
 
-Deno.test("LoginSession forwards a non-device prompt and resolves via respond", async () => {
+Deno.test("LoginSession forwards even a device-code-looking select prompt", async () => {
   const { session, wait } = create(async (interaction) => {
     const picked = await interaction.prompt({
       type: "select",
       message: "Pick one:",
-      options: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
+      options: [
+        { id: "browser", label: "Browser login (default)" },
+        { id: "device_code", label: "Device code login (headless)" },
+      ],
     });
     interaction.notify({ type: "progress", message: `chose ${picked}` });
   });
@@ -74,13 +81,13 @@ Deno.test("LoginSession forwards a non-device prompt and resolves via respond", 
     assert(snap.prompt, "expected a forwarded prompt");
     assertEquals(snap.prompt.type, "select");
     const promptId = snap.prompt.id;
-    assert(session.respond(promptId, "b"));
+    assert(session.respond(promptId, "browser"));
     // Re-responding the same id must fail.
     assert(!session.respond(promptId, "x"));
     await wait("done");
     assertEquals(session.snapshot().events, [{
       type: "progress",
-      message: "chose b",
+      message: "chose browser",
     }]);
   } finally {
     session.dispose();

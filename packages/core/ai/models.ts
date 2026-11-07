@@ -74,11 +74,14 @@ export class LumiscaModels {
     return await this.credentials?.read(providerId);
   }
 
-  /** Resolve the effective credential of a provider (env or stored). */
+  /** Resolve the effective credential of a provider (env or stored). The
+   * type comes from the stored credential: a subscription login is "oauth",
+   * not an API key. */
   async checkAuth(providerId: string): Promise<AuthCheck | undefined> {
     const result = await this.resolveKey(providerId);
     if (result === undefined) return undefined;
-    return { source: result.source, type: "api_key" };
+    const stored = await this.credentials?.read(providerId);
+    return { source: result.source, type: stored?.type ?? "api_key" };
   }
 
   /** Run a provider login flow (api_key or oauth) and persist the credential. */
@@ -160,6 +163,10 @@ export class LumiscaModels {
       env: this.env(),
     });
     if (result === undefined) return undefined;
-    return { apiKey: result.auth.apiKey, source: result.source ?? "stored" };
+    return {
+      apiKey: result.auth.apiKey,
+      source: result.source ?? "stored",
+      ...(result.headers !== undefined ? { headers: result.headers } : {}),
+    };
   }
 }

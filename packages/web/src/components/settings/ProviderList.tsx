@@ -96,6 +96,11 @@ export function ProviderList({
   const configured = providers.filter(
     (p) => p.configured !== false || p.userDefined,
   );
+  /** OAuth providers nobody has signed in to yet. They have no models, so
+   * the configured-only rule would hide the only way to start the login. */
+  const signIn = providers.filter(
+    (p) => p.authType === "oauth" && p.configured === false,
+  );
 
   return (
     <SettingsSection
@@ -108,7 +113,15 @@ export function ProviderList({
         </button>
       }
     >
-      {configured.length === 0 && (
+      {signIn.map((p) => (
+        <ProviderRow
+          key={p.id}
+          name={p.name}
+          status={t("settings.provider.login")}
+          onOpen={() => onOpen(p.id)}
+        />
+      ))}
+      {configured.length === 0 && signIn.length === 0 && (
         <p className="settings-note">{t("settings.provider.noProviders")}</p>
       )}
       {configured.map((p) => (

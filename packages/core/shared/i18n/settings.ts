@@ -308,7 +308,24 @@ export const settings = {
   },
   "settings.provider.logout": { ja: "ログアウト", en: "Logout" },
   "settings.provider.login": { ja: "ログイン", en: "Login" },
-  "settings.provider.relogin": { ja: "再ログイン", en: "Re-login" },
+  "settings.provider.loginWithBrowser": {
+    ja: "ブラウザでログイン",
+    en: "Sign in with browser",
+  },
+  "settings.provider.loginWithDeviceCode": {
+    ja: "デバイスコードでログイン",
+    en: "Sign in with a device code",
+  },
+  "settings.provider.loginHint": {
+    ja: "サブスクリプションのアカウントでログインします。",
+    en: "Sign in with your subscription account.",
+  },
+  "settings.provider.loginRemoteHint": {
+    ja:
+      "ブラウザでのログインは、このサーバーと同じマシンで開いたページでのみ使えます。リモート接続ではデバイスコードを使ってください。",
+    en:
+      "Browser sign-in works only on a page opened on the server machine. Use a device code when connecting remotely.",
+  },
   "settings.provider.authWaiting": {
     ja: "認証を待機中…",
     en: "Waiting for authentication…",

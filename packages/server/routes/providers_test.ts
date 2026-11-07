@@ -20,11 +20,32 @@ class FakeProviderApi implements ProviderApi {
    * resolves them, but they are not stored in Lumisca). */
   envAuth = new Set<string>();
   logoutCalls: string[] = [];
-  loginScript: ((interaction: AuthInteraction) => Promise<void>) | undefined;
+  loginScript:
+    | ((interaction: AuthInteraction) => Promise<void> | void)
+    | undefined;
 
   listProviders(): readonly Provider[] {
     return [...this.oauthProviders, "anthropic"].map((id) =>
-      ({ id, name: id }) as Provider
+      ({
+        id,
+        name: id,
+        getModels: () => [],
+        resolveCredential: () => Promise.resolve(undefined),
+        auth: this.oauthProviders.has(id)
+          ? {
+            oauth: {
+              name: id,
+              methods: ["browser", "device_code"] as const,
+              login: () => Promise.reject(new Error("unused")),
+            },
+          }
+          : {
+            apiKey: {
+              name: id,
+              resolve: () => Promise.resolve(undefined),
+            },
+          },
+      }) as Provider
     );
   }
   listModelsDetailed(): ModelInfo[] {
@@ -109,6 +130,20 @@ function makeApp(fake: FakeProviderApi) {
   return app;
 }
 
+/** Start a ChatGPT login with an explicit method (the route refuses to pick
+ * one). Extra headers let a test describe where the page is opened. */
+function startLogin(
+  app: ReturnType<typeof providerRoutes>,
+  method: "browser" | "device_code" = "device_code",
+  headers: Record<string, string> = {},
+) {
+  return app.request("/providers/openai-codex/login", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify({ method }),
+  });
+}
+
 async function snapshot(
   app: ReturnType<typeof providerRoutes>,
   sessionId: string,
@@ -147,6 +182,7 @@ Deno.test("/providers exposes authType per provider", async () => {
       name: "openai-codex",
       configured: false,
       authType: "oauth",
+      loginMethods: ["browser", "device_code"],
       userDefined: false,
     },
     {
@@ -188,16 +224,8 @@ Deno.test("ambient env auth does not mark a provider as configured", async () =>
 
 Deno.test("OAuth login runs a device-code flow and marks the provider configured", async () => {
   const fake = new FakeProviderApi();
-  fake.loginScript = async (interaction) => {
-    const method = await interaction.prompt({
-      type: "select",
-      message: "Select login method:",
-      options: [
-        { id: "browser", label: "Browser login (default)" },
-        { id: "device_code", label: "Device code login (headless)" },
-      ],
-    });
-    assertEquals(method, "device_code", "device method must be auto-selected");
+  fake.loginScript = (interaction) => {
+    assertEquals(interaction.method, "device_code");
     interaction.notify({
       type: "device_code",
       userCode: "ABCD-EFGH",
@@ -208,9 +236,7 @@ Deno.test("OAuth login runs a device-code flow and marks the provider configured
   // Prime the auth cache (unconfigured).
   await app.request("/providers");
 
-  const start = await app.request("/providers/openai-codex/login", {
-    method: "POST",
-  });
+  const start = await startLogin(app);
   assertEquals(start.status, 200);
   const { sessionId } = await start.json();
 
@@ -244,6 +270,56 @@ Deno.test("login is refused for non-OAuth providers and unknown ids", async () =
   assertEquals(unknown.status, 404);
 });
 
+Deno.test("login needs an explicit method", async () => {
+  const app = makeApp(new FakeProviderApi());
+  const missing = await app.request("/providers/openai-codex/login", {
+    method: "POST",
+  });
+  assertEquals(missing.status, 400);
+  const unknown = await app.request("/providers/openai-codex/login", {
+    method: "POST",
+    body: JSON.stringify({ method: "password" }),
+  });
+  assertEquals(unknown.status, 400);
+});
+
+Deno.test("browser login is refused for a page that is not on this machine", async () => {
+  const app = makeApp(new FakeProviderApi());
+  const remote = await startLogin(app, "browser", {
+    host: "myserver.tailnet.ts.net:8000",
+    origin: "http://myserver.tailnet.ts.net:8000",
+  });
+  assertEquals(remote.status, 400);
+  // A loopback host with a remote page is still a remote page.
+  const mismatch = await startLogin(app, "browser", {
+    origin: "http://myserver.tailnet.ts.net:8000",
+  });
+  assertEquals(mismatch.status, 400);
+});
+
+Deno.test("browser login runs when the page is on this machine", async () => {
+  const fake = new FakeProviderApi();
+  fake.loginScript = (interaction) => {
+    assertEquals(interaction.method, "browser");
+    interaction.notify({
+      type: "auth_url",
+      url: "https://auth.openai.com/oauth/authorize?x=1",
+    });
+  };
+  const app = makeApp(fake);
+  const start = await startLogin(app, "browser", {
+    host: "127.0.0.1:8000",
+    origin: "http://127.0.0.1:8000",
+  });
+  assertEquals(start.status, 200);
+  const { sessionId } = await start.json();
+  const snap = await pollUntil(app, sessionId, "done");
+  assertEquals(snap.events, [{
+    type: "auth_url",
+    url: "https://auth.openai.com/oauth/authorize?x=1",
+  }]);
+});
+
 Deno.test("a forwarded prompt resolves through POST respond", async () => {
   const fake = new FakeProviderApi();
   fake.loginScript = async (interaction) => {
@@ -255,10 +331,7 @@ Deno.test("a forwarded prompt resolves through POST respond", async () => {
     interaction.notify({ type: "progress", message: `chose ${picked}` });
   };
   const app = makeApp(fake);
-  const { sessionId } = await (await app.request(
-    "/providers/openai-codex/login",
-    { method: "POST" },
-  )).json();
+  const { sessionId } = await (await startLogin(app)).json();
 
   let snap: ProviderLoginSnapshot;
   const deadline = Date.now() + 2000;
@@ -289,10 +362,7 @@ Deno.test("cancelling a login leaves the provider unconfigured", async () => {
     await interaction.prompt({ type: "manual_code", message: "paste code" });
   };
   const app = makeApp(fake);
-  const { sessionId } = await (await app.request(
-    "/providers/openai-codex/login",
-    { method: "POST" },
-  )).json();
+  const { sessionId } = await (await startLogin(app)).json();
 
   let snap: ProviderLoginSnapshot;
   const deadline = Date.now() + 2000;
@@ -320,14 +390,8 @@ Deno.test("a second login request reuses the running session", async () => {
     await interaction.prompt({ type: "manual_code", message: "paste code" });
   };
   const app = makeApp(fake);
-  const first = await (await app.request(
-    "/providers/openai-codex/login",
-    { method: "POST" },
-  )).json();
-  const second = await (await app.request(
-    "/providers/openai-codex/login",
-    { method: "POST" },
-  )).json();
+  const first = await (await startLogin(app)).json();
+  const second = await (await startLogin(app)).json();
   assertEquals((second as { sessionId: string }).sessionId, first.sessionId);
   assertEquals(started, 1);
   // Clean up so no dangling session keeps polling.
@@ -343,10 +407,7 @@ Deno.test("a failing login surfaces as error without configuring the provider", 
     throw new Error("token exchange failed");
   };
   const app = makeApp(fake);
-  const { sessionId } = await (await app.request(
-    "/providers/openai-codex/login",
-    { method: "POST" },
-  )).json();
+  const { sessionId } = await (await startLogin(app)).json();
   const snap = await pollUntil(app, sessionId, "error");
   assertEquals(snap.error, "token exchange failed");
   assert(!fake.loggedIn.has("openai-codex"));

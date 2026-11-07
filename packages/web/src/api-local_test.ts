@@ -340,7 +340,8 @@ const PROVIDER_CASES: Case[] = [
     name: "providerLogin",
     method: "POST",
     path: "/api/providers/anthropic/login",
-    call: () => api.providerLogin("anthropic"),
+    call: () => api.providerLogin("anthropic", "device_code"),
+    body: '{"method":"device_code"}',
   },
   {
     name: "providerLoginPoll",

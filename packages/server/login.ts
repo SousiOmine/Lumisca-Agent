@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AuthInteraction, AuthNotice, AuthPrompt } from "@lumisca/core";
-import { autoAnswerSelect, errorMessage } from "@lumisca/core";
+import { errorMessage } from "@lumisca/core";
 import type {
   ProviderLoginEvent,
   ProviderLoginPrompt,
@@ -19,15 +19,18 @@ const IDLE_TIMEOUT_MS = 15 * 60_000;
  *
  * The flow runs server-side (started from the POST /login handler, not
  * awaited). `notify` events (device code, auth URL, info, progress) are
- * appended to a log the client polls; `prompt` calls (e.g. the OpenAI
- * Codex "select login method") are answered automatically when they offer
- * the device-code method (the only one that works on Deno), and otherwise
- * queued as the current pending prompt until the client responds via
+ * appended to a log the client polls; `prompt` calls are queued as the
+ * current pending prompt until the client responds via
  * POST /login/:sessionId/respond.
+ *
+ * The method is the client's choice, carried through to the flow as
+ * `AuthInteraction.method`. The bridge never answers a prompt on the
+ * user's behalf: a flow that offers a choice must show it.
  */
 export class LoginSession {
   readonly sessionId: string = randomUUID();
   readonly providerId: string;
+  private readonly method: "browser" | "device_code";
 
   private status: ProviderLoginSnapshot["status"] = "starting";
   private readonly events: ProviderLoginEvent[] = [];
@@ -49,10 +52,12 @@ export class LoginSession {
 
   constructor(
     providerId: string,
+    method: "browser" | "device_code",
     startLogin: (interaction: AuthInteraction) => Promise<void>,
     private readonly onExpire: (sessionId: string) => void,
   ) {
     this.providerId = providerId;
+    this.method = method;
     this.idleTimer = setTimeout(
       () => this.expire(),
       IDLE_TIMEOUT_MS,
@@ -125,6 +130,7 @@ export class LoginSession {
   ): Promise<void> {
     const interaction: AuthInteraction = {
       signal: this.abort.signal,
+      method: this.method,
       prompt: (prompt) => this.prompt(prompt),
       notify: (event) => this.notify(event),
     };
@@ -169,13 +175,6 @@ export class LoginSession {
   }
 
   private prompt(prompt: AuthPrompt): Promise<string> {
-    // On Deno only the device-code method works; when the flow offers it
-    // (e.g. OpenAI Codex "Device code login (headless)"), answer with it
-    // instead of showing a broken Node-only option.
-    if (prompt.type === "select" && !prompt.signal?.aborted) {
-      const auto = autoAnswerSelect(prompt.options);
-      if (auto !== undefined) return Promise.resolve(auto);
-    }
     const id = `p${++this.promptSeq}`;
     return new Promise<string>((resolve, reject) => {
       this.awaiting.push({ id, prompt, resolve, reject });
@@ -218,10 +217,12 @@ export class LoginSessions {
 
   create(
     providerId: string,
+    method: "browser" | "device_code",
     startLogin: (interaction: AuthInteraction) => Promise<void>,
   ): LoginSession {
     const session = new LoginSession(
       providerId,
+      method,
       startLogin,
       (id) => this.sessions.delete(id),
     );

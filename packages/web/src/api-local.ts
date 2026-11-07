@@ -15,6 +15,7 @@ import type {
   PendingImage,
   ProviderAuthType,
   ProviderInfo,
+  ProviderLoginMethod,
   ProviderLoginSnapshot,
   RoutineView,
   SessionInfo,
@@ -399,12 +400,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ key }),
     }),
-  /** Start an OAuth login flow for a provider; returns a session id to
-   * poll with providerLoginPoll. */
-  providerLogin: (providerId: string) =>
+  /** Start an OAuth login flow; returns a session id to poll with
+   * providerLoginPoll. The method is required: the two are not
+   * interchangeable and the server never picks one. */
+  providerLogin: (
+    providerId: string,
+    method: ProviderLoginMethod,
+  ) =>
     request<{ sessionId: string }>(
       `/api/providers/${providerId}/login`,
-      { method: "POST" },
+      { method: "POST", body: JSON.stringify({ method }) },
     ),
   providerLoginPoll: (providerId: string, sessionId: string) =>
     request<ProviderLoginSnapshot>(

@@ -28,6 +28,11 @@ export const THINKING_LEVEL_ORDER: readonly ThinkingLevel[] = [
   "max",
 ];
 
+/** A way a provider's OAuth flow can sign a user in. The two are not
+ * interchangeable: the browser flow finishes at a callback on the server
+ * machine, the device code works from anywhere. */
+export type ProviderLoginMethod = "browser" | "device_code";
+
 /** Provider summary for pickers and lists. Shared by the server routes
  * (which build these) and the web UI (which renders them). */
 export interface ProviderInfo {
@@ -38,6 +43,9 @@ export interface ProviderInfo {
   /** The credential method the provider accepts. "oauth" providers get a
    * login flow in the settings UI instead of an API-key field. */
   authType?: ProviderAuthType;
+  /** Sign-in methods the OAuth flow supports, in the order the UI offers
+   * them. Present exactly when `authType` is "oauth". */
+  loginMethods?: readonly ProviderLoginMethod[];
   /** True when the provider was added by the user (OpenAI-compatible
    * custom provider) rather than built in or from env/models.json config. */
   userDefined?: boolean;

@@ -37,6 +37,7 @@ export type {
   ProviderAuthType,
   ProviderInfo,
   ProviderLoginEvent,
+  ProviderLoginMethod,
   ProviderLoginPrompt,
   ProviderLoginSnapshot,
   SavedPrompt,

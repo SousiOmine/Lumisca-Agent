@@ -28,6 +28,7 @@ import {
   builtinProviders,
   DEV_PROVIDER_IDS,
 } from "./dev-catalog.ts";
+import { chatgptProvider } from "./chatgpt/provider.ts";
 import {
   type CatalogStatus,
   resolveCatalogSource,
@@ -107,6 +108,9 @@ export class ModelManager {
     for (const provider of builtinProviders()) {
       this.models.setProvider(provider);
     }
+    // The subscription provider sits between the catalog and the custom
+    // providers: a models.json entry of the same id still overrides it.
+    this.models.setProvider(chatgptProvider({ credentials, settings }));
     this.applyCustomProviders();
     const bundled = snapshotCatalog();
     this.catalogStatus = {

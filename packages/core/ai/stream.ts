@@ -188,9 +188,13 @@ async function* runStream(
   }
   // Responses-API models whose ids the SDK does not recognize (non-OpenAI
   // gateways such as OpenCode Go) would otherwise have their reasoning
-  // hint dropped silently — see reasoningForceOption.
-  const forceOption = reasoningForceOption(model, reasoning);
-  if (forceOption !== undefined) request.providerOptions = forceOption;
+  // hint dropped silently — see reasoningForceOption. The ChatGPT backend
+  // needs its own request shape on top of that (see chatgptProviderOptions).
+  const providerOptions = mergeProviderOptions(
+    reasoningForceOption(model, reasoning),
+    chatgptProviderOptions(model, context),
+  );
+  if (providerOptions !== undefined) request.providerOptions = providerOptions;
   // Conversation affinity: providers that require a stable per-conversation
   // id (OpenCode Go's x-opencode-session) get it as a request header — the
   // SDK merges request headers over the provider factory's own headers.
@@ -549,6 +553,60 @@ export function reasoningForceOption(
   }
   const provider = model.api === "azure-openai-responses" ? "azure" : "openai";
   return { [provider]: { forceReasoning: true } };
+}
+
+/** Provider id of the ChatGPT subscription provider (see
+ * models/chatgpt/provider.ts). Duplicated here for the same reason as
+ * OPENCODE_GO_PROVIDER_ID: the transport stays independent of the
+ * catalog. */
+const CHATGPT_PROVIDER_ID = "openai-codex";
+
+/** Instructions sent when a call has no system prompt. The ChatGPT backend
+ * rejects a request without a top-level `instructions` value, and not every
+ * auxiliary call carries a system prompt. */
+const CHATGPT_FALLBACK_INSTRUCTIONS = "You are a helpful assistant.";
+
+/**
+ * Request shape the ChatGPT (Codex) backend requires.
+ *
+ * Its Responses endpoint is not the public one: it rejects a request whose
+ * top-level `instructions` is missing, and it never stores conversation
+ * state. The SDK sends a system message as an `input` item for reasoning
+ * models, so the system prompt is moved into `instructions` and removed
+ * from `input` (`systemMessageMode: "remove"`). `store: false` also makes
+ * the SDK request the encrypted reasoning it needs to replay a turn without
+ * server-side state. See models/chatgpt.
+ */
+export function chatgptProviderOptions(
+  model: Model<Api>,
+  context: { systemPrompt?: string },
+): VercelProviderOptions | undefined {
+  if (model.provider !== CHATGPT_PROVIDER_ID) return undefined;
+  return {
+    openai: {
+      store: false,
+      systemMessageMode: "remove",
+      instructions: context.systemPrompt !== undefined &&
+          context.systemPrompt.length > 0
+        ? context.systemPrompt
+        : CHATGPT_FALLBACK_INSTRUCTIONS,
+      ...(model.reasoning === true ? { forceReasoning: true } : {}),
+    },
+  };
+}
+
+/** Merge two provider-option bags per provider key; later values win. */
+function mergeProviderOptions(
+  a: VercelProviderOptions | undefined,
+  b: VercelProviderOptions | undefined,
+): VercelProviderOptions | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  const merged: VercelProviderOptions = { ...a };
+  for (const [provider, options] of Object.entries(b)) {
+    merged[provider] = { ...(merged[provider] ?? {}), ...options };
+  }
+  return merged;
 }
 
 /** An empty placeholder assistant message for the stream's start event. */

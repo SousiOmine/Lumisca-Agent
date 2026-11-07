@@ -26,9 +26,11 @@ import {
   useProviderModels,
   useUserProviders,
 } from "../../providers.ts";
+import { isLoopbackHost } from "@lumisca/core/shared";
 import type {
   ProviderAuthType,
   ProviderLoginEvent,
+  ProviderLoginMethod,
   ProviderLoginPrompt,
   ProviderLoginSnapshot,
 } from "../../types.ts";
@@ -93,6 +95,11 @@ export function ProviderDetail({
   const provider = providers.find((p) => p.id === providerId);
   const authType = auth.authType ?? provider?.authType;
   const isOAuth = authType === "oauth";
+  const loginMethods = provider?.loginMethods ?? [];
+  /** The browser flow finishes at a callback on the server machine, so it
+   * is offered only to a page opened there. Remote pages get the device
+   * code (which works from anywhere). */
+  const localPage = isLoopbackHost(globalThis.location.hostname);
 
   /** Poll the running flow until it settles; on completion reload the
    * provider auth state (the server freshly resolved it). */
@@ -163,12 +170,12 @@ export function ProviderDetail({
     }
   };
 
-  const startLogin = async () => {
+  const startLogin = async (method: ProviderLoginMethod) => {
     setLoginBusy(true);
     setError(undefined);
     setNotice(undefined);
     try {
-      const { sessionId } = await api.providerLogin(providerId);
+      const { sessionId } = await api.providerLogin(providerId, method);
       setLoginFlow({ sessionId, snapshot: undefined });
     } catch (e) {
       setError(errorText(e));
@@ -429,19 +436,39 @@ export function ProviderDetail({
               )}
 
               {!loginFlow && (
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={startLogin}
-                  disabled={loginBusy}
-                >
-                  {loginBusy
-                    ? <IconLoader2 size={14} className="spin" />
-                    : <IconLogin2 size={14} />}
-                  {auth.configured
-                    ? t("settings.provider.relogin")
-                    : t("settings.provider.login")}
-                </button>
+                <div className="stack-8">
+                  {localPage && loginMethods.includes("browser") && (
+                    <button
+                      type="button"
+                      className="btn primary"
+                      onClick={() => startLogin("browser")}
+                      disabled={loginBusy}
+                    >
+                      {loginBusy
+                        ? <IconLoader2 size={14} className="spin" />
+                        : <IconLogin2 size={14} />}
+                      {t("settings.provider.loginWithBrowser")}
+                    </button>
+                  )}
+                  {loginMethods.includes("device_code") && (
+                    <button
+                      type="button"
+                      className={localPage ? "btn" : "btn primary"}
+                      onClick={() => startLogin("device_code")}
+                      disabled={loginBusy}
+                    >
+                      {loginBusy
+                        ? <IconLoader2 size={14} className="spin" />
+                        : <IconLogin2 size={14} />}
+                      {t("settings.provider.loginWithDeviceCode")}
+                    </button>
+                  )}
+                  <p className="settings-note">
+                    {localPage
+                      ? t("settings.provider.loginHint")
+                      : t("settings.provider.loginRemoteHint")}
+                  </p>
+                </div>
               )}
 
               {loginFlow && !flowTerminal && (

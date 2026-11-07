@@ -183,6 +183,12 @@ export const MODEL_ENABLED_PREFIX = "model_enabled:";
  * (`model_thinking:<provider>:<model>`). */
 export const MODEL_THINKING_PREFIX = "model_thinking:";
 
+/** Model catalog of the ChatGPT subscription provider, as JSON of the
+ * Model[] the authenticated account can use. The backend returns the list
+ * per account, so it cannot live in the shared models.dev catalog; it is
+ * fetched at login and read back on every start. */
+export const CHATGPT_MODELS_KEY = "chatgpt_models";
+
 /** A saved prompt registered by the user: `id` is the short identifier for
  * the slash command lookup (e.g. "translate"), `label` is the display name
  * shown in the menu, and `prompt` is the text inserted into the composer. */

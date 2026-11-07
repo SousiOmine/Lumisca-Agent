@@ -280,3 +280,14 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
 - **`pushsubscriptionchange` は当てにしない**。Chromium も発火しないことがあり、Safari は実装していません。ページを開いたときに購読を 1 回 POST し直す経路（`packages/web/src/hooks/usePush.ts`）を消さないでください。
 - **`public/sw.js` は素の script** なので、ページの `push.ts` を import できません。base64url の復号だけが 2 か所にあります。
 - **設定行は `pushSupported()` のときだけ**出します（`https` かつデスクトップシェル外かつ Push API あり）。デスクトップの `http://127.0.0.1` と `deno task dev` は対象外で、そこは従来どおり Tauri の通知が担当します。iOS はホーム画面の PWA でだけ動きます。
+
+## 13. プロバイダーの OAuth ログイン（ChatGPT）
+
+設定 → プロバイダー → ChatGPT から、ChatGPT のサブスクリプションで OpenAI のモデル（Codex 系）を使えます。実装は `packages/core/models/chatgpt/` です。
+
+- **方式はクライアントが決める**: `POST /api/providers/:id/login` の body に `{"method":"browser"|"device_code"}` が必須です。サーバーに既定はありません。ブラウザ方式は Origin と Host が loopback のときだけ受け付けます（コールバックはサーバー機の `127.0.0.1:1455/1457` にしか来ないためです）。
+- **モデル一覧はログイン時に取る**: `GET /backend-api/codex/models` を認証付きで取得し、`chatgpt_models` に保存します。取得に失敗するとログインごと失敗し、credential は保存されません。静的な一覧への fallback はありません。
+- **期限切れの更新**: `resolveCredential` が期限の 60 秒前に更新し、同時要求は 1 回の更新を共有します。更新トークンはローテーションされるため、2 回交換すると片方が無効になります。
+- **要求の形**: Codex バックエンドは `instructions` 必須・`store:false` です。`ai/stream.ts` の `chatgptProviderOptions` がシステムプロンプトを `instructions` に移し、`input` から外します。ここを外すと全リクエストが 400 になります。
+- **設定のキー**: `AuthInteraction.method`（クライアントの選択）、`OAuthAuth.methods`（プロバイダーが受理する方式）、`ProviderInfo.loginMethods`（UI が読む一覧）です。`methods` を増やすときは 3 つとも合わせてください。
+- **確認**: `deno test packages/core/models/chatgpt packages/server/login_openai_codex_test.ts packages/server/routes/providers_test.ts`。実機の確認には ChatGPT アカウントが必要で、デバイスコード方式は ChatGPT のセキュリティ設定で有効化しておきます。

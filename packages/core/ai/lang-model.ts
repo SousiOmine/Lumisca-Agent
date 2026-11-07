@@ -21,6 +21,10 @@ import type { Api, Model, StreamOptions } from "./types.ts";
 export interface ResolvedApiKey {
   apiKey: string;
   source: string;
+  /** Headers the provider derived from the credential itself (the ChatGPT
+   * account id). They win over the model's static headers: a catalog entry
+   * cannot know which account is signed in. */
+  headers?: Record<string, string>;
 }
 
 /** Build the Vercel provider settings common to every factory from a model's
@@ -37,6 +41,9 @@ function settingsFor(
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(model.headers ?? {})) {
     if (v !== null) headers[k] = v;
+  }
+  for (const [k, v] of Object.entries(key.headers ?? {})) {
+    headers[k] = v;
   }
   return {
     apiKey: key.apiKey,

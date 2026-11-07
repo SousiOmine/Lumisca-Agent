@@ -41,7 +41,9 @@ export function safePageHost(hostHeader: string | undefined): string {
   }
 }
 
-function hostnameOf(host: string | undefined): string {
+/** Hostname of a Host header (IPv6 literals keep their brackets), or ""
+ * when it cannot be parsed. Shared with the login route's loopback check. */
+export function hostnameOf(host: string | undefined): string {
   if (!host) return "";
   try {
     return new URL(`http://${host}`).hostname.replace(/^\[|\]$/g, "");
