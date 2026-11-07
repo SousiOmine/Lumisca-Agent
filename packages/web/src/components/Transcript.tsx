@@ -39,6 +39,8 @@ interface TranscriptProps {
     text: string,
     images: UserMessageImage[],
   ) => Promise<void>;
+  /** Sends a card's answer as the next prompt (a card ends its turn). */
+  onCardSend: (text: string) => void;
   /** Shown in the middle while the transcript is empty. */
   empty?: ComponentChildren;
 }
@@ -84,6 +86,7 @@ export function Transcript(
     visualBase,
     attachBase,
     onRewind,
+    onCardSend,
     empty,
     pinToken,
   }: TranscriptProps,
@@ -163,6 +166,7 @@ export function Transcript(
             running={running && index === rows.length - 1}
             endedAt={index === rows.length - 1 ? agentEndedAt : undefined}
             onRewind={onRewind}
+            onCardSend={onCardSend}
           />
         ))}
         {streamingText.length > 0 && (

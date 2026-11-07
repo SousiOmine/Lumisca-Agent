@@ -1,8 +1,11 @@
+import { CoreError } from "../errors.ts";
 import {
   type AttachmentRef,
+  CARD_HELP,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_CALL,
   MAX_ATTACHMENTS_TOTAL_BYTES,
+  parseUiMarkup,
   TOOL_CHAT_ATTACH,
 } from "../shared/mod.ts";
 import type { SessionAttachmentStore } from "../session/attachments.ts";
@@ -25,6 +28,7 @@ const attachSchema = object({
       "inline; every other file is offered as a download. Capped at " +
       `${MAX_ATTACHMENTS_PER_CALL} files.`,
   )),
+  card: optional(string(`A card shown with the reply: ${CARD_HELP}`)),
 });
 
 /** What the tool needs to read files and where to put them. */
@@ -108,9 +112,11 @@ export async function attachFiles(
  * the file is right there, so it is handed over instead.
  *
  * A stella conversation has `send_chat` instead: there the text is not shown
- * either, so "attach a file" and "say something" are one act.
+ * either, so "attach a file" and "say something" are one act. Both tools take
+ * the same `card` markup and write it under the same `details.card` key, so
+ * one reader draws either.
  *
- * The result carries the attachment list in `details`, which is what the
+ * The result carries the files and the card in `details`, which is what the
  * client draws and what a reload re-draws (the transcript keeps the call).
  * The bytes are copied into the session's store, so what the user sees keeps
  * showing what was sent even after the original file changes.
@@ -123,32 +129,62 @@ export function createChatAttachTool(
     name: TOOL_CHAT_ATTACH,
     label: "Chat Attach",
     description:
-      "Send files to the user in this reply: images are shown inline, " +
-      "other files are offered as downloads. `paths` takes the same form as " +
-      "the file tools (absolute, or relative to the working folder) and " +
-      `each must exist. Up to ${MAX_ATTACHMENTS_PER_CALL} files per call, ` +
+      "Send files or a card to the user in this reply, beside your text: " +
+      "images are shown inline, other files are offered as downloads, and " +
+      "`card` is a small structured panel (a table, a metric, a flow, a " +
+      "question). `paths` takes the same form as the file tools (absolute, " +
+      "or relative to the working folder) and each must exist. Up to " +
+      `${MAX_ATTACHMENTS_PER_CALL} files per call, ` +
       `${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MiB each and ` +
       `${MAX_ATTACHMENTS_TOTAL_BYTES / (1024 * 1024)} MiB in total. Your ` +
       "text is already shown, so do not paste the file's content here as " +
       "well; say what the file is.",
     parameters: attachSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
-      const attachments = await attachFiles({
+      const card = (params.card ?? "").trim();
+      const paths = params.paths ?? [];
+      if (card.length === 0 && paths.length === 0) {
+        throw new CoreError("Send a file, a card, or both.", "invalid");
+      }
+      if (card.length > 0) {
+        // Checked here, not in the browser: a card the server accepted must
+        // draw, and the client only ever sees what this check let through.
+        const parsed = parseUiMarkup(card);
+        if (!parsed.ok) {
+          throw new CoreError(
+            `Invalid card markup: ${parsed.problem}`,
+            "invalid",
+          );
+        }
+      }
+      const attachments = paths.length === 0 ? [] : await attachFiles({
         files,
         store,
         sessionId,
-        paths: params.paths ?? [],
+        paths,
         ...(signal !== undefined ? { signal } : {}),
       });
       return {
         content: [{
           type: "text",
-          text: attachments.length === 1
-            ? "Sent 1 file to the user."
-            : `Sent ${attachments.length} files to the user.`,
+          text: receipt(card.length > 0, attachments.length),
         }],
-        details: { attachments },
+        details: { attachments, card: card.length === 0 ? null : card },
       };
     },
   };
+}
+
+/** What the model reads after the call. It says what was handed over, not
+ * what it said: the reply's own text is shown separately, and repeating it
+ * here would put the same words in the prompt twice. */
+function receipt(hasCard: boolean, files: number): string {
+  const parts: string[] = [];
+  if (files === 1) parts.push("1 file");
+  else if (files > 1) parts.push(`${files} files`);
+  if (hasCard) parts.push("a card");
+  const what = parts.length === 1
+    ? parts[0]!
+    : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  return `Sent ${what} to the user.`;
 }

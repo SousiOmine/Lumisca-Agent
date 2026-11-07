@@ -377,6 +377,7 @@ Deno.test("ConversationTurn: a steered notification renders in the work log", ()
     runningTools: new Map(),
     running: true,
     onRewind: () => {},
+    onCardSend: () => {},
   }));
 
   // One activity header for the whole run: the notification did not start a
@@ -422,6 +423,7 @@ Deno.test("ConversationTurn: a context snapshot reaches neither the log nor a di
     runningTools: new Map(),
     running: false,
     onRewind: () => {},
+    onCardSend: () => {},
   }));
 
   assertEquals(html.includes("スキル (3 件)"), false, html);
@@ -460,6 +462,7 @@ Deno.test("ConversationTurn: a context snapshot stays out of a running turn", ()
     runningTools: new Map(),
     running: true,
     onRewind: () => {},
+    onCardSend: () => {},
   }));
 
   assertEquals(html.includes("Date: 2026-11-07"), false, html);
@@ -587,6 +590,7 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
       running: isViewRunning(view),
       endedAt: view.agentEndedAt,
       onRewind: () => {},
+      onCardSend: () => {},
     }));
   };
 
@@ -625,6 +629,7 @@ Deno.test("ConversationTurn: a mode prompt renders the images attached to it", (
     runningTools: new Map(),
     running: false,
     onRewind: () => {},
+    onCardSend: () => {},
   }));
   assertStringIncludes(html, 'class="msg-images"');
   assertStringIncludes(html, "data:image/png;base64,QUJD");
@@ -698,9 +703,81 @@ Deno.test("ConversationTurn: a fragment renders its rows without a header", () =
     runningTools: new Map(),
     running: false,
     onRewind: () => {},
+    onCardSend: () => {},
   }));
   assertEquals(html.match(/class="agent-activity/g), null);
   // The rows themselves are drawn, inside the work log.
   assertStringIncludes(html, 'class="agent-work-log"');
   assertStringIncludes(html, "tool-timeline");
+});
+
+Deno.test("ConversationTurn: a chat_attach card is drawn under the reply", () => {
+  // Code mode's agent shows a card the same way stella's does: the tool result
+  // carries the markup, and the card belongs to the answer rather than to the
+  // collapsed work log (a reader must not have to open the log to see it).
+  const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
+  const call = fauxToolCall("chat_attach", { card: markup }, "call-1");
+  const messages: AgentMessage[] = [
+    user(1),
+    fauxAssistantMessage([call], { timestamp: 2 }) as AgentMessage,
+    {
+      role: "toolResult",
+      toolCallId: "call-1",
+      toolName: "chat_attach",
+      content: [{ type: "text", text: "Sent a card to the user." }],
+      details: { attachments: [], card: markup },
+      isError: false,
+      timestamp: 3,
+    },
+  ];
+
+  const turns = buildTurns(messages);
+  const html = renderToString(createElement(ConversationTurn, {
+    turn: turns[turns.length - 1]!,
+    entering: false,
+    visualBase: "/api/sessions/s/visual/",
+    attachBase: "/api/sessions/s/attachment/",
+    toolResults: new Map(),
+    runningTools: new Map(),
+    running: false,
+    onRewind: () => {},
+    onCardSend: () => {},
+  }));
+
+  assertStringIncludes(html, "ui-card");
+  assertStringIncludes(html, "確認");
+  assertStringIncludes(html, "進めますか。");
+});
+
+Deno.test("ConversationTurn: a failed chat_attach draws no card", () => {
+  const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
+  const call = fauxToolCall("chat_attach", { card: markup }, "call-2");
+  const messages: AgentMessage[] = [
+    user(1),
+    fauxAssistantMessage([call], { timestamp: 2 }) as AgentMessage,
+    {
+      role: "toolResult",
+      toolCallId: "call-2",
+      toolName: "chat_attach",
+      content: [{ type: "text", text: "Invalid card markup" }],
+      details: { attachments: [], card: markup },
+      isError: true,
+      timestamp: 3,
+    },
+  ];
+
+  const turns = buildTurns(messages);
+  const html = renderToString(createElement(ConversationTurn, {
+    turn: turns[turns.length - 1]!,
+    entering: false,
+    visualBase: "/api/sessions/s/visual/",
+    attachBase: "/api/sessions/s/attachment/",
+    toolResults: new Map(),
+    runningTools: new Map(),
+    running: false,
+    onRewind: () => {},
+    onCardSend: () => {},
+  }));
+
+  assertEquals(html.includes("ui-card"), false, html);
 });

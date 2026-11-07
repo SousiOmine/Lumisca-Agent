@@ -52,3 +52,16 @@ export function chatMessageOfDetails(
     attachments: attachmentsOfDetails(details),
   };
 }
+
+/** The card a tool result carried in `details.card`, or null when the call
+ * showed none.
+ *
+ * Both tools that hand a card over write it under this key — `send_chat` in
+ * stella, `chat_attach` in code mode — so one reader draws either. A row from
+ * a build that predates the key answers null rather than failing: its files
+ * are still read by `attachmentsOfDetails`. */
+export function cardOfDetails(details: unknown): string | null {
+  if (typeof details !== "object" || details === null) return null;
+  const card = (details as { card?: unknown }).card;
+  return typeof card === "string" && card.length > 0 ? card : null;
+}

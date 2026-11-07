@@ -234,6 +234,36 @@ export function ChatView(
     })();
   };
 
+  /** Send a card's answer as the next prompt. The answer IS the message: the
+   * composer's text and staged images stay where they are, and a failure is
+   * left to the session's error banner instead of being written back into the
+   * composer the reader is typing in. */
+  const sendCardAnswer = (text: string) => {
+    const answer = text.trim();
+    if (answer.length === 0 || providerUnconfigured) return;
+    setSending(true);
+    void (async () => {
+      try {
+        await onPrompt(answer, [], undefined);
+        setPinToken((token) => token + 1);
+      } catch {
+        // The view already shows why (useSessionActions puts the classified
+        // error on the session).
+      } finally {
+        setSending(false);
+      }
+    })();
+  };
+  const sendCardAnswerRef = useRef(sendCardAnswer);
+  useEffect(() => {
+    sendCardAnswerRef.current = sendCardAnswer;
+  });
+  /** Stable wrapper: every turn is memoized, and a new function on each
+   * render would redraw the whole transcript. */
+  const handleCardSend = useCallback((text: string) => {
+    sendCardAnswerRef.current(text);
+  }, []);
+
   /** A `run` or `action` command was picked at the start of the input (the
    * composer handles completion and insertion itself — see
    * Composer.applySlashPick). Agent modes (existing commands) build their
@@ -353,6 +383,7 @@ export function ChatView(
         visualBase={visualBase}
         attachBase={attachBase}
         onRewind={handleRewind}
+        onCardSend={handleCardSend}
         empty={view.info.chat
           ? <p>{t("chat.empty.chat")}</p>
           : <p>{t("chat.empty.workspace")}</p>}

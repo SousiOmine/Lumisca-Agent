@@ -4,12 +4,7 @@ import {
   IconClipboard,
 } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
-import { useMemo } from "preact/compat";
-import {
-  parseUiMarkup,
-  resolveUiView,
-  type UiResolvedView,
-} from "@lumisca/core/shared";
+
 import { useLocale, useT } from "../../i18n.ts";
 import { formatClockTime } from "../../format.ts";
 import { useCopy } from "../../hooks/useSave.ts";
@@ -17,7 +12,7 @@ import type { StellaEntry } from "../../types.ts";
 import { PromptFiles } from "./PromptFiles.tsx";
 import { AttachmentCard } from "../chat/AttachmentCard.tsx";
 import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
-import { UiCard } from "../chat/UiCard.tsx";
+import { CardView } from "../chat/CardView.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 
 /**
@@ -275,21 +270,4 @@ function AgentBubble({
       </div>
     </div>
   );
-}
-
-/** A card, drawn from the markup the entry carried. Parsing happens here (as
- * it does for code mode's transcript), so a markup this build cannot read
- * shows the "could not be displayed" note rather than half a card. */
-function CardView({
-  markup,
-  onSend,
-}: {
-  markup: string;
-  onSend: (text: string) => void;
-}) {
-  const view = useMemo<UiResolvedView | null>(() => {
-    const parsed = parseUiMarkup(markup);
-    return parsed.ok ? resolveUiView(parsed.view) : null;
-  }, [markup]);
-  return <UiCard view={view} onSend={onSend} />;
 }

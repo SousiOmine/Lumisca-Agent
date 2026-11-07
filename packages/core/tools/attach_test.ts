@@ -155,13 +155,13 @@ Deno.test("chat_attach: a missing file or a directory fails", async () => {
   }
 });
 
-Deno.test("chat_attach: no paths is refused", async () => {
+Deno.test("chat_attach: a call with nothing to send is refused", async () => {
   const test = await fixture();
   try {
     await assertRejects(
       () => test.tool.execute("t", {}, undefined),
       Error,
-      "Attach at least one file",
+      "Send a file, a card, or both.",
     );
   } finally {
     await test.cleanup();
@@ -181,6 +181,79 @@ Deno.test("chat_attach: too many files in one call is refused", async () => {
       Error,
       "up to 10 files",
     );
+  } finally {
+    await test.cleanup();
+  }
+});
+
+Deno.test("chat_attach: a card travels alone", async () => {
+  const test = await fixture();
+  try {
+    const card = '<Card title="確認"><Text>進めますか。</Text></Card>';
+    const result = await test.tool.execute("t", { card }, undefined);
+
+    assertEquals((result.details as { card: string }).card, card);
+    assertEquals(
+      (result.details as { attachments: unknown[] }).attachments,
+      [],
+    );
+    // The model reads what it sent, not the markup again.
+    assertEquals(
+      (result.content[0] as { text: string }).text,
+      "Sent a card to the user.",
+    );
+  } finally {
+    await test.cleanup();
+  }
+});
+
+Deno.test("chat_attach: a card and a file are one call", async () => {
+  const test = await fixture({ "chart.png": new Uint8Array([1, 2, 3]) });
+  try {
+    const card = "<Card><Text>見てください。</Text></Card>";
+    const result = await test.tool.execute(
+      "t",
+      { card, paths: [join(test.root, "chart.png")] },
+      undefined,
+    );
+    const details = result.details as {
+      card: string;
+      attachments: Array<{ name: string }>;
+    };
+    assertEquals(details.card, card);
+    assertEquals(details.attachments.length, 1);
+    assertEquals(
+      (result.content[0] as { text: string }).text,
+      "Sent 1 file and a card to the user.",
+    );
+  } finally {
+    await test.cleanup();
+  }
+});
+
+Deno.test("chat_attach: invalid card markup is refused, and no file is stored", async () => {
+  const test = await fixture({ "chart.png": new Uint8Array([1, 2, 3]) });
+  try {
+    await assertRejects(
+      () =>
+        test.tool.execute(
+          "t",
+          {
+            card: "<Card><Text>a</Text>",
+            paths: [join(test.root, "chart.png")],
+          },
+          undefined,
+        ),
+      Error,
+      "Invalid card markup",
+    );
+    // The card is checked before the files are copied, so a refused call
+    // leaves nothing behind.
+    const stored: string[] = [];
+    for await (const entry of Deno.readDir(test.storeRoot)) {
+      stored.push(entry.name);
+    }
+    assertEquals(stored, []);
   } finally {
     await test.cleanup();
   }
