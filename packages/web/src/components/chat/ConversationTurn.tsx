@@ -58,6 +58,13 @@ function isSteered(message: AgentMessage): boolean {
  * prompt). Its `responses` stay empty — see ConversationTurn, which renders
  * such a turn without an activity header.
  *
+ * A dynamic context snapshot (date, model, skill catalog, workspace
+ * instructions, on-demand tools, reply language) is dropped: it is what the
+ * model reads, not something said or done in the conversation. It is dropped
+ * HERE rather than hidden by MessageRow, because a row that stays in
+ * `responses` still counts toward the work log — the turn would offer a
+ * disclosure that opens onto nothing.
+ *
  * A loaded window usually begins at a prompt, but not always: the server
  * looks back only so far for the turn a page starts in, so a run that
  * outgrew that lookback (a runaway tool loop) hands over rows whose prompt
@@ -69,34 +76,26 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
   // Rows that arrived before the next turn starts.
   let pending: AgentMessage[] = [];
   /** Open a turn at `user`, deciding first what the rows before it belong to.
-   *
-   * The dynamic contexts (date, model, skill catalog) are published right
-   * before the run they steer, so they are the turn's own preamble and stay
-   * inside it. Everything else there belongs to the turn whose prompt is on
-   * an earlier page: it is drawn as that turn's tail, in its own fragment, so
-   * the rows are neither dropped nor shown as this turn's work. A compaction
+   * Everything before it belongs to the turn whose prompt is on an earlier
+   * page: it is drawn as that turn's tail, in its own fragment, so the rows
+   * are neither dropped nor shown as this turn's work. A compaction
    * checkpoint is a row of its own and draws no responses, so nothing is hung
    * under it. */
   const startTurn = (user: AgentMessage, standalone = false) => {
-    // The contexts are the TRAILING run of rows: everything before them
-    // belongs to what the window inherited. Splitting there keeps both parts
-    // in transcript order.
-    let cut = pending.length;
-    while (cut > 0 && pending[cut - 1]!.role === "context") cut--;
-    const inherited = pending.slice(0, cut);
-    const contexts = pending.slice(cut);
+    const inherited = pending;
     pending = [];
     if (standalone) {
-      if (inherited.length + contexts.length > 0) {
-        turns.push({ responses: [...inherited, ...contexts] });
-      }
+      if (inherited.length > 0) turns.push({ responses: inherited });
       turns.push({ user, responses: [], standalone: true });
       return;
     }
     if (inherited.length > 0) turns.push({ responses: inherited });
-    turns.push({ user, responses: contexts });
+    turns.push({ user, responses: [] });
   };
   for (const message of messages) {
+    // A dynamic context snapshot is the model's reading, not part of the
+    // conversation: see the doc above.
+    if (message.role === "context") continue;
     // A retry notification is an internal repair, not a turn: the message
     // is dropped (the retried response joins the turn it was retried in).
     // The server reads the same rule when it chooses where a window may
@@ -207,11 +206,11 @@ export const ConversationTurn = memo(function ConversationTurn({
   // Everything the turn produced except the final assistant, whose text
   // renders below the log: intermediate assistant messages (their text and
   // tool calls) plus the turn's compact rows — a notification or a prompt
-  // steered into the run, a dynamic-context snapshot. Their relative order
-  // is the transcript's; the final assistant's tool calls are appended
-  // after them by AssistantTools, which is where they belong. A user
-  // message inside the log (a prompt steered into the run) keeps its action
-  // row: rewind works on it like on a turn's own prompt.
+  // steered into the run. Their relative order is the transcript's; the
+  // final assistant's tool calls are appended after them by AssistantTools,
+  // which is where they belong. A user message inside the log (a prompt
+  // steered into the run) keeps its action row: rewind works on it like on
+  // a turn's own prompt.
   const workLog = finalAssistant === undefined
     ? turn.responses
     : turn.responses.filter((message) => message !== finalAssistant);

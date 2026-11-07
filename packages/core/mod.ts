@@ -49,7 +49,6 @@ export type {
   AuthPrompt,
   AuthType,
   CheckpointMessage,
-  ContextMessage,
   ImageContent,
   Message,
   Model,

@@ -3,7 +3,6 @@ import type {
   AgentMessage,
   AssistantMessage,
   CheckpointMessage,
-  ContextMessage,
   ModeMessage,
   ToolCallBlock,
   ToolResultMessage,
@@ -11,7 +10,6 @@ import type {
 import { ToolCall } from "../ToolCall.tsx";
 
 import { NotificationRow } from "../NotificationRow.tsx";
-import { ContextRow } from "../ContextRow.tsx";
 import { CheckpointRow } from "../CheckpointRow.tsx";
 import { CopyableUserMessage } from "./CopyableUserMessage.tsx";
 import { MarkdownBlock } from "./MarkdownBlock.tsx";
@@ -44,12 +42,6 @@ export function MessageRow({
   // System notifications are compact one-line rows, not user messages.
   if (message.role === "notification") {
     return <NotificationRow message={message} />;
-  }
-
-  // Dynamic context snapshots (skill catalog, instruction updates) are
-  // compact rows too: they carry model-facing text, not a user prompt.
-  if (message.role === "context") {
-    return <ContextRow message={message as ContextMessage} />;
   }
 
   // A compaction checkpoint (older history condensed to free context) is a

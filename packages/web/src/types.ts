@@ -20,7 +20,6 @@ export type {
   CheckpointMessage,
   ClientEvent,
   ConnectionEntry,
-  ContextMessage,
   GoalInfo,
   Locale,
   McpAuthSnapshot,

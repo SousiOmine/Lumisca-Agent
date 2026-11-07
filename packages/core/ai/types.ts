@@ -303,8 +303,9 @@ export interface ContextMessage {
   role: "context";
   /** Provider that published it ("skills", "instructions"). */
   provider: string;
-  /** Head line: the UI row label (the body carries the framing the model
-   * reads, so the title never has to be model-facing prose). */
+  /** One-line label of the record, kept when a prune reduces the body. No
+   * client draws it — see the web's buildTurns. The body carries the framing
+   * the model reads, so the label is never model-facing prose. */
   title: string;
   /** Model-facing text. */
   body: string;

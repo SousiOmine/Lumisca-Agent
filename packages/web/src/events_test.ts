@@ -1326,8 +1326,8 @@ Deno.test("events: prependOlderWindow keeps a page's second copy of a key", () =
 });
 
 Deno.test("events: mergeNewestWindow never grows on a repeated resync", () => {
-  // The reported symptom: the top of a code-mode transcript showed the same
-  // context rows again and again. The dynamic contexts are published in one
+  // The reported symptom: the loaded history kept gaining the same context
+  // rows on every sync. The dynamic contexts are published in one
   // loop, so two of them can share a millisecond; keyed by role + timestamp
   // alone, the merge anchored both incoming rows on the view's LAST copy of
   // that key (a Map is built with "the last index wins"), which re-inserted a

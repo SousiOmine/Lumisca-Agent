@@ -19,10 +19,11 @@ import type { ContextMessage } from "./types.ts";
 
 /** One message a provider wants published. */
 export interface ContextUpdate {
-  /** Head line: the row label code mode's transcript shows (stella's
-   * conversation has no context rows: its clients never read the title). The
-   * body carries the model-facing frame, so the title stays a plain
-   * label. */
+  /** One-line label of the record, kept when a prune reduces the body. No
+   * client draws it: code mode's transcript has no context row (see the
+   * web's buildTurns), and a stella conversation receives none. The body
+   * carries the framing the model reads, so the label is never model-facing
+   * prose. */
   title: string;
   /** Model-facing text. */
   body: string;

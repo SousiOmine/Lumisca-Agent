@@ -83,7 +83,8 @@ export interface PageRules<T> {
   /** Which rows a page counts (see MessageRepo.listWindow and
    * TranscriptRows). Required, because a page is a count of screen units and
    * only the surface knows what its screen draws: a conversation reads
-   * `"conversation"` (its entries), code mode `"all"` (every row is drawn). */
+   * `"conversation"` (its entries), code mode `"all"` (its transcript is the
+   * model's history, minus the rows the renderer drops). */
   rows: TranscriptRows;
   pageItems?: number;
   maxPageItems?: number;

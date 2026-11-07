@@ -281,7 +281,7 @@ Deno.test("buildTurns: retry notifications are skipped entirely", () => {
   assertEquals(turns[0]!.responses.length, 1);
 });
 
-Deno.test("buildTurns: context snapshots join the turn they precede", () => {
+Deno.test("buildTurns: context snapshots are not part of any turn", () => {
   const context = (timestamp: number): AgentMessage => ({
     role: "context",
     provider: "skills",
@@ -291,8 +291,8 @@ Deno.test("buildTurns: context snapshots join the turn they precede", () => {
   });
 
   // A fresh session publishes its context before the first prompt: the
-  // snapshot must render inside that turn, never vanish (it has no turn of
-  // its own).
+  // snapshot is the model's reading, not something said or done, so it is
+  // neither a turn of its own nor part of the one below.
   const leading = buildTurns([
     context(1),
     user(2),
@@ -300,12 +300,9 @@ Deno.test("buildTurns: context snapshots join the turn they precede", () => {
   ]);
   assertEquals(leading.length, 1);
   assertEquals(leading[0]!.user!.role, "user");
-  assertEquals(leading[0]!.responses.map((m) => m.role), [
-    "context",
-    "assistant",
-  ]);
+  assertEquals(leading[0]!.responses.map((m) => m.role), ["assistant"]);
 
-  // A later snapshot lands in the turn that is already open.
+  // A later snapshot between two assistant messages is dropped the same way.
   const between = buildTurns([
     user(1),
     assistant(2),
@@ -315,7 +312,6 @@ Deno.test("buildTurns: context snapshots join the turn they precede", () => {
   assertEquals(between.length, 1);
   assertEquals(between[0]!.responses.map((m) => m.role), [
     "assistant",
-    "context",
     "assistant",
   ]);
 });
@@ -399,22 +395,64 @@ Deno.test("ConversationTurn: a steered notification renders in the work log", ()
   assertStringIncludes(html, "notification-line-summary");
 });
 
-Deno.test("ConversationTurn: a context snapshot renders in the work log", () => {
-  // The same rule puts the turn's other compact rows there: a dynamic
-  // context snapshot (the skill catalog, an AGENTS.md update) is what the
-  // model received, and ContextRow documents that a session shows it.
-  const responses: AgentMessage[] = [
-    {
-      role: "context",
-      provider: "skills",
-      title: "スキル (3 件)",
-      body: "<available_skills>\n- demo\n</available_skills>",
-      timestamp: 2,
-    },
+Deno.test("ConversationTurn: a context snapshot reaches neither the log nor a disclosure", () => {
+  // A context snapshot is the model's reading, so it is not drawn. It must
+  // also not be passed to the turn: a row left in `responses` would count
+  // toward the work log and give the activity header a disclosure that opens
+  // onto nothing.
+  const context = {
+    role: "context",
+    provider: "skills",
+    title: "スキル (3 件)",
+    body: "<available_skills>\n- demo\n</available_skills>",
+    timestamp: 2,
+  } as AgentMessage;
+  const turns = buildTurns([
+    user(1),
+    context,
     fauxAssistantMessage("done", { timestamp: 3 }) as AgentMessage,
-  ];
+  ]);
+  assertEquals(turns.length, 1);
   const html = renderToString(createElement(ConversationTurn, {
-    turn: { user: user(1), responses },
+    turn: turns[0]!,
+    entering: false,
+    visualBase: "/api/sessions/s/visual/",
+    attachBase: "/api/sessions/s/attachment/",
+    toolResults: new Map(),
+    runningTools: new Map(),
+    running: false,
+    onRewind: () => {},
+  }));
+
+  assertEquals(html.includes("スキル (3 件)"), false, html);
+  // Nothing to open: the header is drawn without the chevron and stays
+  // disabled.
+  assertStringIncludes(html, "agent-activity-spacer");
+  assertStringIncludes(html, "done");
+});
+
+Deno.test("ConversationTurn: a context snapshot stays out of a running turn", () => {
+  // The same drop, on the screen the report was about: the contexts are
+  // published right before a run, while the turn is still running and its
+  // work log is open. They must not appear there either — the log shows what
+  // the agent did, and the reader watching the work should not have to read
+  // the model's preamble.
+  const context = {
+    role: "context",
+    provider: "date",
+    title: "Date: 2026-11-07",
+    body: "The current date is 2026-11-07.",
+    timestamp: 2,
+  } as AgentMessage;
+  const turns = buildTurns([
+    user(1),
+    context,
+    fauxAssistantMessage([fauxToolCall("bash", { command: "ls" })], {
+      timestamp: 3,
+    }) as AgentMessage,
+  ]);
+  const html = renderToString(createElement(ConversationTurn, {
+    turn: turns[0]!,
     entering: false,
     visualBase: "/api/sessions/s/visual/",
     attachBase: "/api/sessions/s/attachment/",
@@ -424,11 +462,11 @@ Deno.test("ConversationTurn: a context snapshot renders in the work log", () => 
     onRewind: () => {},
   }));
 
-  assertEquals(html.match(/class="agent-activity/g)?.length, 1);
-  const workLog = html.indexOf('class="agent-work-log"');
-  const row = html.indexOf("スキル (3 件)");
-  assert(workLog !== -1, html);
-  assert(row > workLog, html);
+  assertEquals(html.includes("Date: 2026-11-07"), false, html);
+  // The work itself is still there, open, under the running header.
+  assertStringIncludes(html, "tool-timeline");
+  assertWorkLog(html, true);
+  assertStringIncludes(html, "作業中");
 });
 
 Deno.test("a notification steered mid-run keeps the running turn last", () => {
@@ -623,10 +661,11 @@ Deno.test("buildTurns: a window that begins inside a turn draws its tail", () =>
   assertEquals(withPrompt[1]!.responses.map((m) => m.timestamp), [3]);
 });
 
-Deno.test("buildTurns: leading context still joins the prompt it precedes", () => {
+Deno.test("buildTurns: leading context does not open a fragment", () => {
   // The dynamic contexts are published right before a run: in a window that
-  // begins with them, they belong to the prompt below, not to a fragment of
-  // the previous turn.
+  // begins with them, they belong to no turn at all. The prompt below still
+  // opens the window's only turn, and the dropped rows leave no fragment
+  // behind (a fragment would head the screen with work nobody did).
   const context = (timestamp: number): AgentMessage => ({
     role: "context",
     provider: "date",
@@ -637,7 +676,7 @@ Deno.test("buildTurns: leading context still joins the prompt it precedes", () =
   const turns = buildTurns([context(1), user(2), assistant(3)]);
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.user!.timestamp, 2);
-  assertEquals(turns[0]!.responses.map((m) => m.timestamp), [1, 3]);
+  assertEquals(turns[0]!.responses.map((m) => m.timestamp), [3]);
 });
 
 Deno.test("ConversationTurn: a fragment renders its rows without a header", () => {

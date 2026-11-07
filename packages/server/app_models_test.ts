@@ -228,8 +228,9 @@ Deno.test("stella API: the conversation carries the conversation, never the mode
   // Two rules in one endpoint. The reported symptom was `Date: …` and
   // `On-demand tools` rows in stella's chat: they are `context`
   // publications — the model's history — and the conversation must not serve
-  // them, while the session endpoint (code mode) keeps serving them for its
-  // own transcript. The second rule is what the mode is for now: a turn that
+  // them, while the session endpoint (code mode) keeps serving them (its
+  // clients hold the model's history; the web's transcript draws no row for
+  // them). The second rule is what the mode is for now: a turn that
   // stopped to use a tool is narration and stays in the model's history,
   // while the final turn's text is the agent's reply and reaches the screen
   // together with what it SENT with `send_chat`.
