@@ -82,6 +82,12 @@
    * stella pane). Zero on a phone, where the screen belongs to the pane. */
   --app-inset: 12px;
 
+  /* The square of the paperclip beside the composer's field. The field draws
+   * its first line in the middle of this square (composer.css), so one number
+   * places both: a size written only in the composer sheet would let the
+   * field's own padding drift away from it. */
+  --input-attach-size: 32px;
+
   --tab-height: 40px;
   /* Room for a title bar the OS draws over the page. Non-zero only in the
    * macOS desktop window, whose transparent native title bar overlays the

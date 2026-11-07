@@ -670,6 +670,46 @@ Deno.test("the composer draws one frame, and its buttons are one size", async ()
     true,
     "a one-glyph button must be square",
   );
+
+  // The paperclip and the first line of the message share one centre. They
+  // are two boxes side by side, so nothing lines them up on its own: the
+  // button was pinned with a fixed `margin-top`, which is level at one of
+  // the field's three font sizes and a few pixels off at the others (14px
+  // in the new-session view, 13px in a session, 16px on a touch device).
+  // The field now pads its top by the difference between the button's
+  // square and its own line, and both numbers come from the same token.
+  const attach = /\.input-attach \{([^}]*)\}/.exec(css);
+  assertEquals(
+    /height:\s*var\(--input-attach-size\)/.test(attach![1]!),
+    true,
+    "the attach button's square must come from the shared token",
+  );
+  assertEquals(
+    /margin-top/.test(attach![1]!),
+    false,
+    "a fixed margin cannot follow the field's font size",
+  );
+  assertEquals(
+    /padding:\s*calc\(\(var\(--input-attach-size\) - 1lh\) \/ 2\)/.test(
+      fieldBlock![1]!,
+    ),
+    true,
+    "the field must centre its first line in the attach button's square",
+  );
+
+  // 1lh resolves against the field's own font-size and line-height, so the
+  // three size overrides need no second number to keep in step. They must
+  // not replace the whole `padding` shorthand, though: that would drop the
+  // derived top padding and put the drift back.
+  const shorthand = cssRules(css).filter((rule) =>
+    rule.selector.includes(".input-box") &&
+    /(^|[;{\s])padding:/.test(rule.body)
+  );
+  assertEquals(
+    shorthand.map((rule) => rule.selector),
+    [".input-box,\n.input-box:focus,\n.input-box:focus-visible"],
+    "the field's other rules must set the sides, not the whole padding",
+  );
 });
 
 Deno.test("the machine's screen fills the window without reflowing it", async () => {

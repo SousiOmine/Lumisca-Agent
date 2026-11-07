@@ -43,7 +43,13 @@
 }
 
 /* The field and the attach control beside it. The textarea keeps the whole
- * remaining width; the button sits where the writing starts. */
+ * remaining width; the button sits where the writing starts.
+ *
+ * `align-items: flex-start`, not `center`: the field grows downward as the
+ * message does, and a button that drifts to the middle of a long draft is no
+ * longer "beside the writing". The two are still level on the first line,
+ * because the field's own padding centres that line in the button's square
+ * (see `.input-box`). */
 .input-box-wrap {
   position: relative;
   display: flex;
@@ -51,15 +57,15 @@
   gap: 6px;
 }
 
-/* Pinned to the first line rather than centred: the field grows downward as
- * the message does, and a button that drifts to the middle of a long draft
- * is no longer "beside the writing". Its 32px square is the app's icon
- * target (see .icon-btn); `flex: none` keeps it that size inside the row. */
+/* The square the field's first line is centred in. Its size is a token
+ * (tokens.css) because the field measures itself against it: a size written
+ * only here leaves the two apart by a different amount at each of the three
+ * sizes the field takes (13px in a session, 14px in the new-session view,
+ * 16px on a touch device). */
 .input-attach {
   flex: none;
-  margin-top: 1px;
-  width: 32px;
-  height: 32px;
+  width: var(--input-attach-size);
+  height: var(--input-attach-size);
 }
 
 /* The remaining-length line: quiet, and only present near the cap. */
@@ -408,7 +414,14 @@
  * frame, and a second border inside it drew a box within a box as soon as
  * the field took focus (the keyboard ring the rest of the app needs would
  * otherwise appear here, where the capsule already answers the focus). The
- * rule below is what keeps that promise under `:focus-visible` too. */
+ * rule below is what keeps that promise under `:focus-visible` too.
+ *
+ * The top padding is half the difference between the attach square and one
+ * line of this field's type, which is what puts the first line in the middle
+ * of the paperclip beside it. `1lh` resolves against this element's own
+ * font-size and line-height, so the tall field and a touch device follow
+ * without a second number; both rules read `--input-attach-size`. The bottom
+ * padding stays the small value it was — nothing sits beside the last line. */
 .input-box,
 .input-box:focus,
 .input-box:focus-visible {
@@ -417,7 +430,7 @@
   background: transparent;
   border: none;
   outline: none;
-  padding: 2px 4px;
+  padding: calc((var(--input-attach-size) - 1lh) / 2) 4px 2px;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.6;
@@ -551,7 +564,10 @@
   .input-box,
   .input-box.large {
     font-size: 16px;
-    padding: 4px 6px;
+    /* Horizontal only: the top padding is what centres the first line in the
+     * attach square (above), and it follows the bigger type by itself. */
+    padding-left: 6px;
+    padding-right: 6px;
   }
 
   .input-actions .btn:not(.btn-with-label) {
