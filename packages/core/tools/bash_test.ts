@@ -6,7 +6,7 @@ import { HostCommandRunner } from "./host/command-runner.ts";
 import { HostFileBackend } from "./host/files.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { formatDuration } from "./duration.ts";
-import { MAX_SPILL_FILES, MAX_TOOL_OUTPUT } from "./truncate.ts";
+import { MAX_TOOL_OUTPUT } from "./truncate.ts";
 import { removeDirRetry, toolText } from "../test-utils.ts";
 
 /** The host tool over a fresh temp workspace. */
@@ -489,7 +489,7 @@ Deno.test("bash tool keeps the plain note when the spill cannot be written", asy
 });
 
 Deno.test("the spill is readable through the same file backend", async () => {
-  const { tool, root } = makeTool();
+  const { tool, root, spillDir } = makeTool();
   const files = new HostFileBackend(new Sandbox([root]));
   try {
     const text = toolText(await runBigCommand(tool, root));
@@ -500,6 +500,21 @@ Deno.test("the spill is readable through the same file backend", async () => {
     const resolved = await files.resolve(path);
     assertEquals(resolved.ok, true, `unresolvable spill: ${path}`);
     assert((await files.readText(path)).includes(BIG_HEAD), `spill: ${path}`);
+    assertEquals(path.startsWith(spillDir), true, `path: ${path}`);
+
+    // The tools are closed with the agent: nothing can reference the spill
+    // any more, so they go. Removal is asynchronous (it goes through the
+    // file backend, which may be a container), so poll rather than assume.
+    // How many a spiller keeps, and that it keeps only its own, is
+    // truncate_test.ts's subject.
+    tool.dispose?.();
+    let remaining: unknown[] = [];
+    for (let i = 0; i < 50; i++) {
+      remaining = [...Deno.readDirSync(spillDir)];
+      if (remaining.length === 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assertEquals(remaining, [], "dispose must delete the session's spills");
   } finally {
     await removeDirRetry(root);
   }
@@ -603,35 +618,6 @@ Deno.test("bash tool returns when the run is aborted", async () => {
     if (Deno.build.os !== "windows") {
       assertEquals(result.details?.exitCode, 137);
     }
-  } finally {
-    await removeDirRetry(root);
-  }
-});
-
-Deno.test("bash tool keeps only the newest spills and drops them on close", async () => {
-  const { tool, root, spillDir } = makeTool();
-  try {
-    // Each run writes far more than the tool's cap, so every one spills.
-    for (let i = 0; i < MAX_SPILL_FILES + 4; i++) {
-      await runBigCommand(tool, root);
-    }
-    const kept = [...Deno.readDirSync(spillDir)];
-    assertEquals(
-      kept.length <= MAX_SPILL_FILES,
-      true,
-      `spills not pruned: ${kept.length}`,
-    );
-    // The tools are closed with the agent: nothing can reference the spills
-    // any more, so they go. Removal is asynchronous (it goes through the
-    // file backend, which may be a container), so poll rather than assume.
-    tool.dispose?.();
-    let remaining: unknown[] = [];
-    for (let i = 0; i < 50; i++) {
-      remaining = [...Deno.readDirSync(spillDir)];
-      if (remaining.length === 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    assertEquals(remaining, [], "dispose must delete the session's spills");
   } finally {
     await removeDirRetry(root);
   }

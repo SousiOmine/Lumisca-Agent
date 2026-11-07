@@ -16,6 +16,11 @@ import {
   MAX_BACKGROUND_COMMANDS,
   trimIncompleteUtf8,
 } from "./background.ts";
+import type {
+  BackgroundProcess,
+  BackgroundSpawner,
+  BackgroundSpawnInput,
+} from "./background-backend.ts";
 import type { ClientEvent } from "../types/event.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { LumiscaCore } from "../mod.ts";
@@ -389,22 +394,45 @@ Deno.test("killAll stops every running command", async () => {
   );
 });
 
+/** A spawner that hands out running processes without starting anything:
+ * for the manager's own state machine, which never needs a real command.
+ *
+ * The limit case used to start eight `ping -n 60` here, which on Windows
+ * spent 14s starting and tearing down shells to assert a check that runs
+ * before the spawner is called at all. */
+function idleSpawner(): BackgroundSpawner & { spawned: number } {
+  const spawner = {
+    spawned: 0,
+    spawn: (_input: BackgroundSpawnInput): Promise<BackgroundProcess> => {
+      spawner.spawned++;
+      return Promise.resolve({
+        pid: 1000 + spawner.spawned,
+        output: (async function* () {})(),
+        exited: new Promise<number | undefined>(() => {}),
+        kill: () => Promise.resolve(),
+      });
+    },
+  };
+  return spawner;
+}
+
 Deno.test("the per-session concurrency limit is enforced", async () => {
-  const manager = new BackgroundProcessManager();
-  try {
-    for (let i = 0; i < MAX_BACKGROUND_COMMANDS; i++) {
-      await manager.start({ cwd: Deno.cwd(), command: longCommand });
-    }
-    let message = "";
-    try {
-      await manager.start({ cwd: Deno.cwd(), command: longCommand });
-    } catch (error) {
-      message = error instanceof Error ? error.message : String(error);
-    }
-    assert(message.includes("Too many background commands"), message);
-  } finally {
-    await manager.killAll();
+  const spawner = idleSpawner();
+  const manager = new BackgroundProcessManager({ spawner });
+  for (let i = 0; i < MAX_BACKGROUND_COMMANDS; i++) {
+    await manager.start({ cwd: Deno.cwd(), command: longCommand });
   }
+  let message = "";
+  try {
+    await manager.start({ cwd: Deno.cwd(), command: longCommand });
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assert(message.includes("Too many background commands"), message);
+  // Refused before anything was started: a rejected command must not leave
+  // a half-registered process behind.
+  assertEquals(spawner.spawned, MAX_BACKGROUND_COMMANDS);
+  assertEquals(manager.list().length, MAX_BACKGROUND_COMMANDS);
 });
 
 Deno.test("finished commands free their slot for new starts", async () => {
